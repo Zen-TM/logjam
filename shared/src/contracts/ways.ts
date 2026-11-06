@@ -23,3 +23,15 @@ export const WAY_KIND_WORDS: Record<
   import: { label: "Import", plural: "Imports", icon: "importedFile" },
   track: { label: "Track", plural: "Tracks", icon: "track" },
 };
+
+/**
+ * Adding a file of lines, named the same on both clients: Logjam GPS's Saved
+ * sheet and Logjam Web's Ways menu. `menu` says what it takes; `file` is the
+ * short name where the format is already clear.
+ */
+export const WAY_IMPORT = {
+  menu: "Import GPX, KML or GeoJSON",
+  file: "Import a file",
+  saved: (name: string) => `“${name}” is saved under Imports.`,
+  failed: "Couldn't import that file.",
+} as const;

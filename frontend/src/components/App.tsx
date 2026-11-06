@@ -24,6 +24,7 @@ import { routeMadeTopoJob } from "./dialogs/topoUpload";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
 import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
+import { useWayImport } from "./sidebar/panels/useWayImport";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
@@ -743,6 +744,8 @@ function App() {
     loadsUserData &&
       (activePanel === "ways" || activePanel === "plan-detail" || showWays),
   );
+  const { openPicker: openWayImportPicker, input: wayImportInput } =
+    useWayImport(refetchStandaloneFiles);
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -1969,6 +1972,7 @@ function App() {
             sharedPlaces={sharedPlaces}
             onAddPlace={() => setShowAdd(true)}
             onOpenUnifiedImport={() => setShowUnifiedImport(true)}
+            onImportWay={openWayImportPicker}
             onSharePlaces={(ids) => openSelection(ids, "share")}
             onExportPlaces={(ids) => openSelection(ids, "export")}
             onMakeMap={makeMap}
@@ -2187,8 +2191,9 @@ function App() {
           />
         </main>
 
+        {wayImportInput}
         <LayersPopover
-          onImportFile={() => setShowUnifiedImport(true)}
+          onImportFile={openWayImportPicker}
           open={layersOpen}
           onClose={() => setLayersOpen(false)}
           anchorRef={layersButtonRef}

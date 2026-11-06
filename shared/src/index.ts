@@ -62,6 +62,7 @@ export * from "./planWriteUp.js";
 export * from "./rangeSelect.js";
 export * from "./mapRegionEstimate.js";
 export * from "./vectorImport.js";
+export * from "./importName.js";
 export * from "./trackStats.js";
 export * from "./trackLine.js";
 export * from "./importedTrackSeries.js";

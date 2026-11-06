@@ -329,13 +329,12 @@ export default function LayersPopover({
                     onToggle={setShowMgaGrid}
                   />
                   {/* The list ends with the way to add to it: the same
-                      import the Ways and Logs lists offer. */}
+                      import the Ways list offers. */}
                   <Row
                     leading={
                       <IconTile icon="upload" hue="var(--color-neutral)" />
                     }
                     title={copy.importFile}
-                    subtitle={copy.importFileWebDetail}
                     onOpen={() => {
                       onClose();
                       onImportFile();

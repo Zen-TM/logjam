@@ -19,6 +19,7 @@ import {
   routeToGpx,
   routeToKml,
   type StandaloneFile,
+  WAY_IMPORT,
   WAY_KIND_WORDS,
   WAY_KINDS,
   wayVerbIcon,
@@ -104,7 +105,7 @@ export default function RoutesPanel({
   places,
   sharedPlaces,
   onStartDrawingRoute,
-  onOpenUnifiedImport,
+  onImportWay,
   onOpenWay,
   onOpenPlace,
 }: {
@@ -126,7 +127,7 @@ export default function RoutesPanel({
    *  (`WayItem.viaPlace`). */
   sharedPlaces: TPlace[];
   onStartDrawingRoute: () => void;
-  onOpenUnifiedImport: () => void;
+  onImportWay: () => void;
   /**
    * Open a way's own page, which also centres the map on it. `verb` arms one
    * of that page's actions — how a row offers Share, Rename and Delete without
@@ -289,9 +290,9 @@ export default function RoutesPanel({
             },
             {
               id: "import",
-              label: "Import from CSV",
+              label: WAY_IMPORT.menu,
               icon: "upload",
-              onSelect: onOpenUnifiedImport,
+              onSelect: onImportWay,
             },
           ]}
           trigger={(props) => (
@@ -354,13 +355,8 @@ export default function RoutesPanel({
       >
         Draw a route
       </Button>
-      <Button
-        compact
-        variant="outline"
-        icon="upload"
-        onClick={onOpenUnifiedImport}
-      >
-        Import from CSV
+      <Button compact variant="outline" icon="upload" onClick={onImportWay}>
+        {WAY_IMPORT.file}
       </Button>
     </>
   );

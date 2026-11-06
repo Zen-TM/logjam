@@ -52,6 +52,8 @@ import {
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  importFailureMessage,
+  WAY_IMPORT,
   WAY_KIND_WORDS,
   wayVerbIcon,
   wayVerbLabel,
@@ -896,7 +898,7 @@ export function SavedScreen({
       const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
         const { record } = outcome;
-        info(`“${record.name}” is saved under Imports.`, {
+        info(WAY_IMPORT.saved(record.name), {
           label: "Open",
           onPress: () =>
             onOpenMap(record.bbox, undefined, {
@@ -911,7 +913,7 @@ export function SavedScreen({
       }
     } catch (err) {
       console.error(err);
-      fail(messageFromError(err, "Couldn't import that file."));
+      fail(importFailureMessage(err, WAY_IMPORT.failed));
     } finally {
       setImportBusy(false);
       setActiveOp(null);
@@ -1367,7 +1369,7 @@ export function SavedScreen({
       case "import":
         return importBusy
           ? null
-          : { label: "Import a file", onPress: () => void handleImportFile() };
+          : { label: WAY_IMPORT.file, onPress: () => void handleImportFile() };
     }
   })();
 
@@ -2220,7 +2222,7 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Import GPX, KML or GeoJSON"
+            title={WAY_IMPORT.menu}
             icon="importedFile"
             hue={assetHue.import}
             onPress={

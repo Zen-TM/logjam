@@ -15,8 +15,10 @@ import { unzipSync } from "fflate";
 import {
   parseVectorImport,
   IMPORT_ERRORS,
+  importDisplayName,
   pickNextTrackColor,
   MEDIA_EXTENSION_BY_MIME,
+  MEDIA_SIZE_CAPS,
   TRACK_MIME_TYPES,
 } from "@logjam/shared";
 
@@ -33,12 +35,12 @@ import {
 import { getMediaById, listStandaloneMedia } from "../sync/mirrorStore";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { IMPORTS_DIR } from "../offline/localStores";
-import { importDisplayName } from "./importName";
 import { stageIncomingFile } from "./stagedFile";
 
-// A phone-realistic ceiling; the parser's MAX_IMPORT_POSITIONS is the real
-// complexity guard, this just refuses to read absurd files into memory.
-const MAX_IMPORT_FILE_BYTES = 30 * 1024 * 1024;
+// The API's own cap on a track file, so a file the account would refuse at
+// sync is refused here, up front. The parser's MAX_IMPORT_POSITIONS is the
+// real complexity guard; this also keeps absurd files out of memory.
+const MAX_IMPORT_FILE_BYTES = MEDIA_SIZE_CAPS.track;
 
 /**
  * The colour a new import gets until the upload lands. It is the server's own
@@ -63,7 +65,7 @@ export function randomId(): string {
 
 // A KMZ may not expand past what a bare .kml import is allowed to be (Guard:
 // vectorImports.test.ts). The ceiling above is checked against the COMPRESSED
-// file, so without this a 30 MB zip of zeroes inflates to gigabytes — on the
+// file, so without this a 20 MB zip of zeroes inflates to gigabytes — on the
 // one input path an outside party controls, and before any downstream guard
 // (MAX_IMPORT_POSITIONS) gets to run.
 const MAX_KMZ_UNCOMPRESSED_BYTES = MAX_IMPORT_FILE_BYTES;
