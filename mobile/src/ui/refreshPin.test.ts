@@ -148,3 +148,26 @@ it("the control drops a refresh the pin says left the top", () => {
   );
   expect(text).toContain("if (!pin.leftTop()) return onRefresh();");
 });
+
+// Red when the hook drops `nestedScrollEnabled: false`, or a pull list sets
+// the prop itself: Android's refresh layout then arms a pull through nested
+// scrolling, which ignores a disabled control, and a drag that left the top
+// shows the circle again.
+it("every pull list turns nested scrolling off, through the hook only", () => {
+  const src = new URL("../", import.meta.url);
+  const hook = readFileSync(
+    new URL("./refreshFromTop.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(hook).toMatch(/scrollProps = \{[^}]*nestedScrollEnabled: false/s);
+  const offenders = readdirSync(src, { recursive: true, encoding: "utf8" })
+    .filter((file) => /\.tsx$/.test(file) && !file.includes(".test."))
+    .filter((file) => file !== "ui/refreshFromTop.tsx")
+    .filter((file) => {
+      const text = readFileSync(new URL(file, src), "utf8");
+      return (
+        text.includes("<pull.Refresh") && text.includes("nestedScrollEnabled")
+      );
+    });
+  expect(offenders).toEqual([]);
+});
