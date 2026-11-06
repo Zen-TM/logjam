@@ -1213,6 +1213,11 @@ test.describe("desktop", () => {
       page.getByRole("dialog", { name: "Map layers" }),
     ).toBeVisible();
     await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: /^Overlays/ })
+      .click();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
 
     // Escape closes it and puts focus back on the button that opened it.
     await page.keyboard.press("Escape");

@@ -110,6 +110,13 @@ describe("the Layers popover's start view", () => {
 });
 
 describe("the Layers popover's last tab", () => {
+  // Mutation: start `view` on "overlays" in LayersPopover, and the first open
+  // is not on Map (as Logjam GPS's sheet is).
+  it("opens on Map the first time", () => {
+    render(popover(true, null));
+    expect(chip("Map").getAttribute("aria-checked")).toBe("true");
+  });
+
   // Mutation: reset the view to "overlays" when the popover closes (the old
   // behaviour), and it reopens on the first tab instead of the last one used.
   it.each(["Map", "Terrain"])(

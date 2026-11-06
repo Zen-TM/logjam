@@ -139,11 +139,11 @@ export default function LayersPopover({
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
 }) {
-  const [view, setView] = useState<View>("overlays");
+  const [view, setView] = useState<View>("basemap");
   // However it closes (the button toggles `open` itself), the next opening
-  // is on the tab it was last on, as Logjam GPS's Layers sheet is (in memory,
-  // not persisted). A sub-view falls back to the tab it opened from. A start
-  // request made in the same render wins.
+  // is on the tab it was last on, the first time on Map, as Logjam GPS's Layers
+  // sheet is (in memory, not persisted). A sub-view falls back to the tab it
+  // opened from. A start request made in the same render wins.
   const [wasOpen, setWasOpen] = useState(open);
   if (wasOpen !== open) {
     setWasOpen(open);
