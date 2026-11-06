@@ -318,6 +318,14 @@ class FakeS3:
         return json.loads(gzip.decompress(self.store[g.S3_PREFIX + key]))
 
 
+class FrozenDatetime(datetime):
+    """`run` reads the real clock; the fixtures are stamped at NOW."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+
+
 def run_with(s3, gauges, fetch, bom=None, env=True):
     fake_boto3 = mock.Mock()
     fake_boto3.client.return_value = s3
@@ -330,6 +338,9 @@ def run_with(s3, gauges, fetch, bom=None, env=True):
             g, "fetch_daily", bom or (lambda *a: {"2026-10-01": [1.0, 2.0]})
         ),
         mock.patch.object(g.time, "sleep"),
+        # Without it the fixtures' readings age past READINGS_DAYS a week after
+        # NOW and are dropped: this suite went red on 2026-11-06.
+        mock.patch.object(g, "datetime", FrozenDatetime),
     ]
     for p in patches:
         p.start()
