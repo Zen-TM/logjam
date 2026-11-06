@@ -51,6 +51,10 @@ export function useDownBasemaps(online: boolean): {
   probe: () => void;
 } {
   const [down, setDown] = useState<ReadonlySet<string>>(() => new Set());
+  // The verdict so far, so an answer that changes nothing never reaches
+  // setDown: React calls the component for a same-value set while a render is
+  // pending, and here that component is MapScreen.
+  const verdict = useRef<ReadonlySet<string>>(down);
   // The latest probe's number. An older probe that answers late would put its
   // stale verdict over a newer one, so only the latest may write.
   const latest = useRef(0);
@@ -59,8 +63,11 @@ export function useDownBasemaps(online: boolean): {
     const mine = ++latest.current;
     for (const id of PROBED_BASEMAPS) {
       void serverAnswers(probeUrl(id)).then((ok) => {
-        if (latest.current === mine)
-          setDown((prev) => withBasemapDown(prev, id, !ok));
+        if (latest.current !== mine) return;
+        const next = withBasemapDown(verdict.current, id, !ok);
+        if (next === verdict.current) return;
+        verdict.current = next;
+        setDown(next);
       });
     }
   }, [online]);

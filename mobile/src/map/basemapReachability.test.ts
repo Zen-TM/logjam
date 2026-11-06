@@ -1,10 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { basemapToShow } from "@logjam/shared";
+import { basemapToShow, serverAnswers } from "@logjam/shared";
 
 import { DEFAULT_BASEMAP } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
-import { basemapFallbackFor, PROBED_BASEMAPS } from "./basemapReachability";
+import {
+  basemapFallbackFor,
+  PROBED_BASEMAPS,
+  useDownBasemaps,
+} from "./basemapReachability";
+
+vi.mock("@logjam/shared", async (original) => ({
+  ...(await original<typeof import("@logjam/shared")>()),
+  serverAnswers: vi.fn(),
+}));
+
+// Just enough React to run the hook once and see what it hands setState.
+const setState = vi.fn();
+vi.mock("react", async (original) => ({
+  ...(await original<typeof import("react")>()),
+  useState: (init: () => unknown) => [init(), setState],
+  useRef: (current: unknown) => ({ current }),
+  useCallback: (fn: unknown) => fn,
+  useEffect: () => {},
+}));
+
+const settle = () => new Promise((resolve) => setTimeout(resolve));
 
 describe("the probed basemaps", () => {
   // Mutation: probe the drawn basemap, and an unreachable CDN marks the
@@ -48,5 +69,30 @@ describe("the basemap shown while a server is down", () => {
         basemapFallbackFor("six-imagery", down),
       ),
     ).toBe("protomaps");
+  });
+});
+
+describe("probing the basemaps when the Layers sheet opens", () => {
+  // Mutation: call setDown for every answer again (drop the `next ===
+  // verdict.current` check) and each open re-renders MapScreen once per
+  // server, in the frames the sheet is sliding up.
+  it("sets state only when a server's verdict changes", async () => {
+    const answers = vi.mocked(serverAnswers);
+    const { probe } = useDownBasemaps(true);
+
+    answers.mockResolvedValue(true);
+    probe();
+    probe();
+    await settle();
+    expect(setState).not.toHaveBeenCalled();
+
+    answers.mockResolvedValue(false);
+    probe();
+    await settle();
+    expect(setState).toHaveBeenCalledTimes(PROBED_BASEMAPS.length);
+
+    probe();
+    await settle();
+    expect(setState).toHaveBeenCalledTimes(PROBED_BASEMAPS.length);
   });
 });
