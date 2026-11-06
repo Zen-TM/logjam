@@ -362,7 +362,7 @@ function App() {
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
-  // The box tool, drawing a topo's area or an export's (`boxPick.ts`).
+  // The box tool, drawing a topo's area or a print or GIS map's (`boxPick.ts`).
   const [boxPick, setBoxPick] = useState<BoxPick>(NO_BOX_PICK);
   const selectingTopoBbox = isPicking(boxPick, "topo");
   const selectingExportBox = isPicking(boxPick, "export");
@@ -1196,15 +1196,15 @@ function App() {
           setActivePanel("inbox");
           toast.error(
             view.status === "failed"
-              ? (view.errorMessage ?? "That export couldn't be made.")
-              : "That export isn't ready yet. It comes to your Inbox when it is.",
+              ? (view.errorMessage ?? "That map couldn't be made.")
+              : "That map isn't ready yet. It comes to your Inbox when it is.",
           );
         }
       })
       .catch((err) => {
         console.error(err);
         setActivePanel("inbox");
-        toast.error(messageFromError(err, "Couldn't load the export."));
+        toast.error(messageFromError(err, "Couldn't load that map."));
       });
   }, [loadsUserData, toast]);
 
@@ -1600,7 +1600,7 @@ function App() {
     </Notice>
   ) : null;
 
-  // Opening Export an area anew: no stale form, and no pick result from last time.
+  // Opening Make a map anew: no stale form, and no pick result from last time.
   const freshExportDialog = () => {
     setExportDialogKey((key) => key + 1);
     setPendingGeoPdfExtent(null);
@@ -1610,7 +1610,7 @@ function App() {
   };
 
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
-  // A topo goes straight to its dialog with the box; an export opens a GeoPDF's
+  // A topo goes straight to its dialog with the box; a print or GIS map opens a GeoPDF's
   // paper frame on the map over the box, because the paper decides the final
   // extent, and keeps the box for a GIS format.
   const makeMap = (bounds: TBbox, kind: MapKind) => {
@@ -1650,7 +1650,7 @@ function App() {
         },
         {
           id: "export",
-          label: "Export an area",
+          label: "Print or GIS map",
           icon: "export",
           onSelect: () => {
             setBoxPick((pick) => endBox(pick, "export"));

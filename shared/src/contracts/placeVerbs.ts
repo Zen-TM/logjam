@@ -38,7 +38,7 @@ type VerbDeclaration = {
 const NO_MAP_FROM_A_PLACE =
   "Logjam GPS makes a map from an area framed on its map, not from a place.";
 
-const EXPORTED_AT_A_DESK =
+const MAPS_MADE_AT_A_DESK =
   "A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.";
 
 const OPENING_SHOWS_IT_ON_WEB =
@@ -75,12 +75,12 @@ export const PLACE_VERBS = [
     reason: NO_MAP_FROM_A_PLACE,
   },
   {
-    id: "exportArea",
+    id: "makeGeoPdf",
     icon: "export",
-    label: "Export the area here",
+    label: "Make a map here",
     for: "both",
     on: "web",
-    reason: EXPORTED_AT_A_DESK,
+    reason: MAPS_MADE_AT_A_DESK,
   },
   // Either kind of place: "friends can export it" (sharePromise) holds for a
   // sharee too.

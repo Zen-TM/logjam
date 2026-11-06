@@ -898,7 +898,7 @@ const exportPosts = () =>
     .mock.calls.filter(([path]) => path === "/topo-exports")
     .map(([, init]) => (init as { body: unknown }).body);
 
-describe("Export an area, for GIS", () => {
+describe("Make a map, for GIS", () => {
   // Mutation: start `format` at a GIS format.
   it("opens on GeoPDF", () => {
     render(dialog({ open: true }));

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Export an area hides itself while a GIS format's box is drawn on the map,
+// Make a map hides itself while a GIS format's box is drawn on the map,
 // and expects that box back. App holds the opening's own state (which format
 // it starts on, the box it was opened over), and this is the only test of
 // that wiring: App has no render harness (it pulls in maplibre).
@@ -19,10 +19,10 @@ async function openApp(page: Page) {
   });
 }
 
-/** Map tools → Export an area → GeoTIFF → Pick on the map: the
+/** Map tools → Make a map → GeoTIFF → Pick on the map: the
  *  dialog hides and the box tool waits for the export's box. */
 async function startGisPick(page: Page) {
-  await mapTool(page, ["Make a map", "Export an area"]);
+  await mapTool(page, ["Make a map", "Print or GIS map"]);
   const dialog = page.locator("dialog[open]");
   await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
   await dialog.getByRole("button", { name: "Pick on the map" }).click();

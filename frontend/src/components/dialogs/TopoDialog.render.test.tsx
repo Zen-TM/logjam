@@ -112,9 +112,7 @@ describe("TopoDialog", () => {
   // Mutation: a title of its own instead of LIDAR_JOB_COPY's.
   it("sharpens an area", () => {
     render(dialog({ open: true }));
-    expect(
-      screen.getByRole("heading", { name: "Sharpen an area" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sharpen area" })).toBeTruthy();
   });
 });
 

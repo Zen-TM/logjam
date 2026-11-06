@@ -119,7 +119,7 @@ describe("the sharpened areas view", () => {
     expect(screen.queryByRole("menuitem", { name: /^Share/ })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Remove" })).toBeTruthy();
     expect(
-      screen.getByRole("menuitem", { name: "Export this area…" }),
+      screen.getByRole("menuitem", { name: "Print or GIS map…" }),
     ).toBeTruthy();
   });
 
@@ -152,9 +152,9 @@ describe("the sharpened areas view", () => {
     expect(screen.getByText("Queued")).toBeTruthy();
   });
 
-  it("arms the pick from the Sharpen an area button", () => {
+  it("arms the pick from the Sharpen area button", () => {
     const props = draw([]);
-    fireEvent.click(screen.getByRole("button", { name: "Sharpen an area" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sharpen area" }));
     expect(props.onSharpen).toHaveBeenCalled();
   });
 });

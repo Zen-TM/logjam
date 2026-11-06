@@ -348,9 +348,9 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/a11y.spec.ts --workers=1
-      # App's own state around Export an area's box pick, which no unit test
+      # App's own state around Make a map's box pick, which no unit test
       # reaches (App has no render harness). Writes nothing.
-      - name: Playwright Export an area
+      - name: Playwright Make a map
         working-directory: frontend
         env:
           VITE_AUTH_MODE: fake

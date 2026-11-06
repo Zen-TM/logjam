@@ -1,4 +1,4 @@
-// Export an area. A GeoPDF, chosen on every open, is a printable map of one
+// Make a map. A GeoPDF, chosen on every open, is a printable map of one
 // area, on one sheet of paper, at one scale: the form asks the paper and the
 // scale, which size the area, then where it is, then what goes on top. For a
 // GIS (GeoTIFF, GeoPackage, MBTiles) the area is a free box with no paper, and
@@ -687,13 +687,13 @@ function GeoPdfDialog({
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
       toast.done(
-        "Making your export. It comes to your Inbox, and downloads itself if this tab is still open.",
+        "Making your map. It comes to your Inbox, and downloads itself if this tab is still open.",
       );
       onExportQueued?.();
       onClose();
     } catch (e) {
       console.error(e);
-      setError(messageFromError(e, "Couldn't queue the export. Try again."));
+      setError(messageFromError(e, "Couldn't queue the map. Try again."));
     } finally {
       setGenerating(false);
     }
@@ -933,7 +933,7 @@ function GeoPdfDialog({
     <>
       <Dialog
         open={open}
-        title="Export an area"
+        title="Make a map"
         size="large"
         dismissible={!generating}
         onClose={onClose}
@@ -1791,7 +1791,7 @@ function AreaExportFields({
         </p>
         <p className={classes.note}>
           It comes to your Inbox, and downloads itself if this tab is still
-          open. Exports are kept for 7 days.
+          open. Map files are kept for 7 days.
         </p>
         <p className={classes.note}>
           What comes out is drawn from the government's survey, and it may be

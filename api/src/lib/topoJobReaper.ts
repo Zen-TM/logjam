@@ -403,8 +403,8 @@ function exportJobEntry(row: {
     email: {
       pref: "exportEmail",
       // Same subject export_worker.py's failure mail uses.
-      subject: `Topo export failed — ${row.format.toUpperCase()}`,
-      headline: "Your topo export failed.",
+      subject: `Map failed — ${row.format.toUpperCase()}`,
+      headline: "Your map couldn't be made.",
       reason: REAPER_EXPORT_MESSAGE,
       deepLink: `export=${row.id}`,
     },

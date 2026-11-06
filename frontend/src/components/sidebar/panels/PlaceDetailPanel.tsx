@@ -680,7 +680,7 @@ function PlaceDetailPanel({
       setShowTripLogDialog(true);
     },
     makeTopo: () => onMakeMap(current, "topo"),
-    exportArea: () => onMakeMap(current, "geopdf"),
+    makeGeoPdf: () => onMakeMap(current, "geopdf"),
     exportPlace: () => onExportPlace(current.id),
     share: () => setShowShareDialog(true),
     copy: () => void handleCopyPlace(false),

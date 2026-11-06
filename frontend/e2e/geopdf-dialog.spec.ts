@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { NSW_CONTOURS, NSW_HILLSHADE, NSW_SLOPE } from "@logjam/shared";
 import { baseTilePng, statewideArchives } from "./__fixtures__/geoPdfTiles";
 
-// Make it in Export an area renders the GeoPDF in the tab: tile reads are
+// Make it in Make a map renders the GeoPDF in the tab: tile reads are
 // stubbed (made-up fixtures, slowed so the render outlasts the interaction),
 // the PDF arrives as a download, and the page answers input meanwhile. Needs
 // fake auth and the seeded API to open the dialog, as export-area.spec.ts
@@ -102,7 +102,7 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     .getByRole("group", { name: "Tools" })
     .getByText("Make a map")
     .click();
-  await page.getByRole("menuitem", { name: "Export an area" }).click();
+  await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
   const dialog = page.locator("dialog[open]");
 
   // A made-up area in the far west, clear of every seeded footprint.

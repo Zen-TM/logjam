@@ -386,6 +386,9 @@ renumber.
 - **One thing, one word.** The word for each thing, and the words never
   used for it, are `COPY_RULES`; a failing test prints what to say.
 - **A button is a verb** ("Make a map", not "Map").
+- **"Export" produces a file; a map is made.** "Export as GPX" is a file; a
+  GeoPDF or GIS map is "Make a map" (`export-is-a-file` in `COPY_RULES`), and
+  a LiDAR job is "Sharpen area".
 - **Helper text is the exception.** Where a label and an icon are not enough:
   one plain sentence saying what the setting means, an example over a rule
   ("315° is what most maps use"). A label that says it gets no hint.

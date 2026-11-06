@@ -736,7 +736,7 @@ function NotificationsPanel({
             void downloadJobFile(
               n,
               async () => (await getTopoExport(exportJobId)).downloadUrl,
-              "Couldn't download the export.",
+              "Couldn't download the map.",
             )
           }
         >

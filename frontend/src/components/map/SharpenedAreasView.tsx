@@ -65,7 +65,7 @@ export default function SharpenedAreasView({
   loaded: boolean;
   /** Opens the dialog for a new area, as the Make a map menu does. */
   onSharpen: () => void;
-  /** Export an area, over a sharpened area's footprint. */
+  /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyTo: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;
@@ -94,7 +94,7 @@ export default function SharpenedAreasView({
       ? [
           {
             id: "export",
-            label: "Export this area…",
+            label: "Print or GIS map…",
             icon: "export",
             onSelect: () => onExportArea(job),
           },
@@ -125,7 +125,7 @@ export default function SharpenedAreasView({
               copy: {
                 confirmTitle: `Delete ${label}?`,
                 confirmBody:
-                  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Exports already made from it stay until they expire; one still waiting to start is cancelled.",
+                  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.",
                 confirmLabel: "Delete",
                 tone: "destructive",
               },

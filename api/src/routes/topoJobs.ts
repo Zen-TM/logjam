@@ -629,7 +629,7 @@ router.delete(
     if (runningExports > 0) {
       throw new AppError(
         409,
-        say`An export of this LiDAR map is running. Try again when it finishes.`,
+        say`A map is being made from this LiDAR map. Try again when it finishes.`,
       );
     }
 

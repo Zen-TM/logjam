@@ -2146,7 +2146,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load exports."));
+          setError(messageFromError(err, "Couldn't load your maps."));
       })
       .finally(() => {
         if (!cancelled) {

@@ -47,7 +47,7 @@ export type AreaBbox = {
  */
 export const AREA_EXPORT_MAX_SIDE_KM = 100;
 
-export const AREA_EXPORT_TOO_LARGE = say`An export can be up to ${AREA_EXPORT_MAX_SIDE_KM} km on a side. Choose a smaller area, or split it into smaller exports.`;
+export const AREA_EXPORT_TOO_LARGE = say`A map can be up to ${AREA_EXPORT_MAX_SIDE_KM} km on a side. Choose a smaller area, or split it into smaller maps.`;
 
 export const AREA_EXPORT_OUTSIDE_NSW = say`That area is outside NSW, where the statewide terrain is. Choose an area in NSW.`;
 
