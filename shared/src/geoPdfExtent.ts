@@ -294,10 +294,15 @@ function mgaProj(zone: 54 | 55 | 56): string {
   return `+proj=utm +zone=${zone} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
 }
 
+/** Each MGA zone's longitude span; the outer two run on past NSW. */
+export const MGA_ZONES = [
+  { zone: 54, west: -Infinity, east: 144 },
+  { zone: 55, west: 144, east: 150 },
+  { zone: 56, west: 150, east: Infinity },
+] as const;
+
 export function detectMgaZone(lon: number): 54 | 55 | 56 {
-  if (lon < 144) return 54;
-  if (lon < 150) return 55;
-  return 56;
+  return (MGA_ZONES.find((z) => lon < z.east) ?? MGA_ZONES[2]).zone;
 }
 
 /** Easting and northing in a chosen zone, not the one `lon` falls in. */

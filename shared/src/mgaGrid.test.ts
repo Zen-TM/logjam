@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { toEastingNorthing } from "./geoPdfExtent.js";
-import { mgaGrid, mgaGridLabel, mgaGridStep } from "./mgaGrid.js";
+import { toEastingNorthing, toZoneEastingNorthing } from "./geoPdfExtent.js";
+import {
+  clipToLongitudes,
+  mgaGrid,
+  mgaGridLabel,
+  mgaGridStep,
+} from "./mgaGrid.js";
 
 // Around Katoomba (zone 56).
 const view = { west: 150.28, south: -33.74, east: 150.34, north: -33.7 };
@@ -56,11 +61,72 @@ describe("mgaGrid", () => {
     for (const f of g.features) expect(f.properties.text).toMatch(/^\d\d$/);
   });
 
-  it("uses the zone of the view centre across a boundary", () => {
+  // Mutation: build only the centre's zone and the far side of the edge has
+  // no lines of its own zone; drop the clip and the west zone's lines run
+  // past the edge; move an edge or drop a zone in MGA_ZONES.
+  it.each([
+    [144, 54, 55],
+    [150, 55, 56],
+  ] as const)("draws each zone's own grid either side of %i", (edge, w, e) => {
     const g = mgaGrid(
-      { west: 149.9, south: -33.7, east: 150.1, north: -33.6 },
+      { west: edge - 0.1, south: -33.7, east: edge + 0.1, north: -33.6 },
       11,
     );
-    expect(g.features.length).toBeGreaterThan(0);
+    const sides = new Set<number>();
+    for (const f of g.features) {
+      const c = f.geometry.coordinates;
+      const zone = c.every(([lon]) => lon <= edge) ? w : e;
+      expect(c.every(([lon]) => (zone === w ? lon <= edge : lon >= edge))).toBe(
+        true,
+      );
+      sides.add(zone);
+      const [lon, lat] = c[Math.floor(c.length / 2)];
+      const { easting, northing } = toZoneEastingNorthing(lat, lon, zone);
+      const offStep = (m: number) => Math.abs(m / 1e4 - Math.round(m / 1e4));
+      expect(Math.min(offStep(easting), offStep(northing))).toBeLessThan(1e-3);
+    }
+    expect([...sides].sort()).toEqual([w, e]);
+  });
+
+  // Mutation: interpolate at the midpoint, always cut at the east edge, or
+  // keep a line that leaves and re-enters as one piece.
+  it("cuts a line exactly at the edge longitude", () => {
+    expect(
+      clipToLongitudes(
+        [
+          [149, 0],
+          [151, 2],
+          [152, 3],
+        ],
+        -Infinity,
+        150,
+      ),
+    ).toEqual([
+      [
+        [149, 0],
+        [150, 1],
+      ],
+    ]);
+    expect(
+      clipToLongitudes(
+        [
+          [153, 0],
+          [149, 4],
+          [148, 5],
+          [151, 8],
+        ],
+        150,
+        Infinity,
+      ),
+    ).toEqual([
+      [
+        [153, 0],
+        [150, 3],
+      ],
+      [
+        [150, 7],
+        [151, 8],
+      ],
+    ]);
   });
 });
