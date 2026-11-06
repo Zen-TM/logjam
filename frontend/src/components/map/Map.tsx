@@ -139,7 +139,8 @@ function isTerminalTopoSourceError(error: unknown): boolean {
 }
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
-import MapChrome, { type MapTool } from "./MapChrome";
+import MapChrome from "./MapChrome";
+import { type MapToolActions, webMapTools } from "./mapToolList";
 import { collectLngLatPairs } from "./topoFootprint";
 import {
   afterEase,
@@ -641,7 +642,7 @@ function Map({
   placeHighlight,
   placeTypes,
   layersButton,
-  mapTools,
+  mapToolActions,
   notices,
   onTopoSourceUnavailable,
 }: {
@@ -795,7 +796,7 @@ function Map({
   placeTypes: TPlaceType[];
   /** The Layers control, owned by App because App owns what it toggles. */
   layersButton?: ReactNode;
-  mapTools: readonly MapTool[];
+  mapToolActions: MapToolActions;
   /** Pinned notices about what the map shows right now. */
   notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
@@ -3664,7 +3665,7 @@ function Map({
         is3D={is3D}
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
-        tools={mapTools}
+        tools={webMapTools(mapToolActions)}
         selectingArea={selectingArea}
         notices={notices}
         search={

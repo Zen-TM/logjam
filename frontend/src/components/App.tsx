@@ -74,7 +74,7 @@ import {
 import { useConfirm } from "./sidebar/panels/useConfirm";
 import LayersPopover from "./map/LayersPopover";
 import { findRouteById } from "./sidebar/panels/inboxModel";
-import { webMapTools } from "./map/mapToolList";
+import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import { consentGate, currentConsentVersionOf } from "../consent";
@@ -1636,7 +1636,9 @@ function App() {
   };
 
   // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
-  const mapTools = webMapTools({
+  // Handed to Map as actions, not built here: `startMeasuring` writes a ref, and
+  // react-hooks/refs refuses a function that does passed to a call in render.
+  const mapToolActions: MapToolActions = {
     measure: { onSelect: () => startMeasuring() },
     route: { onSelect: () => startDrawingRoute() },
     place: { onSelect: () => setShowAdd(true) },
@@ -1650,7 +1652,7 @@ function App() {
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
     sharpen: { onSelect: () => setShowTopo(true) },
-  });
+  };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =
@@ -2170,7 +2172,7 @@ function App() {
                 onClick={() => setLayersOpen((open) => !open)}
               />
             }
-            mapTools={mapTools}
+            mapToolActions={mapToolActions}
             notices={notices}
             flyToBounds={flyToBounds}
             onFlyToBoundsConsumed={() => setFlyToBounds(null)}

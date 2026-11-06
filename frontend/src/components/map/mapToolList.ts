@@ -9,8 +9,8 @@ type Action = { onSelect: () => void } | { menu: readonly MenuEntry[] };
  * caller says what each one does. A `Record` over the ids, so `tsc` refuses a
  * missing or an extra tool.
  */
-export function webMapTools(
-  actions: Record<MapToolIdOn<"web">, Action>,
-): MapTool[] {
+export type MapToolActions = Record<MapToolIdOn<"web">, Action>;
+
+export function webMapTools(actions: MapToolActions): MapTool[] {
   return mapTools("web").map((tool) => ({ ...tool, ...actions[tool.id] }));
 }
