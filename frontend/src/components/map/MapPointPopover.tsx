@@ -218,6 +218,8 @@ export default function MapPointPopover({
                   state={weather.state}
                   online={online}
                   onLoad={weather.load}
+                  model={weather.model}
+                  onModel={weather.chooseModel}
                 />
               ) : (
                 <div className={classes.verbs}>

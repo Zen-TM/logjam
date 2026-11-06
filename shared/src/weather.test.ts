@@ -12,7 +12,10 @@ import {
   weatherRows,
 } from "./contracts/weather.js";
 import {
+  WEATHER_MODELS,
+  WEATHER_MODEL_DEFAULT,
   fetchForecast,
+  isWeatherModelId,
   parseForecast,
   weatherCell,
   weatherCellKey,
@@ -77,6 +80,45 @@ describe("weatherCell", () => {
   it("leaves the height to Open-Meteo when it isn't known", () => {
     const url = new URL(weatherRequestUrl(weatherCell(spot, null)));
     expect(url.searchParams.has("elevation")).toBe(false);
+  });
+});
+
+describe("the forecast model", () => {
+  // Mutation that turns it red: set `models` for best match too, or drop the
+  // model from `weatherRequestUrl`.
+  it("asks for a chosen model by id, and changes nothing else", () => {
+    const base = new URL(weatherRequestUrl(cell));
+    expect(base.searchParams.has("models")).toBe(false);
+    for (const { id } of WEATHER_MODELS) {
+      const url = new URL(weatherRequestUrl(weatherCell(spot, 1013.4, id)));
+      if (id === WEATHER_MODEL_DEFAULT) {
+        expect(url.search).toBe(base.search);
+        continue;
+      }
+      expect(url.searchParams.get("models")).toBe(id);
+      url.searchParams.delete("models");
+      expect(url.search).toBe(base.search);
+    }
+  });
+
+  // Mutation that turns it red: leave the model out of `weatherCellKey`, so a
+  // client shows one model's forecast under another's name.
+  it("keeps each model's forecast under its own key", () => {
+    const keys = WEATHER_MODELS.map(({ id }) =>
+      weatherCellKey(weatherCell(spot, 1013.4, id)),
+    );
+    expect(new Set(keys).size).toBe(WEATHER_MODELS.length);
+    // A copy kept before models were offered is best match.
+    expect(keys[0]).toBe("-33.7,150.3,1010");
+  });
+
+  it("lists the default first, once per id, and knows its own", () => {
+    expect(WEATHER_MODELS[0].id).toBe(WEATHER_MODEL_DEFAULT);
+    const ids = WEATHER_MODELS.map(({ id }) => id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.every(isWeatherModelId)).toBe(true);
+    expect(isWeatherModelId("bom_access_global")).toBe(false);
+    expect(isWeatherModelId(undefined)).toBe(false);
   });
 });
 
