@@ -136,14 +136,17 @@ describe("the fire tint", () => {
     }
   });
 
-  it("keys each row as the map draws it, with no row for an old fire", () => {
+  // Mutation: return the tint's own translucent colour, and on Logjam GPS's
+  // dark sheet the older swatches all but vanish.
+  it("keys each row as the tint shows on a white map, with no row for an old fire", () => {
     const rows = fireLegendRows();
     expect(rows.map((r) => r.label)).toEqual([
       "Under a year ago",
       "4 years ago",
       "7 years ago",
     ]);
-    expect(rows[0]!.colour).toBe("rgba(190,24,93,0.45)");
+    // #be185d at 0.45 over white.
+    expect(rows[0]!.colour).toBe("#e297b6");
   });
 });
 

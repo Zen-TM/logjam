@@ -117,21 +117,31 @@ export function fireTintAt(years: number): {
   const b = FIRE_RAMP[at]!;
   const t = (years - a.years) / (b.years - a.years);
   const mix = (x: number, y: number) => x + (y - x) * t;
+  return {
+    colour: mixHex(a.colour, b.colour, t),
+    fill: mix(a.fill, b.fill),
+    edge: mix(a.edge, b.edge),
+  };
+}
+
+/** `from` moved `t` of the way to `to`, per channel, as `#rrggbb`. */
+function mixHex(from: string, to: string, t: number): string {
   const channel = (hex: string, i: number) =>
     parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-  const colour = `#${[0, 1, 2]
+  return `#${[0, 1, 2]
     .map((i) =>
-      Math.round(mix(channel(a.colour, i), channel(b.colour, i)))
+      Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)
         .toString(16)
         .padStart(2, "0"),
     )
     .join("")}`;
-  return { colour, fill: mix(a.fill, b.fill), edge: mix(a.edge, b.edge) };
 }
 
 /**
- * The legend: a swatch for each row as the tint draws it on the map, newest
- * first. Ten years and more has no row: it has no colour, as the legend says.
+ * The legend: a swatch for each row as the tint shows on a white map, newest
+ * first. Opaque, since a legend sits on a sheet, not the map: a dark sheet
+ * would swallow a translucent swatch. Ten years and more has no row: it has
+ * no colour, as the legend says.
  */
 export function fireLegendRows(): { label: string; colour: string }[] {
   return [
@@ -140,10 +150,7 @@ export function fireLegendRows(): { label: string; colour: string }[] {
     { label: "7 years ago", years: 7 },
   ].map(({ label, years }) => {
     const { colour, fill } = fireTintAt(years);
-    const [r, g, b] = [0, 1, 2].map((i) =>
-      parseInt(colour.slice(1 + i * 2, 3 + i * 2), 16),
-    );
-    return { label, colour: `rgba(${r},${g},${b},${fill})` };
+    return { label, colour: mixHex("#ffffff", colour, fill) };
   });
 }
 
