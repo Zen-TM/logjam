@@ -1261,7 +1261,7 @@ test.describe("desktop", () => {
         ),
       ].map((item) => Number(getComputedStyle(item).opacity));
     });
-    expect(midFade).toHaveLength(4);
+    expect(midFade).toHaveLength(5);
     expect(midFade.every((opacity) => opacity < 0.95)).toBe(true);
     await expect(tray).toHaveCount(0);
 
