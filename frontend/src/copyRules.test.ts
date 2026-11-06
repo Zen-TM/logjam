@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   copySay,
   copyViolations,
@@ -158,11 +158,14 @@ function sources(dir: string): string[] {
 }
 
 // The scan parses every source file once, about a second alone and several
-// under a loaded machine, past vitest's 5 s default. The parse is the work, so
-// the test that pays for it (the first to call `hits`) gets the 30 s that
-// `switchCopy.test.ts` gives its own. Mutation: remove the 30_000 and run the
-// whole suite with the CPUs oversubscribed.
+// under a loaded machine, near vitest's 5 s default. The parse is the work, so
+// it runs in a beforeAll with the 30 s `switchCopy.test.ts` gives its own, and
+// no test pays for it whatever order the tests run in.
 describe("copy on Logjam Web", () => {
+  beforeAll(() => {
+    hits();
+  }, 30_000);
+
   it("reads a string that is a JSX child expression's branch", () => {
     const [first] = childExpressionStrings(
       "x.tsx",
@@ -188,7 +191,7 @@ describe("copy on Logjam Web", () => {
           `${file}:${line} "${text}" — ${copySay(rule)}`,
       );
     expect(offenders).toEqual([]);
-  }, 30_000);
+  });
 
   // Mutation: reword one baselined string so it no longer offends.
   it("every baseline entry still offends — the list only shrinks", () => {
