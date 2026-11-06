@@ -133,7 +133,9 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                   state.kind === "failed"
                     ? "Discard this download?"
                     : "Stop this download?",
-                  "The download so far will be deleted from this phone.",
+                  spec.update
+                    ? "The map you have saved stays as it is."
+                    : "The download so far will be deleted from this phone.",
                   [
                     { text: "Keep it", style: "cancel" },
                     {

@@ -20,6 +20,7 @@ export function Hero({
   eyebrow,
   title,
   titleNumberOfLines = 1,
+  wrapValue = false,
   value,
   secondaryValue,
   valueSuffix,
@@ -31,6 +32,9 @@ export function Hero({
   eyebrow?: string;
   title: string;
   titleNumberOfLines?: number;
+  /** Lets the value line wrap instead of ending in an ellipsis, for a value
+   *  that is a sentence (the save screen's estimates) and not a figure. */
+  wrapValue?: boolean;
   value?: string;
   /**
    * A second stat of EQUAL weight beside `value`, middot-separated. The
@@ -80,7 +84,7 @@ export function Hero({
         {actions}
       </View>
       {value ? (
-        <Text style={styles.value} numberOfLines={1}>
+        <Text style={styles.value} numberOfLines={wrapValue ? undefined : 1}>
           {secondaryValue ? `${value} · ${secondaryValue}` : value}
           {valueSuffix ? (
             <Text style={styles.valueSuffix}> {valueSuffix}</Text>

@@ -6,6 +6,8 @@ import {
   downloadNotice,
   groupRegionJobs,
   isGroupBusy,
+  jobsToStop,
+  updateProgressLine,
   mayResumeOnReconnect,
   regionGroupToastText,
 } from "./regionDownloadGroups";
@@ -269,5 +271,29 @@ describe("an update's finish toast", () => {
     expect(text([updating("a", { kind: "ready", gaps: 0, failed: 0 })])).toBe(
       "Test region updated · 1 map",
     );
+  });
+});
+
+describe("an updating card", () => {
+  it("says how far along it is, or that it stopped short", () => {
+    expect(updateProgressLine({ settled: false, fraction: 0.426 })).toBe(
+      "Updating · 43%",
+    );
+    expect(updateProgressLine({ settled: true, fraction: 0.5 })).toBe(
+      "Update didn't finish",
+    );
+  });
+
+  // Mutation: return every job for an update, and Stop deletes what was saved.
+  it("stops only what has not saved when it is an update", () => {
+    const saved = job("a", "g", { kind: "ready", gaps: 0, failed: 0 });
+    const waiting = job("b", "g", { kind: "queued" });
+    expect(jobsToStop({ update: true, jobs: [saved, waiting] })).toEqual([
+      waiting,
+    ]);
+    expect(jobsToStop({ update: false, jobs: [saved, waiting] })).toEqual([
+      saved,
+      waiting,
+    ]);
   });
 });

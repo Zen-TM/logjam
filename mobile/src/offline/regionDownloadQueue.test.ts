@@ -63,8 +63,10 @@ const {
   onRegionDownloadToast,
   pauseRegionDownload,
   renameRegionGroup,
+  stopRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
+const { deleteDownloadedArtifact } = await import("./regionDownloads");
 
 const job = (id: string) => ({
   taskKind: "tile-pyramid" as const,
@@ -194,5 +196,75 @@ describe("an update", () => {
       },
     );
     expect(renameArtifactGroup).toHaveBeenCalledWith("g", "Renamed");
+  });
+});
+
+describe("stopping an update", () => {
+  const updateJob = (id: string) => ({
+    ...job(id),
+    groupId: "card",
+    update: true as const,
+  });
+  const jobOf = (id: string, kind: "ready" | "paused") => ({
+    spec: { ...updateJob(id) },
+    state:
+      kind === "ready"
+        ? ({ kind: "ready", gaps: 0, failed: 0 } as const)
+        : ({ kind: "paused", reason: "connectivity" } as const),
+    progress: {} as never,
+  });
+
+  // Mutation: stop every job of an update, as a first save does, and the
+  // files it already saved, which took their older copies' place, go too.
+  it("keeps the files it already saved", async () => {
+    vi.mocked(deleteDownloadedArtifact).mockClear();
+    const done = jobOf("done", "ready");
+    const waiting = jobOf("waiting", "paused");
+    stopRegionGroup({
+      groupId: "card",
+      update: true,
+      jobs: [done, waiting],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const deleted = vi.mocked(deleteDownloadedArtifact).mock.calls.flat();
+    expect(deleted).toContain("waiting");
+    expect(deleted).not.toContain("done");
+  });
+
+  it("stops everything a first save wrote", async () => {
+    vi.mocked(deleteDownloadedArtifact).mockClear();
+    stopRegionGroup({
+      groupId: "card",
+      update: false,
+      jobs: [jobOf("done", "ready"), jobOf("waiting", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.mocked(deleteDownloadedArtifact).mock.calls.flat()).toContain(
+      "done",
+    );
+  });
+
+  // Mutation: announce a stopped run, and what is left of an update the user
+  // cut short is reported as "updated".
+  it("says nothing of a run the user stopped", async () => {
+    const toasts: unknown[] = [];
+    const stop = onRegionDownloadToast((message) => toasts.push(message));
+    runRegionDownload.mockResolvedValueOnce({
+      status: "ready",
+      artifact: { id: "a" },
+      gaps: 0,
+      failed: 0,
+    });
+    enqueueRegionDownloads([updateJob("a"), updateJob("b")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toasts).toEqual([]);
+    stopRegionGroup({
+      groupId: "card",
+      update: true,
+      jobs: [jobOf("a", "ready"), jobOf("b", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    expect(toasts).toEqual([]);
   });
 });

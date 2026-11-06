@@ -574,6 +574,7 @@ export function RegionDownloadScreen({
         onBack={onBack}
         backLabel={backLabel}
         title="Save maps offline"
+        wrapValue
         // TWO stats, equal weight, one line — the two things the decision is
         // actually made on. Showing additional stats would overflow the
         // line without changing what the user does next. The hero carries no
@@ -726,7 +727,7 @@ export function RegionDownloadScreen({
           <Field
             label="Detail"
             aside={
-              <Text style={styles.detailCaption} numberOfLines={1}>
+              <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
                   at any zoom, and the detail level only caps how much of the
@@ -851,5 +852,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { ...muted(theme, textRole.meta), flexShrink: 1 },
+  detailCaption: {
+    ...muted(theme, textRole.meta),
+    flexShrink: 1,
+    textAlign: "right",
+  },
 }));

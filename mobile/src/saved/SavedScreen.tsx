@@ -156,7 +156,12 @@ import {
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
-import { groupRegionJobs, isGroupBusy } from "../offline/regionDownloadGroups";
+import {
+  groupRegionJobs,
+  isGroupBusy,
+  updateProgressLine,
+  type RegionDownloadGroup,
+} from "../offline/regionDownloadGroups";
 import {
   groupUnfinishedRegions,
   type UnfinishedRegionGroup,
@@ -167,9 +172,9 @@ import {
   type UnfinishedRegion,
 } from "../offline/regionMbtiles";
 import {
-  cancelRegionDownload,
   enqueueRegionDownloads,
   renameRegionGroup,
+  stopRegionGroup,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
@@ -351,7 +356,13 @@ type SavedItem = {
   resolveBbox: () => Promise<Bbox | null>;
   /** A saved area downloaded again over itself. `busy` while a run of this
    *  card is in the queue; `savedOn` is when its files were saved. */
-  update?: { savedLine: string; busy: boolean; run: () => Promise<void> };
+  update?: {
+    savedLine: string;
+    busy: boolean;
+    run: () => Promise<void>;
+    /** The card's run, while one is going or has stopped short. */
+    running?: RegionDownloadGroup;
+  };
   /** Persist a new display name. Absent on a shared route or waypoint, which
    *  is read-only — see `AssetActions.rename`. */
   rename?: (name: string) => Promise<unknown>;
@@ -677,8 +688,17 @@ export function SavedScreen({
   // same shape as the GeoPDF import card below. A run whose every job is saved
   // drops off: its artifacts are in the list underneath by then.
   const regionJobs = useRegionDownloads();
-  const downloadGroups = groupRegionJobs(regionJobs).filter(
-    (group) => !group.done,
+  const liveGroups = groupRegionJobs(regionJobs).filter((group) => !group.done);
+  // An update runs on the saved card itself, which stays in the list as the
+  // map it is; only a run with no card of its own gets a card of its own.
+  const cardKeys = new Set(regionArtifacts.map(regionGroupKey));
+  const updatingCards = new Map(
+    liveGroups
+      .filter((group) => group.update && cardKeys.has(group.groupId))
+      .map((group) => [group.groupId, group]),
+  );
+  const downloadGroups = liveGroups.filter(
+    (group) => !updatingCards.has(group.groupId),
   );
 
   // Half-written regions with NO job in the queue — a download the app was
@@ -753,25 +773,22 @@ export function SavedScreen({
   const [downloadSheetId, setDownloadSheetId] = useState<string | null>(null);
   const downloadSheetGroup =
     downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
-  const confirmStopGroup = useCallback(
-    (group: { label: string; jobs: { spec: { id: string } }[] }) => {
-      Alert.alert(
-        "Stop saving these maps?",
-        "The download so far will be deleted from this phone.",
-        [
-          { text: "Keep going", style: "cancel" },
-          {
-            text: "Stop",
-            style: "destructive",
-            onPress: () => {
-              for (const job of group.jobs) cancelRegionDownload(job.spec.id);
-            },
-          },
-        ],
-      );
-    },
-    [],
-  );
+  const confirmStopGroup = useCallback((group: RegionDownloadGroup) => {
+    Alert.alert(
+      group.update ? "Stop updating?" : "Stop saving these maps?",
+      group.update
+        ? "Maps already updated stay. The rest keep the version you have."
+        : "The download so far will be deleted from this phone.",
+      [
+        { text: "Keep going", style: "cancel" },
+        {
+          text: "Stop",
+          style: "destructive",
+          onPress: () => stopRegionGroup(group),
+        },
+      ],
+    );
+  }, []);
 
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
@@ -992,7 +1009,11 @@ export function SavedScreen({
         key: savedRegionKey(group.key),
         category: "region",
         title: group.label ?? "Offline map region",
-        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${savedLine}`,
+        subtitle: updatingCards.has(group.key)
+          ? updateProgressLine(
+              updatingCards.get(group.key) as RegionDownloadGroup,
+            )
+          : `${countOf(basemapMembers.length, "map")} · saved ${savedLine}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
@@ -1008,6 +1029,7 @@ export function SavedScreen({
           ? {
               savedLine,
               busy: isGroupBusy(regionJobs, group.key),
+              running: updatingCards.get(group.key),
               run: () =>
                 startRegionUpdate(
                   group.members,
@@ -1929,7 +1951,16 @@ export function SavedScreen({
                 title={item.title}
                 subtitle={item.subtitle}
                 icon={CATEGORY_META[item.category].icon}
-                hue={assetHue[item.category]}
+                hue={
+                  item.update?.running?.settled
+                    ? theme.warning
+                    : assetHue[item.category]
+                }
+                progress={
+                  item.update?.running && !item.update.running.settled
+                    ? item.update.running.fraction
+                    : undefined
+                }
                 selected={picked}
                 // While selecting, an asset this user may not delete (a shared
                 // route or waypoint) is greyed out — the same dead look an
@@ -1998,6 +2029,16 @@ export function SavedScreen({
                         size={15}
                         color={theme.success}
                         label="Backed up to your account"
+                      />
+                    ) : null}
+                    {item.update?.running && !selecting ? (
+                      <IconButton
+                        icon="close"
+                        accessibilityLabel={`Stop updating ${item.title}`}
+                        onPress={() => {
+                          const run = item.update?.running;
+                          if (run) confirmStopGroup(run);
+                        }}
                       />
                     ) : null}
                     {item.inlineAction ? (
@@ -2346,6 +2387,17 @@ export function SavedScreen({
                     });
                   }}
                 />
+              ) : null}
+              {/* The update's files, one row each, with pause/resume/stop and
+                  the reason one failed: what the run card's sheet shows a first
+                  save. */}
+              {menuItem.update?.running ? (
+                <>
+                  <SectionHeader title="Updating" />
+                  {menuItem.update.running.jobs.map((job) => (
+                    <RegionDownloadRow key={job.spec.id} job={job} />
+                  ))}
+                </>
               ) : null}
               {/* Every asset that still reaches THIS sheet is a file on this
                   handset. Routes, tracks, imports and waypoints left for their
