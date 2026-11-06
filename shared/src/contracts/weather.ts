@@ -119,11 +119,14 @@ const rainText = (mm: number): string =>
   mm >= RAIN_SHOWN_MM ? formatRainMm(mm) : WEATHER_NONE;
 const chanceText = (percent: number): string =>
   percent > 0 ? `${percent}%` : WEATHER_NONE;
+// A figure and its unit are joined by a no-break space, so a narrow card or
+// a large font never strands the unit on a line of its own.
+const UNIT = "\u00a0";
 const windText = (kmh: number): string =>
-  Math.round(kmh) > 0 ? `${Math.round(kmh)} km/h` : WEATHER_NONE;
+  Math.round(kmh) > 0 ? `${Math.round(kmh)}${UNIT}km/h` : WEATHER_NONE;
 
 export function formatRainMm(mm: number): string {
-  return `${mm > 0 && mm < 1 ? mm.toFixed(1) : Math.round(mm)} mm`;
+  return `${mm > 0 && mm < 1 ? mm.toFixed(1) : Math.round(mm)}${UNIT}mm`;
 }
 
 export type WeatherDayFacts = {

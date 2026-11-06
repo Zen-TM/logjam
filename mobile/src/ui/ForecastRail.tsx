@@ -1,4 +1,4 @@
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 
 import {
   makeStyles,
@@ -32,8 +32,11 @@ export type ForecastCard = {
 };
 
 // A card and the gap after it: four and a half fit a phone's sheet, so the next
-// one peeks and says there is more.
+// one peeks and says there is more. A larger system font widens the cards
+// rather than wrapping "10 km/h": fewer fit and the row scrolls further.
 const CARD_WIDTH = spacing(6) + spacing(2);
+const forecastCardWidth = (fontScale: number): number =>
+  Math.round(CARD_WIDTH * Math.max(1, fontScale));
 const GAP = spacing(0.5);
 
 // A titled row of cards that scrolls sideways: one per hour, day or past day,
@@ -56,6 +59,7 @@ export function ForecastRail({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const width = forecastCardWidth(useWindowDimensions().fontScale);
   return (
     <View style={styles.rail}>
       <View style={styles.heading} accessible accessibilityRole="header">
@@ -66,7 +70,7 @@ export function ForecastRail({
         horizontal
         nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
-        snapToInterval={CARD_WIDTH + GAP}
+        snapToInterval={width + GAP}
         snapToAlignment="start"
         decelerationRate="fast"
         contentContainerStyle={styles.track}
@@ -75,7 +79,7 @@ export function ForecastRail({
         {cards.map((card) => (
           <View
             key={card.key}
-            style={[styles.card, card.current && styles.current]}
+            style={[styles.card, { width }, card.current && styles.current]}
             accessible
             accessibilityLabel={card.spoken}
           >
@@ -112,7 +116,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   summary: { ...muted(theme, textRole.detail), fontVariant: ["tabular-nums"] },
   track: { gap: GAP },
   card: {
-    width: CARD_WIDTH,
     alignItems: "center",
     gap: spacing(0.5),
     paddingVertical: spacing(1),

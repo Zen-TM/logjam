@@ -223,11 +223,11 @@ describe("weatherDayFacts", () => {
       temperature: "4–17°C",
       rain: "–",
       chance: "5%",
-      wind: "10 km/h",
+      wind: "10\u00a0km/h",
     });
     expect(weatherDayFacts(forecast.days[1], now)).toMatchObject({
       day: "Mon 19",
-      rain: "0.4 mm",
+      rain: "0.4\u00a0mm",
       chance: "20%",
     });
     expect(weatherDayFacts(forecast.days[5], now).temperature).toBe("-1–8°C");
@@ -330,11 +330,13 @@ describe("weatherRows", () => {
 
   it("names the past row for its source and totals it", () => {
     expect(byKey.past.title).toBe("Modelled rain, past 7 days");
-    expect(byKey.past.summary).toBe("25 mm");
+    // Mutation: a plain space in formatRainMm lets a narrow card or a large
+    // font strand the unit on its own line.
+    expect(byKey.past.summary).toBe("25\u00a0mm");
     expect(byKey.past.cards).toHaveLength(7);
     expect(byKey.past.cards[0]).toMatchObject({
       label: "Sun 11",
-      rain: "7 mm",
+      rain: "7\u00a0mm",
       glyph: null,
       temperature: null,
       wind: null,
@@ -372,9 +374,9 @@ describe("weatherRows", () => {
 
   it("reads a card aloud with every figure on it", () => {
     expect(byKey.hours.cards[5].spoken).toBe(
-      "2 pm, Clear, 16°, no rain, 5% chance, wind 8 km/h",
+      "2 pm, Clear, 16°, no rain, 5% chance, wind 8\u00a0km/h",
     );
-    expect(byKey.past.cards[0].spoken).toBe("Sun 11, rain 7 mm");
+    expect(byKey.past.cards[0].spoken).toBe("Sun 11, rain 7\u00a0mm");
   });
 });
 
