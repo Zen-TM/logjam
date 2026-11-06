@@ -442,3 +442,61 @@ resource "aws_cloudwatch_metric_alarm" "gauges_not_launched" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# ── Fire history ───────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, as for
+# the place registry. A short read of the service exits non-zero with the
+# published raster left in place.
+resource "aws_cloudwatch_log_metric_filter" "fire_history_failures" {
+  name           = "logjam-fire-history-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.fire_history.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "FireHistoryFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "fire_history_failed" {
+  alarm_name        = "logjam-fire-history-failed"
+  alarm_description = "The monthly fire history build stopped with a non-zero exit or failed to start; the published raster is unchanged and a month older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.fire_history.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.fire_history_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.fire_history_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule.
+resource "aws_cloudwatch_metric_alarm" "fire_history_not_launched" {
+  alarm_name        = "logjam-fire-history-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly fire history build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.fire_history.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.fire_history_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.fire_history.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

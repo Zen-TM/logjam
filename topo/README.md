@@ -411,6 +411,37 @@ REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 
 ---
 
+## Refreshing the fire history
+
+`build_fire_history.py` turns NPWS Fire History into the most-recent-fire-year
+raster the vegetation pass marks burnt ground from
+(`fire/fire_history_year.tif` in the topo bucket, with its legend beside it).
+A scheduled ECS task runs `publish` monthly; these commands are for trying a
+change by hand, from `topo/`, in the worker image:
+
+```bash
+docker compose run --rm topo python3 /app/build_fire_history.py fetch /output/fire.geojson
+docker compose run --rm topo python3 /app/build_fire_history.py build \
+  --input /output/fire.geojson --output /output/fire/fire_history_year.tif
+```
+
+`fetch` pages through NPWS's ArcGIS map service (SEED's download package
+refuses a script) into one GeoJSON file and stops with an error unless it got
+every polygon the service counts. `build` also takes SEED's shapefile.
+In November 2026 the service held 38,238 polygons: `fetch` took six minutes
+for a 310 MB file, `build` one minute at a 760 MB peak, for a 2.8 MB raster.
+
+`publish` does both, then uploads the raster and its legend, unless the
+service's polygon count and latest dates match those in the published legend.
+Publishing is a prod change and the maintainer's to make; the vegetation pass
+reads the new raster from the next job on, with no deploy:
+
+```bash
+python3 build_fire_history.py publish --bucket logjam-topo-jobs
+```
+
+---
+
 ## Troubleshooting
 
 **`pdal: command not found`**
