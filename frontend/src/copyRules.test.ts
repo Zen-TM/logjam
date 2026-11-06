@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   copySay,
   copyViolations,
@@ -157,7 +157,15 @@ function sources(dir: string): string[] {
   });
 }
 
+// The scan parses every source file once, about a second alone and several
+// under a loaded machine, near vitest's 5 s default. The parse is the work, so
+// it runs in a beforeAll with the 30 s `switchCopy.test.ts` gives its own, and
+// no test pays for it whatever order the tests run in.
 describe("copy on Logjam Web", () => {
+  beforeAll(() => {
+    hits();
+  }, 30_000);
+
   it("reads a string that is a JSX child expression's branch", () => {
     const [first] = childExpressionStrings(
       "x.tsx",
