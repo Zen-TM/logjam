@@ -67,6 +67,35 @@ describe("createRefreshPin", () => {
     expect(pin.held()).toBe(false);
   });
 
+  // Red when `leftTop` forgets the drag: Android's refresh layout armed at
+  // the finger landing, so a drag that left the top and came back still asks
+  // to refresh and only dropping that request stops it.
+  it("remembers that a drag left the top, past the finger lifting", () => {
+    const pin = createRefreshPin();
+    pin.scroll(0);
+    pin.down();
+    expect(pin.leftTop()).toBe(false);
+    pin.beginDrag();
+    pin.scroll(850);
+    pin.scroll(0);
+    pin.endDrag();
+    expect(pin.leftTop()).toBe(true);
+    pin.down();
+    expect(pin.leftTop()).toBe(false);
+  });
+
+  it("does not count a fling's scrolling against the next drag", () => {
+    const pin = createRefreshPin();
+    pin.scroll(0);
+    pin.down();
+    pin.beginDrag();
+    pin.endDrag();
+    pin.scroll(300);
+    pin.scroll(0);
+    pin.down();
+    expect(pin.leftTop()).toBe(false);
+  });
+
   it("keeps a tap on a scrolled list held", () => {
     const pin = createRefreshPin();
     pin.scroll(400);
@@ -110,4 +139,14 @@ it("every list refresh is drawn by its <pull.Refresh>", () => {
     })
     .map(({ file }) => file);
   expect(offenders).toEqual([]);
+});
+
+// Red when the control hands a pull straight to the screen: the drag that left
+// the top would fetch.
+it("the control drops a refresh the pin says left the top", () => {
+  const text = readFileSync(
+    new URL("./refreshFromTop.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(text).toContain("if (!pin.leftTop()) return onRefresh();");
 });

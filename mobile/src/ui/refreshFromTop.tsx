@@ -57,10 +57,24 @@ export function useRefreshFromTop() {
 function PullRefreshControl({
   pin,
   enabled = true,
+  onRefresh,
   ...rest
 }: RefreshControlProps & { pin: ReturnType<typeof createRefreshPin> }) {
   const held = useSyncExternalStore(pin.subscribe, pin.held);
-  return <RefreshControl enabled={enabled && !held} {...rest} />;
+  return (
+    <RefreshControl
+      enabled={enabled && !held}
+      // A pull armed before the drag left the top is dropped: no fetch, and
+      // `refreshing` stays false so the circle retracts.
+      onRefresh={
+        onRefresh &&
+        (() => {
+          if (!pin.leftTop()) return onRefresh();
+        })
+      }
+      {...rest}
+    />
+  );
 }
 
 // The listeners already forked onto each event: a screen merges on every

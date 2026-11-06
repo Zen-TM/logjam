@@ -16,7 +16,7 @@ import { sheetPins } from "./sheetPull";
  * Guard: `refreshPin.test.ts`.
  */
 export function createRefreshPin() {
-  const s = { scrolled: 0, touching: false, pinned: false };
+  const s = { scrolled: 0, touching: false, pinned: false, left: false };
   const listeners = new Set<() => void>();
   const set = (pinned: boolean) => {
     if (pinned === s.pinned) return;
@@ -32,12 +32,21 @@ export function createRefreshPin() {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
+    // Whether the drag that is down, or the last one, left the top. Android's
+    // refresh layout may have armed at the finger landing, while the control
+    // was still enabled, and disabling it later does not stop that pull: the
+    // refresh it asks for is dropped (`PullRefreshControl`). Kept past the
+    // finger lifting, as the refresh is reported after it; the next finger
+    // down starts afresh.
+    leftTop: () => s.left,
     down: () => {
       s.touching = true;
+      s.left = sheetPins(s);
       set(sheetPins(s));
     },
     scroll: (scrolled: number) => {
       s.scrolled = scrolled;
+      if (sheetPins(s) && s.touching) s.left = true;
       if (sheetPins(s)) set(true);
       else settle();
     },
