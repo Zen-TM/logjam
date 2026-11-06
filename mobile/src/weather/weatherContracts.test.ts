@@ -54,6 +54,10 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     const view = read("./WeatherView.tsx");
     expect(view).toContain("WEATHER_MODELS.map");
     expect(view).toContain("onChange={weather.chooseModel}");
+    // One sideways line, never a wrapped block (maintainer). Mutation: drop
+    // `scroll` from the model ChipRail.
+    const rail = view.slice(view.indexOf("<ChipRail"));
+    expect(rail.slice(0, rail.indexOf("/>"))).toMatch(/^\s*scroll$/m);
     const hook = read("./useWeather.ts");
     expect(hook).toContain("weatherCell(point, elevationM, model)");
     expect(hook).toContain("fetchCell(weatherCell(point, elevationM, next))");
