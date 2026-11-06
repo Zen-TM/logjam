@@ -37,7 +37,7 @@ function buildRefusal(builds, runtimeVersion, version) {
     )
   )
     return null;
-  return `No finished production build of ${version} has runtime ${runtimeVersion}, so the update would reach no phone: docs/operations/mobile-release.md, OTA hotfixes, step 4.`;
+  return `No finished production build of ${version} has runtime ${runtimeVersion}, so the update would reach no phone: docs/operations/mobile-release.md, OTA hotfixes, By hand, step 3.`;
 }
 
 if (require.main === module) {
