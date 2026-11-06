@@ -6,6 +6,7 @@ import {
   bulkDiscardBody,
   opChanges,
   opTarget,
+  keepMineConfirmBody,
   restoreConfirmBody,
   canRecreate,
   rejectedFields,
@@ -329,11 +330,8 @@ describe("rejectedFields / salvageableFields", () => {
 });
 
 describe("restoreSubtitle", () => {
-  it("warns about the replacement only when there IS something to replace", () => {
-    expect(restoreSubtitle(shelved())).toMatch(/replaces what's there now/);
-    // The other device CLEARED the field: nothing is being overwritten, and the
-    // warning would describe a cost the user is not paying.
-    expect(restoreSubtitle(shelved({ serverValue: null }))).toBeUndefined();
+  it("says restoring replaces the user's own text", () => {
+    expect(restoreSubtitle()).toMatch(/Replaces yours/);
   });
 });
 
@@ -506,19 +504,18 @@ describe("canRecreate", () => {
 });
 
 describe("shelf copy", () => {
-  it("names the field and the thing, in the past tense", () => {
+  it("names the field and the thing, and does not say whose text won", () => {
     expect(shelfTitle(shelved())).toBe(
-      "Your notes for “Claustral” were overwritten",
+      "Your notes for “Claustral” were also changed on another device",
     );
-    // Agreement follows the FIELD: e.g. "Your water grade was overwritten"
-    // rather than "were".
+    // Agreement follows the FIELD: e.g. "Your water grade was" rather than "were".
     expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
-      "Your water grade for “Claustral” was overwritten",
+      "Your water grade for “Claustral” was also changed on another device",
     );
     // The name is captured when the value is shelved, so it survives the row
     // being deleted — this fallback is for entries shelved before that column.
     expect(shelfTitle(shelved({ entityName: null }))).toBe(
-      "Your notes on a place were overwritten",
+      "Your notes on a place were also changed on another device",
     );
   });
 
@@ -559,33 +556,24 @@ describe("shelf copy", () => {
     }
   });
 
-  it("says CLEARED when the other device emptied the field", () => {
-    // A null server value is a real outcome, not a missing one, and "overwritten"
-    // would leave the user hunting for a replacement that does not exist.
-    expect(shelfTitle(shelved({ serverValue: null }))).toMatch(/were cleared$/);
+  // Mutation: swap the two values back (describe `serverValue` as the winner).
+  it("says the user's version was saved, and shows what it replaced", () => {
+    expect(shelfSubtitle(shelved(), NOW)).toBe(
+      "Replaced: Classic. Do it in summer. · yesterday",
+    );
+    expect(shelfExplanation(shelved())).toBe(
+      "Your version was saved. It replaced a different one that another device wrote.",
+    );
+    expect(shelfExplanation(shelved())).not.toMatch(/overwritten|dropped|lost/);
+  });
+
+  it("says nothing was replaced when the account had nothing there", () => {
     expect(shelfSubtitle(shelved({ serverValue: null }), NOW)).toBe(
-      "Cleared on another device · yesterday",
+      "Yours was saved · yesterday",
     );
     expect(shelfExplanation(shelved({ serverValue: null }))).toMatch(
-      /cleared this attribute/,
+      /Your version was saved/,
     );
-  });
-
-  it("shows what is there instead in the supporting line", () => {
-    expect(shelfSubtitle(shelved(), NOW)).toBe(
-      "Kept instead: Classic. Do it in summer. · yesterday",
-    );
-  });
-
-  it("answers 'I typed that, where did it go' in one sentence", () => {
-    // One answer, because a shelf entry can only ever be a conflict receipt:
-    // the push was applied and a newer value for that field won. No deadline —
-    // nothing expires these any more.
-    const text = shelfExplanation(shelved());
-    expect(text).toBe(
-      "Your change was overwritten by another device on this account.",
-    );
-    expect(text).not.toMatch(/30 days/);
   });
 
   it("says what happened to the thing, for every reason a restore is refused", () => {
@@ -601,6 +589,9 @@ describe("shelf copy", () => {
     expect(
       restoreBlockReason(shelved({ restoreBlock: "unsupported" })),
     ).toMatch(/yourself/);
+    expect(restoreBlockReason(shelved({ restoreBlock: "nothing" }))).toMatch(
+      /nothing there before/,
+    );
   });
 });
 
@@ -613,7 +604,7 @@ describe("bulkDiscardBody", () => {
     });
     expect(body).toContain("2 changes are dropped");
     expect(body).toContain("One waiting upload is deleted from this phone");
-    expect(body).toContain("3 lost values are deleted");
+    expect(body).toContain("3 earlier versions are deleted");
   });
 
   it("never mentions a kind the selection does not contain", () => {
@@ -633,7 +624,7 @@ describe("bulkDiscardBody", () => {
 });
 
 describe("restoreConfirmBody", () => {
-  it("QUOTES the value it is about to destroy", () => {
+  it("QUOTES the user's own text it is about to replace", () => {
     // This is the last moment that text exists anywhere, and the sheet showing
     // it has closed behind the dialog — "replaces what your account holds now"
     // names nothing the user can weigh.
@@ -650,7 +641,7 @@ describe("restoreConfirmBody", () => {
   });
 
   it("counts instead of quoting in bulk, where N values cannot all be shown", () => {
-    expect(restoreConfirmBody(4)).toMatch(/Those 4 values/);
+    expect(restoreConfirmBody(4)).toMatch(/Those 4 earlier versions/);
   });
 });
 
@@ -677,5 +668,13 @@ describe("selectionCountLabel", () => {
     expect(
       selectionCountLabel({ selected: 2, retryCount: 0, restoreCount: 0 }),
     ).toBe("2 selected");
+  });
+});
+
+describe("keepMineConfirmBody", () => {
+  it("quotes the earlier text, because deleting it is the whole cost", () => {
+    const body = keepMineConfirmBody("Classic. Do it in summer.");
+    expect(body).toContain("“Classic. Do it in summer.”");
+    expect(body).toMatch(/Your version stays/);
   });
 });

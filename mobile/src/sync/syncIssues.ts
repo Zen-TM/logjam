@@ -79,9 +79,11 @@ export type ShelfEntry = {
   entity: string;
   entityId: string;
   field: string;
-  /** What the user wrote, and lost. */
+  /** What the user wrote. The account took it: a conflict receipt exists only
+   *  for an APPLIED push, and the API's rule is that the later arrival wins. */
   shelvedValue: unknown;
-  /** What the account holds instead — null when the other device CLEARED it. */
+  /** What the account held before the user's write replaced it — the only copy
+   *  left of it. Null when the account had nothing there. */
   serverValue: unknown;
   at: string;
   /** Why "Restore" is unavailable, or null when it can be. */
@@ -94,14 +96,15 @@ export type ShelfEntry = {
 };
 
 /**
- * Why a shelved value cannot be put back, or null when it can.
+ * Why the earlier version cannot be put back, or null when it can.
  *
  * Checked BEFORE the verb is offered, because every one of these ends the same
  * way if it isn't: the write parks as a fresh `blocked` op, and a row the user
  * tapped in Lost reappears in Stuck. A recovery action that manufactures a new
- * sync issue is worse than no recovery action.
+ * sync issue is worse than no recovery action. `nothing` is the account having
+ * held nothing: "restoring" it would clear the user's field.
  */
-export type RestoreBlock = "gone" | "unsupported";
+export type RestoreBlock = "gone" | "unsupported" | "nothing";
 
 type ParkedRow = {
   seq: number;
@@ -217,7 +220,7 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
       shelvedValue,
       serverValue,
       at: row.at,
-      restoreBlock: target.block,
+      restoreBlock: target.block ?? (serverValue === null ? "nothing" : null),
       canKeepBoth:
         target.block === null &&
         canKeepBothField(entity, field) &&
@@ -274,31 +277,32 @@ async function shelfTarget(
 }
 
 /**
- * Put a shelved value back: write it locally, queue the update, and DELETE the
- * shelf row — the issue has been dealt with, and a row that stayed behind in a
- * "restored" state asked the user to decide the same thing twice.
+ * Put the account's earlier version back: write it locally, queue the update,
+ * and DELETE the shelf row — the issue has been dealt with, and a row that
+ * stayed behind in a "restored" state asked the user to decide the same thing
+ * twice.
  *
- * This is a clobber, not a merge: the value it displaces is the other device's,
- * and after this write nothing records what that was. The confirm dialog is
- * where that is said, and it quotes the value being replaced, because this
- * function is the point of no return for it. `keepBothShelfValue` is the way
- * out that costs nothing.
+ * This is a clobber, not a merge: the value it displaces is the user's own
+ * (live on every device now), and after this write nothing records what that
+ * was. The confirm dialog is where that is said, and it quotes the value being
+ * replaced, because this function is the point of no return for it.
+ * `keepBothShelfValue` is the way out that costs nothing.
  *
  * The write wins on arrival because it is a NEW edit with a current timestamp,
  * not a replay of the one that lost. It loses only to an edit made after it,
  * which is ordinary LWW and correct.
  */
 export async function restoreShelfValue(id: number): Promise<void> {
-  await writeShelfValue(id, (entry) => entry.shelvedValue);
+  await writeShelfValue(id, (entry) => entry.serverValue);
 }
 
 /**
- * Keep both: write `{kept}\n\n{recovered}` and delete the shelf row.
+ * Keep both: write `{earlier}\n\n{yours}` and delete the shelf row.
  *
- * The kept value goes FIRST because the sentence describing it has to be
- * unambiguous — "your text is added below what's there now" — and chronology
+ * The earlier text goes FIRST because the sentence describing it has to be
+ * unambiguous — "the earlier text is added above yours" — and chronology
  * cannot supply an order here: an offline edit can be typed after the value
- * that beat it to the server.
+ * it replaced.
  */
 export async function keepBothShelfValue(id: number): Promise<void> {
   await writeShelfValue(id, (entry) => {
@@ -601,7 +605,8 @@ async function dropOp(seq: number): Promise<void> {
 }
 
 /**
- * Throw a lost value away. The only copy — conflict entries never expire (a
+ * "Keep my version": the user's text is already the account's, so this only
+ * deletes the earlier text — the only copy. Conflict entries never expire (a
  * countdown to silent deletion would violate fail-loudly), so the table shrinks
  * only when the user says so.
  */

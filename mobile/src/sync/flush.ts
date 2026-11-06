@@ -221,10 +221,11 @@ async function applyOpResult(
         const base = row.base_fields_json
           ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
           : {};
-        // `shelved_json` is what the USER wrote and `server_json` is what won
-        // — the Sync Issues screen renders them as "Discarded" and "Kept".
-        // Filling both columns from serverValue would show the other
-        // device's value labelled as their own and lose their own edits.
+        // `shelved_json` is what the USER wrote, which the account took (the
+        // later arrival wins); `server_json` is the value it replaced, and the
+        // only copy of it. The Sync Issues screen shows them as "Yours" and
+        // "Replaced". Filling both from serverValue would show the other
+        // device's value as the user's own.
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
@@ -245,10 +246,14 @@ async function applyOpResult(
               ? (JSON.parse(queued.fields_json) as Record<string, unknown>)
               : {},
           );
-        const real = later.reduce(
-          (kept, fields) => filterSelfConflicts(kept, base, fields),
-          filterSelfConflicts(result.conflicts, base, ownFields),
-        );
+        // A receipt whose replaced value is nothing replaced nothing: the field
+        // was empty on the account, and the user's text is simply saved.
+        const real = later
+          .reduce(
+            (kept, fields) => filterSelfConflicts(kept, base, fields),
+            filterSelfConflicts(result.conflicts, base, ownFields),
+          )
+          .filter((receipt) => receipt.serverValue != null);
         const at = new Date().toISOString();
         // The server's own confirmed row is the name's source, and this is the
         // only moment it is guaranteed to be in hand: the mirror row can be

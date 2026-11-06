@@ -1,9 +1,8 @@
 // Account sync issues — "what didn't save, and what do you want me to do?"
 //
-// ONE LIST: stuck changes (push failures) and lost values (pull LWW drops) are
-// unified because to the user both mean the same thing — a change made locally
-// is not in their account. Both are counted (`countSyncIssues`), both are
-// actionable, and nothing on this screen expires: a countdown to deleting the
+// ONE LIST: stuck changes (push failures) and conflicts (another device wrote
+// the same field) are unified because both want a decision from the user.
+// Both are counted (`countSyncIssues`), both are actionable, and nothing on this screen expires: a countdown to deleting the
 // last copy of someone's writing is the exact failure this page exists to
 // prevent.
 //
@@ -12,7 +11,7 @@
 // is the engine's problem, not the user's: `flush.ts` parks it as `retrying`
 // and the cycle comes back for it, for a day (`shouldGiveUpOnSyncOp`). So a row
 // here is either a refusal about the request, a row deleted under the edit, a
-// value another device overwrote, or something the app has already retried by
+// value another device also changed, or something the app has already retried by
 // itself — which is why the sheet's retry copy can say how many attempts it
 // spent before asking.
 //
@@ -89,6 +88,7 @@ import {
   rejectedFields,
   restoreBlockReason,
   restoreConfirmBody,
+  keepMineConfirmBody,
   restoreSubtitle,
   salvageableFields,
   selectionCountLabel,
@@ -292,15 +292,16 @@ export function SyncIssuesScreen({
     const ok = await confirm({
       confirmTitle:
         restorable.length === 1
-          ? "Restore this value?"
-          : `Restore ${restorable.length} values?`,
+          ? "Restore the earlier version?"
+          : `Restore ${restorable.length} earlier versions?`,
       // A one-row selection gets the same quoted value the sheet's own confirm
       // gives it: the bar is a different route to the same irreversible write,
       // not a reason to say less about it.
       confirmBody: restoreConfirmBody(
         restorable.length,
-        restorable.length === 1 && typeof restorable[0].serverValue === "string"
-          ? restorable[0].serverValue
+        restorable.length === 1 &&
+          typeof restorable[0].shelvedValue === "string"
+          ? restorable[0].shelvedValue
           : undefined,
       ),
       confirmLabel: "Restore",
@@ -311,8 +312,8 @@ export function SyncIssuesScreen({
       .then(() => {
         notify(
           restorable.length === 1
-            ? "Value restored."
-            : `${restorable.length} values restored.`,
+            ? "Earlier version restored."
+            : `${restorable.length} earlier versions restored.`,
         );
         clearSelection();
         load();
@@ -414,20 +415,24 @@ export function SyncIssuesScreen({
     [load, notify],
   );
 
-  const confirmForget = useCallback(
+  const keepMine = useCallback(
     async (entry: ShelfEntry) => {
       setMenuIssue(null);
-      const ok = await confirm({
-        confirmTitle: "Discard this value?",
-        confirmBody:
-          "This is the only copy left of what you typed. It can't be got back.",
-        confirmLabel: "Discard",
-        tone: "destructive",
-      });
-      if (!ok) return;
+      // Your text is already the account's, so there is nothing to send: the
+      // only thing this deletes is the earlier text, and that can't come back.
+      // With nothing replaced there is nothing to lose, so no dialog.
+      if (typeof entry.serverValue === "string") {
+        const ok = await confirm({
+          confirmTitle: "Keep my version?",
+          confirmBody: keepMineConfirmBody(entry.serverValue),
+          confirmLabel: "Keep mine",
+          tone: "destructive",
+        });
+        if (!ok) return;
+      }
       void dismissShelfEntry(entry.id)
         .then(() => {
-          notify("Value discarded.");
+          notify("Kept your version.");
           load();
         })
         .catch((err: unknown) => console.error(err));
@@ -438,13 +443,13 @@ export function SyncIssuesScreen({
   const confirmRestore = useCallback(
     async (entry: ShelfEntry) => {
       setMenuIssue(null);
-      // The value about to be destroyed is quoted in the dialog: this is the
-      // last moment it exists anywhere, and the sheet that was showing it has
-      // closed behind the alert.
+      // The value about to be destroyed (the user's own) is quoted in the
+      // dialog: this is the last moment it exists anywhere, and the sheet that
+      // was showing it has closed behind the alert.
       const replacing =
-        typeof entry.serverValue === "string" ? entry.serverValue : undefined;
+        typeof entry.shelvedValue === "string" ? entry.shelvedValue : undefined;
       const ok = await confirm({
-        confirmTitle: "Restore this value?",
+        confirmTitle: "Restore the earlier version?",
         confirmBody: restoreConfirmBody(1, replacing),
         confirmLabel: "Restore",
         tone: "destructive",
@@ -454,14 +459,14 @@ export function SyncIssuesScreen({
         .then(() => {
           notify(
             online
-              ? "Value restored. It'll reach your other devices next sync."
-              : "Value restored on this phone. It syncs when you have signal.",
+              ? "Earlier version restored. It'll reach your other devices next sync."
+              : "Earlier version restored on this phone. It syncs when you have signal.",
           );
           load();
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("Couldn't restore that value.", "error");
+          notify("Couldn't restore that version.", "error");
         });
     },
     [load, notify, online],
@@ -544,7 +549,7 @@ export function SyncIssuesScreen({
                   {restorable.length > 0 ? (
                     <IconButton
                       icon="undo"
-                      accessibilityLabel={`Restore ${restorable.length} selected values`}
+                      accessibilityLabel={`Restore ${restorable.length} earlier versions`}
                       color={theme.accent}
                       onPress={confirmBulkRestore}
                     />
@@ -558,8 +563,7 @@ export function SyncIssuesScreen({
           ) : (
             <View style={styles.railHint}>
               <Text style={styles.railHintText} numberOfLines={2}>
-                These changes aren&apos;t in your account. Tap one to see what
-                it was.
+                Tap one to see what happened and what you can do.
               </Text>
             </View>
           )}
@@ -627,10 +631,10 @@ export function SyncIssuesScreen({
             onKeepBoth={(entry) =>
               act(
                 keepBothShelfValue(entry.id),
-                "Both kept — your text was added below.",
+                "Both kept — the earlier text is above yours.",
               )
             }
-            onForget={confirmForget}
+            onKeepMine={keepMine}
           />
         ) : null}
       </BottomSheet>
@@ -754,71 +758,71 @@ function LostMenu({
   entry,
   onRestore,
   onKeepBoth,
-  onForget,
+  onKeepMine,
 }: {
   entry: ShelfEntry;
   onRestore: (entry: ShelfEntry) => void;
   onKeepBoth: (entry: ShelfEntry) => void;
-  onForget: (entry: ShelfEntry) => void;
+  onKeepMine: (entry: ShelfEntry) => void;
 }) {
-  const theme = useTheme();
   const styles = useStyles();
 
-  // The other device's value is absent when it CLEARED the field — there is no
-  // "Kept" to show, and a block reading "(empty)" would be three lines of chrome
-  // around nothing.
-  const hasKept = entry.serverValue !== null;
+  // The earlier text is absent when the account had nothing there — a block
+  // reading "(empty)" would be three lines of chrome around nothing.
+  const hasEarlier = entry.serverValue !== null;
   return (
     <View style={styles.menuBody}>
       <Text style={styles.menuCause}>{shelfExplanation(entry)}</Text>
-      {/* Labelled by which value is LIVE, not by whose it is — both are the
-          user's. Selectable rather than a Copy button: RN's own text selection
-          is the platform's copy affordance and costs no dependency. */}
+      {/* Labelled by which value is LIVE: yours is saved, the other is the only
+          copy left. Selectable rather than a Copy button: RN's own text
+          selection is the platform's copy affordance and costs no dependency. */}
       <View style={styles.valueBlock}>
-        <Text style={styles.menuLabel}>Discarded</Text>
+        <Text style={styles.menuLabel}>Yours (saved)</Text>
         <Text style={styles.menuValue} selectable>
           {previewValue(entry.field, entry.shelvedValue)}
         </Text>
       </View>
-      {hasKept ? (
+      {hasEarlier ? (
         <View style={styles.valueBlock}>
-          <Text style={styles.menuLabel}>Kept</Text>
+          <Text style={styles.menuLabel}>Replaced</Text>
           <Text style={styles.menuValue} selectable>
             {previewValue(entry.field, entry.serverValue)}
           </Text>
         </View>
       ) : null}
       <Text style={styles.menuCause}>
-        {hasKept
+        {hasEarlier
           ? "Press and hold either value to copy it."
           : "Press and hold the value to copy it."}
       </Text>
       {/* Keep both first: it is the only way out of this sheet that destroys
-          nothing, so it goes above the one that does. */}
+          nothing. */}
       {entry.canKeepBoth ? (
         <Row
           icon="merge"
           title="Keep both"
-          subtitle="Appends the discarded text to what's there now."
+          subtitle="Puts the earlier text above yours."
           onPress={() => onKeepBoth(entry)}
         />
       ) : null}
+      <Row
+        icon="done"
+        title="Keep my version"
+        subtitle={
+          hasEarlier ? "Already saved. Deletes the earlier text." : undefined
+        }
+        onPress={() => onKeepMine(entry)}
+      />
       {entry.restoreBlock === null ? (
         <Row
           icon="undo"
-          title="Restore the discarded value"
-          subtitle={restoreSubtitle(entry)}
+          title="Restore the earlier version"
+          subtitle={restoreSubtitle()}
           onPress={() => onRestore(entry)}
         />
-      ) : (
+      ) : hasEarlier ? (
         <Text style={styles.menuCause}>{restoreBlockReason(entry)}</Text>
-      )}
-      <Row
-        icon="delete"
-        hue={theme.warning}
-        title="Discard this value"
-        onPress={() => onForget(entry)}
-      />
+      ) : null}
     </View>
   );
 }

@@ -139,7 +139,7 @@ describe("listShelfEntries", () => {
     expect((await listShelfEntries())[0].canKeepBoth).toBe(true);
 
     shelfRows.length = 0;
-    // The other device CLEARED the field: there is no second value to keep.
+    // The account had nothing there: there is no second value to keep.
     shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
     expect((await listShelfEntries())[0].canKeepBoth).toBe(false);
 
@@ -156,8 +156,24 @@ describe("listShelfEntries", () => {
   });
 });
 
+describe("restoreBlock", () => {
+  it("is 'nothing' when the account held nothing, so Restore cannot clear the field", async () => {
+    shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
+    expect((await listShelfEntries())[0].restoreBlock).toBe("nothing");
+    await expect(restoreShelfValue(1)).rejects.toThrow(/Cannot write/);
+    expect(writes).toEqual([]);
+  });
+
+  it("is null when there is an earlier version to put back", async () => {
+    shelfRows.push(shelfRow());
+    expect((await listShelfEntries())[0].restoreBlock).toBeNull();
+  });
+});
+
 describe("restoreShelfValue", () => {
-  it("writes the value back and DELETES the row", async () => {
+  // Mutation: write `shelvedValue` instead — a no-op, since the account already
+  // holds the user's text (the later arrival wins, api syncPush.test.ts).
+  it("writes the EARLIER version back and DELETES the row", async () => {
     shelfRows.push(shelfRow());
     await restoreShelfValue(1);
     expect(writes).toEqual([
@@ -165,7 +181,7 @@ describe("restoreShelfValue", () => {
         entity: "place",
         id: "c1",
         field: "notes",
-        value: "Exit track overgrown past the second crossing.",
+        value: "Classic. Do it in summer.",
       },
     ]);
     // The issue is dealt with. A row left behind would ask the user to decide
@@ -179,12 +195,12 @@ describe("restoreShelfValue", () => {
 });
 
 describe("keepBothShelfValue", () => {
-  it("joins them with the KEPT value first, separated by a blank line", async () => {
+  it("joins them with the EARLIER value first, separated by a blank line", async () => {
     shelfRows.push(shelfRow());
     await keepBothShelfValue(1);
-    // Kept first because the sentence describing it has to be unambiguous —
-    // "your text is added below what's there now". Chronology can't supply an
-    // order: an offline edit can be typed after the value that beat it.
+    // Earlier first because the sentence describing it has to be unambiguous —
+    // "the earlier text is above yours". Chronology can't supply an order: an
+    // offline edit can be typed after the value it replaced.
     expect(writes[0].value).toBe(
       "Classic. Do it in summer.\n\nExit track overgrown past the second crossing.",
     );
@@ -197,7 +213,9 @@ describe("keepBothShelfValue", () => {
 
   it("refuses rather than writing 'null' into the field", async () => {
     shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
-    await expect(keepBothShelfValue(1)).rejects.toThrow(/Cannot keep both/);
+    await expect(keepBothShelfValue(1)).rejects.toThrow(
+      /Cannot (keep both|write)/,
+    );
     expect(writes).toEqual([]);
   });
 });
