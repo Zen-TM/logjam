@@ -55,6 +55,11 @@ class TestFailureSentence(unittest.TestCase):
             GENERIC_FAILURE,
         )
 
+    # There is no support to contact. Mutation: put "contact support" back in
+    # GENERIC_FAILURE.
+    def test_the_generic_sentence_sends_no_one_to_support(self):
+        self.assertNotIn("support", GENERIC_FAILURE.lower())
+
     def test_too_large_says_what_to_do(self):
         sentence = failure_sentence(ExportTooLarge("would generate over 9 map tiles"))
         self.assertIn("smaller", sentence)

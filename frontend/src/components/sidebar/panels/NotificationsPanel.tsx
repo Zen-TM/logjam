@@ -58,6 +58,7 @@ import {
   markNotificationRead,
 } from "../../../placeUtils";
 import { triggerDownload } from "../../../download";
+import { BUG_REPORT_URL } from "../../Footer";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -693,6 +694,22 @@ function NotificationsPanel({
           }
         >
           Download
+        </Button>
+      );
+    }
+    // A failed export has no support to contact; the bug form is the way on.
+    if (n.type === "topo_export_complete" && n.payload.status === "failed") {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() =>
+            window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer")
+          }
+        >
+          Report a bug
         </Button>
       );
     }

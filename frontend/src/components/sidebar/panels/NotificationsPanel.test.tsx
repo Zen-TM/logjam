@@ -198,3 +198,31 @@ describe("NotificationsPanel: an announcement", () => {
     );
   });
 });
+
+describe("NotificationsPanel: a failed export", () => {
+  const failed: TNotification = {
+    id: "n9",
+    type: "topo_export_complete",
+    payload: {
+      format: "gpkg",
+      status: "failed",
+      errorMessage: "This export couldn't be made. Start it again.",
+    },
+    read: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Mutation: drop the failed-export branch of `rowFooter`, or open anything
+  // but the bug form.
+  it("offers Report a bug, since there is no support to contact", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderPanel([failed]);
+    fireEvent.click(screen.getByRole("button", { name: "Report a bug" }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("/issues/new?template=bug.yml"),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+});

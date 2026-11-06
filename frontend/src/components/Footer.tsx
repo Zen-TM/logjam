@@ -2,7 +2,7 @@ import classes from "./Footer.module.css";
 
 const SOURCE_URL = "https://github.com/Zen-TM/logjam";
 
-const BUG_REPORT_URL = `${SOURCE_URL}/issues/new?template=bug.yml`;
+export const BUG_REPORT_URL = `${SOURCE_URL}/issues/new?template=bug.yml`;
 
 function Footer() {
   return (
