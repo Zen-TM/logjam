@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import {
+  Animated,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   RefreshControl,
@@ -62,10 +63,17 @@ function PullRefreshControl({
   return <RefreshControl enabled={enabled && !held} {...rest} />;
 }
 
+// The listeners already forked onto each event: a screen merges on every
+// render, and an event keeps every listener it is given.
+const forked = new WeakMap<object, Set<unknown>>();
+
 /**
  * Two scroll-prop sets on one list (the hero collapse and the refresh pin both
  * want `onScroll` and the drag events): spreading both would drop the first, so
- * a handler named by both runs for each.
+ * a handler named by both runs for each. The hero's `onScroll` is a native
+ * `Animated.event`, an object the native driver attaches to the view and not a
+ * function, so the other handler joins it as a listener (`Animated.forkEvent`)
+ * and the event itself is kept. Guard: `mergeScrollProps.test.ts`.
  */
 export function mergeScrollProps<A extends object, B extends object>(
   a: A,
@@ -77,11 +85,20 @@ export function mergeScrollProps<A extends object, B extends object>(
   >;
   for (const [key, first] of Object.entries(a)) {
     const second = (b as Record<string, unknown>)[key];
-    if (typeof first === "function" && typeof second === "function") {
+    if (typeof second !== "function" || first == null) continue;
+    if (typeof first === "function") {
       out[key] = (...args: unknown[]) => {
         first(...args);
         second(...args);
       };
+    } else if (typeof first === "object") {
+      const seen = forked.get(first) ?? new Set();
+      forked.set(first, seen);
+      if (!seen.has(second)) {
+        seen.add(second);
+        Animated.forkEvent(first as never, second as never);
+      }
+      out[key] = first;
     }
   }
   return out as A & B;
