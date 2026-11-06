@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   contractSectionKeys,
+  COPY_MEDIA_SETTING,
   LEADERBOARD_SETTING,
   NOTIFICATION_PREFERENCES,
   notificationGroupLead,
@@ -104,6 +105,52 @@ describe("the leaderboard switch", () => {
   });
 });
 
+// Mutation: send `leaderboardOptIn` instead of `copyPlaceMedia`, or seed the
+// switch off when the account has no stored choice (the server reads it as on).
+describe("the copy-photos switch", () => {
+  it("starts on, sits under Copying a place before Friends, and saves the account's choice", async () => {
+    const saved = { ...user, uiPreferences: { copyPlaceMedia: false } };
+    vi.mocked(updateUserPreferences).mockResolvedValue(saved);
+    const onCurrentUserChange = vi.fn();
+    renderPanel(onCurrentUserChange);
+    const toggle = screen.getByRole("switch", {
+      name: COPY_MEDIA_SETTING.label,
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    const group = screen.getByRole("group", { name: SETTINGS.copy.copying });
+    expect(within(group).getByRole("switch")).toBe(toggle);
+    const friends = screen.getByRole("group", { name: SETTINGS.copy.friends });
+    expect(
+      group.compareDocumentPosition(friends) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(onCurrentUserChange).toHaveBeenCalledWith(saved),
+    );
+    expect(updateUserPreferences).toHaveBeenCalledWith({
+      copyPlaceMedia: false,
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  // Mutation: leave the optimistic value standing after a failed save.
+  it("goes back and says so when the save fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(updateUserPreferences).mockRejectedValue(new Error("offline"));
+    renderPanel();
+    const toggle = screen.getByRole("switch", {
+      name: COPY_MEDIA_SETTING.label,
+    });
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(COPY_MEDIA_SETTING.saveFailed),
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
 // Each notification switch sits in its group, whose lead starts the sentence
 // its short label ends. Mutation: draw the switches in one group, or put one in
 // the other group.
@@ -127,8 +174,10 @@ describe("the notification switches", () => {
 
 // Logjam GPS's Settings menu lists its pages in `SETTINGS`' order; Logjam Web
 // draws the sections both have in that same order, under the same names.
-// Mutation: swap two `contractSectionKeys` cases in the panel, rename a heading
-// in place of reading `SETTINGS.copy`, or draw Privacy above Notifications.
+// Mutation: hard-code a section title that differs from `SETTINGS.copy`, or
+// draw a group lead with `SectionHeader` so an extra h3 lands between the three.
+// (The order itself is the contract's: reordering `SETTINGS.sections` turns the
+// shared contract test red and this one with it.)
 describe("the sections", () => {
   it("are the contract's, in its order, under its names", () => {
     renderPanel();

@@ -18,6 +18,7 @@ import {
   leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   ACCOUNT_PHONE_ONLY,
+  COPY_MEDIA_SETTING,
   SETTINGS,
   SETTINGS_PHONE_ONLY,
   SELECTION_GESTURES,
@@ -1557,6 +1558,14 @@ describe("SETTINGS", () => {
       "notifications",
       "privacy",
     ]);
+  });
+
+  // The one entry both clients draw the copy-photos switch from. Mutation:
+  // retype the label on one client (the sheet that defaults from it says the
+  // same words), or move the group out of Privacy and security.
+  it("holds the copy-photos switch under Copying a place", () => {
+    expect(SETTINGS.copy.copying).toBe("Copying a place");
+    expect(COPY_MEDIA_SETTING.label).toBe("Copy photos too");
   });
 
   // Mutation: type "Settings › Privacy" into copy.privacy.

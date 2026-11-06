@@ -2,6 +2,7 @@ import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  COPY_MEDIA_SETTING,
   LEADERBOARD_SETTING,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
@@ -100,6 +101,8 @@ function SettingsPanel({
     null,
   );
   const [leaderboardSaving, setLeaderboardSaving] = useState(false);
+  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
+  const [copyMediaSaving, setCopyMediaSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -113,6 +116,8 @@ function SettingsPanel({
         ...(currentUser.uiPreferences?.notifications ?? {}),
       });
       setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
+      // On unless the account says otherwise, as the server reads it.
+      setCopyMedia(currentUser.uiPreferences?.copyPlaceMedia ?? true);
     }
   }
 
@@ -159,6 +164,24 @@ function SettingsPanel({
       toast.error(messageFromError(err, LEADERBOARD_SETTING.saveFailed));
     } finally {
       setLeaderboardSaving(false);
+    }
+  }
+
+  async function handleToggleCopyMedia() {
+    if (copyMedia === null) return;
+    const previous = copyMedia;
+    setCopyMedia(!previous);
+    setCopyMediaSaving(true);
+    try {
+      onCurrentUserChange(
+        await updateUserPreferences({ copyPlaceMedia: !previous }),
+      );
+    } catch (err) {
+      console.error(err);
+      setCopyMedia(previous);
+      toast.error(messageFromError(err, COPY_MEDIA_SETTING.saveFailed));
+    } finally {
+      setCopyMediaSaving(false);
     }
   }
 
@@ -251,20 +274,36 @@ function SettingsPanel({
         <SectionHeader title={copy.privacy} />
         {/* The failed account is reported once, under Notifications. */}
         {currentUser || !currentUserError ? (
-          <Group lead={copy.friends}>
-            {leaderboardOptIn === null ? (
-              <LoadingState />
-            ) : (
-              <SwitchRow
-                title={LEADERBOARD_SETTING.label}
-                description={LEADERBOARD_SETTING.hint}
-                checked={leaderboardOptIn}
-                disabled={leaderboardSaving}
-                disabledReason="Saving…"
-                onChange={handleToggleLeaderboard}
-              />
-            )}
-          </Group>
+          <>
+            <Group lead={copy.copying}>
+              {copyMedia === null ? (
+                <LoadingState />
+              ) : (
+                <SwitchRow
+                  title={COPY_MEDIA_SETTING.label}
+                  description={COPY_MEDIA_SETTING.hint}
+                  checked={copyMedia}
+                  disabled={copyMediaSaving}
+                  disabledReason="Saving…"
+                  onChange={handleToggleCopyMedia}
+                />
+              )}
+            </Group>
+            <Group lead={copy.friends}>
+              {leaderboardOptIn === null ? (
+                <LoadingState />
+              ) : (
+                <SwitchRow
+                  title={LEADERBOARD_SETTING.label}
+                  description={LEADERBOARD_SETTING.hint}
+                  checked={leaderboardOptIn}
+                  disabled={leaderboardSaving}
+                  disabledReason="Saving…"
+                  onChange={handleToggleLeaderboard}
+                />
+              )}
+            </Group>
+          </>
         ) : null}
         {/* The closing note, where Logjam GPS ends this page with what is kept
             on the phone. */}
