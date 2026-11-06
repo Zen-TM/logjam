@@ -11,10 +11,18 @@ const DOWNLOADS_TREE =
 
 const fs = vi.hoisted(() => {
   const written: { name: string; mimeType: string | null; text: string }[] = [];
-  const state = { existing: [] as string[], pick: "ok" as "ok" | "cancel" };
+  // `createdAs` is the name the provider's URI reports for the new file: the
+  // requested name on external storage, a bare id on Downloads.
+  const state = {
+    createdAs: null as string | null,
+    pick: "ok" as "ok" | "cancel",
+  };
   const directory = {
-    list: () => state.existing.map((name) => ({ name })),
+    list: vi.fn(() => {
+      throw new Error("list() is a synchronous call on the JS thread");
+    }),
     createFile: (name: string, mimeType: string | null) => ({
+      name: state.createdAs ?? name,
       write: async (text: string) => {
         written.push({ name, mimeType, text });
       },
@@ -30,7 +38,7 @@ const fs = vi.hoisted(() => {
       return directory;
     }),
   };
-  return { written, state, Directory };
+  return { written, state, directory, Directory };
 });
 vi.mock("expo-file-system", () => ({ Directory: fs.Directory }));
 vi.mock("expo-file-system/legacy", () => ({
@@ -60,7 +68,7 @@ const { exportRoute, exportStoredFile } = await import("./fileExport");
 
 beforeEach(() => {
   fs.written.length = 0;
-  fs.state.existing = [];
+  fs.state.createdAs = null;
   fs.state.pick = "ok";
 });
 
@@ -68,7 +76,10 @@ const route = { name: "Claustral", points: [] };
 
 describe("saving an export to a folder the user picks", () => {
   it("writes into a Downloads-only picker, which the legacy SAF helpers refuse", async () => {
-    await expect(exportRoute(route, "gpx")).resolves.toBe("Claustral.gpx");
+    fs.state.createdAs = "1234"; // Downloads hands back a numeric id
+    await expect(exportRoute(route, "gpx")).resolves.toBe(
+      "to the folder you chose",
+    );
     expect(fs.written).toHaveLength(1);
     expect(fs.written[0]).toMatchObject({
       name: "Claustral.gpx",
@@ -77,9 +88,15 @@ describe("saving an export to a folder the user picks", () => {
     expect(fs.written[0].text).toContain("<gpx");
   });
 
-  it("puts the collision counter before the extension", async () => {
-    fs.state.existing = ["Claustral.gpx", "Claustral (1).gpx"];
-    await expect(exportRoute(route, "gpx")).resolves.toBe("Claustral (2).gpx");
+  it("names the file as the provider did, which may differ from the request", async () => {
+    fs.state.createdAs = "Claustral (1).gpx";
+    await expect(exportRoute(route, "gpx")).resolves.toBe("Claustral (1).gpx");
+  });
+
+  // Red if saveExportFile calls directory.list() again to pick a free name.
+  it("leaves unique naming to the provider and never lists the folder", async () => {
+    await exportRoute(route, "gpx");
+    expect(fs.directory.list).not.toHaveBeenCalled();
   });
 
   it("treats a backed-out picker as no save, not an error", async () => {
@@ -93,7 +110,7 @@ describe("saving an export to a folder the user picks", () => {
     await expect(exportRoute(route, "gpx")).rejects.toThrow("boom");
   });
 
-  it("hands an imported file back byte for byte", async () => {
+  it("writes a stored file's text as read, under the name given", async () => {
     await exportStoredFile("/p/a.gpx", "a.gpx");
     expect(fs.written[0]).toMatchObject({ name: "a.gpx", text: "stored" });
   });
