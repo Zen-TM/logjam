@@ -6,6 +6,7 @@
 // GPS draws every kind of line its phone holds (routes, imported ways, tracks)
 // and GeoPDFs as rows of their own, Logjam Web draws one "Ways" row.
 import { MAP_TERRAIN } from "./mapTerrain.js";
+import { WAY_IMPORT } from "./ways.js";
 import type { ScreenContract } from "./types.js";
 
 export const MAP_LAYERS = {
@@ -30,9 +31,7 @@ export const MAP_LAYERS = {
     places: "Places",
     ways: "Ways",
     // The overlays list ends with the way to add one, named the same on both
-    // clients. On Logjam GPS the row takes GPX, KML and GeoJSON; Logjam Web's
-    // says under it that it is the CSV importer.
-    importFile: "Import a file",
-    importFileWebDetail: "From a CSV file",
+    // clients: GPX, KML and GeoJSON (`WAY_IMPORT`).
+    importFile: WAY_IMPORT.file,
   },
 } as const satisfies ScreenContract;

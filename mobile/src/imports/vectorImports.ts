@@ -15,6 +15,7 @@ import { unzipSync } from "fflate";
 import {
   parseVectorImport,
   IMPORT_ERRORS,
+  importDisplayName,
   pickNextTrackColor,
   MEDIA_EXTENSION_BY_MIME,
   TRACK_MIME_TYPES,
@@ -33,7 +34,6 @@ import {
 import { getMediaById, listStandaloneMedia } from "../sync/mirrorStore";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { IMPORTS_DIR } from "../offline/localStores";
-import { importDisplayName } from "./importName";
 import { stageIncomingFile } from "./stagedFile";
 
 // A phone-realistic ceiling; the parser's MAX_IMPORT_POSITIONS is the real

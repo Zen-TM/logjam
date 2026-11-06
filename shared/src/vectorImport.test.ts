@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   IMPORT_ERRORS,
+  importFailureMessage,
   parseGeoJson,
   parseGpx,
   parseKml,
@@ -284,5 +285,18 @@ describe("malformed input fails loudly", () => {
         IMPORT_ERRORS.invalidCoordinates,
       );
     }
+  });
+});
+
+describe("importFailureMessage", () => {
+  // Mutation: return only `messageFromError(err, fallback)` and every parse
+  // failure collapses to the fallback (a plain Error is not an ApiError).
+  it("says what the parser said, and the fallback for anything else", () => {
+    expect(
+      importFailureMessage(new Error(IMPORT_ERRORS.noFeatures), "Couldn't."),
+    ).toBe(IMPORT_ERRORS.noFeatures);
+    expect(importFailureMessage(new Error("boom at 12,34"), "Couldn't.")).toBe(
+      "Couldn't.",
+    );
   });
 });

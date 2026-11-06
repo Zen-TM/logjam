@@ -1334,7 +1334,12 @@ export function useTripLogs(enabled: boolean) {
 
 type MediaUploadMeta = {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  /** Null on a standalone file (`linkedType: "none"`), which names its `origin` instead. */
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  /** What the API checks against `origin` (shared `parseMediaMetadata`). */
+  metadata?: Record<string, unknown>;
   filename: string;
   mediaType: string;
 };
@@ -1397,7 +1402,10 @@ export function putToPresignedUrl(
 // `thumbnail` is the client-generated JPEG for images/videos, or null for tracks.
 export async function uploadMedia(params: {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  metadata?: Record<string, unknown>;
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
@@ -1405,6 +1413,9 @@ export async function uploadMedia(params: {
   const meta: MediaUploadMeta = {
     linkedType: params.linkedType,
     linkedId: params.linkedId,
+    ...(params.origin && { origin: params.origin }),
+    ...(params.displayName && { displayName: params.displayName }),
+    ...(params.metadata && { metadata: params.metadata }),
     filename: params.file.name,
     mediaType: params.mediaType,
   };

@@ -1,8 +1,5 @@
-// What an imported file is CALLED once it lands in Saved.
-//
-// Its own RN-free module so the rule has a test (Guard: importName.test.ts):
-// `vectorImports.ts` pulls in `expo-file-system`, which vitest cannot parse —
-// the same split, and the same reason, as `notifications/tapTarget.ts`.
+// What an imported file is CALLED once it lands in Saved (Logjam GPS) or Ways
+// (Logjam Web). One rule for both clients (Guard: importName.test.ts).
 //
 // Two names compete, and they are genuinely different things:
 //   - the FILE name  — what the file is called on disk (`Ridge approach.gpx`),

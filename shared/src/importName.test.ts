@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { fileNameWithoutExtension, importDisplayName } from "./importName";
+import { fileNameWithoutExtension, importDisplayName } from "./importName.js";
 
 describe("fileNameWithoutExtension", () => {
   it("drops the extension and nothing else", () => {

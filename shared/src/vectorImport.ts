@@ -6,6 +6,7 @@
 // errors are STATIC strings and must never echo file content or coordinate
 // values (test: shared/src/vectorImport.test.ts).
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { messageFromError } from "./apiErrors.js";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -61,6 +62,18 @@ export const IMPORT_ERRORS = {
   tooLarge: "File is too large to import",
   unsupportedExtension: "Unsupported file type — use GPX, KML, or GeoJSON",
 } as const;
+
+/**
+ * What to tell the user when an import failed. The parser's own messages are
+ * static and already written for them ("No mappable features found in the
+ * file"), so they pass through; anything else is `messageFromError`'s.
+ */
+export function importFailureMessage(err: unknown, fallback: string): string {
+  const known: readonly string[] = Object.values(IMPORT_ERRORS);
+  return err instanceof Error && known.includes(err.message)
+    ? err.message
+    : messageFromError(err, fallback);
+}
 
 // ── shared helpers ──────────────────────────────────────────────────────────
 

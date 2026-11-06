@@ -36,7 +36,11 @@ import {
   type TripLogCustomFieldType,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES, makeCustomFieldKey } from "@logjam/shared";
+import {
+  CUSTOM_FIELD_TYPES,
+  makeCustomFieldKey,
+  WAY_IMPORT,
+} from "@logjam/shared";
 import type {
   TPlace,
   TUser,
@@ -496,7 +500,7 @@ function UnifiedImportDialog({
     setError(null);
     if (/\.(gpx|kml|kmz|geojson)$/i.test(file.name)) {
       setError(
-        `"${file.name}" isn't a CSV. This importer reads CSV files of places and trips. To add a GPX or KML track on Logjam Web, open a place, choose Edit and add it under Route. Logjam GPS imports GPX, KML and GeoJSON from Saved.`,
+        `"${file.name}" isn't a CSV. This importer reads CSV files of places and trips. To add a GPX, KML or GeoJSON file, open Ways and choose Add, then “${WAY_IMPORT.menu}”.`,
       );
       return;
     }

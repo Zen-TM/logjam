@@ -61,6 +61,7 @@ function SidebarPanel({
   sharedPlaces,
   onAddPlace,
   onOpenUnifiedImport,
+  onImportWay,
   onRefetch,
   filters,
   onChangeFilters,
@@ -146,6 +147,8 @@ function SidebarPanel({
   sharedPlaces: TPlace[];
   onAddPlace: () => void;
   onOpenUnifiedImport: () => void;
+  /** Opens the picker for a GPX, KML or GeoJSON file (Ways). */
+  onImportWay: () => void;
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
@@ -504,7 +507,7 @@ function SidebarPanel({
             places={[...places, ...sharedPlaces]}
             sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
-            onOpenUnifiedImport={onOpenUnifiedImport}
+            onImportWay={onImportWay}
             onOpenWay={onOpenWay}
             onOpenPlace={openPlaceDetail}
           />

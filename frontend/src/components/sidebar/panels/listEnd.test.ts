@@ -36,7 +36,6 @@ describe("a list ends with its empty state's add button", () => {
       "utf8",
     );
     expect(source).toContain("copy.importFile}");
-    expect(source).toContain("copy.importFileWebDetail");
     expect(source).toContain("onImportFile()");
   });
 });
