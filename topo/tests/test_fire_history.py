@@ -14,6 +14,7 @@ import re
 import sys
 import tempfile
 import unittest
+import urllib.error
 from datetime import date
 from pathlib import Path
 from unittest import mock
@@ -87,7 +88,15 @@ class FakeService:
     """The layer's /query: `count` polygons, served `page` at a time in
     OBJECTID order, as ArcGIS pages by resultOffset."""
 
-    def __init__(self, count, page=2, counted=None, ignores_offset=False, too_big=None):
+    def __init__(
+        self,
+        count,
+        page=2,
+        counted=None,
+        ignores_offset=False,
+        too_big=None,
+        latest=None,
+    ):
         self.features = [_feature(oid, 1572566400000) for oid in range(1, count + 1)]
         self.page = page
         self.counted = count if counted is None else counted
@@ -95,6 +104,11 @@ class FakeService:
         # (offset, size): a page from this offset over this many polygons
         # answers 500, as the service's size limit does.
         self.too_big = too_big
+        # Each date field's maximum, in epoch ms, where it isn't 2019-11-01.
+        self.latest = latest or {}
+        # An error every page raises instead of answering.
+        self.down = None
+        self.page_requests = 0
         self.offsets = []
 
     def __call__(self, params):
@@ -105,11 +119,15 @@ class FakeService:
                 "features": [
                     {
                         "attributes": {
-                            f"latest_{f}": 1572566400000 for f in fh.DATE_FIELDS
+                            f"latest_{f}": self.latest.get(f, 1572566400000)
+                            for f in fh.DATE_FIELDS
                         }
                     }
                 ]
             }
+        self.page_requests += 1
+        if self.down:
+            raise self.down
         offset = 0 if self.ignores_offset else params["resultOffset"]
         size = min(self.page, params["resultRecordCount"])
         if self.too_big and offset >= self.too_big[0] and size > self.too_big[1]:
@@ -126,12 +144,18 @@ class FakeService:
 
 class TestEsriDate(unittest.TestCase):
     def test_epoch_ms_is_the_utc_day(self):
+        # Mutation: convert in local time (fromtimestamp without tz) and
+        # Sydney's clock moves a midnight-UTC date to the next day.
         self.assertEqual(fh.esri_date(1793059200000), "2026-10-27")
 
     def test_dates_before_1970_and_the_null_sentinel(self):
         self.assertEqual(fh.esri_date(15638400000), "1970-07-01")
         self.assertEqual(fh.esri_date(-2209161600000), "1899-12-30")
         self.assertIsNone(fh.esri_date(None))
+
+    def test_a_date_past_year_9999_is_no_date(self):
+        # Mutation: drop the OverflowError catch and the read dies here.
+        self.assertIsNone(fh.esri_date(10**15))
 
 
 class TestFetch(unittest.TestCase):
@@ -141,6 +165,8 @@ class TestFetch(unittest.TestCase):
         self.out = Path(self.dir.name) / "fire.geojson"
 
     def test_pages_through_every_polygon_into_one_geojson(self):
+        # Mutation: page by a fixed PAGE_SIZE instead of what came back, or
+        # skip the date conversion.
         service = FakeService(5, page=2)
         with mock.patch("sys.stdout", io.StringIO()):
             self.assertEqual(fh.fetch(self.out, fh.RASTER_FIELDS, 5, service), 5)
@@ -159,6 +185,18 @@ class TestFetch(unittest.TestCase):
             self.assertEqual(fh.fetch(self.out, fh.RASTER_FIELDS, 9, service), 9)
         doc = json.loads(self.out.read_text())
         self.assertEqual(len(doc["features"]), 9)
+
+    def test_an_unreachable_service_fails_without_halving(self):
+        # Mutation: halve on every error and an outage takes ten halvings,
+        # each with its retries, to fail.
+        service = FakeService(5)
+        service.down = urllib.error.URLError("Name or service not known")
+        with (
+            mock.patch("sys.stdout", io.StringIO()),
+            self.assertRaises(urllib.error.URLError),
+        ):
+            fh.fetch(self.out, fh.RASTER_FIELDS, 5, service)
+        self.assertEqual(service.page_requests, 1)
 
     def test_a_short_read_fails(self):
         # Mutation: drop fetch()'s count check and a partial read builds.
@@ -209,6 +247,8 @@ class TestPublish(unittest.TestCase):
         return build
 
     def test_a_new_source_uploads_the_raster_then_its_legend(self):
+        # Mutation: upload the legend first, and a failed raster upload
+        # leaves a legend that makes next month's run skip the stale raster.
         s3 = FakeS3()
         self._publish(s3, FakeService(3))
         self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
@@ -223,13 +263,29 @@ class TestPublish(unittest.TestCase):
         self.assertEqual(s3.uploads, [])
 
     def test_a_new_polygon_rebuilds(self):
+        # Mutation: leave the count out of source_state().
         s3 = FakeS3(
             {"source": fh.source_state(FakeService(3)), "valid_feature_count": 100}
         )
         self._publish(s3, FakeService(4))
         self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
 
+    def test_a_change_in_any_latest_date_alone_rebuilds(self):
+        # Mutation: drop a field from DATE_FIELDS (or compare only the count)
+        # and an edit that moves only that date is skipped.
+        for field in ("StartDate", "EndDate", "VerDate"):
+            with self.subTest(field=field):
+                s3 = FakeS3(
+                    {
+                        "source": fh.source_state(FakeService(3)),
+                        "valid_feature_count": 100,
+                    }
+                )
+                self._publish(s3, FakeService(3, latest={field: 1572652800000}))
+                self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
+
     def test_a_short_read_uploads_nothing(self):
+        # Mutation: drop fetch()'s count check and the partial read uploads.
         s3 = FakeS3()
         service = FakeService(3, counted=4)
         with self.assertRaises(SystemExit):
@@ -242,6 +298,14 @@ class TestPublish(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._publish(s3, FakeService(3), valid=89)
         self.assertEqual(s3.uploads, [])
+
+
+class TestGridCeiling(unittest.TestCase):
+    def test_a_grid_far_larger_than_nsw_stops_before_allocating(self):
+        # Mutation: drop the MAX_CELLS check and a stray polygon sizes the
+        # in-memory raster past the task's memory.
+        with self.assertRaises(SystemExit):
+            fh.rasterize_max_year(None, {2019}, (0, 4e6, -5e6, 0), None, "x.tif")
 
 
 class TestRasterKey(unittest.TestCase):

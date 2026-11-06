@@ -35,12 +35,14 @@ Source & licence: NPWS Fire History - Wildfires and Prescribed Burns, from
 """
 
 import argparse
+import http.client
 import json
 import math
 import os
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -80,6 +82,13 @@ LEGEND_KEY = "fire/fire_history_year_legend.json"
 # A build with this many fewer dated polygons than the published one is the
 # service losing data, not NPWS removing fires: keep the published raster.
 MIN_VALID_RATIO = 0.9
+# Twice the November 2026 grid (12975 x 12588). The grid spans every polygon,
+# dated or not, so one stray far from NSW would otherwise size the in-memory
+# raster past the task's memory. Guard: tests/test_fire_history.py.
+MAX_CELLS = 2 * 12975 * 12588
+# What a failed read can raise: an HTTP or socket error, a truncated or
+# non-JSON body, or an ArcGIS error (query() raises it as a RuntimeError).
+READ_ERRORS = (OSError, http.client.HTTPException, ValueError, RuntimeError)
 
 Query = Callable[[dict], dict]
 
@@ -233,6 +242,11 @@ def rasterize_max_year(
     xmin, xmax, ymin, ymax = extent
     width = int(math.ceil((xmax - xmin) / RASTER_RESOLUTION_M))
     height = int(math.ceil((ymax - ymin) / RASTER_RESOLUTION_M))
+    if width * height > MAX_CELLS:
+        raise SystemExit(
+            f"a {width} x {height} grid is far larger than NSW's: "
+            "a polygon lies far outside the state"
+        )
 
     # Burnt in memory (about 330 MB for NSW) and written once: GTiff rewrites
     # a compressed block each pass it leaves the block cache, without reusing
@@ -278,7 +292,7 @@ def query(params: dict) -> dict:
             if "error" in doc:
                 raise RuntimeError(f"service error: {doc['error']}")
             return doc
-        except (OSError, ValueError, RuntimeError) as err:
+        except READ_ERRORS as err:
             if attempt == HTTP_TRIES - 1:
                 raise
             print(f"  query failed ({err}), retrying …", flush=True)
@@ -290,7 +304,10 @@ def esri_date(ms: Optional[int]) -> Optional[str]:
     reader types as a Date field, as the shapefile's are."""
     if ms is None:
         return None
-    return (datetime(1970, 1, 1) + timedelta(milliseconds=ms)).date().isoformat()
+    try:
+        return (datetime(1970, 1, 1) + timedelta(milliseconds=ms)).date().isoformat()
+    except OverflowError:  # outside years 1 to 9999: no usable date
+        return None
 
 
 def source_state(get: Query = query) -> dict:
@@ -351,8 +368,12 @@ def fetch(
                         "f": "geojson",
                     }
                 )
-            except (OSError, ValueError, RuntimeError) as err:
-                if size == 1:
+            except READ_ERRORS as err:
+                # A refused connection or a failed lookup is no page's size.
+                unreachable = isinstance(err, urllib.error.URLError) and not (
+                    isinstance(err, urllib.error.HTTPError)
+                )
+                if size == 1 or unreachable:
                     raise
                 size //= 2
                 print(
@@ -423,7 +444,8 @@ def publish(bucket: str, s3=None, get: Query = query) -> None:
                 f"over {old['valid_feature_count']}: check the service"
             )
         # The raster before the legend, so a failed upload leaves an old
-        # legend and the next run builds again.
+        # legend and the next run builds again. Guard:
+        # tests/test_fire_history.py, test_a_new_source_uploads_the_raster_then_its_legend.
         s3.upload_file(str(tif), bucket, RASTER_KEY)
         s3.put_object(
             Bucket=bucket,
