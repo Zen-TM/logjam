@@ -128,16 +128,28 @@ run "releases_stay_the_maintainers" {
   command = plan
 
   # Mutation: dropping a rule or the admin-only bypass on either release
-  # ruleset lets a collaborator cut a Logjam GPS release.
+  # ruleset, or adding any other bypass actor to the tags', lets a
+  # collaborator cut a Logjam GPS release.
   assert {
     condition = alltrue(flatten([
       for rs in [github_repository_ruleset.mobile_release_tags, github_repository_ruleset.mobile_release_branches] : [
         rs.rules[0].creation, rs.rules[0].update, rs.rules[0].deletion,
-        length(rs.bypass_actors) == 1,
         rs.bypass_actors[0].actor_id == 5,
       ]
-    ]))
+    ])) && length(github_repository_ruleset.mobile_release_tags.bypass_actors) == 1
     error_message = "Only repository admins may create, move or delete mobile-v* tags and release/mobile-v* branches."
+  }
+
+  # Mutation: making the second bypass actor on the branches GitHub Actions
+  # (Integration 15368), or adding a third, lets any pull-request workflow
+  # that asks for a write token push the branch an OTA hotfix publishes from
+  # (docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md).
+  assert {
+    condition = (
+      length(github_repository_ruleset.mobile_release_branches.bypass_actors) == 2 &&
+      github_repository_ruleset.mobile_release_branches.bypass_actors[1].actor_type == "DeployKey"
+    )
+    error_message = "Besides admins, only a deploy key (ota-hotfix.yml's, in the mobile-ota Environment) may push release/mobile-v* branches."
   }
 
   assert {
@@ -155,6 +167,23 @@ run "releases_stay_the_maintainers" {
       github_repository_ruleset.maplibre_android_tags.bypass_actors[0].actor_id == 5,
     ])
     error_message = "Only repository admins may move or delete maplibre-android-v* tags."
+  }
+}
+
+run "ota_updates_are_signed_on_main_only" {
+  command = plan
+
+  # Mutation: widening mobile-ota's policy (another branch, a tag pattern,
+  # protected_branches, or no custom policy) lets a workflow on that ref read
+  # the OTA signing key and sign an update every phone would run.
+  assert {
+    condition = (
+      github_repository_environment.this["mobile-ota"].deployment_branch_policy[0].custom_branch_policies &&
+      !github_repository_environment.this["mobile-ota"].deployment_branch_policy[0].protected_branches &&
+      github_repository_environment_deployment_policy.this["mobile-ota"].branch_pattern == "main" &&
+      github_repository_environment_deployment_policy.this["mobile-ota"].tag_pattern == null
+    )
+    error_message = "The mobile-ota Environment must be deployable from main and nothing else: it holds the OTA signing key (docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)."
   }
 }
 

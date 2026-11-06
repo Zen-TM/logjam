@@ -1,0 +1,57 @@
+name: ota-rollback
+
+# Undoes a Logjam GPS OTA update: `eas update:rollback <group>` republishes the
+# group published before it on its branch, or tells phones to run the
+# JavaScript embedded in their build when there is none. The group must be
+# the latest on its branch for its runtime. Run it on main (Actions →
+# ota-rollback, or `gh workflow run ota-rollback.yml -f group=<id>`), so
+# undoing a hotfix doesn't depend on which machine holds the signing key.
+# The owner alone, as with a publish (ota-hotfix.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: Update group to roll back (the production group the hotfix's PR comment names)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-hotfix
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    environment: mobile-ota
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      # eas-cli evaluates app.config.ts for the signing certificate.
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      - uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
+        with:
+          eas-version: 24.8.0
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Roll back
+        working-directory: mobile
+        env:
+          GROUP: ${{ inputs.group }}
+          OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p keys
+          printf '%s\n' "$OTA_PRIVATE_KEY" > keys/private-key.pem
+          eas update:rollback "$GROUP" --private-key-path keys/private-key.pem --non-interactive
