@@ -61,18 +61,22 @@ describe("mgaGrid", () => {
     for (const f of g.features) expect(f.properties.text).toMatch(/^\d\d$/);
   });
 
-  // Mutation: build only the centre's zone and the far side of 150 degrees
-  // has no zone 56 lines; drop the clip and zone 55 lines run past 150.
-  it("draws each zone's own grid on its side of a zone edge", () => {
+  // Mutation: build only the centre's zone and the far side of the edge has
+  // no lines of its own zone; drop the clip and the west zone's lines run
+  // past the edge; move an edge or drop a zone in MGA_ZONES.
+  it.each([
+    [144, 54, 55],
+    [150, 55, 56],
+  ] as const)("draws each zone's own grid either side of %i", (edge, w, e) => {
     const g = mgaGrid(
-      { west: 149.9, south: -33.7, east: 150.1, north: -33.6 },
+      { west: edge - 0.1, south: -33.7, east: edge + 0.1, north: -33.6 },
       11,
     );
     const sides = new Set<number>();
     for (const f of g.features) {
       const c = f.geometry.coordinates;
-      const zone = c.every(([lon]) => lon <= 150) ? 55 : 56;
-      expect(c.every(([lon]) => (zone === 55 ? lon <= 150 : lon >= 150))).toBe(
+      const zone = c.every(([lon]) => lon <= edge) ? w : e;
+      expect(c.every(([lon]) => (zone === w ? lon <= edge : lon >= edge))).toBe(
         true,
       );
       sides.add(zone);
@@ -81,9 +85,11 @@ describe("mgaGrid", () => {
       const offStep = (m: number) => Math.abs(m / 1e4 - Math.round(m / 1e4));
       expect(Math.min(offStep(easting), offStep(northing))).toBeLessThan(1e-3);
     }
-    expect([...sides].sort()).toEqual([55, 56]);
+    expect([...sides].sort()).toEqual([w, e]);
   });
 
+  // Mutation: interpolate at the midpoint, always cut at the east edge, or
+  // keep a line that leaves and re-enters as one piece.
   it("cuts a line exactly at the edge longitude", () => {
     expect(
       clipToLongitudes(
@@ -99,6 +105,27 @@ describe("mgaGrid", () => {
       [
         [149, 0],
         [150, 1],
+      ],
+    ]);
+    expect(
+      clipToLongitudes(
+        [
+          [153, 0],
+          [149, 4],
+          [148, 5],
+          [151, 8],
+        ],
+        150,
+        Infinity,
+      ),
+    ).toEqual([
+      [
+        [153, 0],
+        [150, 3],
+      ],
+      [
+        [150, 7],
+        [151, 8],
       ],
     ]);
   });

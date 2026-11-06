@@ -1,9 +1,13 @@
 // The MGA grid on the live map: GDA2020 / MGA lines, as GeoJSON in lon/lat.
 // A view across a zone edge gets both zones' grids, each cut at the edge
-// meridian, since the two grids sit at different angles there. Both clients draw it from this one function
-// (ADR 0020); the printed grid in the GeoPDF follows the same two-digit label
-// convention. Guard: mgaGrid.test.ts.
-import { fromEastingNorthing, toZoneEastingNorthing } from "./geoPdfExtent.js";
+// meridian, since the two grids sit at different angles there. Both clients
+// draw it from this one function (ADR 0020); the printed grid in the GeoPDF
+// follows the same two-digit label convention. Guard: mgaGrid.test.ts.
+import {
+  fromEastingNorthing,
+  MGA_ZONES,
+  toZoneEastingNorthing,
+} from "./geoPdfExtent.js";
 
 export interface GridBbox {
   west: number;
@@ -53,15 +57,7 @@ export function mgaGridLabel(metres: number, step: number): string {
     : String(Math.round(metres / 100) % 1000).padStart(3, "0");
 }
 
-type Zone = 54 | 55 | 56;
 type Pt = [number, number];
-
-/** Each zone's longitude span; the outer two run on past NSW. */
-const ZONES: { zone: Zone; west: number; east: number }[] = [
-  { zone: 54, west: -Infinity, east: 144 },
-  { zone: 55, west: 144, east: 150 },
-  { zone: 56, west: 150, east: Infinity },
-];
 
 /** The pieces of `line` between longitudes `west` and `east`, cut exactly at
  *  them. Interpolates in lon/lat, which is straight enough over one segment. */
@@ -94,7 +90,7 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
   const out: MgaGrid = { type: "FeatureCollection", features: [] };
   const step = mgaGridStep(zoom);
   if (step === null) return out;
-  for (const z of ZONES) {
+  for (const z of MGA_ZONES) {
     const west = Math.max(bbox.west, z.west);
     const east = Math.min(bbox.east, z.east);
     if (west < east) zoneGrid(out, { ...bbox, west, east }, z, step);
@@ -107,7 +103,7 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
 function zoneGrid(
   out: MgaGrid,
   bbox: GridBbox,
-  { zone, west, east }: (typeof ZONES)[number],
+  { zone, west, east }: (typeof MGA_ZONES)[number],
   step: number,
 ) {
   const corners = [
