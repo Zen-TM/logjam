@@ -885,7 +885,7 @@ export function SavedScreen({
       });
       const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
-        info("File imported.");
+        info(WAY_IMPORT.saved(outcome.record.name));
         // Land on the tab holding what was just added, so the new row is
         // visible instead of buried in a size-sorted "All".
         setFilter("import");

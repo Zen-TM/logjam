@@ -7,6 +7,7 @@
 // values (test: shared/src/vectorImport.test.ts).
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { messageFromError } from "./apiErrors.js";
+import { MEDIA_SIZE_CAPS } from "./media.js";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -64,15 +65,30 @@ export const IMPORT_ERRORS = {
 } as const;
 
 /**
- * What to tell the user when an import failed. The parser's own messages are
- * static and already written for them ("No mappable features found in the
- * file"), so they pass through; anything else is `messageFromError`'s.
+ * What each `IMPORT_ERRORS` message says to the user. The constants are for
+ * code and the corpus goldens; these are the sentences a client shows.
+ */
+export const IMPORT_SENTENCES: Record<keyof typeof IMPORT_ERRORS, string> = {
+  unparseable:
+    "We couldn't read that file. Check that it opens in another app.",
+  invalidCoordinates:
+    "That file has a point in an impossible place. Try exporting it again.",
+  noFeatures: "There's no line or point in that file to show on the map.",
+  tooManyPositions:
+    "That file has too many points. Try saving a shorter section.",
+  tooLarge: `That file is over ${MEDIA_SIZE_CAPS.track / 1024 / 1024} MB. Try saving a shorter section.`,
+  unsupportedExtension: "That file isn't a GPX, KML or GeoJSON file.",
+};
+
+/**
+ * What to tell the user when an import failed: the parser's own failures in
+ * `IMPORT_SENTENCES`, anything else through `messageFromError`.
  */
 export function importFailureMessage(err: unknown, fallback: string): string {
-  const known: readonly string[] = Object.values(IMPORT_ERRORS);
-  return err instanceof Error && known.includes(err.message)
-    ? err.message
-    : messageFromError(err, fallback);
+  const key = (
+    Object.keys(IMPORT_ERRORS) as (keyof typeof IMPORT_ERRORS)[]
+  ).find((each) => err instanceof Error && err.message === IMPORT_ERRORS[each]);
+  return key ? IMPORT_SENTENCES[key] : messageFromError(err, fallback);
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────

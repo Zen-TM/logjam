@@ -61,3 +61,24 @@ test("Ways imports a GPX file as an Import row, and offers no CSV", async ({
     }
   }
 });
+
+// The map's Layers popover ends with the same import. Mutation: point App's
+// `onImportFile` back at the CSV importer, and no file chooser opens.
+test("the Layers popover's Import a file opens the same picker", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Map layers" })
+    .getByRole("radio", { name: "Overlays" })
+    .click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: /^Import a file/ }).click();
+  const picker = await chooser;
+  expect(picker.isMultiple()).toBe(false);
+  await expect(page.getByRole("dialog", { name: /CSV/ })).toHaveCount(0);
+});

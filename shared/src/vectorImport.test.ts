@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   IMPORT_ERRORS,
+  IMPORT_SENTENCES,
   importFailureMessage,
   parseGeoJson,
   parseGpx,
@@ -291,12 +292,25 @@ describe("malformed input fails loudly", () => {
 describe("importFailureMessage", () => {
   // Mutation: return only `messageFromError(err, fallback)` and every parse
   // failure collapses to the fallback (a plain Error is not an ApiError).
-  it("says what the parser said, and the fallback for anything else", () => {
-    expect(
-      importFailureMessage(new Error(IMPORT_ERRORS.noFeatures), "Couldn't."),
-    ).toBe(IMPORT_ERRORS.noFeatures);
+  it("says the sentence for each parser failure, and the fallback for anything else", () => {
+    for (const key of Object.keys(
+      IMPORT_ERRORS,
+    ) as (keyof typeof IMPORT_ERRORS)[]) {
+      expect(
+        importFailureMessage(new Error(IMPORT_ERRORS[key]), "Couldn't."),
+      ).toBe(IMPORT_SENTENCES[key]);
+    }
     expect(importFailureMessage(new Error("boom at 12,34"), "Couldn't.")).toBe(
       "Couldn't.",
     );
+  });
+
+  // Mutation: drop the full stop, or put a figure from the file in a sentence.
+  it("keeps the sentences plain: whole, and carrying only the size cap", () => {
+    for (const sentence of Object.values(IMPORT_SENTENCES)) {
+      expect(sentence).toMatch(/\.$/);
+      expect(sentence.replace(/20 MB/, "")).not.toMatch(/\d/);
+    }
+    expect(IMPORT_SENTENCES.tooLarge).toContain("20 MB");
   });
 });

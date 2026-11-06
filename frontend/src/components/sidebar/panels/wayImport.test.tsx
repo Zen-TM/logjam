@@ -6,7 +6,13 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IMPORT_ERRORS, WAY_IMPORT } from "@logjam/shared";
+import {
+  ApiError,
+  IMPORT_ERRORS,
+  IMPORT_SENTENCES,
+  MEDIA_SIZE_CAPS,
+  WAY_IMPORT,
+} from "@logjam/shared";
 import { importWayFile } from "./wayImport";
 import { useWayImport } from "./useWayImport";
 
@@ -67,6 +73,28 @@ describe("importWayFile", () => {
   });
 });
 
+describe("importWayFile limits and failures", () => {
+  // Mutation: delete the size check, and a file the API would refuse is read
+  // and uploaded first.
+  it("refuses a file over the track cap before reading or uploading it", async () => {
+    const file = gpxFile();
+    Object.defineProperty(file, "size", { value: MEDIA_SIZE_CAPS.track + 1 });
+    const text = vi.spyOn(file, "text");
+    await expect(importWayFile(file)).rejects.toThrow(IMPORT_ERRORS.tooLarge);
+    expect(text).not.toHaveBeenCalled();
+    expect(api.uploadMedia).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the mapping, and a dead connection says "Couldn't import
+  // that file." with no hint to check it.
+  it("calls a storage PUT that got no answer a connection failure", async () => {
+    api.uploadMedia.mockRejectedValueOnce(
+      new Error("Upload failed (network error)"),
+    );
+    await expect(importWayFile(gpxFile())).rejects.toThrow("Network Error");
+  });
+});
+
 describe("the picker", () => {
   const Harness = ({ onImported }: { onImported: () => void }) => {
     const { input } = useWayImport(onImported);
@@ -97,8 +125,38 @@ describe("the picker", () => {
     render(<Harness onImported={onImported} />);
     pick(gpxFile("empty.gpx", "<gpx></gpx>"));
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(IMPORT_ERRORS.noFeatures),
+      expect(toast.error).toHaveBeenCalledWith(IMPORT_SENTENCES.noFeatures),
     );
     expect(onImported).not.toHaveBeenCalled();
+  });
+
+  // Mutation: show `messageFromError`'s fallback instead of the API's sentence.
+  it("shows the account's own sentence when the upload is refused", async () => {
+    api.uploadMedia.mockRejectedValueOnce(
+      new ApiError(507, "/media/presign", "POST", "Your storage is full."),
+    );
+    const onImported = vi.fn();
+    render(<Harness onImported={onImported} />);
+    pick(gpxFile());
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Your storage is full."),
+    );
+    expect(onImported).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the busy flag, and a second pick starts a second upload.
+  it("takes one import at a time", async () => {
+    let finish!: () => void;
+    api.uploadMedia.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = () => resolve({}))),
+    );
+    render(<Harness onImported={vi.fn()} />);
+    pick(gpxFile());
+    await waitFor(() => expect(api.uploadMedia).toHaveBeenCalledTimes(1));
+    expect(toast.info).toHaveBeenCalledWith("Importing…");
+    pick(gpxFile("second.gpx"));
+    finish();
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect(api.uploadMedia).toHaveBeenCalledTimes(1);
   });
 });
