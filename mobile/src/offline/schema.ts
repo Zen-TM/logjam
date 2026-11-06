@@ -28,7 +28,8 @@ export const SCHEMA_SQL = `
           -- unused nullable column.)
           label        TEXT,
           groupId      TEXT,
-          groupLabel   TEXT
+          groupLabel   TEXT,
+          firstSavedAt TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
@@ -182,6 +183,10 @@ export const ADDED_COLUMNS: {
   // groupId/groupLabel and group by their own id (one card each).
   { table: "map_artifact", column: "groupId", definition: "TEXT" },
   { table: "map_artifact", column: "groupLabel", definition: "TEXT" },
+  // When the file this one replaced in its card was first saved: set by an
+  // update, so the card keeps its place in Saved and says when it was first
+  // saved and when it was last updated (`cardDates`).
+  { table: "map_artifact", column: "firstSavedAt", definition: "TEXT" },
   // Wall-clock recording time. Deriving elapsed time from the fix series alone
   // would omit time between the last accepted fix and the Finish tap. Pauses
   // are accumulated explicitly at pause/resume taps.

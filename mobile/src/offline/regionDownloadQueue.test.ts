@@ -36,11 +36,15 @@ vi.mock(
 vi.mock("./networkPolicy", () => ({ connectionWorthResuming: () => false }));
 // Every run finds no connection.
 vi.mock("./regionMbtiles", () => ({ deleteRegionFile: vi.fn() }));
-const deleteSupersededBy = vi.hoisted(() => vi.fn());
+const swapSuperseded = vi.hoisted(() =>
+  vi.fn((_artifact: unknown, _failed: number) => Promise.resolve(true)),
+);
+const renameArtifactGroup = vi.hoisted(() => vi.fn());
+vi.mock("./registryDb", () => ({ renameArtifactGroup }));
 vi.mock("./regionDownloads", () => ({
   deleteClipFile: vi.fn(),
   deleteDownloadedArtifact: vi.fn(),
-  deleteSupersededBy,
+  swapSuperseded,
 }));
 const runRegionDownload = vi.hoisted(() =>
   vi.fn(
@@ -56,7 +60,9 @@ vi.mock("./regionTileDownload", () => ({
 const {
   cancelAllRegionDownloads,
   enqueueRegionDownloads,
+  onRegionDownloadToast,
   pauseRegionDownload,
+  renameRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
 
@@ -135,27 +141,58 @@ describe("a runner that throws", () => {
 });
 
 describe("an update", () => {
-  // Mutation: call deleteSupersededBy before the run settles, or for a run
-  // that did not finish, and a failed update leaves the user without the map
-  // they had.
+  const ready = (artifact: object, failed = 0) => ({
+    status: "ready",
+    artifact,
+    gaps: 0,
+    failed,
+  });
+
+  // Mutation: swap before the run settles, or for a run that did not finish,
+  // and a failed update leaves the user without the map they had.
   it("swaps the old file out only after the new one is saved", async () => {
-    deleteSupersededBy.mockClear();
-    const artifact = { id: "new" };
+    swapSuperseded.mockClear();
     runRegionDownload.mockResolvedValueOnce({
       status: "failed",
       code: "unknown",
     });
     enqueueRegionDownloads([job("fails")]);
     await vi.advanceTimersByTimeAsync(0);
-    expect(deleteSupersededBy).not.toHaveBeenCalled();
-    runRegionDownload.mockResolvedValueOnce({
-      status: "ready",
-      artifact,
-      gaps: 0,
-      failed: 0,
-    });
+    expect(swapSuperseded).not.toHaveBeenCalled();
+    const artifact = { id: "new" };
+    runRegionDownload.mockResolvedValueOnce(ready(artifact, 2));
     enqueueRegionDownloads([job("saves")]);
     await vi.advanceTimersByTimeAsync(0);
-    expect(deleteSupersededBy).toHaveBeenCalledWith(artifact);
+    expect(swapSuperseded).toHaveBeenCalledWith(artifact, 2);
+  });
+
+  // Mutation: ignore swapSuperseded's answer, and a download too poor to
+  // replace the older copy is reported as saved.
+  it("reports a download that could not replace the old copy as failed", async () => {
+    const toasts: { tone: string }[] = [];
+    const stop = onRegionDownloadToast((message) => toasts.push(message));
+    swapSuperseded.mockResolvedValueOnce(false);
+    runRegionDownload.mockResolvedValueOnce(ready({ id: "holey" }, 3));
+    enqueueRegionDownloads([job("holey")]);
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    expect(toasts.at(-1)).toMatchObject({ tone: "error" });
+  });
+
+  // Mutation: have Saved's rename call renameArtifactGroup alone, and the
+  // files still downloading are written under the old name.
+  it("writes the files still to come under a name given meanwhile", async () => {
+    runRegionDownload.mockClear();
+    const a = { ...job("one"), groupId: "g" };
+    const b = { ...job("two"), groupId: "g" };
+    enqueueRegionDownloads([a, b]);
+    await renameRegionGroup("g", "Renamed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect((runRegionDownload.mock.calls as unknown[][])[1]?.[0]).toMatchObject(
+      {
+        groupLabel: "Renamed",
+      },
+    );
+    expect(renameArtifactGroup).toHaveBeenCalledWith("g", "Renamed");
   });
 });

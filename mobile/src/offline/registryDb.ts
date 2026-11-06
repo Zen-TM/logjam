@@ -80,6 +80,7 @@ type ArtifactRow = {
   label: string | null;
   groupId: string | null;
   groupLabel: string | null;
+  firstSavedAt: string | null;
 };
 
 function rowToArtifact(row: ArtifactRow): MapArtifact {
@@ -104,6 +105,7 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     label: row.label,
     groupId: row.groupId,
     groupLabel: row.groupLabel,
+    firstSavedAt: row.firstSavedAt,
   };
 }
 
@@ -121,8 +123,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, label, groupId, groupLabel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, label, groupId, groupLabel, firstSavedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -140,6 +142,20 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.label ?? null,
     artifact.groupId ?? null,
     artifact.groupLabel ?? null,
+    artifact.firstSavedAt ?? null,
+  );
+  notifyChanged();
+}
+
+export async function setArtifactFirstSaved(
+  id: string,
+  firstSavedAt: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE map_artifact SET firstSavedAt = ? WHERE id = ?",
+    firstSavedAt,
+    id,
   );
   notifyChanged();
 }

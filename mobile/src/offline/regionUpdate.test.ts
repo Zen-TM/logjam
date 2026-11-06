@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { MapArtifact } from "../map/sourceResolver";
+
 vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
 vi.mock("@react-native-community/netinfo", () => ({
@@ -12,8 +14,11 @@ vi.mock("./freeSpace", () => ({
   NotEnoughSpaceError: class extends Error {},
 }));
 
-const { regionUpdateSpecs } = await import("./regionUpdate");
-import type { MapArtifact } from "../map/sourceResolver";
+const { canUpdateRegion, regionUpdateSpecs, startRegionUpdate } = await import(
+  "./regionUpdate"
+);
+const NetInfo = (await import("@react-native-community/netinfo")).default;
+const { askAllowCellular } = await import("./askMobileData");
 
 const BOX: [number, number, number, number] = [150.2, -33.7, 150.3, -33.6];
 const member = (extra: Partial<MapArtifact> & { id: string }): MapArtifact => ({
@@ -108,5 +113,26 @@ describe("regionUpdateSpecs", () => {
   it("gives each job its own id", () => {
     const ids = regionUpdateSpecs(members, "A", false, newId)?.map((s) => s.id);
     expect(new Set(ids).size).toBe(4);
+  });
+});
+
+describe("a card that cannot be updated", () => {
+  const legacy = member({ id: "x", bbox: null });
+  const sharpenedOnly = member({
+    id: "y",
+    kind: "dem-region",
+    logicalKey: "lidar-abc",
+    format: "pmtiles",
+  });
+
+  // Mutation: offer Update on every card and a card with no area answers the
+  // data prompt and then does nothing.
+  it("is not offered Update, and asks nothing if asked anyway", async () => {
+    expect(canUpdateRegion([legacy])).toBe(false);
+    expect(canUpdateRegion([sharpenedOnly])).toBe(false);
+    expect(canUpdateRegion([member({ id: "z" })])).toBe(true);
+    await startRegionUpdate([legacy], "A");
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+    expect(askAllowCellular).not.toHaveBeenCalled();
   });
 });

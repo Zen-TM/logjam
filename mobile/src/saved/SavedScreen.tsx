@@ -145,17 +145,18 @@ import {
 } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
-import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
-import { startRegionUpdate } from "../offline/regionUpdate";
+import { renameArtifact } from "../offline/registryDb";
+import { canUpdateRegion, startRegionUpdate } from "../offline/regionUpdate";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
+  cardDates,
   groupArtifacts,
   isBundledRegionMember,
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
-import { groupRegionJobs } from "../offline/regionDownloadGroups";
+import { groupRegionJobs, isGroupBusy } from "../offline/regionDownloadGroups";
 import {
   groupUnfinishedRegions,
   type UnfinishedRegionGroup,
@@ -168,6 +169,7 @@ import {
 import {
   cancelRegionDownload,
   enqueueRegionDownloads,
+  renameRegionGroup,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
@@ -349,7 +351,7 @@ type SavedItem = {
   resolveBbox: () => Promise<Bbox | null>;
   /** A saved area downloaded again over itself. `busy` while a run of this
    *  card is in the queue; `savedOn` is when its files were saved. */
-  update?: { savedOn: string; busy: boolean; run: () => Promise<void> };
+  update?: { savedLine: string; busy: boolean; run: () => Promise<void> };
   /** Persist a new display name. Absent on a shared route or waypoint, which
    *  is read-only — see `AssetActions.rename`. */
   rename?: (name: string) => Promise<unknown>;
@@ -968,8 +970,16 @@ export function SavedScreen({
     // downloads a file per selected map; grouping by area prevents separate
     // unrelated rows so the whole region can be deleted together. Legacy rows
     // (no groupId) group under their own id and stand alone, unchanged.
-    for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
+    // A card sits where it was first saved (the oldest of its files), so an
+    // update, which writes newer files, does not move it.
+    const regionCards = groupArtifacts(regionArtifacts, regionGroupKey)
+      .map((group) => ({ group, dates: cardDates(group.members) }))
+      .sort((a, b) => b.dates.savedAt.localeCompare(a.dates.savedAt));
+    for (const { group, dates } of regionCards) {
       const first = group.members[0];
+      const savedLine = `${formatDay(dates.savedAt)}${
+        dates.updatedAt ? ` · updated ${formatDay(dates.updatedAt)}` : ""
+      }`;
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
@@ -982,7 +992,7 @@ export function SavedScreen({
         key: savedRegionKey(group.key),
         category: "region",
         title: group.label ?? "Offline map region",
-        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
+        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${savedLine}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
@@ -992,17 +1002,19 @@ export function SavedScreen({
         // A rename is the name of the AREA, so it reaches every row of the run.
         rename: (name) =>
           first.groupId
-            ? renameArtifactGroup(first.groupId, name)
+            ? renameRegionGroup(first.groupId, name)
             : renameArtifact(first.id, name),
-        update: {
-          savedOn: formatDay(first.downloadedAt),
-          busy: regionJobs.some((job) => job.spec.groupId === group.key),
-          run: () =>
-            startRegionUpdate(
-              group.members,
-              group.label ?? "Offline map region",
-            ),
-        },
+        update: canUpdateRegion(group.members)
+          ? {
+              savedLine,
+              busy: isGroupBusy(regionJobs, group.key),
+              run: () =>
+                startRegionUpdate(
+                  group.members,
+                  group.label ?? "Offline map region",
+                ),
+            }
+          : undefined,
         members: group.members.map((artifact) => ({
           id: artifact.id,
           title: regionMemberName(artifact),
@@ -2322,7 +2334,7 @@ export function SavedScreen({
                   subtitle={
                     menuItem.update.busy
                       ? "Updating…"
-                      : `Saved ${menuItem.update.savedOn}`
+                      : `Saved ${menuItem.update.savedLine}`
                   }
                   disabled={menuItem.update.busy}
                   onPress={() => {

@@ -67,6 +67,52 @@ export function supersededBy(
   );
 }
 
+/**
+ * What an update does when a download lands. It swaps in the new file only
+ * when it is no worse than the one it replaces: a first save accepts a few
+ * dead tiles (the user has nothing else), an update does not trade a whole
+ * copy for one with holes. An accepted file takes over the older one's
+ * first-saved time, so the card keeps its place (`cardDates`).
+ * Guard: `artifactGroups.test.ts` ("settleUpdate").
+ */
+export function settleUpdate(
+  fresh: MapArtifact,
+  failedTiles: number,
+  all: readonly MapArtifact[],
+): { accepted: boolean; drop: MapArtifact[]; firstSavedAt: string | null } {
+  const older = supersededBy(fresh, all);
+  if (older.length === 0) {
+    return { accepted: true, drop: [], firstSavedAt: null };
+  }
+  if (failedTiles > 0) {
+    return { accepted: false, drop: [fresh], firstSavedAt: null };
+  }
+  const first = older
+    .map((a) => a.firstSavedAt ?? a.downloadedAt)
+    .reduce((a, b) => (a < b ? a : b));
+  return { accepted: true, drop: older, firstSavedAt: first };
+}
+
+/**
+ * When a card was first saved (its place in Saved, oldest file wins) and, when
+ * an update has replaced any of its files, when it was last updated.
+ * Guard: `artifactGroups.test.ts` ("cardDates").
+ */
+export function cardDates(members: readonly MapArtifact[]): {
+  savedAt: string;
+  updatedAt: string | null;
+} {
+  const times = members.map((a) => a.firstSavedAt ?? a.downloadedAt);
+  const newest = members.reduce(
+    (latest, a) => (a.downloadedAt > latest ? a.downloadedAt : latest),
+    "",
+  );
+  return {
+    savedAt: times.reduce((a, b) => (a < b ? a : b)),
+    updatedAt: members.some((a) => a.firstSavedAt) ? newest : null,
+  };
+}
+
 export type Bbox = [west: number, south: number, east: number, north: number];
 
 export type ArtifactGroup = {

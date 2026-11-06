@@ -34,7 +34,8 @@ const ownFiles = (members: readonly MapArtifact[]) =>
 
 /**
  * The jobs that download a card's own files again, or null when the card holds
- * nothing to read an area from (a legacy row with no extent).
+ * nothing to read an area from (a legacy row with no extent, or only a
+ * sharpened area's clips). The card offers Update only when this is not null.
  * Guard: `regionUpdate.test.ts`.
  */
 export function regionUpdateSpecs(
@@ -55,7 +56,12 @@ export function regionUpdateSpecs(
   const groupId = regionGroupKey(files[0]);
   const run = { bbox, groupId, groupLabel, allowCellular };
   return files.map((a): RegionTaskSpec => {
-    const base = { id: newId(), label: a.label ?? groupLabel, ...run };
+    const base = {
+      id: newId(),
+      label: a.label ?? groupLabel,
+      update: true as const,
+      ...run,
+    };
     if (a.format === "mbtiles") {
       return {
         taskKind: "tile-pyramid",
@@ -77,11 +83,18 @@ export function regionUpdateSpecs(
   });
 }
 
+export const canUpdateRegion = (members: readonly MapArtifact[]) =>
+  regionUpdateSpecs(members, "", false, () => "") !== null;
+
 /** Ask what an update needs the user to decide, then queue it. */
 export async function startRegionUpdate(
   members: readonly MapArtifact[],
   groupLabel: string,
 ): Promise<void> {
+  // Before any question: a card with nothing to update would answer them all
+  // and then do nothing.
+  const specs = regionUpdateSpecs(members, groupLabel, false, randomUUID);
+  if (!specs) return;
   const state = await NetInfo.fetch();
   if (state.isConnected === false) {
     Alert.alert(
@@ -92,13 +105,6 @@ export async function startRegionUpdate(
   }
   const allowCellular = await askAllowCellular();
   if (allowCellular === null) return;
-  const specs = regionUpdateSpecs(
-    members,
-    groupLabel,
-    allowCellular,
-    randomUUID,
-  );
-  if (!specs) return;
   try {
     // The new copy is whole beside the old one before the old one goes.
     await assertSpaceFor(
@@ -109,5 +115,5 @@ export async function startRegionUpdate(
     Alert.alert("Not enough space", err.message);
     return;
   }
-  enqueueRegionDownloads(specs);
+  enqueueRegionDownloads(specs.map((spec) => ({ ...spec, allowCellular })));
 }

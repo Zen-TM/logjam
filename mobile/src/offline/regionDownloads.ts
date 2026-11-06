@@ -40,8 +40,13 @@ import type { MapArtifact } from "../map/sourceResolver";
 import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
-import { supersededBy } from "./artifactGroups";
-import { deleteArtifact, insertArtifact, listArtifacts } from "./registryDb";
+import { settleUpdate } from "./artifactGroups";
+import {
+  deleteArtifact,
+  insertArtifact,
+  listArtifacts,
+  setArtifactFirstSaved,
+} from "./registryDb";
 import { exhaustedTileOutcome, regionClipKind } from "./regionTilePlanning";
 import type { AreaClip } from "./sharpenedClips";
 import {
@@ -67,6 +72,8 @@ export type RegionClipSpec = {
   /** Set when the clip is of a sharpened area's archive (sharpenedClips.ts). */
   area?: AreaClip;
   label: string;
+  /** Set on an update of a saved area: its finish toast says so. */
+  update?: true;
   /** The download run this belongs to — see MapArtifact.groupId. */
   groupId: string;
   groupLabel: string;
@@ -528,12 +535,21 @@ export async function deleteDownloadedArtifact(id: string): Promise<void> {
 }
 
 /**
- * Delete the older copy of a map a download has just saved over, so an update
- * swaps each file only once its new one is whole. A failure leaves both
- * copies, which is only a larger card.
+ * Put a saved download in the place of the older copy of the same map in its
+ * card, if there is one (an update), once it is whole. False when it was not
+ * good enough to replace it (`settleUpdate`) and has been dropped, leaving the
+ * older copy. A failure here leaves both copies, which is only a larger card.
  */
-export async function deleteSupersededBy(fresh: MapArtifact): Promise<void> {
-  for (const old of supersededBy(fresh, await listArtifacts())) {
-    await deleteDownloadedArtifact(old.id);
-  }
+export async function swapSuperseded(
+  fresh: MapArtifact,
+  failedTiles: number,
+): Promise<boolean> {
+  const { accepted, drop, firstSavedAt } = settleUpdate(
+    fresh,
+    failedTiles,
+    await listArtifacts(),
+  );
+  if (firstSavedAt) await setArtifactFirstSaved(fresh.id, firstSavedAt);
+  for (const old of drop) await deleteDownloadedArtifact(old.id);
+  return accepted;
 }

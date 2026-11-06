@@ -34,6 +34,8 @@ export type RegionDownloadGroup = {
   settled: boolean;
   /** Every job saved — the card has nothing left to say. */
   done: boolean;
+  /** The run is an update of a saved area, not a first save. */
+  update: boolean;
 };
 
 function jobFraction(job: RegionJob): number {
@@ -77,6 +79,7 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
       // comparing it to the job count would leave a finished run permanently
       // unfinished (a red "0 maps didn't finish" card).
       done: groupJobs.every((job) => job.state.kind === "ready"),
+      update: groupJobs.some((job) => job.spec.update),
     };
   });
 }
@@ -85,8 +88,34 @@ function maps(count: number): string {
   return `${count} map${count === 1 ? "" : "s"}`;
 }
 
+/**
+ * Whether a saved card has an update still to run or run out of its turn:
+ * queued, downloading or paused. A saved or failed job is history (the queue
+ * keeps it only until the next enqueue). Guard: `regionDownloadGroups.test.ts`
+ * ("isGroupBusy").
+ */
+export function isGroupBusy(jobs: RegionJob[], groupId: string): boolean {
+  return jobs.some(
+    (job) =>
+      job.spec.groupId === groupId &&
+      (job.state.kind === "queued" ||
+        job.state.kind === "downloading" ||
+        job.state.kind === "paused"),
+  );
+}
+
 /** What the finish toast says. Names the area and both tallies, never a bbox. */
 export function regionGroupToastText(group: RegionDownloadGroup): string {
+  if (group.update) {
+    // Nothing replaced a file when no job saved: the card is as it was.
+    if (group.jobs.every((job) => job.state.kind !== "ready")) {
+      return `Couldn't update ${group.label} · your saved map is unchanged`;
+    }
+    if (group.unfinished > 0 || group.demUnfinished) {
+      return `${group.label} partly updated · ${maps(group.unfinished)} didn't finish · older copies kept`;
+    }
+    return `${group.label} updated · ${maps(group.ready)}`;
+  }
   const saved =
     group.ready > 0
       ? `${group.label} saved · ${maps(group.ready)}`
