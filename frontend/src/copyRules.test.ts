@@ -157,6 +157,11 @@ function sources(dir: string): string[] {
   });
 }
 
+// The scan parses every source file once, about a second alone and several
+// under a loaded machine, past vitest's 5 s default. The parse is the work, so
+// the test that pays for it (the first to call `hits`) gets the 30 s that
+// `switchCopy.test.ts` gives its own. Mutation: remove the 30_000 and run the
+// whole suite with the CPUs oversubscribed.
 describe("copy on Logjam Web", () => {
   it("reads a string that is a JSX child expression's branch", () => {
     const [first] = childExpressionStrings(
@@ -183,7 +188,7 @@ describe("copy on Logjam Web", () => {
           `${file}:${line} "${text}" — ${copySay(rule)}`,
       );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   // Mutation: reword one baselined string so it no longer offends.
   it("every baseline entry still offends — the list only shrinks", () => {

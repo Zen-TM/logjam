@@ -62,7 +62,9 @@ const baselined = (file: string, rule: string, text: string) =>
   );
 
 /** Every rule a user-facing string breaks, bar what ALLOWED excuses. */
-function hits() {
+let cached: ReturnType<typeof scan> | undefined;
+const hits = () => (cached ??= scan());
+function scan() {
   return [...sources(SRC), APP].flatMap((path) =>
     userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
       ({ line, text }) =>
@@ -130,7 +132,7 @@ describe("copy on Logjam GPS", () => {
         ),
     );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   it("breaks no copy rule", () => {
     const offenders = hits()
@@ -140,7 +142,7 @@ describe("copy on Logjam GPS", () => {
           `${file}:${line} "${text}" — ${copySay(rule)}`,
       );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   // Mutation: reword one baselined string so it no longer offends.
   it("every baseline entry still offends — the list only shrinks", () => {
