@@ -36,12 +36,17 @@ vi.mock(
 vi.mock("./networkPolicy", () => ({ connectionWorthResuming: () => false }));
 // Every run finds no connection.
 vi.mock("./regionMbtiles", () => ({ deleteRegionFile: vi.fn() }));
+const deleteSupersededBy = vi.hoisted(() => vi.fn());
 vi.mock("./regionDownloads", () => ({
   deleteClipFile: vi.fn(),
   deleteDownloadedArtifact: vi.fn(),
+  deleteSupersededBy,
 }));
 const runRegionDownload = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve({ status: "paused", reason: "connectivity" })),
+  vi.fn(
+    (): Promise<unknown> =>
+      Promise.resolve({ status: "paused", reason: "connectivity" }),
+  ),
 );
 vi.mock("./regionTileDownload", () => ({
   connectionAllows: () => Promise.resolve(false),
@@ -126,5 +131,31 @@ describe("a runner that throws", () => {
     enqueueRegionDownloads([job("throws"), job("next")]);
     await vi.advanceTimersByTimeAsync(0);
     expect(runRegionDownload).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("an update", () => {
+  // Mutation: call deleteSupersededBy before the run settles, or for a run
+  // that did not finish, and a failed update leaves the user without the map
+  // they had.
+  it("swaps the old file out only after the new one is saved", async () => {
+    deleteSupersededBy.mockClear();
+    const artifact = { id: "new" };
+    runRegionDownload.mockResolvedValueOnce({
+      status: "failed",
+      code: "unknown",
+    });
+    enqueueRegionDownloads([job("fails")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deleteSupersededBy).not.toHaveBeenCalled();
+    runRegionDownload.mockResolvedValueOnce({
+      status: "ready",
+      artifact,
+      gaps: 0,
+      failed: 0,
+    });
+    enqueueRegionDownloads([job("saves")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deleteSupersededBy).toHaveBeenCalledWith(artifact);
   });
 });

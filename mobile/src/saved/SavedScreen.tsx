@@ -146,6 +146,7 @@ import {
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
 import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
+import { startRegionUpdate } from "../offline/regionUpdate";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   groupArtifacts,
@@ -346,6 +347,9 @@ type SavedItem = {
   focusBasemapId?: BasemapId;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
+  /** A saved area downloaded again over itself. `busy` while a run of this
+   *  card is in the queue; `savedOn` is when its files were saved. */
+  update?: { savedOn: string; busy: boolean; run: () => Promise<void> };
   /** Persist a new display name. Absent on a shared route or waypoint, which
    *  is read-only — see `AssetActions.rename`. */
   rename?: (name: string) => Promise<unknown>;
@@ -990,6 +994,15 @@ export function SavedScreen({
           first.groupId
             ? renameArtifactGroup(first.groupId, name)
             : renameArtifact(first.id, name),
+        update: {
+          savedOn: formatDay(first.downloadedAt),
+          busy: regionJobs.some((job) => job.spec.groupId === group.key),
+          run: () =>
+            startRegionUpdate(
+              group.members,
+              group.label ?? "Offline map region",
+            ),
+        },
         members: group.members.map((artifact) => ({
           id: artifact.id,
           title: regionMemberName(artifact),
@@ -2299,6 +2312,27 @@ export function SavedScreen({
                   icon="edit"
                   hue={theme.neutral}
                   onPress={() => setMenuMode("rename")}
+                />
+              ) : null}
+              {menuItem.update ? (
+                <Row
+                  title="Update"
+                  icon="refresh"
+                  hue={assetHue[menuItem.category]}
+                  subtitle={
+                    menuItem.update.busy
+                      ? "Updating…"
+                      : `Saved ${menuItem.update.savedOn}`
+                  }
+                  disabled={menuItem.update.busy}
+                  onPress={() => {
+                    const target = menuItem.update;
+                    closeItemSheet();
+                    target?.run().catch((err: unknown) => {
+                      console.error(err);
+                      fail(messageFromError(err, "Couldn't start the update."));
+                    });
+                  }}
                 />
               ) : null}
               {/* Every asset that still reaches THIS sheet is a file on this

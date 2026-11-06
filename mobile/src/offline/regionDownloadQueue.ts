@@ -356,6 +356,12 @@ async function drain(): Promise<void> {
       }
     }
 
+    if (outcome.status === "ready") {
+      await import("./regionDownloads")
+        .then((m) => m.deleteSupersededBy(outcome.artifact))
+        .catch(console.error);
+    }
+
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();

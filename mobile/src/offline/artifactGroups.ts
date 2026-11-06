@@ -46,6 +46,27 @@ export function isBundledRegionMember(
   );
 }
 
+/**
+ * The files of a saved area that `fresh` replaces: a group holds one file per
+ * kind and source, so a newer download of the same map in the same card (an
+ * update) takes the older one's place. Nothing else is touched.
+ * Guard: `artifactGroups.test.ts` ("supersededBy").
+ */
+export function supersededBy(
+  fresh: MapArtifact,
+  all: readonly MapArtifact[],
+): MapArtifact[] {
+  const key = regionGroupKey(fresh);
+  return all.filter(
+    (other) =>
+      other.id !== fresh.id &&
+      isRegionArtifact(other) &&
+      regionGroupKey(other) === key &&
+      other.kind === fresh.kind &&
+      other.logicalKey === fresh.logicalKey,
+  );
+}
+
 export type Bbox = [west: number, south: number, east: number, north: number];
 
 export type ArtifactGroup = {

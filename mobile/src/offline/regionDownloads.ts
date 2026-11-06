@@ -40,7 +40,8 @@ import type { MapArtifact } from "../map/sourceResolver";
 import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
-import { deleteArtifact, insertArtifact } from "./registryDb";
+import { supersededBy } from "./artifactGroups";
+import { deleteArtifact, insertArtifact, listArtifacts } from "./registryDb";
 import { exhaustedTileOutcome, regionClipKind } from "./regionTilePlanning";
 import type { AreaClip } from "./sharpenedClips";
 import {
@@ -523,5 +524,16 @@ export async function deleteDownloadedArtifact(id: string): Promise<void> {
     await FileSystem.deleteAsync(`file://${artifact.path}`, {
       idempotent: true,
     }).catch(() => {});
+  }
+}
+
+/**
+ * Delete the older copy of a map a download has just saved over, so an update
+ * swaps each file only once its new one is whole. A failure leaves both
+ * copies, which is only a larger card.
+ */
+export async function deleteSupersededBy(fresh: MapArtifact): Promise<void> {
+  for (const old of supersededBy(fresh, await listArtifacts())) {
+    await deleteDownloadedArtifact(old.id);
   }
 }

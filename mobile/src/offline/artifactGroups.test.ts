@@ -6,6 +6,7 @@ import {
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
+  supersededBy,
   unionBbox,
   type Bbox,
 } from "./artifactGroups";
@@ -199,5 +200,32 @@ describe("isBundledRegionMember", () => {
     expect(member("slope-region", "nsw-slope")).toBe(true);
     expect(member("land-region", "nsw-land")).toBe(true);
     expect(member("dem-region", "lidar-abc")).toBe(true);
+  });
+});
+
+describe("supersededBy", () => {
+  const saved = (id: string, extra: Partial<MapArtifact> = {}) =>
+    artifact({ id, groupId: "run-1", ...extra });
+  // Mutation: drop the groupId test and an update of one card deletes the
+  // same map from every other saved area; drop the logicalKey test and it
+  // deletes the card's other maps.
+  it("names only the same map in the same card", () => {
+    const fresh = saved("new");
+    const all = [
+      fresh,
+      saved("old"),
+      saved("other-map", { logicalKey: "six-imagery" }),
+      saved("other-card", { groupId: "run-2" }),
+      saved("clip", { kind: "dem-region" }),
+    ];
+    expect(supersededBy(fresh, all).map((a) => a.id)).toEqual(["old"]);
+  });
+
+  it("finds a legacy row, which stands alone under its own id", () => {
+    const legacy = artifact({ id: "legacy" });
+    const fresh = artifact({ id: "new", groupId: "legacy" });
+    expect(supersededBy(fresh, [legacy, fresh]).map((a) => a.id)).toEqual([
+      "legacy",
+    ]);
   });
 });
