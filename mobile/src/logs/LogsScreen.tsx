@@ -20,7 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Keyboard, RefreshControl, Text, View } from "react-native";
+import { Keyboard, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeTripFilterCount,
@@ -102,6 +102,8 @@ import {
   type ToastMessage,
   Icon,
   EmptyState,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -124,6 +126,7 @@ export function LogsScreen({
 }) {
   const theme = useTheme();
   const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const connectivity = useConnectivity();
@@ -541,7 +544,7 @@ export function LogsScreen({
     list: (
       <HeroSectionList
         style={styles.list}
-        {...heroCollapse.scrollProps}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={yearSections}
         keyExtractor={keyExtractor}
@@ -556,7 +559,7 @@ export function LogsScreen({
         windowSize={5}
         removeClippedSubviews
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {

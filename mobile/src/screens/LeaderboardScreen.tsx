@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   contractSectionKeys,
   LEADERBOARD,
@@ -59,6 +59,8 @@ import {
   Toast,
   useHeroCollapse,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { dismissPodium, isPodiumDismissed } from "./leaderboard";
 
@@ -136,6 +138,7 @@ export function LeaderboardScreen({
   backLabel: string;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -243,9 +246,9 @@ export function LeaderboardScreen({
           styles.listContent,
           heroCollapse.inset(spacing(1.5)),
         ]}
-        {...heroCollapse.scrollProps}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             progressViewOffset={heroCollapse.headerHeight}
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}

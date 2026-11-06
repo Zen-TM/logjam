@@ -26,7 +26,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Keyboard, RefreshControl, Text, View } from "react-native";
+import { Keyboard, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -113,6 +113,8 @@ import {
   type ChipOption,
   type ToastMessage,
   EmptyState,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { useStoredSort } from "../sortPreference";
 import { deletePlaceLocal } from "../sync/outbox";
@@ -174,6 +176,7 @@ export function PlacesScreen({
 }) {
   const theme = useTheme();
   const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -803,7 +806,7 @@ export function PlacesScreen({
     list: (
       <HeroFlatList
         style={styles.list}
-        {...heroCollapse.scrollProps}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={visible}
         keyExtractor={keyExtractor}
@@ -815,7 +818,7 @@ export function PlacesScreen({
         windowSize={5}
         removeClippedSubviews
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {

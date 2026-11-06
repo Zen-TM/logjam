@@ -46,6 +46,7 @@ export { NavReadout } from "./NavReadout";
 export { holdTick } from "./holdTick";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
 export { BottomSheet, closedSheet } from "./BottomSheet";
+export { mergeScrollProps, useRefreshFromTop } from "./refreshFromTop";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";

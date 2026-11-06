@@ -29,13 +29,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ActivityIndicator,
-  RefreshControl,
-  Share,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Share, Text, View } from "react-native";
 import {
   contractSectionKeys,
   friendInviteMessage,
@@ -101,6 +95,8 @@ import {
   Toast,
   type ChipOption,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { UserSearch } from "./UserSearch";
 
@@ -137,6 +133,7 @@ export function FriendsScreen({
 }) {
   const theme = useTheme();
   const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -433,12 +430,12 @@ export function FriendsScreen({
     list: () => (
       <HeroFlatList
         style={styles.list}
-        {...heroCollapse.scrollProps}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={items}
         keyExtractor={keyExtractor}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             progressViewOffset={heroCollapse.headerHeight}
             refreshing={refreshing}
             onRefresh={onRefresh}

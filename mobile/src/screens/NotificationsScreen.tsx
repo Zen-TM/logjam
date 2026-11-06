@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -143,6 +143,8 @@ import {
   useHeroCollapse,
   type ChipOption,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { notificationMeta } from "./notificationMeta";
 
@@ -283,6 +285,7 @@ export function NotificationsScreen({
   openAnnouncement?: { announcementId: string; nonce: number };
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -1130,7 +1133,7 @@ export function NotificationsScreen({
         windowSize={5}
         removeClippedSubviews
         keyboardShouldPersistTaps="handled"
-        {...heroCollapse.scrollProps}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         ListHeaderComponent={
           <View>
             {head.map((key) => (
@@ -1139,7 +1142,7 @@ export function NotificationsScreen({
           </View>
         }
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             progressViewOffset={heroCollapse.headerHeight}
             refreshing={false}
             onRefresh={query.refetch}

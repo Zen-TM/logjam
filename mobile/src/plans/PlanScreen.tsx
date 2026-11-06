@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   ApiError,
   contractSectionKeys,
@@ -88,6 +88,7 @@ import {
   type ChipOption,
   type ToastMessage,
   useNow,
+  useRefreshFromTop,
 } from "../ui";
 import { FormBuilderSheet, type FormBuilderState } from "./FormBuilderSheet";
 import { FormSheet, type FormSheetState } from "./FormSheet";
@@ -355,6 +356,7 @@ function PlanPage({
   joined?: boolean;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { assetHue } = useHues();
   const styles = useStyles();
   const { plan } = cached;
@@ -581,8 +583,9 @@ function PlanPage({
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
+        {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             refreshing={refreshing}
             onRefresh={online ? onRefresh : undefined}
             enabled={online}

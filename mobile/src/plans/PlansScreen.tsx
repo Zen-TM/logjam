@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -80,6 +80,8 @@ import {
   type ChipOption,
   type ToastMessage,
   confirm,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
@@ -177,6 +179,7 @@ export function PlansScreen({
 }) {
   const theme = useTheme();
   const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
   const { assetHue } = useHues();
   const { accountState } = useAccountState();
@@ -723,13 +726,13 @@ export function PlansScreen({
         >
           <HeroFlatList
             style={styles.list}
-            {...heroCollapse.scrollProps}
+            {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
             contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
             data={rows}
             keyExtractor={planKey}
             renderItem={renderItem}
             refreshControl={
-              <RefreshControl
+              <pull.Refresh
                 progressViewOffset={heroCollapse.headerHeight}
                 refreshing={refreshing}
                 onRefresh={() => void poll()}
