@@ -20,6 +20,7 @@ const toast = vi.hoisted(() => ({
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 const api = vi.hoisted(() => ({
   getPlaceDetail: vi.fn(),
+  getPlaceShares: vi.fn(async () => []),
   updateRoute: vi.fn(async () => ({ displacedRoute: null })),
   linkMediaToPlace: vi.fn(async () => ({})),
   uploadMedia: vi.fn(async () => ({})),

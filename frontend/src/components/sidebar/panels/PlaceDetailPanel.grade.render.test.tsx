@@ -10,6 +10,7 @@ vi.mock("../../feedback/ToastProvider", () => ({
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ tripLogs: [], media: [] })),
+  getPlaceShares: vi.fn(async () => []),
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
