@@ -112,6 +112,9 @@ export function WeatherView({ weather }: { weather: Weather }) {
           }))}
           value={weather.model}
           onChange={weather.chooseModel}
+          // One line that scrolls sideways (maintainer's call): a wrapped
+          // block pushed the forecast down, most in the map point sheet.
+          scroll
         />
       </View>
       {WEATHER.sections.map(({ key }) => {
