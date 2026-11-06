@@ -12,12 +12,12 @@ import type { ComponentProps } from "react";
 import {
   planAddVerbLabel,
   TRIP_PLAN_MAX_FORMS,
-  mediaSkippedSentence,
   MAX_PLACES_PER_TRIP,
   TRIP_PLACES_CAP_SENTENCE,
   todayDateKey,
   TRIP_PLAN_FORMS,
   tripPlanRequiredSummary,
+  tripPlanTripLogPlacesLine,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
@@ -819,58 +819,61 @@ describe("Add a place or way stopped halfway", () => {
   });
 });
 
-describe("Start a trip log after a copy failed", () => {
-  // Mutations: save every picked place again on Next, and a retry puts a
-  // second copy of the first place in the user's places; drop `onStale`,
-  // and a place gone from the plan 404s on every retry; count only the last
-  // run's photos, and the first copy's missing photo goes unsaid.
-  it("saves only the places not copied yet, then links them all", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(savePlanItem)
-      .mockResolvedValueOnce({ id: "copy-a", mediaSkipped: 1 })
-      .mockRejectedValueOnce(new ApiError(404, "/plans/p1", "POST"))
-      .mockResolvedValueOnce({ id: "copy-b", mediaSkipped: 1 });
+describe("Start a trip log from a plan", () => {
+  const place = (id: string, name: string, latitude: number) =>
+    ({
+      kind: "place",
+      id,
+      name,
+      latitude,
+      longitude: 150,
+      placeTypeId: "canyon",
+      media: [],
+    }) as unknown as TripPlanPlace;
+  const mine = (id: string, name: string, latitude: number) =>
+    ({
+      id,
+      name,
+      latitude,
+      longitude: 150,
+      placeTypeId: "waterfall",
+    }) as unknown as TPlace;
+
+  // Mutations: save a copy of each pick first (savePlanItem is called, and the
+  // user's places gain a duplicate); link the plan place's id; list a place
+  // the caller doesn't have.
+  it("lists and links only places the caller already has, saving nothing", () => {
+    vi.mocked(savePlanItem).mockClear();
     const onDone = vi.fn();
-    const onCopied = vi.fn();
-    const onStale = vi.fn();
-    const place = (id: string, name: string) =>
-      ({
-        kind: "place",
-        id,
-        name,
-        placeTypeId: "canyon",
-        media: [],
-      }) as unknown as TripPlanPlace;
     render(
       <PlanTripLogPlacesDialog
-        planId="p1"
-        places={[place("a", "Claustral"), place("b", "Ranon")]}
-        onCopied={onCopied}
-        onStale={onStale}
+        places={[place("a", "Claustral", -33), place("b", "Ranon", -34)]}
+        own={[mine("mine-a", "Claustral", -33)]}
         onDone={onDone}
         onClose={() => {}}
       />,
     );
+    expect(screen.getByText(tripPlanTripLogPlacesLine(1, 2))).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Ranon" })).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Claustral" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Ranon" }));
-    const next = screen.getByRole("button", {
-      name: TRIP_PLAN_PAGE.copy.tripLogNext,
-    });
-    fireEvent.click(next);
-    expect(
-      await screen.findByText(/^1 copy saved to your places\./),
-    ).toBeTruthy();
-    expect(onCopied).toHaveBeenCalledTimes(1);
-    expect(onStale).toHaveBeenCalledTimes(1);
-    fireEvent.click(next);
-    await waitFor(() =>
-      expect(onDone).toHaveBeenCalledWith(
-        ["copy-a", "copy-b"],
-        ["canyon", "canyon"],
-      ),
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.tripLogNext }),
     );
-    expect(savePlanItem).toHaveBeenCalledTimes(3);
-    expect(toast.error).toHaveBeenCalledWith(mediaSkippedSentence(2, false));
+    expect(onDone).toHaveBeenCalledWith(["mine-a"], ["waterfall"]);
+    expect(savePlanItem).not.toHaveBeenCalled();
+  });
+
+  it("says so, with nothing to pick, when none match", () => {
+    render(
+      <PlanTripLogPlacesDialog
+        places={[place("a", "Claustral", -33)]}
+        own={[]}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText(tripPlanTripLogPlacesLine(0, 1))).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 });
 
@@ -885,16 +888,18 @@ describe("Start a trip log with many places", () => {
           kind: "place",
           id: `p${i}`,
           name: `Place ${i}`,
+          latitude: i,
+          longitude: 150,
           placeTypeId: "canyon",
           media: [],
         }) as unknown as TripPlanPlace,
     );
     render(
       <PlanTripLogPlacesDialog
-        planId="p1"
         places={places}
-        onCopied={() => {}}
-        onStale={() => {}}
+        own={places.map(
+          (p) => ({ ...p, id: `mine-${p.id}` }) as unknown as TPlace,
+        )}
         onDone={() => {}}
         onClose={() => {}}
       />,

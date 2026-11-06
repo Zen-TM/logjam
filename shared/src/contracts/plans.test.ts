@@ -999,19 +999,15 @@ describe("an invite's preview", () => {
 });
 
 describe("Start a trip log's places line", () => {
-  const bare = { media: [] };
-  const withOne = { media: [{}] };
-  // Mutation: decide from every place, or ignore the picks, and picking
-  // only a place without photos promises "with its photos".
-  it("promises photos only where the picks have some", () => {
-    expect(tripPlanTripLogPlacesLine([bare], true)).not.toMatch(/photos/);
-    expect(tripPlanTripLogPlacesLine([], true)).not.toMatch(/photos/);
-    expect(tripPlanTripLogPlacesLine([bare, withOne], true)).toMatch(
-      /with its photos/,
+  // Mutation: say "all" whenever something matched, or drop the left-out
+  // count, and the picker hides that a place is not linkable.
+  it("says which are listed and what is left out", () => {
+    expect(tripPlanTripLogPlacesLine(0, 2)).toMatch(/none/);
+    expect(tripPlanTripLogPlacesLine(2, 2)).toMatch(/all in your places/);
+    expect(tripPlanTripLogPlacesLine(1, 3)).toBe(
+      "Only places you already have are listed; the other 2 are left out.",
     );
-    expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
-      /without its photos/,
-    );
+    expect(tripPlanTripLogPlacesLine(2, 3)).toMatch(/the other 1 is left out/);
   });
 });
 

@@ -1528,21 +1528,18 @@ export function tripPlanAddOutcome(args: {
   };
 }
 
-/** Start a trip log's line: what saving the picked places brings. Photos
- *  are promised only when a picked place has some. */
+/** Start a trip log's line: which of the plan's places the trip can link.
+ *  Only those already in the caller's places are listed. */
 export function tripPlanTripLogPlacesLine(
-  picked: readonly { media: readonly unknown[] }[],
-  withPhotos: boolean,
+  matched: number,
+  total: number,
 ): string {
-  if (!picked.some((place) => place.media.length > 0))
-    return "Each place you pick is saved to your places first, then linked.";
-  return `Each place you pick is saved to your places first, ${withPhotos ? "with" : "without"} its photos, then linked.`;
-}
-
-/** Start a trip log stopped partway: what is in the user's places already. */
-export function tripPlanTripLogStopped(saved: number, why: string): string {
-  if (saved === 0) return why;
-  return `${saved === 1 ? "1 copy" : `${saved} copies`} saved to your places. ${why}`;
+  if (matched === 0)
+    return "None of this plan's places are in your places, so the trip links none.";
+  const left = total - matched;
+  if (left === 0)
+    return "These are all in your places, so the trip can link any of them.";
+  return `Only places you already have are listed; the other ${left} ${left === 1 ? "is" : "are"} left out.`;
 }
 
 /** Where Save a copy put it. */

@@ -746,10 +746,9 @@ export default function PlanDetailPanel({
 
       {pickingTripPlaces && (
         <PlanTripLogPlacesDialog
-          planId={plan.id}
           places={plan.places}
-          onCopied={onOwnChanged}
-          onStale={() => refetch({ quiet: true })}
+          // The trip API takes only the caller's own places, not a shared one.
+          own={own.places.filter((place) => place.ownerId === myUserId)}
           onClose={() => setPickingTripPlaces(false)}
           onDone={(placeIds, placeTypeIds) => {
             setPickingTripPlaces(false);
