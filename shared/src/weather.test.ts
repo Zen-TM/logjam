@@ -220,7 +220,7 @@ describe("weatherDayFacts", () => {
       date: "2026-10-18",
       day: "Today",
       condition: { label: "Clear", icon: "weatherClear" },
-      temperature: "4–17°C",
+      temperature: "4–17°",
       rain: "–",
       chance: "5%",
       wind: "10\u00a0km/h",
@@ -230,7 +230,7 @@ describe("weatherDayFacts", () => {
       rain: "0.4\u00a0mm",
       chance: "20%",
     });
-    expect(weatherDayFacts(forecast.days[5], now).temperature).toBe("-1–8°C");
+    expect(weatherDayFacts(forecast.days[5], now).temperature).toBe("-1–8°");
   });
 
   it("drops the days a kept forecast has outlived", () => {

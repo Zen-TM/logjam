@@ -134,7 +134,7 @@ export type WeatherDayFacts = {
   /** "Today", or "Mon 20". */
   day: string;
   condition: WeatherCondition;
-  /** "4–17°C" */
+  /** "4–17°" */
   temperature: string;
   /** "6 mm", or `WEATHER_NONE` for a dry day. */
   rain: string;
@@ -160,7 +160,9 @@ export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
     date: day.date,
     day: dayLabel(day.date, now),
     condition: weatherCondition(day.code),
-    temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°C`,
+    // Degrees alone, as an hour's card says them: a "C" wrapped onto its own
+    // line in a day card with a two-digit low (weather.test.ts pins it).
+    temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°`,
     rain: rainText(day.rainMm),
     chance: day.rainChance != null ? chanceText(day.rainChance) : null,
     wind: windText(day.windMaxKmh),
@@ -187,7 +189,7 @@ export type WeatherCard = {
   /** Null where a figure is a rain total, which no single condition names. */
   glyph: IconIdea | null;
   glyphLabel: string;
-  /** "14°" for an hour, "4–17°C" for a day; null for a past day. */
+  /** "14°" for an hour, "4–17°" for a day; null for a past day. */
   temperature: string | null;
   /** "0.4 mm"; `WEATHER_NONE` where none fell, so the wet cards stand out. */
   rain: string;
