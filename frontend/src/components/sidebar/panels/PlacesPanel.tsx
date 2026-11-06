@@ -364,13 +364,13 @@ function PlacesPanel({
     return [
       {
         id: "topo",
-        label: LIDAR_JOB_COPY.noun,
+        label: LIDAR_JOB_COPY.make,
         icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
         id: "export",
-        label: "Print or GIS map",
+        label: "Make a map",
         icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },

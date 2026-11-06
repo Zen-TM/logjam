@@ -102,7 +102,6 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     .getByRole("group", { name: "Tools" })
     .getByText("Make a map")
     .click();
-  await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
   const dialog = page.locator("dialog[open]");
 
   // A made-up area in the far west, clear of every seeded footprint.

@@ -62,7 +62,7 @@ export default function SharpenedAreasView({
   friends: TFriend[];
   /** False until the first fetch of completed areas settles (shared/DESIGN.md §11). */
   loaded: boolean;
-  /** Arms the pick, as the Make a map menu does. */
+  /** Arms the pick, as the tray's Sharpen an area does. */
   onSharpen: () => void;
   /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
@@ -93,7 +93,7 @@ export default function SharpenedAreasView({
       ? [
           {
             id: "export",
-            label: "Print or GIS map…",
+            label: "Make a map…",
             icon: "export",
             onSelect: () => onExportArea(job),
           },

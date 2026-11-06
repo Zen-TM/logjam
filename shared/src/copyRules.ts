@@ -105,7 +105,7 @@ export const COPY_RULES: readonly CopyRule[] = [
     id: "export-is-a-file",
     pattern:
       /\bexport (?:an|this|the) area\b|\barea exports?\b|\b(?:that|this|your|the|an?) exports?\b(?! (?:of|as)\b)|\bexports (?:are|already|at a time)\b|\bsmaller exports\b/i,
-    say: '"Export" is for producing a file (Export as GPX). A map is made: "Make a map", "Print or GIS map".',
+    say: '"Export" is for producing a file (Export as GPX). A map is made ("Make a map") and an area sharpened ("Sharpen an area").',
   },
   {
     id: "attach-to-place",

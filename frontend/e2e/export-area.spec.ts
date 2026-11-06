@@ -22,19 +22,16 @@ async function openApp(page: Page) {
 /** Map tools → Make a map → GeoTIFF → Pick on the map: the
  *  dialog hides and the box tool waits for the export's box. */
 async function startGisPick(page: Page) {
-  await mapTool(page, ["Make a map", "Print or GIS map"]);
+  await mapTool(page, "Make a map");
   const dialog = page.locator("dialog[open]");
   await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
   await dialog.getByRole("button", { name: "Pick on the map" }).click();
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 }
 
-async function mapTool(page: Page, path: (string | RegExp)[]) {
+async function mapTool(page: Page, name: string) {
   await page.getByRole("button", { name: "Tools", exact: true }).click();
-  const [first, ...rest] = path;
-  await page.getByRole("group", { name: "Tools" }).getByText(first).click();
-  for (const item of rest)
-    await page.getByRole("menuitem", { name: item }).click();
+  await page.getByRole("group", { name: "Tools" }).getByText(name).click();
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });

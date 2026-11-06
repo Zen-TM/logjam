@@ -113,9 +113,7 @@ describe("the sharpened areas view", () => {
     expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /^Share/ })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Remove" })).toBeTruthy();
-    expect(
-      screen.getByRole("menuitem", { name: "Print or GIS map…" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Make a map…" })).toBeTruthy();
   });
 
   // Mutation: drop the `loaded` gate and the view says "None yet." while the
@@ -126,9 +124,9 @@ describe("the sharpened areas view", () => {
     expect(screen.queryByText(/None yet/)).toBeNull();
   });
 
-  it("arms the pick from the Sharpen area button", () => {
+  it("arms the pick from the Sharpen an area button", () => {
     const props = draw([]);
-    fireEvent.click(screen.getByRole("button", { name: "Sharpen area" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sharpen an area" }));
     expect(props.onSharpen).toHaveBeenCalled();
   });
 });

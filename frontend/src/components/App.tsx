@@ -106,7 +106,6 @@ import {
   normalizeTerrainLayers,
   type TerrainSwitchKey,
   MAP_TERRAIN,
-  LIDAR_JOB_COPY,
   opensPreview,
   PLAN_ADD_VERBS,
   planVerbsFor,
@@ -1424,28 +1423,15 @@ function App() {
     route: { onSelect: startDrawingRoute },
     place: { onSelect: () => setShowAdd(true) },
     makeMap: {
-      menu: [
-        {
-          id: "topo",
-          label: LIDAR_JOB_COPY.make,
-          icon: "lidar",
-          onSelect: () => {
-            setActivePanel(null);
-            setBoxPick((pick) => armBox(pick, "topo"));
-          },
-        },
-        {
-          id: "export",
-          label: "Print or GIS map",
-          icon: "export",
-          onSelect: () => {
-            setBoxPick((pick) => endBox(pick, "export"));
-            freshExportDialog();
-            setShowGeoPdf(true);
-          },
-        },
-      ],
+      onSelect: () => {
+        setBoxPick((pick) => endBox(pick, "export"));
+        freshExportDialog();
+        setShowGeoPdf(true);
+      },
     },
+    // The dialog draws the area itself ("Draw the area"), as the Layers
+    // popover's Sharpen button opens it.
+    sharpen: { onSelect: () => setShowTopo(true) },
   });
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
