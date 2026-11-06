@@ -9,6 +9,7 @@ import {
   setSlopeScaleColour,
   setSlopeThreshold,
   setSlopeUpper,
+  slopeBoundaryError,
   slopeBoundaryRange,
   slopeScale,
   SLOPE_SCALE_COLOURS,
@@ -125,5 +126,23 @@ describe("the edit held while the user types", () => {
     const after = nextSlopeBandsEdit(first, broken);
     expect(after.bands).toBe(broken);
     expect(after.lastValid).toBe(BANDS);
+  });
+});
+
+describe("the reason a typed angle is refused", () => {
+  const range = slopeBoundaryRange(BANDS, 0); // 41..59 in the defaults
+
+  // Mutation: return null for a value outside the range (or say nothing for
+  // an empty box), and the field snaps back with no reason given.
+  it("names the limits for a number the bands cannot take", () => {
+    for (const raw of ["5", "60", "", "  ", "4.5", "abc", "-3"])
+      expect(slopeBoundaryError(range, raw), raw).toBe(
+        `Use a whole number from ${range.min} to ${range.max}.`,
+      );
+  });
+
+  it("accepts every whole number the bands can take", () => {
+    for (const deg of [range.min, range.max, 50])
+      expect(slopeBoundaryError(range, String(deg))).toBeNull();
   });
 });

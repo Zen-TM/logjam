@@ -121,6 +121,8 @@ export function NumberField({
   onChange,
   constraints,
   showError = false,
+  explain,
+  leftError = null,
   onBlur,
   ...fieldProps
 }: Omit<
@@ -131,9 +133,16 @@ export function NumberField({
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
   showError?: boolean;
+  /** The words for a value that is not one, in place of `numericFieldError`'s
+   *  (an empty box can be refused too). One rule shared with the other client. */
+  explain?: (raw: string) => string | null;
+  /** Why the last value left in the box was refused, kept after it is put back. */
+  leftError?: string | null;
 }) {
   const [touched, setTouched] = useState(false);
-  const error = numericFieldError(value, constraints);
+  const error =
+    (explain ? explain(value) : numericFieldError(value, constraints)) ??
+    leftError;
   return (
     <TextField
       {...fieldProps}
@@ -170,13 +179,20 @@ export function LiveNumberField({
   value,
   onCommit,
   constraints,
+  explain,
   ...fieldProps
-}: Omit<ComponentProps<typeof NumberField>, "value" | "onChange"> & {
+}: Omit<
+  ComponentProps<typeof NumberField>,
+  "value" | "onChange" | "leftError"
+> & {
   value: number;
   onCommit: (next: number) => void;
   constraints: NumericFieldConstraints;
 }) {
   const [draft, setDraft] = useState(() => String(value));
+  // Why a value was refused: put back on leaving, so it is told rather than
+  // snapped, and gone at the next keystroke.
+  const [refused, setRefused] = useState<string | null>(null);
   // A new value from outside replaces the draft, during render, unless the
   // draft already reads as it ("45." for 45). Object.is, as effect deps
   // compare: NaN equals itself here.
@@ -195,14 +211,23 @@ export function LiveNumberField({
       {...fieldProps}
       value={draft}
       constraints={constraints}
+      explain={explain}
+      leftError={refused}
       onChange={(next) => {
         setDraft(next);
+        setRefused(null);
         if (next.trim() !== "" && numericFieldError(next, constraints) === null)
           onCommit(Number(next));
       }}
       // Whatever is left that never committed (empty, "-", out of range) is
-      // not a value: the field goes back to what is drawn.
-      onBlur={() => setDraft(String(value))}
+      // not a value: the field goes back to what is drawn, saying why.
+      onBlur={() => {
+        setRefused(
+          (explain ? explain(draft) : numericFieldError(draft, constraints)) ??
+            null,
+        );
+        setDraft(String(value));
+      }}
     />
   );
 }
