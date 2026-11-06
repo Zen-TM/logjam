@@ -381,7 +381,7 @@ function isPluralLabel(label: string): boolean {
 export function shelfSubtitle(entry: ShelfEntry, now: number): string {
   const when = relativeTime(entry.at, now);
   if (entry.serverValue === null) return `Yours was saved · ${when}`;
-  return `Replaced: ${previewValue(entry.field, entry.serverValue)} · ${when}`;
+  return `Replaced: ${readableValue(entry.field, entry.serverValue)} · ${when}`;
 }
 
 /**
@@ -394,6 +394,9 @@ export function shelfSubtitle(entry: ShelfEntry, now: number): string {
  * promises a deadline.
  */
 export function shelfExplanation(entry: ShelfEntry): string {
+  if (entry.changedSince) {
+    return "This was changed again after your version was saved. The earlier text is still here.";
+  }
   if (entry.serverValue === null) {
     return "Your version was saved. Another device had changed this item in the meantime.";
   }
@@ -461,6 +464,31 @@ export function keepMineConfirmBody(replaced: string): string {
 function truncate(text: string, max = 120): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** Whether there is an earlier version to keep, quote or restore. */
+export function hasEarlierVersion(entry: ShelfEntry): boolean {
+  return entry.serverValue !== null;
+}
+
+/**
+ * Any field value as a person reads it: text as it is, a list joined, an
+ * attributes blob as "Label: value" lines. Used where a dialog quotes the text
+ * it is about to delete, whatever type the field is.
+ */
+export function readableValue(field: string, value: unknown): string {
+  if (UNRENDERABLE_FIELDS.has(field)) return "(hidden)";
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !key.startsWith("_"))
+      .map(([key, inner]) => {
+        const label = fieldLabel(key);
+        return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${fieldValueText(key, inner)}`;
+      })
+      .join("; ");
+  }
+  return previewValue(field, value);
 }
 
 /** A shelved or parked field value, rendered for reading — never a coordinate. */

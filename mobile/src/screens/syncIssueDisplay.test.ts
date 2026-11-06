@@ -6,7 +6,9 @@ import {
   bulkDiscardBody,
   opChanges,
   opTarget,
+  hasEarlierVersion,
   keepMineConfirmBody,
+  readableValue,
   restoreConfirmBody,
   canRecreate,
   rejectedFields,
@@ -47,6 +49,8 @@ function shelved(overrides: Partial<ShelfEntry> = {}): ShelfEntry {
     entityId: "c1",
     field: "notes",
     shelvedValue: "Abseil 3 anchor spinning",
+    currentValue: "Abseil 3 anchor spinning",
+    changedSince: false,
     serverValue: "Classic. Do it in summer.",
     at: "2026-08-30T00:00:00.000Z",
     restoreBlock: null,
@@ -676,5 +680,45 @@ describe("keepMineConfirmBody", () => {
     const body = keepMineConfirmBody("Classic. Do it in summer.");
     expect(body).toContain("“Classic. Do it in summer.”");
     expect(body).toMatch(/Your version stays/);
+  });
+});
+
+describe("hasEarlierVersion", () => {
+  // Mutation: test `typeof serverValue === "string"` instead — an attributes
+  // blob, a list or a number would then be deleted by Keep my version with no
+  // dialog.
+  it("is true for a value of any type, false only for nothing", () => {
+    expect(hasEarlierVersion(shelved())).toBe(true);
+    expect(
+      hasEarlierVersion(
+        shelved({ field: "fieldValues", serverValue: { quality: 3 } }),
+      ),
+    ).toBe(true);
+    expect(
+      hasEarlierVersion(shelved({ field: "altNames", serverValue: ["a"] })),
+    ).toBe(true);
+    expect(
+      hasEarlierVersion(shelved({ field: "elevation", serverValue: 0 })),
+    ).toBe(true);
+    expect(hasEarlierVersion(shelved({ serverValue: null }))).toBe(false);
+  });
+});
+
+describe("readableValue", () => {
+  it("reads lists, attributes and numbers as words, not JSON", () => {
+    expect(readableValue("altNames", ["Upper", "Lower"])).toBe("Upper, Lower");
+    expect(
+      readableValue("fieldValues", { quality: 3, _internal: 1, hours: 6 }),
+    ).toBe("Star rating: 3/5; Trip time: 6 hours");
+    expect(readableValue("elevation", 120)).toBe("120");
+    expect(readableValue("latitude", -33.6)).toBe("(hidden)");
+  });
+});
+
+describe("a conflict whose field changed after the push", () => {
+  it("says so instead of claiming the user's version is what's saved", () => {
+    expect(shelfExplanation(shelved({ changedSince: true }))).toMatch(
+      /changed again/,
+    );
   });
 });

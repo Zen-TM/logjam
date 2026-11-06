@@ -15,7 +15,7 @@ import {
   type SyncPushOp,
 } from "@logjam/shared";
 
-import { getMirrorPlace } from "./mirrorStore";
+import { getMirrorPlace, getMirrorTrip } from "./mirrorStore";
 import { parkedError, type ParkedError } from "./parkedError";
 import {
   canKeepBothField,
@@ -82,6 +82,13 @@ export type ShelfEntry = {
   /** What the user wrote. The account took it: a conflict receipt exists only
    *  for an APPLIED push, and the API's rule is that the later arrival wins. */
   shelvedValue: unknown;
+  /** What the field holds NOW, as this phone mirrors it — `shelvedValue` when
+   *  the mirror can't say. Restore and Keep both overwrite THIS, so dialogs
+   *  quote it: the user may have edited the field again, or another device
+   *  written after the flush, and a snapshot would name text that isn't there. */
+  currentValue: unknown;
+  /** True when `currentValue` is no longer the text the user's push wrote. */
+  changedSince: boolean;
   /** What the account held before the user's write replaced it — the only copy
    *  left of it. Null when the account had nothing there. */
   serverValue: unknown;
@@ -212,19 +219,23 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     const target = await shelfTarget(entity, row.entity_id, field);
     const shelvedValue = row.shelved_json ? JSON.parse(row.shelved_json) : null;
     const serverValue = row.server_json ? JSON.parse(row.server_json) : null;
+    const live = await liveFieldValue(entity, row.entity_id, field);
+    const currentValue = live === undefined ? shelvedValue : live;
     entries.push({
       id: row.id,
       entity,
       entityId: row.entity_id,
       field,
       shelvedValue,
+      currentValue,
+      changedSince: !sameValue(currentValue, shelvedValue),
       serverValue,
       at: row.at,
       restoreBlock: target.block ?? (serverValue === null ? "nothing" : null),
       canKeepBoth:
         target.block === null &&
         canKeepBothField(entity, field) &&
-        isMergeablePair(shelvedValue, serverValue),
+        isMergeablePair(currentValue, serverValue),
       // The stored name first: it was captured while the row still existed, and
       // the mirror lookup is only the fallback for entries shelved before the
       // column did (`ensureLocalColumns` backfills nothing).
@@ -236,6 +247,33 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     });
   }
   return entries;
+}
+
+/**
+ * The field's value in the phone's mirror, or `undefined` when the mirror
+ * can't say (an entity with no mirror reader, a row since deleted). Places and
+ * trips are the entities that conflict in practice.
+ */
+async function liveFieldValue(
+  entity: string,
+  entityId: string,
+  field: string,
+): Promise<unknown> {
+  const row =
+    entity === "place"
+      ? await getMirrorPlace(entityId)
+      : entity === "tripLog"
+        ? await getMirrorTrip(entityId)
+        : null;
+  return row && field in row
+    ? (row as unknown as Record<string, unknown>)[field]
+    : undefined;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  const flat = (value: unknown) =>
+    JSON.stringify(typeof value === "string" ? value.trim() : (value ?? null));
+  return flat(a) === flat(b);
 }
 
 /** Two values worth joining: both real text, and not already the same text. */
@@ -309,7 +347,7 @@ export async function keepBothShelfValue(id: number): Promise<void> {
     if (!entry.canKeepBoth) {
       throw new Error(`Cannot keep both for shelf entry ${id}`);
     }
-    return `${String(entry.serverValue).trim()}\n\n${String(entry.shelvedValue).trim()}`;
+    return `${String(entry.serverValue).trim()}\n\n${String(entry.currentValue).trim()}`;
   });
 }
 

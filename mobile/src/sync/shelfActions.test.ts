@@ -63,6 +63,17 @@ vi.mock("expo-file-system/legacy", () => ({
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000001",
 }));
+// What the mirror holds now; null = the mirror can't say.
+let livePlace: Record<string, unknown> | null = null;
+vi.mock("./mirrorStore", async () => {
+  const actual =
+    await vi.importActual<typeof import("./mirrorStore")>("./mirrorStore");
+  return {
+    ...actual,
+    getMirrorPlace: () => Promise.resolve(livePlace),
+    getMirrorTrip: () => Promise.resolve(null),
+  };
+});
 vi.mock("./outbox", async () => {
   const actual = await vi.importActual<typeof import("./outbox")>("./outbox");
   return {
@@ -110,6 +121,7 @@ beforeEach(() => {
   outboxRows.length = 0;
   runCalls.length = 0;
   writes.length = 0;
+  livePlace = null;
 });
 
 describe("the mergeable-field list", () => {
@@ -213,10 +225,37 @@ describe("keepBothShelfValue", () => {
 
   it("refuses rather than writing 'null' into the field", async () => {
     shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
-    await expect(keepBothShelfValue(1)).rejects.toThrow(
-      /Cannot (keep both|write)/,
-    );
+    await expect(keepBothShelfValue(1)).rejects.toThrow(/Cannot write/);
     expect(writes).toEqual([]);
+  });
+
+  // Reaches the `canKeepBoth` check itself: the entry can be written, but a
+  // place name is not joinable. Mutation: delete the `!entry.canKeepBoth`
+  // throw in keepBothShelfValue — the name would be written as two lines.
+  it("refuses a field where joining makes nonsense", async () => {
+    shelfRows.push(
+      shelfRow({
+        field: "name",
+        shelved_json: JSON.stringify("Claustral"),
+        server_json: JSON.stringify("Claustral Canyon"),
+      }),
+    );
+    await expect(keepBothShelfValue(1)).rejects.toThrow(/Cannot keep both/);
+    expect(writes).toEqual([]);
+  });
+
+  // The text it joins is what the field holds NOW. Mutation: join
+  // `shelvedValue` — it would put back text the user has since replaced.
+  it("joins the earlier text to the live value, not the flush-time snapshot", async () => {
+    shelfRows.push(shelfRow());
+    livePlace = { notes: "Edited again on the phone." };
+    const [entry] = await listShelfEntries();
+    expect(entry.changedSince).toBe(true);
+    expect(entry.currentValue).toBe("Edited again on the phone.");
+    await keepBothShelfValue(1);
+    expect(writes[0].value).toBe(
+      "Classic. Do it in summer.\n\nEdited again on the phone.",
+    );
   });
 });
 

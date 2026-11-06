@@ -84,11 +84,12 @@ import {
   opChanges,
   opTarget,
   opTitle,
-  previewValue,
   rejectedFields,
   restoreBlockReason,
   restoreConfirmBody,
+  hasEarlierVersion,
   keepMineConfirmBody,
+  readableValue,
   restoreSubtitle,
   salvageableFields,
   selectionCountLabel,
@@ -299,9 +300,8 @@ export function SyncIssuesScreen({
       // not a reason to say less about it.
       confirmBody: restoreConfirmBody(
         restorable.length,
-        restorable.length === 1 &&
-          typeof restorable[0].shelvedValue === "string"
-          ? restorable[0].shelvedValue
+        restorable.length === 1
+          ? readableValue(restorable[0].field, restorable[0].currentValue)
           : undefined,
       ),
       confirmLabel: "Restore",
@@ -421,10 +421,12 @@ export function SyncIssuesScreen({
       // Your text is already the account's, so there is nothing to send: the
       // only thing this deletes is the earlier text, and that can't come back.
       // With nothing replaced there is nothing to lose, so no dialog.
-      if (typeof entry.serverValue === "string") {
+      if (hasEarlierVersion(entry)) {
         const ok = await confirm({
           confirmTitle: "Keep my version?",
-          confirmBody: keepMineConfirmBody(entry.serverValue),
+          confirmBody: keepMineConfirmBody(
+            readableValue(entry.field, entry.serverValue),
+          ),
           confirmLabel: "Keep mine",
           tone: "destructive",
         });
@@ -446,8 +448,7 @@ export function SyncIssuesScreen({
       // The value about to be destroyed (the user's own) is quoted in the
       // dialog: this is the last moment it exists anywhere, and the sheet that
       // was showing it has closed behind the alert.
-      const replacing =
-        typeof entry.shelvedValue === "string" ? entry.shelvedValue : undefined;
+      const replacing = readableValue(entry.field, entry.currentValue);
       const ok = await confirm({
         confirmTitle: "Restore the earlier version?",
         confirmBody: restoreConfirmBody(1, replacing),
@@ -769,7 +770,7 @@ function LostMenu({
 
   // The earlier text is absent when the account had nothing there — a block
   // reading "(empty)" would be three lines of chrome around nothing.
-  const hasEarlier = entry.serverValue !== null;
+  const hasEarlier = hasEarlierVersion(entry);
   return (
     <View style={styles.menuBody}>
       <Text style={styles.menuCause}>{shelfExplanation(entry)}</Text>
@@ -777,16 +778,18 @@ function LostMenu({
           copy left. Selectable rather than a Copy button: RN's own text
           selection is the platform's copy affordance and costs no dependency. */}
       <View style={styles.valueBlock}>
-        <Text style={styles.menuLabel}>Yours (saved)</Text>
+        <Text style={styles.menuLabel}>
+          {entry.changedSince ? "Saved now" : "Yours (saved)"}
+        </Text>
         <Text style={styles.menuValue} selectable>
-          {previewValue(entry.field, entry.shelvedValue)}
+          {readableValue(entry.field, entry.currentValue)}
         </Text>
       </View>
       {hasEarlier ? (
         <View style={styles.valueBlock}>
           <Text style={styles.menuLabel}>Replaced</Text>
           <Text style={styles.menuValue} selectable>
-            {previewValue(entry.field, entry.serverValue)}
+            {readableValue(entry.field, entry.serverValue)}
           </Text>
         </View>
       ) : null}
