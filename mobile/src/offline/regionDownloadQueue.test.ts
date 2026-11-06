@@ -213,17 +213,24 @@ describe("stopping an update", () => {
         : ({ kind: "paused", reason: "connectivity" } as const),
     progress: {} as never,
   });
+  const ready = (id: string) => ({
+    status: "ready",
+    artifact: { id },
+    gaps: 0,
+    failed: 0,
+  });
 
   // Mutation: stop every job of an update, as a first save does, and the
   // files it already saved, which took their older copies' place, go too.
   it("keeps the files it already saved", async () => {
     vi.mocked(deleteDownloadedArtifact).mockClear();
-    const done = jobOf("done", "ready");
-    const waiting = jobOf("waiting", "paused");
+    runRegionDownload.mockResolvedValueOnce(ready("done"));
+    enqueueRegionDownloads([updateJob("done"), updateJob("waiting")]);
+    await vi.advanceTimersByTimeAsync(0);
     stopRegionGroup({
       groupId: "card",
       update: true,
-      jobs: [done, waiting],
+      jobs: [jobOf("done", "ready"), jobOf("waiting", "paused")],
     });
     await vi.advanceTimersByTimeAsync(0);
     const deleted = vi.mocked(deleteDownloadedArtifact).mock.calls.flat();
@@ -233,6 +240,10 @@ describe("stopping an update", () => {
 
   it("stops everything a first save wrote", async () => {
     vi.mocked(deleteDownloadedArtifact).mockClear();
+    const first = (id: string) => ({ ...job(id), groupId: "card" });
+    runRegionDownload.mockResolvedValueOnce(ready("done"));
+    enqueueRegionDownloads([first("done"), first("waiting")]);
+    await vi.advanceTimersByTimeAsync(0);
     stopRegionGroup({
       groupId: "card",
       update: false,

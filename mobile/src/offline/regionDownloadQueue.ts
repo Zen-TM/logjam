@@ -348,7 +348,11 @@ async function drain(): Promise<void> {
       console.error(err);
       return { status: "failed", code: "unknown" } as const;
     });
-    tokens.delete(next.spec.id);
+    // The token stays until the job's state says what the run became: from the
+    // moment a file is registered until then, a Stop only marks the token, so
+    // it cannot delete a file the swap below has just made the only copy.
+    // Guard: regionDownloadQueue.test.ts ("an update that is stopped at every
+    // step of its run").
 
     // The spec was snapshotted before the run; the user may have renamed the
     // area while it was in flight (the naming prompt is deliberately non-
@@ -374,9 +378,20 @@ async function drain(): Promise<void> {
       if (!kept) outcome = { status: "failed", code: "provider-errors" };
     }
 
+    const stoppedLate = token.stop === "cancel";
+    tokens.delete(next.spec.id);
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();
+      continue;
+    }
+    // A Stop that came after the file was saved: a first save is cancelled as
+    // it would have been a moment sooner; an update's file has already taken
+    // the older one's place, so it is kept.
+    if (stoppedLate && outcome.status === "ready" && !next.spec.update) {
+      jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
+      publish();
+      deleteAbandonedRegion(next.spec.id).catch((err) => console.error(err));
       continue;
     }
     patch(next.spec.id, {
@@ -438,6 +453,10 @@ export function cancelRegionDownload(id: string): void {
     token.stop = "cancel";
     return; // the pump removes the row when the run returns "cancelled"
   }
+  // A Stop answered from a screen that was drawn before the job saved: an
+  // update's saved file is the only copy of its map, never this call's to delete.
+  const live = jobs.find((job) => job.spec.id === id);
+  if (live?.spec.update && live.state.kind === "ready") return;
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
   deleteAbandonedRegion(id).catch((err) => console.error(err));
@@ -448,7 +467,16 @@ export function stopRegionGroup(
   group: Pick<RegionDownloadGroup, "groupId" | "jobs" | "update">,
 ): void {
   userStopped.add(group.groupId);
-  for (const job of jobsToStop(group)) cancelRegionDownload(job.spec.id);
+  // The queue's jobs as they are now, not as the screen drew them when its
+  // confirm opened: a job that saved while the user decided is no longer
+  // something to stop.
+  const live = jobs.filter((job) => job.spec.groupId === group.groupId);
+  for (const job of jobsToStop({
+    jobs: live,
+    update: live.some((job) => job.spec.update),
+  })) {
+    cancelRegionDownload(job.spec.id);
+  }
 }
 
 /**
