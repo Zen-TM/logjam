@@ -749,8 +749,6 @@ export function PlaceDetailScreen({
           <IconButton
             icon="overflow"
             accessibilityLabel={`Actions for ${place.name}`}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }

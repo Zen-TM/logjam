@@ -244,8 +244,6 @@ export function TripDetailScreen({
           <IconButton
             icon="overflow"
             accessibilityLabel={`Actions for ${tripTitle(current)}`}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }
