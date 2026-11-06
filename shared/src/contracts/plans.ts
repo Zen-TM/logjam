@@ -32,6 +32,7 @@ import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
 import { PLACE_FORM } from "./placeForm.js";
+import { SHORT_MONTHS, SHORT_WEEKDAYS } from "../dateNames.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
@@ -189,26 +190,15 @@ export function tripPlansEmpty(
   };
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
 function dayParts(date: DateOnly) {
   const [year, month, day] = date.split("-").map(Number);
   const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return { year, month: MONTHS[month - 1], day, weekday: WEEKDAYS[weekday] };
+  return {
+    year,
+    month: SHORT_MONTHS[month - 1],
+    day,
+    weekday: SHORT_WEEKDAYS[weekday],
+  };
 }
 
 /**

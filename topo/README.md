@@ -455,6 +455,12 @@ recipe above does:
 python3 build_fire_history.py publish --bucket logjam-topo-jobs
 ```
 
+The Fire history overlay's archive exists only once `publish` has run, and the
+schedule runs it on the 5th of the month. So when the overlay first ships,
+merge it, let *Deploy topo worker* push the image, and run
+`logjam-fire-history` once by hand before the Logjam Web and Logjam GPS
+deploys that add its row: until then, turning it on finds no file.
+
 ---
 
 ## Troubleshooting

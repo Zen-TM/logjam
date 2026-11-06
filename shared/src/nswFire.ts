@@ -6,6 +6,7 @@
 //
 // The archive holds the fire's year and month, never how long ago that was:
 // each client works that out from today, so the map doesn't age between builds.
+import { SHORT_MONTHS } from "./dateNames.js";
 import { NSW_5M } from "./demSources.js";
 
 export const NSW_FIRE = {
@@ -154,21 +155,6 @@ export function fireLegendRows(): { label: string; colour: string }[] {
   });
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
 /**
  * "Wildfire, Dec 2019": what "What is here?" says of the most recent fire a
  * map's own query found on its fire layer at a point, or null. Neither client
@@ -192,5 +178,5 @@ export function fireNameOf(
   const type =
     (typeof best.type === "number" ? FIRE_TYPES[best.type] : undefined) ??
     FIRE_UNKNOWN_TYPE;
-  return `${type}, ${MONTHS[best.month - 1]} ${best.year}`;
+  return `${type}, ${SHORT_MONTHS[best.month - 1]} ${best.year}`;
 }

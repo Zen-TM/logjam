@@ -55,7 +55,7 @@ export const MAP_TERRAIN = {
       "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.",
     // The source's gap, said beside the legend it qualifies.
     fireCaveat:
-      "Mapped by NPWS: a fire it didn't map, often on private land, has no colour.",
+      "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
     slopeBands: "Slope bands",
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.

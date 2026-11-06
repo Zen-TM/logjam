@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { fireLayerSpecs } from "./fireLayers";
 import { FIRE_EDGE_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
+import { TERRAIN_ENTRIES } from "./terrainEntries";
 
 const NOV_2026 = new Date(2026, 10, 7);
 
@@ -48,5 +49,13 @@ describe("the Fire history layers", () => {
       FIRE_FILL_LAYER,
       FIRE_EDGE_LAYER,
     ]);
+  });
+
+  // Mutation: credit the source with anything but NSW_FIRE's own line, and
+  // the map's attribution drops a CC BY term of the data.
+  it("credit the data on the map, by its CC BY licence", () => {
+    expect(TERRAIN_ENTRIES.fire.attribution).toBe(NSW_FIRE.creditHtml);
+    expect(NSW_FIRE.creditHtml).toContain("NPWS Fire History");
+    expect(NSW_FIRE.creditHtml).toContain("CC BY 4.0");
   });
 });

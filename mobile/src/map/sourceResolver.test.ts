@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SharpenedOverlay } from "@logjam/shared";
+import { NSW_FIRE, type SharpenedOverlay } from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
@@ -521,9 +521,14 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    expect(resolveMapSource({ kind: "nsw-fire" }, offline)).toHaveLength(1);
+    const drawn = resolveMapSource({ kind: "nsw-fire" }, offline);
+    expect(drawn).toHaveLength(1);
     const [online] = resolveMapSource({ kind: "nsw-fire" }, ctx({}));
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
+    // Mutation: credit the source with anything but NSW_FIRE's own line, and
+    // the map's credits drop a CC BY term of the data, online or off.
+    for (const source of [online, drawn[0]])
+      expect(source).toMatchObject({ attribution: NSW_FIRE.credit });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/fire/nsw-fire-history.pmtiles",
     );
