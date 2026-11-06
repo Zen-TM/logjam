@@ -351,30 +351,17 @@ export function discardExplanation(op: ParkedOp): string {
 
 /**
  * A conflict's headline: another device changed the same thing the user did.
- * Neutral on who "won" in the title; the sheet says it (`shelfExplanation`).
+ * Short on purpose: the row shows two lines, and the thing's name, which says
+ * which one, must survive at the largest text size. Neutral on who "won"; the
+ * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
+ * agreement with a plural field label.
  */
 export function shelfTitle(entry: ShelfEntry): string {
   const label = fieldLabel(entry.field);
   const subject = entry.entityName
     ? `for “${entry.entityName}”`
     : `on a ${entityNoun(entry.entity)}`;
-  const verb = isPluralLabel(label) ? "were" : "was";
-  return `Your ${label} ${subject} ${verb} also changed on another device`;
-}
-
-/**
- * Whether a field's label takes a plural verb — "your notes WERE overwritten",
- * "your water grade WAS". Singular fields use "was" while plural fields use
- * "were".
- *
- * Derived from the label rather than hand-listed, because a second list of
- * fields is a list that drifts from `FIELD_LABEL` (root AGENTS.md). Every
- * plural label we write ends in "s" and no singular one does — checked in
- * `syncIssueDisplay.test.ts` across the whole map, so a future label that
- * breaks the rule (a "status", say) fails there rather than on someone's phone.
- */
-function isPluralLabel(label: string): boolean {
-  return label.endsWith("s");
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)} ${subject} changed on two devices`;
 }
 
 /** The supporting line: what the user's text replaced, and how long ago. */
