@@ -8,11 +8,13 @@
 // here rather than under routes/ or tracks/: both own a caller, neither owns
 // the writing.
 //
-// ANDROID uses the Storage Access Framework, which is already part of
-// expo-file-system: the user picks a real folder, we write into it, and the
-// file lands somewhere they can find with any file manager. No new native
-// module — expo-sharing would mean a fresh dev client build for what SAF
-// already does.
+// ANDROID uses the Storage Access Framework through expo-file-system's
+// Directory API: the user picks a real folder, we write into it, and the file
+// lands somewhere they can find with any file manager. Not the legacy
+// StorageAccessFramework helpers: they accept only com.android.externalstorage
+// trees, so a phone whose picker offers just Downloads (or Drive) rejects a
+// valid grant. Guard: fileExport.test.ts. No new native module — expo-sharing
+// would mean a fresh dev client build for what SAF already does.
 //
 // iOS has no SAF equivalent, so export fails loudly there rather than
 // pretending. It needs expo-sharing (share sheet, whose "Save to Files" is the
@@ -24,6 +26,7 @@
 // it is precise timestamped location history. It goes only to the folder the
 // user chose; nothing here logs the name, the path, or the geometry.
 import { Platform } from "react-native";
+import { Directory } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   exportFilename,
@@ -37,6 +40,9 @@ import {
   type RecordedTrackPoint,
   type RoutePoint,
 } from "@logjam/shared";
+
+// Directory.pickDirectoryAsync rejects with this code when the user backs out.
+const PICKER_CANCELLED = "ERR_PICKER_CANCELLED";
 
 export type ExportFormat = "gpx" | "kml";
 
@@ -62,20 +68,19 @@ async function saveExportFile(
 ): Promise<string | null> {
   if (Platform.OS !== "android") throw new ExportUnsupportedError();
 
-  const permission =
-    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-  if (!permission.granted) return null;
+  let directory: Directory;
+  try {
+    directory = await Directory.pickDirectoryAsync();
+  } catch (err) {
+    if ((err as { code?: string }).code === PICKER_CANCELLED) return null;
+    throw err;
+  }
 
   // Android's own collision handling appends its counter to the END of the
   // display name — "route.gpx (1)" — which leaves the file without a usable
   // extension and Gaia refuses it. So the collision is resolved HERE, where the
   // counter can go before the dot, and SAF is only ever handed a free name.
-  const existing = await FileSystem.StorageAccessFramework.readDirectoryAsync(
-    permission.directoryUri,
-  );
-  const taken = new Set(
-    existing.map((uri) => decodeURIComponent(uri).split("/").pop() ?? ""),
-  );
+  const taken = new Set(directory.list().map((entry) => entry.name));
   const extension = filename.slice(filename.lastIndexOf(".") + 1);
   const base = filename.slice(0, filename.lastIndexOf("."));
   let candidate = filename;
@@ -83,14 +88,7 @@ async function saveExportFile(
     candidate = `${base} (${n}).${extension}`;
   }
 
-  const target = await FileSystem.StorageAccessFramework.createFileAsync(
-    permission.directoryUri,
-    candidate,
-    mimeType,
-  );
-  await FileSystem.writeAsStringAsync(target, content, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  await directory.createFile(candidate, mimeType).write(content);
   return candidate;
 }
 
