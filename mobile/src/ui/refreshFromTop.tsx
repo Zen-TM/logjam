@@ -46,11 +46,11 @@ export function useRefreshFromTop() {
 }
 
 /**
- * A `RefreshControl` that is disabled while its list's `pin` holds it off.
- * Android's refresh layout takes over a drag the moment its list reaches the
- * top, so disabling it is the only way to stop a drag that began lower from
- * arming it. It is enabled again on lift: a control disabled when a touch
- * lands never takes that touch over. (iOS has no such switch and keeps its
+ * A `RefreshControl` that is disabled while its list's `pin` holds it off: the
+ * list is scrolled away from its top, or a drag that has been away is still
+ * down. Android's refresh layout takes a touch it was enabled for when the
+ * finger landed, so the control has to be off before then; it is on again once
+ * the list is at rest at the top. (iOS has no such switch and keeps its
  * bounce.)
  */
 function PullRefreshControl({
