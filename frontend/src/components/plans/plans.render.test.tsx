@@ -110,6 +110,7 @@ vi.mock("../../plansApi", async (importOriginal) => ({
   approveMember: vi.fn(async () => ({})),
   getInviteLinks: vi.fn(async () => []),
   previewInviteLink: vi.fn(),
+  getLeaderForms: vi.fn(async () => []),
 }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),

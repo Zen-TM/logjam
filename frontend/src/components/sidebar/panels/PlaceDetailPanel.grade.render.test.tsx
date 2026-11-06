@@ -4,6 +4,10 @@ import type { ScopedCustomFieldDef } from "@logjam/shared";
 import type { TPlace } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
+vi.mock("../../gauges/useGauges", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../gauges/useGauges")>()),
+  useGauges: () => ({ file: null, failed: false, now: Date.now() }),
+}));
 vi.mock("../../feedback/ToastProvider", () => ({
   useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));

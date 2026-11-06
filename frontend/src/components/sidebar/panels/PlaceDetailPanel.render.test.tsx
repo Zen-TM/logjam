@@ -17,6 +17,10 @@ const toast = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
 }));
+vi.mock("../../gauges/useGauges", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../gauges/useGauges")>()),
+  useGauges: () => ({ file: null, failed: false, now: Date.now() }),
+}));
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 const api = vi.hoisted(() => ({
   getPlaceDetail: vi.fn(),
