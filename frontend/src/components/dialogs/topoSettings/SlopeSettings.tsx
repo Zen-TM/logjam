@@ -10,6 +10,7 @@ import {
   setSlopeThreshold,
   setSlopeUpper,
   slopeBandsError,
+  slopeBoundaryError,
   slopeBoundaryRange,
   slopeScale,
   type SlopeBand,
@@ -98,6 +99,9 @@ export default function SlopeSettings({ value, onChange }: Props) {
     integer: true,
   });
 
+  const explain = (boundary: "threshold" | number) => (raw: string) =>
+    slopeBoundaryError(slopeBoundaryRange(bands, boundary), raw);
+
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>{MAP_TERRAIN.copy.slopeBandsIntro}</p>
@@ -159,6 +163,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
           className={styles.numberCell}
           value={bands[0].fromDeg}
           constraints={boundaryConstraints("threshold")}
+          explain={explain("threshold")}
           onCommit={(deg) => commitBands(setSlopeThreshold(bands, deg))}
         />
         <span className={styles.fixedCell}>Transparent</span>
@@ -174,6 +179,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
               className={styles.numberCell}
               value={band.toDeg}
               constraints={boundaryConstraints(idx)}
+              explain={explain(idx)}
               onCommit={(deg) => commitBands(setSlopeUpper(bands, idx, deg))}
             />
             <span

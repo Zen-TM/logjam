@@ -129,6 +129,28 @@ export function slopeBoundaryRange(
 }
 
 /**
+ * Why `raw` (what was typed for a boundary) is not one, in the sentence both
+ * clients show under the field, or null when it is a whole number in `range`.
+ * An empty box is no angle either. `range` is `slopeBoundaryRange`'s: a value
+ * outside it would leave a band under 1° wide or past its neighbour.
+ */
+export function slopeBoundaryError(
+  range: { min: number; max: number },
+  raw: string,
+): string | null {
+  const text = raw.trim();
+  const deg = Number(text);
+  if (
+    text !== "" &&
+    Number.isInteger(deg) &&
+    deg >= range.min &&
+    deg <= range.max
+  )
+    return null;
+  return `Use a whole number from ${range.min} to ${range.max}.`;
+}
+
+/**
  * Insert a band at `position` (0..bands.length), or null when there is no room.
  *  - 0: a new lowest band below the transparency threshold (lowers it).
  *  - bands.length: a new top band toward 90°; if the top is already 90° it

@@ -19,6 +19,7 @@ import {
   setSlopeThreshold,
   setSlopeUpper,
   slopeBandsError,
+  slopeBoundaryError,
   slopeBoundaryRange,
   slopeScale,
   DEFAULT_SLOPE_SCALE,
@@ -172,18 +173,10 @@ function BoundaryRow({
 
   const commit = () => {
     if (draft == null) return;
-    const deg = Number(draft);
-    if (
-      draft.trim() !== "" &&
-      Number.isInteger(deg) &&
-      deg >= range.min &&
-      deg <= range.max
-    ) {
-      setProblem(null);
-      if (deg !== value) onCommit(deg);
-    } else {
-      setProblem(`Use a whole number from ${range.min} to ${range.max}.`);
-    }
+    const why = slopeBoundaryError(range, draft);
+    // Told rather than snapped back: the reason stays until the next keystroke.
+    setProblem(why);
+    if (why == null && Number(draft) !== value) onCommit(Number(draft));
     setDraft(null);
   };
 
@@ -194,7 +187,10 @@ function BoundaryRow({
         <TextInput
           style={styles.input}
           value={draft ?? String(value)}
-          onChangeText={setDraft}
+          onChangeText={(text) => {
+            setDraft(text);
+            setProblem(null);
+          }}
           onBlur={commit}
           onSubmitEditing={commit}
           keyboardType="number-pad"
