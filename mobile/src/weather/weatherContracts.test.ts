@@ -48,6 +48,13 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     // A horizontal scroller that hands the sheet its vertical drags.
     const rail = read("../ui/ForecastRail.tsx");
     expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);
+    // A larger font widens the cards, and the snap follows. Mutation: size
+    // the cards from CARD_WIDTH alone, and "10 km/h" wraps at font 1.5.
+    expect(rail).toContain(
+      "forecastCardWidth(useWindowDimensions().fontScale)",
+    );
+    expect(rail).toContain("snapToInterval={width + GAP}");
+    expect(rail).toContain("{ width }");
   });
 
   it("offers the shared models and asks on the press that chose one", () => {
