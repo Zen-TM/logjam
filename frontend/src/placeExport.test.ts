@@ -9,6 +9,7 @@ import {
   parseSources,
 } from "./csvImport/placeValueParsers";
 import { detectPlaceColumns } from "./csvImport/placeColumns";
+import { placeTypeOfFile } from "./csvImport/placeTypeColumn";
 import type { TPlace } from "./placeUtils";
 
 // The seven grades are field values, so the fixture speaks field keys —
@@ -258,6 +259,7 @@ describe("buildPlaceExport — CSV", () => {
       // `sources` is always present; field (`attr:<key>`) columns appear only
       // when some place carries them.
       "sources",
+      "placeType",
       "attr:hours",
       "attr:longest_abseil",
       "attr:num_abseils",
@@ -265,6 +267,30 @@ describe("buildPlaceExport — CSV", () => {
     ]);
     expect(filename).toBe("logjam-empress-canyon.csv");
     expect(blob.type).toBe("text/csv");
+  });
+
+  // Mutation: drop PLACE_TYPE_HEADER from CSV_COLUMNS, or look the name up by
+  // anything but `placeTypeId`.
+  it("names each place's type, and the importer reads it back", async () => {
+    const types = [
+      { id: "t-canyon", name: "Canyon" },
+      { id: "t-camp", name: "Campsite" },
+    ];
+    const { blob } = buildPlaceExport(
+      [
+        place({ placeTypeId: "t-camp" }),
+        place({ id: "c2", placeTypeId: "gone" }),
+      ],
+      "csv",
+      [],
+      types,
+    );
+    const { headers, rows } = await parseCsv(csvFile(await text(blob)));
+    expect(rows.map((row) => row.placeType)).toEqual(["Campsite", ""]);
+    expect(placeTypeOfFile(headers, rows.slice(0, 1), types)).toEqual({
+      typeId: "t-camp",
+      several: false,
+    });
   });
 
   it("appends one attr:<key> column per custom-field key across the set, sorted, auto-mapping on re-import", async () => {

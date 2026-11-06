@@ -2176,6 +2176,7 @@ function App() {
           open={selectedAreaPlaceIds.length > 0}
           selectedPlaces={selectedAreaPlaces}
           placeCustomFieldDefs={placeCustomFieldDefs}
+          placeTypes={placeTypes}
           availablePlaces={allPlaces}
           ownedPlaceIds={ownedPlaceIds}
           friends={friends}

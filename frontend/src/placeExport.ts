@@ -5,7 +5,8 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import type { TPlace } from "./placeUtils";
+import { PLACE_TYPE_HEADER } from "./csvImport/placeTypeColumn";
+import type { TPlace, TPlaceType } from "./placeUtils";
 
 export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
 
@@ -206,6 +207,7 @@ const CSV_COLUMNS = [
   "longitude",
   ...EXPORT_PROPERTY_KEYS,
   "sources",
+  PLACE_TYPE_HEADER,
 ] as const;
 
 // Excel/LibreOffice/Sheets treat a cell starting with =, +, -, @ (or a tab/CR
@@ -234,9 +236,14 @@ const CSV_TEXT_COLUMNS = new Set<(typeof CSV_COLUMNS)[number]>([
   "altNames",
   "notes",
   "sources",
+  PLACE_TYPE_HEADER,
 ]);
 
-function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
+function csvCell(
+  c: TPlace,
+  column: (typeof CSV_COLUMNS)[number],
+  typeName: string,
+): string {
   switch (column) {
     case "name":
       return c.name;
@@ -248,6 +255,8 @@ function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
       return c.altNames.join("; ");
     case "notes":
       return c.notes ?? "";
+    case PLACE_TYPE_HEADER:
+      return typeName;
     case "sources": {
       // Serialised as the JSON [[label, url], …] form that parseSources
       // round-trips losslessly (a "; " token join can't preserve a
@@ -279,7 +288,10 @@ function collectFieldKeys(places: TPlace[]): string[] {
   return [...keys].sort();
 }
 
-function placesToCsv(places: TPlace[]): Blob {
+function placesToCsv(
+  places: TPlace[],
+  types: Pick<TPlaceType, "id" | "name">[],
+): Blob {
   const attrKeys = collectFieldKeys(places);
   const attrColumns = attrKeys.map((key) => `attr:${key}`);
   const fields = [...CSV_COLUMNS, ...attrColumns];
@@ -289,7 +301,11 @@ function placesToCsv(places: TPlace[]): Blob {
     const fieldValues = placeFieldValues(c);
     const row: Record<string, string> = {};
     for (const column of CSV_COLUMNS) {
-      const cell = csvCell(c, column);
+      const cell = csvCell(
+        c,
+        column,
+        types.find((t) => t.id === c.placeTypeId)?.name ?? "",
+      );
       row[column] = CSV_TEXT_COLUMNS.has(column)
         ? neutralizeFormula(cell)
         : cell;
@@ -315,12 +331,14 @@ function placesToCsv(places: TPlace[]): Blob {
  * and GeoJSON key by `key` so the file round-trips back through import, and a
  * label is not stable enough to key on (a rename would break the round trip).
  * Absent, a description falls back to the key, which is what a value whose
- * definition has been deleted gets anyway.
+ * definition has been deleted gets anyway. `types` name each place's type in
+ * the CSV; without one the cell is empty.
  */
 export function buildPlaceExport(
   places: TPlace[],
   format: TExportFormat,
   defs: TripLogCustomFieldDef[] = [],
+  types: Pick<TPlaceType, "id" | "name">[] = [],
 ): { blob: Blob; filename: string } {
   switch (format) {
     case "gpx":
@@ -340,7 +358,7 @@ export function buildPlaceExport(
       };
     case "csv":
       return {
-        blob: placesToCsv(places),
+        blob: placesToCsv(places, types),
         filename: buildFilename(places, "csv"),
       };
   }

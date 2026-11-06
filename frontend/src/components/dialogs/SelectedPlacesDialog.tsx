@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { noFriendsMessage, type TripLogCustomFieldDef } from "@logjam/shared";
-import type { TPlace, TFriend } from "../../placeUtils";
+import type { TPlace, TPlaceType, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -49,6 +49,7 @@ function SelectedPlacesDialog({
   open,
   selectedPlaces,
   placeCustomFieldDefs,
+  placeTypes,
   availablePlaces,
   ownedPlaceIds,
   friends,
@@ -63,6 +64,7 @@ function SelectedPlacesDialog({
   /** Labels the field values in the human-readable GPX/KML descriptions. The
    *  machine-readable forms key by `key` so they round-trip through import. */
   placeCustomFieldDefs: TripLogCustomFieldDef[];
+  placeTypes: TPlaceType[];
   availablePlaces: TPlace[];
   ownedPlaceIds: Set<string>;
   friends: TFriend[];
@@ -156,6 +158,7 @@ function SelectedPlacesDialog({
       selectedPlaces,
       exportFormat,
       placeCustomFieldDefs,
+      placeTypes,
     );
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");

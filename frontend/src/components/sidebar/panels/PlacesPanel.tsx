@@ -393,6 +393,7 @@ function PlacesPanel({
           targets,
           format,
           placeCustomFieldDefs,
+          placeTypes,
         );
         download(blob, filename);
       },

@@ -68,6 +68,11 @@ const CSV =
   "Test Alpha Gorge,-33.7101,150.3102\n" +
   "Test Bravo Chasm,-33.9202,150.5203\n";
 
+const CAMPSITE: TPlaceType = {
+  id: "t-camp",
+  name: "Campsite",
+} as TPlaceType;
+
 function dialog(currentUser: TUser | null) {
   return (
     <ToastProvider>
@@ -78,7 +83,7 @@ function dialog(currentUser: TUser | null) {
         customFieldDefs={[]}
         onCustomFieldDefsChange={() => {}}
         placeCustomFieldDefs={[]}
-        placeTypes={[CANYON]}
+        placeTypes={[CANYON, CAMPSITE]}
         currentUser={currentUser}
         onRefetchPlaces={() => {}}
         onRefetchTripLogs={() => {}}
@@ -88,14 +93,37 @@ function dialog(currentUser: TUser | null) {
   );
 }
 
-async function loadCsv() {
+async function loadCsv(content = CSV) {
   const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
-  const file = new File([CSV], "places.csv", { type: "text/csv" });
+  const file = new File([content], "places.csv", { type: "text/csv" });
   await act(async () => {
     fireEvent.change(input, { target: { files: [file] } });
   });
   await screen.findByRole("heading", { name: /^Place columns/ });
 }
+
+// Mutation: drop the `setImportPlaceTypeId(landsIn)` in the file loader, or
+// let an old file without the column change the type.
+describe("UnifiedImportDialog, a file that names its type", () => {
+  const typeSelect = () =>
+    screen.getByRole("combobox", { name: /place type/i }) as HTMLSelectElement;
+
+  it("lands in that type; a file without the column keeps the default", async () => {
+    render(dialog(user()));
+    await loadCsv(
+      "name,latitude,longitude,placeType\n" +
+        "Test Alpha Gorge,-33.7101,150.3102,Campsite\n" +
+        "Test Bravo Chasm,-33.9202,150.5203,campsite\n",
+    );
+    expect(typeSelect().value).toBe("t-camp");
+  });
+
+  it("keeps Canyon for a file without a placeType column", async () => {
+    render(dialog(user()));
+    await loadCsv();
+    expect(typeSelect().value).toBe(SYSTEM_PLACE_TYPE_IDS.canyon);
+  });
+});
 
 // A refetch, consent, or late first load keeps the loaded file, column map,
 // and review intact while open; only reopening starts over.
