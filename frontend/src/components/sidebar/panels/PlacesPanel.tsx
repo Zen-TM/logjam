@@ -358,23 +358,9 @@ function PlacesPanel({
     setActivePanel("place-detail");
   };
 
-  const makeMapEntries = (targets: TPlace[]): MenuEntry[] => {
+  const makeMapFrom = (targets: TPlace[], kind: MapKind) => {
     const bounds = placesBounds(targets);
-    if (!bounds) return [];
-    return [
-      {
-        id: "topo",
-        label: LIDAR_JOB_COPY.make,
-        icon: "lidar",
-        onSelect: () => onMakeMap(bounds, "topo"),
-      },
-      {
-        id: "export",
-        label: "Make a map",
-        icon: "export",
-        onSelect: () => onMakeMap(bounds, "geopdf"),
-      },
-    ];
+    if (bounds) onMakeMap(bounds, kind);
   };
 
   const exportEntries = (targets: TPlace[]): MenuEntry[] =>
@@ -408,10 +394,7 @@ function PlacesPanel({
       openPlace(place);
       onPlaceVerb(id);
     };
-    const makeMap = (kind: MapKind) => () => {
-      const bounds = placesBounds([place]);
-      if (bounds) onMakeMap(bounds, kind);
-    };
+    const makeMap = (kind: MapKind) => () => makeMapFrom([place], kind);
     const run: Record<WebPlaceVerbId, () => void> = {
       open: onPage,
       logTrip: handOff("logTrip"),
@@ -571,14 +554,17 @@ function PlacesPanel({
           countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
-          {/* An icon like its siblings: as a labelled filled button the bar ran
-              past one line at 380px. The menu it opens says what it makes. */}
-          <Menu
+          {/* Icons like their siblings: as labelled filled buttons the bar ran
+              past one line at 380px. The same two verbs as the map's + tray. */}
+          <IconButton
+            icon="template"
             label="Make a map"
-            entries={makeMapEntries(selected)}
-            trigger={(props) => (
-              <IconButton {...props} icon="template" label="Make a map" />
-            )}
+            onClick={() => makeMapFrom(selected, "geopdf")}
+          />
+          <IconButton
+            icon="lidar"
+            label={LIDAR_JOB_COPY.make}
+            onClick={() => makeMapFrom(selected, "topo")}
           />
           <IconButton
             icon="shareFriend"
