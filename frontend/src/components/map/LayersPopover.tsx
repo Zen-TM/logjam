@@ -35,6 +35,10 @@ import classes from "./LayersPopover.module.css";
 
 type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
 
+/** The tab a view belongs to: a sub-view is Terrain's. */
+const tabOf = (view: View): View =>
+  view === "sharpened" || view === "slopeBands" ? "terrain" : view;
+
 const copy = MAP_LAYERS.copy;
 const terrainCopy = MAP_TERRAIN.copy;
 
@@ -137,11 +141,13 @@ export default function LayersPopover({
 }) {
   const [view, setView] = useState<View>("overlays");
   // However it closes (the button toggles `open` itself), the next opening
-  // starts on Overlays; a start request made in the same render wins.
+  // is on the tab it was last on, as Logjam GPS's Layers sheet is (in memory,
+  // not persisted). A sub-view falls back to the tab it opened from. A start
+  // request made in the same render wins.
   const [wasOpen, setWasOpen] = useState(open);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (!open) setView("overlays");
+    if (!open) setView(tabOf);
   }
   const [seenStartView, setSeenStartView] = useState(startView);
   if (seenStartView !== startView) {
@@ -162,7 +168,7 @@ export default function LayersPopover({
   ].filter(Boolean).length;
 
   const close = () => {
-    setView("overlays");
+    setView(tabOf);
     onClose();
   };
 
