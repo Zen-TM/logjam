@@ -73,7 +73,7 @@ export type NotificationPreferenceGroup = "email" | "inApp";
  * enough for a switch label (`SWITCH_COPY_MAX`) on both clients.
  */
 export const NOTIFICATION_PREFERENCES = [
-  // A LiDAR map or an export mails whether it finishes or fails
+  // A LiDAR map or a print or GIS map mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
   { key: "topoEmail", group: "email", label: "LiDAR maps" },
   { key: "exportEmail", group: "email", label: "Print and GIS maps" },

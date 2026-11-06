@@ -133,15 +133,16 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "topo_export_complete": {
       const format =
         EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
-        (p.format ? String(p.format).toUpperCase() : "Area");
+        (p.format ? String(p.format).toUpperCase() : null);
+      const map = format ? `${format} map` : "Map";
       if (p.status === "failed") {
         return {
-          text: `${format} map failed`,
+          text: `${map} failed`,
           ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
-        text: `${format} map${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        text: `${map}${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
         // Older ones carry no size.
         ...(typeof p.resultBytes === "number" &&
           p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),

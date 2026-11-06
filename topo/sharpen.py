@@ -2,7 +2,7 @@
 """
 sharpen.py
 ----------
-Sharpen an area: an ELVIS ZIP to the statewide terrain formats at the
+Sharpen area: an ELVIS ZIP to the statewide terrain formats at the
 survey's own cell, for a job the API marked to sharpen (`topo_jobs.sharpen`).
 
     sharpen.py ZIP OUT [--statewide-heights SRC] [--statewide-slope SRC]

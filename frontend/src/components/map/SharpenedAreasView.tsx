@@ -64,7 +64,7 @@ export default function SharpenedAreasView({
   loaded: boolean;
   /** Arms the pick, as the Make a map menu does. */
   onSharpen: () => void;
-  /** Export an area, over a sharpened area's footprint. */
+  /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyTo: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;

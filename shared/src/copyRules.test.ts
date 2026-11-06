@@ -94,12 +94,37 @@ describe("contract copy", () => {
     ["turn-down", "Turn down", "Decline"],
     ["turn-down", "Let in", "Accept"],
     ["attach-to-place", "Attach to a place", "Link to a place"],
+    // Mutation: drop any one alternative of export-is-a-file and its row
+    // stops flagging.
     ["export-is-a-file", "Export an area", "Make a map"],
+    ["export-is-a-file", "Export this area", "Make a map here"],
+    ["export-is-a-file", "Area exports", "Print and GIS maps"],
     ["export-is-a-file", "Your export is ready", "Your map is ready"],
-    ["export-is-a-file", "Area exports", "Export as GPX"],
+    ["export-is-a-file", "You have 3 exports already", "You have 3 map files"],
+    ["export-is-a-file", "Exports are kept for 7 days", "Map files are kept"],
+    [
+      "export-is-a-file",
+      "You can run 2 exports at a time",
+      "You can make 2 maps",
+    ],
+    [
+      "export-is-a-file",
+      "Split it into smaller exports",
+      "Split it into smaller maps",
+    ],
   ])("flags %s in %j and passes %j", (id, bad, good) => {
     expect(copyViolations(bad)).toContain(id);
     expect(copyViolations(good)).not.toContain(id);
+  });
+
+  // A file is exported: "an export of" and "an export as" name one.
+  // Mutation: delete the `(?! (?:of|as)\b)` lookahead of export-is-a-file.
+  it("lets an export of a file through", () => {
+    for (const text of [
+      "Download an export of your data",
+      "Your export as GPX is ready",
+    ])
+      expect(copyViolations(text)).not.toContain("export-is-a-file");
   });
 
   // One word, then a name: the name's own capital makes it read as Title

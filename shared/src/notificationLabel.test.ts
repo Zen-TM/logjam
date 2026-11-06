@@ -152,7 +152,7 @@ describe("notificationLabel", () => {
       notificationLabel(
         notification("topo_export_complete", { status: "failed" }),
       ).text,
-    ).toBe("Area map failed");
+    ).toBe("Map failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.
