@@ -23,7 +23,6 @@ try to make it code; when you convert a rule to code, delete its line.
 | A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
 | The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
 | Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
-| Where a user can go: the tabs, the rail and More, in order, with their words                                                | `contracts/nav.ts` (`NAV`)                                                       |
 | A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
 | How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
@@ -63,9 +62,19 @@ renumber.
 - **A confirm is for what can't come back**: losing data, spending something
   (mobile data, credits), or ending something that is running. A step you can
   undo where you are never confirms; it offers Undo. Nothing else asks.
+  Guards: `mobile/src/ui/confirm.test.ts` (Logjam GPS asks only through
+  `confirm()`, bar the sign-out prompt in `App.tsx`, listed in the test's
+  `BASELINE`), `shared/src/contracts/contracts.test.ts` (a delete confirm
+  names its thing and says it can't be undone), and
+  `frontend/src/components/routes/useRouteDraft.test.ts` (Logjam Web: Clear
+  can be undone). Whether a given step can come back is for review.
 - **The warning fill has three uses**: a destructive confirm's button, the
-  recording light, and a notice about data being lost right now. It always
-  carries a glyph: accent and warning share a luminance.
+  recording light, and a notice about data being lost right now. It is told
+  from the accent by its glyph, never by its luminance: the two share one.
+  Guards: on Logjam Web a destructive `Button` requires an `icon` by type, and
+  on both clients a critical `Notice` does (`tsc -b` fails without one);
+  `Notice.test.tsx` (Logjam Web's critical fill) and
+  `frontend/e2e/confirms.spec.ts` (a destructive confirm keeps its glyph).
 
 ## 2. A screen answers one question
 
@@ -138,6 +147,12 @@ renumber.
 - **A dialog that asks nothing of the reader (a message, a rules list, a
   summary) closes by its × and by a Close button** in its footer.
 - **A tab opens at its root**, not the sub-page the user was last on.
+- **Where a user can go is declared once**: the tabs, the rail and More, in
+  order and in words, are `NAV` in `contracts/nav.ts`. A client draws it and
+  never lists it again, so a rename or a reorder is one edit. Guards:
+  `contracts/nav.test.ts` writes out each client's order, and
+  `navItems.test.ts` (Logjam Web) and `navTabs.test.ts` (Logjam GPS) hold the
+  rail and the tabs to it.
 - **The way out undoes one layer.** A sub-view inside a sheet or dialog backs
   out to its parent, and the title names the step. Escape, the back gesture
   and × each undo exactly one layer.
