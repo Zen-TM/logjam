@@ -74,9 +74,9 @@ export const PLACE_VERBS = [
     reason: NO_MAP_FROM_A_PLACE,
   },
   {
-    id: "exportArea",
+    id: "makeGeoPdf",
     icon: "export",
-    label: "Export the area here",
+    label: "Make a map here",
     for: "both",
     on: "web",
     reason: EXPORTED_AT_A_DESK,

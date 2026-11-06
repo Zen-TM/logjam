@@ -93,7 +93,7 @@ export default function SharpenedAreasView({
       ? [
           {
             id: "export",
-            label: "Export this area…",
+            label: "Print or GIS map…",
             icon: "export",
             onSelect: () => onExportArea(job),
           },
@@ -123,7 +123,7 @@ export default function SharpenedAreasView({
             ask({
               title: `Delete ${label}?`,
               message:
-                "The sharpened area is deleted from your account, and friends you shared it with lose it too. Exports already made from it stay until they expire; one still waiting to start is cancelled.",
+                "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.",
               confirmLabel: "Delete",
               run: async () => {
                 try {

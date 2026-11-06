@@ -370,7 +370,7 @@ function PlacesPanel({
       },
       {
         id: "export",
-        label: "Export this area",
+        label: "Print or GIS map",
         icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
@@ -417,7 +417,7 @@ function PlacesPanel({
       logTrip: handOff("logTrip"),
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),
-      exportArea: makeMap("geopdf"),
+      makeGeoPdf: makeMap("geopdf"),
       share: () => onSharePlaces([place.id]),
       copy: handOff("copy"),
       copyAndRemove: handOff("copyAndRemove"),

@@ -120,16 +120,16 @@ describe("notificationLabel", () => {
     });
   });
 
-  // Mutation: uppercase the format again, and it reads "GPKG export ready".
-  it("names an export's format as the app does", () => {
+  // Mutation: uppercase the format again, and it reads "GPKG map ready".
+  it("names a map's format as the app does", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", { format: "gpkg" }),
       ).text,
-    ).toBe("GeoPackage export ready");
+    ).toBe("GeoPackage map ready");
   });
 
-  it("labels export completion and failure", () => {
+  it("labels a map's completion and failure", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -137,7 +137,7 @@ describe("notificationLabel", () => {
           jobName: "Kanangra",
         }),
       ).text,
-    ).toBe("PDF export for Kanangra ready");
+    ).toBe("PDF map for Kanangra ready");
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -146,17 +146,17 @@ describe("notificationLabel", () => {
           errorMessage: "boom",
         }),
       ),
-    ).toEqual({ text: "PDF export failed", detail: "boom" });
+    ).toEqual({ text: "PDF map failed", detail: "boom" });
     // Only a real format is upper-cased. Mutation: upper-case the fallback.
     expect(
       notificationLabel(
         notification("topo_export_complete", { status: "failed" }),
       ).text,
-    ).toBe("Area export failed");
+    ).toBe("Area map failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.
-  it("gives a finished export its size when it has one", () => {
+  it("gives a finished map its size when it has one", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -164,7 +164,7 @@ describe("notificationLabel", () => {
           resultBytes: 5 * 1024 ** 2,
         }),
       ),
-    ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
+    ).toEqual({ text: "GeoTIFF map ready", detail: "5 MB" });
   });
 
   it("degrades gracefully on missing payload fields", () => {

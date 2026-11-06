@@ -204,7 +204,7 @@ router.get(
     if (!row) {
       throw new AppError(
         404,
-        say`That export has expired or was deleted. Exports are kept for 7 days.`,
+        say`That map file has expired or was deleted. Map files are kept for 7 days.`,
       );
     }
     // An export artefact is one of the largest single objects the app serves,
@@ -230,11 +230,11 @@ router.delete(
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that export.`);
+    if (!row) throw new AppError(404, say`Couldn't find that map.`);
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(
         409,
-        say`An export that is still running can't be deleted.`,
+        say`A map that is still being made can't be deleted.`,
       );
     }
 

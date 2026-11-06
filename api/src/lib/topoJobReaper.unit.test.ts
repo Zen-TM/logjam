@@ -270,7 +270,7 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
       "This LiDAR map was stopped because it took too long. Make it again to try again.",
     );
     expect(exportUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
-      "This export was stopped because it took too long. Start it again to try again.",
+      "This map was stopped because it took too long. Start it again to try again.",
     );
   });
 
@@ -694,7 +694,7 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
     await reapStuckTopoJobs(NOW);
 
     const subjects = emailSend.mock.calls.map((call) => call[0].subject);
-    expect(subjects).toEqual(["Topo export failed — GEOTIFF"]);
+    expect(subjects).toEqual(["Map failed — GEOTIFF"]);
   });
 
   // The house dedup rule: mailing the READ set would double-send from two

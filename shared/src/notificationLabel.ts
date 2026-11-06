@@ -136,12 +136,12 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         (p.format ? String(p.format).toUpperCase() : "Area");
       if (p.status === "failed") {
         return {
-          text: `${format} export failed`,
+          text: `${format} map failed`,
           ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
-        text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        text: `${format} map${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
         // Older ones carry no size.
         ...(typeof p.resultBytes === "number" &&
           p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),

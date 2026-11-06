@@ -102,6 +102,12 @@ export const COPY_RULES: readonly CopyRule[] = [
     say: 'Answer an offer "Accept" or "Decline" (a plan invite: "Join" or "Decline").',
   },
   {
+    id: "export-is-a-file",
+    pattern:
+      /\bexport (?:an|this|the) area\b|\barea exports?\b|\b(?:that|this|your|the|an?) exports?\b(?! (?:of|as)\b)|\bexports (?:are|already|at a time)\b|\bsmaller exports\b/i,
+    say: '"Export" is for producing a file (Export as GPX). A map is made: "Make a map", "Print or GIS map".',
+  },
+  {
     id: "attach-to-place",
     pattern: /\battach(?:ed)? to (?:a|this) place\b/i,
     say: 'Say "Link to a place" / "Unlink from this place".',

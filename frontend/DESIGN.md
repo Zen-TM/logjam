@@ -106,7 +106,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
   current answer as the subtitle. Inside a `Dialog`, two ways of setting one
-  thing are a `ChipRail` that swaps the view under it (Export an area's On the
+  thing are a `ChipRail` that swaps the view under it (Make a map's On the
   map · Type the edges), never a disclosure.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one

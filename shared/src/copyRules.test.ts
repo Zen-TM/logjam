@@ -94,6 +94,9 @@ describe("contract copy", () => {
     ["turn-down", "Turn down", "Decline"],
     ["turn-down", "Let in", "Accept"],
     ["attach-to-place", "Attach to a place", "Link to a place"],
+    ["export-is-a-file", "Export an area", "Make a map"],
+    ["export-is-a-file", "Your export is ready", "Your map is ready"],
+    ["export-is-a-file", "Area exports", "Export as GPX"],
   ])("flags %s in %j and passes %j", (id, bad, good) => {
     expect(copyViolations(bad)).toContain(id);
     expect(copyViolations(good)).not.toContain(id);

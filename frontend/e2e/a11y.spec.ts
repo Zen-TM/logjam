@@ -923,7 +923,7 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("Sharpen an area, its ELVIS steps and its Vegetation choice", async ({
+  test("Sharpen area, its ELVIS steps and its Vegetation choice", async ({
     page,
   }) => {
     await openApp(page);
@@ -933,11 +933,11 @@ test.describe("desktop", () => {
       .getByRole("radio", { name: "Terrain" })
       .click();
     await page.getByRole("button", { name: /^Sharpened areas/ }).click();
-    await page.getByRole("button", { name: "Sharpen an area" }).click();
+    await page.getByRole("button", { name: "Sharpen area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Sharpen an area" }),
+      dialog.getByRole("heading", { name: "Sharpen area" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
@@ -973,20 +973,18 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Export an area: GeoPDF, its edges, and a GIS format", async ({
-    page,
-  }) => {
+  test("Make a map: GeoPDF, its edges, and a GIS format", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Tools", exact: true }).click();
     await page
       .getByRole("group", { name: "Tools" })
       .getByText("Make a map")
       .click();
-    await page.getByRole("menuitem", { name: "Export an area" }).click();
+    await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Export an area" }),
+      dialog.getByRole("heading", { name: "Make a map" }),
     ).toBeVisible();
     // Closed, the Area section is paper, scale and the button to the map.
     await expect(

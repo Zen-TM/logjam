@@ -200,23 +200,23 @@ def send_completion_email(
         'style="display:block" /></p>'
     )
     if ok:
-        subject = f"Topo export ready — {format_.upper()}"
+        subject = f"Map ready — {format_.upper()}"
         text = (
-            "Your topo export is ready.\n\n"
+            "Your map is ready.\n\n"
             f"Open Logjam Web to download: {base}/?export={export_job_id}"
         )
         html = (
             f"{logo_html}"
-            f"<p>Your topo export is ready.</p>"
+            f"<p>Your map is ready.</p>"
             f'<p><a href="{base}/?export={export_job_id}">Open Logjam Web to download</a></p>'
         )
     else:
-        subject = f"Topo export failed — {format_.upper()}"
+        subject = f"Map failed — {format_.upper()}"
         safe_error = error or "Unknown error"
-        text = f"Your topo export failed.\n\n{safe_error}\n\nOpen Logjam Web to retry: {base}"
+        text = f"Your map couldn't be made.\n\n{safe_error}\n\nOpen Logjam Web to retry: {base}"
         html = (
             f"{logo_html}"
-            f"<p>Your topo export failed.</p>"
+            f"<p>Your map couldn't be made.</p>"
             f"<p><strong>{safe_error}</strong></p>"
             f'<p><a href="{base}">Open Logjam Web to retry</a></p>'
         )
