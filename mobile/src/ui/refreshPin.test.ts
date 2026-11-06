@@ -1,47 +1,44 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { createRefreshPin, refreshPinAfter } from "./refreshPin";
-
-describe("refreshPinAfter", () => {
-  // Red when `down` holds a list at its top off.
-  it("leaves a drag that began at the top free to refresh", () => {
-    expect(refreshPinAfter("down", { pinned: false, scrolled: 0 })).toBe(false);
-  });
-
-  // Red when `down` stops reading the offset: a drag that starts scrolled down
-  // and reaches the top would arm the refresh.
-  it("holds off a drag that began scrolled down", () => {
-    expect(refreshPinAfter("down", { pinned: false, scrolled: 400 })).toBe(
-      true,
-    );
-  });
-
-  // Red when `scroll` stops pinning: a drag that began at the top, went down
-  // the list and came back would arm the refresh.
-  it("holds off a drag that leaves the top", () => {
-    expect(refreshPinAfter("scroll", { pinned: false, scrolled: 20 })).toBe(
-      true,
-    );
-  });
-
-  // Red when `scroll` unpins on reaching the top: the drag that scrolled down
-  // reaches the top again and arms the refresh.
-  it("stays held off when the same drag returns to the top", () => {
-    expect(refreshPinAfter("scroll", { pinned: true, scrolled: 0 })).toBe(true);
-  });
-
-  it("frees the list when the finger lifts", () => {
-    expect(refreshPinAfter("up", { pinned: true, scrolled: 400 })).toBe(false);
-  });
-});
+import { createRefreshPin } from "./refreshPin";
 
 // The events of a real Android drag: the scroll view takes the touch over and
 // JS sees no cancel that matters and no touch end.
 describe("createRefreshPin", () => {
-  // Red when the pin is released by a touch cancel, or `scroll` is gated on
-  // the finger being down rather than on a drag: the drag that began at the
-  // top and came back would arm the refresh.
+  it("leaves a list at its top free to refresh", () => {
+    const pin = createRefreshPin();
+    pin.scroll(0);
+    pin.down();
+    expect(pin.held()).toBe(false);
+  });
+
+  // Red when the pin is only taken at touch start: Android's refresh layout
+  // has taken a touch it was enabled for by then, so the control must already
+  // be disabled while the list is scrolled away, before any finger lands.
+  it("holds a list off while it is scrolled away, before a finger lands", () => {
+    const pin = createRefreshPin();
+    pin.scroll(400);
+    expect(pin.held()).toBe(true);
+  });
+
+  // Red when the release at the top ignores the finger: the drag that began
+  // scrolled down reaches the top and arms the refresh.
+  it("holds a drag that began scrolled down all the way to the top", () => {
+    const pin = createRefreshPin();
+    pin.scroll(400);
+    pin.down();
+    pin.beginDrag();
+    pin.scroll(200);
+    pin.scroll(0);
+    expect(pin.held()).toBe(true);
+    pin.endDrag();
+    expect(pin.held()).toBe(false);
+  });
+
+  // Red when a touch cancel, or a finger-down gate, frees the pin mid-drag:
+  // the drag that began at the top, went down the list and came back would arm
+  // the refresh.
   it("holds off a drag that began at the top, left it and came back", () => {
     const pin = createRefreshPin();
     pin.scroll(0);
@@ -55,37 +52,27 @@ describe("createRefreshPin", () => {
     expect(pin.held()).toBe(false);
   });
 
-  // Red when the drag start frees the pin (a cancel treated as a lift): the
-  // drag that began scrolled down would arm the refresh on reaching the top.
-  it("holds a drag that began scrolled down all the way to the top", () => {
-    const pin = createRefreshPin();
-    pin.scroll(400);
-    pin.down();
-    pin.beginDrag();
-    pin.scroll(200);
-    pin.scroll(0);
-    expect(pin.held()).toBe(true);
-  });
-
-  // Red when `scroll` pins without a drag: a fling after the finger lifted
-  // would leave the next touch's native down ignored by a disabled control.
-  it("is not pinned by momentum after the finger lifts", () => {
+  // Red when a fling that comes to rest at the top leaves the list held: the
+  // next touch would land on a disabled control and could never refresh.
+  it("frees a list a fling has brought back to the top", () => {
     const pin = createRefreshPin();
     pin.scroll(0);
     pin.down();
     pin.beginDrag();
-    pin.endDrag();
     pin.scroll(300);
+    pin.endDrag();
+    expect(pin.held()).toBe(true);
+    pin.scroll(100);
+    pin.scroll(0);
     expect(pin.held()).toBe(false);
   });
 
-  it("frees a tap on a scrolled list when the finger lifts", () => {
+  it("keeps a tap on a scrolled list held", () => {
     const pin = createRefreshPin();
     pin.scroll(400);
     pin.down();
-    expect(pin.held()).toBe(true);
     pin.up();
-    expect(pin.held()).toBe(false);
+    expect(pin.held()).toBe(true);
   });
 
   it("tells a subscriber only when the pin changes", () => {
@@ -97,7 +84,7 @@ describe("createRefreshPin", () => {
     pin.up();
     expect(calls).toBe(0);
     pin.scroll(10);
-    pin.down();
+    pin.scroll(20);
     expect(calls).toBe(1);
   });
 });
