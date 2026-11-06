@@ -332,8 +332,7 @@ async function drain(): Promise<void> {
     // A runner that throws ends its job as failed rather than leaving it
     // "downloading" for good, its token held and the jobs behind it stalled.
     // Guard: regionDownloadQueue.test.ts ("a runner that throws").
-    const outcome: RegionRunOutcome = await (next.spec.taskKind ===
-    "tile-pyramid"
+    let outcome: RegionRunOutcome = await (next.spec.taskKind === "tile-pyramid"
       ? runRegionDownload(next.spec, report, token)
       : import("./regionDownloads").then((m) =>
           m.runRegionClip(next.spec as RegionClipTask, report, token),
@@ -356,6 +355,18 @@ async function drain(): Promise<void> {
       }
     }
 
+    // An update's file replaces the older one only if it is no worse.
+    if (outcome.status === "ready") {
+      const { artifact, failed } = outcome;
+      const kept = await import("./regionDownloads")
+        .then((m) => m.swapSuperseded(artifact, failed))
+        .catch((err: unknown) => {
+          console.error(err);
+          return true;
+        });
+      if (!kept) outcome = { status: "failed", code: "provider-errors" };
+    }
+
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();
@@ -373,7 +384,9 @@ async function drain(): Promise<void> {
 }
 
 /**
- * Name the area a run is downloading, while it downloads.
+ * Name the area a run is downloading, while it downloads. Saved's rename of a
+ * card takes the same path (`renameRegionGroup`), so a rename during an update
+ * is not undone by the files it is still writing.
  *
  * The prompt goes up the moment the jobs are enqueued (the download must not
  * wait on typing), so the name can arrive before, during or after any given
@@ -381,16 +394,22 @@ async function drain(): Promise<void> {
  * label into the artifact they write, and rows already written are updated in
  * place.
  */
-export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
+export async function renameRegionGroup(
+  groupId: string,
+  groupLabel: string,
+): Promise<void> {
   jobs = jobs.map((job) =>
     job.spec.groupId === groupId
       ? { ...job, spec: { ...job.spec, groupLabel } }
       : job,
   );
   publish();
-  void import("./registryDb")
-    .then((registry) => registry.renameArtifactGroup(groupId, groupLabel))
-    .catch((err) => console.error(err));
+  const registry = await import("./registryDb");
+  await registry.renameArtifactGroup(groupId, groupLabel);
+}
+
+export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
+  renameRegionGroup(groupId, groupLabel).catch((err) => console.error(err));
 }
 
 /** Stop for now; the partial MBTiles keeps every tile already fetched. */

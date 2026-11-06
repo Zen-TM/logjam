@@ -80,6 +80,8 @@ export type RegionJobSpec = {
   basemapId: DownloadableTileSourceId;
   /** User-facing name; goes in the MBTiles `name` row and the Saved list. */
   label: string;
+  /** Set on an update of a saved area: its finish toast says so. */
+  update?: true;
   /** The download run this job belongs to — see MapArtifact.groupId. */
   groupId: string;
   /** The name the user gave that run's area, live-editable while it downloads. */

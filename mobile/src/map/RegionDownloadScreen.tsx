@@ -40,7 +40,6 @@ import {
   type LngLatBounds,
   type MapRef,
 } from "@maplibre/maplibre-react-native";
-import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   checkRegionCaps,
@@ -62,7 +61,6 @@ import {
   BottomSheet,
   Button,
   Chip,
-  confirm,
   Field,
   Hero,
   Notice,
@@ -77,7 +75,7 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { placeRegistryWithRegion } from "../offline/placeRegistry";
-import { isExpensive } from "../offline/networkPolicy";
+import { askAllowCellular } from "../offline/askMobileData";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { regionClipSpecs } from "../offline/regionTilePlanning";
 import {
@@ -532,25 +530,8 @@ export function RegionDownloadScreen({
             );
             return;
           }
-          // Metered asked HERE, at the tap, rather than from a subscription's
-          // last value: the answer decides whether tens of megabytes go on
-          // someone's plan, and the connection can change between the last
-          // event and the tap. It is also why there is no "use mobile data"
-          // toggle: a switch set before the walk out of Wi-Fi range answers a
-          // question about a connection the phone is no longer on.
-          const connection = await NetInfo.fetch();
-          // Metered: ask, once, about THIS download. Declining is a cancel, not
-          // a setting to go and find.
-          let allowCellular = false;
-          if (isExpensive(connection)) {
-            allowCellular = await confirm({
-              confirmTitle: "Use mobile data?",
-              confirmBody: "This download will use your mobile data.",
-              confirmLabel: "Download",
-              tone: "filled",
-            });
-            if (!allowCellular) return;
-          }
+          const allowCellular = await askAllowCellular();
+          if (allowCellular === null) return;
           // Check space before starting: on a full phone the SQLite insert would
           // fail mid-batch and report a generic failure with nothing reclaimed.
           // The p90 estimate is what actually lands, so that is what has to fit.

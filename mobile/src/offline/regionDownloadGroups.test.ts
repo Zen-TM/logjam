@@ -5,6 +5,7 @@ import { DEM_SOURCE_ID, type DownloadableTileSourceId } from "@logjam/shared";
 import {
   downloadNotice,
   groupRegionJobs,
+  isGroupBusy,
   mayResumeOnReconnect,
   regionGroupStatusLine,
   regionGroupToastText,
@@ -251,5 +252,58 @@ describe("mayResumeOnReconnect", () => {
     expect(mayResumeOnReconnect("active", 0)).toBe(true);
     expect(mayResumeOnReconnect("background", 1)).toBe(true);
     expect(mayResumeOnReconnect("background", 0)).toBe(false);
+  });
+});
+
+describe("isGroupBusy", () => {
+  const ready = { kind: "ready", gaps: 0, failed: 0 } as const;
+  // Mutation: count every job in the group and a saved card says "Updating…"
+  // until some other download is queued.
+  it("counts only work still to run", () => {
+    expect(isGroupBusy([job("a", "g", ready)], "g")).toBe(false);
+    expect(
+      isGroupBusy([job("a", "g", { kind: "failed", code: "unknown" })], "g"),
+    ).toBe(false);
+    expect(isGroupBusy([job("a", "g", { kind: "queued" })], "g")).toBe(true);
+    expect(
+      isGroupBusy([job("a", "g", { kind: "paused", reason: "user" })], "g"),
+    ).toBe(true);
+    expect(isGroupBusy([job("a", "other", { kind: "queued" })], "g")).toBe(
+      false,
+    );
+  });
+});
+
+describe("an update's finish toast", () => {
+  const updating = (id: string, state: RegionJobState) => {
+    const j = job(id, "g", state);
+    return { ...j, spec: { ...j.spec, update: true as const } };
+  };
+  const text = (jobs: RegionJob[]) =>
+    regionGroupToastText(groupRegionJobs(jobs)[0]);
+
+  // Mutation: use the first-save wording and a failed update reads as
+  // "nothing saved", as if the card were lost.
+  it("says the saved map is unchanged when nothing was replaced", () => {
+    expect(text([updating("a", { kind: "failed", code: "unknown" })])).toBe(
+      "Couldn't update Test region · your saved map is unchanged",
+    );
+  });
+
+  it("says what was kept when only some files were replaced", () => {
+    expect(
+      text([
+        updating("a", { kind: "ready", gaps: 0, failed: 0 }),
+        updating("b", { kind: "failed", code: "unknown" }),
+      ]),
+    ).toBe(
+      "Test region partly updated · 1 map didn't finish · older copies kept",
+    );
+  });
+
+  it("says updated when every file was replaced", () => {
+    expect(text([updating("a", { kind: "ready", gaps: 0, failed: 0 })])).toBe(
+      "Test region updated · 1 map",
+    );
   });
 });
