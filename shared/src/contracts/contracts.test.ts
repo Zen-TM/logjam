@@ -1632,7 +1632,7 @@ describe("a verb list's reason and gap", () => {
 describe("MAP_TOOLS", () => {
   // Both clients' trays are `mapTools(platform)`: the web builder
   // (`webMapTools`) and Logjam GPS's `TOOLS` read it, and their own tests pin
-  // that. Mutation: drop `on: "web"` from "makeMap" and the GPS list gains it;
+  // that. Mutation: drop `on: "web"` from "makeMap" or "sharpen" and the GPS list gains it;
   // swap two entries and the orders below fail.
   it("draws the same tools in the same order, less what one client lacks", () => {
     expect(mapTools("web").map((tool) => tool.id)).toEqual([
@@ -1640,6 +1640,7 @@ describe("MAP_TOOLS", () => {
       "route",
       "place",
       "makeMap",
+      "sharpen",
     ]);
     expect(mapTools("gps").map((tool) => tool.id)).toEqual([
       "measure",

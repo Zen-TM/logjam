@@ -11,7 +11,8 @@ describe("webMapTools", () => {
       measure: noop,
       route: noop,
       place: noop,
-      makeMap: { menu: [] },
+      makeMap: noop,
+      sharpen: noop,
     });
     expect(tools.map(({ id, label, icon }) => ({ id, label, icon }))).toEqual(
       mapTools("web"),

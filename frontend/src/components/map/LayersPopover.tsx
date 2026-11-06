@@ -131,7 +131,7 @@ export default function LayersPopover({
   sharpenedLoaded: boolean;
   activeTopoJobs: TopoJob[];
   friends: TFriend[];
-  /** Opens the dialog for a new sharpened area, as the Make a map menu does. */
+  /** Opens the dialog for a new sharpened area, as the tray's Sharpen an area does. */
   onSharpen: () => void;
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyToArea: (footprint: GeoJsonPolygonal) => void;

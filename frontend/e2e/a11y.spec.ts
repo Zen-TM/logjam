@@ -1020,7 +1020,7 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("Sharpen area, its ELVIS steps and its Vegetation choice", async ({
+  test("Sharpen an area, its ELVIS steps and its Vegetation choice", async ({
     page,
   }) => {
     await openApp(page);
@@ -1030,11 +1030,11 @@ test.describe("desktop", () => {
       .getByRole("radio", { name: "Terrain" })
       .click();
     await page.getByRole("button", { name: /^Sharpened areas/ }).click();
-    await page.getByRole("button", { name: "Sharpen area" }).click();
+    await page.getByRole("button", { name: "Sharpen an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Sharpen area" }),
+      dialog.getByRole("heading", { name: "Sharpen an area" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
@@ -1077,7 +1077,6 @@ test.describe("desktop", () => {
       .getByRole("group", { name: "Tools" })
       .getByText("Make a map")
       .click();
-    await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
@@ -1613,9 +1612,7 @@ test.describe("fits", () => {
   });
 
   // Mutation: drop `wrap` from the Scale rail and "Other" runs off the dialog.
-  test("Print or GIS map's Scale chips all show at phone width", async ({
-    page,
-  }) => {
+  test("Make a map's Scale chips all show at phone width", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
     await page.getByRole("button", { name: "Tools", exact: true }).click();
@@ -1623,7 +1620,6 @@ test.describe("fits", () => {
       .getByRole("group", { name: "Tools" })
       .getByText("Make a map")
       .click();
-    await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
     const scale = page.getByRole("radiogroup", { name: "Scale" });
     await expect(scale.getByRole("radio", { name: "Other" })).toBeInViewport({
       ratio: 1,
