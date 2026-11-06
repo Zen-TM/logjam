@@ -30,6 +30,7 @@ _ENTRYPOINTS = (
     "export_worker.py",
     "build_place_registry.py",
     "build_gauges.py",
+    "build_fire_history.py",
     "build_nsw_dem.py",
 )
 

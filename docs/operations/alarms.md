@@ -17,12 +17,14 @@ that goes wrong between deploys.
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
-| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
+| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges, fire history) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
 | `logjam-place-registry-not-launched` | EventBridge Scheduler's call to start the monthly build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-gauges-failed` | The river gauges job stopped with a non-zero exit or failed to start; the published readings are getting older | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-gauges` |
 | `logjam-gauges-not-launched` | EventBridge Scheduler's call to start the gauges job returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
+| `logjam-fire-history-failed` | The monthly fire history build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-fire-history` |
+| `logjam-fire-history-not-launched` | EventBridge Scheduler's call to start the monthly fire history build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -209,3 +211,44 @@ group. Any target error alarms, including one a retry got past.
 2. If none ran, find the `RunTask` call by the role `logjam-gauges-scheduler` in
    CloudTrail and read its error: a role, subnet or task definition problem,
    fixed in Terraform.
+
+## Fire history
+
+The raster the vegetation layer marks burnt ground from,
+`fire/fire_history_year.tif` in the topo bucket, is rebuilt by the ECS task
+`logjam-fire-history`, which EventBridge Scheduler starts at 04:00 Sydney on
+the 5th of each month from its own schedule group. It reads NPWS's map
+service and does nothing when the service's polygon count and latest dates
+match the published legend's (`fire/fire_history_year_legend.json`). A run
+that fails uploads nothing, so the published raster stays as it was, a
+month older.
+
+### `logjam-fire-history-failed`
+
+A metric filter on `/aws/events/logjam-worker-failures` counts this family's
+failed stops as `FireHistoryFailures` in namespace `Logjam/Workers`. It runs
+once a month, so one failure fires.
+
+1. Read `/aws/events/logjam-worker-failures`: `detail.containers[0].exitCode`
+   (137 is an out-of-memory kill) and `detail.stoppedReason`.
+2. Read `/ecs/logjam-fire-history`. "not building from a partial read" means
+   fewer polygons arrived than the service counts, or the service changed
+   while it was read; "query failed" lines before it name the HTTP error.
+   "refusing to publish" means the service now holds far fewer dated
+   polygons than the published build. Either way, check the service answers
+   (`topo/README.md`, "Refreshing the fire history") and run the task again
+   by hand. Anything else is a bug in `topo/build_fire_history.py` or the
+   topo worker image; if a worker deploy just ran, roll the worker back
+   ([rollback.md](rollback.md)).
+
+### `logjam-fire-history-not-launched`
+
+EventBridge Scheduler's `TargetErrorCount` for the `logjam-fire-history`
+schedule group. Any target error alarms, including one a retry got past,
+since the next scheduled run is a month away.
+
+1. Look in ECS for a `logjam-fire-history` task started after the alarm; if
+   one ran, this was a passing error.
+2. If none ran, find the `RunTask` call by the role
+   `logjam-fire-history-scheduler` in CloudTrail and read its error: a role,
+   subnet or task definition problem, fixed in Terraform.
