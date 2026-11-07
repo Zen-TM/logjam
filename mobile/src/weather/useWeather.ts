@@ -20,7 +20,6 @@ import {
 
 import { refreshRain } from "../gauges/gaugeFeed";
 import { readCachedRain } from "../gauges/gaugeStorage";
-
 import { useConnectivity } from "../map/connectivity";
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
 import {
