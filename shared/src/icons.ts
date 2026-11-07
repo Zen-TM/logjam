@@ -89,6 +89,8 @@ export const ICONS = {
   disclosure: { web: "chevron-right", gps: "chevron-right" }, // opens a sub-view
   scrollBack: { web: "chevrons-left", gps: "chevrons-left" }, // a row of cards, a page back
   scrollOn: { web: "chevrons-right", gps: "chevrons-right" }, // ...a page on
+  earlier: { web: "step-back", gps: "skip-back" }, // a step back in time (the weather map)
+  later: { web: "step-forward", gps: "skip-forward" }, // ...a step on
   expand: { web: "chevron-down", gps: "chevron-down" },
   collapse: { web: "chevron-up", gps: "chevron-up" },
   overflow: { web: "ellipsis-vertical", gps: "more-vertical" }, // a thing's verbs
@@ -149,6 +151,7 @@ export const ICONS = {
   elevation: { web: "trending-up", gps: "trending-up" },
   scaleBar: { web: "ruler-dimension-line", gps: "mci:arrow-expand-horizontal" },
   weather: { web: "umbrella", gps: "umbrella" }, // the forecast for a spot
+  weatherMap: { web: "cloud-sun-rain", gps: "mci:weather-partly-rainy" }, // the weather over a region, on the map
 
   // — weather: one per `WEATHER_CONDITIONS` entry. Feather's plain cloud is
   // already sync's and its sun a trip type's, so those draw MaterialCommunityIcons' —

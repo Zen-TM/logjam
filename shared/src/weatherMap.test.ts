@@ -10,12 +10,14 @@ import {
 } from "./overlayLegends.js";
 import {
   parseWeatherMap,
+  parseWeatherWind,
   WEATHER_LAYERS,
   WEATHER_MAP,
   weatherLayer,
   weatherLayerUrl,
   weatherLegendRows,
   weatherReliefColor,
+  weatherShown,
   weatherShownLabel,
   weatherStepAt,
   weatherTimeLabel,
@@ -234,5 +236,80 @@ describe("the Weather legend", () => {
     );
     expect(overlayChoiceLabel(legend, "rainPast168")).toBe("Rain, past 7 days");
     expect(legend.credit).toBe(WEATHER_MAP.credit);
+  });
+});
+
+describe("what the overlay shows", () => {
+  const anchor = Date.parse(file.anchor);
+
+  // Mutation: start at step 0 instead of the one now falls in, and the bar
+  // opens on an hour already past.
+  it("starts at the step now falls in and spans the rest", () => {
+    const shown = weatherShown({
+      file,
+      layer: "rain",
+      picked: null,
+      now: anchor + 30 * 60_000,
+    });
+    expect(shown).toMatchObject({
+      kind: "ready",
+      step: 1,
+      first: 1,
+      last: file.steps.length - 1,
+      shown: weatherTimeLabel(file.steps[1]!.time, anchor + 30 * 60_000),
+    });
+  });
+
+  // Mutation: drop the clamp, and a pick from an older run indexes past this
+  // one's steps or back into the past.
+  it("holds a pick inside the steps still to come", () => {
+    const at = (picked: number) =>
+      weatherShown({ file, layer: "wind", picked, now: anchor });
+    expect(at(-5)).toMatchObject({ step: 0 });
+    expect(at(999)).toMatchObject({ step: file.steps.length - 1 });
+    expect(at(2.6)).toMatchObject({ step: 3 });
+  });
+
+  // Mutation: let a stepped layer through when every step is past, and a
+  // week-old run draws as now.
+  it("is out of date once every step is past", () => {
+    const last = Date.parse(file.steps.at(-1)!.time);
+    expect(
+      weatherShown({ file, layer: "rain", picked: null, now: last + 1 }).kind,
+    ).toBe("outOfDate");
+  });
+
+  // Mutation: treat a total the run left out as ready, and the map asks for
+  // an archive the job never wrote.
+  it("draws a total with no step, and misses one the run left out", () => {
+    expect(
+      weatherShown({ file, layer: "rainPast24", picked: 7, now: anchor }),
+    ).toMatchObject({ kind: "ready", step: null, first: 0, last: 0 });
+    expect(
+      weatherShown({
+        file: { ...file, totals: [] },
+        layer: "rainPast24",
+        picked: null,
+        now: anchor,
+      }).kind,
+    ).toBe("missing");
+  });
+
+  it("ages the run from when it was built", () => {
+    const now = Date.parse(file.built) + 2 * 3_600_000;
+    expect(
+      weatherShown({ file, layer: "rain", picked: null, now }),
+    ).toMatchObject({ age: "Updated 2 h ago" });
+  });
+});
+
+describe("the wind file", () => {
+  // Mutation: return the parsed JSON unchecked, and a bad file throws inside
+  // `windArrows` instead of drawing no arrows.
+  it("reads the builder's file and refuses a broken one", () => {
+    expect(parseWeatherWind(wind)).toBe(wind);
+    expect(parseWeatherWind({ ...wind, columns: "35" })).toBeNull();
+    expect(parseWeatherWind({ ...wind, steps: [{ speed: [] }] })).toBeNull();
+    expect(parseWeatherWind(null)).toBeNull();
   });
 });

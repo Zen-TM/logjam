@@ -3,6 +3,7 @@
 // of the map first (`TERRAIN_LAYER_KEYS` in terrain.ts, which both clients
 // also stack them by).
 import type { ScreenContract } from "./types.js";
+import { WEATHER } from "./weather.js";
 
 export const MAP_TERRAIN = {
   id: "map.terrain",
@@ -82,7 +83,7 @@ export const MAP_TERRAIN = {
     weatherLater: "Later",
     weatherLoading: "Getting the weather map…",
     weatherFailed: "Couldn't get the weather map.",
-    weatherOutOfDate: "This forecast has run out.",
+    weatherOutOfDate: WEATHER.copy.outOfDate,
     slopeBands: "Slope bands",
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.

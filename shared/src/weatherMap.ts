@@ -14,7 +14,7 @@
 // Guards: weatherMap.test.ts, against the fixture topo/tests/test_weather.py
 // writes from the builder.
 import { SHORT_WEEKDAYS } from "./dateNames.js";
-import { WEATHER } from "./contracts/weather.js";
+import { WEATHER, weatherAge } from "./contracts/weather.js";
 import {
   mixHex,
   parseRgbaHex,
@@ -36,6 +36,13 @@ export const WEATHER_MAP = {
   /** The job's ATTRIBUTION, which every manifest carries: CC BY 4.0's
    *  condition. Guard: topo/tests/test_weather.py. */
   credit: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS",
+  /** A manifest this old is asked for again on the next turn-on or return
+   *  to the map; nothing polls. */
+  refreshAfterMs: 3_600_000,
+  /** How often an open map re-reads the clock, for the step now falls in. */
+  clockMs: 300_000,
+  /** How long the scrubber rests before the map asks for that step. */
+  settleMs: 150,
 } as const;
 
 export type WeatherFieldKey = "rain" | "temperature" | "wind" | "gusts";
@@ -343,6 +350,69 @@ export function weatherShownLabel(
   return layer.hours < 0
     ? `To ${weatherTimeLabel(file.anchor, now)}`
     : `To ${weatherTimeLabel(new Date(edge).toISOString(), now)}`;
+}
+
+/**
+ * What the overlay shows for a manifest, the layer picked and the step the
+ * user picked (null until they do), on both clients: the step clamped to
+ * those still to come, starting at the one now falls in. A stepped layer
+ * whose every step is past is out of date, never drawn as today's; a total
+ * the run left out (an hour no run held) is missing. Each client maps this to
+ * its own bar and archive. Guard: weatherMap.test.ts.
+ */
+export type WeatherShown =
+  | { kind: "outOfDate" | "missing" }
+  | {
+      kind: "ready";
+      layer: WeatherLayer;
+      /** Index into the manifest's steps; null for a total. */
+      step: number | null;
+      /** The scrubber's reach; both 0 for a total. */
+      first: number;
+      last: number;
+      /** The step's time, or the total's window. */
+      shown: string;
+      /** The run's age. */
+      age: string;
+    };
+
+export function weatherShown(input: {
+  file: WeatherMapFile;
+  layer: WeatherLayerKey;
+  picked: number | null;
+  now: number;
+}): WeatherShown {
+  const { file, now } = input;
+  const layer = weatherLayer(input.layer);
+  const age = weatherAge(Date.parse(file.built), now);
+  if (isWeatherTotal(layer)) {
+    if (!file.totals.includes(layer.key as WeatherTotalKey))
+      return { kind: "missing" };
+    const shown = weatherShownLabel(file, layer.key, 0, now);
+    return { kind: "ready", layer, step: null, first: 0, last: 0, shown, age };
+  }
+  const first = weatherStepAt(file, now);
+  if (first === null) return { kind: "outOfDate" };
+  const last = file.steps.length - 1;
+  const step = Math.min(
+    last,
+    Math.max(first, Math.round(input.picked ?? first)),
+  );
+  const shown = weatherShownLabel(file, layer.key, step, now);
+  return { kind: "ready", layer, step, first, last, shown, age };
+}
+
+/** `wind.json` if it has the shape `windArrows` reads, else null: a bad file
+ *  draws no arrows rather than throwing. */
+export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
+  const w = raw as Partial<WeatherWindFile> | null;
+  return w &&
+    typeof w === "object" &&
+    [w.west, w.north, w.step, w.columns, w.rows].every(Number.isFinite) &&
+    Array.isArray(w.steps) &&
+    w.steps.every((s) => Array.isArray(s?.speed) && Array.isArray(s?.from))
+    ? (w as WeatherWindFile)
+    : null;
 }
 
 /** The wind arrows of one step, as points a symbol layer rotates: `rotate`
