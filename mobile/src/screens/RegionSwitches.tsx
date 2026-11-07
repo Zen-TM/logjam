@@ -1,8 +1,8 @@
 // One switch per region, shared by the first-login step and the Settings page.
-import { REGIONS, type Region } from "@logjam/shared";
+import { REGIONS, toggleRegion, type Region } from "@logjam/shared";
 
 import { SwitchRow } from "../ui";
-import { regionSwitches, toggledRegions } from "./regionChoice";
+import { regionSwitches } from "./regionChoice";
 
 export function RegionSwitches({
   chosen,
@@ -27,9 +27,7 @@ export function RegionSwitches({
           description={region.reason}
           checked={region.checked}
           disabled={disabled || region.disabled}
-          onChange={(on) =>
-            onChange(toggledRegions(chosen, region.id, on, regions))
-          }
+          onChange={() => onChange(toggleRegion(chosen, region.id, regions))}
         />
       ))}
     </>

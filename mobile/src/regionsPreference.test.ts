@@ -66,6 +66,40 @@ describe("the chosen regions on Logjam GPS", () => {
     expect(store.readRegions()).toEqual(["nsw"]);
   });
 
+  // Mutation: drop setSending(true), or the `finally`, and the screens' switches
+  // stay live while a send is out (a second tap's rollback is the first's) or
+  // stay dead after it.
+  it("is sending from the PATCH until it settles, whether it lands or fails", async () => {
+    const store = await load();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let settle!: (fail: boolean) => void;
+    patch.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          settle = (fail) => (fail ? reject(new Error("x")) : resolve({}));
+        }),
+    );
+    expect(store.isSendingRegions()).toBe(false);
+    const sent = store.chooseRegions(["nz"], true);
+    expect(store.isSendingRegions()).toBe(true);
+    settle(false);
+    await sent;
+    expect(store.isSendingRegions()).toBe(false);
+    const failed = store.chooseRegions(["nsw"], true);
+    expect(store.isSendingRegions()).toBe(true);
+    settle(true);
+    await failed;
+    expect(store.isSendingRegions()).toBe(false);
+  });
+
+  // Mutation: set sending for a guest, and its switches go dead for nothing.
+  it("is never sending for a guest", async () => {
+    const store = await load();
+    const kept = store.chooseRegions(["nz"], false);
+    expect(store.isSendingRegions()).toBe(false);
+    await kept;
+  });
+
   it("are replaced by the account's, and by the default when it has none", async () => {
     const store = await load();
     await store.chooseRegions(["nz"], false);

@@ -3,20 +3,14 @@ import {
   consentFormProblem,
   consentSubmitFailure,
   offersRegionChoice,
-  REGION_CHOICE,
-  regionChoiceProblem,
   REGIONS,
   SIGN_IN_COPY,
   USERNAME_HINT,
   type Region,
 } from "@logjam/shared";
-import { messageFromError } from "../errors/messageFromError";
-import {
-  recordConsent,
-  updateUserPreferences,
-  type TUser,
-} from "../placeUtils";
+import { recordConsent, type TUser } from "../placeUtils";
 import BrandMark from "./brand/BrandMark";
+import RegionStep from "./RegionStep";
 import TermsTick from "./TermsTick";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
 import classes from "./ConsentGate.module.css";
@@ -34,7 +28,7 @@ import classes from "./ConsentGate.module.css";
  * confirms its age here, in the same request that records the consent.
  *
  * Once there is more than one region, a new account is then asked where it
- * canyons (REGION_CHOICE), in the same card.
+ * canyons (RegionStep).
  *
  * The links to read are in the tick's own sentence (TermsTick), and opening one
  * does not answer the question about it.
@@ -65,25 +59,6 @@ function ConsentGate({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [askingRegions, setAskingRegions] = useState(false);
-  const [chosen, setChosen] = useState<string[]>([]);
-
-  async function handleRegions(): Promise<void> {
-    // Pressing Continue is how the user learns what is missing (shared/DESIGN.md §5).
-    const problem = regionChoiceProblem(chosen);
-    if (problem) {
-      setError(problem);
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      onAccepted(await updateUserPreferences({ regions: chosen }));
-    } catch (err) {
-      console.error(err);
-      setError(messageFromError(err, REGION_CHOICE.saveFailed));
-      setSubmitting(false);
-    }
-  }
 
   async function handleAgree(): Promise<void> {
     const problem = consentFormProblem({
@@ -127,50 +102,7 @@ function ConsentGate({
 
   if (askingRegions) {
     return (
-      <div className={classes.container}>
-        <div className={classes.card}>
-          <BrandMark className={classes.brandMark} />
-          <h1 className={classes.title}>{REGION_CHOICE.title}</h1>
-          <p className={classes.body}>{REGION_CHOICE.hint}</p>
-          {regions.map((region) => (
-            <Checkbox
-              key={region.id}
-              label={region.name}
-              checked={chosen.includes(region.id)}
-              onChange={(next) => {
-                setChosen((prev) =>
-                  next
-                    ? [...prev, region.id]
-                    : prev.filter((id) => id !== region.id),
-                );
-                setError(null);
-              }}
-            />
-          ))}
-          {error && (
-            <ErrorBanner
-              message={error}
-              onRetry={chosen.length > 0 ? handleRegions : undefined}
-            />
-          )}
-          <Button
-            variant="filled"
-            className={classes.action}
-            onClick={handleRegions}
-            busy={submitting}
-          >
-            {REGION_CHOICE.continue}
-          </Button>
-          <Button
-            className={classes.action}
-            onClick={onSignOut}
-            disabled={submitting}
-            disabledReason="Saving your regions…"
-          >
-            Sign out
-          </Button>
-        </div>
-      </div>
+      <RegionStep onDone={onAccepted} onSignOut={onSignOut} regions={regions} />
     );
   }
 

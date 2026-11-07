@@ -28,9 +28,9 @@ export const baseLayersFor = (regionIds: readonly string[]) =>
   offeredBasemaps(regionIds).map(toBaseLayer);
 
 /**
- * Every basemap the catalogue offers, whatever the account chose: what the map
- * mounts sources for, so a pick from a region later unchosen still draws, and
- * what the GeoPDF dialog lists.
+ * The full offered catalogue, whatever the account chose, so every basemap
+ * source stays mounted and the GeoPDF dialog lists them all. A stored pick no
+ * longer in `baseLayersFor` falls back to the default (App.tsx).
  */
 export const BASE_LAYERS = BASEMAP_CATALOG.filter(
   (entry) => entry.offered !== false,

@@ -177,7 +177,7 @@ describe("the region step", () => {
     expect(screen.queryByText(REGION_CHOICE.title)).toBeNull();
   });
 
-  // Mutation: drop the problem check in handleRegions and an empty choice is
+  // Mutation: drop the problem check in RegionStep's handleContinue and an empty choice is
   // sent to the API.
   it("holds Continue with its reason until a region is ticked, then sends every ticked id", async () => {
     const saved = { id: "u1", uiPreferences: { regions: ["nsw", "nz"] } };

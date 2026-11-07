@@ -11,9 +11,10 @@ import {
   ownAttributeCountLabel,
   ownTypeCountLabel,
   REGION_CHOICE,
-  regionChoiceProblem,
+  regionOffRefusal,
   REGIONS,
   SETTINGS,
+  toggleRegion,
   type Region,
   type SectionKeysOn,
   type NotificationPreferenceGroup,
@@ -202,9 +203,7 @@ function SettingsPanel({
   async function handleToggleRegion(id: string) {
     if (chosenRegions === null) return;
     const previous = chosenRegions;
-    const next = previous.includes(id)
-      ? previous.filter((chosen) => chosen !== id)
-      : [...previous, id];
+    const next = toggleRegion(previous, id, regions);
     setChosenRegions(next);
     setRegionsSaving(true);
     try {
@@ -280,17 +279,14 @@ function SettingsPanel({
           ) : (
             regions.map((region) => {
               const on = chosenRegions.includes(region.id);
-              // The last one stays: turning it off would leave none to offer.
-              const refused = on
-                ? regionChoiceProblem(
-                    chosenRegions.filter((id) => id !== region.id),
-                  )
-                : null;
+              const refused = regionOffRefusal(chosenRegions, region.id);
               return (
                 <SwitchRow
                   key={region.id}
                   title={region.name}
                   checked={on}
+                  // One at a time: a failed save rolls back to the choice before
+                  // it, which would undo a toggle made mid-save.
                   disabled={regionsSaving || refused !== null}
                   disabledReason={refused ?? "Saving…"}
                   onChange={() => handleToggleRegion(region.id)}

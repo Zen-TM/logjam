@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import { NSW_REGION, REGION_CHOICE, type Region } from "@logjam/shared";
 
 import {
+  regionContinueProps,
   regionsSettingsRow,
   regionStepPress,
   regionSwitches,
+  sendsRegionChoice,
   showsRegionStep,
-  toggledRegions,
+  showsRegionStepAfterSignIn,
 } from "./regionChoice";
 
 // Mobile tests run without a renderer, so the screens' decisions are these
@@ -47,25 +49,64 @@ describe("the region step of the first-login gate", () => {
       explain: "Choose at least one region.",
     });
     expect(regionStepPress(["nz"])).toEqual({ send: true });
-    const source = readFileSync(
-      new URL("./ConsentGate.tsx", import.meta.url),
-      "utf8",
-    );
-    expect(source).not.toMatch(/disabled=\{regionProblem/);
   });
 
-  it("is built from the contract's copy, and shown by showsRegionStep", () => {
-    const source = readFileSync(
-      new URL("./ConsentGate.tsx", import.meta.url),
-      "utf8",
+  // Mutation: add `disabled: regionStepPress(chosen) !== send` (or any
+  // `disabled`) to regionContinueProps, and an empty choice greys Continue out
+  // with no word on why.
+  it("gives Continue no disabled prop, whatever is chosen", () => {
+    const onPress = () => {};
+    const props = regionContinueProps(false, onPress);
+    expect(props).toEqual({
+      label: "Continue",
+      onPress,
+      loading: false,
+    });
+    expect("disabled" in props).toBe(false);
+    expect(regionContinueProps(true, onPress).loading).toBe(true);
+  });
+
+  // Mutation: draw Continue by hand in RegionStep (not from
+  // regionContinueProps), or show the step without asking showsRegionStep.
+  it("is one screen, drawn from the contract's copy and shown by the decisions", () => {
+    const read = (path: string) =>
+      readFileSync(new URL(path, import.meta.url), "utf8");
+    const step = read("./RegionStep.tsx");
+    expect(step).toContain("REGION_CHOICE.title");
+    expect(step).toContain("REGION_CHOICE.hint");
+    expect(step).toContain("<Button {...regionContinueProps(");
+    expect(step).toContain("useRegionsSending()");
+    expect(read("./ConsentGate.tsx")).toContain("<RegionStep");
+    expect(read("./ConsentGate.tsx")).toContain(
+      "showsRegionStep(newAccount, regions)",
     );
-    // Mutation: type the title back into the screen, or show the step without
-    // asking showsRegionStep.
-    expect(source).toContain("REGION_CHOICE.title");
-    expect(source).toContain("REGION_CHOICE.hint");
-    expect(source).toContain("REGION_CHOICE.continue");
-    expect(source).toContain("showsRegionStep(newAccount, regions)");
+    expect(read("../AppShell.tsx")).toContain(
+      "showsRegionStepAfterSignIn(newAccount, regionsAsked)",
+    );
     expect(REGION_CHOICE.title).toBe("Where do you canyon?");
+  });
+});
+
+describe("the step right after Logjam GPS's own sign-up form", () => {
+  // Mutation: ignore `finished` (the step comes back at every render), or
+  // `justCreatedAccount` (a plain sign-in is asked), or show it with one region.
+  it("is for a just-made account, until finished, and only with two regions", () => {
+    expect(showsRegionStepAfterSignIn(true, false, TWO)).toBe(true);
+    expect(showsRegionStepAfterSignIn(true, true, TWO)).toBe(false);
+    expect(showsRegionStepAfterSignIn(false, false, TWO)).toBe(false);
+    expect(showsRegionStepAfterSignIn(true, false, ONE)).toBe(false);
+  });
+});
+
+describe("whether a region choice goes to the account", () => {
+  // Mutation: send for a guest (ADR 0007), or stop a linked account sending
+  // because it is offline (`=== "available"`): it keeps the choice and sends
+  // when it can.
+  it("is no for a guest, and yes for a linked account online or off", () => {
+    expect(sendsRegionChoice("guest", true)).toBe(false);
+    expect(sendsRegionChoice("guest", false)).toBe(false);
+    expect(sendsRegionChoice("linked", true)).toBe(true);
+    expect(sendsRegionChoice("linked", false)).toBe(true);
   });
 });
 
@@ -79,8 +120,8 @@ describe("the Regions row and page of Settings", () => {
     expect(regionsSettingsRow(["nsw"], ONE)).toBeNull();
   });
 
-  // Mutation: drop the `keepOne` refusal, and the last region can be turned
-  // off, which leaves the account choosing none.
+  // Mutation: drop the `keepOne` refusal (regionOffRefusal), and the last
+  // region can be turned off, which leaves the account choosing none.
   it("refuses to turn the last region off, with the contract's reason", () => {
     const [nsw, nz] = regionSwitches(["nsw"], TWO, true);
     expect(nsw).toMatchObject({ disabled: true, reason: expect.any(String) });
@@ -90,9 +131,15 @@ describe("the Regions row and page of Settings", () => {
     ).toBe(false);
   });
 
-  it("moves one switch and keeps the regions' order", () => {
-    expect(toggledRegions(["nz"], "nsw", true, TWO)).toEqual(["nsw", "nz"]);
-    expect(toggledRegions(["nsw", "nz"], "nz", false, TWO)).toEqual(["nsw"]);
+  // Mutation: drop `|| sending` from the page's switches, or send by
+  // `accountState !== "guest"` instead of sendsRegionChoice.
+  it("holds its switches while a send is in flight", () => {
+    const read = (path: string) =>
+      readFileSync(new URL(path, import.meta.url), "utf8");
+    const page = read("./settings/RegionsSettingsScreen.tsx");
+    expect(page).toContain("useRegionsSending()");
+    expect(page).toContain("disabled={offline || sending}");
+    expect(page).toContain("sendsRegionChoice(");
   });
 
   // Mutation: draw the row unconditionally, or leave `regions` out of the

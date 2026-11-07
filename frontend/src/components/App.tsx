@@ -78,8 +78,13 @@ import { findRouteById } from "./sidebar/panels/inboxModel";
 import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
-import { consentGate, currentConsentVersionOf } from "../consent";
+import {
+  consentGate,
+  currentConsentVersionOf,
+  showsRegionStep,
+} from "../consent";
 import ConsentGate from "./ConsentGate";
+import RegionStep from "./RegionStep";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
@@ -1559,6 +1564,20 @@ function App() {
         newAccount={currentUser.consentVersion === null}
         currentUsername={currentUser.username}
         onAccepted={applyCurrentUser}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Logjam Web's own sign-up form records consent itself, so the gate above
+  // never shows for it; this is where that account is asked its regions.
+  if (currentUser && showsRegionStep({ signedUpNow: auth.newAccount })) {
+    return (
+      <RegionStep
+        onDone={(user) => {
+          applyCurrentUser(user);
+          auth.finishNewAccount();
+        }}
         onSignOut={signOut}
       />
     );

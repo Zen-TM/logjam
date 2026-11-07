@@ -11,6 +11,7 @@ import { readPref, writePref } from "./prefsDb";
 const REGIONS_PREF_KEY = "regions";
 
 let current: string[] | null = null;
+let sending = false;
 const listeners = new Set<() => void>();
 
 function stored(): string[] {
@@ -27,16 +28,34 @@ export function readRegions(): string[] {
 }
 
 export function useRegions(): string[] {
-  return useSyncExternalStore((listener) => {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  }, readRegions);
+  return useSyncExternalStore(subscribe, readRegions);
+}
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+/**
+ * Whether a choice is on its way to the account. The screens hold their
+ * switches while it is: a second choice could be rolled back by the first's
+ * failure, and two sends can land out of order.
+ */
+export const isSendingRegions = (): boolean => sending;
+
+export function useRegionsSending(): boolean {
+  return useSyncExternalStore(subscribe, isSendingRegions);
 }
 
 function keep(ids: string[]): void {
   if (JSON.stringify(ids) === JSON.stringify(readRegions())) return;
   current = ids;
   writePref(REGIONS_PREF_KEY, JSON.stringify(ids));
+  for (const listener of listeners) listener();
+}
+
+function setSending(value: boolean): void {
+  sending = value;
   for (const listener of listeners) listener();
 }
 
@@ -54,7 +73,8 @@ export function forgetRegions(): void {
  * Keep a choice made on this phone and, signed in, send it to the account.
  * Returns whether it reached the account (true for a guest, who sends
  * nothing: ADR 0007). A failed send puts the previous choice back, so the
- * phone never holds a choice the account does not.
+ * phone never holds a choice the account does not. One send at a time: the
+ * screens disable their switches while `useRegionsSending()` (the test holds them to it).
  */
 export async function chooseRegions(
   ids: readonly string[],
@@ -64,6 +84,7 @@ export async function chooseRegions(
   const next = normalizeRegionIds(ids);
   keep(next);
   if (!signedIn) return true;
+  setSending(true);
   try {
     await apiFetch("/users/me", { method: "PATCH", body: { regions: next } });
     return true;
@@ -71,5 +92,7 @@ export async function chooseRegions(
     console.error(err);
     keep(before);
     return false;
+  } finally {
+    setSending(false);
   }
 }

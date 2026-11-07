@@ -305,8 +305,6 @@ const BASEMAP_ASSETS_BASE_URL = "https://protomaps.github.io/basemaps-assets";
 const PROTOMAPS_LAYER_PREFIX = "pm-";
 const PROTOMAPS_SOURCE_ID = "protomaps";
 
-export { BASE_LAYERS };
-
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
  * generated @protomaps/basemaps layer set.

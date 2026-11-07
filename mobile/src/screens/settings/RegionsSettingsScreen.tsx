@@ -13,9 +13,14 @@ import {
   unavailableReasonText,
 } from "../../auth/capabilities";
 import { useConnectivity } from "../../map/connectivity";
-import { chooseRegions, useRegions } from "../../regionsPreference";
+import {
+  chooseRegions,
+  useRegions,
+  useRegionsSending,
+} from "../../regionsPreference";
 import { makeStyles, muted } from "../../theme";
 import { ScreenScroll, Toast, type ToastMessage } from "../../ui";
+import { sendsRegionChoice } from "../regionChoice";
 import { RegionSwitches } from "../RegionSwitches";
 
 export function RegionsSettingsScreen() {
@@ -23,6 +28,7 @@ export function RegionsSettingsScreen() {
   const chosen = useRegions();
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
+  const sending = useRegionsSending();
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // A guest is "needs-account" here and still allowed: nothing is sent.
@@ -32,14 +38,15 @@ export function RegionsSettingsScreen() {
 
   const change = useCallback(
     async (next: string[]) => {
-      if (await chooseRegions(next, accountState !== "guest")) return;
+      if (await chooseRegions(next, sendsRegionChoice(accountState, online)))
+        return;
       setToast({
         text: REGION_CHOICE.saveFailed,
         tone: "error",
         nonce: Date.now(),
       });
     },
-    [accountState],
+    [accountState, online],
   );
 
   return (
@@ -54,7 +61,7 @@ export function RegionsSettingsScreen() {
           chosen={chosen}
           onChange={(next) => void change(next)}
           keepOne
-          disabled={offline}
+          disabled={offline || sending}
         />
       </ScreenScroll>
       <Toast message={toast} onDismissed={() => setToast(null)} />

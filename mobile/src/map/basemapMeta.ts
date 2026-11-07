@@ -23,3 +23,16 @@ export const mobileBasemaps = (regionIds: readonly string[]): BasemapId[] =>
 /** Shown until the user has picked one (and when a stored pick is unreadable). */
 export const defaultBasemap = (regionIds: readonly string[]): BasemapId =>
   defaultBasemapFor(regionIds) as BasemapId;
+
+/**
+ * The basemap to use now: the stored pick while these regions still offer it,
+ * else their default. The pick itself is left alone, so choosing the region
+ * again brings it back. Guard: basemapMeta.test.ts.
+ */
+export const effectiveBasemap = (
+  picked: BasemapId,
+  regionIds: readonly string[],
+): BasemapId =>
+  mobileBasemaps(regionIds).includes(picked)
+    ? picked
+    : defaultBasemap(regionIds);

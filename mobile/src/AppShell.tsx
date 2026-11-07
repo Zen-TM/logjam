@@ -85,6 +85,8 @@ import { PickAreaScreen } from "./map/PickAreaScreen";
 import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
+import { RegionStep } from "./screens/RegionStep";
+import { showsRegionStepAfterSignIn } from "./screens/regionChoice";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -1013,10 +1015,13 @@ Notifications.setNotificationHandler({
 
 export function AppShell({
   accountState,
+  newAccount = false,
   onLinkAccount,
   onSignOut,
 }: {
   accountState: AccountState;
+  /** The sign-up form just made the account: ask for its regions first. */
+  newAccount?: boolean;
   onLinkAccount: () => void;
   onSignOut: SignOutHandler;
 }) {
@@ -1031,6 +1036,7 @@ export function AppShell({
     !isGuest,
   );
   const [consented, setConsented] = useState(false);
+  const [regionsAsked, setRegionsAsked] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const { fontScale } = useWindowDimensions();
   const tabBarHeight = useTabBarHeight();
@@ -1190,11 +1196,25 @@ export function AppShell({
         consentVersion={currentConsentVersionOf(user)}
         newAccount={user.consentVersion === null}
         currentUsername={user.username}
+        accountState={accountState}
         onConsented={() => {
           setConsented(true);
+          // Its own region step has run for a new account.
+          setRegionsAsked(true);
           userQuery.refetch();
         }}
         onSignOut={onSignOut}
+      />
+    );
+  }
+
+  // Logjam GPS's sign-up form records consent itself, so the gate above never
+  // shows for an account it makes: its region step comes here instead.
+  if (showsRegionStepAfterSignIn(newAccount, regionsAsked)) {
+    return (
+      <RegionStep
+        accountState={accountState}
+        onDone={() => setRegionsAsked(true)}
       />
     );
   }

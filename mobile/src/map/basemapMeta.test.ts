@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { offeredBasemaps, REGIONS } from "@logjam/shared";
 
-import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
+import {
+  defaultBasemap,
+  effectiveBasemap,
+  mobileBasemaps,
+} from "./basemapMeta";
 import { resolveMapSource, type BasemapId } from "./sourceResolver";
 
 describe("the basemaps Logjam GPS offers", () => {
@@ -33,5 +37,19 @@ describe("the basemaps Logjam GPS offers", () => {
       );
       expect(source?.status, id).toBe("ok");
     }
+  });
+});
+
+describe("the basemap in use while regions change under an open map", () => {
+  // Mutation: return `picked` unconditionally, and a basemap no chosen region
+  // offers keeps drawing after its region is unchosen.
+  it("is the pick while a chosen region offers it, else the default", () => {
+    expect(effectiveBasemap("osm-cycle", ["nsw"])).toBe("osm-cycle");
+    // A region id nothing offers stands in for "unchosen": only the worldwide
+    // maps remain, so the NSW-only pick falls to that choice's default.
+    expect(effectiveBasemap("six-imagery", [])).toBe(defaultBasemap([]));
+    expect(mobileBasemaps([])).not.toContain("six-imagery");
+    // The pick is not rewritten: choosing the region again restores it.
+    expect(effectiveBasemap("six-imagery", ["nsw"])).toBe("six-imagery");
   });
 });

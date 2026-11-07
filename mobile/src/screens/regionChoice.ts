@@ -8,14 +8,49 @@ import {
   offersRegionChoice,
   REGIONS,
   regionChoiceProblem,
+  REGION_CHOICE,
+  regionOffRefusal,
   type Region,
 } from "@logjam/shared";
+
+import { capabilityStatus, type AccountState } from "../auth/capabilities";
 
 /** The step after the terms: for a new account, and only once there is a choice. */
 export const showsRegionStep = (
   newAccount: boolean,
   regions: readonly Region[] = REGIONS,
 ): boolean => newAccount && offersRegionChoice(regions);
+
+/**
+ * The step right after Logjam GPS's own sign-up form, which records consent
+ * itself so `ConsentGate` never shows: until the step has been finished.
+ */
+export const showsRegionStepAfterSignIn = (
+  justCreatedAccount: boolean,
+  finished: boolean,
+  regions: readonly Region[] = REGIONS,
+): boolean => !finished && showsRegionStep(justCreatedAccount, regions);
+
+/**
+ * Whether a choice goes to the account. Only a guest sends nothing (ADR 0007):
+ * a linked account that is offline keeps the choice and sends it when it can,
+ * so this is not "the capability is available".
+ */
+export function sendsRegionChoice(
+  accountState: AccountState,
+  online: boolean,
+): boolean {
+  const status = capabilityStatus("serverPrefs", accountState, online);
+  return !(
+    status.status === "unavailable" && status.reason === "needs-account"
+  );
+}
+
+/** The step's Continue button: never `disabled`, it explains on press (shared/DESIGN.md §5). */
+export const regionContinueProps = (
+  submitting: boolean,
+  onPress: () => void,
+) => ({ label: REGION_CHOICE.continue, onPress, loading: submitting });
 
 /** The Settings row that opens the regions page, or null with one region. */
 export function regionsSettingsRow(
@@ -57,26 +92,13 @@ export function regionSwitches(
   keepOne = false,
 ): RegionSwitch[] {
   return regions.map((region) => {
-    const checked = chosen.includes(region.id);
-    const refused = keepOne && checked && chosen.length === 1;
+    const reason = keepOne ? regionOffRefusal(chosen, region.id) : null;
     return {
       id: region.id,
       title: region.name,
-      checked,
-      disabled: refused,
-      ...(refused && { reason: regionChoiceProblem([])! }),
+      checked: chosen.includes(region.id),
+      disabled: reason !== null,
+      ...(reason !== null && { reason }),
     };
   });
-}
-
-/** The choice after one switch moves, in `regions`' order. */
-export function toggledRegions(
-  chosen: readonly string[],
-  id: string,
-  on: boolean,
-  regions: readonly Region[] = REGIONS,
-): string[] {
-  return regions
-    .map((region) => region.id)
-    .filter((each) => (each === id ? on : chosen.includes(each)));
 }

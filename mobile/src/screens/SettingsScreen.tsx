@@ -80,10 +80,9 @@ export type SettingsPage =
 
 const copy = SETTINGS.copy;
 
-// No idea in the icon registry fits a region yet: its row has no tile.
-const PAGE_ICONS: Record<SettingsPage, Glyph | undefined> = {
+const PAGE_ICONS: Record<SettingsPage, Glyph> = {
   display: "typography",
-  regions: undefined,
+  regions: "region",
   map: "map",
   notifications: "notifications",
   offline: "device",
