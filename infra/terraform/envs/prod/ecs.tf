@@ -708,9 +708,10 @@ resource "aws_ecs_task_definition" "weather" {
     }
     name = "weather"
   }])
-  # A build reads about 280 small range requests' worth of NSW (about 250 MB)
-  # on 16 threads and writes about 430 small archives; it holds one step at a
-  # time per thread. One vCPU for the PNG encoding, and memory to spare.
+  # A build reads about 270 MB of NSW in 64 KB range requests on 16 threads
+  # and writes about 420 small archives, holding one step at a time per
+  # thread: 7 minutes and 2.7 minutes of CPU on a laptop. One vCPU for the PNG
+  # encoding, and memory to spare.
   cpu                      = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   family                   = "logjam-weather"

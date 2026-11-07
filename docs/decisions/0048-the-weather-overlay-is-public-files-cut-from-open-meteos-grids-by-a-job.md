@@ -25,8 +25,8 @@ for `ecmwf_ifs` (IFS HRES):
 - steps are hourly to 90 h, 3-hourly to 144 h, 6-hourly to 360 h, and a
   3-hourly step's rain is the sum of its three hours (checked against the
   point API: 0.7 + 0.7 + 0.7 against 2.1);
-- reading five variables for NSW from one step is about 0.3 MB per variable
-  in a few range requests.
+- reading five variables for NSW from one step is about 2 MB, in range
+  requests of 64 KB.
 
 Every `.om` reader Open-Meteo publishes is GPL-2.0-only: `omfiles` on PyPI
 (its `Cargo.toml` says `license = "GPL-2.0-only"`, its repository the GPL-2.0
@@ -104,7 +104,7 @@ receives.**
   later client-side reader means writing our own decoder.
 - **Neutral:** the bucket's 7 days limit past rain to a week; ERA5 runs 5
   days behind, so no reanalysis covers the last 72 hours either. Each build
-  reads about 250 MB from the bucket, four times a day.
+  reads about 270 MB from the bucket, four times a day.
 
 ## Alternatives considered
 

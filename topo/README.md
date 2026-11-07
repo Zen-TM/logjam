@@ -521,9 +521,9 @@ docker compose run --rm topo python3 /app/build_weather.py build /output/weather
 pmtiles show output/weather/runs/*/rain/000.pmtiles   # zoom 5, four tiles, bounds BOX
 ```
 
-`build` reads the latest complete run whatever is published, about 250 MB
+`build` reads the latest complete run whatever is published, about 270 MB
 in range requests (105 steps of five variables, and 168 past hours of rain),
-and took 4.5 minutes on a laptop for about 12 MB of files. `run` does the same
+and took 7 minutes on a laptop for about 12 MB of files. `run` does the same
 only when the run is newer than `master/weather/v1/latest.json`, uploads the
 run's folder, then the manifest, and deletes every run folder but the new one
 and the one before. Publishing is a prod change and the maintainer's to make:
