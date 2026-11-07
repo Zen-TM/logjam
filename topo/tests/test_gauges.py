@@ -582,6 +582,9 @@ class TestRain(unittest.TestCase):
         # Mutation: date a total by its end stamp → red; the storm of one
         # afternoon would be drawn on the next day.
         self.assertEqual(g.period_start("2026-11-04T09:00:00.000+10:00"), "2026-11-03")
+        # Mutation: date by the stamp's own offset → red; the same moment
+        # written in UTC would land a day early.
+        self.assertEqual(g.period_start("2026-11-03T23:00:00.000Z"), "2026-11-03")
 
     def test_the_file_holds_the_days_before_today_in_aest(self):
         doc = fixture_rain()
@@ -599,6 +602,50 @@ class TestRain(unittest.TestCase):
         self.assertTrue(g.rain_fault([float(3000 + i) for i in range(360)]))
         self.assertTrue(g.rain_fault([0.0] * 300 + [150.0] * 11))
         self.assertTrue(g.rain_fault([]))
+
+    def test_the_registry_keeps_only_cleared_owners(self):
+        # Mutation: drop the owner check in rain_registry, or add an owner to
+        # RAIN_OWNERS without reading its terms into ADR 0047 → red.
+        self.assertEqual(
+            g.RAIN_OWNERS,
+            {"NSW - Water NSW"},
+            "a new owner's terms go in ADR 0047 first",
+        )
+
+        def station(no, owner):
+            return {
+                "station_no": no,
+                "station_longname": f"MADE UP {no}",
+                "ts_id": f"{no}1",
+                "station_latitude": "-33.7",
+                "station_longitude": "150.3",
+                "to": "2026-10-29T09:00:00.000+10:00",
+                "DATA_OWNER_NAME": owner,
+            }
+
+        daily = [
+            station("900201", "NSW - Water NSW"),
+            station("900202", ""),
+            station("900203", "NSW - Snowy Hydro Limited"),
+        ]
+        raw = [
+            {"station_no": n, "ts_id": f"{n}2"} for n in ("900201", "900202", "900203")
+        ]
+        lists = iter([daily, raw])
+        dry_year = [["2026-01-01T09:00:00.000+10:00", 0.0, 140]] * 300
+
+        def values(url, timeout=60):
+            ids = re.search(r"ts_id=([\d,]+)", url).group(1).split(",")
+            return [{"ts_id": i, "data": dry_year} for i in ids]
+
+        with (
+            mock.patch.object(g, "bom_list", lambda **kw: next(lists)),
+            mock.patch.object(g, "http_get", values),
+            mock.patch.object(g, "datetime", FrozenDatetime),
+            mock.patch.object(g.time, "sleep"),
+        ):
+            kept = g.rain_registry()
+        self.assertEqual([x["id"] for x in kept], ["900201"])
 
     def test_every_listed_rain_gauge_is_a_station_with_series(self):
         # Mutation: list an id with letters, a duplicate, or a series id that

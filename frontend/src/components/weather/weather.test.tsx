@@ -17,6 +17,7 @@ import {
 } from "@logjam/shared";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
 import { PlaceWeather } from "./PlaceWeather";
+import { RAIN_WAIT_MS } from "./useWeather";
 import { WeatherView } from "./WeatherView";
 
 // A press on a disabled button opens its reason in a tooltip, which positions
@@ -419,6 +420,30 @@ describe("rain gauges", () => {
     expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
     expect(screen.getByText(WEATHER.copy.noGaugeNear)).toBeTruthy();
     expect(screen.queryByText("© Made-up owner")).toBeNull();
+  });
+
+  // Mutation: drop the `late` race from fetchRain → red; a stalled CDN
+  // request would hold the forecast at loading.
+  it("shows the forecast without the file when it stalls", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url.startsWith("/")
+          ? new Promise(() => {})
+          : Promise.resolve(Response.json(forecastJson)),
+      ),
+    );
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RAIN_WAIT_MS - 1);
+    });
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByText(WEATHER.copy.pastModel)).toBeTruthy();
   });
 
   it("draws the model's row alone when the file can't be had", async () => {

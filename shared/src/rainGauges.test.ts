@@ -93,6 +93,7 @@ describe("nearbyRain", () => {
     expect(rain.gauges[0].distanceM).toBeCloseTo(2224, -1);
   });
 
+  // Mutation: raise RAIN_GAUGE_MAX_M, or drop the distance filter → red.
   it("stops at the cutoff", () => {
     const far = { latitude: -33.95, longitude: 150.3 };
     // 12 km to -33.84, 13 km to -33.83: both in; the rest past 15 km.
@@ -102,7 +103,20 @@ describe("nearbyRain", () => {
     expect(RAIN_GAUGE_MAX_M).toBe(15_000);
     const nowhere = nearbyRain(file, { latitude: -35, longitude: 150 }, dates);
     expect(nowhere.gauges).toEqual([]);
+    expect(nowhere.near).toBe(false);
     expect(rainCredit(nowhere)).toBeNull();
+  });
+
+  // A gauge in reach that sent nothing for the dates is not drawn, but it is
+  // near: the row must not say no gauge is. Mutation: compute `near` from the
+  // drawn gauges → red.
+  it("tells a near gauge with no data from no gauge near", () => {
+    const silent = nearbyRain(file, { latitude: -33.71, longitude: 150.3 }, [
+      "2026-10-29",
+    ]);
+    expect(silent.gauges).toEqual([]);
+    expect(silent.near).toBe(true);
+    expect(nearbyRain(file, spot, dates).near).toBe(true);
   });
 
   it("credits the owner only where a gauge is drawn", () => {

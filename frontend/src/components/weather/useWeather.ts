@@ -33,12 +33,21 @@ export type WeatherState =
       rain: PastRain | null;
     };
 
-/** The public rain gauge file (ADR 0047), or null on any failure: the past
- *  days then show the model's figures, as they did before gauges. */
+/** How long the forecast waits for the gauge file, as Logjam GPS's fetch. */
+export const RAIN_WAIT_MS = 15_000;
+
+/** The public rain gauge file (ADR 0047), or null on any failure or after
+ *  `RAIN_WAIT_MS`: the past days then show the model's figures, as they did
+ *  before gauges, and a stalled file never holds up the forecast. */
 function fetchRain(signal: AbortSignal) {
-  return fetch(`/${RAIN_PATH}`, { signal })
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), RAIN_WAIT_MS);
+  });
+  const file = fetch(`/${RAIN_PATH}`, { signal })
     .then((res) => (res.ok ? res.json() : null))
     .then(parseRainFile, () => null);
+  return Promise.race([file, late]).finally(() => clearTimeout(timer));
 }
 
 function subscribe(onChange: () => void) {

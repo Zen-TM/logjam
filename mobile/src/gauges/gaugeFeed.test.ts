@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   kept: null as { ageMs: number } | null,
   offlineOnly: false,
   canRun: true,
+  canRunArgs: [] as unknown[][],
   epoch: 0,
 }));
 vi.mock("../config", () => ({
@@ -29,7 +30,10 @@ vi.mock("../offline/offlineOnlyMode", () => ({
   isOfflineOnly: () => h.offlineOnly,
 }));
 vi.mock("../offline/networkPolicy", () => ({
-  canRunNow: async () => h.canRun,
+  canRunNow: async (...args: unknown[]) => {
+    h.canRunArgs.push(args);
+    return h.canRun;
+  },
 }));
 vi.mock("./gaugeStorage", () => ({
   cacheGauges: h.cache,
@@ -51,6 +55,7 @@ beforeEach(() => {
   h.kept = null;
   h.offlineOnly = false;
   h.canRun = true;
+  h.canRunArgs = [];
   h.epoch = 0;
   vi.stubGlobal("fetch", h.fetch);
 });
@@ -206,6 +211,15 @@ describe("refreshRain", () => {
       [`https://cdn.example/${RAIN_PATH}`, { signal: expect.any(AbortSignal) }],
     ]);
     expect(h.cacheRain).toHaveBeenCalledWith(JSON.stringify(rain), 0);
+  });
+
+  // The press is the user's ask: a sync setting that keeps background work
+  // off mobile data must not drop the gauge rows from the forecast it asked
+  // for. Mutation: gate it on the sync setting (`canRunNow("sync")`) → red.
+  it("is allowed mobile data, as the forecast on the same press is", async () => {
+    answer(JSON.stringify(rain));
+    await refreshRain();
+    expect(h.canRunArgs).toEqual([["sync", true]]);
   });
 
   // Mutation: drop the parse → red; a bad file would replace a good one.

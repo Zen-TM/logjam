@@ -86,10 +86,11 @@ async function run(): Promise<GaugeLatestFile | null> {
  * The rain gauge file (ADR 0047), on the press that asks for a forecast: the
  * new file, kept, or null when none was fetched (offline-only mode, no
  * connection, a failure or a bad file). Same request rules as `latest.json`:
- * only the public path, nothing else sent.
+ * only the public path, nothing else sent. Mobile data is allowed whatever the
+ * sync setting: the press is the user's own ask, as the forecast's is.
  */
 export async function refreshRain(): Promise<RainFile | null> {
-  if (isOfflineOnly() || !(await canRunNow("sync"))) return null;
+  if (isOfflineOnly() || !(await canRunNow("sync", true))) return null;
   const epoch = gaugesEpoch();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

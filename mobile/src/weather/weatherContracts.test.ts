@@ -59,6 +59,21 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(rail).toContain("{ width }");
   });
 
+  // ADR 0047: WaterNSW's terms ask for its notice wherever its figures are.
+  // Mutation: drop `rain` from Credit, or pass nothing to it → red.
+  it("draws the rain gauges' credit beside Open-Meteo's", () => {
+    const section = WEATHER_SECTIONS.credit({
+      forecast: {} as never,
+      rows: [],
+      rainCredit: "© Made-up owner",
+    }) as React.ReactElement<{ rain: string | null }>;
+    const draw = section.type as (props: { rain: string | null }) => unknown;
+    const drawn = JSON.stringify(draw(section.props));
+    expect(drawn).toContain("© Made-up owner");
+    expect(drawn).toContain(WEATHER.copy.credit);
+    expect(JSON.stringify(draw({ rain: null }))).not.toContain("Made-up");
+  });
+
   it("offers the shared models and asks on the press that chose one", () => {
     const view = read("./WeatherView.tsx");
     expect(view).toContain("WEATHER_MODELS.map");

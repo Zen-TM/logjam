@@ -330,8 +330,10 @@ def load_rain_gauges() -> List[dict]:
 
 
 def period_start(stamp: str) -> str:
-    """The `YYYY-MM-DD` a 9am-to-9am total began on, from its end stamp."""
-    return (datetime.fromisoformat(stamp).date() - timedelta(1)).isoformat()
+    """The `YYYY-MM-DD` a 9am-to-9am total began on, from its end stamp, on
+    the AEST clock whatever offset the stamp is written in."""
+    end = datetime.fromisoformat(stamp).astimezone(AEST).date()
+    return (end - timedelta(1)).isoformat()
 
 
 def rain_coverage(raw_ts: List[str]) -> Dict[str, datetime]:

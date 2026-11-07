@@ -354,6 +354,7 @@ describe("weatherRows", () => {
     });
     const rain = {
       attribution: "© Made-up owner",
+      near: true,
       gauges: [
         gauge("MADE UP TBRG", 3460, [0, 30, 0, 1.5, 12, null, null]),
         gauge("OTHER CK @ DAM", 9040, [2, 41, 0, 0, null, null, null]),
@@ -388,12 +389,17 @@ describe("weatherRows", () => {
       expect(cards[0].spoken).toBe("Sun 11, no rain");
     });
 
-    it("says so when no gauge is near, and nothing when the file is missing", () => {
-      const none = weatherRows(forecast, spotNine, { ...rain, gauges: [] });
-      const row = none.find((r) => r.key === "past");
-      expect(row?.title).toBe("Modelled rain, past 7 days");
-      expect(row?.note).toBe(WEATHER.copy.noGaugeNear);
+    // Mutation: say "no gauge within 15 km" whenever none is drawn → red;
+    // a gauge 5 km away that missed these days would be called absent.
+    it("says why the row is the model's: no gauge near, or a near one silent", () => {
+      const pastNote = (near: boolean) =>
+        weatherRows(forecast, spotNine, { ...rain, gauges: [], near }).find(
+          (r) => r.key === "past",
+        );
+      expect(pastNote(false)?.title).toBe("Modelled rain, past 7 days");
+      expect(pastNote(false)?.note).toBe(WEATHER.copy.noGaugeNear);
       expect(WEATHER.copy.noGaugeNear).toContain("15 km");
+      expect(pastNote(true)?.note).toBe(WEATHER.copy.gaugeSilent);
     });
   });
 

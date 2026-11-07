@@ -4,9 +4,10 @@
 // past which the model is shown instead: ADR 0047.
 //
 // PRIVACY: the file is the same for everyone, so fetching it says nothing
-// about a spot; the nearest gauges are picked here, on the device.
-// Guard: rainGauges.test.ts, against the fixture the builder writes
-// (topo/tests/test_gauges.py).
+// about a spot; the nearest gauges are picked here, on the device. Guards for
+// the request: frontend/src/components/weather/weather.test.tsx and
+// mobile/src/gauges/gaugeFeed.test.ts. Guard for the format: rainGauges.test.ts,
+// against the fixture the builder writes (topo/tests/test_gauges.py).
 import { GAUGE_FORMAT, GAUGE_PREFIX } from "./gauges.js";
 import { haversineMeters } from "./placeGeo.js";
 
@@ -100,6 +101,9 @@ export type PastRain = {
   /** Nearest first; empty when none within `RAIN_GAUGE_MAX_M` measured any
    *  of the dates. */
   gauges: NearbyRainGauge[];
+  /** A gauge is within `RAIN_GAUGE_MAX_M`, whether or not it measured these
+   *  dates: with none drawn, the row says which of the two it was. */
+  near: boolean;
 };
 
 /** The gauges to draw for a spot's past days: the nearest few within
@@ -110,7 +114,7 @@ export function nearbyRain(
   point: { latitude: number; longitude: number },
   dates: string[],
 ): PastRain {
-  const gauges = file.gauges
+  const inRange = file.gauges
     .map((gauge) => ({
       gauge,
       distanceM: haversineMeters(
@@ -121,10 +125,12 @@ export function nearbyRain(
       ),
       mm: dates.map((date) => rainOnDate(file, gauge, date)),
     }))
-    .filter((g) => g.distanceM <= RAIN_GAUGE_MAX_M && g.mm.some(isNum))
+    .filter((g) => g.distanceM <= RAIN_GAUGE_MAX_M);
+  const gauges = inRange
+    .filter((g) => g.mm.some(isNum))
     .sort((a, b) => a.distanceM - b.distanceM)
     .slice(0, RAIN_GAUGES_SHOWN);
-  return { attribution: file.attribution, gauges };
+  return { attribution: file.attribution, gauges, near: inRange.length > 0 };
 }
 
 /** The gauges' credit, where any of their figures are drawn. */

@@ -51,6 +51,10 @@ export const WEATHER = {
     gaugeNote:
       "Gauges count rain from 9 am to 9 am and report a day or two late; a day marked Model is Open-Meteo's.",
     noGaugeNear: `No rain gauge within ${RAIN_GAUGE_MAX_M / 1000} km, so these are Open-Meteo's.`,
+    // A gauge is near but sent nothing for these days (an outage, or a kept
+    // forecast older than the kept gauge file).
+    gaugeSilent:
+      "The rain gauges near here have nothing for these days, so these are Open-Meteo's.",
     model: "Forecast model",
     // Says what the choice means; the models' names are `WEATHER_MODELS`.
     // Logjam GPS shows it above the chips. Logjam Web's menu heads the list
@@ -399,7 +403,11 @@ function pastRows(
         now,
         WEATHER.copy.pastModel,
         null,
-        rain ? WEATHER.copy.noGaugeNear : null,
+        !rain
+          ? null
+          : rain.near
+            ? WEATHER.copy.gaugeSilent
+            : WEATHER.copy.noGaugeNear,
       ),
     ];
   return rain.gauges.map((g, i) =>
