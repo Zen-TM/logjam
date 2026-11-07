@@ -260,7 +260,8 @@ import {
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
@@ -955,7 +956,9 @@ export function MapScreen({
   const mapReady = basemapAssets.localBaseUrl != null || basemapAssets.failed;
   // Seeded from (and written back to) the device preference: a map that reset
   // to the default on every launch made the choice worth nothing.
-  const [basemapId, setBasemapId] = useState<BasemapId>(readBasemapPreference);
+  const [pickedBasemapId, setBasemapId] = useState<BasemapId>(
+    readBasemapPreference,
+  );
   const chooseBasemap = useCallback((next: BasemapId) => {
     setBasemapId(next);
     setBasemapPreference(next);
@@ -1005,13 +1008,17 @@ export function MapScreen({
   );
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
+  const regionIds = useRegions();
+  // The pick can outlive its region (unchosen while the map is open).
+  const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
     connectivity === "online",
+    regionIds,
   );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId, downBasemaps),
+    basemapFallbackFor(basemapId, downBasemaps, regionIds),
   ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
@@ -1648,13 +1655,13 @@ export function MapScreen({
     const covering = basemapsCoveringViewport(
       artifacts,
       viewportBbox,
-      MOBILE_BASEMAPS,
+      mobileBasemaps(regionIds),
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, regionIds]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is

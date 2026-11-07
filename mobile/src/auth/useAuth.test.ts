@@ -156,7 +156,10 @@ describe("password sign-in", () => {
   });
 
   it("opens the app when the flow signs in", async () => {
-    signInWithPasswordFlow.mockResolvedValue({ type: "signedIn" });
+    signInWithPasswordFlow.mockResolvedValue({
+      type: "signedIn",
+      newAccount: true,
+    });
     expect(
       await useAuth().signInWithPassword("a@b.co", "pw", "canyon_fan"),
     ).toEqual({
@@ -168,7 +171,17 @@ describe("password sign-in", () => {
       "canyon_fan",
     );
     expect(setState).toHaveBeenLastCalledWith("authenticated");
+    // Carried to AppShell, which asks where the new account canyons: set
+    // before the state change that mounts it.
+    expect(setState.mock.calls.at(-2)).toEqual([true]);
     expect(signInWithBrowser).not.toHaveBeenCalled();
+  });
+
+  // Mutation: leave `finishNewAccount` a no-op, and a relock or the
+  // min-version screen remounts AppShell, which asks again over the choice.
+  it("clears the new account once its region step is done", () => {
+    useAuth().finishNewAccount();
+    expect(setState).toHaveBeenLastCalledWith(false);
   });
 
   it("hands a form answer back to the form and opens no browser", async () => {

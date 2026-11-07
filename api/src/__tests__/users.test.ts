@@ -198,6 +198,32 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
+  // Mutation: store `regions` as sent, and an id no region has reaches both
+  // clients; or accept [] or only unknown ids, and an account that chose
+  // something is silently given NSW.
+  it("PATCH /users/me stores the chosen regions, dropping unknown ids", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    expect(before.body.uiPreferences.regions).toEqual(["nsw"]);
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ regions: ["atlantis", "nsw"] });
+    expect(res.status).toBe(200);
+    expect(res.body.uiPreferences.regions).toEqual(["nsw"]);
+    for (const regions of [[], "nsw", [7], null, ["atlantis"]]) {
+      const bad = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ regions });
+      expect(bad.status).toBe(400);
+    }
+    const tooMany = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ regions: Array.from({ length: 65 }, () => "nsw") });
+    expect(tooMany.status).toBe(413);
+  });
+
   // Mutation: store the body's bands without `parseSlopeBands`, and a band
   // MapLibre cannot draw reaches both clients' maps.
   it("PATCH /users/me rejects slope bands the editor would not accept", async () => {

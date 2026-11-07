@@ -98,6 +98,9 @@ export function useAuth() {
     return readEntryChoice() === "guest" ? "guest" : "loading";
   });
   const [error, setError] = useState<string | null>(null);
+  // The sign-up form just made this account: Logjam GPS asks where it canyons
+  // before the map. Lost on a restart, which keeps the NSW default.
+  const [newAccount, setNewAccount] = useState(false);
 
   // On mount: restore the session. Offline with a persisted identity still
   // lands in "authenticated" — an expired token is irrelevant until a request
@@ -198,6 +201,7 @@ export function useAuth() {
         setError(finished.error);
         return false;
       }
+      setNewAccount(false);
       setState("authenticated");
       return true;
     } catch (err) {
@@ -225,8 +229,10 @@ export function useAuth() {
         newAccountUsername,
       );
       if (result.type === "form") return result;
-      if (result.type === "signedIn") setState("authenticated");
-      else await handleSignIn();
+      if (result.type === "signedIn") {
+        setNewAccount(result.newAccount);
+        setState("authenticated");
+      } else await handleSignIn();
       return { type: "done" };
     },
     [handleSignIn],
@@ -249,6 +255,7 @@ export function useAuth() {
     // would send the next cold start to the sign-in form while this sign-out
     // sent them to the chooser. Same state, same screen, either way.
     clearEntryChoice();
+    setNewAccount(false);
     let ended = null;
     try {
       ended = await signOutLocally();
@@ -308,11 +315,17 @@ export function useAuth() {
    * returns them to their app, with their data. Everyone else has somewhere to
    * go without an account, so they are offered that instead.
    */
+  const finishNewAccount = useCallback(() => setNewAccount(false), []);
+
   const offersGuestEntry = readEntryChoice() !== "guest";
 
   return {
     state,
     accountState,
+    newAccount,
+    /** The new account's region step is done: AppShell remounts (a relock,
+     *  the min-version screen) must not ask it again over the choice. */
+    finishNewAccount,
     offersGuestEntry,
     error,
     /** The landing screen draws its own forms (Cognito issuer, real auth). */

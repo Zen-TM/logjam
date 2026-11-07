@@ -10,7 +10,8 @@ import { CurrentUserIdContext } from "../CurrentUserIdContext";
 import { useIsMobile } from "../useIsMobile";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
-import Map, { BASE_LAYERS, type SnapMode } from "./map/Map";
+import Map, { type SnapMode } from "./map/Map";
+import { baseLayersFor } from "./map/baseLayers";
 import { useRouteDraft } from "./routes/useRouteDraft";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
@@ -77,8 +78,13 @@ import { findRouteById } from "./sidebar/panels/inboxModel";
 import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
-import { consentGate, currentConsentVersionOf } from "../consent";
+import {
+  consentGate,
+  currentConsentVersionOf,
+  showsRegionStep,
+} from "../consent";
 import ConsentGate from "./ConsentGate";
+import RegionStep from "./RegionStep";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
@@ -128,6 +134,7 @@ import {
   drawsNswContours,
   drawsNswHillshade,
   normalizeTerrainLayers,
+  normalizeUserUiPreferences,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -224,16 +231,6 @@ function App() {
     "logjam.activeLayerId",
     "protomaps",
   );
-  // A basemap the picker no longer offers (the raster "Default", dropped for
-  // the vector one) would otherwise hide every basemap layer and show nothing.
-  const pickedLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
-    ? storedLayerId
-    : "protomaps";
-  const {
-    shownLayerId: activeLayerId,
-    down: downBasemaps,
-    setHealth: setBasemapHealth,
-  } = useBasemapFallback(pickedLayerId, BASE_LAYERS);
 
   // On the device, like the basemap choice; the slope bands are the account's.
   const [storedTerrainLayers, setStoredTerrainLayers] = useStoredState<unknown>(
@@ -390,6 +387,25 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Keyed by string: the fallback toast's effect depends on this list.
+  const regionKey = normalizeUserUiPreferences(
+    currentUser?.uiPreferences,
+  ).regions.join(",");
+  const baseLayers = useMemo(
+    () => baseLayersFor(regionKey.split(",")),
+    [regionKey],
+  );
+  // A basemap the picker does not offer (a region unchosen, or the raster
+  // "Default") would otherwise be shown with no way to switch off it.
+  const pickedLayerId = baseLayers.some((layer) => layer.id === storedLayerId)
+    ? storedLayerId
+    : (baseLayers.find((layer) => layer.id === "protomaps") ?? baseLayers[0]!)
+        .id;
+  const {
+    shownLayerId: activeLayerId,
+    down: downBasemaps,
+    setHealth: setBasemapHealth,
+  } = useBasemapFallback(pickedLayerId, baseLayers);
   // `authenticated` is NOT enough to start fetching the user's data: a user
   // whose recorded consent is stale gets ConsentGate rendered instead of
   // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
@@ -1553,6 +1569,20 @@ function App() {
     );
   }
 
+  // Logjam Web's own sign-up form records consent itself, so the gate above
+  // never shows for it; this is where that account is asked its regions.
+  if (currentUser && showsRegionStep({ signedUpNow: auth.newAccount })) {
+    return (
+      <RegionStep
+        onDone={(user) => {
+          applyCurrentUser(user);
+          auth.finishNewAccount();
+        }}
+        onSignOut={signOut}
+      />
+    );
+  }
+
   const dimUI =
     pickingCoords ||
     selectingFilterArea ||
@@ -2210,7 +2240,7 @@ function App() {
           placeCount={places.length + sharedPlaces.length}
           wayCount={showWays ? wayCount : null}
           completedTopoJobs={completedTopoJobs}
-          baseLayers={BASE_LAYERS}
+          baseLayers={baseLayers}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
           unavailableBasemaps={downBasemaps}

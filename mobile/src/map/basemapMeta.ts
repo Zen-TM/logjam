@@ -5,26 +5,34 @@
 // (`BasemapThumb`), which says more than any icon can. Where there is no tile
 // (the vector source, offline) the fallback is the `map` idea.
 
+import { defaultBasemapFor, offeredBasemaps } from "@logjam/shared";
+
 import type { BasemapId } from "./sourceResolver";
 
 /**
- * The picker's order, and the whole of what Logjam GPS offers — NOT derived from
- * BASEMAP_CATALOG, which also carries the Logjam Web-only "osm" raster (the same
- * OpenStreetMap cartography as `protomaps`, fetched instead of drawn, and
- * online-only). Two rows of the same map, one of which can't be saved, is a
- * choice with no answer, so Logjam GPS lists the drawn one only.
- *
- * OSM family first, then the SIX rasters: the OSM ones are the general-purpose
- * maps you open on, and the SIX sheets are what you switch to for the ground.
+ * What the picker lists for these regions, in the catalogue's order: the worldwide
+ * maps, then each chosen region's. The catalogue leaves out the Logjam
+ * Web-only "osm" raster (`offered: false`): the same cartography as
+ * `protomaps`, fetched instead of drawn and online-only, so two rows of one map
+ * with one that can't be saved. Guard: basemapMeta.test.ts, that every id
+ * offered is one the resolver draws.
  */
-export const MOBILE_BASEMAPS: BasemapId[] = [
-  "protomaps",
-  "osm-topo",
-  "osm-cycle",
-  "six-topo",
-  "six-base",
-  "six-imagery",
-];
+export const mobileBasemaps = (regionIds: readonly string[]): BasemapId[] =>
+  offeredBasemaps(regionIds).map((entry) => entry.id as BasemapId);
 
 /** Shown until the user has picked one (and when a stored pick is unreadable). */
-export const DEFAULT_BASEMAP: BasemapId = "six-topo";
+export const defaultBasemap = (regionIds: readonly string[]): BasemapId =>
+  defaultBasemapFor(regionIds) as BasemapId;
+
+/**
+ * The basemap to use now: the stored pick while these regions still offer it,
+ * else their default. The pick itself is left alone, so choosing the region
+ * again brings it back. Guard: basemapMeta.test.ts.
+ */
+export const effectiveBasemap = (
+  picked: BasemapId,
+  regionIds: readonly string[],
+): BasemapId =>
+  mobileBasemaps(regionIds).includes(picked)
+    ? picked
+    : defaultBasemap(regionIds);

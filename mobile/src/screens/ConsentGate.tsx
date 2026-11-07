@@ -12,22 +12,29 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  REGIONS,
   SIGN_IN_COPY,
   USERNAME_HINT,
+  type Region,
 } from "@logjam/shared";
 
+import type { AccountState } from "../auth/capabilities";
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
 import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, SwitchRow, TextField } from "../ui";
+import { RegionStep } from "./RegionStep";
+import { showsRegionStep } from "./regionChoice";
 import { TermsSwitch } from "./TermsSwitch";
 
 export function ConsentGate({
   consentVersion,
   newAccount,
   currentUsername,
+  accountState,
   onConsented,
   onSignOut,
+  regions = REGIONS,
 }: {
   /** The version the server named, which is the only one it will record. */
   consentVersion: string;
@@ -35,8 +42,11 @@ export function ConsentGate({
   newAccount: boolean;
   /** The neutral name the API gave the account, offered as the default. */
   currentUsername: string;
+  accountState: AccountState;
   onConsented: () => void;
   onSignOut: SignOutHandler;
+  /** Every region on offer; a prop so a test can give the step two. */
+  regions?: readonly Region[];
 }) {
   const styles = useStyles();
 
@@ -51,6 +61,7 @@ export function ConsentGate({
     message: string;
     retry: boolean;
   } | null>(null);
+  const [askRegions, setAskRegions] = useState(false);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
   const insets = useSafeAreaInsets();
 
@@ -76,7 +87,8 @@ export function ConsentGate({
       await (newAccount
         ? updateConsent(consentVersion, username.trim())
         : updateConsent(consentVersion));
-      onConsented();
+      if (showsRegionStep(newAccount, regions)) setAskRegions(true);
+      else onConsented();
     } catch (err) {
       console.error(err);
       const failure = consentSubmitFailure(err, newAccount);
@@ -86,6 +98,17 @@ export function ConsentGate({
       setSubmitting(false);
     }
   };
+
+  if (askRegions) {
+    return (
+      <RegionStep
+        accountState={accountState}
+        onDone={onConsented}
+        onSignOut={() => onSignOut()}
+        regions={regions}
+      />
+    );
+  }
 
   return (
     <ScrollView

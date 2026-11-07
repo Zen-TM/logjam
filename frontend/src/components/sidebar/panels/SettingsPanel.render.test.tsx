@@ -13,7 +13,11 @@ import {
   LEADERBOARD_SETTING,
   NOTIFICATION_PREFERENCES,
   notificationGroupLead,
+  NSW_REGION,
+  REGION_CHOICE,
+  regionChoiceProblem,
   SETTINGS,
+  type Region,
 } from "@logjam/shared";
 
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
@@ -43,6 +47,7 @@ function renderPanel(
     currentUser = user as TUser | null,
     currentUserError = null as string | null,
     onRetryCurrentUser = () => {},
+    regions = undefined as readonly Region[] | undefined,
   } = {},
 ) {
   render(
@@ -57,6 +62,7 @@ function renderPanel(
       placeTypes={[]}
       onPlaceTypesChange={() => {}}
       onCurrentUserChange={onCurrentUserChange}
+      regions={regions}
     />,
   );
 }
@@ -224,5 +230,73 @@ describe("an account that did not load", () => {
       currentUserError: "Couldn't load your account.",
     });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+const TWO_REGIONS: Region[] = [
+  NSW_REGION,
+  {
+    ...NSW_REGION,
+    id: "nz",
+    name: "New Zealand",
+    basemaps: [],
+    defaultBasemap: "osm-topo",
+  },
+];
+
+describe("the Regions section", () => {
+  // Mutation: draw the section whatever `offersRegionChoice` says, or leave it
+  // out of `sections`, and one of these two goes red.
+  it("is drawn with a second region, one switch each, from the account's choice", () => {
+    renderPanel(vi.fn(), { regions: TWO_REGIONS });
+    expect(screen.getByText(SETTINGS.copy.regions)).toBeTruthy();
+    expect(screen.getByText(REGION_CHOICE.hint)).toBeTruthy();
+    expect(
+      screen.getByRole("switch", { name: "NSW" }).getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("switch", { name: "New Zealand" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
+  it("is not drawn with one region", () => {
+    renderPanel(vi.fn(), { regions: [NSW_REGION] });
+    expect(screen.queryByText(SETTINGS.copy.regions)).toBeNull();
+    expect(screen.queryByRole("switch", { name: "NSW" })).toBeNull();
+  });
+
+  // Mutation: let the last chosen region switch off, or send the other
+  // region's id, and this goes red.
+  it("saves the new choice, and refuses to turn off the last region", async () => {
+    const saved = { ...user, uiPreferences: { regions: ["nsw", "nz"] } };
+    vi.mocked(updateUserPreferences).mockResolvedValue(saved);
+    renderPanel(vi.fn(), { regions: TWO_REGIONS });
+    const nsw = screen.getByRole("switch", { name: "NSW" });
+    expect((nsw as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(regionChoiceProblem([])!)).toBeTruthy();
+    fireEvent.click(nsw);
+    expect(updateUserPreferences).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("switch", { name: "New Zealand" }));
+    await waitFor(() =>
+      expect(updateUserPreferences).toHaveBeenCalledWith({
+        regions: ["nsw", "nz"],
+      }),
+    );
+  });
+
+  // Mutation: leave the optimistic value standing after a failed save.
+  it("goes back and says so when the save fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(updateUserPreferences).mockRejectedValue(new Error("offline"));
+    renderPanel(vi.fn(), { regions: TWO_REGIONS });
+    const nz = screen.getByRole("switch", { name: "New Zealand" });
+    fireEvent.click(nz);
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(REGION_CHOICE.saveFailed),
+    );
+    expect(nz.getAttribute("aria-checked")).toBe("false");
   });
 });

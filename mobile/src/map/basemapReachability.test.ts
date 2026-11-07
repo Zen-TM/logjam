@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { basemapToShow, serverAnswers } from "@logjam/shared";
 
-import { DEFAULT_BASEMAP } from "./basemapMeta";
+import { defaultBasemap } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 import {
   basemapFallbackFor,
-  PROBED_BASEMAPS,
+  probedBasemaps,
   useDownBasemaps,
 } from "./basemapReachability";
 
@@ -24,6 +24,10 @@ vi.mock("react", async (original) => ({
   useCallback: (fn: unknown) => fn,
   useEffect: () => {},
 }));
+
+const NSW = ["nsw"];
+const DEFAULT_BASEMAP = defaultBasemap(NSW);
+const PROBED_BASEMAPS = probedBasemaps(NSW);
 
 const settle = () => new Promise((resolve) => setTimeout(resolve));
 
@@ -44,7 +48,7 @@ describe("the basemap shown while a server is down", () => {
     const shown = basemapToShow(
       DEFAULT_BASEMAP,
       down,
-      basemapFallbackFor(DEFAULT_BASEMAP, down),
+      basemapFallbackFor(DEFAULT_BASEMAP, down, NSW),
     );
     expect(shown).not.toBe(DEFAULT_BASEMAP);
     expect(down.has(shown as never)).toBe(false);
@@ -52,7 +56,7 @@ describe("the basemap shown while a server is down", () => {
       basemapToShow(
         DEFAULT_BASEMAP,
         new Set(),
-        basemapFallbackFor(DEFAULT_BASEMAP, new Set()),
+        basemapFallbackFor(DEFAULT_BASEMAP, new Set(), NSW),
       ),
     ).toBe(DEFAULT_BASEMAP);
   });
@@ -61,12 +65,12 @@ describe("the basemap shown while a server is down", () => {
   // imagery pick to the also-down topo, which is drawn blank.
   it("falls to the drawn basemap when the default is down too", () => {
     const down = new Set<BasemapId>([DEFAULT_BASEMAP, "six-imagery"]);
-    expect(basemapFallbackFor("six-imagery", down)).toBe("protomaps");
+    expect(basemapFallbackFor("six-imagery", down, NSW)).toBe("protomaps");
     expect(
       basemapToShow(
         "six-imagery",
         down,
-        basemapFallbackFor("six-imagery", down),
+        basemapFallbackFor("six-imagery", down, NSW),
       ),
     ).toBe("protomaps");
   });
@@ -78,7 +82,7 @@ describe("probing the basemaps when the Layers sheet opens", () => {
   // server, in the frames the sheet is sliding up.
   it("sets state only when a server's verdict changes", async () => {
     const answers = vi.mocked(serverAnswers);
-    const { probe } = useDownBasemaps(true);
+    const { probe } = useDownBasemaps(true, NSW);
 
     answers.mockResolvedValue(true);
     probe();
