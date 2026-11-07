@@ -38,6 +38,7 @@ export const KIT_COMPONENTS = {
   ChipPicker: both,
   ChipRail: both,
   RangePills: both,
+  Scrubber: both, // a bounded run of steps dragged through, over the map (the weather bar)
   AttributeFilter: both,
   DateRangeFilter: gps(
     "a date range as two bounds that open the sheet's DatePicker; Logjam Web uses two date inputs in a FilterField",

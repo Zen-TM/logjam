@@ -4,13 +4,20 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  OVERLAY_LEGENDS,
+  overlayChoiceLabel,
+  overlayLegendRows,
+} from "./overlayLegends.js";
+import {
   parseWeatherMap,
+  parseWeatherWind,
   WEATHER_LAYERS,
   WEATHER_MAP,
   weatherLayer,
   weatherLayerUrl,
   weatherLegendRows,
   weatherReliefColor,
+  weatherShown,
   weatherShownLabel,
   weatherStepAt,
   weatherTimeLabel,
@@ -203,5 +210,132 @@ describe("the wind arrows", () => {
       wind.rows * wind.columns - 1,
     );
     expect(windArrows(wind, 99).features).toEqual([]);
+  });
+});
+
+describe("the Weather legend", () => {
+  const legend = OVERLAY_LEGENDS.weather;
+
+  // Mutation: key the legend by `rows` alone, and picking Temperature still
+  // shows the rain key.
+  it("keys the layer picked, and rain for one it doesn't know", () => {
+    expect(overlayLegendRows(legend, "temperature")).toEqual(
+      weatherLegendRows("temperature"),
+    );
+    expect(overlayLegendRows(legend, "snow")).toEqual(
+      weatherLegendRows("rain"),
+    );
+    expect(overlayLegendRows(OVERLAY_LEGENDS.land, "temperature")).toBe(
+      OVERLAY_LEGENDS.land.rows,
+    );
+  });
+
+  it("offers every layer and names the one picked", () => {
+    expect(legend.choice?.options.map((o) => o.value)).toEqual(
+      WEATHER_LAYERS.map((l) => l.key),
+    );
+    expect(overlayChoiceLabel(legend, "rainPast168")).toBe("Rain, past 7 days");
+    expect(legend.credit).toBe(WEATHER_MAP.credit);
+  });
+});
+
+describe("what the overlay shows", () => {
+  const anchor = Date.parse(file.anchor);
+
+  // Mutation: start at step 0 instead of the one now falls in, and the bar
+  // opens on an hour already past.
+  it("starts at the step now falls in and spans the rest", () => {
+    const shown = weatherShown({
+      file,
+      layer: "rain",
+      picked: null,
+      now: anchor + 30 * 60_000,
+    });
+    expect(shown).toMatchObject({
+      kind: "ready",
+      step: 1,
+      first: 1,
+      last: file.steps.length - 1,
+      shown: weatherTimeLabel(file.steps[1]!.time, anchor + 30 * 60_000),
+    });
+  });
+
+  // Mutation: drop the clamp, and a pick from an older run indexes past this
+  // one's steps or back into the past.
+  it("holds a pick inside the steps still to come", () => {
+    const at = (picked: number) =>
+      weatherShown({
+        file,
+        layer: "wind",
+        picked: { path: file.path, step: picked },
+        now: anchor,
+      });
+    expect(at(-5)).toMatchObject({ step: 0 });
+    expect(at(999)).toMatchObject({ step: file.steps.length - 1 });
+    expect(at(2.6)).toMatchObject({ step: 3 });
+  });
+
+  // Mutation: use a pick whatever run it was made in, and the first look at
+  // a new run opens on a time nobody chose there.
+  it("counts a pick only in the run it was made in", () => {
+    const at = (path: string) =>
+      weatherShown({
+        file,
+        layer: "rain",
+        picked: { path, step: 3 },
+        now: anchor,
+      });
+    expect(at(file.path)).toMatchObject({ step: 3 });
+    expect(at("runs/20261106T1800Z-20261107T0300Z/")).toMatchObject({
+      step: 0,
+    });
+  });
+
+  // Mutation: let a stepped layer through when every step is past, and a
+  // week-old run draws as now.
+  it("is out of date once every step is past", () => {
+    const last = Date.parse(file.steps.at(-1)!.time);
+    expect(
+      weatherShown({ file, layer: "rain", picked: null, now: last + 1 }).kind,
+    ).toBe("outOfDate");
+  });
+
+  // Mutation: treat a total the run left out as ready, and the map asks for
+  // an archive the job never wrote.
+  it("draws a total with no step, and misses one the run left out", () => {
+    expect(
+      weatherShown({
+        file,
+        layer: "rainPast24",
+        picked: { path: file.path, step: 7 },
+        now: anchor,
+      }),
+    ).toMatchObject({ kind: "ready", step: null, first: 0, last: 0 });
+    expect(
+      weatherShown({
+        file: { ...file, totals: [] },
+        layer: "rainPast24",
+        picked: null,
+        now: anchor,
+      }).kind,
+    ).toBe("missing");
+  });
+
+  it("ages the run from when it was built", () => {
+    const now = Date.parse(file.built) + 2 * 3_600_000;
+    expect(
+      weatherShown({ file, layer: "rain", picked: null, now }),
+    ).toMatchObject({ age: "Updated 2 h ago" });
+  });
+});
+
+describe("the wind file", () => {
+  // Mutation: return the parsed JSON unchecked, and a bad file throws inside
+  // `windArrows` instead of drawing no arrows.
+  it("reads the builder's file and refuses a broken one", () => {
+    expect(parseWeatherWind(wind)).toBe(wind);
+    expect(parseWeatherWind({ ...wind, columns: "35" })).toBeNull();
+    expect(parseWeatherWind({ ...wind, steps: [{ speed: [] }] })).toBeNull();
+    expect(parseWeatherWind(null)).toBeNull();
   });
 });

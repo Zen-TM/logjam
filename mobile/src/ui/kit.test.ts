@@ -35,6 +35,24 @@ describe("AttributeFilter", () => {
   });
 });
 
+// Mutation: drop `accessibilityRole="adjustable"` or the increment/decrement
+// actions from `Scrubber`, and a screen reader meets a plain view it cannot
+// step; drop `valueText`, and it reads no time.
+describe("Scrubber", () => {
+  it("is one adjustable control that reads its step in words", () => {
+    const source = readFileSync(
+      new URL("./Scrubber.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('accessibilityRole="adjustable"');
+    expect(source).toContain(
+      'accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}',
+    );
+    expect(source).toContain("accessibilityValue={{ text: valueText }}");
+    expect(source).toContain("accessibilityLabel={label}");
+  });
+});
+
 describe("the Logjam GPS kit barrel", () => {
   it("exports exactly the declared components", () => {
     const barrel = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
