@@ -27,7 +27,8 @@ export type OverlayLegend = {
   /**
    * The key, a swatch per row, in the order the legend lists them: the
    * colour, with `pattern` (an image drawn at `COVERAGE_HATCH_PIXEL_RATIO`)
-   * over it at the map's scale.
+   * over it. Logjam Web draws it at the map's scale; Logjam GPS's RN `Image`
+   * tiles it at device pixels, so its swatch is finer than its map.
    */
   rows: readonly { label: string; colour: string; pattern?: string }[];
   /**

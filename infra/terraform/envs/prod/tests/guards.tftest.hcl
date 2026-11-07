@@ -400,12 +400,14 @@ run "pin_role_passes_every_topo_task_role" {
     override_during = plan
   }
 
-  # Mutation: leave a topo-image task's role out of PassWorkerRoles (as the
-  # coverage role first was), and pin-release.sh's re-registration of that
-  # family is refused, so every topo deploy and worker rollback fails.
+  # Mutation: leave a topo-image task's role, or the execution role, out of
+  # PassWorkerRoles, and pin-release.sh's re-registration of that family is
+  # refused, so every topo deploy and worker rollback fails. The list here is
+  # held to pin-release.sh's families by its --self-test.
   assert {
     condition = alltrue([
       for arn in [
+        aws_iam_role.ecs_task_execution.arn,
         aws_ecs_task_definition.topo_worker.task_role_arn,
         aws_ecs_task_definition.topo_export_worker.task_role_arn,
         aws_ecs_task_definition.place_registry.task_role_arn,
@@ -417,7 +419,7 @@ run "pin_role_passes_every_topo_task_role" {
           if try(s.Sid, "") == "PassWorkerRoles"
       ]).Resource, arn)
     ])
-    error_message = "The pin role must be able to pass the task role of every family pin-release.sh pins for the topo image."
+    error_message = "The pin role must be able to pass the execution role and the task role of every family pin-release.sh pins for the topo image."
   }
 
   # Mutation: add another task's role to the fire history scheduler's

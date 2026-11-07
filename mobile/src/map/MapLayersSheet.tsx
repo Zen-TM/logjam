@@ -55,7 +55,6 @@ import {
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
   OVERLAY_TERRAIN_KEYS,
-  COVERAGE_HATCH_PIXEL_RATIO,
   overlayChoiceLabel,
   normalizeCarrier,
   type CarrierId,
@@ -571,7 +570,7 @@ function OverlayLegendSheet({
           >
             {pattern ? (
               <Image
-                source={{ uri: pattern, scale: COVERAGE_HATCH_PIXEL_RATIO }}
+                source={{ uri: pattern }}
                 resizeMode="repeat"
                 style={StyleSheet.absoluteFill}
               />

@@ -44,6 +44,22 @@ self_test() {
   fi
   echo "ok   — families match ecs.tf:"
   sed 's/^/       /' <<<"$want"
+  # The pin role must be able to pass each topo family's task role: the
+  # Terraform guard pin_role_passes_every_topo_task_role lists their task
+  # definitions by hand, so it names the same ones as the families above.
+  local topo listed
+  topo=$(awk -v fams=" $(families logjam-topo-worker) " '
+    /^resource "aws_ecs_task_definition"/ { gsub(/"/, "", $3); name = $3 }
+    /^ *family *=/ { gsub(/[" ]/, "", $3); if (index(fams, " " $3 " ")) print name }
+  ' "$HERE/../terraform/envs/prod/ecs.tf" | LC_ALL=C sort)
+  listed=$(grep -o 'aws_ecs_task_definition\.[a-z_]*\.task_role_arn' \
+    "$HERE/../terraform/envs/prod/tests/guards.tftest.hcl" | cut -d. -f2 | LC_ALL=C sort -u)
+  if [ "$topo" != "$listed" ]; then
+    echo "FAIL — guards.tftest.hcl's pin role check lists other task definitions"
+    diff <(echo "$topo") <(echo "$listed") | sed 's/^/  /'
+    return 1
+  fi
+  echo "ok   — the pin role guard lists every topo family's task definition"
 }
 
 case "${1:-}" in
