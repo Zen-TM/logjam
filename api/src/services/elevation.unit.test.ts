@@ -11,7 +11,7 @@ import {
   sampleElevations as sampleDemElevations,
   sampleSlope,
 } from "./elevation";
-import { NSW_REGION, type SamplePosition, TERRARIUM } from "@logjam/shared";
+import { NSW_REGION, TERRARIUM, type SamplePosition } from "@logjam/shared";
 
 // The archive source is read from the CDN base, which the unit env leaves
 // unset: these tests then see the worldwide source alone. The

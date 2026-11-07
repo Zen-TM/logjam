@@ -9,8 +9,8 @@ import {
   geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
   NSW_REGION,
-  type SharpenedOverlay,
   TARGET_DPI,
+  type SharpenedOverlay,
   type TileCoord,
   type TileToMapTransform,
 } from "@logjam/shared";

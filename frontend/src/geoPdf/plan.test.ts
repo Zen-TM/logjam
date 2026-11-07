@@ -1,12 +1,12 @@
 import {
-  type GeoPdfConfig,
-  getMapDimensions,
+  extentFromCentreAndSize,
   lat2tileY,
   lon2tileX,
+  getMapDimensions,
   NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
+  type GeoPdfConfig,
   type SharpenedOverlay,
-  extentFromCentreAndSize,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {

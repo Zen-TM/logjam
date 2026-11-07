@@ -47,7 +47,7 @@ level 9.
   `(0, 0, 0)`, no value, wherever any of the nine heights Horn needs is
   missing; at a coarser zoom only where all four pixels below it have none,
   and a tile with no value anywhere is left out. Zoom 8 to 15. Credit:
-  derived from the NSW 5 m DEM, with the tail of `NSW_5M.credit`.
+  derived from the NSW 5 m DEM, with the tail of `NSW_REGION.terrain.heights.credit`.
 - **Slope as a fake DEM.** The archive holds no colour, so a client draws it
   with a `color-relief` layer and the user's bands as doubled stops, which
   give hard band edges. `color-relief` draws them in the MapLibre Native build

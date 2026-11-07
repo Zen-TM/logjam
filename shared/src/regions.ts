@@ -5,14 +5,19 @@
 // the canyon-list import, the layer switches), never what answers for a
 // location: heights, terrain tiles, gauges and the area-export check follow
 // coverage, whatever a user chose (ADR 0028 for heights). Worldwide sources
-// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region.
+// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guards:
+// `regions.test.ts` (`DEM_SOURCES` holds every region's sources) and
+// `areaExport.test.ts` (the check reads every region with terrain); neither
+// takes a choice.
 //
 // Stored ids and paths keep their values: `nsw-5m`, `six-*`,
 // `master/dem/nsw-5m.pmtiles`, `master/places/v1/` and `master/gauges/v1/` are
 // on phones, in tracks' climb labels and in installed builds. A new region's
 // archives go under `master/<kind>/<region>-…`, as NSW's terrain already does.
+// Guard: `regions.test.ts` ("keeps NSW's stored ids and paths").
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
+import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
@@ -29,7 +34,7 @@ export type TerrainArchive = {
 };
 
 export type Region = {
-  /** Stored in `uiPreferences.regions`: never change one. */
+  /** Stored in `uiPreferences.regions`: never change one (regions.test.ts). */
   id: string;
   /** What user copy calls it: "That area is outside NSW". */
   name: string;
@@ -115,7 +120,7 @@ export const NSW_REGION = {
   name: "NSW",
   // The Blue Mountains.
   view: { center: [150.31, -33.7], zoom: 9 },
-  timeZone: "Australia/Sydney",
+  timeZone: SYDNEY_TZ,
   // Geofabrik's outline of its New South Wales extract, which takes in the
   // ACT (© OpenStreetMap contributors, ODbL), cut at 154.2° E to leave out
   // Lord Howe Island and the sea out to it, then buffered and simplified to
@@ -197,7 +202,7 @@ export const NSW_REGION = {
       sourceLayer: "land",
       /** The source's attribute, kept as it is (test_land_tenure.py). */
       classProperty: "TenureClass",
-      /** The build script's zooms: z13 is about a metre, and deeper ones overzoom. */
+      /** The build script's zooms (test_land_tenure.py): z13 is about a metre, and deeper ones overzoom. */
       minzoom: 8,
       maxzoom: 13,
       coverage: NSW_HEIGHTS.coverage,

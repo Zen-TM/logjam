@@ -12,8 +12,8 @@ import { randomUUID } from "expo-crypto";
 import NetInfo from "@react-native-community/netinfo";
 import {
   NSW_REGION,
-  type RegionBbox,
   SHARPENED_SOURCE_PREFIX,
+  type RegionBbox,
 } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";

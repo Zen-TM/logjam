@@ -5,9 +5,9 @@ import {
   contourLabelHalo,
   drawsNswContours,
   drawsNswHillshade,
-  nswContourStyle,
   takesNswContours,
   takesNswHillshade,
+  nswContourStyle,
 } from "./nswContours.js";
 import { VECTOR_STYLE_DEFAULTS } from "./topoSettings.js";
 import { NSW_REGION } from "./regions.js";

@@ -44,11 +44,11 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
-  planRegionForBasemaps,
-  MAP_TERRAIN,
   NSW_REGION,
+  planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 
 import { config } from "../config";

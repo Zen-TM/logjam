@@ -1,7 +1,5 @@
 import { useState, type ReactNode, type RefObject } from "react";
 import {
-  takesNswContours,
-  takesNswHillshade,
   contractSectionKeys,
   LAND_CLASSES,
   MAP_LAYERS,
@@ -9,9 +7,11 @@ import {
   MAP_TERRAIN,
   NSW_REGION,
   PLACE_TYPE_COLORS,
+  slopeLegendRows,
+  takesNswContours,
+  takesNswHillshade,
   type SectionKeysOn,
   type SlopeBand,
-  slopeLegendRows,
   type TerrainSwitchKey,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";

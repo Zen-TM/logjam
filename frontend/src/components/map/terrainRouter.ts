@@ -14,9 +14,9 @@
 // nothing").
 import {
   NSW_REGION,
-  terrainTileArchive,
   SHARPENED_ARCHIVE_URL,
   sharpenedDemSource,
+  terrainTileArchive,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
   type TerrainLayerKey,

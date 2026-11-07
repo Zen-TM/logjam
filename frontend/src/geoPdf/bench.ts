@@ -13,13 +13,13 @@ import { PROTOMAPS_SWATCH } from "../basemapSwatch";
 import {
   computeTileToMapTransform,
   computeZoom,
-  type GeoPdfConfig,
-  geoPdfMaxNativeZoom,
-  getMapDimensions,
-  NSW_REGION,
-  RASTER_TEMPLATE_DEFAULTS,
-  TARGET_DPI,
   extentFromCentreAndSize,
+  geoPdfMaxNativeZoom,
+  NSW_REGION,
+  TARGET_DPI,
+  getMapDimensions,
+  RASTER_TEMPLATE_DEFAULTS,
+  type GeoPdfConfig,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 import { prefetchGeoPdf, runGeoPdfRender } from "./client";

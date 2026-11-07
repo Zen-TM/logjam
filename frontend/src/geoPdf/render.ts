@@ -26,10 +26,10 @@ import {
   getPaperDimensions,
   NSW_REGION,
   nswContourStyle,
+  TILE_SIZE,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
   type TerrainLayerKey,
-  TILE_SIZE,
   type TileCoord,
   type TileToMapTransform,
 } from "@logjam/shared";

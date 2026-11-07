@@ -16,13 +16,13 @@
 // beyond the bounds MapLibre needs.
 import {
   BASEMAP_CATALOG,
-  type BasemapCatalogEntry,
   NSW_REGION,
-  type RoutedTerrain,
+  type BasemapCatalogEntry,
   SHARPENED_SOURCE_PREFIX,
+  TERRAIN_ROUTED_FROM,
+  type RoutedTerrain,
   type SharpenedArea,
   type SharpenedOverlay,
-  TERRAIN_ROUTED_FROM,
   type TerrainArchiveLayer,
   type TopoLayerFormat,
   type TopoLayerKey,

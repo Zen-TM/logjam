@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  TERRAIN_LAYER_DEFAULTS,
   drawsOverTerrain,
   normalizeTerrainLayers,
   slopeBandAt,
   slopeLegendRows,
   slopeReliefColor,
-  terrainBeforeIds,
   terrainCredit,
+  TERRAIN_LAYER_DEFAULTS,
+  terrainBeforeIds,
 } from "./terrain.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import {

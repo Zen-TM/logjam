@@ -8,13 +8,13 @@ import {
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
   SHARPENED_CLIMB_SOURCE,
-  TERRARIUM,
   clearDemArchives,
   demArchive,
+  readDemArchive,
+  TERRARIUM,
   demCredits,
   demTileUrl,
   isFinerClimbSource,
-  readDemArchive,
   sampleDem,
   type DemSource,
   type DemTileReader,
@@ -83,7 +83,11 @@ describe("the declaration", () => {
       const root = join(import.meta.dirname, "../..", pkg, "src");
       for (const file of readdirSync(root, { recursive: true }) as string[]) {
         if (!/\.tsx?$/.test(file) || /\.test\.tsx?$/.test(file)) continue;
-        if (file.endsWith("demSources.ts") || file === "regions.ts") continue;
+        if (
+          pkg === "shared" &&
+          (file === "demSources.ts" || file === "regions.ts")
+        )
+          continue;
         const text = readFileSync(join(root, file), "utf8");
         if (prefixes.some((prefix) => text.includes(prefix)))
           offenders.push(`${pkg}/src/${file}`);

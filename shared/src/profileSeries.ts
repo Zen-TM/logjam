@@ -7,10 +7,10 @@
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
 import {
+  climbSourceOf,
   GPS_CLIMB_SOURCE,
   SHARPENED_CLIMB_SOURCE,
   TERRARIUM,
-  climbSourceOf,
 } from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";

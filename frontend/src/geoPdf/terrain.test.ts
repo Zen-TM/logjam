@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseRgbaHex,
-  DEM_NO_DATA_BELOW,
-  demMetresFromRgb,
-  tileY2lat,
   lat2tileY,
   NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
   type SharpenedArea,
-  type SlopeBand,
-  slopeBandAt,
-  TILE_SIZE,
   type TileCoord,
+  tileY2lat,
+  DEM_NO_DATA_BELOW,
+  parseRgbaHex,
+  slopeBandAt,
+  demMetresFromRgb,
+  TILE_SIZE,
+  type SlopeBand,
 } from "@logjam/shared";
 import {
   areasOnPage,
