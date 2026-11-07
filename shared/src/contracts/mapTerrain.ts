@@ -38,8 +38,9 @@ export const MAP_TERRAIN = {
     vegetationAbout: "About vegetation",
     vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
-    // Land tenure, Fire history and Coverage stack with this group, but their
-    // rows are in `MAP_OVERLAYS`: none is part of the shape of the ground.
+    // Land tenure, Fire history, Coverage and Weather stack with this group,
+    // but their rows are in `MAP_OVERLAYS`: none is part of the shape of the
+    // ground.
     // Behind that row's help button, titled with its label.
     landAbout: "About land tenure",
     landLegend:
@@ -66,6 +67,22 @@ export const MAP_TERRAIN = {
     // The source's limits, said beside the legend they qualify.
     coverageCaveat:
       "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+    weather: "Weather",
+    // Behind that row's help button, titled with its label, over a picker of
+    // `WEATHER_LAYERS` (named under the row) and the chosen layer's key.
+    weatherAbout: "About the weather map",
+    weatherLayer: "Show",
+    weatherLegend:
+      "ECMWF's forecast, coloured by what you pick. Drag the bar on the map to move through the week; past rain is the model's estimate of what fell, not a gauge's.",
+    // The model's limits, said beside the key they qualify: one sentence.
+    weatherCaveat:
+      "Cells are about 9 km across, so this shows the big systems, not a storm over one catchment.",
+    // The bar over the map while Weather is on.
+    weatherEarlier: "Earlier",
+    weatherLater: "Later",
+    weatherLoading: "Getting the weather map…",
+    weatherFailed: "Couldn't get the weather map.",
+    weatherOutOfDate: "This forecast has run out.",
     slopeBands: "Slope bands",
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.

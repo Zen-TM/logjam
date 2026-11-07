@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  OVERLAY_LEGENDS,
+  overlayChoiceLabel,
+  overlayLegendRows,
+} from "./overlayLegends.js";
+import {
   parseWeatherMap,
   WEATHER_LAYERS,
   WEATHER_MAP,
@@ -203,5 +208,31 @@ describe("the wind arrows", () => {
       wind.rows * wind.columns - 1,
     );
     expect(windArrows(wind, 99).features).toEqual([]);
+  });
+});
+
+describe("the Weather legend", () => {
+  const legend = OVERLAY_LEGENDS.weather;
+
+  // Mutation: key the legend by `rows` alone, and picking Temperature still
+  // shows the rain key.
+  it("keys the layer picked, and rain for one it doesn't know", () => {
+    expect(overlayLegendRows(legend, "temperature")).toEqual(
+      weatherLegendRows("temperature"),
+    );
+    expect(overlayLegendRows(legend, "snow")).toEqual(
+      weatherLegendRows("rain"),
+    );
+    expect(overlayLegendRows(OVERLAY_LEGENDS.land, "temperature")).toBe(
+      OVERLAY_LEGENDS.land.rows,
+    );
+  });
+
+  it("offers every layer and names the one picked", () => {
+    expect(legend.choice?.options.map((o) => o.value)).toEqual(
+      WEATHER_LAYERS.map((l) => l.key),
+    );
+    expect(overlayChoiceLabel(legend, "rainPast168")).toBe("Rain, past 7 days");
+    expect(legend.credit).toBe(WEATHER_MAP.credit);
   });
 });
