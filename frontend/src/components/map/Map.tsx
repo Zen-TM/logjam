@@ -633,7 +633,6 @@ function Map({
   slopeBands,
   coverageCarrier = DEFAULT_CARRIER,
   weather,
-  weatherBar,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -767,8 +766,6 @@ function Map({
     layer: WeatherLayerKey;
     arrows: GeoJSON.FeatureCollection | null;
   };
-  /** The bar that goes with it, over the map. */
-  weatherBar?: ReactNode;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -3786,7 +3783,6 @@ function Map({
       data-sheet-open={sheetOpen}
     >
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-      {weatherBar}
       <MapChrome
         map={drawableMap}
         geolocate={loaded?.geolocate ?? null}

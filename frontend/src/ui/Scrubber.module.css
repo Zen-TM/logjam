@@ -1,0 +1,11 @@
+.scrubber {
+  /* intrinsic: a drag needs room to be worth making; it gives way on a phone
+     narrower than this. */
+  width: 12rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--color-accent);
+  /* The thumb's own hit area is the control's height on a finger. */
+  min-height: var(--control-md);
+}

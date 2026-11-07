@@ -1,34 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, View } from "react-native";
-import { MAP_TERRAIN } from "@logjam/shared";
 
 import { makeStyles, radius } from "../theme";
 import { stepAtX, xAtStep } from "./scrubberMath";
 
 const THUMB = 24;
 const HEIGHT = 48;
+/** The track's width unless the caller has less room. */
+export const SCRUBBER_WIDTH = 280;
 
 /**
- * A slider over the forecast's steps. No slider library is installed and a
- * native one would need an APK build, so this is a drag on a track. For a
- * screen reader it is one adjustable control: swipe up and down for the next
- * step, its time as the value (`value`).
+ * A slider over whole steps, `first` to `last` (a forecast's hours). The same
+ * component as Logjam Web's `Scrubber`, a range input there. No slider
+ * library is installed and a native one would need an APK build, so this is a
+ * drag on a track. For a screen reader it is one adjustable control: swipe up
+ * and down for the next step, `valueText` as its value, `label` its name.
  */
-export function WeatherScrubber({
+export function Scrubber({
   first,
   last,
-  step,
   value,
-  width,
   onChange,
+  label,
+  valueText,
+  width = SCRUBBER_WIDTH,
 }: {
   first: number;
   last: number;
-  step: number;
-  /** The shown step in words: what a screen reader reads. */
-  value: string;
-  width: number;
-  onChange: (step: number) => void;
+  value: number;
+  onChange: (next: number) => void;
+  label: string;
+  /** The step in words: what a screen reader reads. */
+  valueText: string;
+  /** Logjam GPS only: the track is drawn at a size, not stretched. */
+  width?: number;
 }) {
   const styles = useStyles();
   const latest = useRef({ first, last, width, onChange });
@@ -57,17 +62,17 @@ export function WeatherScrubber({
     });
   });
 
-  const x = xAtStep(step, width, first, last);
+  const x = xAtStep(value, width, first, last);
   return (
     <View
       accessible
       accessibilityRole="adjustable"
-      accessibilityLabel={MAP_TERRAIN.copy.weather}
-      accessibilityValue={{ text: value }}
+      accessibilityLabel={label}
+      accessibilityValue={{ text: valueText }}
       accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
       onAccessibilityAction={(event) => {
         const by = event.nativeEvent.actionName === "increment" ? 1 : -1;
-        onChange(Math.min(last, Math.max(first, step + by)));
+        onChange(Math.min(last, Math.max(first, value + by)));
       }}
       style={[styles.hit, { width }]}
       {...pan.panHandlers}

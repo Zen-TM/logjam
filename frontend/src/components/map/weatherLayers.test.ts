@@ -80,6 +80,10 @@ function fakeMap(ids: string[]) {
       );
     },
     removeLayer: (id: string) => layers.splice(layers.indexOf(id), 1),
+    moveLayer: (id: string, before?: string) => {
+      layers.splice(layers.indexOf(id), 1);
+      layers.splice(before ? layers.indexOf(before) : layers.length, 0, id);
+    },
     getStyle: () => ({ layers: layers.map((id) => ({ id })) }),
   };
 }
@@ -96,6 +100,24 @@ describe("syncWindArrows", () => {
       WEATHER_FIELD_LAYER,
       WEATHER_ARROWS_LAYER,
       "contours",
+    ]);
+  });
+
+  // Mutation: return early when the arrows layer exists (the old code), and a
+  // Wind to Gusts switch, which rebuilds the field on top of the style, leaves
+  // the arrows underneath it.
+  it("moves existing arrows back over a rebuilt field", () => {
+    const map = fakeMap(["a", WEATHER_FIELD_LAYER, "contours"]);
+    syncWindArrows(map, data);
+    map.removeLayer(WEATHER_FIELD_LAYER);
+    map.layers.push(WEATHER_FIELD_LAYER);
+    expect(map.layers[map.layers.length - 1]).toBe(WEATHER_FIELD_LAYER);
+    syncWindArrows(map, data);
+    expect(map.layers).toEqual([
+      "a",
+      "contours",
+      WEATHER_FIELD_LAYER,
+      WEATHER_ARROWS_LAYER,
     ]);
   });
 

@@ -7,7 +7,6 @@ import {
   weatherLayerUrl,
   weatherWindUrl,
   type WeatherMapFile,
-  type WeatherWindFile,
 } from "@logjam/shared";
 
 /**
@@ -42,15 +41,4 @@ export function areaTouchesRun(
     area.south <= north &&
     area.north >= south
   );
-}
-
-/** The arrows file if it has the shape `windArrows` reads, else null. */
-export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
-  const w = raw as Partial<WeatherWindFile> | null;
-  return w &&
-    [w.west, w.north, w.step, w.columns, w.rows].every(Number.isFinite) &&
-    Array.isArray(w.steps) &&
-    w.steps.every((s) => Array.isArray(s?.speed) && Array.isArray(s?.from))
-    ? (w as WeatherWindFile)
-    : null;
 }

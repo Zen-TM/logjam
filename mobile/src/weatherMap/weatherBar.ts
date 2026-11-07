@@ -1,17 +1,11 @@
-// What the bar over the map says while Weather is on, decided apart from the
-// view so each state has a test (shared weatherMap.ts has the labels, the
-// weather contract the words). One function for the layer, the step and the
-// run's state: the same words as Logjam Web's bar.
+// What the bar over the map says while Weather is on: the fetch state and the
+// words, on top of shared `weatherShown`, which decides the step, the clamp
+// and the out-of-date and missing cases for both clients.
 import {
   MAP_TERRAIN,
-  isWeatherTotal,
-  weatherAge,
-  weatherLayer,
-  weatherShownLabel,
-  weatherStepAt,
+  weatherShown,
   type WeatherLayerKey,
   type WeatherMapFile,
-  type WeatherTotalKey,
 } from "@logjam/shared";
 
 export type WeatherBarModel =
@@ -34,11 +28,6 @@ export type WeatherBarModel =
 
 const copy = MAP_TERRAIN.copy;
 
-/** `step` held inside what the scrubber spans: an old pick never indexes past a new run. */
-export function clampStep(step: number, first: number, last: number): number {
-  return Math.min(last, Math.max(first, Math.round(step)));
-}
-
 export function weatherBarModel(input: {
   status: "loading" | "ready" | "failed";
   file: WeatherMapFile | null;
@@ -53,31 +42,23 @@ export function weatherBarModel(input: {
     return { kind: "loading", text: copy.weatherLoading };
   if (status === "failed" || !file)
     return { kind: "failed", text: copy.weatherFailed, canRetry: input.online };
-  const layer = weatherLayer(input.layer);
-  const age = weatherAge(Date.parse(file.built), now);
-  const title = `${layer.label} (${layer.unit})`;
-  if (isWeatherTotal(layer)) {
-    // A total this run leaves out (an hour no model run held) draws nothing.
-    if (!file.totals.includes(layer.key as WeatherTotalKey))
-      return { kind: "failed", text: copy.weatherFailed, canRetry: false };
-    return {
-      kind: "ready",
-      title,
-      detail: `${weatherShownLabel(file, layer.key, 0, now)} · ${age}`,
-      scrub: null,
-    };
-  }
-  const first = weatherStepAt(file, now);
-  // Every step is past: a run that old is never drawn as today's.
-  if (first === null) return { kind: "outOfDate", text: copy.weatherOutOfDate };
-  const last = file.steps.length - 1;
-  const step = clampStep(input.picked ?? first, first, last);
-  const value = weatherShownLabel(file, layer.key, step, now);
+  const shown = weatherShown({
+    file,
+    layer: input.layer,
+    picked: input.picked,
+    now,
+  });
+  if (shown.kind !== "ready")
+    return shown.kind === "outOfDate"
+      ? { kind: "outOfDate", text: copy.weatherOutOfDate }
+      : // A total this run leaves out draws nothing and there is nothing to retry.
+        { kind: "failed", text: copy.weatherFailed, canRetry: false };
+  const { layer, step, first, last } = shown;
   return {
     kind: "ready",
-    title,
-    detail: `${value} · ${age}`,
-    scrub: { first, last, step, value },
+    title: `${layer.label} (${layer.unit})`,
+    detail: `${shown.shown} · ${shown.age}`,
+    scrub: step === null ? null : { first, last, step, value: shown.shown },
   };
 }
 

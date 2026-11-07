@@ -1,27 +1,55 @@
-import { MAP_TERRAIN, WEATHER } from "@logjam/shared";
-import { Button, IconButton } from "../../ui";
-import type { WeatherView } from "./weatherView";
+import { useEffect, useState } from "react";
+import {
+  MAP_TERRAIN,
+  WEATHER,
+  WEATHER_MAP,
+  type WeatherLayerKey,
+} from "@logjam/shared";
+import { Button, IconButton, Notice, Scrubber } from "../../ui";
+import {
+  weatherView,
+  type WeatherMapState,
+  type WeatherPick,
+} from "./weatherView";
 import classes from "./WeatherBar.module.css";
 
 const copy = MAP_TERRAIN.copy;
 
 /**
- * The bar over the map while Weather is on: what the layer is and which time
- * it shows, a scrubber over the steps still to come (a total has none), and
- * the run's age. The scrubber is a native range, so arrows, Home and End work
- * and a screen reader hears the time as its value.
+ * Weather's notice in the map's stack while it is on: what the layer is and
+ * which time it shows, a scrubber over the steps still to come (a total has
+ * none) and the run's age; or why there is nothing to show.
+ *
+ * It holds the step while the scrubber moves and tells the app (`onSettle`)
+ * only once it rests, so a drag re-renders the bar and not the app, and the
+ * map is asked for the archive of the step it rests on, not each notch.
  */
 export default function WeatherBar({
-  view,
+  state,
+  layerKey,
+  now,
+  settled,
+  onSettle,
   online,
-  onStep,
   onRetry,
 }: {
-  view: WeatherView;
+  state: WeatherMapState;
+  layerKey: WeatherLayerKey;
+  now: number;
+  settled: WeatherPick | null;
+  onSettle: (pick: WeatherPick) => void;
   online: boolean;
-  onStep: (step: number) => void;
   onRetry: () => void;
 }) {
+  const [pick, setPick] = useState(settled);
+  useEffect(() => {
+    if (!pick) return;
+    const timer = setTimeout(() => onSettle(pick), WEATHER_MAP.settleMs);
+    return () => clearTimeout(timer);
+  }, [pick, onSettle]);
+  const view = weatherView({ on: true, state, layerKey, pick, now });
+  const path = state.status === "ready" ? state.file.path : null;
+  const onStep = (step: number) => path && setPick({ path, step });
   if (view.kind === "off") return null;
   if (view.kind !== "ready") {
     const text = {
@@ -30,51 +58,52 @@ export default function WeatherBar({
       outOfDate: copy.weatherOutOfDate,
     }[view.kind];
     return (
-      <div className={classes.bar} role="status">
-        <span className={classes.state}>{text}</span>
-        {view.kind === "failed" && online && (
-          <Button variant="outline" compact onClick={onRetry}>
-            {WEATHER.copy.tryAgain}
-          </Button>
-        )}
-      </div>
+      <Notice
+        icon="weatherMap"
+        tone={view.kind === "failed" ? "warning" : "info"}
+        controls={
+          view.kind === "failed" && online ? (
+            <Button variant="outline" compact onClick={onRetry}>
+              {WEATHER.copy.tryAgain}
+            </Button>
+          ) : undefined
+        }
+      >
+        {text}
+      </Notice>
     );
   }
   const { layer, step, first, last, shown, age } = view;
   return (
-    <section className={classes.bar} aria-label={copy.weather}>
-      <div className={classes.line}>
-        <span className={classes.title}>
-          {layer.label} <span className={classes.unit}>{layer.unit}</span>
-        </span>
-        <span className={classes.shown}>{shown}</span>
-      </div>
-      {step !== null && (
-        <div className={classes.scrub}>
-          <IconButton
-            icon="scrollBack"
-            label={copy.weatherEarlier}
-            onClick={() => onStep(Math.max(first, step - 1))}
-          />
-          <input
-            type="range"
-            className={classes.range}
-            aria-label={layer.label}
-            aria-valuetext={shown}
-            min={first}
-            max={last}
-            step={1}
-            value={step}
-            onChange={(e) => onStep(Number(e.currentTarget.value))}
-          />
-          <IconButton
-            icon="scrollOn"
-            label={copy.weatherLater}
-            onClick={() => onStep(Math.min(last, step + 1))}
-          />
-        </div>
-      )}
-      <span className={classes.age}>{age}</span>
-    </section>
+    <Notice
+      icon="weatherMap"
+      controls={
+        step !== null && (
+          <>
+            <IconButton
+              icon="earlier"
+              label={copy.weatherEarlier}
+              onClick={() => onStep(Math.max(first, step - 1))}
+            />
+            <Scrubber
+              first={first}
+              last={last}
+              value={step}
+              onChange={onStep}
+              label={layer.label}
+              valueText={shown}
+            />
+            <IconButton
+              icon="later"
+              label={copy.weatherLater}
+              onClick={() => onStep(Math.min(last, step + 1))}
+            />
+          </>
+        )
+      }
+    >
+      {layer.label} <span className={classes.muted}>{layer.unit}</span> ·{" "}
+      {shown} · <span className={classes.muted}>{age}</span>
+    </Notice>
   );
 }

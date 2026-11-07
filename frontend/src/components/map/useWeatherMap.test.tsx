@@ -11,7 +11,7 @@ const manifest = {
   run: "2026-11-07T00:00Z",
   built: "2026-11-07T09:07Z",
   anchor: "2026-11-07T09:00Z",
-  path: "runs/20261107T0000Z/",
+  path: "runs/20261107T0000Z-20261107T0900Z/",
   bounds: [139, -39.5, 156, -26],
   zoom: 5,
   steps: [0, 1, 2].map((i) => ({
@@ -68,18 +68,18 @@ describe("useWeatherMap", () => {
     const { result } = renderHook(() => useWeatherMap(false, "rain"));
     await flush();
     expect(asked).toEqual([]);
-    expect(result.current.view.kind).toBe("off");
+    expect(result.current.state.status).toBe("loading");
   });
 
   // Mutation: keep polling, and a left-open tab asks every minute.
   it("fetches the manifest from our own origin once on turn-on, never again by itself", async () => {
     const { result } = renderHook(() => useWeatherMap(true, "rain"));
-    expect(result.current.view.kind).toBe("loading");
+    expect(result.current.state.status).toBe("loading");
     await flush();
     expect(asked).toEqual([
       `${window.location.origin}/master/weather/v1/latest.json`,
     ]);
-    expect(result.current.view.kind).toBe("ready");
+    expect(result.current.state.status).toBe("ready");
     await act(() => vi.advanceTimersByTimeAsync(2 * hour));
     expect(asked).toHaveLength(1);
   });
@@ -108,11 +108,11 @@ describe("useWeatherMap", () => {
     respond = () => ({ ...manifest, format: 2 });
     const { result } = renderHook(() => useWeatherMap(true, "rain"));
     await flush();
-    expect(result.current.view.kind).toBe("failed");
+    expect(result.current.state.status).toBe("failed");
     respond = (url) => (url.endsWith("latest.json") ? manifest : wind);
     act(() => result.current.retry());
     await flush();
-    expect(result.current.view.kind).toBe("ready");
+    expect(result.current.state.status).toBe("ready");
     expect(asked).toHaveLength(2);
   });
 
@@ -120,7 +120,7 @@ describe("useWeatherMap", () => {
     respond = () => null;
     const { result } = renderHook(() => useWeatherMap(true, "rain"));
     await flush();
-    expect(result.current.view.kind).toBe("failed");
+    expect(result.current.state.status).toBe("failed");
   });
 
   // Mutation: fetch wind.json for Rain, or once per step, and every user pays
@@ -141,18 +141,88 @@ describe("useWeatherMap", () => {
     expect(result.current.arrows?.features).toHaveLength(2);
   });
 
-  // Mutation: draw the picked step at once, and a drag across the week asks
-  // for an archive per notch.
-  it("shows a picked step on the bar at once and on the map a moment later", async () => {
+  // Mutation: draw the step the bar is on, not the one it rested on, and a
+  // drag across the week asks the map for an archive per notch.
+  it("draws the step the bar settled on", async () => {
     const { result } = renderHook(() => useWeatherMap(true, "rain"));
     await flush();
-    act(() => result.current.setStep(2));
-    const step = (v: typeof result.current.view) =>
-      v.kind === "ready" ? v.step : null;
-    expect(step(result.current.view)).toBe(2);
-    expect(step(result.current.drawn)).toBe(1);
-    await act(() => vi.advanceTimersByTimeAsync(200));
-    expect(step(result.current.drawn)).toBe(2);
+    const url = (n: number) =>
+      `${window.location.origin}/master/weather/v1/${manifest.path}rain/00${n}.pmtiles`;
+    expect(result.current.drawnUrl).toBe(url(1));
+    act(() => result.current.settle({ path: manifest.path, step: 2 }));
+    expect(result.current.drawnUrl).toBe(url(2));
+    act(() => result.current.settle({ path: "runs/other/", step: 2 }));
+    expect(result.current.drawnUrl).toBe(url(1));
+  });
+
+  // Mutation: skip the visibilitychange listener, and a tab left on Weather
+  // overnight keeps asking for the pruned run's files.
+  it("asks again when the tab returns to the front over an hour on, not before", async () => {
+    renderHook(() => useWeatherMap(true, "rain"));
+    await flush();
+    const show = () => document.dispatchEvent(new Event("visibilitychange"));
+    await act(() =>
+      vi.advanceTimersByTimeAsync(WEATHER_MAP.refreshAfterMs - 1000),
+    );
+    show();
+    await flush();
+    expect(asked).toHaveLength(1);
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    show();
+    await flush();
+    expect(asked).toHaveLength(2);
+  });
+
+  describe("an archive the manifest names is gone", () => {
+    const fresh = {
+      ...manifest,
+      run: "2026-11-07T06:00Z",
+      path: "runs/20261107T0600Z-20261107T0900Z/",
+    };
+    // Mutation: blacklist instead of refetching (do nothing here), and the
+    // overlay stays on a pruned run until it is toggled.
+    it("drops the manifest, asks for the current one once and draws its run", async () => {
+      const { result } = renderHook(() => useWeatherMap(true, "rain"));
+      await flush();
+      respond = (url) => (url.endsWith("latest.json") ? fresh : wind);
+      // A tile burst reports it more than once.
+      act(() => {
+        result.current.archiveGone();
+        result.current.archiveGone();
+      });
+      expect(result.current.drawnUrl).toBeNull();
+      await flush();
+      expect(asked.filter((u) => u.endsWith("latest.json"))).toHaveLength(2);
+      expect(result.current.drawnUrl).toContain(fresh.path);
+    });
+
+    // Mutation: refetch every time, and a run whose archive really is gone
+    // loops manifest, archive, manifest, ...
+    it("is failed when the current run's archive is gone too, and Try again asks anew", async () => {
+      const { result } = renderHook(() => useWeatherMap(true, "rain"));
+      await flush();
+      act(() => result.current.archiveGone());
+      await flush();
+      expect(result.current.state.status).toBe("ready");
+      act(() => result.current.archiveGone());
+      expect(result.current.state.status).toBe("failed");
+      expect(asked.filter((u) => u.endsWith("latest.json"))).toHaveLength(2);
+      act(() => result.current.retry());
+      await flush();
+      expect(result.current.state.status).toBe("ready");
+      expect(asked.filter((u) => u.endsWith("latest.json"))).toHaveLength(3);
+    });
+
+    // Mutation: keep the old manifest when the refetch fails, and the bar says
+    // ready over nothing.
+    it("is failed when the manifest cannot be fetched again", async () => {
+      const { result } = renderHook(() => useWeatherMap(true, "rain"));
+      await flush();
+      respond = () => null;
+      act(() => result.current.archiveGone());
+      await flush();
+      expect(result.current.state.status).toBe("failed");
+    });
   });
 
   // Mutation: draw arrows when wind.json is malformed, and a bad file throws
@@ -164,6 +234,6 @@ describe("useWeatherMap", () => {
     expect(asked.some((u) => u.endsWith("wind.json"))).toBe(true);
     await flush();
     expect(result.current.arrows).toBeNull();
-    expect(result.current.view.kind).toBe("ready");
+    expect(result.current.state.status).toBe("ready");
   });
 });

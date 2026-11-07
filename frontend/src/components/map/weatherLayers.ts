@@ -79,13 +79,16 @@ type ArrowsMap = {
   removeSource(id: string): unknown;
   getLayer(id: string): unknown;
   addLayer(spec: LayerSpecification, beforeId?: string): unknown;
+  moveLayer(id: string, beforeId?: string): unknown;
   removeLayer(id: string): unknown;
   getStyle(): { layers: { id: string }[] };
 };
 
 /**
  * Puts the wind arrows `data` on the map directly over the colour field, or
- * takes them off for null. A no-op while the field is not on the map.
+ * takes them off for null. A no-op while the field is not on the map. The
+ * field is rebuilt (on top of the style) when the layer picked changes, so an
+ * arrows layer that already exists is moved back over it.
  */
 export function syncWindArrows(
   map: ArrowsMap,
@@ -102,8 +105,11 @@ export function syncWindArrows(
   }
   if (source) source.setData(data);
   else map.addSource(WEATHER_WIND_SOURCE, { type: "geojson", data });
-  if (map.getLayer(WEATHER_ARROWS_LAYER)) return;
   const ids = map.getStyle().layers.map((l) => l.id);
-  const above = ids[ids.indexOf(WEATHER_FIELD_LAYER) + 1];
-  map.addLayer(windArrowsLayerSpec(WEATHER_WIND_SOURCE), above);
+  const placed = ids.indexOf(WEATHER_ARROWS_LAYER) >= 0;
+  const rest = ids.filter((id) => id !== WEATHER_ARROWS_LAYER);
+  const above = rest[rest.indexOf(WEATHER_FIELD_LAYER) + 1];
+  if (!placed) map.addLayer(windArrowsLayerSpec(WEATHER_WIND_SOURCE), above);
+  else if (ids[ids.indexOf(WEATHER_FIELD_LAYER) + 1] !== WEATHER_ARROWS_LAYER)
+    map.moveLayer(WEATHER_ARROWS_LAYER, above);
 }

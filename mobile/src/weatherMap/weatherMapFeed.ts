@@ -4,12 +4,13 @@
 //
 // PRIVACY: the requests carry no headers and no query, only the files' paths,
 // the same for every phone and every place, so our CDN's logs say nothing about
-// where anyone looks. Guard: weatherMapFeed.test.ts ("from the CDN with
-// nothing else sent"). A failure is a state, never a log line (a URL would be
-// one).
+// where anyone looks. Guard: weatherMapFeed.test.ts ("asks the CDN for the
+// public file with nothing else sent"). A failure is a state, never a log line
+// (a URL would be one); guard: weatherMapFeed.test.ts ("a failure is a state, never a log line").
 import {
   WEATHER_MAP,
   parseWeatherMap,
+  parseWeatherWind,
   weatherWindUrl,
   type WeatherMapFile,
   type WeatherWindFile,
@@ -18,7 +19,6 @@ import {
 import { config } from "../config";
 import { canRunNow } from "../offline/networkPolicy";
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
-import { parseWeatherWind } from "./weatherMapRun";
 
 const TIMEOUT_MS = 15_000;
 
@@ -38,13 +38,15 @@ async function getJson(url: string): Promise<{ text: string } | null> {
 /**
  * The run on the CDN now, with the text it came as (to keep it as it is), or
  * null for no connection, offline-only mode, a failure or a manifest this
- * build can't draw. Rides the "sync" setting like the gauge file: 4 KB.
+ * build can't draw. Rides the "sync" setting like the gauge file: 4 KB, unless
+ * the caller has the user's own answer for mobile data (`allowMetered`, a
+ * download they started), which stands in for it.
  */
-export async function fetchWeatherManifest(): Promise<{
+export async function fetchWeatherManifest(allowMetered?: boolean): Promise<{
   file: WeatherMapFile;
   text: string;
 } | null> {
-  if (isOfflineOnly() || !(await canRunNow("sync"))) return null;
+  if (isOfflineOnly() || !(await canRunNow("sync", allowMetered))) return null;
   const got = await getJson(
     `${config.topoCdnBaseUrl}/${WEATHER_MAP.manifestPath}`,
   );

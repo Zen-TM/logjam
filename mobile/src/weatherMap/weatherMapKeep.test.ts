@@ -2,7 +2,11 @@
 // download leaves a manifest over missing files); keep a file whose status is
 // not 200; drop the epoch check (a download begun before a wipe writes after
 // it); drop `dropRunsExcept` (the run before is never replaced); skip the
-// `canRunNow` check (a download starts on mobile data the user ruled out).
+// `canRunNow` check (a download starts on mobile data the user ruled out);
+// ask it once instead of every CHECK_EVERY files (a download keeps running on
+// a connection the user ruled out); drop `assertSpaceFor` (a full phone fails
+// midway); check only the first area's box (a batch elsewhere keeps nothing);
+// pass no `allowCellular` to the manifest fetch (sync-on-mobile off skips it).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { weatherFixture } from "./weatherMapFixture";
@@ -16,6 +20,10 @@ const h = vi.hoisted(() => ({
   canRun: true,
   latest: null as null | { file: unknown; text: string },
   canRunArgs: [] as unknown[][],
+  manifestArgs: [] as unknown[][],
+  /** Calls to `canRunNow` after which it says no; -1 never. */
+  denyAfter: -1,
+  space: true,
 }));
 vi.mock("expo-file-system/legacy", () => ({
   readAsStringAsync: async (uri: string) => {
@@ -56,21 +64,36 @@ vi.mock("../config", () => ({
 vi.mock("../offline/networkPolicy", () => ({
   canRunNow: async (...args: unknown[]) => {
     h.canRunArgs.push(args);
-    return h.canRun;
+    return h.canRun && (h.denyAfter < 0 || h.canRunArgs.length <= h.denyAfter);
+  },
+}));
+vi.mock("../offline/freeSpace", () => ({
+  assertSpaceFor: async () => {
+    if (!h.space) throw new Error("not enough space");
   },
 }));
 vi.mock("./weatherMapFeed", () => ({
-  fetchWeatherManifest: async () => h.latest,
+  fetchWeatherManifest: async (...args: unknown[]) => {
+    h.manifestArgs.push(args);
+    return h.latest;
+  },
 }));
 
-const { keepLatestWeather } = await import("./weatherMapKeep");
+const { CHECK_EVERY, keepLatestWeather: keep } = await import(
+  "./weatherMapKeep"
+);
 const { readKeptWeather, stopWeatherMapForWipe } = await import(
   "./weatherMapStorage"
 );
 
+const keepLatestWeather = (allowCellular: boolean, area: typeof PERTH) =>
+  keep(allowCellular, [area]);
 const PERTH = { west: 115.8, south: -32, east: 116, north: -31.9 };
 const BLUE_MOUNTAINS = { west: 150.2, south: -33.7, east: 150.3, north: -33.6 };
-const newRun = { ...weatherFixture, path: "runs/20261107T0600Z/" };
+const newRun = {
+  ...weatherFixture,
+  path: "runs/20261107T0600Z-20261107T1500Z/",
+};
 const keptFiles = (run: { path: string }) =>
   [...h.files.keys()].filter((k) => k.includes(run.path));
 
@@ -81,6 +104,9 @@ beforeEach(() => {
   h.failAt = -1;
   h.canRun = true;
   h.canRunArgs = [];
+  h.manifestArgs = [];
+  h.denyAfter = -1;
+  h.space = true;
   h.latest = { file: weatherFixture, text: JSON.stringify(weatherFixture) };
 });
 
@@ -145,6 +171,51 @@ describe("keepLatestWeather", () => {
   it("keeps nothing for an area the run does not cover", async () => {
     await keepLatestWeather(false, PERTH);
     expect(h.files.size).toBe(0);
+  });
+
+  // Mutation: pass nothing to the manifest fetch, and with "sync" on Wi-Fi only
+  // a save the user allowed on mobile data keeps nothing, silently.
+  it("hands the save's mobile-data answer to the manifest fetch", async () => {
+    await keepLatestWeather(true, BLUE_MOUNTAINS);
+    expect(h.manifestArgs).toEqual([[true]]);
+  });
+
+  // Mutation: check only the first area's box, and a batch whose first area
+  // is elsewhere keeps nothing for the area the run does cover.
+  it("keeps the run when any area of the batch is covered", async () => {
+    await keep(false, [PERTH, BLUE_MOUNTAINS]);
+    expect(await readKeptWeather()).toEqual(weatherFixture);
+  });
+
+  // Mutation: ask the connection rule once, and a download that loses the
+  // Wi-Fi the user required keeps running on mobile data.
+  it("asks the connection rule again every CHECK_EVERY files and stops whole", async () => {
+    await keepLatestWeather(false, BLUE_MOUNTAINS);
+    // The fixture's run is small; a bigger run has more files than CHECK_EVERY.
+    const big = {
+      ...newRun,
+      steps: Array.from({ length: 60 }, (_, i) => weatherFixture.steps[i % 4]!),
+    };
+    h.latest = { file: big, text: JSON.stringify(big) };
+    h.canRunArgs = [];
+    h.denyAfter = 2;
+    await keepLatestWeather(false, BLUE_MOUNTAINS);
+    expect(h.canRunArgs.length).toBeGreaterThan(2);
+    expect((await readKeptWeather())?.path).toBe(weatherFixture.path);
+    expect(keptFiles(big)).toEqual([]);
+    expect(CHECK_EVERY).toBeLessThan(weatherRunUrls("x", big).length);
+  });
+
+  // Mutation: drop `assertSpaceFor`, and a full phone fails midway, after the
+  // previous run was dropped.
+  it("keeps nothing, and drops nothing, when the phone has no room", async () => {
+    await keepLatestWeather(false, BLUE_MOUNTAINS);
+    h.latest = { file: newRun, text: JSON.stringify(newRun) };
+    h.space = false;
+    await keepLatestWeather(false, BLUE_MOUNTAINS);
+    expect((await readKeptWeather())?.path).toBe(weatherFixture.path);
+    expect(keptFiles(weatherFixture).length).toBeGreaterThan(0);
+    expect(keptFiles(newRun)).toEqual([]);
   });
 
   it("keeps nothing without a manifest", async () => {

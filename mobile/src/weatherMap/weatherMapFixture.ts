@@ -7,7 +7,7 @@ export const weatherFixture: WeatherMapFile = {
   run: "2026-11-07T00:00Z",
   built: "2026-11-07T09:07Z",
   anchor: "2026-11-07T09:00Z",
-  path: "runs/20261107T0000Z/",
+  path: "runs/20261107T0000Z-20261107T0900Z/",
   bounds: [139, -39.5, 156, -26],
   zoom: 5,
   steps: [

@@ -57,8 +57,14 @@ vi.mock("./regionTileDownload", () => ({
   runRegionDownload,
 }));
 
-const keepLatestWeather = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const keepLatestWeather = vi.hoisted(() =>
+  vi.fn((..._args: unknown[]) => Promise.resolve()),
+);
 vi.mock("../weatherMap/weatherMapKeep", () => ({ keepLatestWeather }));
+const wipeEpoch = vi.hoisted(() => ({ value: 7 }));
+vi.mock("../weatherMap/weatherMapEpoch", () => ({
+  weatherMapEpoch: () => wipeEpoch.value,
+}));
 
 const {
   cancelAllRegionDownloads,
@@ -66,6 +72,7 @@ const {
   onRegionDownloadToast,
   pauseRegionDownload,
   renameRegionGroup,
+  resumeRegionDownload,
   stopRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
@@ -93,20 +100,52 @@ beforeEach(async () => {
 });
 
 describe("the weather run kept with a saved area", () => {
+  const BLUE_MOUNTAINS = {
+    west: 150.2,
+    south: -33.7,
+    east: 150.3,
+    north: -33.6,
+  };
+  const PERTH = { west: 115.8, south: -32, east: 116, north: -31.9 };
+
   // Mutation: drop the call from `enqueueRegionDownloads`, and an area saved
   // or updated keeps no weather run for the overlay to draw offline; pass
   // `false` for `allowCellular`, and a download the user allowed on mobile
-  // data is refused its weather.
-  it("is asked for once per download, with its own box and connection answer", async () => {
+  // data is refused its weather; pass `specs[0]`'s box alone, and a batch
+  // whose first area is elsewhere keeps nothing for the others.
+  it("is asked for once per download, with every box and its connection answer", async () => {
     keepLatestWeather.mockClear();
     enqueueRegionDownloads([
-      { ...job("w-1"), allowCellular: true },
+      { ...job("w-1"), bbox: PERTH, allowCellular: true },
       { ...job("w-2"), allowCellular: true },
     ]);
     await vi.advanceTimersByTimeAsync(0);
     expect(keepLatestWeather.mock.calls).toEqual([
-      [true, { west: 150.2, south: -33.7, east: 150.3, north: -33.6 }],
+      [true, [PERTH, BLUE_MOUNTAINS], 7],
     ]);
+  });
+
+  // Mutation: read the epoch inside the dynamic import's `then`, and a wipe
+  // that lands while the module loads is the epoch the keep starts in.
+  it("passes the wipe epoch read before the import resolves", async () => {
+    keepLatestWeather.mockClear();
+    wipeEpoch.value = 3;
+    enqueueRegionDownloads([job("w-3")]);
+    wipeEpoch.value = 4;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(keepLatestWeather.mock.calls[0]?.[2]).toBe(3);
+    wipeEpoch.value = 7;
+  });
+
+  // Mutation: drop the call from `resumeRegionDownload`, and a Retry on a
+  // stopped download never brings the weather the body says it does.
+  it("is asked for again on a Retry", async () => {
+    enqueueRegionDownloads([{ ...job("w-4"), allowCellular: true }]);
+    await vi.advanceTimersByTimeAsync(0);
+    keepLatestWeather.mockClear();
+    resumeRegionDownload("w-4");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(keepLatestWeather.mock.calls).toEqual([[true, [BLUE_MOUNTAINS], 7]]);
   });
 });
 

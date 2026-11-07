@@ -28,6 +28,7 @@ import {
   regionGroupToastText,
 } from "./regionDownloadGroups";
 import { connectionWorthResuming } from "./networkPolicy";
+import { weatherMapEpoch } from "../weatherMap/weatherMapEpoch";
 import {
   runRegionDownload,
   type PausedReason,
@@ -285,15 +286,30 @@ function installAutoResumeWatchers(): void {
   });
 }
 
+/**
+ * The latest weather run goes with the area, so the overlay draws offline
+ * (ADR 0048): on a save, an update and a Retry alike. Nothing waits on it and
+ * nothing fails for want of it. Every spec's box counts, and the wipe epoch
+ * is read here, before the import awaits.
+ */
+function keepWeatherWith(specs: RegionTaskSpec[]): void {
+  const first = specs[0];
+  if (!first) return;
+  const epoch = weatherMapEpoch();
+  void import("../weatherMap/weatherMapKeep")
+    .then((m) =>
+      m.keepLatestWeather(
+        first.allowCellular,
+        specs.map((spec) => spec.bbox),
+        epoch,
+      ),
+    )
+    .catch(() => {});
+}
+
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
   installAutoResumeWatchers();
-  // The latest weather run goes with the area, so the overlay draws offline
-  // (ADR 0048). Nothing waits on it and nothing fails for want of it.
-  const first = specs[0];
-  if (first)
-    void import("../weatherMap/weatherMapKeep")
-      .then((m) => m.keepLatestWeather(first.allowCellular, first.bbox))
-      .catch(() => {});
+  keepWeatherWith(specs);
   for (const spec of specs) userStopped.delete(spec.groupId);
   jobs = [
     // Settled jobs from an earlier batch are dropped, not kept: the progress
@@ -449,6 +465,8 @@ export function pauseRegionDownload(id: string): void {
 }
 
 export function resumeRegionDownload(id: string): void {
+  const spec = jobs.find((job) => job.spec.id === id)?.spec;
+  if (spec) keepWeatherWith([spec]);
   patch(id, { state: { kind: "queued" } });
   pump();
 }

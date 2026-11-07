@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet } from "react-native";
 
 import {
+  controlSize,
   hitSlop,
   opacity,
   radius,
@@ -89,8 +90,8 @@ export function IconButton({
 
 const styles = StyleSheet.create({
   base: {
-    width: 40,
-    height: 40,
+    width: controlSize.md,
+    height: controlSize.md,
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",

@@ -2,51 +2,52 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   WEATHER_MAP,
   parseWeatherMap,
+  parseWeatherWind,
+  weatherLayerUrl,
   weatherWindUrl,
   windArrows,
   type WeatherLayerKey,
   type WeatherWindFile,
 } from "@logjam/shared";
 import {
-  WEATHER_MANIFEST_MAX_AGE_MS,
-  parseWindFile,
   weatherView,
   type WeatherMapState,
+  type WeatherPick,
 } from "./weatherView";
 
 /** Every user reads the same files from our own origin (ADR 0048). */
 const BASE = window.location.origin;
 
-/** How long a dragged scrubber waits before the map is asked for its step's
- *  archive, so a drag across the week asks for the few it lingers on. */
-const DRAW_AFTER_MS = 150;
-/** The bar's clock and the step it starts on, kept to the minute-ish. */
-const CLOCK_MS = 300_000;
-
 /**
  * The Weather overlay's files while it is on: the manifest, fetched when it is
- * turned on and again then if older than an hour (nothing polls), and the
- * wind arrows' file, once per run and only for a layer that draws them. A
- * failure is only ever `failed`; nothing is logged.
+ * turned on, and again then or when the tab comes back to the front if it is
+ * older than `WEATHER_MAP.refreshAfterMs` (nothing polls), and the wind
+ * arrows' file, once per run and only for a layer that draws them. A failure is
+ * only ever `failed`; nothing is logged.
  *
- * `view` is what the bar shows at once; `drawn` is the same a moment behind the
- * scrubber, which is what the map draws.
+ * What is drawn is `settled`, the step the bar has rested on: the bar holds the
+ * step while it is dragged, so a notch re-renders the bar and not the app.
  */
 export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
   const [state, setState] = useState<WeatherMapState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [pick, setPick] = useState<{ path: string; step: number } | null>(null);
-  const [drawnPick, setDrawnPick] = useState(pick);
+  const [settled, setSettled] = useState<WeatherPick | null>(null);
   const [wind, setWind] = useState<{
     path: string;
     data: WeatherWindFile | null;
   } | null>(null);
   const loadedAt = useRef(0);
+  // The run whose archive went missing and whose manifest was asked for again.
+  const goneFor = useRef<string | null>(null);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (!on) return;
-    if (Date.now() - loadedAt.current < WEATHER_MANIFEST_MAX_AGE_MS) return;
+    if (Date.now() - loadedAt.current < WEATHER_MAP.refreshAfterMs) return;
     const abort = new AbortController();
     setState((prev) =>
       prev.status === "ready" ? prev : { status: "loading" },
@@ -72,27 +73,36 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
 
   useEffect(() => {
     if (!on) return;
+    const onVisible = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - loadedAt.current >= WEATHER_MAP.refreshAfterMs
+      )
+        setAttempt((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [on]);
+
+  useEffect(() => {
+    if (!on) return;
     // At once too: a turn-on starts from the clock as it is, not as it was.
     const tick = () => setNow(Date.now());
     const first = setTimeout(tick, 0);
-    const timer = setInterval(tick, CLOCK_MS);
+    const timer = setInterval(tick, WEATHER_MAP.clockMs);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
   }, [on]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDrawnPick(pick), DRAW_AFTER_MS);
-    return () => clearTimeout(timer);
-  }, [pick]);
-
   const file = state.status === "ready" ? state.file : null;
   const path = file?.path;
-  const chosenIn = (p: typeof pick) => (p && p.path === path ? p.step : null);
-  const base = { on, state, layerKey, now, base: BASE };
-  const view = weatherView({ ...base, chosen: chosenIn(pick) });
-  const drawn = weatherView({ ...base, chosen: chosenIn(drawnPick) });
+  const drawn = weatherView({ on, state, layerKey, pick: settled, now });
+  const drawnUrl =
+    file && drawn.kind === "ready"
+      ? weatherLayerUrl(BASE, file, drawn.layer.key, drawn.step ?? 0)
+      : null;
 
   const drawnStep = drawn.kind === "ready" ? drawn.step : null;
   const wantsWind =
@@ -104,7 +114,7 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     fetch(weatherWindUrl(BASE, file), { signal: abort.signal })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error())))
       .then((raw: unknown) =>
-        setWind({ path: forPath, data: parseWindFile(raw) }),
+        setWind({ path: forPath, data: parseWeatherWind(raw) }),
       )
       .catch(() => {
         if (!abort.signal.aborted) setWind({ path: forPath, data: null });
@@ -120,16 +130,32 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     [wantsWind, drawnStep, wind, path],
   );
 
-  const setStep = useCallback(
-    (step: number) => path && setPick({ path, step }),
-    [path],
-  );
+  /** An archive the manifest names is gone (the job pruned that run): drop the
+   *  manifest and ask once for the current one. The same run twice means it is
+   *  the current one, and it is failed. */
+  const archiveGone = useCallback(() => {
+    const s = stateRef.current;
+    if (s.status !== "ready") return;
+    stateRef.current = { status: "loading" };
+    loadedAt.current = 0;
+    if (goneFor.current === s.file.path) {
+      stateRef.current = { status: "failed" };
+      setState(stateRef.current);
+      return;
+    }
+    goneFor.current = s.file.path;
+    setState(stateRef.current);
+    setAttempt((n) => n + 1);
+  }, []);
 
   return {
-    view,
-    drawn,
+    state,
+    now,
+    drawnUrl,
     arrows,
-    setStep,
+    settled,
+    settle: setSettled,
+    archiveGone,
     retry: () => setAttempt((n) => n + 1),
   };
 }

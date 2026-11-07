@@ -30,7 +30,7 @@ describe("weatherSource", () => {
       {
         status: "ok",
         sourceType: "raster-dem",
-        url: "pmtiles://https://cdn.example/master/weather/v1/runs/20261107T0000Z/rain/002.pmtiles",
+        url: "pmtiles://https://cdn.example/master/weather/v1/runs/20261107T0000Z-20261107T0900Z/rain/002.pmtiles",
         origin: "remote",
       },
     );
@@ -47,7 +47,7 @@ describe("weatherSource", () => {
     );
     expect(kept).toMatchObject({ origin: "local" });
     expect(kept?.url).toBe(
-      "pmtiles://file:///data/weather-map/master/weather/v1/runs/20261107T0000Z/totals/rainNext24.pmtiles",
+      "pmtiles://file:///data/weather-map/master/weather/v1/runs/20261107T0000Z-20261107T0900Z/totals/rainNext24.pmtiles",
     );
   });
 

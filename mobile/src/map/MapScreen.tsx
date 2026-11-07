@@ -94,6 +94,7 @@ import {
   landNameOf,
   coverageNameOf,
   normalizeCarrier,
+  WEATHER_MAP,
   weatherLayer,
   type OverlayTerrainKey,
   type WeatherLayerKey,
@@ -1714,7 +1715,10 @@ export function MapScreen({
   });
   // The scrubber moves at once; the map follows when it rests, so a drag
   // doesn't open an archive per step passed.
-  const weatherStep = useSettled(weatherDrawnStep(weatherBar), 150);
+  const weatherStep = useSettled(
+    weatherDrawnStep(weatherBar),
+    WEATHER_MAP.settleMs,
+  );
   const weatherDrawn = useMemo(
     () =>
       weatherOn && weather.file && weatherStep !== null

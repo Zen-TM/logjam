@@ -9,13 +9,14 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   WEATHER_MAP,
   parseWeatherMap,
+  parseWeatherWind,
   type WeatherMapFile,
   type WeatherWindFile,
   weatherWindUrl,
 } from "@logjam/shared";
 
 import { WEATHER_MAP_DIR } from "../offline/localStores";
-import { parseWeatherWind } from "./weatherMapRun";
+import { bumpWeatherMapEpoch } from "./weatherMapEpoch";
 
 /** `weatherLayerUrl`'s `base` for the kept copy. */
 export const KEPT_WEATHER_BASE = WEATHER_MAP_DIR.replace(/\/$/, "");
@@ -52,12 +53,8 @@ export async function readKeptWind(
 
 // A wipe bumps the epoch so a download begun before it cannot write after it
 // (the pattern of gauges/gaugeStorage.ts).
-let epoch = 0;
 let job: Promise<unknown> = Promise.resolve();
 const listeners = new Set<() => void>();
-
-/** Read when a download begins; check it before every write. */
-export const weatherMapEpoch = (): number => epoch;
 
 /** The download in flight, so a wipe can wait for it to stop. */
 export function holdForWipe(running: Promise<unknown>): void {
@@ -66,7 +63,7 @@ export function holdForWipe(running: Promise<unknown>): void {
 
 /** Called by the sign-out wipe: the download stops at its next file. */
 export async function stopWeatherMapForWipe(): Promise<void> {
-  epoch += 1;
+  bumpWeatherMapEpoch();
   await job.catch(() => {});
 }
 

@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
-import type { WeatherMapFile, WeatherWindFile } from "@logjam/shared";
+import {
+  WEATHER_MAP,
+  type WeatherMapFile,
+  type WeatherWindFile,
+} from "@logjam/shared";
 
 import { config } from "../config";
 import { chooseWeatherRun } from "./weatherMapChoice";
 import { fetchWeatherManifest, fetchWeatherWind } from "./weatherMapFeed";
+import { weatherFetchDue } from "./weatherMapRefetch";
 import {
   KEPT_WEATHER_BASE,
   onKeptWeatherChange,
   readKeptWeather,
   readKeptWind,
 } from "./weatherMapStorage";
-
-/** A manifest older than this is fetched again when the app comes to the front. */
-export const WEATHER_REFRESH_MS = 3_600_000;
-/** The bar's "Updated 3 h ago" moves while the app is in front. */
-const TICK_MS = 5 * 60_000;
 
 /** The run kept with the saved areas, or null; reads again when one is kept. */
 export function useKeptWeather(): WeatherMapFile | null {
@@ -62,12 +62,20 @@ export function useWeatherMap(
   const [answered, setAnswered] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [attempt, setAttempt] = useState(0);
-  const fetchedAt = useRef(0);
+  const fetchedAt = useRef<number | null>(null);
 
   const ask = `${online}:${attempt}`;
   useEffect(() => {
     if (!enabled || !online) return;
-    if (fetched && Date.now() - fetchedAt.current < WEATHER_REFRESH_MS) return;
+    if (
+      !weatherFetchDue({
+        enabled,
+        online,
+        fetchedAt: fetched ? fetchedAt.current : null,
+        now: Date.now(),
+      })
+    )
+      return;
     let live = true;
     void fetchWeatherManifest().then((got) => {
       if (!live) return;
@@ -93,7 +101,7 @@ export function useWeatherMap(
     let tick: ReturnType<typeof setInterval> | undefined;
     const start = () => {
       clearInterval(tick);
-      tick = setInterval(() => setNow(Date.now()), TICK_MS);
+      tick = setInterval(() => setNow(Date.now()), WEATHER_MAP.clockMs);
     };
     if (AppState.currentState === "active") start();
     const app = AppState.addEventListener("change", (state) => {
@@ -101,7 +109,15 @@ export function useWeatherMap(
       if (state !== "active") return;
       setNow(Date.now());
       start();
-      if (Date.now() - fetchedAt.current >= WEATHER_REFRESH_MS)
+      // Online is the effect's to judge: this only asks it to look again.
+      if (
+        weatherFetchDue({
+          enabled: true,
+          online: true,
+          fetchedAt: fetchedAt.current,
+          now: Date.now(),
+        })
+      )
         setAttempt((a) => a + 1);
     });
     return () => {

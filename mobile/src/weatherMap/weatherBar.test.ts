@@ -2,7 +2,7 @@ import { MAP_TERRAIN } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { weatherFixture as file } from "./weatherMapFixture";
-import { clampStep, weatherBarModel, weatherDrawnStep } from "./weatherBar";
+import { weatherBarModel, weatherDrawnStep } from "./weatherBar";
 
 const copy = MAP_TERRAIN.copy;
 // 10 am Sydney time on the 7th is 23:00Z the day before; the steps are in UTC,
@@ -33,10 +33,10 @@ describe("weatherBarModel", () => {
   // Mutation: let `picked` through unclamped, and a pick from the run before
   // (more steps) indexes past this run's last archive.
   it("holds a pick to the steps the run has and from now on", () => {
-    expect(clampStep(99, 1, 3)).toBe(3);
-    expect(clampStep(-4, 1, 3)).toBe(1);
-    const model = weatherBarModel({ ...base, picked: 99 });
-    expect(model.kind === "ready" && model.scrub?.step).toBe(3);
+    const past = weatherBarModel({ ...base, picked: 99 });
+    expect(past.kind === "ready" && past.scrub?.step).toBe(3);
+    const early = weatherBarModel({ ...base, picked: -4 });
+    expect(early.kind === "ready" && early.scrub?.step).toBe(1);
   });
 
   // Mutation: draw a stepped layer from a run whose steps are all past, and

@@ -114,6 +114,45 @@ async function openAnnouncement(page: Page, narrow = false) {
   return dialog;
 }
 
+// Stubbed: the manifest is a public file, and the archives fail like a dropped
+// connection, which the map retries and is not a pruned run (the bar and the
+// legend are what is measured, not the field).
+async function stubWeatherManifest(page: Page) {
+  await page.route("**/master/weather/v1/runs/**", (route) => route.abort());
+  const hour = 3_600_000;
+  const start = Math.ceil(Date.now() / hour) * hour;
+  await page.route("**/master/weather/v1/latest.json", (route) =>
+    route.fulfill({
+      json: {
+        format: 1,
+        model: "ecmwf_ifs",
+        run: new Date(start - 9 * hour).toISOString(),
+        built: new Date(start - hour).toISOString(),
+        anchor: new Date(start).toISOString(),
+        path: "runs/20261107T0000Z-20261107T0900Z/",
+        bounds: [139, -39.5, 156, -26],
+        zoom: 5,
+        steps: Array.from({ length: 24 }, (_, i) => ({
+          time: new Date(start + i * hour).toISOString(),
+          hours: 1,
+        })),
+        totals: [],
+        attribution: "",
+      },
+    }),
+  );
+}
+
+// Weather on from the Overlays list, its legend open.
+async function showWeather(page: Page) {
+  await openApp(page);
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  const layers = page.getByRole("dialog", { name: "Map layers" });
+  await layers.getByRole("radio", { name: /^Overlays/ }).click();
+  await layers.getByRole("switch", { name: "Show weather" }).click();
+  await layers.getByRole("button", { name: "About the weather map" }).click();
+}
+
 test.describe("desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -1226,45 +1265,16 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
-  // Stubbed: the manifest is a public file, and the archives are left to 404
-  // (the bar and the legend are what is measured, not the field).
   test("the Weather bar and its legend", async ({ page }) => {
-    const hour = 3_600_000;
-    const start = Math.ceil(Date.now() / hour) * hour;
-    await page.route("**/master/weather/v1/latest.json", (route) =>
-      route.fulfill({
-        json: {
-          format: 1,
-          model: "ecmwf_ifs",
-          run: new Date(start - 9 * hour).toISOString(),
-          built: new Date(start - hour).toISOString(),
-          anchor: new Date(start).toISOString(),
-          path: "runs/20261107T0000Z/",
-          bounds: [139, -39.5, 156, -26],
-          zoom: 5,
-          steps: Array.from({ length: 24 }, (_, i) => ({
-            time: new Date(start + i * hour).toISOString(),
-            hours: 1,
-          })),
-          totals: [],
-          attribution: "",
-        },
-      }),
-    );
-    await openApp(page);
-    await page.getByRole("button", { name: "Layers", exact: true }).click();
-    const layers = page.getByRole("dialog", { name: "Map layers" });
-    await layers.getByRole("radio", { name: /^Overlays/ }).click();
-    await layers.getByRole("switch", { name: "Show weather" }).click();
-    await layers.getByRole("button", { name: "About the weather map" }).click();
+    await stubWeatherManifest(page);
+    await showWeather(page);
     const legend = page.getByRole("dialog", { name: "Weather" });
     await expect(legend).toBeVisible();
     await expectNoViolations(page, "dialog");
     await legend.getByLabel("Close").click();
     await page.keyboard.press("Escape");
-    const bar = page.getByRole("region", { name: "Weather" });
-    await expect(bar.getByRole("slider")).toBeVisible();
-    await expectNoViolations(page, "section[aria-label='Weather']");
+    await expect(page.getByRole("slider")).toBeVisible();
+    await expectNoViolations(page, "[data-tone='info']");
   });
 
   // Stubbed: the gauge file is public and never fetched from prod here.
@@ -1963,6 +1973,27 @@ test.describe("narrow web", () => {
     const dialog = await openAnnouncement(page, true);
     await expectNoViolations(page, "dialog");
     expect((await dialog.boundingBox())!.width).toBe(390);
+  });
+
+  test("the Weather legend and bar at phone width", async ({ page }) => {
+    await stubWeatherManifest(page);
+    await showWeather(page);
+    await expectNoViolations(page, "dialog");
+    expect(
+      (await page.getByRole("dialog").last().boundingBox())!.width,
+    ).toBeLessThanOrEqual(390);
+    await page
+      .getByRole("dialog", { name: "Weather" })
+      .getByLabel("Close")
+      .click();
+    await page.keyboard.press("Escape");
+    const slider = page.getByRole("slider");
+    await expect(slider).toBeVisible();
+    await expectNoViolations(page, "[data-tone='info']");
+    // Inside the phone: not past either edge.
+    const box = (await slider.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
   });
 
   test("the tab bar and its More menu", async ({ page }) => {

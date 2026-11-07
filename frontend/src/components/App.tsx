@@ -540,8 +540,8 @@ function App() {
   const { contours, weather, coverage, fire, slope, land, hillshade } =
     terrainLayers;
   const weatherMap = useWeatherMap(weather, weatherLayerKey);
-  const weatherUrl =
-    weatherMap.drawn.kind === "ready" ? weatherMap.drawn.url : null;
+  const weatherUrl = weatherMap.drawnUrl;
+  const { archiveGone: weatherArchiveGone } = weatherMap;
   const mapWeather = useMemo(
     () => ({ layer: weatherLayerKey, arrows: weatherMap.arrows }),
     [weatherLayerKey, weatherMap.arrows],
@@ -599,6 +599,10 @@ function App() {
       const terrainKey = TERRAIN_LAYER_KEYS.find(
         (key) => TERRAIN_ENTRIES[key].id === entryId,
       );
+      if (terrainKey === "weather") {
+        weatherArchiveGone();
+        return;
+      }
       if (terrainKey) {
         toast.error(
           `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
@@ -612,7 +616,7 @@ function App() {
         );
       }
     },
-    [toast],
+    [toast, weatherArchiveGone],
   );
 
   const startPickingCoords = useCallback(
@@ -1605,7 +1609,7 @@ function App() {
     setSelectedPlanId(null);
     setActivePanel(null);
   };
-  const notices = planOnMap ? (
+  const mapNotice = planOnMap ? (
     <Notice
       icon="plan"
       twoLines
@@ -1639,6 +1643,22 @@ function App() {
       Places filter: {filteredPlaces.length} of {allPlaces.length} shown
     </Notice>
   ) : null;
+  const notices = weather ? (
+    <>
+      {mapNotice}
+      <WeatherBar
+        state={weatherMap.state}
+        layerKey={weatherLayerKey}
+        now={weatherMap.now}
+        settled={weatherMap.settled}
+        onSettle={weatherMap.settle}
+        online={online}
+        onRetry={weatherMap.retry}
+      />
+    </>
+  ) : (
+    mapNotice
+  );
 
   // Opening Make a map anew: no stale form, and no pick result from last time.
   const freshExportDialog = () => {
@@ -2177,14 +2197,6 @@ function App() {
             slopeBands={slopeBands.drawn}
             coverageCarrier={coverageCarrier}
             weather={mapWeather}
-            weatherBar={
-              <WeatherBar
-                view={weatherMap.view}
-                online={online}
-                onStep={weatherMap.setStep}
-                onRetry={weatherMap.retry}
-              />
-            }
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
