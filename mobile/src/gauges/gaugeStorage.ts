@@ -1,18 +1,21 @@
-// The last river gauge file on this phone (ADR 0044). It is public and the
-// same for everyone; it is wiped anyway because every on-device store joins
-// the wipe (ADR 0006).
+// The last river gauge file on this phone (ADR 0044), and the last rain gauge
+// file (ADR 0047). Both are public and the same for everyone; they are wiped
+// anyway because every on-device store joins the wipe (ADR 0006).
 import * as FileSystem from "expo-file-system/legacy";
 import {
   gaugeHistoryUrl,
   parseGaugeHistory,
   parseGaugeLatest,
+  parseRainFile,
   type GaugeHistoryFile,
   type GaugeLatestFile,
+  type RainFile,
 } from "@logjam/shared";
 
 import { GAUGES_DIR } from "../offline/localStores";
 
 const FILE = `${GAUGES_DIR}latest.json`;
+const RAIN_FILE = `${GAUGES_DIR}rain.json`;
 const HISTORY_DIR = `${GAUGES_DIR}history/`;
 
 /** A gauge's history path, or null for an id that is not a station number. */
@@ -24,6 +27,18 @@ export async function readCachedGauges(): Promise<GaugeLatestFile | null> {
   try {
     return parseGaugeLatest(
       JSON.parse(await FileSystem.readAsStringAsync(FILE)),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Sends nothing: the kept rain gauge file, or null. Its days are dated, so
+ *  an old one is still true: it only covers fewer of the days shown. */
+export async function readCachedRain(): Promise<RainFile | null> {
+  try {
+    return parseRainFile(
+      JSON.parse(await FileSystem.readAsStringAsync(RAIN_FILE)),
     );
   } catch {
     return null;
@@ -70,6 +85,11 @@ export function stopGaugesForWipe(): Promise<void> {
  *  cache, which the next fetch restores. */
 export function cacheGauges(text: string, fetchEpoch: number): Promise<void> {
   return keep(FILE, text, fetchEpoch);
+}
+
+/** Keeps an already parsed rain gauge file. */
+export function cacheRain(text: string, fetchEpoch: number): Promise<void> {
+  return keep(RAIN_FILE, text, fetchEpoch);
 }
 
 /** Keeps an already parsed history file for the gauge. */

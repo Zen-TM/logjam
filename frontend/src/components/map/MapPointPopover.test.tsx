@@ -129,7 +129,8 @@ describe("MapPointPopover weather", () => {
       screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
     );
     await act(async () => {});
-    expect(fetch).toHaveBeenCalledTimes(1);
+    // The forecast, and the rain gauge file the same press asks for.
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
     // The facts are gone while the forecast is up, and Back returns to Options.
     expect(screen.queryByText(MAP_POINT.copy.position)).toBeNull();

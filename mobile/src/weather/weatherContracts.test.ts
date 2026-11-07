@@ -43,8 +43,10 @@ describe("Logjam GPS draws what the weather contracts name", () => {
 
   it("draws the rows the shared module shapes, with the shared card", () => {
     const view = read("./WeatherView.tsx");
-    expect(view).toContain("weatherRows(forecast, now)");
+    expect(view).toContain("weatherRows(forecast, now, weather.rain)");
     expect(view).toContain("cards={found.cards}");
+    // Every gauge's row, not the first. Mutation: `rows.find` → red.
+    expect(view).toContain(".filter((r) => r.key === row)");
     // A horizontal scroller that hands the sheet its vertical drags.
     const rail = read("../ui/ForecastRail.tsx");
     expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);

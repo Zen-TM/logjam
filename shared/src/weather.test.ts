@@ -341,11 +341,60 @@ describe("weatherRows", () => {
       temperature: null,
       wind: null,
     });
-    const gauged = weatherRows(
-      { ...forecast, past: { ...forecast.past, source: "gauge" } },
-      spotNine,
-    );
-    expect(gauged[2].title).toBe("Rain gauge, past 7 days");
+    expect(byKey.past.note).toBeNull();
+    expect(byKey.past.cards.every((card) => card.note === null)).toBe(true);
+  });
+
+  describe("with rain gauges near", () => {
+    // The fixture's past days are 11 to 17 Oct.
+    const gauge = (name: string, distanceM: number, mm: (number | null)[]) => ({
+      gauge: { id: name, name, lat: 0, lon: 0, mm: [] },
+      distanceM,
+      mm,
+    });
+    const rain = {
+      attribution: "© Made-up owner",
+      gauges: [
+        gauge("MADE UP TBRG", 3460, [0, 30, 0, 1.5, 12, null, null]),
+        gauge("OTHER CK @ DAM", 9040, [2, 41, 0, 0, null, null, null]),
+      ],
+    };
+    const gauged = weatherRows(forecast, spotNine, rain);
+    const past = gauged.filter((row) => row.key === "past");
+
+    it("draws a row for each gauge, named, with its distance", () => {
+      expect(past.map((row) => row.title)).toEqual([
+        "Rain gauge at Made Up TBRG, 3.5 km",
+        "Rain gauge at Other Creek at Dam, 9.0 km",
+      ]);
+      expect(past[0].summary).toBe("56\u00a0mm");
+      // Mutation: put the note on every row, or on none → red.
+      expect(past.map((row) => row.note)).toEqual([
+        null,
+        WEATHER.copy.gaugeNote,
+      ]);
+    });
+
+    // A day the gauge has not sent is Open-Meteo's figure, marked: never a
+    // dash, which reads as dry. Mutation: draw a null day as 0, or drop the
+    // note → red.
+    it("fills a day the gauge has none for from the model, marked", () => {
+      const cards = past[0].cards;
+      expect(cards[1]).toMatchObject({ rain: "30\u00a0mm", note: null });
+      expect(cards[5]).toMatchObject({ rain: "12\u00a0mm", note: "Model" });
+      expect(cards[6]).toMatchObject({ rain: "0.1\u00a0mm", note: "Model" });
+      expect(cards[5].spoken).toBe("Fri 16, rain 12\u00a0mm, modelled");
+      expect(cards[0]).toMatchObject({ rain: "–", note: null });
+      expect(cards[0].spoken).toBe("Sun 11, no rain");
+    });
+
+    it("says so when no gauge is near, and nothing when the file is missing", () => {
+      const none = weatherRows(forecast, spotNine, { ...rain, gauges: [] });
+      const row = none.find((r) => r.key === "past");
+      expect(row?.title).toBe("Modelled rain, past 7 days");
+      expect(row?.note).toBe(WEATHER.copy.noGaugeNear);
+      expect(WEATHER.copy.noGaugeNear).toContain("15 km");
+    });
   });
 
   // A bar reads against its row, with a floor so a drizzle isn't a downpour.

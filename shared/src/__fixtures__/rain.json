@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-30T12:00:00Z",
+  "attribution": "Rain gauges: \u00a9 State of New South Wales through WaterNSW, via the Bureau of Meteorology.",
+  "start": "2026-10-20",
+  "gauges": [
+    {
+      "id": "900101",
+      "name": "MADE UP TBRG",
+      "lat": -33.7,
+      "lon": 150.3,
+      "mm": [0.0, 12.5, null, null, null, 0.5, 0.0, 41.0, 2.0, null]
+    },
+    {
+      "id": "900102",
+      "name": "Made Up Dam",
+      "lat": -33.9,
+      "lon": 150.1,
+      "mm": [null, null, null, null, null, null, null, null, null, null]
+    }
+  ]
+}

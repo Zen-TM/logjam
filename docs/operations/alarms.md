@@ -176,7 +176,10 @@ every two hours from its own schedule group. A run that fails before publishing
 (key, no hot readings, refusing to publish) leaves
 `master/gauges/v1/latest.json` as it was, and clients show its age. A cold
 sweep that fails part way publishes the hot readings first, then exits
-non-zero. The
+non-zero. Each run first publishes `rain.json`, the rain gauges' daily totals
+from BoM ([0047](../decisions/0047-measured-rain-is-a-public-file-from-waternsw-gauges.md));
+if that fails, the river files are still published and the run exits
+non-zero at the end. The
 task reads WaterNSW's key from the Secrets Manager secret
 `logjam/waternsw-api-key`, whose value is set by hand. Its quota is 29 calls a
 day: do not start extra runs.
@@ -196,7 +199,10 @@ non-zero exits and failed starts.
    "the cold sweep failed part way" means one of the daily sweep's calls
    failed: the hot readings were still published and the sweep stopped to
    save the quota. If no chunk got through, the next run sweeps again; if
-   some did, the rest wait for tomorrow.
+   some did, the rest wait for tomorrow. "the rain step failed" (after "rain
+   left for the next run: …") means a BoM call for the rain file failed: the
+   old `rain.json` stays and the next run tries again. BoM's calls spend none
+   of WaterNSW's quota.
 3. Do not rerun by hand in a loop: each run spends calls from the day's 29.
 
 ### `logjam-gauges-not-launched`

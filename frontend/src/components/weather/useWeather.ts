@@ -6,10 +6,14 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
+  RAIN_PATH,
   WEATHER_MODEL_DEFAULT,
   fetchForecast,
   isWeatherModelId,
+  nearbyRain,
+  parseRainFile,
   weatherCell,
+  type PastRain,
   type WeatherForecast,
   type WeatherModelId,
 } from "@logjam/shared";
@@ -21,7 +25,21 @@ export type WeatherState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "failed" }
-  | { status: "ready"; forecast: WeatherForecast; now: number };
+  | {
+      status: "ready";
+      forecast: WeatherForecast;
+      now: number;
+      /** The gauges near the spot, or null when their file couldn't be had. */
+      rain: PastRain | null;
+    };
+
+/** The public rain gauge file (ADR 0047), or null on any failure: the past
+ *  days then show the model's figures, as they did before gauges. */
+function fetchRain(signal: AbortSignal) {
+  return fetch(`/${RAIN_PATH}`, { signal })
+    .then((res) => (res.ok ? res.json() : null))
+    .then(parseRainFile, () => null);
+}
 
 function subscribe(onChange: () => void) {
   window.addEventListener("online", onChange);
@@ -44,6 +62,8 @@ export function useOnline(): boolean {
  * The forecast for a spot (ADR 0038). Nothing is asked until `load` is called
  * from a press, and nothing is kept: closing the view drops the forecast. A
  * failure is only ever `failed`, never the error, which could carry the cell.
+ * The same press fetches the rain gauge file, the same for everyone, and the
+ * gauges near the spot are picked here (ADR 0047).
  *
  * The model is a per-device preference, read by every view that shows a
  * forecast. Choosing one asks again at once: the press that picked it is the
@@ -76,12 +96,21 @@ export function useWeather(
       const abort = new AbortController();
       controller.current = abort;
       setState({ status: "loading" });
-      fetchForecast(weatherCell({ latitude, longitude }, elevationM, which), {
-        signal: abort.signal,
-      }).then(
-        (forecast) => {
-          if (!abort.signal.aborted)
-            setState({ status: "ready", forecast, now: Date.now() });
+      Promise.all([
+        fetchForecast(weatherCell({ latitude, longitude }, elevationM, which), {
+          signal: abort.signal,
+        }),
+        fetchRain(abort.signal),
+      ]).then(
+        ([forecast, file]) => {
+          if (abort.signal.aborted) return;
+          const dates = forecast.past.days.map((day) => day.date);
+          setState({
+            status: "ready",
+            forecast,
+            now: Date.now(),
+            rain: file && nearbyRain(file, { latitude, longitude }, dates),
+          });
         },
         () => {
           if (!abort.signal.aborted) setState({ status: "failed" });

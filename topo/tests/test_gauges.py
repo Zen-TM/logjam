@@ -326,7 +326,7 @@ class FrozenDatetime(datetime):
         return NOW.astimezone(tz)
 
 
-def run_with(s3, gauges, fetch, bom=None, env=True):
+def run_with(s3, gauges, fetch, bom=None, env=True, rain=None):
     fake_boto3 = mock.Mock()
     fake_boto3.client.return_value = s3
     patches = [
@@ -337,6 +337,7 @@ def run_with(s3, gauges, fetch, bom=None, env=True):
         mock.patch.object(
             g, "fetch_daily", bom or (lambda *a: {"2026-10-01": [1.0, 2.0]})
         ),
+        mock.patch.object(g, "publish_rain", rain or (lambda *a: None)),
         mock.patch.object(g.time, "sleep"),
         # Without it the fixtures' readings age past READINGS_DAYS a week after
         # NOW and are dropped.
@@ -503,6 +504,199 @@ class TestRun(unittest.TestCase):
     def test_a_missing_key_stops_before_any_request(self):
         with self.assertRaises(SystemExit):
             run_with(FakeS3(), FIXTURE_GAUGES, self.fresh, env=False)
+
+
+FIXTURE_RAIN = [
+    {
+        "id": "900101",
+        "name": "MADE UP TBRG",
+        "lat": -33.7,
+        "lon": 150.3,
+        "ts": "11",
+        "rawTs": "12",
+    },
+    {
+        "id": "900102",
+        "name": "Made Up Dam",
+        "lat": -33.9,
+        "lon": 150.1,
+        "ts": "21",
+        "rawTs": "22",
+    },
+]
+
+
+def wdo_day(day, value, quality=140):
+    """A WDO daily total, stamped at the end of its 9am-to-9am period."""
+    return [f"{day}T09:00:00.000+10:00", value, quality]
+
+
+# Tips reach 29 Oct 09:00:01 AEST: the total stamped 29 Oct is whole, the
+# one stamped 30 Oct (summed from part of its day) is not.
+RAIN_COMPLETE_TO = datetime.fromisoformat("2026-10-29T09:00:01.000+10:00")
+FIXTURE_RAIN_DATA = [
+    wdo_day("2026-10-21", 0.0),
+    wdo_day("2026-10-22", 12.5, 10),
+    wdo_day("2026-10-23", None),
+    wdo_day("2026-10-24", 3.0, -1),
+    wdo_day("2026-10-25", 5000.0),
+    wdo_day("2026-10-26", 0.5),
+    wdo_day("2026-10-27", 0.0),
+    wdo_day("2026-10-28", 41.0),
+    wdo_day("2026-10-29", 2.0),
+    wdo_day("2026-10-30", 0.5),
+]
+
+
+def fixture_rain():
+    days = {"11": g.rain_days(FIXTURE_RAIN_DATA, RAIN_COMPLETE_TO), "21": {}}
+    return g.build_rain(FIXTURE_RAIN, days, NOW)
+
+
+class TestRain(unittest.TestCase):
+    def test_builder_writes_the_shared_rain_fixture(self):
+        # Mutation: rename a rain.json field, or shift `start` a day → red,
+        # and rainGauges.test.ts would read a file the builder no longer
+        # writes.
+        check_fixture(self, "rain.json", fixture_rain())
+
+    def test_a_day_without_a_whole_total_is_null_never_dry(self):
+        # Mutation: drop the null, missing-quality, coverage or range check
+        # → red; a gauge with no data, or half a day of it, would read as a
+        # dry day.
+        days = g.rain_days(FIXTURE_RAIN_DATA, RAIN_COMPLETE_TO)
+        self.assertEqual(
+            days,
+            {
+                "2026-10-20": 0.0,
+                "2026-10-21": 12.5,
+                "2026-10-25": 0.5,
+                "2026-10-26": 0.0,
+                "2026-10-27": 41.0,
+                "2026-10-28": 2.0,
+            },
+        )
+        self.assertEqual(g.rain_days(FIXTURE_RAIN_DATA, None), {})
+
+    def test_a_total_is_dated_by_the_morning_it_began(self):
+        # Mutation: date a total by its end stamp → red; the storm of one
+        # afternoon would be drawn on the next day.
+        self.assertEqual(g.period_start("2026-11-04T09:00:00.000+10:00"), "2026-11-03")
+
+    def test_the_file_holds_the_days_before_today_in_aest(self):
+        doc = fixture_rain()
+        # NOW is 30 Oct 22:00 AEST: the newest period began 29 Oct.
+        self.assertEqual(doc["start"], "2026-10-20")
+        self.assertEqual(len(doc["gauges"][0]["mm"]), g.RAIN_DAYS)
+        self.assertEqual(doc["gauges"][1]["mm"], [None] * g.RAIN_DAYS)
+
+    def test_a_faulty_year_is_dropped_from_the_registry(self):
+        # Mutation: drop either test in rain_fault → red; a running counter
+        # (Stonequarry Creek's, 2026) or a gauge of daily spikes (Cobbong's)
+        # would draw thousands of millimetres.
+        dry_year = [0.0] * 300 + [5.0] * 60 + [120.0] * 2
+        self.assertFalse(g.rain_fault(dry_year))
+        self.assertTrue(g.rain_fault([float(3000 + i) for i in range(360)]))
+        self.assertTrue(g.rain_fault([0.0] * 300 + [150.0] * 11))
+        self.assertTrue(g.rain_fault([]))
+
+    def test_every_listed_rain_gauge_is_a_station_with_series(self):
+        # Mutation: list an id with letters, a duplicate, or a series id that
+        # is not a number → red; each lands in a WDO query.
+        listed = g.load_rain_gauges()
+        self.assertGreater(len(listed), 100)
+        self.assertEqual(len({x["id"] for x in listed}), len(listed))
+        for x in listed:
+            self.assertRegex(x["id"], r"^\d+$")
+            self.assertRegex(x["ts"], r"^\d+$")
+            self.assertRegex(x["rawTs"], r"^\d+$")
+
+    def test_rain_urls_hold_only_series_ids_and_constants(self):
+        # Mutation: add any other value (a place, a user, a coordinate) to a
+        # rain query → red.
+        urls = []
+
+        def fake(url, timeout=60):
+            urls.append(url)
+            if "getTimeseriesList" in url:
+                return [
+                    ["ts_id", "from", "to"],
+                    ["12", "", "2026-10-29T09:00:01.000+10:00"],
+                ]
+            return [{"ts_id": "11", "data": FIXTURE_RAIN_DATA}]
+
+        with (
+            mock.patch.object(g, "http_get", fake),
+            mock.patch.object(g, "load_rain_gauges", lambda: FIXTURE_RAIN),
+            mock.patch.object(g.time, "sleep"),
+        ):
+            g.publish_rain(FakeS3(), "bucket", NOW)
+        allowed = {
+            "service": "kisters",
+            "type": "QueryServices",
+            "format": "json",
+            "datasource": "0",
+            "request": "getTimeseriesList|getTimeseriesValues",
+            "ts_id": r"\d+(,\d+)*",
+            "from": r"\d{4}-\d\d-\d\d",
+            "to": r"\d{4}-\d\d-\d\d",
+            "returnfields": r"ts_id,coverage|Timestamp,Value,Quality\+Code",
+        }
+        self.assertEqual(len(urls), 2)
+        for url in urls:
+            for key, value in re.findall(r"[?&]([^=]+)=([^&]*)", url):
+                self.assertIn(key, allowed)
+                self.assertRegex(value, "^(%s)$" % allowed[key])
+
+    def test_publish_writes_rain_json_with_the_whole_days(self):
+        s3 = FakeS3()
+
+        def fake(url, timeout=60):
+            if "getTimeseriesList" in url:
+                return [
+                    ["ts_id", "from", "to"],
+                    ["12", "", "2026-10-29T09:00:01.000+10:00"],
+                ]
+            return [{"ts_id": "11", "data": FIXTURE_RAIN_DATA}]
+
+        with (
+            mock.patch.object(g, "http_get", fake),
+            mock.patch.object(g, "load_rain_gauges", lambda: FIXTURE_RAIN),
+            mock.patch.object(g.time, "sleep"),
+        ):
+            g.publish_rain(s3, "bucket", NOW)
+        self.assertEqual(s3.doc("rain.json"), fixture_rain())
+        self.assertEqual(
+            dict(s3.puts)[g.S3_PREFIX + "rain.json"]["CacheControl"],
+            "public, max-age=3600",
+        )
+
+    def test_a_rain_failure_still_publishes_latest_and_exits_non_zero(self):
+        # Mutation: let the rain error escape before latest.json → red (the
+        # river readings stop with it); swallow it → red (the alarm never
+        # fires).
+        def boom(*a):
+            raise OSError("BoM down")
+
+        s3 = FakeS3()
+        with self.assertRaises(SystemExit):
+            run_with(
+                s3, FIXTURE_GAUGES, lambda i, k: TestRun.fresh(None, i, k), rain=boom
+            )
+        self.assertIn(g.S3_PREFIX + "latest.json", s3.store)
+
+    def test_rain_is_published_even_when_waternsw_fails(self):
+        # Mutation: publish rain after the hot fetch → red.
+        published = []
+
+        def down(ids, key):
+            raise OSError("WaterNSW down")
+
+        with self.assertRaises(OSError):
+            run_with(
+                FakeS3(), FIXTURE_GAUGES, down, rain=lambda *a: published.append(1)
+            )
+        self.assertEqual(published, [1])
 
 
 if __name__ == "__main__":

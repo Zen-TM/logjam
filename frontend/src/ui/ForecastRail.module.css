@@ -116,6 +116,11 @@
   background: var(--color-accent);
 }
 
+/* A figure the row's source didn't give (a gauge's modelled day). */
+.fill[data-muted="true"] {
+  background: var(--color-text-muted);
+}
+
 .rain {
   composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text);

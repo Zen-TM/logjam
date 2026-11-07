@@ -2,11 +2,12 @@
 // parse (a bad file replaces a good one); fetch while offline-only; drop the
 // five-minute debounce; keep the throttle across a wipe (`lastOkEpoch`).
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GAUGE_LATEST_PATH, gaugeHistoryUrl } from "@logjam/shared";
+import { GAUGE_LATEST_PATH, RAIN_PATH, gaugeHistoryUrl } from "@logjam/shared";
 
 import {
   refreshGauges,
   refreshGaugeHistories,
+  refreshRain,
   resetGaugeFeed,
 } from "./gaugeFeed";
 import { gaugeFixture } from "./gaugeFixture";
@@ -15,6 +16,7 @@ const h = vi.hoisted(() => ({
   fetch: vi.fn(),
   cache: vi.fn(async () => {}),
   cacheHistory: vi.fn(async (..._args: unknown[]) => {}),
+  cacheRain: vi.fn(async (..._args: unknown[]) => {}),
   kept: null as { ageMs: number } | null,
   offlineOnly: false,
   canRun: true,
@@ -32,6 +34,7 @@ vi.mock("../offline/networkPolicy", () => ({
 vi.mock("./gaugeStorage", () => ({
   cacheGauges: h.cache,
   cacheGaugeHistory: h.cacheHistory,
+  cacheRain: h.cacheRain,
   readCachedGaugeHistory: async () => h.kept,
   gaugesEpoch: () => h.epoch,
 }));
@@ -44,6 +47,7 @@ beforeEach(() => {
   h.fetch.mockReset();
   h.cache.mockClear();
   h.cacheHistory.mockClear();
+  h.cacheRain.mockClear();
   h.kept = null;
   h.offlineOnly = false;
   h.canRun = true;
@@ -179,5 +183,46 @@ describe("refreshGaugeHistories", () => {
     // The write of the fetch in flight carries the epoch it began under, so
     // the store drops it. Mutation: remove that argument → red.
     expect(h.cacheHistory.mock.calls[0]?.[2]).toBe(0);
+  });
+});
+
+describe("refreshRain", () => {
+  const rain = {
+    version: 1,
+    generatedAt: "2026-10-30T12:00:00Z",
+    attribution: "© Made-up owner",
+    start: "2026-10-20",
+    gauges: [
+      { id: "900101", name: "MADE UP", lat: -33.7, lon: 150.3, mm: [1, null] },
+    ],
+  };
+
+  // ADR 0047: the file is the same for everyone, so the request says nothing
+  // of the spot. Mutation: add a header or a query → red.
+  it("asks the CDN for the public file with nothing else sent, and keeps it", async () => {
+    answer(JSON.stringify(rain));
+    expect(await refreshRain()).toEqual(rain);
+    expect(h.fetch.mock.calls).toEqual([
+      [`https://cdn.example/${RAIN_PATH}`, { signal: expect.any(AbortSignal) }],
+    ]);
+    expect(h.cacheRain).toHaveBeenCalledWith(JSON.stringify(rain), 0);
+  });
+
+  // Mutation: drop the parse → red; a bad file would replace a good one.
+  it("keeps the old file when the download is malformed or fails", async () => {
+    answer('{"version":1}');
+    expect(await refreshRain()).toBeNull();
+    h.fetch.mockRejectedValue(new Error("offline"));
+    expect(await refreshRain()).toBeNull();
+    expect(h.cacheRain).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing in offline-only mode or without a usable connection", async () => {
+    h.offlineOnly = true;
+    expect(await refreshRain()).toBeNull();
+    h.offlineOnly = false;
+    h.canRun = false;
+    expect(await refreshRain()).toBeNull();
+    expect(h.fetch).not.toHaveBeenCalled();
   });
 });

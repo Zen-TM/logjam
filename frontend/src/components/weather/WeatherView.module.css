@@ -35,6 +35,23 @@
   color: var(--color-text-muted);
 }
 
+/* A rain gauge's row and the line under it; gauges stack like the rows. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.row + .row {
+  margin-top: var(--space-1);
+}
+
+.rainCredit {
+  composes: meta from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 /* Focus lands here programmatically, never by Tab. */
 .root:focus {
   outline: none;

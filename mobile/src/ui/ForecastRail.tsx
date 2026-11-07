@@ -27,6 +27,9 @@ export type ForecastCard = {
   rainLevel: number;
   chance: string | null;
   wind: string | null;
+  /** A figure not of its row's kind ("Model" in a gauge's row): said under
+   *  it, and its bar drawn muted. */
+  note: string | null;
   /** Everything on the card, in words. */
   spoken: string;
 };
@@ -92,7 +95,11 @@ export function ForecastRail({
             ) : null}
             <View style={styles.bar}>
               <View
-                style={[styles.fill, { width: `${card.rainLevel * 100}%` }]}
+                style={[
+                  styles.fill,
+                  card.note !== null && styles.mutedFill,
+                  { width: `${card.rainLevel * 100}%` },
+                ]}
               />
             </View>
             <Text style={[styles.rain, card.rainLevel === 0 && styles.dry]}>
@@ -102,6 +109,7 @@ export function ForecastRail({
               <Text style={styles.meta}>{card.chance}</Text>
             ) : null}
             {card.wind ? <Text style={styles.meta}>{card.wind}</Text> : null}
+            {card.note ? <Text style={styles.meta}>{card.note}</Text> : null}
           </View>
         ))}
       </ScrollView>
@@ -144,6 +152,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.sm,
     backgroundColor: theme.accent,
   },
+  // A figure the row's source didn't give (a gauge's modelled day).
+  mutedFill: { backgroundColor: theme.textMuted },
   rain: {
     ...textRole.detail,
     color: theme.text,

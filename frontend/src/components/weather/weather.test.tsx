@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  RAIN_PATH,
   WEATHER,
   WEATHER_MODELS,
   contractSectionKeys,
@@ -53,10 +54,18 @@ globalThis.ResizeObserver ??= class {
 
 const modelProps = { model: "best_match", onModel: vi.fn() } as const;
 
-function stubFetch() {
-  const fetch = vi.fn(async () => Response.json(forecastJson));
+/** Answers Open-Meteo with the fixture and the rain gauge file with `rain`
+ *  (a 404 without it); returns the forecast requests alone. */
+function stubFetch(rain?: unknown) {
+  const forecasts = vi.fn<(url: string) => void>();
+  const fetch = vi.fn(async (url: string) => {
+    if (url.startsWith("/"))
+      return rain ? Response.json(rain) : new Response("", { status: 404 });
+    forecasts(url);
+    return Response.json(forecastJson);
+  });
   vi.stubGlobal("fetch", fetch);
-  return fetch;
+  return Object.assign(forecasts, { all: fetch });
 }
 
 function setOnline(online: boolean) {
@@ -78,7 +87,7 @@ afterEach(() => {
 });
 
 describe("WeatherView", () => {
-  const ready = { status: "ready", forecast, now } as const;
+  const ready = { status: "ready", forecast, now, rain: null } as const;
 
   // Mutation that turns it red: leave a contract section out of the renderer
   // map in WeatherView.tsx, or draw one the contract does not name (tsc too).
@@ -358,6 +367,69 @@ describe("PlaceWeather", () => {
   });
 });
 
+describe("rain gauges", () => {
+  // Made up, 869 m from the spot; the fixture's past days are 11 to 17 Oct.
+  const rainFile = {
+    version: 1,
+    generatedAt: "2026-10-17T00:00:00Z",
+    attribution: "© Made-up owner",
+    start: "2026-10-11",
+    gauges: [
+      {
+        id: "900101",
+        name: "MADE UP TBRG",
+        lat: -33.72,
+        lon: 150.31,
+        mm: [0, 30, 0, 1.5, 12, null, null, null, null, null],
+      },
+    ],
+  };
+
+  // The privacy boundary of ADR 0047: the file is fetched by its public path
+  // alone and the gauge is picked here. Mutation that turns it red: add the
+  // spot (or its cell) to the rain request, or stop drawing the gauge's row.
+  it("fetches the public file with the forecast and draws the gauge near", async () => {
+    const fetch = stubFetch(rainFile);
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    const title = "Rain gauge at Made Up TBRG, 869 m";
+    const row = await screen.findByRole("list", { name: title });
+    const urls = fetch.all.mock.calls.map((call) => call[0]);
+    expect(urls).toContain(`/${RAIN_PATH}`);
+    expect(urls.filter((url) => url.startsWith("/"))).toEqual([
+      `/${RAIN_PATH}`,
+    ]);
+    const cards = within(row).getAllByRole("listitem");
+    expect(cards[1].textContent).toContain("30");
+    // A day the gauge hasn't sent: the model's, marked, its bar muted.
+    expect(cards[5].textContent).toContain(WEATHER.copy.modelledDay);
+    expect(cards[5].getAttribute("aria-label")).toContain("modelled");
+    expect(
+      cards[5].querySelector("[data-muted]")?.getAttribute("data-muted"),
+    ).toBe("true");
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
+    expect(screen.getByText(WEATHER.copy.gaugeNote)).toBeTruthy();
+    expect(screen.getByText("© Made-up owner")).toBeTruthy();
+  });
+
+  it("draws the model's row, saying why, when no gauge is near", async () => {
+    stubFetch({ ...rainFile, gauges: [{ ...rainFile.gauges[0], lat: -34.5 }] });
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
+    expect(screen.getByText(WEATHER.copy.noGaugeNear)).toBeTruthy();
+    expect(screen.queryByText("© Made-up owner")).toBeNull();
+  });
+
+  it("draws the model's row alone when the file can't be had", async () => {
+    stubFetch();
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
+    expect(screen.queryByText(WEATHER.copy.noGaugeNear)).toBeNull();
+  });
+});
+
 describe("the forecast model", () => {
   const choose = (name: string) => {
     fireEvent.click(
@@ -409,7 +481,7 @@ describe("the forecast model", () => {
     const { rerender } = render(
       <WeatherView
         {...modelProps}
-        state={{ status: "ready", forecast, now }}
+        state={{ status: "ready", forecast, now, rain: null }}
         online={false}
         onLoad={vi.fn()}
         now={now}

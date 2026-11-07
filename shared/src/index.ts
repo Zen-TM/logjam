@@ -22,6 +22,7 @@ export * from "./mapSearch.js";
 export * from "./weather.js";
 export * from "./placeRegistry.js";
 export * from "./gauges.js";
+export * from "./rainGauges.js";
 export * from "./placeTypes.js";
 export * from "./planItemEdit.js";
 export * from "./placeStatus.js";

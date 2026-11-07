@@ -8,16 +8,20 @@ files and where each number comes from: ADR 0044.
 
     python3 build_gauges.py run --bucket B   # what the 2-hourly ECS task runs
     python3 build_gauges.py registry         # regenerate gauges.json
+    python3 build_gauges.py rain-registry    # regenerate rain_gauges.json
 
 `run` reads gauges.json (the committed list), asks WaterNSW's Water Data API
 for the latest readings, and writes `latest.json` (`GaugeLatestFile` in
 shared/src/gauges.ts). On the daily sweep it also extends each gauge's
 `history/<id>.json` (`GaugeHistoryFile`) from the Bureau of Meteorology.
+Every run also writes `rain.json` (`RainFile` in shared/src/rainGauges.ts):
+the daily rain totals of the gauges in rain_gauges.json, from BoM (ADR 0047).
 
 Sources and licences: readings, (c) State of New South Wales through
 WaterNSW, which asks for that notice on every use; history from BoM's Water
-Data Online, which lists WaterNSW as the owner under CC BY. Neither request
-carries user input: a URL holds a gauge id and constants.
+Data Online, which lists WaterNSW as the owner under CC BY; rain likewise,
+from WaterNSW's stations only. No request carries user input: a URL holds a
+gauge or series id and constants.
 """
 
 import argparse
@@ -25,6 +29,7 @@ import gzip
 import json
 import math
 import os
+import statistics
 import sys
 import time
 import urllib.error
@@ -225,7 +230,7 @@ def needs_sweep(old: Optional[dict], now: datetime) -> bool:
 # ── history ──────────────────────────────────────────────────────────────
 
 
-def bom_values_url(ts_ids: List[str], start: str, end: str) -> str:
+def bom_url(**params) -> str:
     return (
         BOM_URL
         + "?"
@@ -235,14 +240,21 @@ def bom_values_url(ts_ids: List[str], start: str, end: str) -> str:
                 "type": "QueryServices",
                 "format": "json",
                 "datasource": "0",
-                "request": "getTimeseriesValues",
-                "ts_id": ",".join(ts_ids),
-                "from": start,
-                "to": end,
-                "returnfields": "Timestamp,Value",
+                **params,
             },
-            safe=",",
+            safe=",*",
         )
+    )
+
+
+def bom_values_url(
+    ts_ids: List[str], start: str, end: str, fields: str = "Timestamp,Value"
+) -> str:
+    return bom_url(
+        request="getTimeseriesValues",
+        ts_id=",".join(ts_ids),
+        **{"from": start, "to": end},
+        returnfields=fields,
     )
 
 
@@ -283,6 +295,209 @@ def history_days(doc: dict) -> Dict[str, list]:
         (first + timedelta(i)).strftime("%Y-%m-%d"): [lv, fl]
         for i, (lv, fl) in enumerate(zip(doc["level"], doc["flow"]))
     }
+
+
+# ── rain ─────────────────────────────────────────────────────────────────
+
+RAIN_GAUGES_FILE = Path(__file__).with_name("rain_gauges.json")
+# 9am-to-9am totals, stamped at the period's end, and the tips they are summed
+# from: a total is only whole once the tips reach its stamp.
+RAIN_SERIES = "DMQaQc.Merged.DailyTotal.09HR"
+RAIN_RAW_SERIES = "DMQaQc.Merged.AsStored.1"
+RAIN_ATTRIBUTION = (
+    "Rain gauges: © State of New South Wales through WaterNSW, "
+    "via the Bureau of Meteorology."
+)
+# Only owners whose terms allow republishing; the rest and why: ADR 0047.
+RAIN_OWNERS = {"NSW - Water NSW"}
+# Enough for the client's seven days, from a file a few days old.
+RAIN_DAYS = 10
+RAIN_SERIES_PER_CALL = 20
+RAIN_COVERAGE_PER_CALL = 50
+# Above any day NSW has recorded: a figure past it is a fault, never rain.
+RAIN_MAX_DAY_MM = 400
+# WDO's marker for a missing value.
+RAIN_MISSING_QUALITY = -1
+# `rain-registry` drops a series whose year looks like a fault: a running
+# counter (a median above zero; most days are dry) or a run of impossible days.
+RAIN_FAULT_MEDIAN_MM = 1
+RAIN_FAULT_BIG_MM = 100
+RAIN_FAULT_BIG_DAYS = 10
+
+
+def load_rain_gauges() -> List[dict]:
+    return json.loads(RAIN_GAUGES_FILE.read_text())
+
+
+def period_start(stamp: str) -> str:
+    """The `YYYY-MM-DD` a 9am-to-9am total began on, from its end stamp."""
+    return (datetime.fromisoformat(stamp).date() - timedelta(1)).isoformat()
+
+
+def rain_coverage(raw_ts: List[str]) -> Dict[str, datetime]:
+    """{raw ts_id: the last tip WDO holds}."""
+    out: Dict[str, datetime] = {}
+    for i in range(0, len(raw_ts), RAIN_COVERAGE_PER_CALL):
+        time.sleep(BOM_SPACING_S)
+        rows = http_get(
+            bom_url(
+                request="getTimeseriesList",
+                ts_id=",".join(raw_ts[i : i + RAIN_COVERAGE_PER_CALL]),
+                returnfields="ts_id,coverage",
+            ),
+            timeout=BOM_TIMEOUT_S,
+        )
+        for r in rows[1:]:
+            row = dict(zip(rows[0], r))
+            if row["to"]:
+                out[row["ts_id"]] = datetime.fromisoformat(row["to"])
+    return out
+
+
+def rain_days(data: List[list], complete_to: Optional[datetime]) -> Dict[str, float]:
+    """{period start: mm} of the whole, valid totals in a series' rows.
+
+    A total WDO marks missing, one past the last tip it holds (the newest day
+    is often summed from part of it), or one no rain could reach is left
+    out: a missing day must never read as a dry one."""
+    days: Dict[str, float] = {}
+    for stamp, value, quality in data:
+        if value is None or quality == RAIN_MISSING_QUALITY:
+            continue
+        if complete_to is None or datetime.fromisoformat(stamp) > complete_to:
+            continue
+        if not 0 <= value <= RAIN_MAX_DAY_MM:
+            continue
+        days[period_start(stamp)] = round(value, 1)
+    return days
+
+
+def build_rain(
+    stations: List[dict], days: Dict[str, Dict[str, float]], now: datetime
+) -> dict:
+    """`rain.json`: each station's totals for the RAIN_DAYS periods that
+    began before today, oldest first, null where there is none."""
+    today = now.astimezone(AEST).date()
+    first = today - timedelta(RAIN_DAYS)
+    dates = [(first + timedelta(i)).isoformat() for i in range(RAIN_DAYS)]
+    return {
+        "version": FORMAT,
+        "generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "attribution": RAIN_ATTRIBUTION,
+        "start": dates[0],
+        "gauges": [
+            {
+                "id": st["id"],
+                "name": st["name"],
+                "lat": st["lat"],
+                "lon": st["lon"],
+                "mm": [days.get(st["ts"], {}).get(d) for d in dates],
+            }
+            for st in stations
+        ],
+    }
+
+
+def publish_rain(s3, bucket: str, now: datetime) -> None:
+    """Fetches every listed station's last RAIN_DAYS totals and publishes
+    them. Any failed request fails the step and leaves the old file: its
+    days are dated, so a client only falls back to the model for more of
+    them."""
+    stations = load_rain_gauges()
+    coverage = rain_coverage([st["rawTs"] for st in stations])
+    today = now.astimezone(AEST).date()
+    start = (today - timedelta(RAIN_DAYS - 1)).isoformat()
+    end = (today + timedelta(1)).isoformat()
+    raw_of = {st["ts"]: st["rawTs"] for st in stations}
+    days: Dict[str, Dict[str, float]] = {}
+    ids = list(raw_of)
+    for i in range(0, len(ids), RAIN_SERIES_PER_CALL):
+        time.sleep(BOM_SPACING_S)
+        url = bom_values_url(
+            ids[i : i + RAIN_SERIES_PER_CALL],
+            start,
+            end,
+            "Timestamp,Value,Quality Code",
+        )
+        for series in http_get(url, timeout=BOM_TIMEOUT_S):
+            ts = str(series["ts_id"])
+            days[ts] = rain_days(series["data"], coverage.get(raw_of[ts]))
+    put_json(s3, bucket, "rain.json", build_rain(stations, days, now), 3600)
+    print(f"published rain.json: {len(stations)} stations")
+
+
+def rain_fault(values: List[float]) -> bool:
+    if not values:
+        return True
+    big = sum(v > RAIN_FAULT_BIG_MM for v in values)
+    return statistics.median(values) > RAIN_FAULT_MEDIAN_MM or big > RAIN_FAULT_BIG_DAYS
+
+
+def rain_registry() -> List[dict]:
+    """WaterNSW's NSW rain stations with a live daily total and the tips
+    behind it, less any whose last year looks like a fault."""
+    since = (datetime.now(AEST) - timedelta(10)).strftime("%Y-%m-%d")
+    daily = bom_list(
+        request="getTimeseriesList",
+        parametertype_name="Rainfall",
+        ts_name=RAIN_SERIES,
+        returnfields="station_no,station_longname,ts_id,coverage,"
+        "station_latitude,station_longitude,ca_sta",
+    )
+    raw = {
+        r["station_no"]: r["ts_id"]
+        for r in bom_list(
+            request="getTimeseriesList",
+            parametertype_name="Rainfall",
+            ts_name=RAIN_RAW_SERIES,
+            returnfields="station_no,ts_id",
+        )
+    }
+    out: List[dict] = []
+    for r in daily:
+        lat = float(r["station_latitude"] or 0)
+        lon = float(r["station_longitude"] or 0)
+        inside = NSW_BOX[0] < lat < NSW_BOX[1] and NSW_BOX[2] < lon < NSW_BOX[3]
+        no = r["station_no"]
+        if (
+            r.get("DATA_OWNER_NAME") in RAIN_OWNERS
+            and inside
+            and no.isdigit()
+            and no in raw
+            and r["to"][:10] >= since
+        ):
+            out.append(
+                {
+                    "id": no,
+                    "name": r["station_longname"],
+                    "lat": round(lat, 5),
+                    "lon": round(lon, 5),
+                    "ts": r["ts_id"],
+                    "rawTs": raw[no],
+                }
+            )
+    out = sorted({st["id"]: st for st in out}.values(), key=lambda st: st["id"])
+    year_ago = (datetime.now(AEST) - timedelta(365)).strftime("%Y-%m-%d")
+    today = datetime.now(AEST).strftime("%Y-%m-%d")
+    kept: List[dict] = []
+    for i in range(0, len(out), 5):  # a year of five series stays small
+        chunk = {st["ts"]: st for st in out[i : i + 5]}
+        time.sleep(BOM_SPACING_S)
+        url = bom_values_url(
+            list(chunk), year_ago, today, "Timestamp,Value,Quality Code"
+        )
+        for series in http_get(url, timeout=BOM_TIMEOUT_S):
+            st = chunk[str(series["ts_id"])]
+            values = [
+                v
+                for _, v, q in series["data"]
+                if v is not None and q != RAIN_MISSING_QUALITY
+            ]
+            if rain_fault(values):
+                print(f"dropped {st['id']} {st['name']}: its year looks faulty")
+            else:
+                kept.append(st)
+    return sorted(kept, key=lambda st: st["id"])
 
 
 # ── S3 ───────────────────────────────────────────────────────────────────
@@ -369,13 +584,21 @@ def run(bucket: str) -> None:
         raise SystemExit(f"{KEY_ENV} is not set")
     gauges = load_gauges()
     s3 = boto3.client("s3")
+    now = datetime.now(timezone.utc)
+    # First and apart: BoM's rain spends none of WaterNSW's quota, and a
+    # failure on either side leaves the other's file published.
+    rain_failed = False
+    try:
+        publish_rain(s3, bucket, now)
+    except Exception as err:  # noqa: BLE001
+        print(f"rain left for the next run: {err}")
+        rain_failed = True
     old = read_json(s3, bucket, S3_PREFIX + "latest.json")
     if old is not None and len(gauges) < len(old["gauges"]) * MIN_COUNT_RATIO:
         raise SystemExit(
             f"refusing to publish {len(gauges)} gauges over {len(old['gauges'])}: "
             "check gauges.json"
         )
-    now = datetime.now(timezone.utc)
     sweep = needs_sweep(old, now)
     hot = [g["id"] for g in gauges if g["hot"]]
     # A failed hot fetch exits non-zero with the old file in place; clients
@@ -413,26 +636,15 @@ def run(bucket: str) -> None:
         # After publishing, so the failed-run alarm fires with the hot
         # readings already out.
         raise SystemExit("the cold sweep failed part way")
+    if rain_failed:
+        raise SystemExit("the rain step failed")
 
 
 # ── registry ─────────────────────────────────────────────────────────────
 
 
 def bom_list(**params) -> list:
-    url = (
-        BOM_URL
-        + "?"
-        + urllib.parse.urlencode(
-            {
-                "service": "kisters",
-                "type": "QueryServices",
-                "format": "json",
-                "datasource": "0",
-                **params,
-            },
-            safe=",*",
-        )
-    )
+    url = bom_url(**params)
     # `registry` is a run-once tool, so it retries; a list it cannot finish
     # fails the command rather than writing a short one.
     for attempt in range(BOM_TRIES):
@@ -517,18 +729,22 @@ def main(argv: List[str]) -> int:
     r = sub.add_parser("run", help="fetch readings and publish to S3")
     r.add_argument("--bucket", default=os.environ.get("S3_BUCKET_TOPO"))
     sub.add_parser("registry", help="regenerate gauges.json from BoM")
+    sub.add_parser("rain-registry", help="regenerate rain_gauges.json from BoM")
     args = parser.parse_args(argv)
     if args.command == "run":
         if not args.bucket:
             parser.error("run needs --bucket or S3_BUCKET_TOPO")
         run(args.bucket)
-    else:
-        GAUGES_FILE.write_text(
-            "[\n"
-            + ",\n".join(json.dumps(g, separators=(",", ":")) for g in registry())
-            + "\n]\n"
-        )
-        print(f"wrote {GAUGES_FILE}")
+        return 0
+    path, rows = (
+        (GAUGES_FILE, registry())
+        if args.command == "registry"
+        else (RAIN_GAUGES_FILE, rain_registry())
+    )
+    path.write_text(
+        "[\n" + ",\n".join(json.dumps(r, separators=(",", ":")) for r in rows) + "\n]\n"
+    )
+    print(f"wrote {path}")
     return 0
 
 

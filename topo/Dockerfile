@@ -122,6 +122,7 @@ COPY build_land_tenure.py /app/build_land_tenure.py
 COPY build_place_registry.py /app/build_place_registry.py
 COPY build_gauges.py /app/build_gauges.py
 COPY gauges.json /app/gauges.json
+COPY rain_gauges.json /app/rain_gauges.json
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 
