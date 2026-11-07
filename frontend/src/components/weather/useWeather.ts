@@ -38,7 +38,8 @@ export const RAIN_WAIT_MS = 15_000;
 
 /** The public rain gauge file (ADR 0047), or null on any failure or after
  *  `RAIN_WAIT_MS`: the past days then show the model's figures, as they did
- *  before gauges, and a stalled file never holds up the forecast. */
+ *  before gauges, and a stalled file holds up the forecast for at most
+ *  `RAIN_WAIT_MS`. */
 function fetchRain(signal: AbortSignal) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<null>((resolve) => {

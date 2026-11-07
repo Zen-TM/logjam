@@ -134,7 +134,10 @@ reported.**
   wipe deletes. It shows no age: the totals are dated, so an old file only
   leaves more days to the model, each marked. Guards:
   `mobile/src/gauges/gaugeFeed.test.ts` ("refreshRain"), `weather.test.tsx`
-  ("shows the forecast without the file when it stalls").
+  ("shows the forecast without the file when it stalls"), and for the wipe,
+  `mobile/src/offline/localStores.test.ts` (every store is in the wiped
+  list). No guard holds that Logjam GPS never waits for the file, or that it
+  shows no age.
 
 ## Consequences
 

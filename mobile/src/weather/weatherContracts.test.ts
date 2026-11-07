@@ -60,8 +60,13 @@ describe("Logjam GPS draws what the weather contracts name", () => {
   });
 
   // ADR 0047: WaterNSW's terms ask for its notice wherever its figures are.
-  // Mutation: drop `rain` from Credit, or pass nothing to it → red.
+  // Mutation: drop `rain` from Credit, or stop WeatherView passing it the
+  // gauges' credit → red.
   it("draws the rain gauges' credit beside Open-Meteo's", () => {
+    const view = read("./WeatherView.tsx");
+    expect(view).toContain("rainCredit(weather.rain)");
+    expect(view).toContain("rainCredit: credit");
+    expect(view).toContain("<Credit rain={rainCredit} />");
     const section = WEATHER_SECTIONS.credit({
       forecast: {} as never,
       rows: [],
