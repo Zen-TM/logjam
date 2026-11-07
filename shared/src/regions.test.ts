@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
+import { canyonOffersFor } from "./contracts/placesList.js";
 import {
   regionChoiceProblem,
   regionOffRefusal,
@@ -13,6 +14,7 @@ import {
   offeredBasemaps,
 } from "./geoPdfBaseLayers.js";
 import {
+  canyonRegionsOf,
   DEFAULT_REGION_IDS,
   NSW_REGION,
   normalizeRegionIds,
@@ -112,6 +114,32 @@ describe("the declaration", () => {
   });
 });
 
+describe("canyonOffersFor", () => {
+  // Mutation: read `uiPreferences.regions` as it is, and an account that
+  // never chose (or holds a retired id) is offered no canyon import.
+  it("reads the account's preferences through their normaliser", () => {
+    expect(canyonOffersFor(null)).toEqual([NSW_REGION]);
+    expect(canyonOffersFor({ regions: ["nsw", "atlantis"] })).toEqual([
+      NSW_REGION,
+    ]);
+    expect(canyonOffersFor({ regions: ["atlantis"] })).toEqual([NSW_REGION]);
+  });
+});
+
+describe("canyon sources", () => {
+  // Mutation: copy NSW's snapshot key into a second region, and one region's
+  // fresh fetch replaces the other's cached corpus (api ropeWikiCache.ts).
+  it("give each region its own RopeWiki region and snapshot", () => {
+    const sources = REGIONS.flatMap((region) =>
+      region.canyons ? [region.canyons] : [],
+    );
+    for (const key of ["snapshotKey", "ropewikiRegion"] as const) {
+      const values = sources.map((source) => source[key]);
+      expect(new Set(values).size).toBe(values.length);
+    }
+  });
+});
+
 describe("normalizeRegionIds", () => {
   const two: readonly Region[] = [
     NSW_REGION,
@@ -136,6 +164,18 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("canyonRegionsOf", () => {
+  // Mutation: drop the `canyons` test, and a region with no canyon list is
+  // offered an import that can only fail.
+  it("offers an import for each chosen region with a canyon source", () => {
+    const nz = { ...NSW_REGION, id: "nz", canyons: null };
+    expect(ids(canyonRegionsOf(["nsw", "nz"], [NSW_REGION, nz]))).toEqual([
+      "nsw",
+    ]);
+    expect(canyonRegionsOf(["nz"], [NSW_REGION, nz])).toEqual([]);
   });
 });
 

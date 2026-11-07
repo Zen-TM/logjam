@@ -32,8 +32,10 @@ import {
   placeStatus,
   placeSummary,
   qualityLabel,
+  ROPEWIKI_OFFER,
   type PlaceSortKey,
   type PlaceStatus,
+  type Region,
   type RegionBbox,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
@@ -92,6 +94,7 @@ import {
   idRange,
   normaliseBucket,
   placesBounds,
+  ropewikiAddEntries,
   sheetFilterCount,
   withBucket,
 } from "./placesModel";
@@ -163,6 +166,7 @@ function PlacesPanel({
   onExportPlaces,
   onPlaceVerb,
   onExpandSheet,
+  canyonRegions,
 }: {
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
@@ -207,6 +211,8 @@ function PlacesPanel({
   onPlaceVerb: (id: WebPlaceVerbId) => void;
   /** Narrow web: grow the bottom sheet to full. */
   onExpandSheet?: () => void;
+  /** The user's regions that have a canyon list: one import entry each. */
+  canyonRegions: readonly Region[];
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
@@ -471,12 +477,14 @@ function PlacesPanel({
     null,
   );
   const [reviewOpen, setReviewOpen] = useState(false);
+  // The region the confirm was opened for, then the one refreshed and reviewed.
+  const [importRegion, setImportRegion] = useState<Region | null>(null);
 
-  async function importFromRopeWiki() {
+  async function importFromRopeWiki(region: Region) {
     setConfirmRefresh(false);
     setRefreshing(true);
     try {
-      const result = await refreshFromRopeWiki();
+      const result = await refreshFromRopeWiki(region.id);
       setRefreshResult(result);
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
@@ -527,7 +535,7 @@ function PlacesPanel({
   );
 
   const addEntries: Record<
-    SectionKeysOn<typeof PLACES_ADD, "web">,
+    Exclude<SectionKeysOn<typeof PLACES_ADD, "web">, "importRopewiki">,
     { label: string; onSelect: () => void; disabled?: boolean }
   > = {
     add: { label: PLACES_ADD.copy.add, onSelect: onAddPlace },
@@ -535,14 +543,19 @@ function PlacesPanel({
       label: PLACES_ADD.copy.importFile,
       onSelect: onOpenUnifiedImport,
     },
-    importRopewiki: {
-      label: refreshing
-        ? PLACES_ADD.copy.importingRopewiki
-        : PLACES_ADD.copy.importRopewiki,
-      disabled: refreshing,
-      onSelect: () => setConfirmRefresh(true),
-    },
   };
+
+  const ropewikiEntries = ropewikiAddEntries(
+    canyonRegions,
+    refreshing ? (importRegion?.id ?? null) : null,
+  ).map(({ region, ...entry }) => ({
+    ...entry,
+    icon: PLACES_ADD_ICON.importRopewiki,
+    onSelect: () => {
+      setImportRegion(region);
+      setConfirmRefresh(true);
+    },
+  }));
 
   const hero = (
     <Hero
@@ -553,11 +566,18 @@ function PlacesPanel({
           <Menu
             label={PLACES_ADD.copy.menu}
             placement="bottom-end"
-            entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
-              id: key,
-              icon: PLACES_ADD_ICON[key],
-              ...addEntries[key],
-            }))}
+            entries={contractSectionKeys(PLACES_ADD, "web").flatMap<MenuEntry>(
+              (key) =>
+                key === "importRopewiki"
+                  ? ropewikiEntries
+                  : [
+                      {
+                        id: key,
+                        icon: PLACES_ADD_ICON[key],
+                        ...addEntries[key],
+                      },
+                    ],
+            )}
             trigger={(props) => (
               <Button
                 {...props}
@@ -926,18 +946,20 @@ function PlacesPanel({
         open={confirmRefresh}
         copy={{
           confirmTitle: "Import from RopeWiki?",
-          confirmBody:
-            "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.",
+          confirmBody: importRegion
+            ? ROPEWIKI_OFFER.confirmBody(importRegion)
+            : "",
           confirmLabel: "Fetch from RopeWiki",
           tone: "filled",
         }}
         busy={refreshing}
-        onConfirm={() => void importFromRopeWiki()}
+        onConfirm={() => importRegion && void importFromRopeWiki(importRegion)}
         onClose={() => setConfirmRefresh(false)}
       />
-      {refreshResult && (
+      {refreshResult && importRegion && (
         <RopeWikiReviewDialog
           open={reviewOpen}
+          regionId={importRegion.id}
           review={refreshResult.review}
           autoImported={{
             added: refreshResult.added,

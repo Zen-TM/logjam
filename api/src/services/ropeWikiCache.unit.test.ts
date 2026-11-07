@@ -23,8 +23,10 @@ import { s3 } from "./awsClients";
 import { getEnv } from "../lib/env";
 import { getRopeWikiCanyons, clearRopeWikiCache } from "./ropeWikiCache";
 import { AppError } from "../middleware/errorHandler";
+import { NSW_REGION } from "@logjam/shared";
 
 const s3Send = (s3 as unknown as { send: Mock }).send;
+const NSW = NSW_REGION.canyons;
 const getEnvMock = getEnv as unknown as Mock;
 
 // The real Special:Ask export, first four lines. Guards the parser against the
@@ -61,7 +63,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   it("parses the real-format snapshot and reports the source timestamp", async () => {
     mockS3Object(SAMPLE_CSV);
 
-    const { places, errors, sourceUpdatedAt } = await getRopeWikiCanyons();
+    const { places, errors, sourceUpdatedAt } = await getRopeWikiCanyons(NSW);
 
     expect(errors).toEqual([]);
     expect(places).toHaveLength(3);
@@ -83,7 +85,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
 
   it("reads the snapshot from reference/ropewiki-nsw.csv in the media bucket", async () => {
     mockS3Object(SAMPLE_CSV);
-    await getRopeWikiCanyons();
+    await getRopeWikiCanyons(NSW);
 
     const command = s3Send.mock.calls[0][0];
     expect(command.input).toMatchObject({
@@ -95,8 +97,8 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   it("memoises — a second call inside the TTL does not re-read S3", async () => {
     mockS3Object(SAMPLE_CSV);
 
-    const first = await getRopeWikiCanyons();
-    const second = await getRopeWikiCanyons();
+    const first = await getRopeWikiCanyons(NSW);
+    const second = await getRopeWikiCanyons(NSW);
 
     expect(s3Send).toHaveBeenCalledTimes(1);
     expect(second.places).toEqual(first.places);
@@ -105,7 +107,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
 
   it("tolerates S3 omitting LastModified", async () => {
     mockS3Object(SAMPLE_CSV, null);
-    expect((await getRopeWikiCanyons()).sourceUpdatedAt).toBeNull();
+    expect((await getRopeWikiCanyons(NSW)).sourceUpdatedAt).toBeNull();
   });
 
   it("raises a 503 naming the fix when the snapshot is missing", async () => {
@@ -113,7 +115,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
       Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" }),
     );
 
-    await expect(getRopeWikiCanyons()).rejects.toMatchObject({
+    await expect(getRopeWikiCanyons(NSW)).rejects.toMatchObject({
       statusCode: 503,
       devDetail: expect.stringContaining("reference/ropewiki-nsw.csv"),
     });
@@ -122,7 +124,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   it("raises a 503 rather than a generic 500 when no bucket is configured", async () => {
     getEnvMock.mockReturnValue({ S3_BUCKET_MEDIA: undefined });
 
-    const error = await getRopeWikiCanyons().catch((e) => e);
+    const error = await getRopeWikiCanyons(NSW).catch((e) => e);
     expect(error).toBeInstanceOf(AppError);
     expect(error.statusCode).toBe(503);
     expect(s3Send).not.toHaveBeenCalled();
@@ -130,10 +132,10 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
 
   it("does not cache a failed load", async () => {
     s3Send.mockRejectedValueOnce(new Error("transient"));
-    await expect(getRopeWikiCanyons()).rejects.toThrow();
+    await expect(getRopeWikiCanyons(NSW)).rejects.toThrow();
 
     mockS3Object(SAMPLE_CSV);
-    expect((await getRopeWikiCanyons()).places).toHaveLength(3);
+    expect((await getRopeWikiCanyons(NSW)).places).toHaveLength(3);
   });
 
   // A snapshot that is there but is not a corpus must fail like one that is
@@ -142,7 +144,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   it("raises a 503 when the snapshot is not a corpus", async () => {
     mockS3Object("Name,Region\n");
 
-    const error = await getRopeWikiCanyons().catch((e) => e);
+    const error = await getRopeWikiCanyons(NSW).catch((e) => e);
     expect(error).toBeInstanceOf(AppError);
     expect(error.statusCode).toBe(503);
     expect(error.message).toBe(
@@ -155,7 +157,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
     // `location` is the third column the parser insists on (services/ropewiki.ts).
     mockS3Object("pageid,coords\n1,150.4 -33.5\n");
 
-    const error = await getRopeWikiCanyons().catch((e) => e);
+    const error = await getRopeWikiCanyons(NSW).catch((e) => e);
     expect(error).toBeInstanceOf(AppError);
     expect(error.statusCode).toBe(503);
     expect(error.devDetail).toContain("location");
@@ -173,7 +175,7 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
       }),
     );
 
-    const { places, sourceUpdatedAt } = await getRopeWikiCanyons(true);
+    const { places, sourceUpdatedAt } = await getRopeWikiCanyons(NSW, true);
 
     expect(s3Send).not.toHaveBeenCalled();
     expect(places).toHaveLength(3);
@@ -188,9 +190,26 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
         .mockResolvedValue({ ok: false, status: 403, text: async () => "" }),
     );
 
-    await expect(getRopeWikiCanyons(true)).rejects.toMatchObject({
+    await expect(getRopeWikiCanyons(NSW, true)).rejects.toMatchObject({
       statusCode: 502,
       devDetail: expect.stringContaining("HTTP 403"),
     });
+  });
+});
+
+describe("getRopeWikiCanyons — one corpus per region", () => {
+  // Mutation: go back to one cache entry, and a second region's import reads
+  // NSW's canyons for the rest of the hour.
+  it("reads and holds each region's snapshot by its own key", async () => {
+    const other = { ...NSW, snapshotKey: "reference/ropewiki-nz.csv" };
+    mockS3Object(SAMPLE_CSV);
+    mockS3Object(SAMPLE_CSV.split("\n").slice(0, 2).join("\n"));
+    expect((await getRopeWikiCanyons(NSW)).places).toHaveLength(3);
+    expect((await getRopeWikiCanyons(other)).places).toHaveLength(1);
+    expect((await getRopeWikiCanyons(NSW)).places).toHaveLength(3);
+    expect(s3Send.mock.calls.map(([c]) => c.input.Key)).toEqual([
+      "reference/ropewiki-nsw.csv",
+      "reference/ropewiki-nz.csv",
+    ]);
   });
 });
