@@ -15,7 +15,7 @@ import {
   computeZoom,
   extentFromCentreAndSize,
   geoPdfMaxNativeZoom,
-  NSW_HILLSHADE,
+  NSW_REGION,
   TARGET_DPI,
   getMapDimensions,
   RASTER_TEMPLATE_DEFAULTS,
@@ -97,7 +97,7 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
  */
 async function a3Scenario(scale = 25000): Promise<GeoPdfConfig> {
   const header = await new PMTiles(
-    `${location.origin}/${NSW_HILLSHADE.archivePath}`,
+    `${location.origin}/${NSW_REGION.terrain.hillshade.archivePath}`,
   ).getHeader();
   return config(
     { baseLayer: "six-base", overlays: ["hillshade", "slope"] },

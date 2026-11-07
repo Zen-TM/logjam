@@ -49,7 +49,7 @@ import {
   landColor,
   landEdgeOpacity,
   nswContourStyle,
-  NSW_LAND,
+  NSW_REGION,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -3001,7 +3001,7 @@ function Map({
             id: LAND_FILL_LAYER,
             type: "fill",
             source: srcId,
-            "source-layer": NSW_LAND.sourceLayer,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             // Unseen: it is what a tap reads, since a line has no inside.
             paint: { "fill-opacity": 0 },
@@ -3013,7 +3013,7 @@ function Map({
             id: `${LAND_EDGE_LAYER}-${i}`,
             type: "line",
             source: srcId,
-            "source-layer": NSW_LAND.sourceLayer,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
               "line-color": landColor() as maplibregl.ExpressionSpecification,

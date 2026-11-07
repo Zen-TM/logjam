@@ -449,7 +449,7 @@ class TestSlopeS3(unittest.TestCase):
     # clients do not.
     def test_the_height_key_is_the_one_the_clients_read(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        with open(os.path.join(root, "shared/src/demSources.ts")) as f:
+        with open(os.path.join(root, "shared/src/regions.ts")) as f:
             self.assertIn(f'archivePath: "{HEIGHT_KEY}"', f.read())
         self.assertEqual(
             SLOPE_KEY, HEIGHT_KEY.replace("5m.pmtiles", "5m-slope.pmtiles")
@@ -459,7 +459,7 @@ class TestSlopeS3(unittest.TestCase):
     # from an archive the clients do not read.
     def test_the_contour_key_is_the_one_the_clients_read(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        with open(os.path.join(root, "shared/src/nswContours.ts")) as f:
+        with open(os.path.join(root, "shared/src/regions.ts")) as f:
             self.assertIn(f'archivePath: "{CONTOUR_KEY}"', f.read())
 
 
@@ -521,7 +521,7 @@ class TestSlopeEncoding(unittest.TestCase):
     # The month is not compared: a rebuild changes it (ADR 0031).
     def test_both_archives_carry_the_credit_of_the_heights(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        with open(os.path.join(root, "shared/src/demSources.ts")) as f:
+        with open(os.path.join(root, "shared/src/regions.ts")) as f:
             source = f.read()
         tail = credit(HEIGHTS, "X").split("the NSW 5 m", 1)[1].split("extracted")[0]
         self.assertIn(tail + "extracted", source)

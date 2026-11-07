@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { NSW_5M } from "./demSources.js";
 import {
   drawsOverTerrain,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
   normalizeTerrainLayers,
   slopeBandAt,
   slopeLegendRows,
@@ -20,6 +17,7 @@ import {
   rgbaCssFromHex,
   type SlopeBand,
 } from "./topoSettings.js";
+import { NSW_REGION } from "./regions.js";
 
 /**
  * The colour MapLibre draws at `degrees` under `interpolate ["linear"]`:
@@ -119,12 +117,18 @@ describe("terrainCredit", () => {
   // Mutation: list the layers in the order drawn, not top of the map first.
   it("credits the layers drawn in one line, top of the map first", () => {
     expect(terrainCredit(["hillshade", "contours", "slope"])).toBe(
-      NSW_5M.credit.replace(/^Elevation/, "Contours, slope and hillshade"),
+      NSW_REGION.terrain.heights.credit.replace(
+        /^Elevation/,
+        "Contours, slope and hillshade",
+      ),
     );
     expect(terrainCredit(["hillshade", "slope"])).toBe(
-      NSW_5M.credit.replace(/^Elevation/, "Slope and hillshade"),
+      NSW_REGION.terrain.heights.credit.replace(
+        /^Elevation/,
+        "Slope and hillshade",
+      ),
     );
-    expect(terrainCredit(["slope"])).toBe(NSW_SLOPE.credit);
+    expect(terrainCredit(["slope"])).toBe(NSW_REGION.terrain.slope.credit);
     expect(terrainCredit([])).toBeNull();
   });
 
@@ -132,7 +136,9 @@ describe("terrainCredit", () => {
   // DEM, which it does not come from.
   it("leaves Land to its own credit", () => {
     expect(terrainCredit(["land"])).toBeNull();
-    expect(terrainCredit(["land", "slope"])).toBe(NSW_SLOPE.credit);
+    expect(terrainCredit(["land", "slope"])).toBe(
+      NSW_REGION.terrain.slope.credit,
+    );
   });
 
   // Mutation: reword only the 5 m credit, ignoring the one passed.
@@ -146,15 +152,21 @@ describe("terrainCredit", () => {
 
 describe("the statewide slope and hillshade", () => {
   it("credit the NSW 5 m DEM they are derived from", () => {
-    expect(NSW_SLOPE.credit).toMatch(/^Slope: derived from the NSW 5 m/);
-    expect(NSW_HILLSHADE.credit).toMatch(
+    expect(NSW_REGION.terrain.slope.credit).toMatch(
+      /^Slope: derived from the NSW 5 m/,
+    );
+    expect(NSW_REGION.terrain.hillshade.credit).toMatch(
       /^Hillshade: derived from the NSW 5 m/,
     );
   });
 
   it("are read from the archives the build writes", () => {
-    expect(NSW_SLOPE.archivePath).toBe("master/dem/nsw-5m-slope.pmtiles");
-    expect(NSW_HILLSHADE.archivePath).toBe(NSW_5M.archivePath);
+    expect(NSW_REGION.terrain.slope.archivePath).toBe(
+      "master/dem/nsw-5m-slope.pmtiles",
+    );
+    expect(NSW_REGION.terrain.hillshade.archivePath).toBe(
+      NSW_REGION.terrain.heights.archivePath,
+    );
   });
 });
 

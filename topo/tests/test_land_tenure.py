@@ -24,6 +24,10 @@ from build_land_tenure import (  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (ROOT / "shared/src/nswLand.ts").read_text()
+# The archive is declared in the region: only its `land: {` entry, so another
+# layer's zooms can't stand in for its own.
+REGIONS = (ROOT / "shared/src/regions.ts").read_text()
+LAND = REGIONS[REGIONS.index("    land: {") :].split("\n    },", 1)[0]
 
 
 class TestClasses(unittest.TestCase):
@@ -53,13 +57,13 @@ class TestArchive(unittest.TestCase):
     # Mutation: change a value here alone, and the clients draw nothing, or
     # ask for tiles the archive doesn't hold.
     def test_the_clients_read_what_the_build_writes(self):
-        self.assertIn(f'sourceLayer: "{SOURCE_LAYER}"', SHARED)
-        self.assertIn(f'classProperty: "{ATTRIBUTE}"', SHARED)
-        self.assertIn(f"minzoom: {ZMIN},", SHARED)
+        self.assertIn(f'sourceLayer: "{SOURCE_LAYER}"', LAND)
+        self.assertIn(f'classProperty: "{ATTRIBUTE}"', LAND)
+        self.assertIn(f"minzoom: {ZMIN},", LAND)
         # A map draws a 256-unit tile 512 pixels across.
         self.assertIn(f"LAND_TILE_MARGIN_PX = {BUFFER * 2};", SHARED)
-        self.assertIn(f"maxzoom: {ZMAX},", SHARED)
-        self.assertIn(f'"Land: {CREDIT}"', SHARED)
+        self.assertIn(f"maxzoom: {ZMAX},", LAND)
+        self.assertIn(f'"Land: {CREDIT}"', LAND)
 
     # Mutation: drop `-select`, and the archive carries the source's other
     # columns at every zoom.

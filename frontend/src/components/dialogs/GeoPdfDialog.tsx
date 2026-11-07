@@ -68,11 +68,11 @@ import {
   AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_LAYERS_BY_FORMAT,
-  AREA_EXPORT_OUTSIDE_NSW,
+  AREA_EXPORT_OUTSIDE_TERRAIN,
   AREA_EXPORT_TOO_LARGE,
   areasInBox,
   areaExportTooLarge,
-  areaInNsw,
+  areaInTerrainRegion,
   areaSizeKm,
   EXPORT_FORMAT_LABELS,
   geoPdfTooLarge,
@@ -624,8 +624,8 @@ function GeoPdfDialog({
       ? "That box has no size. Draw it again on the map."
       : areaExportTooLarge(gisArea)
         ? AREA_EXPORT_TOO_LARGE
-        : !areaInNsw(gisArea)
-          ? AREA_EXPORT_OUTSIDE_NSW
+        : !areaInTerrainRegion(gisArea)
+          ? AREA_EXPORT_OUTSIDE_TERRAIN
           : null;
   const gisEdges = {
     ...(gisArea ?? NO_AREA),

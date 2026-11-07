@@ -5,7 +5,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  NSW_LAND,
+  NSW_REGION,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
@@ -590,7 +590,7 @@ export function LandRow({
           ))}
         </ul>
         <p>{terrainCopy.landCaveat}</p>
-        <p>{NSW_LAND.credit}</p>
+        <p>{NSW_REGION.terrain.land.credit}</p>
       </Dialog>
     </>
   );

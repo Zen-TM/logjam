@@ -16,11 +16,7 @@
 // beyond the bounds MapLibre needs.
 import {
   BASEMAP_CATALOG,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_5M,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   type BasemapCatalogEntry,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
@@ -573,9 +569,9 @@ export function holdsHillshade(
 ): boolean {
   return (
     artifact.kind === "dem-region" &&
-    artifact.logicalKey === NSW_5M.id &&
+    artifact.logicalKey === NSW_REGION.terrain.heights.id &&
     artifact.minzoom != null &&
-    artifact.minzoom <= NSW_HILLSHADE.minzoom
+    artifact.minzoom <= NSW_REGION.terrain.hillshade.minzoom
   );
 }
 
@@ -589,12 +585,13 @@ export const holdsContours = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
 ): boolean =>
   artifact.kind === "contours-region" &&
-  artifact.logicalKey === NSW_CONTOURS.id;
+  artifact.logicalKey === NSW_REGION.terrain.contours.id;
 
 export const holdsSlope = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
 ): boolean =>
-  artifact.kind === "slope-region" && artifact.logicalKey === NSW_SLOPE.id;
+  artifact.kind === "slope-region" &&
+  artifact.logicalKey === NSW_REGION.terrain.slope.id;
 
 export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
   artifact.kind === "land-region";
@@ -739,20 +736,20 @@ export function resolveMapSource(
     case "nsw-contours":
       return routeTerrain(
         resolveStatewide(
-          NSW_CONTOURS,
+          NSW_REGION.terrain.contours,
           "vector",
           "contours-region",
           ctx,
           undefined,
           holdsContours,
         ),
-        NSW_CONTOURS,
+        NSW_REGION.terrain.contours,
         "contours",
         ctx,
       );
     case "nsw-land":
       return resolveStatewide(
-        NSW_LAND,
+        NSW_REGION.terrain.land,
         "vector",
         "land-region",
         ctx,
@@ -761,14 +758,14 @@ export function resolveMapSource(
     case "nsw-slope":
       return routeTerrain(
         resolveStatewide(
-          NSW_SLOPE,
+          NSW_REGION.terrain.slope,
           "raster-dem",
           "slope-region",
           ctx,
           mainRegion(ref.viewport),
           holdsSlope,
         ),
-        NSW_SLOPE,
+        NSW_REGION.terrain.slope,
         "slope",
         ctx,
         holdsSlope,
@@ -778,7 +775,7 @@ export function resolveMapSource(
     case "nsw-hillshade":
       return routeTerrain(
         resolveStatewide(
-          NSW_HILLSHADE,
+          NSW_REGION.terrain.hillshade,
           "raster-dem",
           "dem-region",
           ctx,
@@ -789,7 +786,7 @@ export function resolveMapSource(
             })),
           holdsHillshade,
         ),
-        NSW_HILLSHADE,
+        NSW_REGION.terrain.hillshade,
         "heights",
         ctx,
         holdsHillshade,

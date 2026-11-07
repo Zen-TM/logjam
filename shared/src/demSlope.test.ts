@@ -8,11 +8,12 @@ import {
   demSlopeWindow,
   slopeDegrees,
 } from "./demSlope.js";
-import { NSW_5M, type DemSource, type DemTileReader } from "./demSources.js";
+import { type DemSource, type DemTileReader } from "./demSources.js";
 import { DEM_TILE_SIZE, resolveDemSamples } from "./demTiles.js";
 import { haversineMeters } from "./placeGeo.js";
+import { NSW_REGION } from "./regions.js";
 
-const DEM_TILE_ZOOM = NSW_5M.sampleZoom;
+const DEM_TILE_ZOOM = NSW_REGION.terrain.heights.sampleZoom;
 
 /** A made-up point at a New South Wales latitude. */
 const POINT = { lon: 150.2, lat: -33.5 };
@@ -175,20 +176,22 @@ describe("demSlopeAt", () => {
     expect(asked).toEqual([]);
 
     const onlyCoarse: DemTileReader = async (source, tiles) =>
-      source.id === NSW_5M.id ? new Map() : rising(1, asked)(source, tiles);
+      source.id === NSW_REGION.terrain.heights.id
+        ? new Map()
+        : rising(1, asked)(source, tiles);
     expect(await demSlopeAt(POINT.lon, POINT.lat, onlyCoarse)).toBeNull();
     expect(asked).toEqual([]);
   });
 
   /** A made-up finer source over the same ground as POINT. */
   const FINE = {
-    ...NSW_5M,
+    ...NSW_REGION.terrain.heights,
     id: "fine-1m",
     sampleZoom: 17,
     coverage: [150, -34, 151, -33],
   } as const satisfies DemSource;
 
-  // Mutation: ignore `sources` and read `NSW_5M` alone, and the finer source
+  // Mutation: ignore `sources` and read `NSW_REGION.terrain.heights` alone, and the finer source
   // never answers.
   it("reads the finest source that has the window, all nine heights from it", async () => {
     const asked: string[] = [];
@@ -196,7 +199,7 @@ describe("demSlopeAt", () => {
       POINT.lon,
       POINT.lat,
       rising(1, asked),
-      [FINE, NSW_5M],
+      [FINE, NSW_REGION.terrain.heights],
     );
     expect(reading?.sourceId).toBe(FINE.id);
     expect(asked).toEqual([FINE.id]);
@@ -207,17 +210,19 @@ describe("demSlopeAt", () => {
     );
   });
 
-  /** Ground rising 5 m a pixel on the finer source, 1 m on `NSW_5M`. */
+  /** Ground rising 5 m a pixel on the finer source, 1 m on `NSW_REGION.terrain.heights`. */
   const twoGrounds: DemTileReader = (source, tiles) =>
     rising(source.id === FINE.id ? 5 : 1)(source, tiles);
 
-  /** What `NSW_5M` alone reads at POINT over `rising(1)`. */
+  /** What `NSW_REGION.terrain.heights` alone reads at POINT over `rising(1)`. */
   const coarseOwn = () =>
-    demSlopeReading(POINT.lon, POINT.lat, rising(1), [NSW_5M]);
+    demSlopeReading(POINT.lon, POINT.lat, rising(1), [
+      NSW_REGION.terrain.heights,
+    ]);
 
-  // Mutation: fill the finer source's gaps from `NSW_5M`, or accept a window
+  // Mutation: fill the finer source's gaps from `NSW_REGION.terrain.heights`, or accept a window
   // some of whose positions the finer source does not cover: the slope would
-  // span two surfaces and differ from NSW_5M's own.
+  // span two surfaces and differ from NSW_REGION.terrain.heights's own.
   it("falls through to the next source when the finer one covers only part of the window", async () => {
     const { positions } = demSlopeWindow(POINT.lon, POINT.lat, FINE.sampleZoom);
     // East edge halfway between the centre column and the east one.
@@ -225,9 +230,9 @@ describe("demSlopeAt", () => {
     const partial = { ...FINE, coverage: [150, -34, edge, -33] } as const;
     const reading = await demSlopeReading(POINT.lon, POINT.lat, twoGrounds, [
       partial,
-      NSW_5M,
+      NSW_REGION.terrain.heights,
     ]);
-    expect(reading?.sourceId).toBe(NSW_5M.id);
+    expect(reading?.sourceId).toBe(NSW_REGION.terrain.heights.id);
     expect(reading?.slopeDegrees).toBeCloseTo(
       (await coarseOwn())!.slopeDegrees,
       6,
@@ -254,9 +259,9 @@ describe("demSlopeAt", () => {
     };
     const reading = await demSlopeReading(POINT.lon, POINT.lat, holed, [
       FINE,
-      NSW_5M,
+      NSW_REGION.terrain.heights,
     ]);
-    expect(reading?.sourceId).toBe(NSW_5M.id);
+    expect(reading?.sourceId).toBe(NSW_REGION.terrain.heights.id);
     expect(reading?.slopeDegrees).toBeCloseTo(
       (await coarseOwn())!.slopeDegrees,
       6,

@@ -44,7 +44,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
-  NSW_5M,
+  NSW_REGION,
   SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
@@ -236,7 +236,7 @@ function regionMemberName(artifact: MapArtifact): string {
   if (artifact.kind === "slope-region") return "Slope";
   if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return artifact.logicalKey === NSW_5M.id
+  return artifact.logicalKey === NSW_REGION.terrain.heights.id
     ? "Elevation data, NSW 5 m"
     : "Elevation data";
 }

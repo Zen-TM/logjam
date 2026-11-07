@@ -6,7 +6,7 @@ import {
   LAND_CLASSES,
   LAND_EDGE_LINES,
   MAP_TERRAIN,
-  NSW_LAND,
+  NSW_REGION,
   TILE_SIZE,
 } from "@logjam/shared";
 import type { Ctx } from "./common";
@@ -26,7 +26,7 @@ function squareTile(tenure: string): Uint8Array {
   tile.writeMessage(
     3,
     (_o, layer) => {
-      layer.writeStringField(1, NSW_LAND.sourceLayer);
+      layer.writeStringField(1, NSW_REGION.terrain.land.sourceLayer);
       layer.writeMessage(
         2,
         (_f, pbf) => {
@@ -39,7 +39,7 @@ function squareTile(tenure: string): Uint8Array {
         },
         null,
       );
-      layer.writeStringField(3, NSW_LAND.classProperty);
+      layer.writeStringField(3, NSW_REGION.terrain.land.classProperty);
       layer.writeMessage(4, (_v, pbf) => pbf.writeStringField(1, tenure), null);
       layer.writeVarintField(5, 4096);
       layer.writeVarintField(15, 2);
