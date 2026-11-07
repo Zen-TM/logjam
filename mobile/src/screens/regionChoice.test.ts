@@ -9,7 +9,6 @@ import {
   regionSwitches,
   sendsRegionChoice,
   showsRegionStep,
-  showsRegionStepAfterSignIn,
 } from "./regionChoice";
 
 // Mobile tests run without a renderer, so the screens' decisions are these
@@ -67,7 +66,8 @@ describe("the region step of the first-login gate", () => {
   });
 
   // Mutation: draw Continue by hand in RegionStep (not from
-  // regionContinueProps), or show the step without asking showsRegionStep.
+  // regionContinueProps), leave its switches live while a send is in flight,
+  // show the step without asking showsRegionStep, or drop the step's Sign out.
   it("is one screen, drawn from the contract's copy and shown by the decisions", () => {
     const read = (path: string) =>
       readFileSync(new URL(path, import.meta.url), "utf8");
@@ -76,37 +76,38 @@ describe("the region step of the first-login gate", () => {
     expect(step).toContain("REGION_CHOICE.hint");
     expect(step).toContain("<Button {...regionContinueProps(");
     expect(step).toContain("useRegionsSending()");
+    expect(step).toContain("disabled={sending}");
+    expect(step).toContain("onPress={onSignOut}");
     expect(read("./ConsentGate.tsx")).toContain("<RegionStep");
     expect(read("./ConsentGate.tsx")).toContain(
       "showsRegionStep(newAccount, regions)",
     );
-    expect(read("../AppShell.tsx")).toContain(
-      "showsRegionStepAfterSignIn(newAccount, regionsAsked)",
-    );
+    expect(read("../AppShell.tsx")).toContain("showsRegionStep(newAccount)");
     expect(REGION_CHOICE.title).toBe("Where do you canyon?");
   });
 });
 
 describe("the step right after Logjam GPS's own sign-up form", () => {
-  // Mutation: ignore `finished` (the step comes back at every render), or
-  // `justCreatedAccount` (a plain sign-in is asked), or show it with one region.
-  it("is for a just-made account, until finished, and only with two regions", () => {
-    expect(showsRegionStepAfterSignIn(true, false, TWO)).toBe(true);
-    expect(showsRegionStepAfterSignIn(true, true, TWO)).toBe(false);
-    expect(showsRegionStepAfterSignIn(false, false, TWO)).toBe(false);
-    expect(showsRegionStepAfterSignIn(true, false, ONE)).toBe(false);
+  // Mutation: drop `newAccount={auth.newAccount}` (AppShell defaults it to
+  // false, and the step never shows after the form), or stop the step's done
+  // clearing it (a relock remounts AppShell and asks again, over the choice).
+  it("is fed and finished from useAuth", () => {
+    const app = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+    expect(app).toContain("newAccount={auth.newAccount}");
+    expect(app).toContain("onNewAccountDone={auth.finishNewAccount}");
+    const shell = readFileSync(
+      new URL("../AppShell.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(shell.match(/onNewAccountDone\?\.\(\)/g)?.length).toBe(2);
   });
 });
 
 describe("whether a region choice goes to the account", () => {
-  // Mutation: send for a guest (ADR 0007), or stop a linked account sending
-  // because it is offline (`=== "available"`): it keeps the choice and sends
-  // when it can.
-  it("is no for a guest, and yes for a linked account online or off", () => {
-    expect(sendsRegionChoice("guest", true)).toBe(false);
-    expect(sendsRegionChoice("guest", false)).toBe(false);
-    expect(sendsRegionChoice("linked", true)).toBe(true);
-    expect(sendsRegionChoice("linked", false)).toBe(true);
+  // Mutation: send for a guest (ADR 0007), or never for a linked account.
+  it("is no for a guest and yes for a linked account", () => {
+    expect(sendsRegionChoice("guest")).toBe(false);
+    expect(sendsRegionChoice("linked")).toBe(true);
   });
 });
 

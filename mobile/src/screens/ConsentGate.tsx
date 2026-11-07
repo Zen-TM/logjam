@@ -104,6 +104,7 @@ export function ConsentGate({
       <RegionStep
         accountState={accountState}
         onDone={onConsented}
+        onSignOut={() => onSignOut()}
         regions={regions}
       />
     );

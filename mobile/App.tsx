@@ -217,6 +217,7 @@ export default function App() {
             <AppShell
               accountState={auth.accountState}
               newAccount={auth.newAccount}
+              onNewAccountDone={auth.finishNewAccount}
               onLinkAccount={auth.linkAccount}
               onSignOut={(options) =>
                 // Sign-out wipes this phone's data, and what the account does

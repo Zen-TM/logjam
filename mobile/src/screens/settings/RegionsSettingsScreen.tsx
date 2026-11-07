@@ -38,15 +38,14 @@ export function RegionsSettingsScreen() {
 
   const change = useCallback(
     async (next: string[]) => {
-      if (await chooseRegions(next, sendsRegionChoice(accountState, online)))
-        return;
+      if (await chooseRegions(next, sendsRegionChoice(accountState))) return;
       setToast({
         text: REGION_CHOICE.saveFailed,
         tone: "error",
         nonce: Date.now(),
       });
     },
-    [accountState, online],
+    [accountState],
   );
 
   return (

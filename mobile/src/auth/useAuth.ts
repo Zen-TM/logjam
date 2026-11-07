@@ -315,12 +315,17 @@ export function useAuth() {
    * returns them to their app, with their data. Everyone else has somewhere to
    * go without an account, so they are offered that instead.
    */
+  const finishNewAccount = useCallback(() => setNewAccount(false), []);
+
   const offersGuestEntry = readEntryChoice() !== "guest";
 
   return {
     state,
     accountState,
     newAccount,
+    /** The new account's region step is done: AppShell remounts (a relock,
+     *  the min-version screen) must not ask it again over the choice. */
+    finishNewAccount,
     offersGuestEntry,
     error,
     /** The landing screen draws its own forms (Cognito issuer, real auth). */

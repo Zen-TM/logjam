@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { NSW_REGION, type Region } from "@logjam/shared";
 
@@ -67,5 +69,17 @@ describe("showsRegionStep", () => {
     expect(showsRegionStep({ signedUpNow: false, regions: TWO_REGIONS })).toBe(
       false,
     );
+  });
+});
+
+describe("the region step after Logjam Web's own sign-up form", () => {
+  // Mutation: delete App's `showsRegionStep({ signedUpNow: auth.newAccount })`
+  // block, or its `finishNewAccount()`, and the form's new account is never
+  // asked, or is asked again on every render.
+  it("is drawn by App from useAuth's new-account flag", () => {
+    const app = readFileSync(join(__dirname, "components/App.tsx"), "utf8");
+    expect(app).toContain("showsRegionStep({ signedUpNow: auth.newAccount })");
+    expect(app).toContain("<RegionStep");
+    expect(app).toContain("auth.finishNewAccount()");
   });
 });

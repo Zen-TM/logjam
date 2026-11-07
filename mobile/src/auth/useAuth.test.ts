@@ -177,6 +177,13 @@ describe("password sign-in", () => {
     expect(signInWithBrowser).not.toHaveBeenCalled();
   });
 
+  // Mutation: leave `finishNewAccount` a no-op, and a relock or the
+  // min-version screen remounts AppShell, which asks again over the choice.
+  it("clears the new account once its region step is done", () => {
+    useAuth().finishNewAccount();
+    expect(setState).toHaveBeenLastCalledWith(false);
+  });
+
   it("hands a form answer back to the form and opens no browser", async () => {
     const answer = {
       type: "form",

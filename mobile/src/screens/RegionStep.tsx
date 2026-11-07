@@ -1,13 +1,12 @@
 // "Where do you canyon?": the step after the terms of a new account. Shown by
 // `ConsentGate` when it records the terms, and by `AppShell` right after Logjam
-// GPS's own sign-up form, which records them itself (`showsRegionStepAfterSignIn`).
+// GPS's own sign-up form, which records them itself.
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { REGION_CHOICE, REGIONS, type Region } from "@logjam/shared";
 
 import type { AccountState } from "../auth/capabilities";
-import { useConnectivity } from "../map/connectivity";
 import { chooseRegions, useRegionsSending } from "../regionsPreference";
 import { makeStyles, spacing } from "../theme";
 import { Button, ErrorBanner } from "../ui";
@@ -21,16 +20,18 @@ import {
 export function RegionStep({
   accountState,
   onDone,
+  onSignOut,
   regions = REGIONS,
 }: {
   accountState: AccountState;
   onDone: () => void;
+  /** A send that keeps failing must not leave Retry as the only way out. */
+  onSignOut: () => void;
   /** Every region on offer; a prop so a test can give the step two. */
   regions?: readonly Region[];
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const online = useConnectivity() === "online";
   const sending = useRegionsSending();
   // None chosen at first: a new account that taps Continue must have chosen.
   const [chosen, setChosen] = useState<string[]>([]);
@@ -46,7 +47,7 @@ export function RegionStep({
       return;
     }
     setBanner(null);
-    if (await chooseRegions(chosen, sendsRegionChoice(accountState, online))) {
+    if (await chooseRegions(chosen, sendsRegionChoice(accountState))) {
       onDone();
     } else setBanner({ message: REGION_CHOICE.saveFailed, retry: true });
   };
@@ -80,6 +81,13 @@ export function RegionStep({
         />
       ) : null}
       <Button {...regionContinueProps(sending, send)} />
+      <Button
+        label="Sign out"
+        variant="ghost"
+        onPress={onSignOut}
+        disabled={sending}
+        disabledReason="Saving your regions…"
+      />
     </ScrollView>
   );
 }

@@ -22,25 +22,12 @@ export const showsRegionStep = (
 ): boolean => newAccount && offersRegionChoice(regions);
 
 /**
- * The step right after Logjam GPS's own sign-up form, which records consent
- * itself so `ConsentGate` never shows: until the step has been finished.
+ * Whether a choice goes to the account: no for a guest (ADR 0007), yes for a
+ * linked account. Connectivity doesn't decide it: a send that fails offline
+ * puts the choice back and the screen offers Retry.
  */
-export const showsRegionStepAfterSignIn = (
-  justCreatedAccount: boolean,
-  finished: boolean,
-  regions: readonly Region[] = REGIONS,
-): boolean => !finished && showsRegionStep(justCreatedAccount, regions);
-
-/**
- * Whether a choice goes to the account. Only a guest sends nothing (ADR 0007):
- * a linked account that is offline keeps the choice and sends it when it can,
- * so this is not "the capability is available".
- */
-export function sendsRegionChoice(
-  accountState: AccountState,
-  online: boolean,
-): boolean {
-  const status = capabilityStatus("serverPrefs", accountState, online);
+export function sendsRegionChoice(accountState: AccountState): boolean {
+  const status = capabilityStatus("serverPrefs", accountState, true);
   return !(
     status.status === "unavailable" && status.reason === "needs-account"
   );

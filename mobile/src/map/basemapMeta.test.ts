@@ -45,8 +45,9 @@ describe("the basemap in use while regions change under an open map", () => {
   // offers keeps drawing after its region is unchosen.
   it("is the pick while a chosen region offers it, else the default", () => {
     expect(effectiveBasemap("osm-cycle", ["nsw"])).toBe("osm-cycle");
-    // A region id nothing offers stands in for "unchosen": only the worldwide
-    // maps remain, so the NSW-only pick falls to that choice's default.
+    // `[]` stands in for "NSW unchosen", which only a second region makes
+    // real (`useRegions()` never returns none): only the worldwide maps
+    // remain, so the NSW-only pick falls to that choice's default.
     expect(effectiveBasemap("six-imagery", [])).toBe(defaultBasemap([]));
     expect(mobileBasemaps([])).not.toContain("six-imagery");
     // The pick is not rewritten: choosing the region again restores it.

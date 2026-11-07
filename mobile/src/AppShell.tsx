@@ -86,7 +86,7 @@ import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { RegionStep } from "./screens/RegionStep";
-import { showsRegionStepAfterSignIn } from "./screens/regionChoice";
+import { showsRegionStep } from "./screens/regionChoice";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -1016,12 +1016,15 @@ Notifications.setNotificationHandler({
 export function AppShell({
   accountState,
   newAccount = false,
+  onNewAccountDone,
   onLinkAccount,
   onSignOut,
 }: {
   accountState: AccountState;
   /** The sign-up form just made the account: ask for its regions first. */
   newAccount?: boolean;
+  /** The region step is done, wherever it was asked: never ask it again. */
+  onNewAccountDone?: () => void;
   onLinkAccount: () => void;
   onSignOut: SignOutHandler;
 }) {
@@ -1036,7 +1039,6 @@ export function AppShell({
     !isGuest,
   );
   const [consented, setConsented] = useState(false);
-  const [regionsAsked, setRegionsAsked] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const { fontScale } = useWindowDimensions();
   const tabBarHeight = useTabBarHeight();
@@ -1200,7 +1202,7 @@ export function AppShell({
         onConsented={() => {
           setConsented(true);
           // Its own region step has run for a new account.
-          setRegionsAsked(true);
+          onNewAccountDone?.();
           userQuery.refetch();
         }}
         onSignOut={onSignOut}
@@ -1210,11 +1212,12 @@ export function AppShell({
 
   // Logjam GPS's sign-up form records consent itself, so the gate above never
   // shows for an account it makes: its region step comes here instead.
-  if (showsRegionStepAfterSignIn(newAccount, regionsAsked)) {
+  if (showsRegionStep(newAccount)) {
     return (
       <RegionStep
         accountState={accountState}
-        onDone={() => setRegionsAsked(true)}
+        onDone={() => onNewAccountDone?.()}
+        onSignOut={() => onSignOut()}
       />
     );
   }
