@@ -139,7 +139,6 @@ import {
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
   canyonRegionsOf,
-  normalizeUserUiPreferences,
   opensPreview,
   PLAN_ADD_VERBS,
   planVerbsFor,
