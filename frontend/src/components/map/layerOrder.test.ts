@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
   drawsOverTerrain,
-  NSW_LAND,
+  NSW_REGION,
   TERRAIN_BASEMAP_ANCHORS,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -55,7 +55,9 @@ describe("landClassAt", () => {
   });
 
   it("names the class drawn at the point", () => {
-    const map = drawn({ [NSW_LAND.classProperty]: "State Forest" });
+    const map = drawn({
+      [NSW_REGION.terrain.land.classProperty]: "State Forest",
+    });
     expect(landClassAt(map, [1, 2])).toBe("State forest");
   });
 });

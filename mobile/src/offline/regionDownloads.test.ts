@@ -109,7 +109,7 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_LAND_CLIP, planExtract } =
+const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_REGION, planExtract } =
   await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
@@ -376,11 +376,11 @@ describe("runRegionClip", () => {
   it("cuts a land clip from the zoom a map draws it", async () => {
     expect((await run({ land: true })).status).toBe("ready");
     for (const { url } of cdn.calls)
-      expect(url).toBe(`${CDN}/${NSW_LAND_CLIP.archivePath}`);
+      expect(url).toBe(`${CDN}/${NSW_REGION.terrain.land.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "land-region",
-        logicalKey: NSW_LAND_CLIP.id,
+        logicalKey: NSW_REGION.terrain.land.id,
         minzoom: LAND_EDGE_MINZOOM,
       }),
     );

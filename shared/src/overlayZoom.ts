@@ -17,7 +17,7 @@ export const ZOOM_FADE_LEVELS = 1;
  */
 export const SLOPE_MIN_ZOOM = 11;
 
-/** Statewide contours (the archive starts at z11, `NSW_CONTOURS`). */
+/** Statewide contours (the archive starts at z11, `NSW_REGION.terrain.contours`). */
 export const CONTOURS_MIN_ZOOM = 12;
 export const CONTOUR_LABELS_MIN_ZOOM = 13;
 /** Minor contours, between the majors. */

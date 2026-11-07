@@ -44,27 +44,27 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
-  NSW_5M,
-  SHARPENED_SOURCE_PREFIX,
-  TOPO_LAYERS,
   formatDistanceM,
-  mediaDisplayName,
-  routeLengthM,
-  messageFromError,
-  removeShareConfirm,
+  type IconIdea,
   importFailureMessage,
+  lidarJobSharePromise,
+  MAP_TERRAIN,
+  mediaDisplayName,
+  messageFromError,
+  NSW_REGION,
+  removeShareConfirm,
+  routeLengthM,
+  type SharableEntityType,
+  type SharePromiseKind,
+  SHARPENED_SOURCE_PREFIX,
+  type ToastAction,
+  TOPO_LAYERS,
+  type TopoLayerFormat,
+  type TopoLayerName,
   WAY_IMPORT,
   WAY_KIND_WORDS,
   wayVerbIcon,
   wayVerbLabel,
-  type IconIdea,
-  type SharableEntityType,
-  type SharePromiseKind,
-  lidarJobSharePromise,
-  type TopoLayerFormat,
-  type TopoLayerName,
-  MAP_TERRAIN,
-  type ToastAction,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -236,7 +236,7 @@ function regionMemberName(artifact: MapArtifact): string {
   if (artifact.kind === "slope-region") return "Slope";
   if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return artifact.logicalKey === NSW_5M.id
+  return artifact.logicalKey === NSW_REGION.terrain.heights.id
     ? "Elevation data, NSW 5 m"
     : "Elevation data";
 }

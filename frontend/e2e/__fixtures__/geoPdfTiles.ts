@@ -3,7 +3,7 @@
 // tiles) around a generic point, built here so no network or archive is
 // needed. Nothing is a real place or a user's data.
 import { deflateSync, crc32 } from "node:zlib";
-import { LAND_CLASSES, NSW_LAND } from "@logjam/shared";
+import { LAND_CLASSES, NSW_REGION } from "@logjam/shared";
 import { PbfWriter } from "pbf";
 import { zxyToTileId } from "pmtiles";
 
@@ -122,7 +122,7 @@ export function landMvt(x: number, y: number): Buffer {
   tile.writeMessage(
     3,
     (_o, layer) => {
-      layer.writeStringField(1, NSW_LAND.sourceLayer);
+      layer.writeStringField(1, NSW_REGION.terrain.land.sourceLayer);
       // One shape past the tile's edges, and one whose border crosses the lakes
       // of `basemapMvt` (a lake spans 900 to 2200 of a tile a zoom deeper).
       for (const [lo, side] of [
@@ -150,7 +150,7 @@ export function landMvt(x: number, y: number): Buffer {
           },
           null,
         );
-      layer.writeStringField(3, NSW_LAND.classProperty);
+      layer.writeStringField(3, NSW_REGION.terrain.land.classProperty);
       layer.writeMessage(
         4,
         (_v, pbf) =>

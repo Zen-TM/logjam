@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   demCredits,
   isClimbSource,
-  NSW_5M,
   sampleDem,
   type DemTileReader,
 } from "./demSources.js";
@@ -19,6 +18,7 @@ import {
   type SharpenedArea,
   LIDAR_JOB_COPY,
 } from "./sharpen.js";
+import { NSW_REGION } from "./regions.js";
 
 // Made-up areas near Katoomba: a z15 range of two by two z14 tiles.
 const area = (over: Partial<SharpenedArea>): SharpenedArea => ({
@@ -167,7 +167,7 @@ describe("a sharpened area's heights", () => {
   const height: Record<string, number> = {
     "lidar-fine": 1,
     "lidar-older": 2,
-    [NSW_5M.id]: 3,
+    [NSW_REGION.terrain.heights.id]: 3,
     terrarium: 4,
   };
   const reader: DemTileReader = async (source, tiles) =>
@@ -216,7 +216,7 @@ describe("a sharpened area's heights", () => {
     expect(profile.demSourceIds).toEqual(["lidar-fine"]);
     expect(demCredits(profile.demSourceIds, sources)).toEqual([
       fine.credit,
-      NSW_5M.credit,
+      NSW_REGION.terrain.heights.credit,
     ]);
     expect(climbFromProfile(profile)?.elevationSource).toBe("lidar");
     expect(isClimbSource("lidar")).toBe(true);
@@ -234,7 +234,7 @@ describe("a sharpened area's heights", () => {
     expect(climbFromProfile(profile)?.elevationSource).toBe("nsw-5m");
     expect(demCredits(profile.demSourceIds, sources)).toEqual([
       fine.credit,
-      NSW_5M.credit,
+      NSW_REGION.terrain.heights.credit,
     ]);
   });
 });

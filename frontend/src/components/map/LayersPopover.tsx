@@ -1,17 +1,17 @@
 import { useState, type ReactNode, type RefObject } from "react";
 import {
+  takesNswContours,
+  takesNswHillshade,
   contractSectionKeys,
   LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  NSW_LAND,
+  NSW_REGION,
   PLACE_TYPE_COLORS,
-  slopeLegendRows,
-  takesNswContours,
-  takesNswHillshade,
   type SectionKeysOn,
   type SlopeBand,
+  slopeLegendRows,
   type TerrainSwitchKey,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
@@ -590,7 +590,7 @@ export function LandRow({
           ))}
         </ul>
         <p>{terrainCopy.landCaveat}</p>
-        <p>{NSW_LAND.credit}</p>
+        <p>{NSW_REGION.terrain.land.credit}</p>
       </Dialog>
     </>
   );

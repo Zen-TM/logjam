@@ -8,6 +8,8 @@
 // the user asks (shared/DESIGN.md §13): Nominatim's usage policy forbids
 // search-as-you-type on its API. Results bias toward NSW, Australia.
 
+import { NSW_REGION, regionBounds } from "./regions.js";
+
 export interface GeocodeResult {
   displayName: string;
   lat: number;
@@ -17,7 +19,8 @@ export interface GeocodeResult {
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 // Bias toward NSW, Australia (the canyoning region) without hard-restricting:
 // lon1,lat1,lon2,lat2 (two opposite corners).
-const NSW_VIEWBOX = "140.999,-28.157,153.638,-37.505";
+const VIEWBOX = (({ west, south, east, north }) =>
+  `${west},${north},${east},${south}`)(regionBounds(NSW_REGION));
 
 /** Shorter than this, the geocoder has nothing useful to say. */
 export const GEOCODE_MIN_QUERY_LENGTH = 3;
@@ -74,7 +77,7 @@ export async function geocode(
     q: trimmed,
     countrycodes: "au",
     limit: String(RESULT_LIMIT),
-    viewbox: NSW_VIEWBOX,
+    viewbox: VIEWBOX,
     bounded: "0",
   });
 

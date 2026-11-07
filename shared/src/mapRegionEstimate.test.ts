@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_SOURCES, NSW_5M, TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_AREA_KM2,
@@ -21,6 +21,7 @@ import {
   type OfflineBasemapId,
   type RegionBbox,
 } from "./mapRegionEstimate.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
@@ -256,7 +257,7 @@ describe("planRegionForBasemaps", () => {
     const [clip] = planRegionForBasemaps(b, [], 15, maxZoomFor).demArchives;
     const z15 = planRegionTiles(b, 15, 15).totalTiles;
     expect(clip!.size.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
-    expect(demClipMinZoom(NSW_5M)).toBe(8);
+    expect(demClipMinZoom(NSW_REGION.terrain.heights)).toBe(8);
     expect(demClipMinZoom(TERRARIUM)).toBe(TERRARIUM.sampleZoom);
   });
 

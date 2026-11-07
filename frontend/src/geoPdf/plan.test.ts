@@ -1,15 +1,12 @@
 import {
-  extentFromCentreAndSize,
+  type GeoPdfConfig,
+  getMapDimensions,
   lat2tileY,
   lon2tileX,
-  getMapDimensions,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
-  type GeoPdfConfig,
   type SharpenedOverlay,
+  extentFromCentreAndSize,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -69,7 +66,10 @@ describe("statewideReads", () => {
   it("names the height and slope tiles of a hillshade and slope print, each once", () => {
     const reads = statewideReads(input({}));
     expect(paths(reads).sort()).toEqual(
-      [NSW_HILLSHADE.archivePath, NSW_SLOPE.archivePath].sort(),
+      [
+        NSW_REGION.terrain.hillshade.archivePath,
+        NSW_REGION.terrain.slope.archivePath,
+      ].sort(),
     );
     const keys = reads.map((r) => `${r.path} ${r.z}/${r.x}/${r.y}`);
     expect(new Set(keys).size).toBe(keys.length);
@@ -83,7 +83,7 @@ describe("statewideReads", () => {
   it("reads only the layers the print draws", () => {
     expect(paths(statewideReads(input({ overlays: [] })))).toEqual([]);
     expect(paths(statewideReads(input({ overlays: ["slope"] })))).toEqual([
-      NSW_SLOPE.archivePath,
+      NSW_REGION.terrain.slope.archivePath,
     ]);
     // Imagery carries its own shadows: a hillshade asked for is not drawn.
     expect(
@@ -99,7 +99,7 @@ describe("statewideReads", () => {
     const imagery = statewideReads(
       input({ baseLayer: "six-imagery", overlays: ["contours"] }),
     );
-    expect(paths(imagery)).toEqual([NSW_CONTOURS.archivePath]);
+    expect(paths(imagery)).toEqual([NSW_REGION.terrain.contours.archivePath]);
     expect(paths(statewideReads(input({ overlays: ["contours"] })))).toEqual(
       [],
     );
@@ -109,7 +109,7 @@ describe("statewideReads", () => {
   // network again, or fails offline.
   it("adds Land where the print asks for it, over any sheet", () => {
     expect(paths(statewideReads(input({ overlays: ["land"] })))).toEqual([
-      NSW_LAND.archivePath,
+      NSW_REGION.terrain.land.archivePath,
     ]);
   });
 

@@ -23,7 +23,10 @@ from build_land_tenure import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARED = (ROOT / "shared/src/nswLand.ts").read_text()
+# The archive is declared in the region (regions.ts), drawn by nswLand.ts.
+SHARED = "".join(
+    (ROOT / "shared/src" / name).read_text() for name in ("nswLand.ts", "regions.ts")
+)
 
 
 class TestClasses(unittest.TestCase):

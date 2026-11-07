@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import {
-  NSW_CONTOURS,
   contourLabelHalo,
   drawsNswContours,
   drawsNswHillshade,
+  nswContourStyle,
   takesNswContours,
   takesNswHillshade,
-  nswContourStyle,
 } from "./nswContours.js";
 import { VECTOR_STYLE_DEFAULTS } from "./topoSettings.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("drawsNswContours", () => {
   it("draws over the vector basemap and imagery while the switch is on", () => {
@@ -38,7 +38,9 @@ describe("drawsNswContours", () => {
   });
 
   it("credits the contours, not the elevation", () => {
-    expect(NSW_CONTOURS.credit).toMatch(/^Contours: derived from the NSW 5 m/);
+    expect(NSW_REGION.terrain.contours.credit).toMatch(
+      /^Contours: derived from the NSW 5 m/,
+    );
   });
 });
 

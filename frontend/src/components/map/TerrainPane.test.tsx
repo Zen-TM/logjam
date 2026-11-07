@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAP_TERRAIN,
-  NSW_LAND,
+  NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
@@ -225,6 +225,6 @@ describe("the Land tenure row on Logjam Web", () => {
     expect(legend).toContain(copy.landLegend);
     expect(legend).toContain("Private land");
     expect(legend).toContain(copy.landCaveat);
-    expect(legend).toContain(NSW_LAND.credit);
+    expect(legend).toContain(NSW_REGION.terrain.land.credit);
   });
 });

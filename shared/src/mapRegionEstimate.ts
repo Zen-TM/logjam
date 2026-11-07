@@ -2,15 +2,9 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import {
-  DEM_SOURCES,
-  NSW_5M,
-  TERRARIUM,
-  type DemSource,
-} from "./demSources.js";
-import { NSW_CONTOURS } from "./nswContours.js";
-import { NSW_LAND_CLIP } from "./nswLand.js";
-import { NSW_HILLSHADE, NSW_SLOPE } from "./terrain.js";
+import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import { landClip } from "./nswLand.js";
+import { NSW_REGION } from "./regions.js";
 
 export type RegionBbox = {
   west: number;
@@ -306,7 +300,7 @@ export function estimateRegionSeconds(totalTiles: number): number {
 /**
  * MEASURED bytes of one tile of a DEM archive at each zoom a clip holds. The
  * sampler reads only the `sampleZoom`; the shallower zooms are saved for the
- * hillshade (`NSW_HILLSHADE`), which would vanish below z15 without them.
+ * hillshade (`NSW_REGION.terrain.hillshade`), which would vanish below z15 without them.
  *
  * z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
  * 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
@@ -334,7 +328,9 @@ const DEM_ARCHIVE_TILE_BYTES: Record<
 
 /** The zoom a saved clip of this DEM archive starts at. */
 export function demClipMinZoom(source: DemSource): number {
-  return source.id === NSW_5M.id ? NSW_HILLSHADE.minzoom : source.sampleZoom;
+  return source.id === NSW_REGION.terrain.heights.id
+    ? NSW_REGION.terrain.hillshade.minzoom
+    : source.sampleZoom;
 }
 
 /**
@@ -421,15 +417,27 @@ function estimateStatewideClip(
 }
 
 export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_CONTOURS, CONTOUR_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.contours,
+    CONTOUR_TILE_BYTES,
+  );
 }
 
 export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_SLOPE, SLOPE_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.slope,
+    SLOPE_TILE_BYTES,
+  );
 }
 
 export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_LAND_CLIP, LAND_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    landClip(NSW_REGION.terrain.land),
+    LAND_TILE_BYTES,
+  );
 }
 
 export interface MultiSourceRegionPlan {

@@ -20,7 +20,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
 | **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
-| **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
+| **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_REGION.terrain.land.credit` in `shared/src/regions.ts` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -96,14 +96,14 @@ version; the source last changed in October 2025.
    A new release can rename its layer: pass it with `--layer`
    (`ogrinfo -ro -q <gdb>` lists it). The build stops on a class that
    `LAND_CLASSES` in `shared/src/nswLand.ts` doesn't have, because a client draws
-   nothing for one. A new version also changes `NSW_LAND.credit`.
+   nothing for one. A new version also changes `NSW_REGION.terrain.land.credit`.
 
 The December 2024 v2 file takes 20 minutes on 4 cores and 9 GB, and makes
 178 MB. At z13, 3,200 random points in four boxes had the same class as the
 source.
 
 Publishing is a prod change and the maintainer's to make. The archive goes to
-the topo bucket at the path `NSW_LAND.archivePath` names, and needs no deploy:
+the topo bucket at the path `NSW_REGION.terrain.land.archivePath` names, and needs no deploy:
 
 ```bash
 aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
@@ -181,8 +181,8 @@ Run `tile` only after `fetch` has finished: a block is built from every sheet
 that touches it, and a finished block is not rebuilt when a neighbour arrives.
 
 Publishing is a prod change and the maintainer's to make. The archive goes to
-the topo bucket at the path `NSW_5M.archivePath` names in
-`shared/src/demSources.ts`:
+the topo bucket at the path `NSW_REGION.terrain.heights.archivePath` names in
+`shared/src/regions.ts`:
 
 ```bash
 aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
@@ -192,7 +192,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem
 
 No deploy is needed. The API looks for the archive every five minutes and
 starts reading it when it appears; the clients read it on their next lookup.
-If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
+If `--extracted` was not the month in `NSW_REGION.terrain.heights.credit`, change the credit in
 the same week. A new height archive leaves the slope archive (below) on the old
 heights and month: rebuild it, deleting `dem/nsw-5m-slope.work/` first if an
 earlier local run left one.

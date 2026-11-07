@@ -13,13 +13,13 @@ import { PROTOMAPS_SWATCH } from "../basemapSwatch";
 import {
   computeTileToMapTransform,
   computeZoom,
-  extentFromCentreAndSize,
-  geoPdfMaxNativeZoom,
-  NSW_HILLSHADE,
-  TARGET_DPI,
-  getMapDimensions,
-  RASTER_TEMPLATE_DEFAULTS,
   type GeoPdfConfig,
+  geoPdfMaxNativeZoom,
+  getMapDimensions,
+  NSW_REGION,
+  RASTER_TEMPLATE_DEFAULTS,
+  TARGET_DPI,
+  extentFromCentreAndSize,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 import { prefetchGeoPdf, runGeoPdfRender } from "./client";
@@ -97,7 +97,7 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
  */
 async function a3Scenario(scale = 25000): Promise<GeoPdfConfig> {
   const header = await new PMTiles(
-    `${location.origin}/${NSW_HILLSHADE.archivePath}`,
+    `${location.origin}/${NSW_REGION.terrain.hillshade.archivePath}`,
   ).getHeader();
   return config(
     { baseLayer: "six-base", overlays: ["hillshade", "slope"] },

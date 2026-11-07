@@ -13,12 +13,10 @@
 // credential. Nothing here logs either (`terrainRouter.test.ts`, "logs
 // nothing").
 import {
-  NSW_CONTOURS,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
+  terrainTileArchive,
   SHARPENED_ARCHIVE_URL,
   sharpenedDemSource,
-  terrainTileArchive,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
   type TerrainLayerKey,
@@ -36,9 +34,9 @@ export type RoutedTerrainKey = Exclude<TerrainLayerKey, "land">;
  * (`terrainRouter.test.ts`, "reads the statewide archive the entries do").
  */
 export const TERRAIN_STATEWIDE = {
-  contours: NSW_CONTOURS,
-  slope: NSW_SLOPE,
-  hillshade: NSW_HILLSHADE,
+  contours: NSW_REGION.terrain.contours,
+  slope: NSW_REGION.terrain.slope,
+  hillshade: NSW_REGION.terrain.hillshade,
 } as const satisfies Record<
   RoutedTerrainKey,
   { archivePath: string; minzoom: number; maxzoom: number; creditHtml: string }

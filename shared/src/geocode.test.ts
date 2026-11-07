@@ -26,7 +26,7 @@ describe("geocode", () => {
       q: "Newnes Plateau",
       countrycodes: "au",
       limit: "5",
-      viewbox: "140.999,-28.157,153.638,-37.505",
+      viewbox: "140.9,-28.04,154.29,-37.73",
       bounded: "0",
     });
     expect(Object.keys(init.headers as object).sort()).toEqual([

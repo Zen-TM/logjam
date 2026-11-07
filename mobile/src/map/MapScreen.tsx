@@ -64,48 +64,48 @@ import {
 } from "expo-sensors";
 import {
   abandonConfirm,
-  SYSTEM_PLACE_TYPE_IDS,
   demCredits,
-  TRACK_MIME_TYPES,
   distinctTripTypes,
   draftAnchorIndices,
   draftPoints,
-  emptyDraft,
-  haversineMeters,
-  initialBearingDegrees,
-  MAP_OVERLAY_REFINEMENTS,
-  GAUGES,
-  MAP_OVERLAYS,
-  MAP_OVERLAY_DEFAULTS,
-  messageFromError,
-  pickNextTrackColor,
-  ROUTE_NAME_MAX_LENGTH,
-  nearestSegment,
-  snapSegment,
-  type IconIdea,
-  type SnapMode,
-  type TrackPass,
   drawsNswContours,
   drawsNswHillshade,
+  GAUGES,
+  haversineMeters,
+  pickNextTrackColor,
+  type IconIdea,
+  initialBearingDegrees,
   LAND_EDGE_LINES,
   LAND_EDGE_MINZOOM,
   landColor,
   landEdgeOpacity,
   landNameOf,
-  NSW_LAND,
-  slopeReliefColor,
-  SLOPE_MIN_ZOOM,
-  zoomFadeIn,
-  terrainBeforeIds,
-  type TerrainLayerKey,
-  type TerrainSwitchKey,
-  nswContourStyle,
-  MAP_INK,
-  TRIP_PLAN_PAGE,
   planRouteNotAdded,
-  type SharpenedArea,
+  MAP_INK,
+  MAP_OVERLAY_DEFAULTS,
+  MAP_OVERLAY_REFINEMENTS,
+  MAP_OVERLAYS,
+  messageFromError,
+  emptyDraft,
+  nearestSegment,
+  NSW_REGION,
+  nswContourStyle,
+  ROUTE_NAME_MAX_LENGTH,
+  terrainBeforeIds,
   type SearchPin,
   searchPinAfter,
+  type SharpenedArea,
+  SLOPE_MIN_ZOOM,
+  slopeReliefColor,
+  type SnapMode,
+  snapSegment,
+  SYSTEM_PLACE_TYPE_IDS,
+  type TerrainLayerKey,
+  type TerrainSwitchKey,
+  TRACK_MIME_TYPES,
+  type TrackPass,
+  TRIP_PLAN_PAGE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import {
   isPlanPin,
@@ -5147,7 +5147,7 @@ export function MapScreen({
               key={`nsw-land-${r.key}`}
               type="fill"
               id={`nsw-land-${r.key}`}
-              source-layer={NSW_LAND.sourceLayer}
+              source-layer={NSW_REGION.terrain.land.sourceLayer}
               beforeId={groundBefore[`nsw-land-${r.key}`]}
               minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5159,7 +5159,7 @@ export function MapScreen({
                 key={`nsw-land-edge-${i}-${r.key}`}
                 type="line"
                 id={`nsw-land-edge-${i}-${r.key}`}
-                source-layer={NSW_LAND.sourceLayer}
+                source-layer={NSW_REGION.terrain.land.sourceLayer}
                 beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
                 minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
