@@ -45,9 +45,11 @@ receives.**
 
 - **Public files.** Under `WEATHER_MAP.prefix` (`master/weather/v1/`):
   `latest.json` (the manifest, `WeatherMapFile` in
-  `shared/src/weatherMap.ts`) and a folder per run, `runs/<run>/`, holding one
-  PMTiles archive per field and step, one per rain total, and `wind.json`
-  for the arrows. A run's files go up before the manifest names them, and the
+  `shared/src/weatherMap.ts`) and a folder per build, `runs/<run>-<anchor>/`,
+  holding one PMTiles archive per field and step, one per rain total, and
+  `wind.json` for the arrows. The anchor in the name keeps two overlapping
+  builds of one run (one that ran past the hour) out of each other's files.
+  A run's files go up before the manifest names them, and the
   run before is kept, so a client holding the old manifest still finds its
   files. Guard: `topo/tests/test_weather.py` ("the manifest goes up last and
   two runs are kept"), and `shared/src/weatherMap.test.ts` against the
@@ -81,10 +83,12 @@ receives.**
   to the account's private ECR repository and is never published. No client
   package depends on an Open-Meteo reader. Guard: `test_weather.py` ("Open-
   Meteo's reader is in the worker image only"), which fails if `omfiles`
-  appears in another requirements file or `@openmeteo/` in any
-  `package.json` or lockfile.
-- **Credit** is the manifest's `attribution`, "Weather data by
-  Open-Meteo.com (CC BY 4.0), ECMWF IFS", drawn wherever the overlay is.
+  appears in another requirements file, a Dockerfile or a `pyproject.toml`,
+  or `@openmeteo/` in any `package.json` or lockfile.
+- **Credit** is the job's `ATTRIBUTION`, "Weather data by Open-Meteo.com
+  (CC BY 4.0), ECMWF IFS", carried in the manifest and mirrored as
+  `WEATHER_MAP.credit`, which both clients draw wherever the overlay is.
+  Guard: `test_weather.py` ("the prefix and format match shared").
 
 ## Consequences
 
@@ -100,8 +104,18 @@ receives.**
   (`check_source` refuses a grid other than O1280), and the overlay ages
   until it is fixed. Whoever conveys the topo worker image to anyone else
   would convey GPL-2.0-only code combined with AGPL-3.0 code: the image must
-  stay private, which nothing but its ECR repository's policy enforces. A
-  later client-side reader means writing our own decoder.
+  stay private. It is, by ECR's default (no repository policy grants anyone
+  outside the account), and no check holds that: publishing it would be held
+  only by review. Two paths reach it from outside the maintainer, both open
+  questions for the maintainer: contributors' read-only AWS role
+  ([0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md))
+  includes ECR pull, so a contributor can pull the image; and CI's topo-e2e
+  job exports every layer of it, the `omfiles` layer included, to this public
+  repository's Actions cache, which a fork's pull request workflow can
+  restore. Whether either counts as conveying is the maintainer's call; if
+  one does, the fix is a Deny on pulling `logjam-topo-worker` in the
+  read-only role, or keeping that layer out of the exported cache. A later
+  client-side reader means writing our own decoder.
 - **Neutral:** the bucket's 7 days limit past rain to a week; ERA5 runs 5
   days behind, so no reanalysis covers the last 72 hours either. Each build
   reads about 270 MB from the bucket, four times a day.

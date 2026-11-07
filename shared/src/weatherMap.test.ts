@@ -39,6 +39,8 @@ function reliefAt(expression: unknown[], value: number): string {
 }
 
 describe("the weather map's manifest", () => {
+  // Mutation: rename or drop a manifest field on either side, or bump the
+  // format on one, and the parse comes back null.
   it("reads the file the builder writes", () => {
     expect(file).not.toBeNull();
     expect(file.model).toBe("ecmwf_ifs");
@@ -63,6 +65,9 @@ describe("the weather map's manifest", () => {
     expect(parseWeatherMap(null)).toBeNull();
   });
 
+  // Mutation: name a step without its zero padding, a total under the
+  // fields, or a step past the run, and a client asks for a file the job
+  // never wrote.
   it("names each layer's archive under the run's folder", () => {
     const folder = `${BASE}/${WEATHER_MAP.prefix}${file.path}`;
     expect(weatherLayerUrl(`${BASE}/`, file, "rain", 7)).toBe(
@@ -126,18 +131,20 @@ describe("the colours", () => {
   it("leaves no value clear for every layer", () => {
     for (const layer of WEATHER_LAYERS)
       expect(reliefAt(weatherReliefColor(layer.key), -32768)).toBe(
-        "rgba(0,0,0,0)",
+        "rgba(0,0,0,0.000)",
       );
   });
 
   it("leaves a dry or calm map clear", () => {
-    expect(reliefAt(weatherReliefColor("rain"), 0)).toBe("rgba(0,0,0,0)");
+    expect(reliefAt(weatherReliefColor("rain"), 0)).toBe("rgba(0,0,0,0.000)");
     expect(reliefAt(weatherReliefColor("rainPast168"), 0.2)).toBe(
-      "rgba(0,0,0,0)",
+      "rgba(0,0,0,0.000)",
     );
-    expect(reliefAt(weatherReliefColor("wind"), 3)).toBe("rgba(0,0,0,0)");
+    expect(reliefAt(weatherReliefColor("wind"), 3)).toBe("rgba(0,0,0,0.000)");
   });
 
+  // Mutation: put two stops out of order or on one value, and MapLibre
+  // refuses the whole expression and draws nothing.
   it("interpolates stops in rising order", () => {
     for (const layer of WEATHER_LAYERS) {
       const values = layer.stops.map((s) => s.value);
@@ -146,6 +153,8 @@ describe("the colours", () => {
     }
   });
 
+  // Mutation: list an unlabelled stop, or a translucent colour, and the key
+  // shows a row the map has no band for, or a swatch the sheet swallows.
   it("keys the legend by each labelled stop, opaque", () => {
     const rows = weatherLegendRows("rain");
     expect(rows.map((r) => r.label)).toEqual([
@@ -164,6 +173,8 @@ describe("the colours", () => {
 });
 
 describe("the wind arrows", () => {
+  // Mutation: count rows from the south, or turn the arrow to `from`
+  // instead of downwind, and every arrow points the wrong way.
   it("places each point from the north-west and turns it downwind", () => {
     const { features } = windArrows(wind, 0);
     expect(features).toHaveLength(wind.rows * wind.columns);
@@ -177,6 +188,7 @@ describe("the wind arrows", () => {
     expect(features[0]!.properties).toEqual({ speed: 18, rotate: 0 });
   });
 
+  // Mutation: draw a null as 0, and a point with no forecast shows calm.
   it("leaves out a point with no value, and a step that isn't there", () => {
     const gappy: WeatherWindFile = {
       ...wind,

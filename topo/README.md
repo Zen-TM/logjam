@@ -23,7 +23,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
 | **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
 | **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
-| **Open-Meteo** (ECMWF IFS, `s3://openmeteo/data_spatial/`) | the Weather overlay (`build_weather.py`) | CC BY 4.0 | the manifest's `attribution`: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS" |
+| **Open-Meteo** (ECMWF IFS, `s3://openmeteo/data_spatial/`) | the Weather overlay (`build_weather.py`) | CC BY 4.0 | `WEATHER_MAP.credit` in `shared/src/weatherMap.ts`, the manifest's `attribution` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 

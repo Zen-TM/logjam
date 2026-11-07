@@ -15,6 +15,12 @@
 // writes from the builder.
 import { SHORT_WEEKDAYS } from "./dateNames.js";
 import { WEATHER } from "./contracts/weather.js";
+import {
+  mixHex,
+  parseRgbaHex,
+  type RgbaHex,
+  rgbaCssFromHex,
+} from "./topoSettings.js";
 
 /** Bumped with the files' shape; each format has its own prefix. */
 export const WEATHER_MAP_FORMAT = 1;
@@ -27,6 +33,9 @@ export const WEATHER_MAP = {
   manifestPath: `master/weather/v${WEATHER_MAP_FORMAT}/latest.json`,
   /** The model's cells are about 9 km: the copy says so, once. */
   cellKm: 9,
+  /** The job's ATTRIBUTION, which every manifest carries: CC BY 4.0's
+   *  condition. Guard: topo/tests/test_weather.py. */
+  credit: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS",
 } as const;
 
 export type WeatherFieldKey = "rain" | "temperature" | "wind" | "gusts";
@@ -72,7 +81,8 @@ export type WeatherWindFile = {
   steps: { speed: (number | null)[]; from: (number | null)[] }[];
 };
 
-type Stop = { value: number; colour: string; label?: string };
+/** `colour` is `#rrggbbaa`: the alpha is how much of the map shows through. */
+type Stop = { value: number; colour: RgbaHex; label?: string };
 
 export type WeatherLayer = {
   key: WeatherLayerKey;
@@ -87,7 +97,7 @@ export type WeatherLayer = {
   arrows?: boolean;
 };
 
-const CLEAR = "rgba(0,0,0,0)";
+const CLEAR = "#00000000";
 
 // Rain runs pale blue to violet and purple, temperature blue to red, wind
 // green to red to purple: none reads as Slope's yellow-to-dark-red bands
@@ -95,38 +105,38 @@ const CLEAR = "rgba(0,0,0,0)";
 // shows through. The alpha is in the stop: light rain stays light on the map.
 const RAIN_STOPS: readonly Stop[] = [
   { value: 0.05, colour: CLEAR },
-  { value: 0.2, colour: "rgba(165,216,255,0.55)", label: "0.2 mm/h" },
-  { value: 1, colour: "rgba(77,171,247,0.7)", label: "1 mm/h" },
-  { value: 3, colour: "rgba(28,126,214,0.8)", label: "3 mm/h" },
-  { value: 8, colour: "rgba(95,61,196,0.85)", label: "8 mm/h" },
-  { value: 20, colour: "rgba(59,7,100,0.9)", label: "20 mm/h" },
+  { value: 0.2, colour: "#a5d8ff8c", label: "0.2 mm/h" },
+  { value: 1, colour: "#4dabf7b2", label: "1 mm/h" },
+  { value: 3, colour: "#1c7ed6cc", label: "3 mm/h" },
+  { value: 8, colour: "#5f3dc4d9", label: "8 mm/h" },
+  { value: 20, colour: "#3b0764e6", label: "20 mm/h" },
 ];
 const TOTAL_STOPS: readonly Stop[] = [
   { value: 0.5, colour: CLEAR },
-  { value: 2, colour: "rgba(165,216,255,0.55)", label: "2 mm" },
-  { value: 10, colour: "rgba(77,171,247,0.7)", label: "10 mm" },
-  { value: 25, colour: "rgba(28,126,214,0.8)", label: "25 mm" },
-  { value: 50, colour: "rgba(95,61,196,0.85)", label: "50 mm" },
-  { value: 100, colour: "rgba(59,7,100,0.9)", label: "100 mm" },
+  { value: 2, colour: "#a5d8ff8c", label: "2 mm" },
+  { value: 10, colour: "#4dabf7b2", label: "10 mm" },
+  { value: 25, colour: "#1c7ed6cc", label: "25 mm" },
+  { value: 50, colour: "#5f3dc4d9", label: "50 mm" },
+  { value: 100, colour: "#3b0764e6", label: "100 mm" },
 ];
 const TEMPERATURE_STOPS: readonly Stop[] = [
   // Below it is no value (−32768): clear, not the coldest colour.
   { value: -1000, colour: CLEAR },
-  { value: -999, colour: "rgba(76,110,245,0.6)" },
-  { value: -5, colour: "rgba(76,110,245,0.6)", label: "−5°" },
-  { value: 5, colour: "rgba(116,192,252,0.6)", label: "5°" },
-  { value: 15, colour: "rgba(150,242,215,0.6)", label: "15°" },
-  { value: 22, colour: "rgba(255,236,153,0.6)", label: "22°" },
-  { value: 30, colour: "rgba(255,146,43,0.6)", label: "30°" },
-  { value: 38, colour: "rgba(201,42,42,0.65)", label: "38°" },
+  { value: -999, colour: "#4c6ef599" },
+  { value: -5, colour: "#4c6ef599", label: "−5°" },
+  { value: 5, colour: "#74c0fc99", label: "5°" },
+  { value: 15, colour: "#96f2d799", label: "15°" },
+  { value: 22, colour: "#ffec9999", label: "22°" },
+  { value: 30, colour: "#ff922b99", label: "30°" },
+  { value: 38, colour: "#c92a2aa6", label: "38°" },
 ];
 const WIND_STOPS: readonly Stop[] = [
   { value: 5, colour: CLEAR },
-  { value: 15, colour: "rgba(150,242,215,0.45)", label: "15 km/h" },
-  { value: 30, colour: "rgba(255,224,102,0.55)", label: "30 km/h" },
-  { value: 50, colour: "rgba(255,146,43,0.65)", label: "50 km/h" },
-  { value: 70, colour: "rgba(224,49,49,0.75)", label: "70 km/h" },
-  { value: 100, colour: "rgba(134,46,156,0.85)", label: "100 km/h" },
+  { value: 15, colour: "#96f2d773", label: "15 km/h" },
+  { value: 30, colour: "#ffe0668c", label: "30 km/h" },
+  { value: 50, colour: "#ff922ba6", label: "50 km/h" },
+  { value: 70, colour: "#e03131bf", label: "70 km/h" },
+  { value: 100, colour: "#862e9cd9", label: "100 km/h" },
 ];
 
 /** The picker's options in order: the stepped fields, then the totals from
@@ -204,7 +214,10 @@ export const isWeatherTotal = (layer: WeatherLayer): boolean =>
 
 /** The `color-relief-color` for a layer: its stops, interpolated. */
 export function weatherReliefColor(key: WeatherLayerKey): unknown[] {
-  const stops = weatherLayer(key).stops.flatMap((s) => [s.value, s.colour]);
+  const stops = weatherLayer(key).stops.flatMap((s) => [
+    s.value,
+    rgbaCssFromHex(s.colour),
+  ]);
   return ["interpolate", ["linear"], ["elevation"], ...stops];
 }
 
@@ -214,17 +227,19 @@ export function weatherLegendRows(
   key: WeatherLayerKey,
 ): { label: string; colour: string }[] {
   return weatherLayer(key).stops.flatMap((stop) =>
-    stop.label ? [{ label: stop.label, colour: overWhite(stop.colour) }] : [],
+    stop.label
+      ? [
+          {
+            label: stop.label,
+            colour: mixHex(
+              "#ffffff",
+              stop.colour.slice(0, 7),
+              parseRgbaHex(stop.colour)[3] / 255,
+            ),
+          },
+        ]
+      : [],
   );
-}
-
-function overWhite(rgba: string): string {
-  const [r, g, b, a] = rgba.match(/[\d.]+/g)!.map(Number);
-  const mix = (c: number) =>
-    Math.round(255 + (c - 255) * a)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${mix(r)}${mix(g)}${mix(b)}`;
 }
 
 /**
@@ -244,7 +259,7 @@ export function parseWeatherMap(raw: unknown): WeatherMapFile | null {
     !time(f.built) ||
     !time(f.anchor) ||
     typeof f.path !== "string" ||
-    !/^runs\/\d{8}T\d{4}Z\/$/.test(f.path) ||
+    !/^runs\/\d{8}T\d{4}Z-\d{8}T\d{4}Z\/$/.test(f.path) ||
     !Array.isArray(f.bounds) ||
     f.bounds.length !== 4 ||
     !f.bounds.every(Number.isFinite) ||

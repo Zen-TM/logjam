@@ -257,6 +257,9 @@ class TestBuild(unittest.TestCase):
         self.assertTrue(np.isnan(heights[~inside]).all())
 
     def test_the_build_matches_the_fixtures(self):
+        # Mutation: change a manifest field, a folder's layout or the arrows'
+        # shape and this fails, until the fixtures are regenerated and
+        # weatherMap.test.ts reads them.
         with tempfile.TemporaryDirectory() as tmp:
             manifest = self.build(tmp)
             wind = json.loads((Path(tmp) / manifest["path"] / "wind.json").read_text())
@@ -290,17 +293,23 @@ class TestBuild(unittest.TestCase):
                 )
 
     def test_the_prefix_and_format_match_shared(self):
+        # Mutation: bump FORMAT, rename a field or total, or change the
+        # credit on one side only, and the clients ask for files or draw a
+        # credit the job doesn't write.
         with open(_SHARED_TS) as f:
             ts = f.read()
         self.assertIn(f"export const WEATHER_MAP_FORMAT = {w.FORMAT};", ts)
         self.assertEqual(w.S3_PREFIX, f"master/weather/v{w.FORMAT}/")
         self.assertIn("prefix: `master/weather/v${WEATHER_MAP_FORMAT}/`", ts)
+        self.assertIn(f'credit: "{w.ATTRIBUTION}"', ts)
         for key in w.TOTALS:
             self.assertIn(f'key: "{key}"', ts)
         for field in w.FIELDS:
             self.assertIn(f'key: "{field.key}"', ts)
 
     def test_an_incomplete_or_regridded_run_is_refused(self):
+        # Mutation: drop a check in check_source and a run on another grid
+        # is sampled with O1280's indices into a plausible-looking wrong map.
         with self.assertRaises(SystemExit):
             w.check_source({**latest_json(), "completed": False})
         with self.assertRaises(SystemExit):
@@ -348,12 +357,12 @@ class TestPublish(unittest.TestCase):
     def test_the_manifest_goes_up_last_and_two_runs_are_kept(self):
         # Mutation: upload latest.json first, or prune the run before, and a
         # client mid-switch asks for files that aren't there.
-        old = w.S3_PREFIX + "runs/20261106T1800Z/rain/000.pmtiles"
-        older = w.S3_PREFIX + "runs/20261106T1200Z/rain/000.pmtiles"
+        old = w.S3_PREFIX + "runs/20261106T1800Z-20261107T0000Z/rain/000.pmtiles"
+        older = w.S3_PREFIX + "runs/20261106T1200Z-20261106T1800Z/rain/000.pmtiles"
         s3 = FakeS3(
             {
                 w.S3_PREFIX + "latest.json": self.manifest_bytes(
-                    "2026-11-06T18:00Z", "runs/20261106T1800Z/"
+                    "2026-11-06T18:00Z", "runs/20261106T1800Z-20261107T0000Z/"
                 ),
                 old: b"x",
                 older: b"x",
@@ -376,18 +385,25 @@ class TestPublish(unittest.TestCase):
         keys = [k for k, _ in s3.puts]
         self.assertEqual(keys[-1], w.S3_PREFIX + "latest.json")
         self.assertTrue(
-            all(k.startswith(w.S3_PREFIX + "runs/20261107T0000Z/") for k in keys[:-1])
+            all(
+                k.startswith(w.S3_PREFIX + "runs/20261107T0000Z-20261107T0600Z/")
+                for k in keys[:-1]
+            )
         )
         self.assertIn(old, s3.objects)
         self.assertEqual(s3.deleted, [older])
-        wind = dict(s3.puts)[w.S3_PREFIX + "runs/20261107T0000Z/wind.json"]
+        wind = dict(s3.puts)[
+            w.S3_PREFIX + "runs/20261107T0000Z-20261107T0600Z/wind.json"
+        ]
         self.assertEqual(wind["ContentEncoding"], "gzip")
 
     def test_a_published_run_is_not_built_again(self):
+        # Mutation: compare with > instead of >= and every hour rebuilds the
+        # same run, about 270 MB a time.
         s3 = FakeS3(
             {
                 w.S3_PREFIX + "latest.json": self.manifest_bytes(
-                    "2026-11-07T00:00Z", "runs/20261107T0000Z/"
+                    "2026-11-07T00:00Z", "runs/20261107T0000Z-20261107T0600Z/"
                 )
             }
         )
@@ -404,8 +420,9 @@ class TestLicenceBoundary(unittest.TestCase):
     def test_open_meteos_reader_is_in_the_worker_image_only(self):
         # ADR 0048: the reader is GPL-2.0-only and Logjam is AGPL-3.0-only, so
         # it is never shipped to a user. Mutation: add `@openmeteo/file-reader`
-        # to a client's package.json, or `omfiles` to another requirements
-        # file, and this fails.
+        # to a client's package.json, `OMFiles` to another requirements file,
+        # or `RUN pip install omfiles` to another Dockerfile or a
+        # pyproject.toml, and this fails.
         found = []
         for dirpath, dirnames, filenames in os.walk(_ROOT):
             dirnames[:] = [
@@ -423,13 +440,15 @@ class TestLicenceBoundary(unittest.TestCase):
                 )
             ]
             for name in filenames:
-                if name in ("package.json", "package-lock.json") or (
-                    name.startswith("requirements") and name.endswith(".txt")
+                if (
+                    name in ("package.json", "package-lock.json", "pyproject.toml")
+                    or name.startswith("Dockerfile")
+                    or (name.startswith("requirements") and name.endswith(".txt"))
                 ):
                     path = os.path.join(dirpath, name)
                     with open(path, encoding="utf-8") as f:
                         text = f.read()
-                    if "@openmeteo/" in text or re.search(r"^omfiles\b", text, re.M):
+                    if "@openmeteo/" in text or re.search(r"\bomfiles\b", text, re.I):
                         found.append(os.path.relpath(path, _ROOT))
         self.assertEqual(found, ["topo/requirements.txt"])
 

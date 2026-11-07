@@ -15,9 +15,13 @@ run is read for the NSW box only (one range-read `.om` file per time step),
 regridded onto web mercator tiles, and published under S3_PREFIX:
 
     latest.json                      WeatherMapFile in shared/src/weatherMap.ts
-    runs/<run>/<field>/<step>.pmtiles   one per field and step
-    runs/<run>/totals/<total>.pmtiles   rain totals around the anchor
-    runs/<run>/wind.json             the wind arrows' grid, every step
+    runs/<run>-<anchor>/<field>/<step>.pmtiles   one per field and step
+    runs/<run>-<anchor>/totals/<total>.pmtiles   rain totals around the anchor
+    runs/<run>-<anchor>/wind.json             the wind arrows' grid, every step
+
+A folder is named for the run and the hour the build counted from, so two
+builds of one run that overlap (one that ran past the hour) never write into
+each other's files.
 
 A run's files go up before `latest.json` names them, and the run before is
 kept, so a client holding the old manifest still finds its files.
@@ -34,7 +38,6 @@ import http.client
 import json
 import math
 import os
-import shutil
 import sys
 import tempfile
 import threading
@@ -519,7 +522,7 @@ def build(
     steps = forecast_steps(valid, run, anchor)
     if not steps:
         raise SystemExit(f"run {iso(run)} has no step after {iso(anchor)}")
-    folder = f"runs/{run_id(run)}/"
+    folder = f"runs/{run_id(run)}-{run_id(anchor)}/"
 
     # Hours of past rain: the latest run's own first hours up to the anchor,
     # then each earlier hour from the run before it.
@@ -690,8 +693,8 @@ def main(argv: List[str]) -> int:
         return 0
     latest = json.loads(get_url(SOURCE_URL + "latest.json"))
     started = time.monotonic()
-    if args.out.exists():
-        shutil.rmtree(args.out)
+    if args.out.exists() and any(args.out.iterdir()):
+        parser.error(f"{args.out} is not empty")
     manifest = build(latest, datetime.now(timezone.utc), args.out)
     (args.out / "latest.json").write_text(json.dumps(manifest, indent=1))
     print(

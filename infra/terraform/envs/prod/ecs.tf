@@ -1,6 +1,7 @@
 # ECS task definitions for the three on-demand Fargate workers, the
 # pre-deploy migrate one-shot, the monthly place registry, fire history and
-# coverage builds and the two-hourly river gauges job. Workers are launched via RunTask
+# coverage builds, the two-hourly river gauges job and the hourly weather job.
+# Workers are launched via RunTask
 # (api/src/lib/ecsRunTask.ts), the rest by their schedules below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
