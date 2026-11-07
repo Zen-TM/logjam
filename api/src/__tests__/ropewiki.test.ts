@@ -23,4 +23,14 @@ describe("POST /ropewiki/import/apply validation", () => {
       .send({ decisions: [{ ropeWikiId: 1, action: "link" }] });
     expect(res.status).toBe(400);
   });
+
+  // Mutation: fall back to NSW for any `region`, and a client asking for a
+  // region with no canyon list gets NSW's canyons.
+  it("rejects a region with no canyon source with 400", async () => {
+    const res = await request(API_URL)
+      .post("/ropewiki/import/apply?region=atlantis")
+      .set(as(CAROL_SUB))
+      .send({ decisions: [{ ropeWikiId: 1, action: "skip" }] });
+    expect(res.status).toBe(400);
+  });
 });

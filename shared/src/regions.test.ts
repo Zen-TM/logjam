@@ -13,6 +13,7 @@ import {
   offeredBasemaps,
 } from "./geoPdfBaseLayers.js";
 import {
+  canyonRegionsOf,
   DEFAULT_REGION_IDS,
   NSW_REGION,
   normalizeRegionIds,
@@ -136,6 +137,18 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("canyonRegionsOf", () => {
+  // Mutation: drop the `canyons` test, and a region with no canyon list is
+  // offered an import that can only fail.
+  it("offers an import for each chosen region with a canyon source", () => {
+    const nz = { ...NSW_REGION, id: "nz", canyons: null };
+    expect(ids(canyonRegionsOf(["nsw", "nz"], [NSW_REGION, nz]))).toEqual([
+      "nsw",
+    ]);
+    expect(canyonRegionsOf(["nz"], [NSW_REGION, nz])).toEqual([]);
   });
 });
 

@@ -1,23 +1,66 @@
 import { parse } from "csv-parse/sync";
-import { SOURCES_FIELD_KEY, say } from "@logjam/shared";
+import { SOURCES_FIELD_KEY, say, type Region } from "@logjam/shared";
 
 import { AppError } from "../middleware/errorHandler";
 
 // notes is a Logjam user-only field — never sourced from RopeWiki.
 
-const ROPEWIKI_CSV_URL =
-  "https://ropewiki.com/index.php?title=Special:Ask" +
-  "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
-  ".Located-20in-20regions%3A%3AX-7C-7CNew-20South-20Wales-5D-5D" +
-  "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
-  "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
-  "-20rating%3DQuality%2F-3FHas-20rating%3DRating%2F-3FHas-20fastest-20typical" +
-  "-20time%3DMin-20Time%2F-3FHas-20slowest-20typical-20time%3DMax-20Time%2F-3F" +
-  "Has-20length-20of-20hike%3DHike%2F-3FHas-20info-20rappels%3DRappels%2F-3F" +
-  "Has-20longest-20rappel%3DLongest%2F-3FHas-20best-20season%3DBest-20Season%2F-3F" +
-  "Has-20shuttle-20length%3DShuttle%2F-3FHas-20vehicle-20type%3DVehicle&mainlabel" +
-  "=-&limit=2000&order=descending%2C%20ascending&sort=Has_rank_rating%2C%20" +
-  "Has_name&offset=0&format=csv";
+/** A region's canyon source, as `Region.canyons` declares it (shared regions.ts). */
+export type RopeWikiSource = NonNullable<Region["canyons"]>;
+
+/**
+ * Semantic MediaWiki's escape for a value inside a `Special:Ask` path, which it
+ * reads back by turning each `-` into `%` and URL-decoding: so every byte of
+ * a character but a letter or a digit goes as `-` and its hex, a space as `-20`.
+ */
+function askEscape(text: string): string {
+  return text.replace(/[^A-Za-z0-9]/g, (c) =>
+    [...new TextEncoder().encode(c)]
+      .map((byte) => `-${byte.toString(16).toUpperCase().padStart(2, "0")}`)
+      .join(""),
+  );
+}
+
+/** The `Special:Ask` CSV export of every canyon RopeWiki files under a region. */
+export function ropeWikiCsvUrl(source: RopeWikiSource): string {
+  return (
+    "https://ropewiki.com/index.php?title=Special:Ask" +
+    "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
+    `.Located-20in-20regions%3A%3AX-7C-7C${askEscape(source.ropewikiRegion)}-5D-5D` +
+    "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
+    "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
+    "-20rating%3DQuality%2F-3FHas-20rating%3DRating%2F-3FHas-20fastest-20typical" +
+    "-20time%3DMin-20Time%2F-3FHas-20slowest-20typical-20time%3DMax-20Time%2F-3F" +
+    "Has-20length-20of-20hike%3DHike%2F-3FHas-20info-20rappels%3DRappels%2F-3F" +
+    "Has-20longest-20rappel%3DLongest%2F-3FHas-20best-20season%3DBest-20Season%2F-3F" +
+    "Has-20shuttle-20length%3DShuttle%2F-3FHas-20vehicle-20type%3DVehicle&mainlabel" +
+    "=-&limit=2000&order=descending%2C%20ascending&sort=Has_rank_rating%2C%20" +
+    "Has_name&offset=0&format=csv"
+  );
+}
+
+/**
+ * A copy of `rw` with the source's extra link (OzUltimate for NSW) unioned
+ * into `attributes.sources`, when its name matches one.
+ */
+export function withExtraLinks(
+  source: RopeWikiSource,
+  rw: RopeWikiCanyon,
+  altNames: string[] = [],
+): RopeWikiCanyon {
+  const extra = source.extraLinks;
+  const url = extra?.match(rw.name, altNames);
+  if (!extra || !url) return rw;
+  const existing = rw.attributes?.sources ?? [];
+  if (existing.some(([, u]) => u === url)) return rw;
+  return {
+    ...rw,
+    attributes: {
+      ...rw.attributes,
+      sources: [...existing, [extra.label, url] as [string, string]],
+    },
+  };
+}
 
 export type RopeWikiCanyon = {
   ropeWikiId: number;
@@ -387,7 +430,7 @@ function parseQuality(value: string): number | null {
 }
 
 /**
- * Fetch the NSW place CSV straight from RopeWiki.
+ * Fetch a region's canyon CSV straight from RopeWiki.
  *
  * As of 2026-08-30 this cannot succeed from a server: RopeWiki sits behind a
  * Cloudflare managed challenge that 403s every non-browser client on every
@@ -395,11 +438,11 @@ function parseQuality(value: string): number | null {
  * go through getRopeWikiCanyons() in ./ropeWikiCache, which reads a
  * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
  */
-export async function fetchAndParseRopeWiki(): Promise<{
+export async function fetchAndParseRopeWiki(source: RopeWikiSource): Promise<{
   places: RopeWikiCanyon[];
   errors: string[];
 }> {
-  const response = await fetch(ROPEWIKI_CSV_URL, {
+  const response = await fetch(ropeWikiCsvUrl(source), {
     signal: AbortSignal.timeout(15000),
     headers: {
       "User-Agent":
