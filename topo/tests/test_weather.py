@@ -397,6 +397,26 @@ class TestPublish(unittest.TestCase):
         ]
         self.assertEqual(wind["ContentEncoding"], "gzip")
 
+    def test_another_build_of_the_run_is_never_pruned(self):
+        # Mutation: prune every folder outside `keep`, and a build of this run
+        # that ran past the hour loses its files while it uploads them.
+        sibling = w.S3_PREFIX + "runs/20261107T0000Z-20261107T0500Z/rain/000.pmtiles"
+        older = w.S3_PREFIX + "runs/20261106T1200Z-20261106T1800Z/rain/000.pmtiles"
+        s3 = FakeS3({sibling: b"x", older: b"x"})
+        w.prune(s3, "bucket", ["runs/20261107T0000Z-20261107T0600Z/"], RUN)
+        self.assertIn(sibling, s3.objects)
+        self.assertEqual(s3.deleted, [older])
+
+    def test_build_refuses_a_folder_with_anything_in_it(self):
+        # Mutation: drop the check, and `build .` writes a run over whatever
+        # the folder held (it once deleted it).
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "keep.txt").write_text("mine")
+            with self.assertRaises(SystemExit) as stop:
+                w.main(["build", tmp])
+            self.assertNotEqual(stop.exception.code, 0)
+            self.assertEqual(os.listdir(tmp), ["keep.txt"])
+
     def test_a_published_run_is_not_built_again(self):
         # Mutation: compare with > instead of >= and every hour rebuilds the
         # same run, about 270 MB a time.

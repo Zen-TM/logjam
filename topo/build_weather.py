@@ -635,15 +635,20 @@ def upload(s3, bucket: str, out: Path, manifest: dict) -> None:
     )
 
 
-def prune(s3, bucket: str, keep: Sequence[str]) -> None:
-    """Every run folder but `keep` (the new run and the one before it)."""
+def prune(s3, bucket: str, keep: Sequence[str], run: datetime) -> None:
+    """Every folder of a run older than `run`, but `keep` (the new build and
+    the one the old manifest named). A folder of this run or a newer one is
+    never pruned: it may be another build of it still uploading, which a
+    later build prunes once a newer run is out."""
     doomed = []
     for page in s3.get_paginator("list_objects_v2").paginate(
         Bucket=bucket, Prefix=S3_PREFIX + "runs/"
     ):
         for obj in page.get("Contents", []):
-            folder = obj["Key"][len(S3_PREFIX) :].split("/", 2)
-            if f"{folder[0]}/{folder[1]}/" not in keep:
+            parts = obj["Key"][len(S3_PREFIX) :].split("/", 2)
+            folder = f"{parts[0]}/{parts[1]}/"
+            older = parts[1].split("-", 1)[0] < run_id(run)
+            if folder not in keep and older:
                 doomed.append({"Key": obj["Key"]})
     for i in range(0, len(doomed), 1000):
         s3.delete_objects(Bucket=bucket, Delete={"Objects": doomed[i : i + 1000]})
@@ -670,7 +675,7 @@ def run(bucket: str, s3=None, get: Callable[[str], bytes] = get_url, now=None) -
         manifest = build(latest, now, out)
         upload(s3, bucket, out, manifest)
     keep = [manifest["path"]] + ([old["path"]] if old else [])
-    prune(s3, bucket, keep)
+    prune(s3, bucket, keep, source_run)
     print(
         f"published {manifest['run']}: {len(manifest['steps'])} steps, "
         f"totals {manifest['totals']}, read {RangeFile.total / 1e6:.0f} MB, "
@@ -691,10 +696,10 @@ def main(argv: List[str]) -> int:
             parser.error("run needs --bucket or S3_BUCKET_TOPO")
         run(args.bucket)
         return 0
-    latest = json.loads(get_url(SOURCE_URL + "latest.json"))
-    started = time.monotonic()
     if args.out.exists() and any(args.out.iterdir()):
         parser.error(f"{args.out} is not empty")
+    latest = json.loads(get_url(SOURCE_URL + "latest.json"))
+    started = time.monotonic()
     manifest = build(latest, datetime.now(timezone.utc), args.out)
     (args.out / "latest.json").write_text(json.dumps(manifest, indent=1))
     print(

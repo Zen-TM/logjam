@@ -50,10 +50,12 @@ receives.**
   `wind.json` for the arrows. The anchor in the name keeps two overlapping
   builds of one run (one that ran past the hour) out of each other's files.
   A run's files go up before the manifest names them, and the
-  run before is kept, so a client holding the old manifest still finds its
-  files. Guard: `topo/tests/test_weather.py` ("the manifest goes up last and
-  two runs are kept"), and `shared/src/weatherMap.test.ts` against the
-  fixtures the builder writes.
+  build before is kept, so a client holding the old manifest still finds its
+  files. Only folders of older runs are pruned, never another build of the
+  run being published. Guard: `topo/tests/test_weather.py` ("the manifest goes
+  up last and two runs are kept", "another build of the run is never
+  pruned"), and `shared/src/weatherMap.test.ts` against the fixtures the
+  builder writes.
 - **Hourly, building only on a new run.** The job reads `latest.json` each
   hour at 20 past and stops unless its `reference_time` is newer than the
   published run's. Runs land 5 to 8 hours after their run time, varying by
