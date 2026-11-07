@@ -1009,3 +1009,18 @@ export const OSM_POINT_ICON_NATURAL_PX = 24;
 export function iconTargetPx(sizeZ18: number, zoom: number): number {
   return Math.max(12, Math.round(sizeZ18 * Math.pow(zoom / 18, 0.5)));
 }
+
+/** `from` moved `t` of the way to `to`, per channel, as `#rrggbb`: with
+ *  `from` white, a translucent colour as it shows on a white sheet (the
+ *  overlay legends' swatches). */
+export function mixHex(from: string, to: string, t: number): string {
+  const channel = (hex: string, i: number) =>
+    parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}

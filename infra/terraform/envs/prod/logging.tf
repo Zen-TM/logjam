@@ -97,3 +97,8 @@ resource "aws_cloudwatch_log_metric_filter" "sync_client" {
     }
   }
 }
+
+resource "aws_cloudwatch_log_group" "weather" {
+  name              = "/ecs/logjam-weather"
+  retention_in_days = local.operational_log_retention_days
+}

@@ -8,6 +8,7 @@
 // each client works that out from today, so the map doesn't age between builds.
 import { SHORT_MONTHS } from "./dateNames.js";
 import { NSW_5M } from "./demSources.js";
+import { mixHex } from "./topoSettings.js";
 
 export const NSW_FIRE = {
   /** A saved clip is filed under this, beside the area it was saved with. */
@@ -123,19 +124,6 @@ export function fireTintAt(years: number): {
     fill: mix(a.fill, b.fill),
     edge: mix(a.edge, b.edge),
   };
-}
-
-/** `from` moved `t` of the way to `to`, per channel, as `#rrggbb`. */
-function mixHex(from: string, to: string, t: number): string {
-  const channel = (hex: string, i: number) =>
-    parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-  return `#${[0, 1, 2]
-    .map((i) =>
-      Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
 }
 
 /**

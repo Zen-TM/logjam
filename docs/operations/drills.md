@@ -51,7 +51,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
       `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,
-      `logjam-fire-history` and `logjam-coverage` carry the
+      `logjam-fire-history`, `logjam-coverage` and `logjam-weather` carry the
       chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
       with no ECR image (or no `releases/<sha>/`) fails before any swap.
