@@ -4,6 +4,7 @@ import {
   WEATHER_CREDIT_URL,
   WEATHER_MODELS,
   contractSectionKeys,
+  rainCredit,
   weatherAge,
   weatherDaysFrom,
   weatherRows,
@@ -73,21 +74,26 @@ function WeatherBody({
     );
   const { forecast } = state;
   const now = fixedNow ?? state.now;
-  const rows = weatherRows(forecast, now);
+  const rows = weatherRows(forecast, now, state.rain);
+  const credit = rainCredit(state.rain);
   const row = (key: WeatherRow["key"]) => {
-    const found = rows.find((r) => r.key === key);
-    if (found)
-      return (
-        <ForecastRail
-          title={found.title}
-          summary={found.summary}
-          labels={{
-            back: `${WEATHER.copy.earlier}: ${found.title}`,
-            on: `${WEATHER.copy.later}: ${found.title}`,
-          }}
-          cards={found.cards}
-        />
-      );
+    // The past is a row for each nearby rain gauge.
+    const found = rows.filter((r) => r.key === key);
+    if (found.length)
+      return found.map((r) => (
+        <div key={r.title} className={classes.row}>
+          <ForecastRail
+            title={r.title}
+            summary={r.summary}
+            labels={{
+              back: `${WEATHER.copy.earlier}: ${r.title}`,
+              on: `${WEATHER.copy.later}: ${r.title}`,
+            }}
+            cards={r.cards}
+          />
+          {r.note && <p className={classes.muted}>{r.note}</p>}
+        </div>
+      ));
     // Every day the forecast held is past; its hours went with them.
     return key === "days" && weatherDaysFrom(forecast, now).length === 0 ? (
       <p className={classes.muted}>{WEATHER.copy.outOfDate}</p>
@@ -101,14 +107,17 @@ function WeatherBody({
     days: () => row("days"),
     past: () => row("past"),
     credit: () => (
-      <a
-        className={classes.credit}
-        href={WEATHER_CREDIT_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {WEATHER.copy.credit}
-      </a>
+      <>
+        <a
+          className={classes.credit}
+          href={WEATHER_CREDIT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {WEATHER.copy.credit}
+        </a>
+        {credit && <p className={classes.rainCredit}>{credit}</p>}
+      </>
     ),
   };
   return (

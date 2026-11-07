@@ -110,8 +110,8 @@ export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-are
 export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 
 /**
- * The last river gauge file (`gauges/gaugeStorage.ts`, ADR 0044). WIPED, though
- * the file is public and the same for everyone, because every on-device store
+ * The last river gauge files (`gauges/gaugeStorage.ts`, ADR 0044) and the last
+ * rain gauge file, `rain.json` (ADR 0047). WIPED, though each file is public and the same for everyone, because every on-device store
  * joins the wipe (ADR 0006); the next user fetches it again.
  */
 export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;

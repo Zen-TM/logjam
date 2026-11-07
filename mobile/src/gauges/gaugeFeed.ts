@@ -10,10 +10,13 @@
 // line.
 import {
   GAUGE_LATEST_PATH,
+  RAIN_PATH,
   gaugeHistoryUrl,
   parseGaugeHistory,
   parseGaugeLatest,
+  parseRainFile,
   type GaugeLatestFile,
+  type RainFile,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -22,6 +25,7 @@ import { isOfflineOnly } from "../offline/offlineOnlyMode";
 import {
   cacheGaugeHistory,
   cacheGauges,
+  cacheRain,
   gaugesEpoch,
   readCachedGaugeHistory,
 } from "./gaugeStorage";
@@ -70,6 +74,34 @@ async function run(): Promise<GaugeLatestFile | null> {
     await cacheGauges(text, epoch).catch(() => {});
     lastOkAt = Date.now();
     lastOkEpoch = epoch;
+    return file;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The rain gauge file (ADR 0047), on the press that asks for a forecast: the
+ * new file, kept, or null when none was fetched (offline-only mode, no
+ * connection, a failure or a bad file). Same request rules as `latest.json`:
+ * only the public path, nothing else sent. Mobile data is allowed whatever the
+ * sync setting: the press is the user's own ask, as the forecast's is.
+ */
+export async function refreshRain(): Promise<RainFile | null> {
+  if (isOfflineOnly() || !(await canRunNow("sync", true))) return null;
+  const epoch = gaugesEpoch();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${config.topoCdnBaseUrl}/${RAIN_PATH}`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const text = await response.text();
+    const file = parseRainFile(JSON.parse(text));
+    if (file) await cacheRain(text, epoch).catch(() => {});
     return file;
   } catch {
     return null;

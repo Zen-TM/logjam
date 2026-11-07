@@ -19,6 +19,9 @@ export type ForecastCard = {
   rainLevel: number;
   chance: string | null;
   wind: string | null;
+  /** A figure not of its row's kind ("Model" in a gauge's row): said under
+   *  it, and its bar drawn muted. */
+  note: string | null;
   /** Everything on the card, in words. */
   spoken: string;
 };
@@ -92,6 +95,7 @@ export function ForecastRail({
             <span className={classes.bar} aria-hidden>
               <span
                 className={classes.fill}
+                data-muted={card.note !== null}
                 style={{ width: `${card.rainLevel * 100}%` }}
               />
             </span>
@@ -100,6 +104,7 @@ export function ForecastRail({
             </span>
             {card.chance && <span className={classes.meta}>{card.chance}</span>}
             {card.wind && <span className={classes.meta}>{card.wind}</span>}
+            {card.note && <span className={classes.meta}>{card.note}</span>}
           </li>
         ))}
       </ul>

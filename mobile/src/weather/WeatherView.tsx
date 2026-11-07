@@ -7,6 +7,7 @@ import {
   WEATHER,
   WEATHER_CREDIT_URL,
   WEATHER_MODELS,
+  rainCredit,
   weatherAge,
   weatherRows,
   type SectionKeysOn,
@@ -22,6 +23,8 @@ import { weatherViewState } from "./weatherState";
 type SectionProps = {
   forecast: WeatherForecast;
   rows: WeatherRow[];
+  /** The rain gauges' credit, where their figures are drawn. */
+  rainCredit: string | null;
 };
 
 function RowSection({
@@ -31,14 +34,20 @@ function RowSection({
   rows: WeatherRow[];
   row: WeatherRow["key"];
 }) {
-  const found = rows.find((r) => r.key === row);
-  return found ? (
-    <ForecastRail
-      title={found.title}
-      summary={found.summary}
-      cards={found.cards}
-    />
-  ) : null;
+  const styles = useStyles();
+  // The past is a row for each nearby rain gauge.
+  return rows
+    .filter((r) => r.key === row)
+    .map((found) => (
+      <View key={found.title} style={styles.row}>
+        <ForecastRail
+          title={found.title}
+          summary={found.summary}
+          cards={found.cards}
+        />
+        {found.note ? <Text style={styles.note}>{found.note}</Text> : null}
+      </View>
+    ));
 }
 
 /** One drawing per contract section; `tsc` and `weatherContracts.test.ts` hold the set. */
@@ -49,7 +58,7 @@ export const WEATHER_SECTIONS: Record<
   hours: ({ rows }) => <RowSection rows={rows} row="hours" />,
   days: ({ rows }) => <RowSection rows={rows} row="days" />,
   past: ({ rows }) => <RowSection rows={rows} row="past" />,
-  credit: () => <Credit />,
+  credit: ({ rainCredit }) => <Credit rain={rainCredit} />,
 };
 
 export function WeatherView({ weather }: { weather: Weather }) {
@@ -78,7 +87,8 @@ export function WeatherView({ weather }: { weather: Weather }) {
     );
 
   const { forecast } = state;
-  const rows = weatherRows(forecast, now);
+  const rows = weatherRows(forecast, now, weather.rain);
+  const credit = rainCredit(weather.rain);
   return (
     <View style={styles.stack}>
       <View style={styles.header}>
@@ -125,28 +135,34 @@ export function WeatherView({ weather }: { weather: Weather }) {
             </Text>
           );
         return (
-          <View key={key}>{WEATHER_SECTIONS[key]({ forecast, rows })}</View>
+          <View key={key}>
+            {WEATHER_SECTIONS[key]({ forecast, rows, rainCredit: credit })}
+          </View>
         );
       })}
     </View>
   );
 }
 
-function Credit() {
+function Credit({ rain }: { rain: string | null }) {
   const styles = useStyles();
   return (
-    <Pressable
-      accessibilityRole="link"
-      hitSlop={hitSlop}
-      onPress={() => void Linking.openURL(WEATHER_CREDIT_URL)}
-    >
-      <Text style={styles.credit}>{WEATHER.copy.credit}</Text>
-    </Pressable>
+    <View style={styles.stack}>
+      <Pressable
+        accessibilityRole="link"
+        hitSlop={hitSlop}
+        onPress={() => void Linking.openURL(WEATHER_CREDIT_URL)}
+      >
+        <Text style={styles.credit}>{WEATHER.copy.credit}</Text>
+      </Pressable>
+      {rain ? <Text style={styles.rainCredit}>{rain}</Text> : null}
+    </View>
   );
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
   stack: { gap: spacing(1.5) },
+  row: { gap: spacing(0.5) },
   header: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   headerText: { flex: 1 },
   model: { gap: spacing(1) },
@@ -156,4 +172,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     textDecorationLine: "underline",
     textAlign: "center",
   },
+  rainCredit: { ...muted(theme, textRole.meta), textAlign: "center" },
 }));

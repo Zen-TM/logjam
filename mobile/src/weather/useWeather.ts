@@ -1,18 +1,25 @@
 // The forecast for one cell: the phone's kept copy at once, a fresh one only
-// when `refresh` is called, which is only ever on a press (ADR 0038).
+// when `refresh` is called, which is only ever on a press (ADR 0038). The same
+// press fetches the rain gauge file, the same for everyone, and the gauges
+// near the spot are picked here, on the phone (ADR 0047).
 //
 // PRIVACY: a failure is a state, never a log line: the error could carry the
 // cell.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchForecast,
+  nearbyRain,
   weatherCell,
   weatherCellKey,
+  type PastRain,
+  type RainFile,
   type WeatherCell,
   type WeatherForecast,
   type WeatherModelId,
 } from "@logjam/shared";
 
+import { refreshRain } from "../gauges/gaugeFeed";
+import { readCachedRain } from "../gauges/gaugeStorage";
 import { useConnectivity } from "../map/connectivity";
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
 import {
@@ -37,6 +44,8 @@ export type Weather = {
   model: WeatherModelId;
   /** Remembers the model and asks for its forecast, on the press that chose it. */
   chooseModel: (model: WeatherModelId) => void;
+  /** The rain gauges near the spot, or null with no gauge file on the phone. */
+  rain: PastRain | null;
 };
 
 type Held = {
@@ -71,6 +80,18 @@ export function useWeather(
       ? held
       : { key, forecast: null, status: "idle", now: held.now };
   const inFlight = useRef<AbortController | null>(null);
+  const [rainFile, setRainFile] = useState<RainFile | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    // A press's fetch can beat the read: keep whichever landed first.
+    readCachedRain()
+      .then((kept) => live && setRainFile((f) => f ?? kept))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -113,6 +134,9 @@ export function useWeather(
         key,
         status: "loading",
       }));
+      refreshRain()
+        .then((fresh) => fresh && setRainFile(fresh))
+        .catch(() => {});
       fetchForecast(target, { signal: controller.signal })
         .then((fresh) => {
           if (controller.signal.aborted) return;
@@ -138,7 +162,21 @@ export function useWeather(
     [fetchCell, point.latitude, point.longitude, elevationM],
   );
 
+  const rain = useMemo(
+    () =>
+      rainFile && here.forecast
+        ? nearbyRain(
+            rainFile,
+            point,
+            here.forecast.past.days.map((day) => day.date),
+          )
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the point's two numbers are the identity
+    [rainFile, here.forecast, point.latitude, point.longitude],
+  );
+
   return {
+    rain,
     model,
     chooseModel,
     forecast: here.forecast,
