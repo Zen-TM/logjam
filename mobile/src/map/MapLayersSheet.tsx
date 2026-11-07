@@ -49,12 +49,16 @@ import {
   basemapFallbackNotice,
   basemapToShow,
   contractSectionKeys,
-  LAND_CLASSES,
+  isOverlayTerrainKey,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  OVERLAY_LEGENDS,
+  OVERLAY_TERRAIN_KEYS,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
+  type OverlayLegend,
+  type OverlayTerrainKey,
   type SectionKeysOn,
   type TerrainSwitchKey,
 } from "@logjam/shared";
@@ -210,7 +214,7 @@ export function MapLayersSheet({
   // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
   const [legend, setLegend] = useState<
-    "vegetation" | "land" | "slope" | "slopeBands" | null
+    "vegetation" | OverlayTerrainKey | "slope" | "slopeBands" | null
   >(null);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
@@ -246,15 +250,22 @@ export function MapLayersSheet({
       <LayersTab
         layers={layers}
         onImportFile={onImportFile}
-        land={terrainSwitch(
-          "land",
-          terrainLayers.land,
-          basemapId,
-          online,
-          artifacts,
-        )}
-        onLandChange={(on) => onTerrainLayerChange("land", on)}
-        onOpenLandLegend={() => setLegend("land")}
+        overlays={
+          Object.fromEntries(
+            OVERLAY_TERRAIN_KEYS.map((key) => [
+              key,
+              terrainSwitch(
+                key,
+                terrainLayers[key],
+                basemapId,
+                online,
+                artifacts,
+              ),
+            ]),
+          ) as Record<OverlayTerrainKey, TerrainSwitchState>
+        }
+        onOverlayChange={onTerrainLayerChange}
+        onOpenOverlayLegend={setLegend}
       />
     ),
     offline: () => (
@@ -281,8 +292,8 @@ export function MapLayersSheet({
       // The slope bands editor is taller than any tab, so it takes the tab's
       // place instead.
       overlay={
-        legend === "land" ? (
-          <LandLegend />
+        legend && isOverlayTerrainKey(legend) ? (
+          <OverlayLegendSheet legend={OVERLAY_LEGENDS[legend]} />
         ) : legend === "slope" ? (
           <SlopeLegend />
         ) : legend === "vegetation" ? (
@@ -435,7 +446,9 @@ function TerrainTab({
             title={MAP_TERRAIN.copy[key]}
             description={
               state.reason ??
-              (key === "land" ? undefined : MAP_TERRAIN.copy[`${key}Hint`])
+              (isOverlayTerrainKey(key)
+                ? undefined
+                : MAP_TERRAIN.copy[`${key}Hint`])
             }
             disabled={state.disabled}
             style={styles.itemRow}
@@ -491,7 +504,7 @@ function SlopeLegend() {
     <>
       <Text style={styles.legend}>{MAP_TERRAIN.copy.slopeLegend}</Text>
       {slopeLegendRows(useSlopeBands()).map(({ label, colour }) => (
-        <View key={label} style={styles.landRow}>
+        <View key={label} style={styles.legendRow}>
           <View style={[styles.slopeSwatch, { backgroundColor: colour }]} />
           <Text style={styles.legend}>{label}</Text>
         </View>
@@ -500,19 +513,23 @@ function SlopeLegend() {
   );
 }
 
-/** What the Land overlay's colours mean, and what they don't. */
-function LandLegend() {
+/**
+ * What a statewide overlay's colours mean, and what they don't: the key, the
+ * source's caveat and its credit (`OVERLAY_LEGENDS`).
+ */
+function OverlayLegendSheet({ legend }: { legend: OverlayLegend }) {
   const styles = useStyles();
   return (
     <>
-      <Text style={styles.legend}>{MAP_TERRAIN.copy.landLegend}</Text>
-      {LAND_CLASSES.map(({ name, colour }) => (
-        <View key={name} style={styles.landRow}>
-          <View style={[styles.landSwatch, { backgroundColor: colour }]} />
-          <Text style={styles.legend}>{name}</Text>
+      <Text style={styles.legend}>{legend.intro}</Text>
+      {legend.rows.map(({ label, colour }) => (
+        <View key={label} style={styles.legendRow}>
+          <View style={[styles.legendSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{label}</Text>
         </View>
       ))}
-      <Text style={styles.legend}>{MAP_TERRAIN.copy.landCaveat}</Text>
+      <Text style={styles.legend}>{legend.caveat}</Text>
+      <Text style={styles.legend}>{legend.credit}</Text>
     </>
   );
 }
@@ -609,19 +626,36 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
 function LayersTab({
   layers,
   onImportFile,
-  land,
-  onLandChange,
-  onOpenLandLegend,
+  overlays,
+  onOverlayChange,
+  onOpenOverlayLegend,
 }: {
   layers: LayerToggleEntry[];
   onImportFile: () => void;
-  land: TerrainSwitchState;
-  onLandChange: (on: boolean) => void;
-  onOpenLandLegend: () => void;
+  overlays: Record<OverlayTerrainKey, TerrainSwitchState>;
+  onOverlayChange: (key: OverlayTerrainKey, on: boolean) => void;
+  onOpenOverlayLegend: (key: OverlayTerrainKey) => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
   const styles = useStyles();
+
+  const overlayRow = (key: OverlayTerrainKey) => {
+    const legend = OVERLAY_LEGENDS[key];
+    const state = overlays[key];
+    return (
+      <SwitchRow
+        icon="layers"
+        hue={legend.hue}
+        title={legend.title}
+        description={state.reason}
+        disabled={state.disabled}
+        checked={state.checked}
+        onChange={(on) => onOverlayChange(key, on)}
+        help={{ label: legend.about, onPress: () => onOpenOverlayLegend(key) }}
+      />
+    );
+  };
 
   const entryRow = (key: string) => {
     const entry = layers.find((candidate) => candidate.key === key);
@@ -636,18 +670,8 @@ function LayersTab({
   > = {
     places: () => entryRow("places"),
     ways: () => entryRow("ways"),
-    land: () => (
-      <SwitchRow
-        icon="layers"
-        hue={LAND_CLASSES[0].colour}
-        title={MAP_OVERLAYS.copy.land}
-        description={land.reason}
-        disabled={land.disabled}
-        checked={land.checked}
-        onChange={onLandChange}
-        help={{ label: MAP_TERRAIN.copy.landAbout, onPress: onOpenLandLegend }}
-      />
-    ),
+    land: () => overlayRow("land"),
+    fire: () => overlayRow("fire"),
     gauges: () => entryRow("gauges"),
     mgaGrid: () => entryRow("mgaGrid"),
     geoPdfs: () => entryRow("geoPdfs"),
@@ -787,8 +811,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   legend: { ...textRole.body, color: theme.text },
-  landRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  landSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  legendSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
   // The bands are translucent: the outline keeps a faint one visible.
   slopeSwatch: {
     width: spacing(2),

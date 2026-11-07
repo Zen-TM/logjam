@@ -7,6 +7,7 @@ import {
 import { unavailableReasonText } from "../auth/capabilities";
 import {
   holdsContours,
+  holdsFire,
   holdsHillshade,
   holdsLand,
   holdsSlope,
@@ -50,7 +51,9 @@ export function terrainSwitch(
         ? holdsSlope
         : key === "land"
           ? holdsLand
-          : holdsHillshade,
+          : key === "fire"
+            ? holdsFire
+            : holdsHillshade,
   );
   if (!online && !saved) {
     return {

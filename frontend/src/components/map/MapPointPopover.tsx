@@ -25,7 +25,7 @@ import {
   StatGrid,
   type Stat,
 } from "../../ui";
-import { landClassAt } from "./layerOrder";
+import { fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
 import classes from "./MapPointPopover.module.css";
 
@@ -78,9 +78,9 @@ export default function MapPointPopover({
     point.latitude,
   );
   const metres = reading?.elevationM ?? null;
-  const [land] = useState(() => {
+  const [{ land, fire }] = useState(() => {
     const { x, y } = map.project([point.longitude, point.latitude]);
-    return landClassAt(map, [x, y]);
+    return { land: landClassAt(map, [x, y]), fire: fireAt(map, [x, y]) };
   });
 
   // Options and the weather swap the body in place and back out one step
@@ -127,6 +127,7 @@ export default function MapPointPopover({
     from,
     slopeDegrees: reading?.slopeDegrees ?? null,
     land,
+    fire,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

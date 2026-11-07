@@ -1,15 +1,16 @@
 import { useState, type ReactNode, type RefObject } from "react";
 import {
   contractSectionKeys,
-  LAND_CLASSES,
+  isOverlayTerrainKey,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  NSW_LAND,
+  OVERLAY_LEGENDS,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
   takesNswHillshade,
+  type OverlayLegend,
   type SectionKeysOn,
   type SlopeBand,
   type TerrainSwitchKey,
@@ -163,6 +164,7 @@ export default function LayersPopover({
     showPlaces,
     showWays,
     terrainLayers.land,
+    terrainLayers.fire,
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -316,10 +318,16 @@ export default function LayersPopover({
                     checked={showWays}
                     onToggle={setShowWays}
                   />
-                  <LandRow
-                    checked={terrainLayers.land}
-                    onToggle={(on) => onTerrainLayerChange("land", on)}
-                  />
+                  {contractSectionKeys(MAP_OVERLAYS, "web")
+                    .filter(isOverlayTerrainKey)
+                    .map((key) => (
+                      <OverlayLegendRow
+                        key={key}
+                        legend={OVERLAY_LEGENDS[key]}
+                        checked={terrainLayers[key]}
+                        onToggle={(on) => onTerrainLayerChange(key, on)}
+                      />
+                    ))}
                   <OverlayRow
                     icon="gauge"
                     hue="var(--color-accent)"
@@ -495,7 +503,7 @@ export function TerrainPane({
         onClose={() => setSlopeLegendOpen(false)}
       >
         <p>{terrainCopy.slopeLegend}</p>
-        <ul className={classes.landLegend}>
+        <ul className={classes.legendList}>
           {slopeLegendRows(slopeBands).map(({ label, colour }) => (
             <li key={label}>
               <IconTile icon="layers" hue={colour} />
@@ -553,11 +561,17 @@ function SlopeBandsView({
   );
 }
 
-/** The Land tenure row, with the legend its help button opens. */
-export function LandRow({
+/**
+ * A statewide overlay's row, with the legend its help button opens: what the
+ * colours mean, the key, the source's caveat and its credit
+ * (`OVERLAY_LEGENDS`).
+ */
+export function OverlayLegendRow({
+  legend,
   checked,
   onToggle,
 }: {
+  legend: OverlayLegend;
   checked: boolean;
   onToggle: (next: boolean) => void;
 }) {
@@ -566,31 +580,28 @@ export function LandRow({
     <>
       <OverlayRow
         icon="layers"
-        hue={LAND_CLASSES[0].colour}
-        title={terrainCopy.land}
+        hue={legend.hue}
+        title={legend.title}
         checked={checked}
         onToggle={onToggle}
-        help={{
-          label: terrainCopy.landAbout,
-          onClick: () => setLegendOpen(true),
-        }}
+        help={{ label: legend.about, onClick: () => setLegendOpen(true) }}
       />
       <Dialog
         open={legendOpen}
-        title={terrainCopy.land}
+        title={legend.title}
         onClose={() => setLegendOpen(false)}
       >
-        <p>{terrainCopy.landLegend}</p>
-        <ul className={classes.landLegend}>
-          {LAND_CLASSES.map(({ name, colour }) => (
-            <li key={name}>
+        <p>{legend.intro}</p>
+        <ul className={classes.legendList}>
+          {legend.rows.map(({ label, colour }) => (
+            <li key={label}>
               <IconTile icon="layers" hue={colour} />
-              {name}
+              {label}
             </li>
           ))}
         </ul>
-        <p>{terrainCopy.landCaveat}</p>
-        <p>{NSW_LAND.credit}</p>
+        <p>{legend.caveat}</p>
+        <p>{legend.credit}</p>
       </Dialog>
     </>
   );

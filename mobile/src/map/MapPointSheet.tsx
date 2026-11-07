@@ -50,6 +50,7 @@ export function MapPointSheet({
   point,
   userCoord,
   land,
+  fire,
   onClose,
   onClosed,
   run,
@@ -64,6 +65,8 @@ export function MapPointSheet({
   fix?: OwnFix | null;
   /** The land class drawn at the point, or null: the Land overlay off or empty there. */
   land: string | null;
+  /** The latest fire at the point, or null: the Fire history overlay off or empty there. */
+  fire: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   onClose: () => void;
@@ -127,6 +130,7 @@ export function MapPointSheet({
           key={`${point.latitude},${point.longitude}`}
           point={point}
           land={land}
+          fire={fire}
           userCoord={userCoord}
           run={run}
           onInfo={onInfo}
@@ -209,6 +213,7 @@ function FixDetail({
 function PointDetail({
   point,
   land,
+  fire,
   userCoord,
   run,
   onInfo,
@@ -219,6 +224,7 @@ function PointDetail({
 }: {
   point: MapPoint;
   land: string | null;
+  fire: string | null;
   userCoord: [number, number] | null;
   run: MapHoldRun;
   onInfo: (message: string) => void;
@@ -292,6 +298,7 @@ function PointDetail({
       : null,
     slopeDegrees: slopeDeg,
     land,
+    fire,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

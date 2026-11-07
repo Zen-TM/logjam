@@ -5,7 +5,7 @@ import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
-import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
+import { isOverlayTerrainKey, TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   abandonConfirm,
@@ -845,7 +845,7 @@ describe("the map's layers", () => {
   // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => !isOverlayTerrainKey(key));
     // The bands sit under the Slope switch they colour.
     const slope = rows.indexOf("slope") + 1;
     const withBands = [
@@ -983,6 +983,7 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "land",
+      "fire",
       "gauges",
       "mgaGrid",
       "importFile",
@@ -992,6 +993,7 @@ describe("the map's overlays list", () => {
       "ways",
       "geoPdfs",
       "land",
+      "fire",
       "gauges",
       "mgaGrid",
       "importFile",
@@ -1289,6 +1291,7 @@ describe("the map point panel", () => {
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
       land: "Private land",
+      fire: "Wildfire, Dec 2019",
       fix: { atMs: 0, accuracyM: 5, nowMs: 1_000 },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);

@@ -3,12 +3,17 @@ import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
   drawsOverTerrain,
+  NSW_FIRE,
   NSW_LAND,
   TERRAIN_BASEMAP_ANCHORS,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
+import { TERRAIN_ENTRIES } from "./terrainEntries";
 import {
+  fireAt,
+  FIRE_EDGE_LAYER,
+  FIRE_FILL_LAYER,
   GAUGE_BELOW,
   GAUGE_LAYER,
   GRID_LABELS,
@@ -57,6 +62,55 @@ describe("landClassAt", () => {
   it("names the class drawn at the point", () => {
     const map = drawn({ [NSW_LAND.classProperty]: "State Forest" });
     expect(landClassAt(map, [1, 2])).toBe("State forest");
+  });
+});
+
+describe("fireAt", () => {
+  // Mutation: drop the `getLayer` test, and with the overlay off MapLibre is
+  // queried for a layer it does not have, and throws.
+  it("reads nothing with the overlay off", () => {
+    const off = {
+      getLayer: () => undefined,
+      queryRenderedFeatures: () => {
+        throw new Error("no such layer");
+      },
+    };
+    expect(fireAt(off, [1, 2])).toBeNull();
+  });
+
+  // Mutation: query a layer id other than the fill, and a tap over a fire
+  // answers nothing.
+  it("names the most recent fire drawn at the point", () => {
+    const asked: string[][] = [];
+    const map = {
+      getLayer: (id: string) => (id === FIRE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: (
+        _point: [number, number],
+        options: { layers: string[] },
+      ) => {
+        asked.push(options.layers);
+        return [
+          {
+            properties: {
+              [NSW_FIRE.yearProperty]: 2019,
+              [NSW_FIRE.monthProperty]: 12,
+              [NSW_FIRE.typeProperty]: 1,
+            },
+          },
+        ];
+      },
+    };
+    expect(fireAt(map, [1, 2])).toBe("Wildfire, Dec 2019");
+    expect(asked).toEqual([[FIRE_FILL_LAYER]]);
+  });
+});
+
+describe("the Fire history layer ids", () => {
+  // Mutation: rename the entry or a layer alone, and the stack and the
+  // basemap move never find the layers: Map.tsx owns `topo-<entry id>-*`.
+  it("belong to the fire entry", () => {
+    for (const id of [FIRE_FILL_LAYER, FIRE_EDGE_LAYER])
+      expect(id.startsWith(`topo-${TERRAIN_ENTRIES.fire.id}-`)).toBe(true);
   });
 });
 
@@ -116,6 +170,7 @@ describe("moveTerrainIntoBasemap", () => {
       map,
       {
         contours: ["topo-nswcontours-minor", "topo-nswcontours-labels"],
+        fire: [],
         slope: ["topo-nswslope-dem"],
         land: ["topo-nswland-fill"],
         hillshade: ["topo-nswhillshade-dem"],

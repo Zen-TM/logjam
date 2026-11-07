@@ -47,13 +47,27 @@ describe("shownOverlays", () => {
     hillshade: false,
   };
 
-  // Mutation: drop `key !== "land"`, and any print over one of the user's own
-  // jobs tints the land nobody asked to see.
+  // Mutation: drop `!isOverlayTerrainKey(key)`, and any print over one of the
+  // user's own jobs tints the land nobody asked to see.
   it("prints Land only where the map shows it, job or no job", () => {
     const shown = (land: boolean) =>
       shownOverlays(new Set(), true, { ...mapShowsContours, land }, true);
     expect(shown(false).has("land")).toBe(false);
     expect(shown(true).has("land")).toBe(true);
+  });
+
+  // Mutation: drop the `VALID_GEOPDF_OVERLAY_NAMES` test, and a map showing
+  // Fire history asks the renderer for a layer it has no drawing of.
+  it("never prints Fire history, whatever the map shows", () => {
+    const shown = (jobInArea: boolean) =>
+      shownOverlays(
+        new Set(),
+        true,
+        { ...mapShowsContours, fire: true },
+        jobInArea,
+      );
+    expect(shown(false).has("fire")).toBe(false);
+    expect(shown(true).has("fire")).toBe(false);
   });
 
   // Mutation: turn every Terrain layer on when no job is in the area

@@ -132,7 +132,9 @@ describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
   });
 
   // Mutation: put `features` back, and a request names an overlay nothing draws.
-  it("is the Terrain group and vegetation, nothing else", () => {
+  // Mutation: let fire through, and a request asks the renderer for a layer
+  // it has no drawing of.
+  it("is the Terrain group but fire history, and vegetation", () => {
     expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
       "contours",
       "hillshade",

@@ -92,6 +92,8 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
+  fireNameOf,
+  NSW_FIRE,
   NSW_LAND,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
@@ -413,6 +415,7 @@ import {
   ROUTES_FLOOR,
   terrainBandMarker,
 } from "./layerOrder";
+import { fireLayerIds, fireLayerPaints, fireMinZoom } from "./fireLayers";
 import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 
@@ -985,7 +988,8 @@ export function MapScreen({
   /** The pin for a searched location: gone at the next map press (searchPinAfter). */
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const [tappedLand, setTappedLand] = useState<string | null>(null);
-  /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
+  const [tappedFire, setTappedFire] = useState<string | null>(null);
+  /** The tap `tappedLand` and `tappedFire` are being read for: a later tap's answer alone counts. */
   const landAskedFor = useRef<MapPoint | null>(null);
   const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
   const pendingPlacePoint = useRef<MapPoint | null>(null);
@@ -1594,6 +1598,26 @@ export function MapScreen({
     () => landResolved.map((r) => `nsw-land-${r.key}`),
     [landResolved],
   );
+  const fireResolved = useMemo(
+    () =>
+      terrainLayers.fire
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-fire", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.fire, viewportBbox, ctx, areasEpoch],
+  );
+  const fireLayerIdList = useMemo(
+    () => fireResolved.flatMap((r) => fireLayerIds(r.key)),
+    [fireResolved],
+  );
+  // Once per mount, so the tint ages with the map's own session, no timer.
+  const [fireNow] = useState(() => new Date());
+  const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
   const slopeResolved = useMemo(
     () =>
       terrainLayers.slope
@@ -2286,6 +2310,7 @@ export function MapScreen({
       const tapped = { latitude: lat, longitude: lon };
       setTappedPoint(tapped);
       setTappedLand(null);
+      setTappedFire(null);
       landAskedFor.current = tapped;
       // From the tiles on the phone, so this works offline and asks no one.
       if (landLayerIds.length > 0) {
@@ -2300,11 +2325,23 @@ export function MapScreen({
           // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
       }
+      if (fireLayerIdList.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(event.nativeEvent.point, {
+            layers: fireLayerIdList,
+          })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedFire(fireNameOf(features));
+          })
+          .catch(() => undefined);
+      }
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
       collectingPoints,
+      fireLayerIdList,
       landLayerIds,
       pressedAnchorIndex,
     ],
@@ -3415,6 +3452,7 @@ export function MapScreen({
           altitudeM: here.coords.altitude,
         });
         setTappedLand(null);
+        setTappedFire(null);
         setTappedPoint({
           latitude: here.coords.latitude,
           longitude: here.coords.longitude,
@@ -4915,6 +4953,7 @@ export function MapScreen({
     contours: contoursResolved,
     slope: slopeResolved,
     land: landResolved,
+    fire: fireResolved,
     hillshade: hillshadeResolved,
   });
 
@@ -4947,6 +4986,7 @@ export function MapScreen({
       `nsw-land-${r.key}`,
       ...LAND_EDGE_LINES.map((_, i) => `nsw-land-edge-${i}-${r.key}`),
     ]),
+    fire: fireResolved.flatMap((r) => fireLayerIds(r.key)),
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
@@ -5174,6 +5214,33 @@ export function MapScreen({
             ))}
           </ResolvedSource>
         ))}
+        {fireResolved.map((r) => {
+          const [fillId, edgeId] = fireLayerIds(r.key);
+          return (
+            <ResolvedSource key={r.key} resolved={r}>
+              <Layer
+                key={fillId}
+                type="fill"
+                id={fillId}
+                source-layer={NSW_FIRE.sourceLayer}
+                beforeId={groundBefore[fillId]}
+                minzoom={fireMinZoom(r.layerMinZoom)}
+                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                paint={firePaints.fill}
+              />
+              <Layer
+                key={edgeId}
+                type="line"
+                id={edgeId}
+                source-layer={NSW_FIRE.sourceLayer}
+                beforeId={groundBefore[edgeId]}
+                minzoom={fireMinZoom(r.layerMinZoom)}
+                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                paint={firePaints.edge}
+              />
+            </ResolvedSource>
+          );
+        })}
         {slopeResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <Layer
@@ -5916,6 +5983,7 @@ export function MapScreen({
         point={tappedPoint}
         fix={tappedFix}
         land={tappedLand}
+        fire={tappedFire}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onClosed={openParkedPlaceForm}
