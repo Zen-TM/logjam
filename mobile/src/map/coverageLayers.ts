@@ -2,6 +2,7 @@
 // hatch images registered beside it (shared nswCoverage.ts holds the levels).
 import {
   type CarrierId,
+  COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
   coverageOpacity,
@@ -16,11 +17,14 @@ export function coverageLayerId(sourceKey: string): string {
   return `nsw-coverage-${sourceKey}`;
 }
 
-/** For `<Images images>`: each hatch under the name the pattern expression uses. */
+/**
+ * For `<Images images>`: each hatch under the name the pattern expression
+ * uses, at the pixel ratio it is drawn at, so it is as fine as Logjam Web's.
+ */
 export const COVERAGE_IMAGES = Object.fromEntries(
   Object.entries(COVERAGE_HATCH_URIS).map(([name, uri]) => [
     name,
-    { source: { uri } },
+    { source: { uri, scale: COVERAGE_HATCH_PIXEL_RATIO } },
   ]),
 );
 

@@ -2819,29 +2819,23 @@ function Map({
             ? GAUGE_ICON_SDF_URI
             : null;
       // Badges are plain bitmaps, two colours and a rim, so there is no tint
-      // to protect and MapLibre can take the decoded element itself.
-      // The Coverage hatches: plain bitmaps like the badges, drawn at 2x.
+      // to protect and MapLibre can take the decoded element itself. So are
+      // the Coverage hatches, which are drawn at 2x.
       const hatchUri = (COVERAGE_HATCH_URIS as Record<string, string>)[id];
-      if (hatchUri) {
+      const bitmapUri =
+        (PLACE_BADGE_URIS as Record<string, string>)[id] ?? hatchUri;
+      if (bitmapUri) {
         if (map.hasImage(id)) return;
-        const hatch = new Image();
-        hatch.onload = () => {
-          if (!map.hasImage(id))
-            map.addImage(id, hatch, {
-              pixelRatio: COVERAGE_HATCH_PIXEL_RATIO,
-            });
+        const bitmap = new Image();
+        bitmap.onload = () => {
+          if (map.hasImage(id)) return;
+          map.addImage(
+            id,
+            bitmap,
+            hatchUri ? { pixelRatio: COVERAGE_HATCH_PIXEL_RATIO } : {},
+          );
         };
-        hatch.src = hatchUri;
-        return;
-      }
-      const badgeUri = (PLACE_BADGE_URIS as Record<string, string>)[id];
-      if (badgeUri) {
-        if (map.hasImage(id)) return;
-        const badge = new Image();
-        badge.onload = () => {
-          if (!map.hasImage(id)) map.addImage(id, badge);
-        };
-        badge.src = badgeUri;
+        bitmap.src = bitmapUri;
         return;
       }
       if (sdfUri) {

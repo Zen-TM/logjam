@@ -304,7 +304,6 @@ resource "aws_iam_role_policy" "fire_history_scheduler" {
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
           aws_iam_role.fire_history.arn,
-          aws_iam_role.coverage.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
@@ -990,6 +989,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
           aws_iam_role.place_registry.arn,
           aws_iam_role.gauges.arn,
           aws_iam_role.fire_history.arn,
+          aws_iam_role.coverage.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }

@@ -340,6 +340,97 @@ run "fire_history_role_writes_only_fire" {
   }
 }
 
+run "pin_role_passes_every_topo_task_role" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_role_policy.gha_pin_task_defs,
+      aws_iam_role_policy.fire_history_scheduler,
+      aws_ecs_task_definition.topo_worker,
+      aws_ecs_task_definition.topo_export_worker,
+      aws_ecs_task_definition.place_registry,
+      aws_ecs_task_definition.gauges,
+      aws_ecs_task_definition.fire_history,
+      aws_ecs_task_definition.coverage,
+    ]
+  }
+
+  # A mocked provider makes up no ARN to compare: each role gets its own.
+  override_resource {
+    target          = aws_iam_role.ecs_task_execution
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-execution" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.topo_worker
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-topo-worker-role" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.place_registry
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-place-registry" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.gauges
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-gauges" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.fire_history
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-fire-history" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.coverage
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-coverage" }
+    override_during = plan
+  }
+  override_resource {
+    target = aws_ecs_task_definition.fire_history
+    values = {
+      arn                  = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-fire-history:1"
+      arn_without_revision = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-fire-history"
+    }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_ecs_cluster.main
+    values          = { arn = "arn:aws:ecs:ap-southeast-2:620853681701:cluster/mock" }
+    override_during = plan
+  }
+
+  # Mutation: leave a topo-image task's role out of PassWorkerRoles (as the
+  # coverage role first was), and pin-release.sh's re-registration of that
+  # family is refused, so every topo deploy and worker rollback fails.
+  assert {
+    condition = alltrue([
+      for arn in [
+        aws_ecs_task_definition.topo_worker.task_role_arn,
+        aws_ecs_task_definition.topo_export_worker.task_role_arn,
+        aws_ecs_task_definition.place_registry.task_role_arn,
+        aws_ecs_task_definition.gauges.task_role_arn,
+        aws_ecs_task_definition.fire_history.task_role_arn,
+        aws_ecs_task_definition.coverage.task_role_arn,
+        ] : contains(one([
+          for s in jsondecode(aws_iam_role_policy.gha_pin_task_defs.policy).Statement : s
+          if try(s.Sid, "") == "PassWorkerRoles"
+      ]).Resource, arn)
+    ])
+    error_message = "The pin role must be able to pass the task role of every family pin-release.sh pins for the topo image."
+  }
+
+  # Mutation: add another task's role to the fire history scheduler's
+  # PassRole, and the schedule can launch a task with more than its own grant.
+  assert {
+    condition = toset(one([
+      for s in jsondecode(aws_iam_role_policy.fire_history_scheduler.policy).Statement : s
+      if try(s.Sid, "") == "PassFireHistoryRoles"
+    ]).Resource) == toset([aws_iam_role.ecs_task_execution.arn, aws_iam_role.fire_history.arn])
+    error_message = "The fire history scheduler may pass only the execution role and the fire history task role."
+  }
+}
+
 run "coverage_role_writes_only_master_coverage" {
   command = plan
   plan_options {

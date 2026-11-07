@@ -216,7 +216,7 @@
 /* A hatched layer's swatch: its 2x pattern at the map's scale, over the hue. */
 .patterned {
   background-image: var(--tile-pattern);
-  background-size: 24px 24px;
+  background-size: 24px 24px; /* intrinsic: the 48px hatch at 2x (COVERAGE_HATCH_PIXEL_RATIO) */
 }
 
 /* A person's tile: the same fill and box, initials instead of a glyph. */

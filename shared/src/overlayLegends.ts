@@ -26,7 +26,8 @@ export type OverlayLegend = {
   intro: string;
   /**
    * The key, a swatch per row, in the order the legend lists them: the
-   * colour, with `pattern` (an image) drawn over it at the map's scale.
+   * colour, with `pattern` (an image drawn at `COVERAGE_HATCH_PIXEL_RATIO`)
+   * over it at the map's scale.
    */
   rows: readonly { label: string; colour: string; pattern?: string }[];
   /**

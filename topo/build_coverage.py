@@ -24,9 +24,13 @@ How the release maps to a carrier (its data interpretation guide, v6):
   is in any Ext Ant map but no Outdoor one, and "none" when it is in neither.
 - 4G, 5G and 5G NSA count; 3G is switched off. Telstra has no 5G Ext Ant
   map, so a carrier's Outdoor maps count towards its Ext Ant too.
-- The Optus-TPG MOCN network is Optus's regional sites shared with TPG. TPG's
-  own maps leave it out (the guide's footnote 11) and TPG's customers use it
-  (footnote 14), and the sites are Optus's, so it counts for both carriers.
+- The Optus-TPG MOCN counts for both Optus and TPG. "TPG's coverage maps do
+  not include coverage it could access via its roaming agreement with Optus"
+  (the guide's footnote 11), and "TPG wholesale customers have access to both
+  TPG's retail coverage and the coverage TPG can access under Optus-TPG MOCN
+  arrangement" (footnote 14). That TPG's own customers use it is inferred from
+  those. For Optus it changes nothing: Optus's own maps already cover all of
+  the MOCN in NSW (the 2026 maps, measured).
 - The retail maps only: Telstra's Wholesale maps are its resellers', smaller.
 
 `publish` asks data.gov.au's CKAN API for the release's resources, picks the

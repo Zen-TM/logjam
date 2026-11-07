@@ -1,4 +1,5 @@
 import {
+  COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
   coverageOpacity,
@@ -39,12 +40,13 @@ describe("coverageLayerFilter", () => {
 describe("COVERAGE_IMAGES", () => {
   // Mutation: drop one hatch, or key it by anything but shared's name, and the
   // fill-pattern names an image the style does not have: the gap draws bare.
-  it("registers every hatch shared's pattern names, from its data URI", () => {
+  // Drop the scale, and the 2x hatch draws twice as coarse as Logjam Web's.
+  it("registers every hatch shared's pattern names, at its pixel ratio", () => {
     expect(COVERAGE_IMAGES).toEqual(
       Object.fromEntries(
         Object.entries(COVERAGE_HATCH_URIS).map(([name, uri]) => [
           name,
-          { source: { uri } },
+          { source: { uri, scale: COVERAGE_HATCH_PIXEL_RATIO } },
         ]),
       ),
     );

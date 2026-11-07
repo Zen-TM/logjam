@@ -58,6 +58,8 @@ const at = (level: string) => ({
 });
 
 describe("the Coverage hatches", () => {
+  // Mutation: edit coverageHatchImages.ts by hand, or change the generator
+  // without rerunning it, and the committed hatch drifts from its source.
   it("are exactly what the generator produces", () => {
     const file = join(here, "coverageHatchImages.ts");
     const committed = readFileSync(file, "utf8");
