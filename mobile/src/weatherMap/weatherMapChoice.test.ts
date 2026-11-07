@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { weatherFixture as run } from "./weatherMapFixture";
 import { chooseWeatherRun } from "./weatherMapChoice";
 
-const kept = { ...run, path: "runs/20261106T1800Z/" } as const;
+const kept = { ...run, path: "runs/20261106T1800Z-20261107T0000Z/" } as const;
 const base = { enabled: true, online: true, settled: true } as const;
 
 // Mutation: fall back to the kept run before the CDN has answered, and a

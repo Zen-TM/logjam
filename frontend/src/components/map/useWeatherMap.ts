@@ -21,7 +21,8 @@ const BASE = window.location.origin;
 /**
  * The Weather overlay's files while it is on: the manifest, fetched when it is
  * turned on, and again then or when the tab comes back to the front if it is
- * older than `WEATHER_MAP.refreshAfterMs` (nothing polls), and the wind
+ * older than `WEATHER_MAP.refreshAfterMs` (nothing polls; guard:
+ * useWeatherMap.test.tsx, "never again by itself"), and the wind
  * arrows' file, once per run and only for a layer that draws them. A failure is
  * only ever `failed`; nothing is logged.
  *
@@ -38,8 +39,10 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     data: WeatherWindFile | null;
   } | null>(null);
   const loadedAt = useRef(0);
-  // The run whose archive went missing and whose manifest was asked for again.
-  const goneFor = useRef<string | null>(null);
+  // The run whose archive went missing and when its manifest was asked for
+  // again: a second miss for that run within the hour is failed, a later one
+  // (a passing 404 long ago) asks again.
+  const goneFor = useRef<{ path: string; at: number } | null>(null);
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
@@ -138,12 +141,17 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     if (s.status !== "ready") return;
     stateRef.current = { status: "loading" };
     loadedAt.current = 0;
-    if (goneFor.current === s.file.path) {
+    const at = Date.now();
+    const gone = goneFor.current;
+    if (
+      gone?.path === s.file.path &&
+      at - gone.at < WEATHER_MAP.refreshAfterMs
+    ) {
       stateRef.current = { status: "failed" };
       setState(stateRef.current);
       return;
     }
-    goneFor.current = s.file.path;
+    goneFor.current = { path: s.file.path, at };
     setState(stateRef.current);
     setAttempt((n) => n + 1);
   }, []);

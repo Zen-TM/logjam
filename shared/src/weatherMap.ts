@@ -37,7 +37,8 @@ export const WEATHER_MAP = {
    *  condition. Guard: topo/tests/test_weather.py. */
   credit: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS",
   /** A manifest this old is asked for again on the next turn-on or return
-   *  to the map; nothing polls. */
+   *  to the map; nothing polls. Guards: frontend useWeatherMap.test.tsx,
+   *  mobile weatherMapRefetch.test.ts. */
   refreshAfterMs: 3_600_000,
   /** How often an open map re-reads the clock, for the step now falls in. */
   clockMs: 300_000,
@@ -376,10 +377,14 @@ export type WeatherShown =
       age: string;
     };
 
+/** The step the user picked, for the run it was picked in. */
+export type WeatherPick = { path: string; step: number };
+
 export function weatherShown(input: {
   file: WeatherMapFile;
   layer: WeatherLayerKey;
-  picked: number | null;
+  /** Counts only in the run it was made in: a new run opens where now is. */
+  picked: WeatherPick | null;
   now: number;
 }): WeatherShown {
   const { file, now } = input;
@@ -396,7 +401,10 @@ export function weatherShown(input: {
   const last = file.steps.length - 1;
   const step = Math.min(
     last,
-    Math.max(first, Math.round(input.picked ?? first)),
+    Math.max(
+      first,
+      Math.round(input.picked?.path === file.path ? input.picked.step : first),
+    ),
   );
   const shown = weatherShownLabel(file, layer.key, step, now);
   return { kind: "ready", layer, step, first, last, shown, age };

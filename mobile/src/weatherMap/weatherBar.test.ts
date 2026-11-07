@@ -33,9 +33,15 @@ describe("weatherBarModel", () => {
   // Mutation: let `picked` through unclamped, and a pick from the run before
   // (more steps) indexes past this run's last archive.
   it("holds a pick to the steps the run has and from now on", () => {
-    const past = weatherBarModel({ ...base, picked: 99 });
+    const past = weatherBarModel({
+      ...base,
+      picked: { path: file.path, step: 99 },
+    });
     expect(past.kind === "ready" && past.scrub?.step).toBe(3);
-    const early = weatherBarModel({ ...base, picked: -4 });
+    const early = weatherBarModel({
+      ...base,
+      picked: { path: file.path, step: -4 },
+    });
     expect(early.kind === "ready" && early.scrub?.step).toBe(1);
   });
 

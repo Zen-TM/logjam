@@ -213,6 +213,22 @@ describe("useWeatherMap", () => {
       expect(asked.filter((u) => u.endsWith("latest.json"))).toHaveLength(3);
     });
 
+    // Mutation: never forget a run whose archive went missing once, and a
+    // passing 404 long ago makes the next one fail the overlay at once.
+    it("asks again for a run whose archive went missing over an hour ago", async () => {
+      const { result } = renderHook(() => useWeatherMap(true, "rain"));
+      await flush();
+      act(() => result.current.archiveGone());
+      await flush();
+      const later = Date.now() + WEATHER_MAP.refreshAfterMs + 1;
+      const clock = vi.spyOn(Date, "now").mockReturnValue(later);
+      act(() => result.current.archiveGone());
+      await flush();
+      clock.mockRestore();
+      expect(result.current.state.status).toBe("ready");
+      expect(asked.filter((u) => u.endsWith("latest.json"))).toHaveLength(3);
+    });
+
     // Mutation: keep the old manifest when the refetch fails, and the bar says
     // ready over nothing.
     it("is failed when the manifest cannot be fetched again", async () => {

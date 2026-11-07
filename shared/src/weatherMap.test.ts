@@ -264,10 +264,31 @@ describe("what the overlay shows", () => {
   // one's steps or back into the past.
   it("holds a pick inside the steps still to come", () => {
     const at = (picked: number) =>
-      weatherShown({ file, layer: "wind", picked, now: anchor });
+      weatherShown({
+        file,
+        layer: "wind",
+        picked: { path: file.path, step: picked },
+        now: anchor,
+      });
     expect(at(-5)).toMatchObject({ step: 0 });
     expect(at(999)).toMatchObject({ step: file.steps.length - 1 });
     expect(at(2.6)).toMatchObject({ step: 3 });
+  });
+
+  // Mutation: use a pick whatever run it was made in, and the first look at
+  // a new run opens on a time nobody chose there.
+  it("counts a pick only in the run it was made in", () => {
+    const at = (path: string) =>
+      weatherShown({
+        file,
+        layer: "rain",
+        picked: { path, step: 3 },
+        now: anchor,
+      });
+    expect(at(file.path)).toMatchObject({ step: 3 });
+    expect(at("runs/20261106T1800Z-20261107T0300Z/")).toMatchObject({
+      step: 0,
+    });
   });
 
   // Mutation: let a stepped layer through when every step is past, and a
@@ -283,7 +304,12 @@ describe("what the overlay shows", () => {
   // an archive the job never wrote.
   it("draws a total with no step, and misses one the run left out", () => {
     expect(
-      weatherShown({ file, layer: "rainPast24", picked: 7, now: anchor }),
+      weatherShown({
+        file,
+        layer: "rainPast24",
+        picked: { path: file.path, step: 7 },
+        now: anchor,
+      }),
     ).toMatchObject({ kind: "ready", step: null, first: 0, last: 0 });
     expect(
       weatherShown({

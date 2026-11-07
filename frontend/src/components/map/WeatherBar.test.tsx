@@ -170,4 +170,23 @@ describe("the Weather bar", () => {
     bar({ now: T0 + 20 * hour });
     expect(document.body.textContent).toBe(copy.weatherOutOfDate);
   });
+
+  // Mutation: offer Try again for a total the run left out, and the button
+  // asks for the same manifest, which still lacks it.
+  it("offers nothing to try again for a total the run left out", () => {
+    bar({ layerKey: "rainNext72" });
+    expect(document.body.textContent).toBe(copy.weatherFailed);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  // Mutation: drop `quiet`, and a screen reader re-reads the bar on every
+  // notch over the scrubber's own value.
+  it("keeps the moving bar out of the live region, and its states in it", () => {
+    bar();
+    expect(document.querySelector("[aria-live=off]")).not.toBeNull();
+    cleanup();
+    bar({ state: { status: "failed" } });
+    expect(document.querySelector("[aria-live=off]")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain(copy.weatherFailed);
+  });
 });

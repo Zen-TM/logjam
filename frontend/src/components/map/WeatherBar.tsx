@@ -5,7 +5,7 @@ import {
   WEATHER_MAP,
   type WeatherLayerKey,
 } from "@logjam/shared";
-import { Button, IconButton, Notice, Scrubber } from "../../ui";
+import { IconButton, Notice, Scrubber } from "../../ui";
 import {
   weatherView,
   type WeatherMapState,
@@ -51,32 +51,31 @@ export default function WeatherBar({
   const path = state.status === "ready" ? state.file.path : null;
   const onStep = (step: number) => path && setPick({ path, step });
   if (view.kind === "off") return null;
-  if (view.kind !== "ready") {
-    const text = {
-      loading: copy.weatherLoading,
-      failed: copy.weatherFailed,
-      outOfDate: copy.weatherOutOfDate,
-    }[view.kind];
+  if (view.kind === "loading")
+    return <Notice icon="weatherMap">{copy.weatherLoading}</Notice>;
+  if (view.kind !== "ready")
     return (
       <Notice
-        icon="weatherMap"
-        tone={view.kind === "failed" ? "warning" : "info"}
-        controls={
+        icon="warning"
+        tone="warning"
+        action={
           view.kind === "failed" && online ? (
-            <Button variant="outline" compact onClick={onRetry}>
-              {WEATHER.copy.tryAgain}
-            </Button>
+            <IconButton
+              icon="retry"
+              label={WEATHER.copy.tryAgain}
+              onClick={onRetry}
+            />
           ) : undefined
         }
       >
-        {text}
+        {view.kind === "outOfDate" ? copy.weatherOutOfDate : copy.weatherFailed}
       </Notice>
     );
-  }
   const { layer, step, first, last, shown, age } = view;
   return (
     <Notice
       icon="weatherMap"
+      quiet
       controls={
         step !== null && (
           <>

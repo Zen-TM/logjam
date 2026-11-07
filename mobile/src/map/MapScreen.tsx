@@ -1706,33 +1706,28 @@ export function MapScreen({
     status: weather.status,
     file: weather.file,
     layer: weatherLayerKey,
-    picked:
-      weatherPick && weatherPick.path === weather.file?.path
-        ? weatherPick.step
-        : null,
+    picked: weatherPick,
     now: weather.now,
     online: connectivity === "online",
   });
-  // The scrubber moves at once; the map follows when it rests, so a drag
-  // doesn't open an archive per step passed.
-  const weatherStep = useSettled(
-    weatherDrawnStep(weatherBar),
+  // The scrubber and the picker move at once; the map follows when they
+  // rest, layer and step together, so a drag doesn't open an archive per step
+  // passed and a new layer never draws for a moment at the old one's step.
+  const weatherNowStep = weatherDrawnStep(weatherBar);
+  const weatherSettled = useSettled(
+    weatherNowStep === null ? null : `${weatherLayerKey}|${weatherNowStep}`,
     WEATHER_MAP.settleMs,
   );
-  const weatherDrawn = useMemo(
-    () =>
-      weatherOn && weather.file && weatherStep !== null
-        ? weatherSource(
-            weather.base,
-            weather.file,
-            weatherLayerKey,
-            weatherStep,
-          )
-        : null,
-    [weatherOn, weather.file, weather.base, weatherLayerKey, weatherStep],
-  );
+  const weatherDrawn = useMemo(() => {
+    if (!weatherOn || !weather.file || weatherSettled === null) return null;
+    const [key, at] = weatherSettled.split("|");
+    const layer = key as WeatherLayerKey;
+    const step = Number(at);
+    const source = weatherSource(weather.base, weather.file, layer, step);
+    return source ? { source, layer, step } : null;
+  }, [weatherOn, weather.file, weather.base, weatherSettled]);
   const weatherResolved = useMemo(
-    () => (weatherDrawn ? [weatherDrawn] : []),
+    () => (weatherDrawn ? [weatherDrawn.source] : []),
     [weatherDrawn],
   );
   const slopeResolved = useMemo(
@@ -5124,7 +5119,7 @@ export function MapScreen({
     coverage: coverageLayerIdList,
     weather: weatherDrawn
       ? [
-          weatherFieldLayerId(weatherDrawn.key),
+          weatherFieldLayerId(weatherDrawn.source.key),
           ...(weatherArrows ? [WEATHER_ARROWS_ID] : []),
         ]
       : [],
@@ -5403,11 +5398,11 @@ export function MapScreen({
             </ResolvedSource>
           );
         })}
-        {weatherDrawn && weatherStep !== null ? (
+        {weatherDrawn ? (
           <WeatherLayers
-            source={weatherDrawn}
-            layer={weatherLayerKey}
-            step={weatherStep}
+            source={weatherDrawn.source}
+            layer={weatherDrawn.layer}
+            step={weatherDrawn.step}
             wind={weather.wind}
             arrows={weatherArrows}
             beforeIds={groundBefore}

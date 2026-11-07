@@ -4,6 +4,7 @@
 import {
   MAP_TERRAIN,
   weatherShown,
+  type WeatherPick,
   type WeatherLayerKey,
   type WeatherMapFile,
 } from "@logjam/shared";
@@ -33,7 +34,8 @@ export function weatherBarModel(input: {
   file: WeatherMapFile | null;
   layer: WeatherLayerKey;
   /** The scrubber's pick, or null for where it starts. */
-  picked: number | null;
+  /** Counts only in the run it was made in (shared `weatherShown`). */
+  picked: WeatherPick | null;
   now: number;
   online: boolean;
 }): WeatherBarModel {

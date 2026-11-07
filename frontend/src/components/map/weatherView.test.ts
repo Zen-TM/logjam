@@ -60,7 +60,7 @@ describe("weatherView", () => {
   });
 
   // Mutation: draw a total the run lacks from a made-up URL, and every tile 404s.
-  it("reads a total this run lacks as failed", () => {
-    expect(view({ layerKey: "rainNext72" }).kind).toBe("failed");
+  it("reads a total this run lacks as missing", () => {
+    expect(view({ layerKey: "rainNext72" }).kind).toBe("missing");
   });
 });

@@ -87,11 +87,12 @@ receives.**
   Meteo's reader is in the worker image only"), which fails if `omfiles`
   appears in another requirements file, a Dockerfile or a `pyproject.toml`,
   or `@openmeteo/` in any `package.json` or lockfile.
-- **Logjam GPS keeps one run, for every saved area.** Saving or updating a
-  saved area also downloads the latest run (about 12 MB, the manifest last)
-  into `WEATHER_MAP_DIR`, replacing the one before, under the download's own
-  mobile-data answer; offline the overlay draws that run with its age. The
-  wipe empties it. Guards: `mobile/src/weatherMap/weatherMapKeep.test.ts`,
+- **Logjam GPS keeps one run, for every saved area.** A save, an update or
+  its Retry also downloads the latest run (about 12 MB, the manifest last)
+  into `WEATHER_MAP_DIR`, replacing the one before, under the save's own
+  mobile-data answer, asked again every 50 files; a stop leaves the run
+  before whole. Offline the overlay draws that run with its age. The wipe
+  empties it. Guards: `mobile/src/weatherMap/weatherMapKeep.test.ts`,
   `mobile/src/offline/wipeLocalData.test.ts`. Logjam Web keeps none.
 - **Credit** is the job's `ATTRIBUTION`, "Weather data by Open-Meteo.com
   (CC BY 4.0), ECMWF IFS", carried in the manifest and mirrored as
