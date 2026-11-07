@@ -6,7 +6,9 @@
 // the right one, and a basemap that swaps a beat after the screen appears
 // re-fetches every tile it just drew.
 import {
+  type CarrierId,
   MAP_OVERLAY_DEFAULTS,
+  normalizeCarrier,
   normalizeTerrainLayers,
   type TerrainSwitchKey,
 } from "@logjam/shared";
@@ -43,6 +45,15 @@ export function setTerrainLayers(
 ): boolean {
   return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }
+
+const COVERAGE_CARRIER_PREF_KEY = "mapCoverageCarrier";
+
+/** The network the Coverage overlay draws, the default until the user picks. */
+export const readCoverageCarrier = (): CarrierId =>
+  normalizeCarrier(readPref(COVERAGE_CARRIER_PREF_KEY));
+
+export const setCoverageCarrier = (id: CarrierId): boolean =>
+  writePref(COVERAGE_CARRIER_PREF_KEY, id);
 
 const readOverlay = (key: string, fallback: boolean): boolean => {
   const stored = readPref(key);

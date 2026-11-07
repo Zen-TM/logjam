@@ -109,10 +109,10 @@ describe("deadTileBudget", () => {
 });
 
 describe("regionClipSpecs", () => {
-  // Mutation: drop the contours, the slope, land, fire or the vector map from the list
+  // Mutation: drop the contours, the slope, land, fire, coverage or the vector map from the list
   // and this goes red: a saved area is then blank offline, with tools that
   // draw straight lines, or has a Slope switch that draws nothing. That the screen enqueues this list for every account has no guard.
-  it("gives every area the DEM archives, the contours, the slope, land, fire and the vector map", () => {
+  it("gives every area the DEM archives, the contours, the slope, land, fire, coverage and the vector map", () => {
     const run = {
       bbox: BBOX,
       groupId: "g",
@@ -132,19 +132,21 @@ describe("regionClipSpecs", () => {
         s.slope,
         s.land,
         s.fire,
+        s.coverage,
       ]),
     ).toEqual([
-      ["nsw-5m", "nsw-5m", undefined, undefined, undefined, undefined],
-      ["nsw-contours", undefined, true, undefined, undefined, undefined],
-      ["nsw-5m-slope", undefined, undefined, true, undefined, undefined],
-      ["nsw-land", undefined, undefined, undefined, true, undefined],
-      ["nsw-fire", undefined, undefined, undefined, undefined, true],
-      ["protomaps", undefined, undefined, undefined, undefined, undefined],
+      ["nsw-5m", "nsw-5m", ...Array(5).fill(undefined)],
+      ["nsw-contours", undefined, true, ...Array(4).fill(undefined)],
+      ["nsw-5m-slope", undefined, undefined, true, ...Array(3).fill(undefined)],
+      ["nsw-land", ...Array(3).fill(undefined), true, undefined, undefined],
+      ["nsw-fire", ...Array(4).fill(undefined), true, undefined],
+      ["nsw-coverage", ...Array(5).fill(undefined), true],
+      ["protomaps", ...Array(6).fill(undefined)],
     ]);
     for (const spec of specs) {
       expect(spec).toMatchObject({ taskKind: "clip", ...run });
     }
-    expect(new Set(specs.map((s) => s.id)).size).toBe(6);
+    expect(new Set(specs.map((s) => s.id)).size).toBe(7);
   });
 });
 

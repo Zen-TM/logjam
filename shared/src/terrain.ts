@@ -1,7 +1,7 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
-// from the 5 m DEM, with no LiDAR job, and two overlays from statewide archives
-// of their own: Fire history (nswFire.ts) and Land (nswLand.ts). Each client
-// only draws these.
+// from the 5 m DEM, with no LiDAR job, and three overlays from statewide
+// archives of their own: Coverage (nswCoverage.ts), Fire history (nswFire.ts)
+// and Land (nswLand.ts). Each client only draws these.
 //
 // Slope is baked once as a fake DEM: a terrarium archive whose "height" is the
 // slope in degrees (ADR 0030 encoding), built by `topo/build_nsw_dem.py slope`.
@@ -39,13 +39,15 @@ export const NSW_HILLSHADE = {
 } as const;
 
 /**
- * The group's layers, top of the map first: contour lines over the tint of
+ * The group's layers, top of the map first: contour lines over the hatch of
+ * where the user's carrier predicts no phone signal over the tint of
  * when the ground last burnt over the slope colours over the edges of who
  * holds the land over the shading. Both clients list them in this order and
  * stack them in it.
  */
 export const TERRAIN_LAYER_KEYS = [
   "contours",
+  "coverage",
   "fire",
   "slope",
   "land",
@@ -60,6 +62,7 @@ export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
  * Overlays, and none redrawn by a sharpened area or turned on by a job in it.
  */
 export const OVERLAY_TERRAIN_KEYS = [
+  "coverage",
   "fire",
   "land",
 ] as const satisfies readonly TerrainLayerKey[];
@@ -75,7 +78,7 @@ export function isOverlayTerrainKey(key: string): key is OverlayTerrainKey {
  * has it: directly under this layer of the Protomaps style (its
  * `@protomaps/basemaps` id, before a client's prefix). The shading lies over
  * the land fills and under the water, with Land's edges on it, so a lake stays
- * a lake; the slope, the fire tint and then the contours lie over the water's
+ * a lake; the slope, the fire tint, the coverage hatch and then the contours lie over the water's
  * fill and under its lines, the roads, the boundaries and every label. Over a raster basemap there is nothing to interleave, and the group
  * sits on top of it. Guards: `terrain.test.ts`, and each client's test that
  * the ids are in the style it draws (frontend `components/map/layerOrder.test.ts`,
@@ -85,6 +88,7 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
   Record<TerrainLayerKey, string>
 > = {
   contours: "water_stream",
+  coverage: "water_stream",
   fire: "water_stream",
   slope: "water_stream",
   land: "water",
@@ -153,6 +157,7 @@ export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainSwitchKey, boolean>
 > = {
   contours: true,
+  coverage: false,
   fire: false,
   slope: true,
   land: false,

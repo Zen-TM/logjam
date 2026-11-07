@@ -14,7 +14,7 @@ import {
 } from "@logjam/shared";
 import { takeDismissingPress } from "../../ui";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
-import { FIRE_FILL_LAYER } from "./layerOrder";
+import { COVERAGE_FILL_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
 import MapPointPopover from "./MapPointPopover";
 
 const placed = vi.hoisted(() => ({ order: [] as string[] }));
@@ -74,6 +74,7 @@ function mount(
       map={map as any}
       point={point}
       from={null}
+      coverageCarrier="optus"
       {...(handlers.startAt ? { startAt: handlers.startAt } : {})}
       onClose={handlers.onClose ?? vi.fn()}
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
@@ -447,6 +448,29 @@ describe("MapPointPopover fire history", () => {
     layered.getLayer = () => undefined;
     mount();
     expect(screen.queryByText(MAP_POINT.copy.fire)).toBeNull();
+    delete layered.queryRenderedFeatures;
+  });
+});
+
+describe("MapPointPopover coverage", () => {
+  // Mutation: stop passing `coverage` to `mapPointFacts`, or name a carrier
+  // other than the one the map draws, and the figure goes missing or answers
+  // for the wrong network.
+  it("names the drawn carrier's level while the layer is on, and nothing when off", () => {
+    const layered = map as unknown as Record<string, unknown>;
+    layered.getLayer = (id: string) =>
+      id === COVERAGE_FILL_LAYER ? {} : undefined;
+    layered.queryRenderedFeatures = () => [
+      { properties: { carrier: "optus", level: "none" } },
+    ];
+    mount();
+    expect(screen.getByText(MAP_POINT.copy.coverage)).toBeTruthy();
+    expect(screen.getByText("Optus: no predicted coverage")).toBeTruthy();
+    cleanup();
+
+    layered.getLayer = () => undefined;
+    mount();
+    expect(screen.queryByText(MAP_POINT.copy.coverage)).toBeNull();
     delete layered.queryRenderedFeatures;
   });
 });

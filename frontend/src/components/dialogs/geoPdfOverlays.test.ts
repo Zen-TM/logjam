@@ -57,17 +57,19 @@ describe("shownOverlays", () => {
   });
 
   // Mutation: drop the `VALID_GEOPDF_OVERLAY_NAMES` test, and a map showing
-  // Fire history asks the renderer for a layer it has no drawing of.
-  it("never prints Fire history, whatever the map shows", () => {
-    const shown = (jobInArea: boolean) =>
-      shownOverlays(
-        new Set(),
-        true,
-        { ...mapShowsContours, fire: true },
-        jobInArea,
-      );
-    expect(shown(false).has("fire")).toBe(false);
-    expect(shown(true).has("fire")).toBe(false);
+  // Fire history or Coverage asks the renderer for a layer it has no drawing of.
+  it("never prints Fire history or Coverage, whatever the map shows", () => {
+    for (const key of ["fire", "coverage"] as const) {
+      const shown = (jobInArea: boolean) =>
+        shownOverlays(
+          new Set(),
+          true,
+          { ...mapShowsContours, [key]: true },
+          jobInArea,
+        );
+      expect(shown(false).has(key)).toBe(false);
+      expect(shown(true).has(key)).toBe(false);
+    }
   });
 
   // Mutation: turn every Terrain layer on when no job is in the area

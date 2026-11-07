@@ -17,6 +17,7 @@ const saved = [
   clip("slope-region", "nsw-5m-slope"),
   clip("land-region", "nsw-land"),
   clip("fire-region", "nsw-fire"),
+  clip("coverage-region", "nsw-coverage"),
   clip("dem-region", "nsw-5m"),
 ];
 
@@ -78,6 +79,9 @@ describe("terrainSwitch", () => {
     ).toBe(true);
     expect(
       terrainSwitch("fire", true, "protomaps", false, [saved[2]!]).disabled,
+    ).toBe(true);
+    expect(
+      terrainSwitch("coverage", true, "protomaps", false, [saved[3]!]).disabled,
     ).toBe(true);
   });
 });

@@ -39,6 +39,7 @@ describe("mapDataAttribution", () => {
           slope: [ok("s", "Slope")],
           land: [],
           fire: [],
+          coverage: [],
           hillshade: [],
         },
       ),

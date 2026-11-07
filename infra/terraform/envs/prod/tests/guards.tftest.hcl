@@ -340,6 +340,35 @@ run "fire_history_role_writes_only_fire" {
   }
 }
 
+run "coverage_role_writes_only_master_coverage" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.coverage]
+  }
+
+  # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
+  # prefix condition, or adding an action or a statement lets the monthly
+  # build see, write or delete more than the Coverage archive and its state.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.coverage.policy).Statement == [
+      {
+        Sid      = "PublishCoverage"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/coverage/*"
+      },
+      {
+        Sid       = "ListCoverage"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/coverage/*" } }
+      },
+    ]
+    error_message = "The coverage role may only list, read and write objects under master/coverage/ in the topo bucket."
+  }
+}
+
 run "api_rate_limit_is_one_plain_ip_rule" {
   command = plan
   plan_options {

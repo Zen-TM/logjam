@@ -92,7 +92,9 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
+  coverageNameOf,
   fireNameOf,
+  NSW_COVERAGE,
   NSW_FIRE,
   NSW_LAND,
   slopeReliefColor,
@@ -100,6 +102,7 @@ import {
   zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
+  type CarrierId,
   type TerrainSwitchKey,
   nswContourStyle,
   MAP_INK,
@@ -253,8 +256,10 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
+  readCoverageCarrier,
   readTerrainLayers,
   setBasemapPreference,
+  setCoverageCarrier,
   setTerrainLayers,
   readGaugesLayer,
   readMgaGridLayer,
@@ -415,6 +420,13 @@ import {
   ROUTES_FLOOR,
   terrainBandMarker,
 } from "./layerOrder";
+import {
+  COVERAGE_IMAGES,
+  coverageLayerFilter,
+  coverageLayerId,
+  coverageLayerPaint,
+  coverageMinZoom,
+} from "./coverageLayers";
 import { fireLayerIds, fireLayerPaints, fireMinZoom } from "./fireLayers";
 import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
@@ -974,6 +986,12 @@ export function MapScreen({
     },
     [],
   );
+  const [coverageCarrier, setCoverageCarrierState] =
+    useState(readCoverageCarrier);
+  const chooseCoverageCarrier = useCallback((next: CarrierId) => {
+    setCoverageCarrierState(next);
+    setCoverageCarrier(next);
+  }, []);
   const slopeBands = useSlopeBands();
   const [layersOpen] = useState(createLayersOpen);
   const [attributionOpen, setAttributionOpen] = useState(false);
@@ -989,7 +1007,8 @@ export function MapScreen({
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const [tappedLand, setTappedLand] = useState<string | null>(null);
   const [tappedFire, setTappedFire] = useState<string | null>(null);
-  /** The tap `tappedLand` and `tappedFire` are being read for: a later tap's answer alone counts. */
+  const [tappedCoverage, setTappedCoverage] = useState<string | null>(null);
+  /** The tap `tappedLand`, `tappedFire` and `tappedCoverage` are being read for: a later tap's answer alone counts. */
   const landAskedFor = useRef<MapPoint | null>(null);
   const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
   const pendingPlacePoint = useRef<MapPoint | null>(null);
@@ -1618,6 +1637,28 @@ export function MapScreen({
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
   const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
+  const coverageResolved = useMemo(
+    () =>
+      terrainLayers.coverage
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-coverage", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.coverage, viewportBbox, ctx, areasEpoch],
+  );
+  const coverageLayerIdList = useMemo(
+    () => coverageResolved.map((r) => coverageLayerId(r.key)),
+    [coverageResolved],
+  );
+  const coveragePaint = useMemo(() => coverageLayerPaint(), []);
+  const coverageFilterExpr = useMemo(
+    () => coverageLayerFilter(coverageCarrier),
+    [coverageCarrier],
+  );
   const slopeResolved = useMemo(
     () =>
       terrainLayers.slope
@@ -2311,6 +2352,7 @@ export function MapScreen({
       setTappedPoint(tapped);
       setTappedLand(null);
       setTappedFire(null);
+      setTappedCoverage(null);
       landAskedFor.current = tapped;
       // From the tiles on the phone, so this works offline and asks no one.
       if (landLayerIds.length > 0) {
@@ -2336,11 +2378,24 @@ export function MapScreen({
           })
           .catch(() => undefined);
       }
+      if (coverageLayerIdList.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(event.nativeEvent.point, {
+            layers: coverageLayerIdList,
+          })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedCoverage(coverageNameOf(features, coverageCarrier));
+          })
+          .catch(() => undefined);
+      }
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
       collectingPoints,
+      coverageCarrier,
+      coverageLayerIdList,
       fireLayerIdList,
       landLayerIds,
       pressedAnchorIndex,
@@ -3453,6 +3508,7 @@ export function MapScreen({
         });
         setTappedLand(null);
         setTappedFire(null);
+        setTappedCoverage(null);
         setTappedPoint({
           latitude: here.coords.latitude,
           longitude: here.coords.longitude,
@@ -4954,6 +5010,7 @@ export function MapScreen({
     slope: slopeResolved,
     land: landResolved,
     fire: fireResolved,
+    coverage: coverageResolved,
     hillshade: hillshadeResolved,
   });
 
@@ -4987,6 +5044,7 @@ export function MapScreen({
       ...LAND_EDGE_LINES.map((_, i) => `nsw-land-edge-${i}-${r.key}`),
     ]),
     fire: fireResolved.flatMap((r) => fireLayerIds(r.key)),
+    coverage: coverageLayerIdList,
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
@@ -5237,6 +5295,27 @@ export function MapScreen({
                 minzoom={fireMinZoom(r.layerMinZoom)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
                 paint={firePaints.edge}
+              />
+            </ResolvedSource>
+          );
+        })}
+        {coverageResolved.length > 0 ? (
+          <Images images={COVERAGE_IMAGES} />
+        ) : null}
+        {coverageResolved.map((r) => {
+          const id = coverageLayerId(r.key);
+          return (
+            <ResolvedSource key={r.key} resolved={r}>
+              <Layer
+                key={id}
+                type="fill"
+                id={id}
+                source-layer={NSW_COVERAGE.sourceLayer}
+                filter={coverageFilterExpr}
+                beforeId={groundBefore[id]}
+                minzoom={coverageMinZoom(r.layerMinZoom)}
+                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                paint={coveragePaint}
               />
             </ResolvedSource>
           );
@@ -5984,6 +6063,7 @@ export function MapScreen({
         fix={tappedFix}
         land={tappedLand}
         fire={tappedFire}
+        coverage={tappedCoverage}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onClosed={openParkedPlaceForm}
@@ -6143,6 +6223,8 @@ export function MapScreen({
         downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
+        coverageCarrier={coverageCarrier}
+        onCoverageCarrierChange={chooseCoverageCarrier}
         artifacts={artifacts}
         hasVegetation={mergedOverlays.jobs.some((job) =>
           job.layers.some((layer) => layer.name === "vegetation"),

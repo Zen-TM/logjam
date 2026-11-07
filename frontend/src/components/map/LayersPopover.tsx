@@ -6,6 +6,9 @@ import {
   MAP_OVERLAYS,
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
+  overlayChoiceLabel,
+  normalizeCarrier,
+  type CarrierId,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
@@ -78,6 +81,8 @@ export default function LayersPopover({
   onBasemapHealth,
   terrainLayers,
   onTerrainLayerChange,
+  coverageCarrier,
+  onCoverageCarrierChange,
   slopeBands,
   onSlopeBandsChange,
   mapView,
@@ -117,6 +122,8 @@ export default function LayersPopover({
   onBasemapHealth?: (id: string, down: boolean) => void;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
+  coverageCarrier: CarrierId;
+  onCoverageCarrierChange: (carrier: CarrierId) => void;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
@@ -165,6 +172,7 @@ export default function LayersPopover({
     showWays,
     terrainLayers.land,
     terrainLayers.fire,
+    terrainLayers.coverage,
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -326,6 +334,17 @@ export default function LayersPopover({
                         legend={OVERLAY_LEGENDS[key]}
                         checked={terrainLayers[key]}
                         onToggle={(on) => onTerrainLayerChange(key, on)}
+                        {...(key === "coverage"
+                          ? {
+                              choice: {
+                                value: coverageCarrier,
+                                onChange: (value: string) =>
+                                  onCoverageCarrierChange(
+                                    normalizeCarrier(value),
+                                  ),
+                              },
+                            }
+                          : {})}
                       />
                     ))}
                   <OverlayRow
@@ -570,10 +589,13 @@ export function OverlayLegendRow({
   legend,
   checked,
   onToggle,
+  choice,
 }: {
   legend: OverlayLegend;
   checked: boolean;
   onToggle: (next: boolean) => void;
+  /** The value of `legend.choice`, for an overlay that has one. */
+  choice?: { value: string; onChange: (value: string) => void };
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
   return (
@@ -582,6 +604,7 @@ export function OverlayLegendRow({
         icon="layers"
         hue={legend.hue}
         title={legend.title}
+        subtitle={overlayChoiceLabel(legend, choice?.value)}
         checked={checked}
         onToggle={onToggle}
         help={{ label: legend.about, onClick: () => setLegendOpen(true) }}
@@ -591,11 +614,24 @@ export function OverlayLegendRow({
         title={legend.title}
         onClose={() => setLegendOpen(false)}
       >
+        {legend.choice && choice && (
+          <ChipRail
+            label={legend.choice.label}
+            options={legend.choice.options}
+            value={choice.value}
+            onChange={choice.onChange}
+            wrap
+          />
+        )}
         <p>{legend.intro}</p>
         <ul className={classes.legendList}>
-          {legend.rows.map(({ label, colour }) => (
+          {legend.rows.map(({ label, colour, pattern }) => (
             <li key={label}>
-              <IconTile icon="layers" hue={colour} />
+              {pattern ? (
+                <IconTile pattern={pattern} hue={colour} />
+              ) : (
+                <IconTile icon="layers" hue={colour} />
+              )}
               {label}
             </li>
           ))}

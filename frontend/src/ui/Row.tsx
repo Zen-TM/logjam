@@ -63,22 +63,34 @@ export function TileCheckbox({
  */
 export function IconTile({
   icon,
+  pattern,
   hue,
   label,
 }: {
-  icon: Glyph;
   hue: string;
   label?: string;
-}) {
+} & (
+  | { icon: Glyph; pattern?: never }
+  /** A map pattern's image, drawn over the hue at the map's own scale, in
+   *  place of a glyph: a legend's swatch of a hatched layer. */
+  | { pattern: string; icon?: never }
+)) {
   return (
     <span
-      className={classes.tile}
-      style={{ "--tile-hue": hue } as CSSProperties}
+      className={
+        pattern ? `${classes.tile} ${classes.patterned}` : classes.tile
+      }
+      style={
+        {
+          "--tile-hue": hue,
+          ...(pattern ? { "--tile-pattern": `url(${pattern})` } : {}),
+        } as CSSProperties
+      }
       role={label ? "img" : undefined}
       aria-label={label}
       title={label}
     >
-      <Icon idea={icon} size={16} />
+      {icon && <Icon idea={icon} size={16} />}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import {
   NSW_5M,
+  NSW_COVERAGE,
   NSW_FIRE,
   NSW_LAND,
   type SharpenedOverlay,
@@ -32,6 +33,12 @@ export const TERRAIN_ENTRIES = {
     pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.slope.archivePath}`,
     format: "slope" as const,
     attribution: TERRAIN_STATEWIDE.slope.creditHtml,
+  },
+  coverage: {
+    id: "nswcoverage",
+    pmtilesUrl: `${window.location.origin}/${NSW_COVERAGE.archivePath}`,
+    format: "coverage" as const,
+    attribution: NSW_COVERAGE.creditHtml,
   },
   fire: {
     id: "nswfire",
@@ -94,6 +101,7 @@ export function terrainEntries(
   return {
     contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
     slope: routed("slope", deepest),
+    coverage: TERRAIN_ENTRIES.coverage,
     fire: TERRAIN_ENTRIES.fire,
     land: TERRAIN_ENTRIES.land,
     hillshade: routed("hillshade", deepest),
