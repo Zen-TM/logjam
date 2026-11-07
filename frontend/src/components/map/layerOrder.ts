@@ -5,6 +5,8 @@
 // basemap the Terrain group goes inside the basemap instead, under its roads
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
 import {
+  type CarrierId,
+  coverageNameOf,
   fireNameOf,
   landNameOf,
   terrainBeforeIds,
@@ -50,6 +52,8 @@ export const LAND_EDGE_LAYER = "topo-nswland-edge";
 /** The Fire history overlay's tint and its edge, named the same way. */
 export const FIRE_FILL_LAYER = "topo-nswfire-fill";
 export const FIRE_EDGE_LAYER = "topo-nswfire-edge";
+/** The Coverage overlay's hatch, the same way. */
+export const COVERAGE_FILL_LAYER = "topo-nswcoverage-fill";
 
 type RenderedQuery = {
   getLayer(id: string): unknown;
@@ -86,6 +90,24 @@ export function fireAt(
   if (!map.getLayer(FIRE_FILL_LAYER)) return null;
   return fireNameOf(
     map.queryRenderedFeatures(point, { layers: [FIRE_FILL_LAYER] }),
+  );
+}
+
+/**
+ * What the Coverage overlay predicts at `point` for `carrier` ("Telstra:
+ * external antenna only"), or null: the overlay is off, or the point is off
+ * the land it covers. Where a handset works the fill is clear, and still
+ * answers.
+ */
+export function coverageAt(
+  map: RenderedQuery,
+  point: [number, number],
+  carrier: CarrierId,
+): string | null {
+  if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
+  return coverageNameOf(
+    map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
+    carrier,
   );
 }
 

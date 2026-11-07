@@ -21,6 +21,8 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
 | **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_FIRE.credit` in `shared/src/nswFire.ts` |
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
+| **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
+| **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -458,6 +460,47 @@ python3 build_fire_history.py publish --bucket logjam-topo-jobs
 The Fire history overlay draws from the archive `publish` writes, so it has
 nothing to show until `publish` has run once; the schedule runs it on the 5th
 of the month.
+
+---
+
+## Refreshing the coverage overlay
+
+`build_coverage.py` turns the ACCC's mobile coverage maps into the Coverage
+overlay's archive (`NSW_COVERAGE.archivePath` in `shared/src/nswCoverage.ts`).
+For each of Telstra, Optus and TPG it holds where a phone works in the hand
+outdoors, works only with an external antenna, or has no predicted coverage,
+over the land of the NSW box. Its docstring says which of the release's maps
+count for each carrier, and why. A scheduled ECS task runs `publish` monthly;
+these commands are for trying a change by hand, from `topo/`, in the worker
+image:
+
+```bash
+docker compose run --rm topo python3 /app/build_coverage.py fetch /output/coverage
+docker compose run --rm topo python3 /app/build_coverage.py build \
+  /output/coverage /output/coverage/nsw-coverage.pmtiles
+pmtiles show output/coverage/nsw-coverage.pmtiles   # zoom 8 to 12, bounds are the NSW box
+```
+
+`fetch` asks data.gov.au's CKAN API for the release and downloads the latest
+year's maps and the ABS coastline: 21 maps and 4.3 GB for the 2026 release.
+`build` stops if a carrier lacks an Outdoor or an Ext Ant map that year, or a
+map has nothing in the NSW box. On the 2026 release it took 47 minutes on 4
+cores, mostly under 2.5 GB, for a 292 MB archive; a 40 km box of it is a
+4.5 MB clip. Of 4,800 random points in four boxes (Blue Mountains, Budawangs,
+Kosciuszko, Western Division), 98% read the same level from the z12 tiles as
+from the source polygons, and every other one was within 26 m of a source
+edge, under one grid cell.
+
+`publish` does both, then uploads the archive and its state
+(`master/coverage/nsw-coverage.json`), unless the latest year's maps are the
+ones that state lists. Publishing is a prod change and the maintainer's to
+make; the clients read the new archive with no deploy. Run it from a host with
+GDAL, boto3 and prod AWS credentials, or start the ECS task `logjam-coverage`
+with `aws ecs run-task` as the slope archive's recipe above does:
+
+```bash
+python3 build_coverage.py publish --bucket logjam-topo-jobs
+```
 
 ---
 

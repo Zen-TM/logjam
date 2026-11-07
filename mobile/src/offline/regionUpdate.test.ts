@@ -70,6 +70,13 @@ describe("regionUpdateSpecs", () => {
       format: "pmtiles",
       sourceType: "vector",
     }),
+    member({
+      id: "g",
+      kind: "coverage-region",
+      logicalKey: "nsw-coverage",
+      format: "pmtiles",
+      sourceType: "vector",
+    }),
     // A sharpened area's clip: its bbox is tile-snapped and its link needs the
     // account, so it is neither read nor re-cut.
     member({
@@ -85,7 +92,7 @@ describe("regionUpdateSpecs", () => {
   // sharpened clip's snapped one, and the update downloads a different area.
   it("asks for the same area, detail, maps and name", () => {
     const specs = regionUpdateSpecs(members, "Claustral", false, newId);
-    expect(specs).toHaveLength(5);
+    expect(specs).toHaveLength(6);
     for (const spec of specs ?? []) {
       expect(spec.bbox).toEqual({
         west: 150.2,
@@ -109,6 +116,7 @@ describe("regionUpdateSpecs", () => {
     expect(specs?.[2]).toMatchObject({ demSourceId: "nsw-5m" });
     expect(specs?.[3]).toMatchObject({ contours: true });
     expect(specs?.[4]).toMatchObject({ fire: true });
+    expect(specs?.[5]).toMatchObject({ coverage: true });
   });
 
   it("has nothing to update when no file knows its area", () => {
@@ -119,7 +127,7 @@ describe("regionUpdateSpecs", () => {
 
   it("gives each job its own id", () => {
     const ids = regionUpdateSpecs(members, "A", false, newId)?.map((s) => s.id);
-    expect(new Set(ids).size).toBe(5);
+    expect(new Set(ids).size).toBe(6);
   });
 });
 

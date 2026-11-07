@@ -46,6 +46,7 @@ import {
   DEM_SOURCE_ID,
   NSW_5M,
   NSW_CONTOURS,
+  NSW_COVERAGE,
   NSW_FIRE,
   NSW_LAND,
   NSW_SLOPE,
@@ -176,6 +177,7 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_SLOPE.id) return "Slope";
   if (basemapId === NSW_LAND.id) return MAP_TERRAIN.copy.land;
   if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
+  if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return name ?? "Map";
 }

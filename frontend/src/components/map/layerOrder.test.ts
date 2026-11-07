@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 
 import { TERRAIN_ENTRIES } from "./terrainEntries";
 import {
+  coverageAt,
+  COVERAGE_FILL_LAYER,
   fireAt,
   FIRE_EDGE_LAYER,
   FIRE_FILL_LAYER,
@@ -105,6 +107,38 @@ describe("fireAt", () => {
   });
 });
 
+describe("coverageAt", () => {
+  // Mutation: drop the `getLayer` test, and with the overlay off MapLibre is
+  // queried for a layer it does not have, and throws.
+  it("reads nothing with the overlay off", () => {
+    const off = {
+      getLayer: () => undefined,
+      queryRenderedFeatures: () => {
+        throw new Error("no such layer");
+      },
+    };
+    expect(coverageAt(off, [1, 2], "telstra")).toBeNull();
+  });
+
+  // Mutation: query a layer id other than the hatch, or name another carrier
+  // than the one drawn, and a tap answers nothing or for the wrong network.
+  it("names the drawn carrier's level at the point", () => {
+    const asked: string[][] = [];
+    const map = {
+      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: (
+        _point: [number, number],
+        options: { layers: string[] },
+      ) => {
+        asked.push(options.layers);
+        return [{ properties: { level: "external", carrier: "tpg" } }];
+      },
+    };
+    expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: external antenna only");
+    expect(asked).toEqual([[COVERAGE_FILL_LAYER]]);
+  });
+});
+
 describe("the Fire history layer ids", () => {
   // Mutation: rename the entry or a layer alone, and the stack and the
   // basemap move never find the layers: Map.tsx owns `topo-<entry id>-*`.
@@ -170,6 +204,7 @@ describe("moveTerrainIntoBasemap", () => {
       map,
       {
         contours: ["topo-nswcontours-minor", "topo-nswcontours-labels"],
+        coverage: [],
         fire: [],
         slope: ["topo-nswslope-dem"],
         land: ["topo-nswland-fill"],
