@@ -4,8 +4,11 @@
 import {
   activePlaceFilterCount,
   EMPTY_PLACE_FILTERS,
+  PLACES_ADD,
+  ROPEWIKI_OFFER,
   type PlaceFilters,
   type PlaceStatusFilterValue,
+  type Region,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -133,4 +136,23 @@ export function idRange(
   if (end < 0) return [];
   if (start < 0) return [to];
   return ids.slice(Math.min(start, end), Math.max(start, end) + 1);
+}
+
+/**
+ * The Add menu's RopeWiki entries: one per region with a canyon list, none
+ * without. `importing` is the region id being imported, which labels its entry.
+ */
+export function ropewikiAddEntries(
+  canyonRegions: readonly Region[],
+  importing: string | null,
+) {
+  return canyonRegions.map((region) => ({
+    id: `importRopewiki-${region.id}`,
+    region,
+    label:
+      importing === region.id
+        ? PLACES_ADD.copy.importingRopewiki
+        : ROPEWIKI_OFFER.menu(region, canyonRegions.length),
+    disabled: importing !== null,
+  }));
 }

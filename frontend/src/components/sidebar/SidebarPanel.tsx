@@ -30,6 +30,8 @@ import type {
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import {
+  canyonRegionsOf,
+  normalizeUserUiPreferences,
   TRIPS_LIST,
   type LoadState,
   type NotificationPlanTarget,
@@ -413,6 +415,9 @@ function SidebarPanel({
             onExportPlaces={onExportPlaces}
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
+            canyonRegions={canyonRegionsOf(
+              normalizeUserUiPreferences(currentUser?.uiPreferences).regions,
+            )}
           />
         )}
         {!accountFailed && activePanel === "friends" && (
