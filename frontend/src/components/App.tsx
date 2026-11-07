@@ -138,7 +138,7 @@ import {
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
-  canyonRegionsOf,
+  canyonOffersFor,
   opensPreview,
   PLAN_ADD_VERBS,
   planVerbsFor,
@@ -2313,9 +2313,7 @@ function App() {
         {/* First-login onboarding choice */}
         <OnboardingChoiceDialog
           open={showOnboarding}
-          canyonRegions={canyonRegionsOf(
-            normalizeUserUiPreferences(currentUser?.uiPreferences).regions,
-          )}
+          canyonRegions={canyonOffersFor(currentUser?.uiPreferences)}
           onLoaded={refetch}
           onImportFiles={() => {
             setShowOnboarding(false);

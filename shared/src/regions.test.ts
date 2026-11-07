@@ -113,6 +113,20 @@ describe("the declaration", () => {
   });
 });
 
+describe("canyon sources", () => {
+  // Mutation: copy NSW's snapshot key into a second region, and one region's
+  // fresh fetch replaces the other's cached corpus (api ropeWikiCache.ts).
+  it("give each region its own RopeWiki region and snapshot", () => {
+    const sources = REGIONS.flatMap((region) =>
+      region.canyons ? [region.canyons] : [],
+    );
+    for (const key of ["snapshotKey", "ropewikiRegion"] as const) {
+      const values = sources.map((source) => source[key]);
+      expect(new Set(values).size).toBe(values.length);
+    }
+  });
+});
+
 describe("normalizeRegionIds", () => {
   const two: readonly Region[] = [
     NSW_REGION,
