@@ -23,6 +23,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
 | **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
 | **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
+| **Open-Meteo** (ECMWF IFS, `s3://openmeteo/data_spatial/`) | the Weather overlay (`build_weather.py`) | CC BY 4.0 | the manifest's `attribution`: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS" |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -501,6 +502,33 @@ with `aws ecs run-task` as the slope archive's recipe above does:
 ```bash
 python3 build_coverage.py publish --bucket logjam-topo-jobs
 ```
+
+---
+
+## Building the weather overlay
+
+`build_weather.py` cuts NSW out of Open-Meteo's ECMWF IFS grids and writes
+the Weather overlay's files (`WeatherMapFile` in `shared/src/weatherMap.ts`):
+per step of the forecast, rain, temperature, wind and gusts as terrarium
+PMTiles at z5, five rain totals either side of the build hour, and the wind
+arrows. Why a job, and why Open-Meteo's own GPL-2.0-only reader is allowed in
+this image and nowhere else: [ADR 0048](../docs/decisions/0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md).
+A scheduled ECS task runs `run` hourly; to try a change by hand, from `topo/`,
+in the worker image:
+
+```bash
+docker compose run --rm topo python3 /app/build_weather.py build /output/weather
+pmtiles show output/weather/runs/*/rain/000.pmtiles   # zoom 5, four tiles, bounds BOX
+```
+
+`build` reads the latest complete run whatever is published, about 250 MB
+in range requests (105 steps of five variables, and 168 past hours of rain),
+and took 4.5 minutes on a laptop for about 12 MB of files. `run` does the same
+only when the run is newer than `master/weather/v1/latest.json`, uploads the
+run's folder, then the manifest, and deletes every run folder but the new one
+and the one before. Publishing is a prod change and the maintainer's to make:
+start the ECS task `logjam-weather` with `aws ecs run-task` as the slope
+archive's recipe above does.
 
 ---
 

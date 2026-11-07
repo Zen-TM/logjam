@@ -352,6 +352,7 @@ run "pin_role_passes_every_topo_task_role" {
       aws_ecs_task_definition.gauges,
       aws_ecs_task_definition.fire_history,
       aws_ecs_task_definition.coverage,
+      aws_ecs_task_definition.weather,
     ]
   }
 
@@ -387,6 +388,11 @@ run "pin_role_passes_every_topo_task_role" {
     override_during = plan
   }
   override_resource {
+    target          = aws_iam_role.weather
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-weather" }
+    override_during = plan
+  }
+  override_resource {
     target = aws_ecs_task_definition.fire_history
     values = {
       arn                  = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-fire-history:1"
@@ -414,6 +420,7 @@ run "pin_role_passes_every_topo_task_role" {
         aws_ecs_task_definition.gauges.task_role_arn,
         aws_ecs_task_definition.fire_history.task_role_arn,
         aws_ecs_task_definition.coverage.task_role_arn,
+        aws_ecs_task_definition.weather.task_role_arn,
         ] : contains(one([
           for s in jsondecode(aws_iam_role_policy.gha_pin_task_defs.policy).Statement : s
           if try(s.Sid, "") == "PassWorkerRoles"
@@ -459,6 +466,35 @@ run "coverage_role_writes_only_master_coverage" {
       },
     ]
     error_message = "The coverage role may only list, read and write objects under master/coverage/ in the topo bucket."
+  }
+}
+
+run "weather_role_writes_only_master_weather" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.weather]
+  }
+
+  # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
+  # prefix condition, or adding an action or a statement lets the hourly job
+  # see, write or delete more than the Weather overlay's own files.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.weather.policy).Statement == [
+      {
+        Sid      = "PublishWeather"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/weather/*"
+      },
+      {
+        Sid       = "ListWeather"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/weather/*" } }
+      },
+    ]
+    error_message = "The weather role may only list, read, write and delete objects under master/weather/ in the topo bucket."
   }
 }
 

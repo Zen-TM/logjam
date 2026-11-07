@@ -558,3 +558,62 @@ resource "aws_cloudwatch_metric_alarm" "coverage_not_launched" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# ── Weather ────────────────────────────────────────────────────────────────
+
+# A failed hour leaves the published run in place and clients show its age;
+# the next hour tries again. One failure alarms: most hours read one small
+# file, so a failure is Open-Meteo's layout or bucket changing, or a build
+# breaking, and a run missed by both of its hours is a forecast six hours old.
+resource "aws_cloudwatch_log_metric_filter" "weather_failures" {
+  name           = "logjam-weather-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.weather.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "WeatherFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "weather_failed" {
+  alarm_name        = "logjam-weather-failed"
+  alarm_description = "The hourly weather job stopped with a non-zero exit or failed to start; the published run is unchanged and getting older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.weather.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.weather_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.weather_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule.
+resource "aws_cloudwatch_metric_alarm" "weather_not_launched" {
+  alarm_name        = "logjam-weather-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the hourly weather job (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.weather.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.weather_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.weather.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

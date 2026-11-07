@@ -403,6 +403,96 @@ resource "aws_iam_role_policy" "coverage_scheduler" {
   })
 }
 
+# Task role for the hourly weather job (ecs.tf): it may list, read, replace
+# and delete what is under master/weather/ in the topo bucket, and nothing
+# else. Delete because each build prunes the runs before the last two.
+resource "aws_iam_role" "weather" {
+  name = "logjam-weather-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "weather" {
+  name = "logjam-weather-publish"
+  role = aws_iam_role.weather.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "PublishWeather"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/weather/*"
+      },
+      {
+        # read_manifest() and prune() in topo/build_weather.py list first.
+        Sid       = "ListWeather"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/weather/*" } }
+      },
+    ]
+  })
+}
+
+# What EventBridge Scheduler assumes to launch the job: RunTask on that one
+# family, in the one cluster, passing only its two roles.
+resource "aws_iam_role" "weather_scheduler" {
+  name = "logjam-weather-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "weather_scheduler" {
+  name = "logjam-weather-runtask"
+  role = aws_iam_role.weather_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunWeatherTask"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        Resource = [
+          aws_ecs_task_definition.weather.arn_without_revision,
+          "${aws_ecs_task_definition.weather.arn_without_revision}:*",
+        ]
+        Condition = {
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.main.arn }
+        }
+      },
+      {
+        Sid    = "PassWeatherRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.weather.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
@@ -990,6 +1080,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
           aws_iam_role.gauges.arn,
           aws_iam_role.fire_history.arn,
           aws_iam_role.coverage.arn,
+          aws_iam_role.weather.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
