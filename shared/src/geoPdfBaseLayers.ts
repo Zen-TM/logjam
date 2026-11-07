@@ -213,9 +213,9 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
 
 /**
  * The basemaps a picker lists for a user who chose `regionIds`, in the
- * catalogue's order: the worldwide ones and their regions' own. A basemap
- * already on the map still draws wherever it covers; this only decides what
- * is offered. Guard: `regions.test.ts`.
+ * catalogue's order: the worldwide ones and their regions' own. A stored pick
+ * that is no longer offered falls back to the default on both clients.
+ * Guard: `regions.test.ts`.
  */
 export function offeredBasemaps(
   regionIds: readonly string[],

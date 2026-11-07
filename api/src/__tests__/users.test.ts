@@ -199,7 +199,8 @@ describe("users routes (fake auth = alice)", () => {
   });
 
   // Mutation: store `regions` as sent, and an id no region has reaches both
-  // clients; or accept [] and an account is offered no region at all.
+  // clients; or accept [] or only unknown ids, and an account that chose
+  // something is silently given NSW.
   it("PATCH /users/me stores the chosen regions, dropping unknown ids", async () => {
     const before = await request(API_URL).get("/users/me").set(AUTH);
     expect(before.body.uiPreferences.regions).toEqual(["nsw"]);
@@ -209,7 +210,7 @@ describe("users routes (fake auth = alice)", () => {
       .send({ regions: ["atlantis", "nsw"] });
     expect(res.status).toBe(200);
     expect(res.body.uiPreferences.regions).toEqual(["nsw"]);
-    for (const regions of [[], "nsw", [7], null]) {
+    for (const regions of [[], "nsw", [7], null, ["atlantis"]]) {
       const bad = await request(API_URL)
         .patch("/users/me")
         .set(AUTH)

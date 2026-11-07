@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest";
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import {
+  regionChoiceProblem,
+  regionOffRefusal,
+  toggleRegion,
+} from "./contracts/settings.js";
+import {
   BASEMAP_CATALOG,
   defaultBasemapFor,
   offeredBasemaps,
@@ -265,5 +270,27 @@ describe("uiPreferences.regions", () => {
     expect(
       normalizeUserUiPreferences({ regions: ["nsw", "atlantis"] }).regions,
     ).toEqual(["nsw"]);
+  });
+});
+
+describe("toggleRegion and regionOffRefusal", () => {
+  const two: readonly Region[] = [
+    NSW_REGION,
+    { ...NSW_REGION, id: "nz", name: "New Zealand" },
+  ];
+
+  // Mutation: append the switched id, and the two clients store one choice in
+  // two orders.
+  it("switches a region, keeping the picker's order", () => {
+    expect(toggleRegion(["nz"], "nsw", two)).toEqual(["nsw", "nz"]);
+    expect(toggleRegion(["nsw", "nz"], "nsw", two)).toEqual(["nz"]);
+  });
+
+  // Mutation: refuse whenever one region is chosen, and the one that is off
+  // can't be switched on.
+  it("refuses to switch off only the last chosen region", () => {
+    expect(regionOffRefusal(["nsw"], "nsw")).toBe(regionChoiceProblem([]));
+    expect(regionOffRefusal(["nsw"], "nz")).toBeNull();
+    expect(regionOffRefusal(["nsw", "nz"], "nsw")).toBeNull();
   });
 });

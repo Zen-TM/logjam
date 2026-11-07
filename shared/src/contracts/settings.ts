@@ -109,7 +109,7 @@ export const COPY_MEDIA_SETTING = {
  */
 export const REGION_CHOICE = {
   title: "Where do you canyon?",
-  hint: "Logjam offers the maps and canyon list of each region you choose. Heights and terrain show wherever you are.",
+  hint: "Logjam offers the maps and canyon list of each region you choose.",
   continue: "Continue",
   saveFailed: "Couldn't save your regions.",
 } as const;
@@ -117,6 +117,31 @@ export const REGION_CHOICE = {
 /** Why a choice can't be saved, or null: at least one region stays chosen. */
 export function regionChoiceProblem(ids: readonly string[]): string | null {
   return ids.length === 0 ? "Choose at least one region." : null;
+}
+
+/** The choice with `id` switched, in `REGIONS` order whatever order it was ticked in. */
+export function toggleRegion(
+  chosen: readonly string[],
+  id: string,
+  regions: readonly Region[] = REGIONS,
+): string[] {
+  const next = chosen.includes(id)
+    ? chosen.filter((other) => other !== id)
+    : [...chosen, id];
+  return regionsOf(next, regions).map((region) => region.id);
+}
+
+/**
+ * Why Settings refuses to switch `id` off, or null: the last chosen region
+ * stays on, since an account with none would be offered nothing.
+ */
+export function regionOffRefusal(
+  chosen: readonly string[],
+  id: string,
+): string | null {
+  return chosen.includes(id)
+    ? regionChoiceProblem(chosen.filter((other) => other !== id))
+    : null;
 }
 
 /** The Regions row's subtitle: what is chosen. */
