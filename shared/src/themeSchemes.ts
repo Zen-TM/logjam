@@ -1,4 +1,5 @@
 import { INK } from "./designTokens.js";
+import { normalizeRegionIds } from "./regions.js";
 import {
   parseSlopeBands,
   RASTER_TEMPLATE_DEFAULTS,
@@ -124,6 +125,12 @@ export type UserUiPreferences = {
    * clients (shared/src/terrain.ts). Edited on Logjam Web.
    */
   slopeBands: SlopeBand[];
+  /**
+   * The regions whose maps and canyon list Logjam offers this user
+   * (regions.ts): ids of known regions, NSW when never chosen. Chosen in the
+   * first-login gate and Settings once there is more than one region.
+   */
+  regions: string[];
 };
 
 export function isNotificationPreferences(
@@ -425,6 +432,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       copyPlaceMedia,
       leaderboardOptIn: prefs.leaderboardOptIn === true,
       slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
+      regions: normalizeRegionIds(prefs.regions),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
@@ -438,6 +446,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     copyPlaceMedia: true,
     leaderboardOptIn: false,
     slopeBands: defaultSlopeBands(),
+    regions: normalizeRegionIds(undefined),
   };
 }
 

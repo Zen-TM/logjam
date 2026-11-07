@@ -1042,10 +1042,7 @@ export function SavedScreen({
               busy: isGroupBusy(regionJobs, group.key),
               running: updatingCards.get(group.key),
               run: () =>
-                startRegionUpdate(
-                  group.members,
-                  group.label ?? "Offline map region",
-                ),
+                startRegionUpdate(group.members, group.label ?? "Offline map"),
             }
           : undefined,
         members: group.members.map((artifact) => ({

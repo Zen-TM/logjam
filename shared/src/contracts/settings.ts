@@ -4,6 +4,7 @@
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
 // has no hero (shared/DESIGN.md §2).
 import type { NotificationPreferences } from "../themeSchemes.js";
+import { REGIONS, regionsOf, type Region } from "../regions.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { ConfirmCopy } from "./confirm.js";
 import type { ClientOnly, ScreenContract } from "./types.js";
@@ -17,6 +18,9 @@ export const SETTINGS = {
     // settings are stored, so each page says once what it needs), Logjam Web
     // draws each one inline. A section only one client has is below.
     { key: "display" },
+    // Drawn only while `offersRegionChoice()`: with one region there is
+    // nothing to choose.
+    { key: "regions" },
     {
       key: "map",
       on: "gps",
@@ -42,6 +46,7 @@ export const SETTINGS = {
   ],
   copy: {
     display: "Display",
+    regions: "Regions",
     map: "Map",
     notifications: "Notifications",
     offline: "Offline and storage",
@@ -95,6 +100,34 @@ export const COPY_MEDIA_SETTING = {
   hint: "Shared place photos and files.",
   saveFailed: "Couldn't save that setting.",
 } as const;
+
+/**
+ * "Where do you canyon?": the step after the username and terms in the
+ * first-login gate, and the Regions section of Settings, on both clients.
+ * Each draws one switch per region (`REGIONS`), several allowed, and neither
+ * is shown while `offersRegionChoice()` is false.
+ */
+export const REGION_CHOICE = {
+  title: "Where do you canyon?",
+  hint: "Logjam offers the maps and canyon list of each region you choose. Heights and terrain show wherever you are.",
+  continue: "Continue",
+  saveFailed: "Couldn't save your regions.",
+} as const;
+
+/** Why a choice can't be saved, or null: at least one region stays chosen. */
+export function regionChoiceProblem(ids: readonly string[]): string | null {
+  return ids.length === 0 ? "Choose at least one region." : null;
+}
+
+/** The Regions row's subtitle: what is chosen. */
+export function chosenRegionsLabel(
+  ids: readonly string[],
+  regions: readonly Region[] = REGIONS,
+): string {
+  return regionsOf(ids, regions)
+    .map((region) => region.name)
+    .join(", ");
+}
 
 /** A navigation row's subtitle is live state: how many the user has made. */
 export function ownTypeCountLabel(own: number): string {

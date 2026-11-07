@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
-import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
+import { normalizeUserUiPreferences } from "./themeSchemes.js";
+import {
+  BASEMAP_CATALOG,
+  defaultBasemapFor,
+  offeredBasemaps,
+} from "./geoPdfBaseLayers.js";
 import {
   DEFAULT_REGION_IDS,
   NSW_REGION,
@@ -208,5 +213,57 @@ describe("regionTouchesBox", () => {
     expect(east).toBeGreaterThan(153.6);
     expect(south).toBeLessThan(-37.5);
     expect(north).toBeGreaterThan(-28.2);
+  });
+});
+
+describe("offeredBasemaps", () => {
+  const nz: Region = {
+    ...NSW_REGION,
+    id: "nz",
+    name: "New Zealand",
+    basemaps: ["osm-cycle"],
+    defaultBasemap: "osm-cycle",
+  };
+  const two = [NSW_REGION, nz];
+
+  // Mutation: list every catalogue entry, and a user who chose New Zealand is
+  // offered SIX Maps of NSW.
+  it("lists the worldwide basemaps and the chosen regions' own", () => {
+    expect(ids(offeredBasemaps(["nz"], two))).toEqual([
+      "osm-topo",
+      "osm-cycle",
+    ]);
+    expect(ids(offeredBasemaps(["nsw"], two))).toEqual([
+      "protomaps",
+      "osm-topo",
+      "six-topo",
+      "six-base",
+      "six-imagery",
+    ]);
+  });
+
+  // Mutation: drop the `offered` test, and both pickers grow a second
+  // OpenStreetMap row that can't be saved.
+  it("leaves out what no picker lists", () => {
+    expect(ids(offeredBasemaps(["nsw"]))).not.toContain("osm");
+  });
+
+  it("opens on the first chosen region's default, else a worldwide one", () => {
+    expect(defaultBasemapFor(["nsw"])).toBe("six-topo");
+    expect(defaultBasemapFor(["nz", "nsw"], two)).toBe("six-topo");
+    expect(defaultBasemapFor(["nz"], two)).toBe("osm-cycle");
+    expect(defaultBasemapFor([], two)).toBe("osm-topo");
+  });
+});
+
+describe("uiPreferences.regions", () => {
+  // Mutation: leave `regions` out of normalizeUserUiPreferences, and a
+  // client reads undefined for every account that never chose.
+  it("is NSW for an account that never chose, and drops unknown ids", () => {
+    expect(normalizeUserUiPreferences(null).regions).toEqual(["nsw"]);
+    expect(normalizeUserUiPreferences({}).regions).toEqual(["nsw"]);
+    expect(
+      normalizeUserUiPreferences({ regions: ["nsw", "atlantis"] }).regions,
+    ).toEqual(["nsw"]);
   });
 });

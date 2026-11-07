@@ -89,6 +89,7 @@ export type TUser = {
     copyPlaceMedia?: boolean;
     leaderboardOptIn?: boolean;
     slopeBands?: SlopeBand[];
+    regions?: string[];
   } | null;
 };
 

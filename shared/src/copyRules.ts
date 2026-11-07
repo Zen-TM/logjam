@@ -87,9 +87,11 @@ export const COPY_RULES: readonly CopyRule[] = [
     say: 'A sharpen job\'s result is a "sharpened area"; "LiDAR map" where either kind is meant.',
   },
   {
+    // A region is where someone canyons (regions.ts), never an offline save.
     id: "region",
-    pattern: /\b(?:map )?regions?\b/i,
-    say: 'Say "offline map"; the verb is "Save an offline map".',
+    pattern:
+      /\bmap regions?\b|\b(?:offline|saved|downloaded) regions?\b|\bregions? (?:download|saved)|\bRegion \d/i,
+    say: 'An offline save is an "offline map"; the verb is "Save an offline map". A region is where you canyon.',
   },
   {
     id: "offline-map",

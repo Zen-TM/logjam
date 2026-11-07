@@ -90,6 +90,8 @@ describe("contract copy", () => {
     ["lidar-topo", "Open the topo", "Open the sharpened area"],
     ["lidar-topo", "Use a topo", "OSM Topo"],
     ["region", "Download a map region", "Save an offline map"],
+    ["region", "Region 3", "Offline map 3"],
+    ["region", "Delete saved regions", "Where do you canyon? Regions"],
     ["offline-map", "Save maps offline", "Save an offline map"],
     ["offline-map", "Download the map for this area", "Save an offline map"],
     ["offline-map", "Map downloaded", "Offline map saved"],
