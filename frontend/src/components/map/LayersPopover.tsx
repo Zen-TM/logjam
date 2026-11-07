@@ -503,7 +503,7 @@ export function TerrainPane({
         onClose={() => setSlopeLegendOpen(false)}
       >
         <p>{terrainCopy.slopeLegend}</p>
-        <ul className={classes.landLegend}>
+        <ul className={classes.legendList}>
           {slopeLegendRows(slopeBands).map(({ label, colour }) => (
             <li key={label}>
               <IconTile icon="layers" hue={colour} />
@@ -592,7 +592,7 @@ export function OverlayLegendRow({
         onClose={() => setLegendOpen(false)}
       >
         <p>{legend.intro}</p>
-        <ul className={classes.overlayLegend}>
+        <ul className={classes.legendList}>
           {legend.rows.map(({ label, colour }) => (
             <li key={label}>
               <IconTile icon="layers" hue={colour} />
