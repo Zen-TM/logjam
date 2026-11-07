@@ -92,6 +92,13 @@ describe("the declaration", () => {
     );
     expect(NSW_REGION.placeSearch).toBe("master/places/v1/");
     expect(NSW_REGION.gauges).toBe("master/gauges/v1/");
+    expect(NSW_REGION.basemaps).toEqual([
+      "protomaps",
+      "six-topo",
+      "six-base",
+      "six-imagery",
+    ]);
+    expect(NSW_REGION.defaultBasemap).toBe("six-topo");
   });
 });
 
@@ -156,6 +163,10 @@ describe("regionTouchesBox", () => {
       false,
     );
     expect(regionTouchesBox(NSW_REGION, box(156, -34, 157, -33))).toBe(false);
+    // Bendigo: inside the border's bounds, south of the Murray.
+    expect(regionTouchesBox(NSW_REGION, box(144, -37.2, 144.1, -37.1))).toBe(
+      false,
+    );
   });
 
   // Mutation: drop the edge-crossing test, and a strip right across the

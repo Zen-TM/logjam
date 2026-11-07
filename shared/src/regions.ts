@@ -5,10 +5,10 @@
 // the canyon-list import, the layer switches), never what answers for a
 // location: heights, terrain tiles, gauges and the area-export check follow
 // coverage, whatever a user chose (ADR 0028 for heights). Worldwide sources
-// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guards:
+// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
+// heights and the area-export check, neither of which takes a choice:
 // `regions.test.ts` (`DEM_SOURCES` holds every region's sources) and
-// `areaExport.test.ts` (the check reads every region with terrain); neither
-// takes a choice.
+// `areaExport.test.ts` (the check reads every region with terrain).
 //
 // Stored ids and paths keep their values: `nsw-5m`, `six-*`,
 // `master/dem/nsw-5m.pmtiles`, `master/places/v1/` and `master/gauges/v1/` are
