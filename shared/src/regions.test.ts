@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
+import { canyonOffersFor } from "./contracts/placesList.js";
 import {
   regionChoiceProblem,
   regionOffRefusal,
@@ -110,6 +111,18 @@ describe("the declaration", () => {
       "six-imagery",
     ]);
     expect(NSW_REGION.defaultBasemap).toBe("six-topo");
+  });
+});
+
+describe("canyonOffersFor", () => {
+  // Mutation: read `uiPreferences.regions` as it is, and an account that
+  // never chose (or holds a retired id) is offered no canyon import.
+  it("reads the account's preferences through their normaliser", () => {
+    expect(canyonOffersFor(null)).toEqual([NSW_REGION]);
+    expect(canyonOffersFor({ regions: ["nsw", "atlantis"] })).toEqual([
+      NSW_REGION,
+    ]);
+    expect(canyonOffersFor({ regions: ["atlantis"] })).toEqual([NSW_REGION]);
   });
 });
 
