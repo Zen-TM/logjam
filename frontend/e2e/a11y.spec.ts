@@ -1226,6 +1226,47 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
+  // Stubbed: the manifest is a public file, and the archives are left to 404
+  // (the bar and the legend are what is measured, not the field).
+  test("the Weather bar and its legend", async ({ page }) => {
+    const hour = 3_600_000;
+    const start = Math.ceil(Date.now() / hour) * hour;
+    await page.route("**/master/weather/v1/latest.json", (route) =>
+      route.fulfill({
+        json: {
+          format: 1,
+          model: "ecmwf_ifs",
+          run: new Date(start - 9 * hour).toISOString(),
+          built: new Date(start - hour).toISOString(),
+          anchor: new Date(start).toISOString(),
+          path: "runs/20261107T0000Z/",
+          bounds: [139, -39.5, 156, -26],
+          zoom: 5,
+          steps: Array.from({ length: 24 }, (_, i) => ({
+            time: new Date(start + i * hour).toISOString(),
+            hours: 1,
+          })),
+          totals: [],
+          attribution: "",
+        },
+      }),
+    );
+    await openApp(page);
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    const layers = page.getByRole("dialog", { name: "Map layers" });
+    await layers.getByRole("radio", { name: /^Overlays/ }).click();
+    await layers.getByRole("switch", { name: "Show weather" }).click();
+    await layers.getByRole("button", { name: "About the weather map" }).click();
+    const legend = page.getByRole("dialog", { name: "Weather" });
+    await expect(legend).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await legend.getByLabel("Close").click();
+    await page.keyboard.press("Escape");
+    const bar = page.getByRole("region", { name: "Weather" });
+    await expect(bar.getByRole("slider")).toBeVisible();
+    await expectNoViolations(page, "section[aria-label='Weather']");
+  });
+
   // Stubbed: the gauge file is public and never fetched from prod here.
   test("a river gauge's panel", async ({ page }) => {
     const now = Math.floor(Date.now() / 1000);

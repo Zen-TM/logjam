@@ -1,0 +1,112 @@
+import { useEffect, useRef, useState } from "react";
+import { PanResponder, View } from "react-native";
+import { MAP_TERRAIN } from "@logjam/shared";
+
+import { makeStyles, radius } from "../theme";
+import { stepAtX, xAtStep } from "./scrubberMath";
+
+const THUMB = 24;
+const HEIGHT = 48;
+
+/**
+ * A slider over the forecast's steps. No slider library is installed and a
+ * native one would need an APK build, so this is a drag on a track. For a
+ * screen reader it is one adjustable control: swipe up and down for the next
+ * step, its time as the value (`value`).
+ */
+export function WeatherScrubber({
+  first,
+  last,
+  step,
+  value,
+  width,
+  onChange,
+}: {
+  first: number;
+  last: number;
+  step: number;
+  /** The shown step in words: what a screen reader reads. */
+  value: string;
+  width: number;
+  onChange: (step: number) => void;
+}) {
+  const styles = useStyles();
+  const latest = useRef({ first, last, width, onChange });
+  useEffect(() => {
+    latest.current = { first, last, width, onChange };
+  });
+  const startX = useRef(0);
+
+  // eslint-disable-next-line react-hooks/refs -- create() only stores the handlers; they read refs on touch, never during render
+  const [pan] = useState(() => {
+    const move = (x: number) => {
+      const l = latest.current;
+      l.onChange(stepAtX(x, l.width, l.first, l.last));
+    };
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      // The map under the bar must not take the drag off the thumb.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => {
+        startX.current = event.nativeEvent.locationX;
+        move(startX.current);
+      },
+      onPanResponderMove: (_event, gesture) =>
+        move(startX.current + gesture.dx),
+    });
+  });
+
+  const x = xAtStep(step, width, first, last);
+  return (
+    <View
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={MAP_TERRAIN.copy.weather}
+      accessibilityValue={{ text: value }}
+      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+      onAccessibilityAction={(event) => {
+        const by = event.nativeEvent.actionName === "increment" ? 1 : -1;
+        onChange(Math.min(last, Math.max(first, step + by)));
+      }}
+      style={[styles.hit, { width }]}
+      {...pan.panHandlers}
+    >
+      {/* The children take no touches, so a touch's position is the track's. */}
+      <View style={styles.track} pointerEvents="none" />
+      <View style={[styles.done, { width: x }]} pointerEvents="none" />
+      <View
+        style={[styles.thumb, { left: x - THUMB / 2 }]}
+        pointerEvents="none"
+      />
+    </View>
+  );
+}
+
+const useStyles = makeStyles((theme) => ({
+  hit: { height: HEIGHT, justifyContent: "center" },
+  track: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 4,
+    borderRadius: radius.sm,
+    backgroundColor: theme.line,
+  },
+  done: {
+    position: "absolute",
+    left: 0,
+    height: 4,
+    borderRadius: radius.sm,
+    backgroundColor: theme.accent,
+  },
+  thumb: {
+    position: "absolute",
+    width: THUMB,
+    height: THUMB,
+    borderRadius: THUMB / 2,
+    backgroundColor: theme.accent,
+    borderWidth: 2,
+    borderColor: theme.card,
+  },
+}));

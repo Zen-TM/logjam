@@ -87,6 +87,15 @@
   outline-offset: -3px;
 }
 
+/* A card floating over the map, for a screen's own bar of controls (Weather's
+   time bar composes it): the look is the kit's, the place is the screen's. */
+.card {
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow-map-card);
+}
+
 .notice {
   composes: body from "../textRoles.generated.module.css";
   display: inline-flex;

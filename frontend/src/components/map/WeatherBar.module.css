@@ -1,0 +1,89 @@
+/* Over the map, above the compass and the scale bar and clear of the action
+   column, so it covers neither the credits nor a control. Measured from the
+   same variables MapChrome uses (Map.module.css sets them on #map). */
+.bar {
+  composes: card from "../../ui/MapControl.module.css";
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--map-inset-left, 0px) + var(--space-2));
+  right: calc(var(--map-actions-clear) + var(--space-1));
+  bottom: calc(var(--space-2) + var(--map-button-size) + var(--space-1));
+  box-sizing: border-box;
+  /* intrinsic: a readable line for the label and the time. */
+  max-width: 28rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding: var(--space-1) var(--space-1-5);
+  transition: left var(--motion-med) ease-out;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--space-1);
+}
+
+.title {
+  composes: control from "../../textRoles.generated.module.css";
+}
+
+.unit {
+  composes: detail from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.shown {
+  composes: control from "../../textRoles.generated.module.css";
+  font-variant-numeric: tabular-nums;
+}
+
+.state {
+  composes: body from "../../textRoles.generated.module.css";
+}
+
+.age {
+  composes: detail from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--color-accent);
+  /* The thumb's own hit area is the control's height on a finger. */
+  min-height: var(--control-md);
+  margin: 0;
+}
+
+.range:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    transition: none;
+  }
+}
+
+/* Narrow web: the tab bar owns the bottom 68px, and the controls sit at 12px. */
+@media (max-width: 768px) {
+  .bar {
+    left: var(--space-1-5);
+    bottom: calc(
+      var(--bottom-nav-height) +
+      var(--space-1-5) +
+      var(--map-button-size) +
+      var(--space-1)
+    );
+  }
+}

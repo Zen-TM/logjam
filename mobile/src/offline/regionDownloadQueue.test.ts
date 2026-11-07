@@ -57,6 +57,9 @@ vi.mock("./regionTileDownload", () => ({
   runRegionDownload,
 }));
 
+const keepLatestWeather = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock("../weatherMap/weatherMapKeep", () => ({ keepLatestWeather }));
+
 const {
   cancelAllRegionDownloads,
   enqueueRegionDownloads,
@@ -87,6 +90,24 @@ beforeEach(async () => {
   appState.currentState = "active";
   service.show.mockClear();
   service.stop.mockClear();
+});
+
+describe("the weather run kept with a saved area", () => {
+  // Mutation: drop the call from `enqueueRegionDownloads`, and an area saved
+  // or updated keeps no weather run for the overlay to draw offline; pass
+  // `false` for `allowCellular`, and a download the user allowed on mobile
+  // data is refused its weather.
+  it("is asked for once per download, with its own box and connection answer", async () => {
+    keepLatestWeather.mockClear();
+    enqueueRegionDownloads([
+      { ...job("w-1"), allowCellular: true },
+      { ...job("w-2"), allowCellular: true },
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(keepLatestWeather.mock.calls).toEqual([
+      [true, { west: 150.2, south: -33.7, east: 150.3, north: -33.6 }],
+    ]);
+  });
 });
 
 describe("a download waiting for a connection", () => {

@@ -37,6 +37,8 @@ export function terrainSwitch(
   basemapId: BasemapId,
   online: boolean,
   artifacts: readonly Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">[],
+  /** A weather run is kept with a saved area: Weather's "clip", which is not an artifact. */
+  weatherKept = false,
 ): TerrainSwitchState {
   const copy = MAP_TERRAIN.copy;
   if (key === "contours" && !takesNswContours(basemapId)) {
@@ -45,19 +47,22 @@ export function terrainSwitch(
   if (key === "hillshade" && !takesNswHillshade(basemapId)) {
     return { checked: false, disabled: true, reason: copy.hillshadeImagery };
   }
-  const saved = artifacts.some(
-    key === "contours"
-      ? holdsContours
-      : key === "slope"
-        ? holdsSlope
-        : key === "land"
-          ? holdsLand
-          : key === "fire"
-            ? holdsFire
-            : key === "coverage"
-              ? holdsCoverage
-              : holdsHillshade,
-  );
+  const saved =
+    key === "weather"
+      ? weatherKept
+      : artifacts.some(
+          key === "contours"
+            ? holdsContours
+            : key === "slope"
+              ? holdsSlope
+              : key === "land"
+                ? holdsLand
+                : key === "fire"
+                  ? holdsFire
+                  : key === "coverage"
+                    ? holdsCoverage
+                    : holdsHillshade,
+        );
   if (!online && !saved) {
     return {
       checked: stored,

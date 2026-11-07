@@ -287,6 +287,13 @@ function installAutoResumeWatchers(): void {
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
   installAutoResumeWatchers();
+  // The latest weather run goes with the area, so the overlay draws offline
+  // (ADR 0048). Nothing waits on it and nothing fails for want of it.
+  const first = specs[0];
+  if (first)
+    void import("../weatherMap/weatherMapKeep")
+      .then((m) => m.keepLatestWeather(first.allowCellular, first.bbox))
+      .catch(() => {});
   for (const spec of specs) userStopped.delete(spec.groupId);
   jobs = [
     // Settled jobs from an earlier batch are dropped, not kept: the progress

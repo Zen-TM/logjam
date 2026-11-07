@@ -97,6 +97,12 @@ vi.mock("../gauges/gaugeStorage", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("../weatherMap/weatherMapStorage", () => ({
+  stopWeatherMapForWipe: () => {
+    record("stop:weather-map");
+    return Promise.resolve();
+  },
+}));
 vi.mock("../plans/plansCache", () => ({
   stopPlansForWipe: () => {
     record("stop:plans");
@@ -176,7 +182,8 @@ describe("wipeAllLocalData", () => {
   // delete: a live producer would re-create what the wipe just removed, and
   // the sharpened areas' transforms would keep their presigned URLs.
   // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
-  // landing after sign-out writes the departing user's plan back.
+  // landing after sign-out writes the departing user's plan back; drop
+  // `stopWeatherMapForWipe()`, and a kept run lands after the delete.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -186,6 +193,7 @@ describe("wipeAllLocalData", () => {
       "stop:track",
       "stop:weather",
       "stop:gauges",
+      "stop:weather-map",
       "stop:sharpened",
       "stop:sharpened-areas",
       "stop:plans",

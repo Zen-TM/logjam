@@ -61,9 +61,10 @@ describe("terrainSwitch", () => {
         disabled: true,
         reason: "Needs a connection",
       });
-      expect(terrainSwitch(key, true, "protomaps", false, saved).disabled).toBe(
-        false,
-      );
+      expect(
+        terrainSwitch(key, true, "protomaps", false, saved, key === "weather")
+          .disabled,
+      ).toBe(false);
       expect(terrainSwitch(key, true, "protomaps", true, []).disabled).toBe(
         false,
       );
@@ -83,5 +84,19 @@ describe("terrainSwitch", () => {
     expect(
       terrainSwitch("coverage", true, "protomaps", false, [saved[3]!]).disabled,
     ).toBe(true);
+  });
+
+  // Mutation: let any saved clip stand for Weather's kept run (or test
+  // `artifacts` for it), and a phone with maps but no kept run switches
+  // Weather on over nothing, or one with a run but no clips cannot.
+  it("offline, Weather needs a kept run and no clip", () => {
+    expect(terrainSwitch("weather", true, "protomaps", false, saved)).toEqual({
+      checked: true,
+      disabled: true,
+      reason: "Needs a connection",
+    });
+    expect(
+      terrainSwitch("weather", true, "protomaps", false, [], true).disabled,
+    ).toBe(false);
   });
 });

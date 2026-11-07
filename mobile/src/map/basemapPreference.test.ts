@@ -1,4 +1,4 @@
-import { DEFAULT_CARRIER } from "@logjam/shared";
+import { DEFAULT_CARRIER, WEATHER_LAYER_DEFAULT } from "@logjam/shared";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../prefsDb", () => ({
@@ -14,6 +14,7 @@ const {
   readGaugesLayer,
   readMgaGridLayer,
   readTerrainLayers,
+  readWeatherLayer,
 } = await import("./basemapPreference");
 const { DEFAULT_BASEMAP } = await import("./basemapMeta");
 
@@ -57,6 +58,7 @@ describe("readTerrainLayers", () => {
       slope: true,
       fire: false,
       coverage: false,
+      weather: false,
       land: false,
       hillshade: false,
       vegetation: true,
@@ -74,6 +76,7 @@ describe("readTerrainLayers", () => {
       slope: true,
       fire: false,
       coverage: false,
+      weather: false,
       land: false,
       hillshade: false,
       vegetation: true,
@@ -90,6 +93,19 @@ describe("readCoverageCarrier", () => {
     for (const stale of [null, "vodafone", ""]) {
       storedValue = stale;
       expect(readCoverageCarrier()).toBe(DEFAULT_CARRIER);
+    }
+  });
+});
+
+describe("readWeatherLayer", () => {
+  // Mutation: return the stored string as it is, and a layer no build offers
+  // reaches the bar and the legend, which then name nothing.
+  it("reads a layer the build offers, the default for anything else", () => {
+    storedValue = "rainPast72";
+    expect(readWeatherLayer()).toBe("rainPast72");
+    for (const stale of [null, "snow", ""]) {
+      storedValue = stale;
+      expect(readWeatherLayer()).toBe(WEATHER_LAYER_DEFAULT);
     }
   });
 });
