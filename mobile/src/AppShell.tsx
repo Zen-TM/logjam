@@ -30,6 +30,7 @@ import {
   keepAccountSlopeBands,
   setSlopeBandsAccount,
 } from "./map/slopeBandsPreference";
+import { keepAccountRegions } from "./regionsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -102,6 +103,7 @@ import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen"
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
 import { NotificationSettingsScreen } from "./screens/settings/NotificationSettingsScreen";
 import { OfflineSettingsScreen } from "./screens/settings/OfflineSettingsScreen";
+import { RegionsSettingsScreen } from "./screens/settings/RegionsSettingsScreen";
 import { PrivacySettingsScreen } from "./screens/settings/PrivacySettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import type { MirrorTrip } from "./sync/mirrorStore";
@@ -305,6 +307,7 @@ type MoreStackParams = {
   // Settings sub-pages. One route each rather than one parameterised route: the
   // back stack reads Settings › Map the way the user got there.
   SettingsDisplay: undefined;
+  SettingsRegions: undefined;
   SettingsMap: undefined;
   SettingsNotifications: undefined;
   SettingsOffline: undefined;
@@ -314,6 +317,7 @@ type MoreStackParams = {
 /** Settings root → the route that page lives at. */
 const SETTINGS_ROUTES: Record<SettingsPage, keyof MoreStackParams> = {
   display: "SettingsDisplay",
+  regions: "SettingsRegions",
   map: "SettingsMap",
   notifications: "SettingsNotifications",
   offline: "SettingsOffline",
@@ -1079,6 +1083,13 @@ export function AppShell({
     keepAccountSlopeBands(slopeBandsFetched, accountId);
   }, [slopeBandsFetched, accountId, isGuest]);
 
+  // The account's regions, kept the same way: they set what the pickers offer.
+  const accountRegions = userQuery.data?.uiPreferences?.regions;
+  const accountLoaded = userQuery.data != null;
+  useEffect(() => {
+    if (!isGuest && accountLoaded) keepAccountRegions(accountRegions);
+  }, [accountRegions, accountLoaded, isGuest]);
+
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
     // listener still mounts — it costs nothing and keeps this effect's shape
@@ -1684,6 +1695,20 @@ export function AppShell({
                         route={route}
                       >
                         <DisplaySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SettingsRegions"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.regions}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <RegionsSettingsScreen />
                       </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>

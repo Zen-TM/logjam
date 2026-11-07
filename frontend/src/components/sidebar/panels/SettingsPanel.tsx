@@ -4,11 +4,17 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   COPY_MEDIA_SETTING,
   LEADERBOARD_SETTING,
+  normalizeUserUiPreferences,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
+  offersRegionChoice,
   ownAttributeCountLabel,
   ownTypeCountLabel,
+  REGION_CHOICE,
+  regionChoiceProblem,
+  REGIONS,
   SETTINGS,
+  type Region,
   type SectionKeysOn,
   type NotificationPreferenceGroup,
   type NotificationPreferences,
@@ -66,6 +72,7 @@ function SettingsPanel({
   placeTypes,
   onPlaceTypesChange,
   onCurrentUserChange,
+  regions = REGIONS,
 }: {
   currentUser: TUser | null;
   /** Our sentence for an account load that failed; settings have nothing to show without it. */
@@ -85,6 +92,8 @@ function SettingsPanel({
    *  managed by the page below. */
   placeTypes: TPlaceType[];
   onPlaceTypesChange: (types: TPlaceType[]) => void;
+  /** The regions to offer; only a test passes more than the real ones. */
+  regions?: readonly Region[];
 }) {
   const toast = useToast();
   const [page, setPage] = useState<ListPage | null>(null);
@@ -103,6 +112,8 @@ function SettingsPanel({
   const [leaderboardSaving, setLeaderboardSaving] = useState(false);
   const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
   const [copyMediaSaving, setCopyMediaSaving] = useState(false);
+  const [chosenRegions, setChosenRegions] = useState<string[] | null>(null);
+  const [regionsSaving, setRegionsSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -118,6 +129,9 @@ function SettingsPanel({
       setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
       // On unless the account says otherwise, as the server reads it.
       setCopyMedia(currentUser.uiPreferences?.copyPlaceMedia ?? true);
+      setChosenRegions(
+        normalizeUserUiPreferences(currentUser.uiPreferences).regions,
+      );
     }
   }
 
@@ -185,6 +199,25 @@ function SettingsPanel({
     }
   }
 
+  async function handleToggleRegion(id: string) {
+    if (chosenRegions === null) return;
+    const previous = chosenRegions;
+    const next = previous.includes(id)
+      ? previous.filter((chosen) => chosen !== id)
+      : [...previous, id];
+    setChosenRegions(next);
+    setRegionsSaving(true);
+    try {
+      onCurrentUserChange(await updateUserPreferences({ regions: next }));
+    } catch (err) {
+      console.error(err);
+      setChosenRegions(previous);
+      toast.error(messageFromError(err, REGION_CHOICE.saveFailed));
+    } finally {
+      setRegionsSaving(false);
+    }
+  }
+
   if (page === "placeTypes") {
     return (
       <PlaceTypeSection
@@ -237,6 +270,36 @@ function SettingsPanel({
         <ThemeChooser />
       </>
     ),
+    regions: () =>
+      offersRegionChoice(regions) ? (
+        <>
+          <SectionHeader title={copy.regions} />
+          <p className={classes.lead}>{REGION_CHOICE.hint}</p>
+          {chosenRegions === null ? (
+            <LoadingState />
+          ) : (
+            regions.map((region) => {
+              const on = chosenRegions.includes(region.id);
+              // The last one stays: turning it off would leave none to offer.
+              const refused = on
+                ? regionChoiceProblem(
+                    chosenRegions.filter((id) => id !== region.id),
+                  )
+                : null;
+              return (
+                <SwitchRow
+                  key={region.id}
+                  title={region.name}
+                  checked={on}
+                  disabled={regionsSaving || refused !== null}
+                  disabledReason={refused ?? "Saving…"}
+                  onChange={() => handleToggleRegion(region.id)}
+                />
+              );
+            })
+          )}
+        </>
+      ) : null,
     notifications: () => (
       <>
         <SectionHeader title={copy.notifications} />

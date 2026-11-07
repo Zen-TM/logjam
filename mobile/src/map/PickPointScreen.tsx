@@ -67,7 +67,8 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { mobileBasemaps } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -127,6 +128,7 @@ export function PickPointScreen({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const regionIds = useRegions();
 
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is only honoured on the first render, and
@@ -304,7 +306,7 @@ export function PickPointScreen({
       {/* Basemaps down the side the action column is NOT on, mirroring the map
           screen's own split so the two feel like the same map. */}
       <View style={[styles.basemaps, { top: insets.top + spacing(2) }]}>
-        {MOBILE_BASEMAPS.map((id) => (
+        {mobileBasemaps(regionIds).map((id) => (
           <Pressable
             key={id}
             accessibilityRole="button"

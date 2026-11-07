@@ -76,6 +76,8 @@ const clearRecentSearches = vi.hoisted(() => vi.fn());
 vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
 const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
 vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
+const forgetRegions = vi.hoisted(() => vi.fn());
+vi.mock("../regionsPreference", () => ({ forgetRegions }));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -133,6 +135,14 @@ describe("wipeAllLocalData", () => {
     forgetSlopeBandsEdit.mockClear();
     await wipeAllLocalData();
     expect(forgetSlopeBandsEdit).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop forgetRegions() from wipeAllLocalData, and the next account
+  // on this phone is offered the previous one's regions.
+  it("forgets the chosen regions", async () => {
+    forgetRegions.mockClear();
+    await wipeAllLocalData();
+    expect(forgetRegions).toHaveBeenCalledOnce();
   });
 
   it("deletes every declared directory", async () => {

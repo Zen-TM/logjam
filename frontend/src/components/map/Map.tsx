@@ -179,6 +179,7 @@ import {
   terrainTile,
 } from "./terrainRouter";
 import { messageFromError } from "../../errors/messageFromError";
+import { BASE_LAYERS } from "./baseLayers";
 import {
   BASEMAP_CATALOG,
   BASEMAP_FAIL_AFTER,
@@ -304,30 +305,7 @@ const BASEMAP_ASSETS_BASE_URL = "https://protomaps.github.io/basemaps-assets";
 const PROTOMAPS_LAYER_PREFIX = "pm-";
 const PROTOMAPS_SOURCE_ID = "protomaps";
 
-// Derived from the canonical shared basemap catalog (map-sources.md D2) —
-// same ids, order, URLs, and zoom caps as before the consolidation. The
-// interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
-// while the GeoPDF renderer keeps fetching its native 20).
-//
-// `kind` rides along because the two entry kinds are not interchangeable
-// downstream: a raster entry is an XYZ template, the vector entry a PMTiles
-// archive drawn from its style.
-//
-// The raster "osm" entry ("Default") is left out: the vector basemap draws the
-// same OpenStreetMap cartography and is the default, so offering both put two
-// renderings of one map side by side. Logjam GPS dropped it the same way.
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.id !== "osm",
-).map((entry) => ({
-  id: entry.id,
-  name: entry.name,
-  kind: entry.kind,
-  // Vector has no XYZ template — `tiles` stays empty and the picker falls back
-  // to a captioned placeholder instead of a tile thumbnail.
-  tiles: entry.kind === "raster" ? [entry.urlTemplate] : [],
-  maxzoom: entry.displayMaxZoom,
-  attribution: entry.attributionHtml,
-}));
+export { BASE_LAYERS };
 
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the

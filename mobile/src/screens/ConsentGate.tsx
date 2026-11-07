@@ -12,14 +12,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  REGION_CHOICE,
+  REGIONS,
   SIGN_IN_COPY,
   USERNAME_HINT,
+  type Region,
 } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
+import { chooseRegions } from "../regionsPreference";
 import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, SwitchRow, TextField } from "../ui";
+import { RegionSwitches } from "./RegionSwitches";
+import { regionStepPress, showsRegionStep } from "./regionChoice";
 import { TermsSwitch } from "./TermsSwitch";
 
 export function ConsentGate({
@@ -28,6 +34,7 @@ export function ConsentGate({
   currentUsername,
   onConsented,
   onSignOut,
+  regions = REGIONS,
 }: {
   /** The version the server named, which is the only one it will record. */
   consentVersion: string;
@@ -37,6 +44,8 @@ export function ConsentGate({
   currentUsername: string;
   onConsented: () => void;
   onSignOut: SignOutHandler;
+  /** Every region on offer; a prop so a test can give the step two. */
+  regions?: readonly Region[];
 }) {
   const styles = useStyles();
 
@@ -51,6 +60,9 @@ export function ConsentGate({
     message: string;
     retry: boolean;
   } | null>(null);
+  // The step after the terms, for a new account: none chosen at first.
+  const [askRegions, setAskRegions] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
   const insets = useSafeAreaInsets();
 
@@ -76,7 +88,8 @@ export function ConsentGate({
       await (newAccount
         ? updateConsent(consentVersion, username.trim())
         : updateConsent(consentVersion));
-      onConsented();
+      if (showsRegionStep(newAccount, regions)) setAskRegions(true);
+      else onConsented();
     } catch (err) {
       console.error(err);
       const failure = consentSubmitFailure(err, newAccount);
@@ -86,6 +99,59 @@ export function ConsentGate({
       setSubmitting(false);
     }
   };
+
+  // Sent signed in: a guest never meets this gate.
+  const sendRegions = async () => {
+    const press = regionStepPress(chosen);
+    if ("explain" in press) {
+      setBanner({ message: press.explain, retry: false });
+      return;
+    }
+    setSubmitting(true);
+    setBanner(null);
+    const sent = await chooseRegions(chosen, true);
+    setSubmitting(false);
+    if (sent) onConsented();
+    else setBanner({ message: REGION_CHOICE.saveFailed, retry: true });
+  };
+
+  if (askRegions) {
+    return (
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + spacing(3),
+            paddingBottom: insets.bottom + spacing(3),
+          },
+        ]}
+      >
+        <Text style={styles.title}>{REGION_CHOICE.title}</Text>
+        <Text style={styles.body}>{REGION_CHOICE.hint}</Text>
+        <RegionSwitches
+          chosen={chosen}
+          onChange={(next) => {
+            setChosen(next);
+            setBanner(null);
+          }}
+          disabled={submitting}
+          regions={regions}
+        />
+        {banner ? (
+          <ErrorBanner
+            message={banner.message}
+            onRetry={banner.retry ? sendRegions : undefined}
+          />
+        ) : null}
+        <Button
+          label={REGION_CHOICE.continue}
+          onPress={sendRegions}
+          loading={submitting}
+        />
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView

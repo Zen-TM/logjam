@@ -5,6 +5,8 @@ vi.mock("../prefsDb", () => ({
   writePref: vi.fn(() => true),
 }));
 
+vi.mock("../regionsPreference", () => ({ readRegions: () => ["nsw"] }));
+
 let storedValue: string | null = null;
 
 const {
@@ -13,7 +15,8 @@ const {
   readMgaGridLayer,
   readTerrainLayers,
 } = await import("./basemapPreference");
-const { DEFAULT_BASEMAP } = await import("./basemapMeta");
+const { defaultBasemap } = await import("./basemapMeta");
+const DEFAULT_BASEMAP = defaultBasemap(["nsw"]);
 
 describe("readBasemapPreference", () => {
   it("returns the stored basemap", () => {

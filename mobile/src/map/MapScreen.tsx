@@ -260,7 +260,8 @@ import {
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
@@ -1005,13 +1006,15 @@ export function MapScreen({
   );
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
+  const regionIds = useRegions();
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
     connectivity === "online",
+    regionIds,
   );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId, downBasemaps),
+    basemapFallbackFor(basemapId, downBasemaps, regionIds),
   ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
@@ -1648,13 +1651,13 @@ export function MapScreen({
     const covering = basemapsCoveringViewport(
       artifacts,
       viewportBbox,
-      MOBILE_BASEMAPS,
+      mobileBasemaps(regionIds),
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, regionIds]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is

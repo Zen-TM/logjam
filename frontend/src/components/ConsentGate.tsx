@@ -2,10 +2,20 @@ import { useState } from "react";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  offersRegionChoice,
+  REGION_CHOICE,
+  regionChoiceProblem,
+  REGIONS,
   SIGN_IN_COPY,
   USERNAME_HINT,
+  type Region,
 } from "@logjam/shared";
-import { recordConsent, type TUser } from "../placeUtils";
+import { messageFromError } from "../errors/messageFromError";
+import {
+  recordConsent,
+  updateUserPreferences,
+  type TUser,
+} from "../placeUtils";
 import BrandMark from "./brand/BrandMark";
 import TermsTick from "./TermsTick";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
@@ -23,6 +33,9 @@ import classes from "./ConsentGate.module.css";
  * it is welcomed rather than told the terms changed, and picks its username and
  * confirms its age here, in the same request that records the consent.
  *
+ * Once there is more than one region, a new account is then asked where it
+ * canyons (REGION_CHOICE), in the same card.
+ *
  * The links to read are in the tick's own sentence (TermsTick), and opening one
  * does not answer the question about it.
  */
@@ -32,6 +45,7 @@ function ConsentGate({
   currentUsername,
   onAccepted,
   onSignOut,
+  regions = REGIONS,
 }: {
   /** The version the server named, which is the only one it will record. */
   consentVersion: string;
@@ -41,6 +55,8 @@ function ConsentGate({
   currentUsername: string;
   onAccepted: (user: TUser) => void;
   onSignOut: () => void;
+  /** The regions to ask about; only a test passes more than the real ones. */
+  regions?: readonly Region[];
 }) {
   const [agreed, setAgreed] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -48,6 +64,26 @@ function ConsentGate({
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [askingRegions, setAskingRegions] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  async function handleRegions(): Promise<void> {
+    // Pressing Continue is how the user learns what is missing (shared/DESIGN.md §5).
+    const problem = regionChoiceProblem(chosen);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      onAccepted(await updateUserPreferences({ regions: chosen }));
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, REGION_CHOICE.saveFailed));
+      setSubmitting(false);
+    }
+  }
 
   async function handleAgree(): Promise<void> {
     const problem = consentFormProblem({
@@ -70,6 +106,11 @@ function ConsentGate({
       const user = newAccount
         ? await recordConsent(consentVersion, username.trim())
         : await recordConsent(consentVersion);
+      if (newAccount && offersRegionChoice(regions)) {
+        setAskingRegions(true);
+        setSubmitting(false);
+        return;
+      }
       // Parent swaps in the updated user, unmounting this gate — no state
       // updates after this point.
       onAccepted(user);
@@ -82,6 +123,55 @@ function ConsentGate({
       else setError(failure.message);
       setSubmitting(false);
     }
+  }
+
+  if (askingRegions) {
+    return (
+      <div className={classes.container}>
+        <div className={classes.card}>
+          <BrandMark className={classes.brandMark} />
+          <h1 className={classes.title}>{REGION_CHOICE.title}</h1>
+          <p className={classes.body}>{REGION_CHOICE.hint}</p>
+          {regions.map((region) => (
+            <Checkbox
+              key={region.id}
+              label={region.name}
+              checked={chosen.includes(region.id)}
+              onChange={(next) => {
+                setChosen((prev) =>
+                  next
+                    ? [...prev, region.id]
+                    : prev.filter((id) => id !== region.id),
+                );
+                setError(null);
+              }}
+            />
+          ))}
+          {error && (
+            <ErrorBanner
+              message={error}
+              onRetry={chosen.length > 0 ? handleRegions : undefined}
+            />
+          )}
+          <Button
+            variant="filled"
+            className={classes.action}
+            onClick={handleRegions}
+            busy={submitting}
+          >
+            {REGION_CHOICE.continue}
+          </Button>
+          <Button
+            className={classes.action}
+            onClick={onSignOut}
+            disabled={submitting}
+            disabledReason="Saving your regions…"
+          >
+            Sign out
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

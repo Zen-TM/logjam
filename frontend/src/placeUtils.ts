@@ -882,6 +882,7 @@ export function updateUserPreferences(
     leaderboardOptIn: boolean;
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
+    regions: string[];
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
