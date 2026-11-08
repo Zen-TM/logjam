@@ -36,6 +36,11 @@ resource "aws_cloudwatch_log_group" "gauges" {
   retention_in_days = local.operational_log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "fire_history" {
+  name              = "/ecs/logjam-fire-history"
+  retention_in_days = local.operational_log_retention_days
+}
+
 resource "aws_cloudwatch_log_group" "api_script" {
   name              = "/ecs/logjam-api-script"
   retention_in_days = local.operational_log_retention_days
