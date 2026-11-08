@@ -304,6 +304,35 @@ run "gauges_role_writes_only_master_gauges" {
   }
 }
 
+run "fire_history_role_writes_only_fire" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.fire_history]
+  }
+
+  # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
+  # prefix condition, or adding an action or a statement lets the monthly
+  # build see, write or delete more than the fire history raster.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.fire_history.policy).Statement == [
+      {
+        Sid      = "PublishFireHistory"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/fire/*"
+      },
+      {
+        Sid       = "ListFireHistory"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "fire/*" } }
+      },
+    ]
+    error_message = "The fire history role may only list, read and write objects under fire/ in the topo bucket."
+  }
+}
+
 run "api_rate_limit_is_one_plain_ip_rule" {
   command = plan
   plan_options {

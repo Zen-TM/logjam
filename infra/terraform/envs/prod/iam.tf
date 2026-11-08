@@ -215,6 +215,96 @@ resource "aws_iam_role_policy" "gauges_scheduler" {
   })
 }
 
+# Task role for the monthly fire history build (ecs.tf): it may list, read
+# and replace what is under fire/ in the topo bucket, and nothing else.
+resource "aws_iam_role" "fire_history" {
+  name = "logjam-fire-history-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "fire_history" {
+  name = "logjam-fire-history-publish"
+  role = aws_iam_role.fire_history.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "PublishFireHistory"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/fire/*"
+      },
+      {
+        # read_legend() in topo/build_fire_history.py lists before it reads,
+        # as upload() does for the place registry.
+        Sid       = "ListFireHistory"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "fire/*" } }
+      },
+    ]
+  })
+}
+
+# What EventBridge Scheduler assumes to launch the build: RunTask on that one
+# family, in the one cluster, passing only its two roles.
+resource "aws_iam_role" "fire_history_scheduler" {
+  name = "logjam-fire-history-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "fire_history_scheduler" {
+  name = "logjam-fire-history-runtask"
+  role = aws_iam_role.fire_history_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunFireHistoryTask"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        Resource = [
+          aws_ecs_task_definition.fire_history.arn_without_revision,
+          "${aws_ecs_task_definition.fire_history.arn_without_revision}:*",
+        ]
+        Condition = {
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.main.arn }
+        }
+      },
+      {
+        Sid    = "PassFireHistoryRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.fire_history.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
@@ -800,6 +890,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
           aws_iam_role.topo_worker.arn,
           aws_iam_role.place_registry.arn,
           aws_iam_role.gauges.arn,
+          aws_iam_role.fire_history.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
