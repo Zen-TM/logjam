@@ -88,9 +88,10 @@ run "ci_reads_no_secret_or_user_data" {
   }
 
   # Mutation: turning the object Deny back into a list of buckets, adding a
-  # bucket to its exceptions, or scoping the log Deny to named log groups
-  # leaves the next bucket or log group readable until someone remembers to
-  # add it. Changing the object Deny's condition (another account, a
+  # bucket to its exceptions (the backup or audit bucket, say), dropping the
+  # signals bucket from them (plans then cannot read the `serving` object), or
+  # scoping the log Deny to named log groups leaves the next bucket or log
+  # group readable until someone remembers to add it. Changing the object Deny's condition (another account, a
   # negated operator, a second key) leaves buckets of ours readable; dropping
   # it denies the AWS-owned objects an EB configuration change reads again.
   assert {
@@ -107,6 +108,7 @@ run "ci_reads_no_secret_or_user_data" {
             "arn:aws:s3:::logjam-tfstate-620853681701/*",
             "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
             "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
+            "arn:aws:s3:::logjam-brain-signals-620853681701/*",
           ]) &&
           try(st.Condition, null) == { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
         ]) &&
@@ -117,7 +119,7 @@ run "ci_reads_no_secret_or_user_data" {
         ])
       )
     ])
-    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the four CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy
@@ -530,5 +532,259 @@ run "cognito_client_scopes_and_api_grant" {
       jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement[0].Resource == "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
     )
     error_message = "The API's Cognito grant must be exactly AdminGetUser and AdminDeleteUser on the one pool (iam.tf)."
+  }
+}
+
+# ── The brain (brain_*.tf) ───────────────────────────────────────────────────
+
+run "brain_postgres_image_is_immutable" {
+  command = plan
+  plan_options {
+    target = [aws_ecr_repository.brain_postgres]
+  }
+
+  # Mutation: setting image_tag_mutability back to MUTABLE lets a push
+  # replace the tag the brain's instance is pinned to.
+  assert {
+    condition     = aws_ecr_repository.brain_postgres.image_tag_mutability == "IMMUTABLE"
+    error_message = "The brain's Postgres image repository must keep immutable tags: the instance is pinned to one."
+  }
+}
+
+run "brain_backups_are_locked_and_never_expire" {
+  command = plan
+  plan_options {
+    target = [
+      aws_s3_bucket_object_lock_configuration.brain_backups,
+      aws_s3_bucket_lifecycle_configuration.brain_backups,
+    ]
+  }
+
+  # Mutation: GOVERNANCE mode (anyone with the bypass permission can delete
+  # backups), fewer than 7 days, or no default retention.
+  assert {
+    condition = (
+      aws_s3_bucket_object_lock_configuration.brain_backups.rule[0].default_retention[0].mode == "COMPLIANCE" &&
+      aws_s3_bucket_object_lock_configuration.brain_backups.rule[0].default_retention[0].days == 7
+    )
+    error_message = "The backup bucket must hold every object under a 7-day COMPLIANCE lock."
+  }
+
+  # Mutation: an `expiration { days = N }` (or a `date`) on any rule, or a
+  # `transition`. pgBackRest expires backups by count; an age rule would delete
+  # the only backup after a run of failed nights. (An expiration with a `days`
+  # leaves expired_object_delete_marker unknown, so that mutation ends the run
+  # with an "Unknown condition value" error rather than the message below.)
+  assert {
+    condition = alltrue([
+      for r in aws_s3_bucket_lifecycle_configuration.brain_backups.rule : (
+        alltrue([for e in r.expiration : e.expired_object_delete_marker == true]) &&
+        length(r.transition) == 0
+      )
+    ])
+    error_message = "No lifecycle rule on the backup bucket may expire or move current versions (infra/AGENTS.md)."
+  }
+
+  # Mutation: removing the noncurrent-version rule lets versions pile up for
+  # ever (the bucket is the most expensive thing here if it does).
+  assert {
+    condition = anytrue([
+      for r in aws_s3_bucket_lifecycle_configuration.brain_backups.rule :
+      anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 1])
+    ])
+    error_message = "The backup bucket must expire noncurrent versions after 1 day."
+  }
+}
+
+run "brain_inert_defaults" {
+  command = plan
+  plan_options {
+    target = [aws_s3_object.brain_serving]
+  }
+
+  # Mutation: defaulting var.brain_serving to true lets the first host that
+  # boots start the API against an empty database.
+  assert {
+    condition     = aws_s3_object.brain_serving.content == "off"
+    error_message = "The serving switch must default to off."
+  }
+}
+
+run "brain_deploy_role_writes_only_release_json" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.gha_brain_deploy]
+  }
+
+  override_resource {
+    target          = aws_ecr_repository.brain_postgres
+    values          = { arn = "arn:aws:ecr:ap-southeast-2:620853681701:repository/logjam-brain-postgres" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_s3_bucket.brain_signals
+    values          = { arn = "arn:aws:s3:::logjam-brain-signals-620853681701" }
+    override_during = plan
+  }
+
+  # Mutation: widening the S3 resource (`/*`, the bucket, `serving`,
+  # `status.json`) or adding an action lets CI write what the brain runs or
+  # whether it serves; adding another repository lets CI push images the
+  # brain pulls.
+  assert {
+    condition = (
+      [for st in jsondecode(aws_iam_role_policy.gha_brain_deploy.policy).Statement : st.Resource] == [
+        "arn:aws:ecr:ap-southeast-2:620853681701:repository/logjam-brain-postgres",
+        "arn:aws:s3:::logjam-brain-signals-620853681701/release.json",
+      ] &&
+      one([
+        for st in jsondecode(aws_iam_role_policy.gha_brain_deploy.policy).Statement : flatten([st.Action])
+        if anytrue([for a in flatten([st.Action]) : startswith(a, "s3:")])
+      ]) == ["s3:PutObject"]
+    )
+    error_message = "The deploy role may push only the brain Postgres image and write only release.json in the signals bucket."
+  }
+}
+
+run "brain_security_group_has_two_ingress_rules" {
+  command = plan
+  plan_options {
+    target = [aws_security_group.brain]
+  }
+
+  override_resource {
+    target          = aws_security_group.worker
+    values          = { id = "sg-mockworker" }
+    override_during = plan
+  }
+
+  # Mutation: a third ingress rule, 0.0.0.0/0 or a CIDR on either, another port,
+  # or a source other than the CloudFront prefix list (80) and the worker
+  # group (5432) exposes the API or the database directly.
+  assert {
+    condition = toset([
+      for i in aws_security_group.brain.ingress : jsonencode([i.from_port, i.to_port, i.protocol, i.prefix_list_ids == null ? [] : sort(tolist(i.prefix_list_ids)), i.security_groups == null ? [] : sort(tolist(i.security_groups)), i.cidr_blocks == null ? 0 : length(i.cidr_blocks), i.ipv6_cidr_blocks == null ? 0 : length(i.ipv6_cidr_blocks), i.self == true])
+      ]) == toset([
+      jsonencode([80, 80, "tcp", ["pl-b8a742d1"], [], 0, 0, false]),
+      jsonencode([5432, 5432, "tcp", [], ["sg-mockworker"], 0, 0, false]),
+    ]) && length(aws_security_group.brain.ingress) == 2
+    error_message = "The brain's security group may take only port 80 from CloudFront and 5432 from the workers."
+  }
+}
+
+run "brain_role_has_only_its_grants" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_role_policy.brain,
+      aws_iam_role_policy_attachments_exclusive.brain,
+      aws_iam_role_policies_exclusive.brain,
+    ]
+  }
+
+  override_resource {
+    target          = aws_secretsmanager_secret.app_db
+    values          = { arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-mock" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_secretsmanager_secret.origin_verify
+    values          = { arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/origin-verify-mock" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.topo_worker
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-topo-worker-role" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.ecs_task_execution
+    values          = { arn = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_ecr_repository.api
+    values          = { arn = "arn:aws:ecr:ap-southeast-2:620853681701:repository/logjam-api" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_ecr_repository.brain_postgres
+    values          = { arn = "arn:aws:ecr:ap-southeast-2:620853681701:repository/logjam-brain-postgres" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_s3_bucket.brain_backups
+    values          = { arn = "arn:aws:s3:::logjam-brain-backups-620853681701" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_s3_bucket.brain_signals
+    values          = { arn = "arn:aws:s3:::logjam-brain-signals-620853681701" }
+    override_during = plan
+  }
+
+  # Mutation: attaching a managed policy (CloudWatchFullAccess, a revived
+  # AmazonS3FullAccess) or a second inline policy by hand in Terraform, or
+  # dropping either exclusive resource, widens a role the whole API runs as.
+  assert {
+    condition = (
+      toset(aws_iam_role_policy_attachments_exclusive.brain.policy_arns) == toset(["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]) &&
+      toset(aws_iam_role_policies_exclusive.brain.policy_names) == toset([aws_iam_role_policy.brain.name])
+    )
+    error_message = "The brain's role may hold only the Session Manager policy and its one inline policy, managed exclusively."
+  }
+
+  # Mutation: adding any bucket (the audit bucket above all), or a wildcard
+  # resource, to an S3 statement lets a compromised API read or overwrite the
+  # audit trail, the state or another bucket. The audit bucket is named so
+  # that the next edit has to look at this list.
+  assert {
+    condition = alltrue([
+      for r in flatten([
+        for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : flatten([st.Resource])
+        if anytrue([for a in flatten([st.Action]) : startswith(a, "s3:")])
+        ]) : contains([
+        "logjam-media", "logjam-topo-jobs", "logjam-access-logs-620853681701",
+        "logjam-brain-backups-620853681701", "logjam-brain-signals-620853681701",
+      ], regex("^arn:aws:s3:::([^/]+)", r)[0])
+    ])
+    error_message = "The brain's role may reach only the media, topo, access-log, backup and signals buckets: never the audit bucket."
+  }
+
+  # Mutation: adding the RDS master secret, a wildcard or any other secret
+  # to the secrets statement, or a second statement with secretsmanager actions.
+  assert {
+    condition = (
+      toset(flatten([
+        for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : st.Resource
+        if anytrue([for a in flatten([st.Action]) : startswith(a, "secretsmanager:")])
+        ])) == toset([
+        "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-mock",
+        "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/origin-verify-mock",
+        "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs*",
+      ]) &&
+      alltrue([
+        for st in jsondecode(aws_iam_role_policy.brain.policy).Statement :
+        flatten([st.Action]) == ["secretsmanager:GetSecretValue"]
+        if anytrue([for a in flatten([st.Action]) : startswith(a, "secretsmanager:")])
+      ])
+    )
+    error_message = "The brain's role may read only the app database, origin-verify and Resend secrets."
+  }
+
+  # Mutation: giving the signals read statement Put/Delete, widening
+  # SignalsWriteStatus past status.json, or any other statement on the
+  # signals bucket lets the host (or a compromised API) change the release or
+  # the serving switch that CI and Terraform decide.
+  assert {
+    condition = [
+      for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : [st.Sid, flatten([st.Action]), flatten([st.Resource])]
+      if strcontains(jsonencode(st.Resource), "logjam-brain-signals")
+      ] == [
+      ["SignalsRead", ["s3:GetObject"], ["arn:aws:s3:::logjam-brain-signals-620853681701/release.json", "arn:aws:s3:::logjam-brain-signals-620853681701/serving"]],
+      ["SignalsWriteStatus", ["s3:PutObject"], ["arn:aws:s3:::logjam-brain-signals-620853681701/status.json"]],
+      ["SignalsList", ["s3:ListBucket"], ["arn:aws:s3:::logjam-brain-signals-620853681701"]],
+    ]
+    error_message = "The brain's role may read release.json and serving, list the signals bucket and write status.json: nothing else."
   }
 }

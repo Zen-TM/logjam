@@ -35,3 +35,21 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   values. Objects in this account's buckets and log events are denied by
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
+- **The brain's signals bucket is the only new bucket CI may read objects
+  from, and it holds no user data** (`release.json`, `serving`, `status.json`,
+  `drill.json`: a release pointer, a switch and health files). Never put
+  anything else in it. The backup bucket stays denied to CI. Guard: the
+  exceptions assert in `ci_reads_no_secret_or_user_data`
+  (`terraform/envs/prod/tests/guards.tftest.hcl`).
+- **The brain's backup bucket never gets a rule that expires or moves current
+  versions.** pgBackRest expires backups by count; an age rule would delete the
+  only backup after a run of failed nights. Its Object Lock stays COMPLIANCE,
+  7 days. Guard: `brain_backups_are_locked_and_never_expire`.
+- **The brain's Postgres image tag is immutable and pinned** in Terraform
+  (`var.brain_pg_image_tag`); the repository refuses a push to an existing tag,
+  so publish a new tag and change the variable, never retag. Guard:
+  `brain_postgres_image_is_immutable`.
+- **The brain's instance role** (`logjam-brain`) holds only the grants in
+  `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
+  app database, origin-verify and Resend, no write to `release.json` or
+  `serving`, and no AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.

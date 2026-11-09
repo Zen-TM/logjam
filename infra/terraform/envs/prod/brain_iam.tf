@@ -1,0 +1,194 @@
+# The brain's instance role. Containers on the host use it through the
+# instance metadata service, as the API does on its Elastic Beanstalk instance
+# today (hop limit 2).
+#
+# It carries what the API uses of logjam-eb-role (the secrets, the S3 grant,
+# Cognito, the worker launch grant), the backup and signals buckets, image pull
+# and the brain's two log groups. It leaves out what the live role also has:
+#   - CloudWatchFullAccess, CloudWatchAgentServerPolicy: no agent runs; the
+#     awslogs driver needs only CreateLogStream and PutLogEvents on two groups.
+#   - AmazonEC2ContainerRegistryReadOnly: pull is scoped to two repositories.
+#   - DatabasePasswordAccess (the RDS master secret): the API runs as logjam_app.
+#   - The Elastic Beanstalk platform bucket grant: there is no Elastic Beanstalk.
+#   - ecs:RunTask on logjam-geo-pdf-worker: that task definition no longer exists.
+# and adds ecs:StopTask, which the API calls (topoJobs.ts, topoJobReaper.ts) and
+# the live role never allowed.
+#
+# Only the policies below may be on the role: the exclusive resources undo
+# anything attached by hand. Guards: tests/guards.tftest.hcl
+# (brain_role_*).
+resource "aws_iam_role" "brain" {
+  name = "logjam-brain"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "brain" {
+  name = aws_iam_role.brain.name
+  role = aws_iam_role.brain.name
+}
+
+# Session Manager's agent permissions. This managed policy is the AWS-documented
+# set and is scoped to SSM and the message channels; not worth hand-listing.
+resource "aws_iam_role_policy_attachment" "brain_ssm" {
+  role       = aws_iam_role.brain.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachments_exclusive" "brain" {
+  role_name   = aws_iam_role.brain.name
+  policy_arns = [aws_iam_role_policy_attachment.brain_ssm.policy_arn]
+}
+
+resource "aws_iam_role_policies_exclusive" "brain" {
+  role_name    = aws_iam_role.brain.name
+  policy_names = [aws_iam_role_policy.brain.name]
+}
+
+resource "aws_iam_role_policy" "brain" {
+  name = "logjam-brain"
+  role = aws_iam_role.brain.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # The logjam_app credentials, the CloudFront origin-verify token and
+        # the Resend API key (SMTP password). The Resend secret is made
+        # outside Terraform, hence the literal ARN (as iam.tf).
+        Sid    = "ReadOwnSecrets"
+        Effect = "Allow"
+        Action = "secretsmanager:GetSecretValue"
+        Resource = [
+          aws_secretsmanager_secret.app_db.arn,
+          aws_secretsmanager_secret.origin_verify.arn,
+          "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs*",
+        ]
+      },
+      {
+        Sid      = "MediaAndTopoObjects"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:aws:s3:::logjam-media/*", "arn:aws:s3:::logjam-topo-jobs/*"]
+      },
+      {
+        Sid      = "MediaAndTopoList"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = ["arn:aws:s3:::logjam-media", "arn:aws:s3:::logjam-topo-jobs"]
+      },
+      {
+        Sid      = "TopoInputMultipart"
+        Effect   = "Allow"
+        Action   = ["s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/inputs/*"
+      },
+      {
+        Sid      = "TopoInputMultipartList"
+        Effect   = "Allow"
+        Action   = "s3:ListBucketMultipartUploads"
+        Resource = "arn:aws:s3:::logjam-topo-jobs"
+      },
+      {
+        # Read-only on purpose: the egress sweeper only sums bytes_sent.
+        Sid      = "AccessLogsRead"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:ListBucket"]
+        Resource = ["arn:aws:s3:::logjam-access-logs-620853681701", "arn:aws:s3:::logjam-access-logs-620853681701/*"]
+      },
+      {
+        Sid      = "CognitoAdminUser"
+        Effect   = "Allow"
+        Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]
+        Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
+      },
+      {
+        Sid    = "RunWorkerTasks"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        Resource = [
+          "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-topo-worker:*",
+          "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-topo-export-worker:*",
+        ]
+      },
+      {
+        Sid      = "StopWorkerTasks"
+        Effect   = "Allow"
+        Action   = "ecs:StopTask"
+        Resource = "arn:aws:ecs:ap-southeast-2:620853681701:task/${aws_ecs_cluster.main.name}/*"
+      },
+      {
+        Sid      = "PassWorkerRoles"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = [aws_iam_role.topo_worker.arn, aws_iam_role.ecs_task_execution.arn]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+      {
+        # pgBackRest's repository: list, read, write and delete, on this bucket.
+        Sid      = "BackupRepositoryList"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = aws_s3_bucket.brain_backups.arn
+      },
+      {
+        Sid      = "BackupRepositoryObjects"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.brain_backups.arn}/*"
+      },
+      {
+        # The brain reads the release and serving switch and writes its own
+        # status. It cannot write the first two: CI and Terraform decide what
+        # runs, not the host.
+        Sid      = "SignalsRead"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = ["${aws_s3_bucket.brain_signals.arn}/release.json", "${aws_s3_bucket.brain_signals.arn}/serving"]
+      },
+      {
+        Sid      = "SignalsWriteStatus"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.brain_signals.arn}/status.json"
+      },
+      {
+        # Without it S3 answers 403, not 404, for an object that is not there
+        # yet (no release.json before the first deploy). Key names only.
+        Sid      = "SignalsList"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = aws_s3_bucket.brain_signals.arn
+      },
+      {
+        # No resource-level permission.
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPull"
+        Effect = "Allow"
+        Action = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = [
+          aws_ecr_repository.api.arn,
+          aws_ecr_repository.brain_postgres.arn,
+        ]
+      },
+      {
+        Sid      = "BrainLogs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = [for g in [local.brain_log_group_api, local.brain_log_group_postgres] : "arn:aws:logs:ap-southeast-2:620853681701:log-group:${g}:*"]
+      },
+    ]
+  })
+}
