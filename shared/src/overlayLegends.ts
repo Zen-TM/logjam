@@ -7,8 +7,8 @@ import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { MAP_INK } from "./designTokens.js";
 import {
   CARRIERS,
+  COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_URIS,
-  COVERAGE_LEVELS,
   NSW_COVERAGE,
 } from "./nswCoverage.js";
 import { FIRE_RAMP, fireLegendRows, NSW_FIRE } from "./nswFire.js";
@@ -50,6 +50,11 @@ export type OverlayLegend = {
    */
   choice?: {
     label: string;
+    /**
+     * The row's one button until a value is picked: it opens the legend.
+     * Absent where a value is always picked (Weather's layer has a default).
+     */
+    choose?: string;
     options: readonly { value: string; label: string }[];
   };
   /** What the source gets wrong, said beside the key it qualifies. */
@@ -105,19 +110,18 @@ export const OVERLAY_LEGENDS: Readonly<
     hue: MAP_INK.casing,
     intro: copy.coverageLegend,
     // Over the light land of a basemap, as the hatch is drawn on the map.
-    rows: COVERAGE_LEVELS.flatMap(({ name, hatch }) =>
-      hatch
-        ? [
-            {
-              label: name[0]!.toUpperCase() + name.slice(1),
-              colour: MAP_INK.label,
-              pattern: COVERAGE_HATCH_URIS[hatch],
-            },
-          ]
-        : [],
-    ),
+    rows: [
+      {
+        label:
+          copy.coverageNoReception[0]!.toUpperCase() +
+          copy.coverageNoReception.slice(1),
+        colour: MAP_INK.label,
+        pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE],
+      },
+    ],
     choice: {
       label: copy.coverageCarrier,
+      choose: copy.coverageChooseCarrier,
       options: CARRIERS.map(({ id, name }) => ({ value: id, label: name })),
     },
     caveat: copy.coverageCaveat,
@@ -128,9 +132,22 @@ export const OVERLAY_LEGENDS: Readonly<
 /** The key `legend` shows for `choice`: its own for that value, if it has one. */
 export function overlayLegendRows(
   legend: OverlayLegend,
-  choice: string | undefined,
+  choice: string | null | undefined,
 ): OverlayLegend["rows"] {
-  return legend.rowsFor?.(choice) ?? legend.rows;
+  return legend.rowsFor?.(choice ?? undefined) ?? legend.rows;
+}
+
+/**
+ * Whether `legend`'s row offers its choice (one button that opens the legend)
+ * in place of its switch: it has a choice, and nothing is picked yet. Both
+ * clients draw the row from this, and a pick made while it holds turns the
+ * overlay on, since the button was the request for it.
+ */
+export function overlayAwaitsChoice(
+  legend: OverlayLegend,
+  value: string | null | undefined,
+): boolean {
+  return legend.choice?.choose !== undefined && value === null;
 }
 
 /** The label of the option `value` names in `legend`'s choice, if it has one. */

@@ -1,4 +1,4 @@
-import { DEFAULT_CARRIER, WEATHER_LAYER_DEFAULT } from "@logjam/shared";
+import { WEATHER_LAYER_DEFAULT } from "@logjam/shared";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../prefsDb", () => ({
@@ -86,13 +86,14 @@ describe("readTerrainLayers", () => {
 
 describe("readCoverageCarrier", () => {
   // Mutation: return the stored string as it is, and a value no build offers
-  // reaches the layer's filter, which then matches no carrier and draws nothing.
-  it("reads a carrier the build offers, the default for anything else", () => {
+  // reaches the layer's filter, which then matches no carrier and draws
+  // nothing; fall back to a carrier, and the overlay draws one never picked.
+  it("reads a carrier the build offers, and nothing for anything else", () => {
     storedValue = "optus";
     expect(readCoverageCarrier()).toBe("optus");
     for (const stale of [null, "vodafone", ""]) {
       storedValue = stale;
-      expect(readCoverageCarrier()).toBe(DEFAULT_CARRIER);
+      expect(readCoverageCarrier()).toBeNull();
     }
   });
 });

@@ -456,7 +456,7 @@ describe("MapPointPopover coverage", () => {
   // Mutation: stop passing `coverage` to `mapPointFacts`, or name a carrier
   // other than the one the map draws, and the figure goes missing or answers
   // for the wrong network.
-  it("names the drawn carrier's level while the layer is on, and nothing when off", () => {
+  it("names the drawn carrier's reception while the layer is on, and nothing when off", () => {
     const layered = map as unknown as Record<string, unknown>;
     layered.getLayer = (id: string) =>
       id === COVERAGE_FILL_LAYER ? {} : undefined;
@@ -465,7 +465,7 @@ describe("MapPointPopover coverage", () => {
     ];
     mount();
     expect(screen.getByText(MAP_POINT.copy.coverage)).toBeTruthy();
-    expect(screen.getByText("Optus: no predicted coverage")).toBeTruthy();
+    expect(screen.getByText("Optus: no mobile reception")).toBeTruthy();
     cleanup();
 
     layered.getLayer = () => undefined;

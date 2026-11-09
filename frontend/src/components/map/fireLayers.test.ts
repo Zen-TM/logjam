@@ -1,8 +1,10 @@
 import {
+  FIRE_MIN_ZOOM,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
   NSW_FIRE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
@@ -22,10 +24,10 @@ describe("the Fire history layers", () => {
       type: "fill",
       source: "topo-src-nswfire",
       "source-layer": NSW_FIRE.sourceLayer,
-      minzoom: NSW_FIRE.minzoom,
+      minzoom: FIRE_MIN_ZOOM,
       paint: {
         "fill-color": fireColor(NOV_2026),
-        "fill-opacity": fireFillOpacity(NOV_2026),
+        "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(NOV_2026)),
       },
     });
     expect(edge).toMatchObject({
@@ -33,11 +35,11 @@ describe("the Fire history layers", () => {
       type: "line",
       source: "topo-src-nswfire",
       "source-layer": NSW_FIRE.sourceLayer,
-      minzoom: NSW_FIRE.minzoom,
+      minzoom: FIRE_MIN_ZOOM,
       paint: {
         "line-color": fireColor(NOV_2026),
         "line-width": 1,
-        "line-opacity": fireEdgeOpacity(NOV_2026),
+        "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(NOV_2026)),
       },
     });
   });

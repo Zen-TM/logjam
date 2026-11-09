@@ -1,0 +1,207 @@
+name: ota-hotfix
+
+# Publishes a Logjam GPS OTA hotfix when a PR labelled `ota-hotfix` merges:
+# cherry-picks the squash commit onto release/mobile-vX.Y.Z of the newest
+# release (cut from its tag if needed), publishes it to `preview`, promotes
+# that group to `production`, then pushes the branch. The rules are
+# docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md and
+# 0023; the procedure, and the manual lane this automates,
+# docs/operations/mobile-release.md.
+#
+# It publishes only what ota-plan.yml passed on the PR's head, and only from
+# a run the repository owner started: a collaborator may merge an approved PR,
+# or re-run this one, but whether a fix is worth a hotfix is the owner's call
+# (`ota-hotfix.js gate`, and publish's own `if:` for a re-run of that job
+# alone). Guard: mobile/src/otaHotfix.test.ts. The branch is pushed after the
+# publish, so a failed publish leaves nothing behind to block a re-run.
+
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/**", "shared/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: write
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      title: ${{ steps.pr.outputs.title }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: mobile/scripts
+      # By the squash commit's "(#N)", not commits/<sha>/pulls, which can
+      # lag a push.
+      - name: Is this the merge of a hotfix whose plan passed?
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          subject=${MESSAGE%%$'\n'*}
+          if [[ ! "$subject" =~ \(#([0-9]+)\)$ ]]; then
+            echo "Not a pull request's merge."
+            exit 0
+          fi
+          number=${BASH_REMATCH[1]}
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")
+          if [ "$(jq --arg sha "$GITHUB_SHA" '.merge_commit_sha == $sha and any(.labels[]; .name == "ota-hotfix")' <<< "$pr")" != true ]; then
+            echo "Not an OTA hotfix."
+            exit 0
+          fi
+          head=$(jq -r .head.sha <<< "$pr")
+          gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=ota-plan&filter=all" \
+            --paginate --jq '.check_runs[]' | jq -s . > "$RUNNER_TEMP/runs.json"
+          refusal=$(CHECK_RUNS="$RUNNER_TEMP/runs.json" HEAD="$head" node mobile/scripts/ota-hotfix.js gate publish)
+          if [ -n "$refusal" ]; then
+            echo "::error::$refusal"
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "**OTA hotfix not published:** $refusal"
+            exit 1
+          fi
+          echo "pr=$number" >> "$GITHUB_OUTPUT"
+          {
+            echo "title<<TITLE_END"
+            jq -r .title <<< "$pr"
+            echo "TITLE_END"
+          } >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: find
+    # Re-running this job alone reuses find's outputs without its gate.
+    if: >-
+      needs.find.outputs.pr != '' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    # EXPO_TOKEN, the OTA signing key and the release-branch deploy key live
+    # only here; the Environment admits main alone
+    # (infra/terraform/envs/github/environments.tf).
+    environment: mobile-ota
+    # One publish at a time: each builds on the release branch the one before
+    # it pushed. GitHub keeps one pending job per group, so a third hotfix
+    # merged meanwhile cancels the second while it waits (`displaced` below).
+    concurrency:
+      group: ota-hotfix
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ needs.find.outputs.pr }}
+      TITLE: ${{ needs.find.outputs.title }}
+      GIT_COMMITTER_NAME: ota-hotfix
+      GIT_COMMITTER_EMAIL: ota-hotfix@users.noreply.github.com
+      # Beside the checkout, not in it. runner.temp is not available here.
+      TREE: ${{ github.workspace }}/../hotfix
+    steps:
+      # The deploy key is the one actor besides admins that may push
+      # release/mobile-v* (the mobile-release-branches ruleset).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_BRANCH_DEPLOY_KEY }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            shared/package-lock.json
+            mobile/package-lock.json
+
+      # The same refusals as the plan, on the release branch as it is now: a
+      # hotfix or release since the plan ran may have moved it.
+      - name: Cherry-pick onto the release branch
+        id: plan
+        run: |
+          set -euo pipefail
+          plan=$(node mobile/scripts/ota-hotfix.js plan "$TREE" "$GITHUB_SHA")
+          tee -a "$GITHUB_OUTPUT" <<< "$plan"
+          refusal=$(sed -n 's/^refusal=//p' <<< "$plan")
+          if [ -n "$refusal" ]; then echo "::error::$refusal"; exit 1; fi
+
+      - name: Build shared
+        working-directory: ${{ env.TREE }}/shared
+        run: npm ci && npm run build
+
+      - uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
+        with:
+          eas-version: 24.8.0
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # keys/ is gitignored, so the tree stays clean for the production guard.
+      - name: Restore the signing key
+        working-directory: ${{ env.TREE }}/mobile
+        env:
+          OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+        run: |
+          mkdir -p keys
+          printf '%s\n' "$OTA_PRIVATE_KEY" > keys/private-key.pem
+
+      # promote:production runs mobile/scripts/check-production-update.js:
+      # the branch, the tag, and a production build with the group's runtime.
+      - name: Publish to preview, then promote to production
+        id: publish
+        working-directory: ${{ env.TREE }}/mobile
+        run: |
+          set -euo pipefail
+          message="$TITLE (#$PR)"
+          preview=$(npm run --silent update:preview -- --message "$message" --non-interactive --json | jq -r '.[0].group')
+          echo "preview=$preview" >> "$GITHUB_OUTPUT"
+          production=$(npm run --silent promote:production -- --group "$preview" --message "$message" --non-interactive --json | jq -r '.[0].group')
+          echo "production=$production" >> "$GITHUB_OUTPUT"
+
+      - name: Push the release branch
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: git -C "$TREE" push origin "release/mobile-v$VERSION"
+
+      - name: Comment
+        if: ${{ !cancelled() }}
+        env:
+          OUTCOME: ${{ job.status }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          PREVIEW: ${{ steps.publish.outputs.preview }}
+          PRODUCTION: ${{ steps.publish.outputs.production }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          rollback="\`gh workflow run ota-rollback.yml -f group=$PRODUCTION\`"
+          if [ "$OUTCOME" = success ]; then
+            body="Published to $VERSION: \`preview\` group \`$PREVIEW\`, \`production\` group \`$PRODUCTION\`. Watch Sentry; to undo, $rollback."
+          elif [ -n "$PRODUCTION" ]; then
+            body="**Published to $VERSION** (\`production\` group \`$PRODUCTION\`), **but release/mobile-v$VERSION was not pushed:** push it by hand before another hotfix ($RUN_URL). To undo the update, $rollback."
+          elif [ -n "$PREVIEW" ]; then
+            body="**OTA hotfix published to \`preview\` only** (group \`$PREVIEW\`): the promotion failed ($RUN_URL). Nothing reached \`production\`."
+          else
+            body="**OTA hotfix not published:** $RUN_URL"
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$body"
+
+  # A cancelled publish job never reaches its own comment step.
+  displaced:
+    needs: [find, publish]
+    if: ${{ always() && needs.find.outputs.pr != '' && needs.publish.result == 'cancelled' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.find.outputs.pr }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "**OTA hotfix cancelled:** another hotfix queued behind it, or someone cancelled it. If it stopped mid-publish it may be on \`preview\` (see $RUN_URL); otherwise nothing was published. Re-run the run once any hotfix ahead of it has finished."
+

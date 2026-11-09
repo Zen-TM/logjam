@@ -1296,7 +1296,7 @@ describe("the map point panel", () => {
       slopeDegrees: 12,
       land: "Private land",
       fire: "Wildfire, Dec 2019",
-      coverage: "Telstra: external antenna only",
+      coverage: "Telstra: no mobile reception",
       fix: { atMs: 0, accuracyM: 5, nowMs: 1_000 },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);

@@ -401,9 +401,8 @@ class TestClients(unittest.TestCase):
         self.assertEqual(
             re.findall(r'\{ id: "(\w+)", name:', SHARED), list(bc.NETWORKS)
         )
-        self.assertEqual(
-            re.findall(r'level: "(\w+)"', SHARED), list(bc.LEVELS.values())
-        )
+        (levels,) = re.findall(r"COVERAGE_LEVELS = \[([^\]]*)\]", SHARED)
+        self.assertEqual(re.findall(r'"(\w+)"', levels), list(bc.LEVELS.values()))
 
     # Mutation: move the box here alone, and the hatch stops short of, or runs
     # past, the area every other statewide layer covers.

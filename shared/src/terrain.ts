@@ -40,20 +40,21 @@ export const NSW_HILLSHADE = {
 } as const;
 
 /**
- * The group's layers, top of the map first: contour lines over the weather
- * (a translucent colour field, with its wind arrows) over the hatch of
- * where the user's carrier predicts no phone signal over the tint of
- * when the ground last burnt over the slope colours over the edges of who
- * holds the land over the shading. Both clients list them in this order and
- * stack them in it.
+ * The group's layers, top of the map first: contour lines over the edges of
+ * who holds the land over the weather (a translucent colour field, with its
+ * wind arrows) over the hatch of where the user's carrier predicts no mobile
+ * reception over the tint of when the ground last burnt over the slope
+ * colours over the shading. Land is only edges, so it goes over the weather,
+ * the hatch and the two fills, which would otherwise wash it out. Both clients
+ * list them in this order and stack them in it.
  */
 export const TERRAIN_LAYER_KEYS = [
   "contours",
+  "land",
   "weather",
   "coverage",
   "fire",
   "slope",
-  "land",
   "hillshade",
 ] as const;
 
@@ -81,9 +82,9 @@ export function isOverlayTerrainKey(key: string): key is OverlayTerrainKey {
  * Where each Terrain layer goes in the vector basemap, as a printed topo map
  * has it: directly under this layer of the Protomaps style (its
  * `@protomaps/basemaps` id, before a client's prefix). The shading lies over
- * the land fills and under the water, with Land's edges on it, so a lake stays
- * a lake; the slope, the fire tint, the coverage hatch and then the contours lie over the water's
- * fill and under its lines, the roads, the boundaries and every label. Over a raster basemap there is nothing to interleave, and the group
+ * the land fills and under the water, so a lake stays a lake; the slope, the
+ * fire tint, the coverage hatch, Land's edges and then the contours lie over
+ * the water's fill and under its lines, the roads, the boundaries and every label. Over a raster basemap there is nothing to interleave, and the group
  * sits on top of it. Guards: `terrain.test.ts`, and each client's test that
  * the ids are in the style it draws (frontend `components/map/layerOrder.test.ts`,
  * mobile `map/basemap/protomapsLayers.test.ts`).
@@ -96,7 +97,7 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
   coverage: "water_stream",
   fire: "water_stream",
   slope: "water_stream",
-  land: "water",
+  land: "water_stream",
   hillshade: "water",
 };
 

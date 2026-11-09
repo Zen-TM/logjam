@@ -267,12 +267,11 @@ describe("terrainBeforeIds", () => {
   }
 
   // Mutation: anchor the slope apart from the contours (say under `water`, with
-  // the shading), and a water fill or a land fill lands between them; anchor
-  // Land with the slope, and it tints the lakes.
-  // Mutation: anchor fire with Land, under the water, and the slope colours
-  // cover its tint; anchor coverage there, and they cover its hatch; anchor
-  // weather there, and the slope draws over the weather.
-  it("puts the shading over the land, and the slope, the fire tint, the coverage hatch then the weather directly under the contours, under the roads", () => {
+  // the shading), and a water fill or a land fill lands between them.
+  // Mutation: anchor fire, coverage, weather or Land under the water, with the
+  // shading, and the slope colours cover them; list Land under fire, the hatch
+  // or the weather, and they wash out its edges.
+  it("puts the shading over the land, and the slope, the fire tint, the coverage hatch, the weather then Land's edges directly under the contours, under the roads", () => {
     const style = [
       "pm-earth",
       "pm-landcover",
@@ -297,7 +296,6 @@ describe("terrainBeforeIds", () => {
       "pm-earth",
       "pm-landcover",
       "shade",
-      "land",
       "pm-water",
       "slope",
       "fire-fill",
@@ -305,6 +303,7 @@ describe("terrainBeforeIds", () => {
       "coverage-fill",
       "weather-field",
       "weather-arrows",
+      "land",
       "c-minor",
       "c-major",
       "c-labels",

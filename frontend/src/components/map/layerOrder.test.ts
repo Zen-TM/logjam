@@ -119,25 +119,62 @@ describe("coverageAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(coverageAt(off, [1, 2], "telstra")).toBeNull();
+    expect(coverageAt(off, [1, 2], [150, -33], "telstra")).toBeNull();
   });
 
   // Mutation: query a layer id other than the hatch, or name another carrier
   // than the one drawn, and a tap answers nothing or for the wrong network.
-  it("names the drawn carrier's level at the point", () => {
-    const asked: string[][] = [];
+  it("names the drawn carrier's reception at the point", () => {
+    const asked: unknown[] = [];
     const map = {
       getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
-      queryRenderedFeatures: (
-        _point: [number, number],
-        options: { layers: string[] },
-      ) => {
-        asked.push(options.layers);
+      queryRenderedFeatures: (at: unknown, options: { layers: string[] }) => {
+        asked.push([at, options.layers]);
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
     };
-    expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: external antenna only");
-    expect(asked).toEqual([[COVERAGE_FILL_LAYER]]);
+    expect(coverageAt(map, [1, 2], [150, -33], "tpg")).toBe(
+      "TPG: no mobile reception",
+    );
+    expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
+  });
+
+  // Mutation: drop `at` on its way to coverageNameOf, or swap it with the
+  // pixel point (here or in MapPointPopover), and a tap in a clear patch that
+  // is a hole in an "external" area answers "no mobile reception" or nothing.
+  it("names the patch a tap is in, not the area it is a hole of", () => {
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const map = {
+      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: () => [
+        {
+          properties: { level: "external" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              ring(150, -34, 151, -33),
+              ring(150.4, -33.6, 150.6, -33.4),
+            ],
+          },
+        },
+        {
+          properties: { level: "outdoor" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [ring(150.4, -33.6, 150.6, -33.4)],
+          },
+        },
+      ],
+    };
+    expect(coverageAt(map, [1, 2], [150.5, -33.5], "telstra")).toBe(
+      "Telstra: mobile reception",
+    );
   });
 });
 
@@ -221,11 +258,11 @@ describe("moveTerrainIntoBasemap", () => {
       "pm-earth",
       "pm-landcover",
       "topo-nswhillshade-dem",
-      "topo-nswland-fill",
       "pm-water",
       "topo-nswslope-dem",
       WEATHER_FIELD_LAYER,
       WEATHER_ARROWS_LAYER,
+      "topo-nswland-fill",
       "topo-nswcontours-minor",
       "topo-nswcontours-labels",
       "pm-water_stream",

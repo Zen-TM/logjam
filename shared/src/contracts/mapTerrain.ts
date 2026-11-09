@@ -60,11 +60,18 @@ export const MAP_TERRAIN = {
       "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
     coverage: "Coverage",
     // Behind that row's help button, titled with its label, over a picker of
-    // `CARRIERS` and a swatch of each hatch named by `COVERAGE_LEVELS`.
+    // `CARRIERS` and a swatch of the hatch.
     coverageAbout: "About coverage",
     coverageCarrier: "Your carrier",
+    // In place of the row's switch until a carrier is picked: the overlay
+    // draws one carrier's map, and there is no default.
+    coverageChooseCarrier: "Choose your carrier",
     coverageLegend:
-      "Hatching marks where your carrier's own model predicts a phone in your hand won't work outdoors. Light hatching means only an external antenna reaches; dense hatching, nothing does.",
+      "Hatching marks where your carrier's own model predicts no mobile reception for a phone in your hand outdoors.",
+    // What "What is here?" says after the carrier; the first is the
+    // legend's swatch too.
+    coverageNoReception: "no mobile reception",
+    coverageReception: "mobile reception",
     // The source's limits, said beside the legend they qualify.
     coverageCaveat:
       "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",

@@ -132,7 +132,7 @@ import {
   drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
-  DEFAULT_CARRIER,
+  drawsCoverage,
   WEATHER_LAYER_DEFAULT,
   weatherLayer,
   type TerrainSwitchKey,
@@ -250,7 +250,7 @@ function App() {
   const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
   const [storedCarrier, setCoverageCarrier] = useStoredState<unknown>(
     "logjam.coverageCarrier",
-    DEFAULT_CARRIER,
+    null,
   );
   const coverageCarrier = normalizeCarrier(storedCarrier);
   const [storedWeatherLayer, setWeatherLayer] = useStoredState<unknown>(
@@ -559,7 +559,7 @@ function App() {
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       weather: weatherUrl !== null,
-      coverage,
+      coverage: drawsCoverage(coverage, coverageCarrier),
       fire,
       slope,
       land,
@@ -581,6 +581,7 @@ function App() {
     contours,
     weatherUrl,
     coverage,
+    coverageCarrier,
     fire,
     slope,
     land,

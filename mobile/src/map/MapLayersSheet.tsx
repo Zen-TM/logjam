@@ -55,6 +55,7 @@ import {
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
   OVERLAY_TERRAIN_KEYS,
+  overlayAwaitsChoice,
   overlayChoiceLabel,
   overlayLegendRows,
   slopeLegendRows,
@@ -76,6 +77,7 @@ import {
 } from "../theme";
 import {
   BottomSheet,
+  Button,
   ChipRail,
   Field,
   Icon,
@@ -91,6 +93,7 @@ import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { SlopeBandsEditor } from "./SlopeBandsEditor";
+import { pickCoverageCarrier } from "./coverageLayers";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -202,8 +205,9 @@ export function MapLayersSheet({
   downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
-  /** What each overlay with a `choice` draws, a per-device choice: Coverage's network, Weather's layer. */
-  choices: Partial<Record<OverlayTerrainKey, string>>;
+  /** What each overlay with a `choice` draws, a per-device choice: Coverage's network, Weather's layer.
+   *  Null until picked, for an overlay that waits on one. */
+  choices: Partial<Record<OverlayTerrainKey, string | null>>;
   onChoiceChange: (key: OverlayTerrainKey, value: string) => void;
   /** A weather run is kept with a saved area, so Weather draws offline. */
   weatherKept: boolean;
@@ -312,7 +316,25 @@ export function MapLayersSheet({
               ? {
                   choice: {
                     value: choices[legend],
-                    onChange: (value: string) => onChoiceChange(legend, value),
+                    onChange: (value: string) =>
+                      legend === "coverage"
+                        ? pickCoverageCarrier(
+                            value,
+                            choices.coverage ?? null,
+                            terrainSwitch(
+                              "coverage",
+                              terrainLayers.coverage,
+                              basemapId,
+                              online,
+                              artifacts,
+                            ).disabled,
+                            {
+                              choose: (id) => onChoiceChange("coverage", id),
+                              turnOn: () =>
+                                onTerrainLayerChange("coverage", true),
+                            },
+                          )
+                        : onChoiceChange(legend, value),
                   },
                 }
               : {})}
@@ -546,7 +568,10 @@ function OverlayLegendSheet({
 }: {
   legend: OverlayLegend;
   /** The value of `legend.choice`, for an overlay that has one. */
-  choice?: { value: string | undefined; onChange: (value: string) => void };
+  choice?: {
+    value: string | null | undefined;
+    onChange: (value: string) => void;
+  };
 }) {
   const styles = useStyles();
   return (
@@ -693,8 +718,9 @@ function LayersTab({
   overlays: Record<OverlayTerrainKey, TerrainSwitchState>;
   onOverlayChange: (key: OverlayTerrainKey, on: boolean) => void;
   onOpenOverlayLegend: (key: OverlayTerrainKey) => void;
-  /** Each overlay's `choice` value, which its row names. */
-  choices: Partial<Record<OverlayTerrainKey, string>>;
+  /** Each overlay's `choice` value, which its row names: null until one is
+   *  picked, when the row offers the choice in place of its switch. */
+  choices: Partial<Record<OverlayTerrainKey, string | null>>;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -703,16 +729,37 @@ function LayersTab({
   const overlayRow = (key: OverlayTerrainKey) => {
     const legend = OVERLAY_LEGENDS[key];
     const state = overlays[key];
+    const openLegend = () => onOpenOverlayLegend(key);
+    const choose = legend.choice?.choose;
+    if (choose !== undefined && overlayAwaitsChoice(legend, choices[key]))
+      return (
+        <Row
+          icon="layers"
+          hue={legend.hue}
+          title={legend.title}
+          onPress={openLegend}
+          right={
+            <Button
+              compact
+              variant="outlineAccent"
+              label={choose}
+              onPress={openLegend}
+            />
+          }
+        />
+      );
     return (
       <SwitchRow
         icon="layers"
         hue={legend.hue}
         title={legend.title}
-        description={state.reason ?? overlayChoiceLabel(legend, choices[key])}
+        description={
+          state.reason ?? overlayChoiceLabel(legend, choices[key] ?? undefined)
+        }
         disabled={state.disabled}
         checked={state.checked}
         onChange={(on) => onOverlayChange(key, on)}
-        help={{ label: legend.about, onPress: () => onOpenOverlayLegend(key) }}
+        help={{ label: legend.about, onPress: openLegend }}
       />
     );
   };

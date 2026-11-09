@@ -73,5 +73,5 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
   `promote:production`,** never bare `eas update` (the signing key path, and
   the production guard). A production update comes only from a
   `release/mobile-vX.Y.Z` branch, never `main`; anything native needs a
-  release. [0009](../docs/decisions/0009-signed-ota-updates.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
+  release. [0046](../docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
   procedure: `docs/operations/mobile-release.md`.
