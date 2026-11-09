@@ -9,7 +9,6 @@ import { MAP_MEASURE } from "./contracts/mapMeasure.js";
 import {
   climbSourceOf,
   GPS_CLIMB_SOURCE,
-  NSW_5M,
   SHARPENED_CLIMB_SOURCE,
   TERRARIUM,
 } from "./demSources.js";
@@ -24,6 +23,7 @@ import {
   type SpeedProfile,
   type TrackDetail,
 } from "./trackStats.js";
+import { NSW_REGION } from "./regions.js";
 
 export type ProfilePoint = { x: number; value: number | null };
 
@@ -148,7 +148,7 @@ export const TRACK_PROFILE_COPY = {
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
   [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
-  [NSW_5M.id]: "NSW 5 m terrain data",
+  [NSW_REGION.terrain.heights.id]: "NSW 5 m terrain data",
   [TERRARIUM.id]: "30 m terrain data",
   [GPS_CLIMB_SOURCE]: "GPS heights",
 };

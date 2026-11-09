@@ -18,13 +18,13 @@ import {
   say,
   AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
-  AREA_EXPORT_OUTSIDE_NSW,
+  AREA_EXPORT_OUTSIDE_TERRAIN,
   AREA_EXPORT_TOO_LARGE,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areasInBox,
   areaExportTooLarge,
-  areaInNsw,
+  areaInTerrainRegion,
   type AreaBbox,
   type ExportFormat,
   type ExportBundling,
@@ -129,8 +129,8 @@ router.post(
     if (areaExportTooLarge(area.data.bbox)) {
       throw new AppError(400, AREA_EXPORT_TOO_LARGE);
     }
-    if (!areaInNsw(area.data.bbox)) {
-      throw new AppError(400, AREA_EXPORT_OUTSIDE_NSW);
+    if (!areaInTerrainRegion(area.data.bbox)) {
+      throw new AppError(400, AREA_EXPORT_OUTSIDE_TERRAIN);
     }
     // The sharpened areas in the box this user may read (ADR 0040), in the
     // router's order: the worker reads only these, so a stranger's area never

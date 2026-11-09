@@ -4,11 +4,13 @@ import {
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
-  areaInNsw,
+  AREA_EXPORT_OUTSIDE_TERRAIN,
+  areaInTerrainRegion,
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
 import { nswContourStyle } from "./nswContours.js";
+import { NSW_REGION, REGIONS } from "./regions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 // A square of `sideKm` centred near Katoomba.
@@ -43,10 +45,30 @@ describe("areaExportTooLarge", () => {
   });
 });
 
-describe("areaInNsw", () => {
+describe("areaInTerrainRegion", () => {
   it("is true for a box touching NSW and false out at sea", () => {
-    expect(areaInNsw(square(10))).toBe(true);
-    expect(areaInNsw(square(10, -33.7, 156))).toBe(false);
+    expect(areaInTerrainRegion(square(10))).toBe(true);
+    expect(areaInTerrainRegion(square(10, -33.7, 156))).toBe(false);
+  });
+
+  // Mutation: check the heights' coverage box again, and this one passes.
+  it("goes by the border, not by the box around the terrain", () => {
+    // Inside the 5 m DEM's coverage rectangle, but all of it in Victoria.
+    const bendigo = square(10, -36.76, 144.28);
+    expect(areaInTerrainRegion(bendigo)).toBe(false);
+  });
+
+  // Mutation: drop the `terrain !== null` test.
+  it("skips a region with no terrain", () => {
+    expect(
+      areaInTerrainRegion(square(10), [{ ...NSW_REGION, terrain: null }]),
+    ).toBe(false);
+  });
+
+  // Mutation: add terrain to a region and leave the sentence alone.
+  it("names every region with terrain in its refusal", () => {
+    for (const region of REGIONS.filter((r) => r.terrain))
+      expect(AREA_EXPORT_OUTSIDE_TERRAIN).toContain(region.name);
   });
 });
 

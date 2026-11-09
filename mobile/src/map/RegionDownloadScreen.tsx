@@ -44,12 +44,9 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
-  NSW_5M,
-  NSW_CONTOURS,
+  NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
-  NSW_SLOPE,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -172,10 +169,11 @@ function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
-  if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
-  if (basemapId === NSW_CONTOURS.id) return "Contours";
-  if (basemapId === NSW_SLOPE.id) return "Slope";
-  if (basemapId === NSW_LAND.id) return MAP_TERRAIN.copy.land;
+  if (basemapId === NSW_REGION.terrain.heights.id)
+    return "Elevation data, NSW 5 m";
+  if (basemapId === NSW_REGION.terrain.contours.id) return "Contours";
+  if (basemapId === NSW_REGION.terrain.slope.id) return "Slope";
+  if (basemapId === NSW_REGION.terrain.land.id) return MAP_TERRAIN.copy.land;
   if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
   if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;

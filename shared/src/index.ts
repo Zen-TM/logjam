@@ -87,6 +87,7 @@ export * from "./dateNames.js";
 export * from "./nswCoverage.js";
 export * from "./nswFire.js";
 export * from "./nswLand.js";
+export * from "./regions.js";
 export * from "./overlayLegends.js";
 export * from "./terrain.js";
 export * from "./demTiles.js";

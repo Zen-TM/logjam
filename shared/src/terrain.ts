@@ -1,42 +1,16 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
 // from the 5 m DEM, with no LiDAR job, and three overlays from statewide
 // archives of their own: Coverage (nswCoverage.ts), Fire history (nswFire.ts)
-// and Land (nswLand.ts). Each client only draws these.
+// and Land (nswLand.ts). The height-derived archives and Land are the region's
+// (`NSW_REGION.terrain`, regions.ts); each client only draws these.
 //
-// Slope is baked once as a fake DEM: a terrarium archive whose "height" is the
-// slope in degrees (ADR 0030 encoding), built by `topo/build_nsw_dem.py slope`.
-// A client loads it as a `raster-dem` source and colours it with a
+// Slope is baked once as a fake DEM, a terrarium archive whose "height" is the
+// slope in degrees. A client loads it as a `raster-dem` source and colours it with a
 // `color-relief` layer, so the bands are a paint expression: the user's own,
 // with no rebuild. Hillshade is MapLibre's own `hillshade` layer on the height
 // archive, so it needs no pipeline at all.
-import { NSW_5M } from "./demSources.js";
+import { NSW_REGION } from "./regions.js";
 import { rgbaCssFromHex, type SlopeBand } from "./topoSettings.js";
-
-export const NSW_SLOPE = {
-  /** A saved clip is filed under this, beside the area it was saved with. */
-  id: "nsw-5m-slope",
-  /** Beside the height archive it is derived from. */
-  archivePath: "master/dem/nsw-5m-slope.pmtiles",
-  // z15 is Horn over the z15 height tiles (equal to `demSlopeAt`); each
-  // coarser zoom is the max of the one below, so a cliff never fades out of
-  // its band as the map zooms out.
-  minzoom: 8,
-  maxzoom: 15,
-  coverage: NSW_5M.coverage,
-  credit: NSW_5M.credit.replace(/^Elevation/, "Slope"),
-  creditHtml: NSW_5M.creditHtml.replace(/^Elevation/, "Slope"),
-} as const;
-
-/** Drawn from the height archive itself, at the zooms it was built at. */
-export const NSW_HILLSHADE = {
-  id: "nsw-5m-hillshade",
-  archivePath: NSW_5M.archivePath,
-  minzoom: 8,
-  maxzoom: NSW_5M.sampleZoom,
-  coverage: NSW_5M.coverage,
-  credit: NSW_5M.credit.replace(/^Elevation/, "Hillshade"),
-  creditHtml: NSW_5M.creditHtml.replace(/^Elevation/, "Hillshade"),
-} as const;
 
 /**
  * The group's layers, top of the map first: contour lines over the edges of
@@ -257,7 +231,7 @@ export function slopeLegendRows(
  */
 export function terrainCredit(
   drawn: Iterable<TerrainLayerKey>,
-  credit: string = NSW_5M.credit,
+  credit: string = NSW_REGION.terrain.heights.credit,
 ): string | null {
   const keys = new Set(drawn);
   const names = TERRAIN_LAYER_KEYS.filter(

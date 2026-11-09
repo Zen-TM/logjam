@@ -6,11 +6,9 @@
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
 import {
-  NSW_CONTOURS,
+  NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
-  NSW_SLOPE,
   type RegionBbox,
   type RegionTilePlan,
 } from "@logjam/shared";
@@ -99,9 +97,9 @@ export function regionClipSpecs(
   });
   return [
     ...demSourceIds.map((id) => clip(id, { demSourceId: id })),
-    clip(NSW_CONTOURS.id, { contours: true }),
-    clip(NSW_SLOPE.id, { slope: true }),
-    clip(NSW_LAND.id, { land: true }),
+    clip(NSW_REGION.terrain.contours.id, { contours: true }),
+    clip(NSW_REGION.terrain.slope.id, { slope: true }),
+    clip(NSW_REGION.terrain.land.id, { land: true }),
     clip(NSW_FIRE.id, { fire: true }),
     clip(NSW_COVERAGE.id, { coverage: true }),
     clip("protomaps"),

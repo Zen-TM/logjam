@@ -7,7 +7,7 @@
 // The archive holds the fire's year and month, never how long ago that was:
 // each client works that out from today, so the map doesn't age between builds.
 import { SHORT_MONTHS } from "./dateNames.js";
-import { NSW_5M } from "./demSources.js";
+import { NSW_REGION } from "./regions.js";
 
 export const NSW_FIRE = {
   /** A saved clip is filed under this, beside the area it was saved with. */
@@ -26,7 +26,7 @@ export const NSW_FIRE = {
    *  finer than that. Deeper zooms overzoom. */
   minzoom: 8,
   maxzoom: 12,
-  coverage: NSW_5M.coverage,
+  coverage: NSW_REGION.terrain.heights.coverage,
   credit:
     "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
   creditHtml:

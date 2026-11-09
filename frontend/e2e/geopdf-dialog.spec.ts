@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { NSW_CONTOURS, NSW_HILLSHADE, NSW_SLOPE } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { baseTilePng, statewideArchives } from "./__fixtures__/geoPdfTiles";
 
 // Make it in Make a map renders the GeoPDF in the tab: tile reads are
@@ -25,9 +25,9 @@ test.use({ viewport: { width: 1440, height: 900 } });
 
 const archives = statewideArchives();
 const ARCHIVE_PATHS: Record<string, Buffer> = {
-  [NSW_HILLSHADE.archivePath]: archives.heights,
-  [NSW_SLOPE.archivePath]: archives.slope,
-  [NSW_CONTOURS.archivePath]: archives.contours,
+  [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
+  [NSW_REGION.terrain.slope.archivePath]: archives.slope,
+  [NSW_REGION.terrain.contours.archivePath]: archives.contours,
 };
 
 /** Every origin a render may reach once Make it is pressed: the stubbed tile

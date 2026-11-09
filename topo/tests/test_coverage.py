@@ -19,7 +19,7 @@ import build_coverage as bc  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (ROOT / "shared/src/nswCoverage.ts").read_text()
-DEM = (ROOT / "shared/src/demSources.ts").read_text()
+REGIONS = (ROOT / "shared/src/regions.ts").read_text()
 
 
 def _resource(name, rid=None, modified="2026-09-21T05:41:27"):
@@ -408,7 +408,7 @@ class TestClients(unittest.TestCase):
     # past, the area every other statewide layer covers.
     def test_the_box_is_the_statewide_layers(self):
         west, south, east, north = bc.BOX
-        self.assertIn(f"coverage: [{west}, {south}, {east}, {north}]", DEM)
+        self.assertIn(f"coverage: [{west}, {south}, {east}, {north}]", REGIONS)
 
     # Mutation: put --detect-shared-borders back, and the statewide archive
     # tiles for hours on four cores.

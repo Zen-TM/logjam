@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   lat2tileY,
-  NSW_5M,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
   type SharpenedArea,
   type TileCoord,
@@ -13,7 +11,6 @@ import {
   slopeBandAt,
   demMetresFromRgb,
   TILE_SIZE,
-  NSW_CONTOURS,
   type SlopeBand,
 } from "@logjam/shared";
 import {
@@ -181,11 +178,19 @@ describe("nswVectorZoom", () => {
   // level higher, and a 1:200 000 print draws and credits 50 m lines the map
   // never shows.
   it("reads no contours where the map draws none", () => {
-    expect(nswVectorZoom(NSW_CONTOURS, 200000, -33.7, 12)).toBeNull();
-    expect(nswVectorZoom(NSW_CONTOURS, 130000, -33.7, 13)).toBeNull();
-    expect(nswVectorZoom(NSW_CONTOURS, 110000, -33.7, 13)).toBe(13);
+    expect(
+      nswVectorZoom(NSW_REGION.terrain.contours, 200000, -33.7, 12),
+    ).toBeNull();
+    expect(
+      nswVectorZoom(NSW_REGION.terrain.contours, 130000, -33.7, 13),
+    ).toBeNull();
+    expect(nswVectorZoom(NSW_REGION.terrain.contours, 110000, -33.7, 13)).toBe(
+      13,
+    );
     // The archive stops at z14; deeper prints stretch it.
-    expect(nswVectorZoom(NSW_CONTOURS, 25000, -33.7, 16)).toBe(14);
+    expect(nswVectorZoom(NSW_REGION.terrain.contours, 25000, -33.7, 16)).toBe(
+      14,
+    );
   });
 });
 
@@ -310,7 +315,7 @@ describe("terrainReadZoom", () => {
   // Mutation: read areas at z15 like the statewide archive, or at their
   // zmax past the print's own zoom.
   it("reads as deep as the print wants, the statewide z15 or an area's zmax at most", () => {
-    const max = NSW_SLOPE.maxzoom;
+    const max = NSW_REGION.terrain.slope.maxzoom;
     expect(terrainReadZoom(18, max, [])).toBe(15);
     expect(terrainReadZoom(18, max, [area(16)])).toBe(16);
     expect(terrainReadZoom(18, max, [area(16), area(17)])).toBe(17);
@@ -362,7 +367,10 @@ describe("terrainCreditLines", () => {
   it("credits each area's survey for the layers it supplied, beside the NSW 5 m data", () => {
     const drawn = new Set(["contours", "slope"] as const);
     expect(terrainCreditLines(drawn, new Map())).toEqual([
-      NSW_5M.credit.replace(/^Elevation/, "Contours and slope"),
+      NSW_REGION.terrain.heights.credit.replace(
+        /^Elevation/,
+        "Contours and slope",
+      ),
     ]);
     expect(
       terrainCreditLines(
@@ -373,7 +381,10 @@ describe("terrainCreditLines", () => {
         ]),
       ),
     ).toEqual([
-      NSW_5M.credit.replace(/^Elevation/, "Contours and slope"),
+      NSW_REGION.terrain.heights.credit.replace(
+        /^Elevation/,
+        "Contours and slope",
+      ),
       `Slope: ${SURVEY}`,
     ]);
     expect(
@@ -381,7 +392,7 @@ describe("terrainCreditLines", () => {
         new Set(),
         new Map([[area(16), new Set(["hillshade"] as const)]]),
       ),
-    ).toEqual([NSW_HILLSHADE.credit, `Hillshade: ${SURVEY}`]);
+    ).toEqual([NSW_REGION.terrain.hillshade.credit, `Hillshade: ${SURVEY}`]);
   });
 });
 

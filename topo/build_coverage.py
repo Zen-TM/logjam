@@ -103,7 +103,8 @@ NAME_PATTERN = re.compile(
 # The class each cell gets, traced into the `level` attribute. `LEVELS` in
 # shared/src/nswCoverage.ts lists the same names (test_coverage.py).
 LEVELS = {1: "outdoor", 2: "external", 3: "none"}
-# The NSW box, `NSW_5M.coverage` in shared/src/demSources.ts: west, south,
+# The NSW box, `NSW_REGION.terrain.heights.coverage` in
+# shared/src/regions.ts: west, south,
 # east, north.
 BOX = (140.9, -37.6, 153.7, -28.0)
 GRID_DEG = 0.0005

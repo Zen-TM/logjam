@@ -92,11 +92,11 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
+  NSW_REGION,
   drawsCoverage,
   fireNameOf,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
@@ -5247,7 +5247,7 @@ export function MapScreen({
               key={`nsw-land-${r.key}`}
               type="fill"
               id={`nsw-land-${r.key}`}
-              source-layer={NSW_LAND.sourceLayer}
+              source-layer={NSW_REGION.terrain.land.sourceLayer}
               beforeId={groundBefore[`nsw-land-${r.key}`]}
               minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5259,7 +5259,7 @@ export function MapScreen({
                 key={`nsw-land-edge-${i}-${r.key}`}
                 type="line"
                 id={`nsw-land-edge-${i}-${r.key}`}
-                source-layer={NSW_LAND.sourceLayer}
+                source-layer={NSW_REGION.terrain.land.sourceLayer}
                 beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
                 minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}

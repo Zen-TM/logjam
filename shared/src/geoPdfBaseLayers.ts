@@ -1,6 +1,6 @@
 import { NSW_FIRE } from "./nswFire.js";
-import { NSW_LAND } from "./nswLand.js";
 import type { TopoLayerName } from "./topoSettings.js";
+import { NSW_REGION } from "./regions.js";
 
 // Data from NSW Spatial Services' web services is licensed CC BY, subject to one
 // extra term in their Terms and Conditions (cl. 3.1.1): they assert the right to
@@ -267,7 +267,7 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
     "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
     NSW_FIRE.credit,
   features: "Features © OpenStreetMap contributors",
-  land: NSW_LAND.credit,
+  land: NSW_REGION.terrain.land.credit,
 };
 
 // Maps each selectable overlay layer name to its underlying data source(s).
