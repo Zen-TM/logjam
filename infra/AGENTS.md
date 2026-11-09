@@ -35,12 +35,14 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   values. Objects in this account's buckets and log events are denied by
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
-- **The brain's signals bucket is the only new bucket CI may read objects
-  from, and it holds no user data** (`release.json`, `serving`, `status.json`,
-  `drill.json`: a release pointer, a switch and health files). Never put
-  anything else in it. The backup bucket stays denied to CI. Guard: the
-  exceptions assert in `ci_reads_no_secret_or_user_data`
-  (`terraform/envs/prod/tests/guards.tftest.hcl`).
+- **The brain's signals bucket holds no user data** (`release.json`,
+  `serving`, `status.json`, `drill.json`: a release pointer, a switch and
+  health files). The brain and the watchdog read it; CI only writes
+  `release.json` to it and never reads it, so it is not an exception of the CI
+  privacy Deny, and nor is the backup bucket. Because the Deny stops reads,
+  Terraform cannot manage an object in either bucket (creating one reads it
+  back). Guard: the exceptions assert and the signals assert in
+  `ci_reads_no_secret_or_user_data` (`terraform/envs/prod/tests/guards.tftest.hcl`).
 - **The brain's backup bucket never gets a rule that expires or moves current
   versions.** pgBackRest expires backups by count; an age rule would delete the
   only backup after a run of failed nights. Its Object Lock stays COMPLIANCE,

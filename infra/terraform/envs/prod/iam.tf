@@ -725,15 +725,13 @@ locals {
   ci_readonly_privacy_deny = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Every bucket of ours but the four CI reads objects from: media, topo
+      # Every bucket of ours but the three CI reads objects from: media, topo
       # outputs, the WORM audit sink (pgaudit query text can embed canyon
-      # names/coords), the access logs (viewers' IPs and request paths), the
-      # brain's backups (a database) and any bucket added later. The
-      # exceptions: init reads the state file (plans run -lock=false, so no
-      # write is needed), the frontend deploy and rollback read release files,
-      # the deploy role's app versions live in the EB bucket, and the brain's
-      # signals bucket (brain_s3.tf) holds only a release pointer, a switch and
-      # status files, which plans read back and CI checks.
+      # names/coords), the access logs (viewers' IPs and request paths) and
+      # any bucket added later. The exceptions: init reads the state file
+      # (plans run -lock=false, so no write is needed), the frontend deploy
+      # and rollback read release files, and the deploy role's app versions
+      # live in the EB bucket.
       #
       # Only buckets in this account: an EB configuration change is a
       # CloudFormation update, and under an unscoped Deny it fails at "S3
@@ -748,7 +746,6 @@ locals {
           "arn:aws:s3:::logjam-tfstate-620853681701/*",
           "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
           "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-          "arn:aws:s3:::${local.brain_signals_bucket}/*",
         ]
         Condition = { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
       },

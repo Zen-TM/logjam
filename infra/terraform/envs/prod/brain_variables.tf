@@ -4,7 +4,7 @@
 # The defaults below keep it that way; the next change reads the last three.
 
 variable "brain_serving" {
-  description = "Whether the brain may start the API: the body of the `serving` object in the signals bucket. Off until the cutover."
+  description = "Whether the brain may start the API (the `serving` switch). Off until the cutover. Unused until the switch exists."
   type        = bool
   default     = false
 }

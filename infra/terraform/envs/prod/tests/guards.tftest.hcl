@@ -87,11 +87,29 @@ run "ci_reads_no_secret_or_user_data" {
     error_message = "Every CI role and the apply boundary must deny GetSecretValue on every secret, with no exception (infra/AGENTS.md)."
   }
 
+  # Mutation: adding `arn:aws:s3:::logjam-brain-signals-620853681701/*` (or the
+  # backup bucket, or a `logjam-brain*` pattern) to the object Deny's
+  # NotResource, or dropping the Deny, lets the plan, deploy and apply roles
+  # read the brain's signals bucket. CI only writes release.json there.
+  assert {
+    condition = alltrue([
+      for p in [
+        aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
+        aws_iam_role_policy.gha_readonly_privacy_deny.policy,
+        aws_iam_policy.github_actions_apply_boundary.policy,
+        ] : anytrue([
+          for st in jsondecode(p).Statement :
+          st.Effect == "Deny" && contains(flatten([st.Action]), "s3:GetObject") && can(st.NotResource) &&
+          !anytrue([for r in st.NotResource : r == "*" || startswith(r, "arn:aws:s3:::logjam-brain")])
+      ])
+    ])
+    error_message = "No CI role may read objects from the brain's signals or backup bucket (infra/AGENTS.md)."
+  }
+
   # Mutation: turning the object Deny back into a list of buckets, adding a
-  # bucket to its exceptions (the backup or audit bucket, say), dropping the
-  # signals bucket from them (plans then cannot read the `serving` object), or
-  # scoping the log Deny to named log groups leaves the next bucket or log
-  # group readable until someone remembers to add it. Changing the object Deny's condition (another account, a
+  # bucket to its exceptions, or scoping the log Deny to named log groups
+  # leaves the next bucket or log group readable until someone remembers to
+  # add it. Changing the object Deny's condition (another account, a
   # negated operator, a second key) leaves buckets of ours readable; dropping
   # it denies the AWS-owned objects an EB configuration change reads again.
   assert {
@@ -108,7 +126,6 @@ run "ci_reads_no_secret_or_user_data" {
             "arn:aws:s3:::logjam-tfstate-620853681701/*",
             "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
             "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-            "arn:aws:s3:::logjam-brain-signals-620853681701/*",
           ]) &&
           try(st.Condition, null) == { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
         ]) &&
@@ -119,7 +136,7 @@ run "ci_reads_no_secret_or_user_data" {
         ])
       )
     ])
-    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the four CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy
@@ -205,6 +222,18 @@ run "contributor_is_read_only_and_mfa_gated" {
       contains(jsondecode(aws_iam_group_policy.contributor.policy).Statement, st)
     ])
     error_message = "The contributor group policy must carry every statement of the CI privacy Deny."
+  }
+
+  # Mutation: the same as for the CI roles: a NotResource entry for the brain's
+  # signals or backup bucket in the group's object Deny lets the contributor
+  # read it.
+  assert {
+    condition = anytrue([
+      for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
+      st.Effect == "Deny" && contains(flatten([st.Action]), "s3:GetObject") && can(st.NotResource) &&
+      !anytrue([for r in st.NotResource : r == "*" || startswith(r, "arn:aws:s3:::logjam-brain")])
+    ])
+    error_message = "The contributor group may not read objects from the brain's signals or backup bucket."
   }
 
   # Mutation: changing BoolIfExists to Bool, flipping the value to "true",
@@ -593,20 +622,6 @@ run "brain_backups_are_locked_and_never_expire" {
       anytrue([for n in r.noncurrent_version_expiration : n.noncurrent_days == 1])
     ])
     error_message = "The backup bucket must expire noncurrent versions after 1 day."
-  }
-}
-
-run "brain_inert_defaults" {
-  command = plan
-  plan_options {
-    target = [aws_s3_object.brain_serving]
-  }
-
-  # Mutation: defaulting var.brain_serving to true lets the first host that
-  # boots start the API against an empty database.
-  assert {
-    condition     = aws_s3_object.brain_serving.content == "off"
-    error_message = "The serving switch must default to off."
   }
 }
 
