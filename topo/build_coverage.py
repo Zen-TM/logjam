@@ -515,8 +515,8 @@ def tippecanoe_command(lines: Path, out: Path, tmp: Path) -> List[str]:
         *["-l", SOURCE_LAYER, f"-Z{ZMIN}", f"-z{ZMAX}"],
         *["-n", "Mobile coverage", "-N", CREDIT],
         # No --coalesce or --detect-shared-borders: on this many polygons
-        # either one tiles for hours. A simplified edge two levels share can
-        # part by a pixel below ZMAX; at ZMAX they are cut as traced.
+        # either one tiles for hours. At ZMAX, the only zoom built, the levels
+        # are cut as traced, so no shared edge parts.
         # Every cell is some level on land, so a tap always has an answer.
         *["--no-feature-limit", "--no-tile-size-limit"],
         str(lines),

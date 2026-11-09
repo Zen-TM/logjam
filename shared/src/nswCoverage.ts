@@ -23,8 +23,8 @@ export const NSW_COVERAGE = {
   /** A `COVERAGE_LEVELS` level. */
   levelProperty: "level",
   /** The build script's zooms: z12 alone, where the overlay is drawn from
-   *  (`COVERAGE_MIN_ZOOM`); its grid is about 50 m, finer than z12's pixels.
-   *  Deeper zooms overzoom. */
+   *  (`COVERAGE_MIN_ZOOM`); its grid is about 50 m, finer than the hatch's
+   *  spacing (about 190 m at z12). Deeper zooms overzoom. */
   minzoom: 12,
   maxzoom: 12,
   coverage: NSW_5M.coverage,
