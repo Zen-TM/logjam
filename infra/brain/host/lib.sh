@@ -27,17 +27,21 @@ log() { echo "brain: $*" >&2; }
 die() { log "$*"; exit 1; }
 compose() { docker compose "$@"; }
 
-# s3_get <key>: the object on stdout. Returns 2 when the key does not exist and
-# 1 when it could not be read, so callers can tell "off" from "unreachable".
-s3_get() {
-  local err rc=0
-  err=$(mktemp)
-  aws s3 cp "s3://$BRAIN_SIGNALS_BUCKET/$1" - 2>"$err" || rc=$?
-  if [ "$rc" != 0 ]; then
-    if grep -qE '\(404\)|NoSuchKey|does not exist' "$err"; then rc=2; else cat "$err" >&2; rc=1; fi
+# s3_get <key>: the object on stdout, from the signals bucket.
+s3_get() { aws s3 cp "s3://$BRAIN_SIGNALS_BUCKET/$1" - --only-show-errors; }
+
+# The serving switch, "on" or "off": the instance tag brain-serving, read from
+# the metadata service. Anything unexpected is off: no tag, another value, no
+# answer. Test-only: BRAIN_SERVING_FILE names a file to read instead, and
+# BRAIN_IMDS_URL moves the metadata service. Guard: tests/e2e.sh.
+serving_state() {
+  local imds=${BRAIN_IMDS_URL:-http://169.254.169.254} token value=
+  if [ -n "${BRAIN_SERVING_FILE:-}" ]; then
+    value=$(cat "$BRAIN_SERVING_FILE" 2> /dev/null || true)
+  elif token=$(curl -sf -m 3 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' "$imds/latest/api/token"); then
+    value=$(curl -sf -m 3 -H "X-aws-ec2-metadata-token: $token" "$imds/latest/meta-data/tags/instance/brain-serving" || true)
   fi
-  rm -f "$err"
-  return "$rc"
+  if [ "$(tr -d '[:space:]' <<<"$value")" = on ]; then echo on; else echo off; fi
 }
 
 # s3_put <key>: stdin to the object.

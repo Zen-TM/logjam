@@ -15,7 +15,7 @@ pgq=$(PGPASSWORD=$pw docker exec -e PGPASSWORD "$(pg_cid)" psql -X -q -tA -F '|'
 api_cid=$(compose ps -aq api 2> /dev/null || true)
 api_image=
 [ -z "$api_cid" ] || api_image=$(docker inspect -f '{{.Config.Image}}' "$api_cid" 2> /dev/null || true)
-serving=$(s3_get serving 2> /dev/null || true)
+serving=$(serving_state)
 backups=$(pgb info --output=json 2> /dev/null || true)
 disk=$(df --output=pcent /data 2> /dev/null | tail -1 | tr -dc 0-9 || true)
 boot_mode=$(cat /run/brain/boot-mode 2> /dev/null || true)
@@ -40,7 +40,7 @@ print(json.dumps({
     "archive_failures": int(pgq[1]) if pgq else None,
     "last_full_time": iso(max(fulls)) if fulls else None,
     "api_sha": e["API_IMAGE"].rsplit(":", 1)[1] if ":" in e["API_IMAGE"] else None,
-    "serving": e["SERVING"].strip() == "on",
+    "serving": e["SERVING"] == "on",
     "boot_mode": e["BOOT_MODE"] or None,
 }))
 PY

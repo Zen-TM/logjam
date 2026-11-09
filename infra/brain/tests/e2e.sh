@@ -19,7 +19,8 @@
 # Mutations, each applied once and seen red (scenario in brackets):
 #   host/boot.sh: `[ "${BRAIN_BOOTSTRAP:-}" = 1 ]` -> `[ "${BRAIN_BOOTSTRAP:-1}" != 0 ]` [3]
 #   host/boot.sh: format a device that has a signature (`0) ;;` -> `0) mkfs.ext4 -F ...`) [3]
-#   host/release-agent.sh: not reading `serving` (always on) [5]
+#   host/release-agent.sh: not reading the switch (`if false` for `!= on`) [5]
+#   host/lib.sh: serving_state answering on for anything but exactly on [5]
 #   host/release-agent.sh: writing LOGJAM_RUNTIME=prod before the release env [6]
 #   host/status.sh: one more key in status.json [9]
 #   compose.yaml: dropping `create_host_path: false` from the data mount [10]
@@ -90,7 +91,8 @@ cleanup() {
   r docker rm -f brain-e2e-ministack brain-e2e-tls > /dev/null 2>&1
   r docker network rm brain-e2e > /dev/null 2>&1
   detach_disk
-  r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-release.lock
+  r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-e2e-serving /run/brain-release.lock
+  [ -z "${IMDS_PID:-}" ] || kill "$IMDS_PID" 2> /dev/null
   rm -rf "$WORK"
 }
 
@@ -132,7 +134,7 @@ print(json.dumps({"sha": sha, "env": env}))
 PY
 }
 point() { release "$@" | aws s3 cp - "s3://$SIGNALS/release.json" --only-show-errors; }
-serving() { printf '%s' "$1" | aws s3 cp - "s3://$SIGNALS/serving" --only-show-errors; }
+serving() { printf '%s' "$1" | r tee /run/brain-e2e-serving > /dev/null; }
 
 trap cleanup EXIT
 
@@ -206,6 +208,7 @@ AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 BRAIN_BACKUP_ENDPOINT=host.docker.internal:$TLS_PORT
 BRAIN_COMPOSE_EXTRA=/opt/brain/tests/compose.test.yaml
+BRAIN_SERVING_FILE=/run/brain-e2e-serving
 EOF
 
 # --- static ----------------------------------------------------------------------
@@ -333,7 +336,7 @@ check "the schema is there" migrated
 S="5 the serving switch"
 point release-a
 agent || bad "the agent failed with serving missing"
-check "serving missing: no API container" [ -z "$(cid api)" ]
+check "no switch file at all: no API container" [ -z "$(cid api)" ]
 serving off; agent
 check "serving off with a pointer present: no API container" [ -z "$(cid api)" ]
 serving on; agent || { bad "the agent failed with serving on"; tail -5 "$WORK/agent.log"; }
@@ -343,6 +346,49 @@ check "the API publishes port 80 and nothing else" \
   [ "$(r docker inspect -f '{{json .HostConfig.PortBindings}}' "$(cid api)")" = '{"8080/tcp":[{"HostIp":"","HostPort":"80"}]}' ]
 serving off; agent
 check "serving back off: the container is gone after one run" [ -z "$(cid api)" ]
+# Anything but exactly on is off: other words, other case, an unreadable source.
+for word in yes ON true 1 "on please" ""; do
+  serving on; agent; serving "$word"; agent
+  check "the switch reading '$word' is off" [ -z "$(cid api)" ]
+done
+serving on; agent; r rm -f /run/brain-e2e-serving; r mkdir /run/brain-e2e-serving; agent
+check "an unreadable switch is off" [ -z "$(cid api)" ]
+r rmdir /run/brain-e2e-serving
+serving on; agent
+
+# The metadata path prod uses: a tag read with an IMDSv2 token, against a stand-in.
+cat > "$WORK/imds.py" <<'PY'
+import http.server, os, sys
+port, tag = int(sys.argv[1]), sys.argv[2]
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def reply(self, code, body=b""):
+        self.send_response(code); self.end_headers(); self.wfile.write(body)
+    def do_PUT(self):
+        ok = self.path == "/latest/api/token" and self.headers.get("X-aws-ec2-metadata-token-ttl-seconds")
+        self.reply(200 if ok else 400, b"tok")
+    def do_GET(self):
+        if self.headers.get("X-aws-ec2-metadata-token") != "tok": return self.reply(401)
+        if self.path == "/latest/meta-data/tags/instance/brain-serving" and os.path.exists(tag):
+            return self.reply(200, open(tag, "rb").read())
+        self.reply(404)
+http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
+PY
+IMDS_PORT=${E2E_IMDS_PORT:-56012}
+python3 "$WORK/imds.py" "$IMDS_PORT" "$WORK/tag" & IMDS_PID=$!
+wait_for 20 curl -s "http://127.0.0.1:$IMDS_PORT/" || bad "the metadata stand-in does not start"
+brain_env BRAIN_SERVING_FILE
+brain_env BRAIN_IMDS_URL "http://127.0.0.1:$IMDS_PORT"
+state() { r bash -c '. /opt/brain/host/lib.sh; serving_state'; }
+printf on > "$WORK/tag"; check "the instance tag on reads on" [ "$(state)" = on ]
+printf off > "$WORK/tag"; check "the instance tag off reads off" [ "$(state)" = off ]
+printf 'yes' > "$WORK/tag"; check "another tag value reads off" [ "$(state)" = off ]
+rm -f "$WORK/tag"; check "no tag reads off" [ "$(state)" = off ]
+printf on > "$WORK/tag"; brain_env BRAIN_IMDS_URL "http://127.0.0.1:1"
+check "an unreachable metadata service reads off" [ "$(state)" = off ]
+kill "$IMDS_PID"; IMDS_PID=
+brain_env BRAIN_IMDS_URL
+brain_env BRAIN_SERVING_FILE /run/brain-e2e-serving
 serving on; agent
 
 # --- 6. a release cannot weaken the host ----------------------------------------------------------------------

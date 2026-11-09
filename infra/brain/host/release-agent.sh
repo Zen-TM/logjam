@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Every 30 s (and at the end of boot.sh): make the running API match the
-# signals bucket. `serving` off or missing: no API container. On: the release
+# switch and the signals bucket. Serving off: no API container. On: the release
 # pointer's image and environment. It does not judge health or roll back: CI's
 # smoke job and rollback.yml rewrite the pointer. Guard: tests/e2e.sh.
 . "$(dirname "$0")/lib.sh"
@@ -8,18 +8,12 @@ exec 9> /run/brain-release.lock
 flock -n 9 || exit 0
 export COMPOSE_PROFILES=api
 
-rc=0; serving=$(s3_get serving) || rc=$?
-case $rc in
-  0) serving=$(tr -d '[:space:]' <<<"$serving") ;;
-  2) serving=off ;;
-  *) die "cannot read the serving switch: changing nothing" ;;
-esac
-if [ "$serving" != on ]; then
+if [ "$(serving_state)" != on ]; then
   compose rm -sf api
   exit 0
 fi
 
-release=$(s3_get release.json) || die "serving is on but release.json is missing or unreadable: changing nothing"
+release=$(s3_get release.json) || die "serving is on but release.json cannot be read: changing nothing"
 
 # The file is rendered from the release's env, then the host's own line goes
 # LAST: a later duplicate wins in an env_file, so no release can unset it.
