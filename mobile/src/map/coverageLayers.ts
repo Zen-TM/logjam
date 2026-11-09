@@ -96,7 +96,7 @@ export async function coverageAtTap(
  */
 export function pickCoverageCarrier(
   value: string,
-  previous: CarrierId | null,
+  previous: string | null,
   switchDisabled: boolean,
   on: { choose: (id: CarrierId) => void; turnOn: () => void },
 ): void {

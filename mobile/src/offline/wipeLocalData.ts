@@ -38,6 +38,7 @@ import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { stopPlansForWipe } from "../plans/plansCache";
 import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
 import { stopGaugesForWipe } from "../gauges/gaugeStorage";
+import { stopWeatherMapForWipe } from "../weatherMap/weatherMapStorage";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
@@ -96,6 +97,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopTrackRecordingForWipe()),
     stoppedInTime(stopWeatherForWipe()),
     stoppedInTime(stopGaugesForWipe()),
+    stoppedInTime(stopWeatherMapForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
     stoppedInTime(stopPlansForWipe()),
   ]);

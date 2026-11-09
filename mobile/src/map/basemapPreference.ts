@@ -11,6 +11,8 @@ import {
   normalizeCarrier,
   normalizeTerrainLayers,
   type TerrainSwitchKey,
+  type WeatherLayerKey,
+  weatherLayer,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
@@ -54,6 +56,15 @@ export const readCoverageCarrier = (): CarrierId | null =>
 
 export const setCoverageCarrier = (id: CarrierId): boolean =>
   writePref(COVERAGE_CARRIER_PREF_KEY, id);
+
+const WEATHER_LAYER_PREF_KEY = "mapWeatherLayer";
+
+/** What the Weather overlay draws, the default until the user picks (and for a stored key this build doesn't know). */
+export const readWeatherLayer = (): WeatherLayerKey =>
+  weatherLayer(readPref(WEATHER_LAYER_PREF_KEY) ?? undefined).key;
+
+export const setWeatherLayer = (key: WeatherLayerKey): boolean =>
+  writePref(WEATHER_LAYER_PREF_KEY, key);
 
 const readOverlay = (key: string, fallback: boolean): boolean => {
   const stored = readPref(key);

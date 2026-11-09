@@ -9,6 +9,9 @@ import {
   overlayAwaitsChoice,
   drawsCoverage,
   overlayChoiceLabel,
+  overlayLegendRows,
+  weatherLayer,
+  type WeatherLayerKey,
   normalizeCarrier,
   type CarrierId,
   PLACE_TYPE_COLORS,
@@ -86,6 +89,8 @@ export default function LayersPopover({
   onTerrainLayerChange,
   coverageCarrier,
   onCoverageCarrierChange,
+  weatherLayer: weatherLayerKey,
+  onWeatherLayerChange,
   slopeBands,
   onSlopeBandsChange,
   mapView,
@@ -127,6 +132,8 @@ export default function LayersPopover({
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
   coverageCarrier: CarrierId | null;
   onCoverageCarrierChange: (carrier: CarrierId) => void;
+  weatherLayer: WeatherLayerKey;
+  onWeatherLayerChange: (layer: WeatherLayerKey) => void;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
@@ -176,6 +183,7 @@ export default function LayersPopover({
     terrainLayers.land,
     terrainLayers.fire,
     drawsCoverage(terrainLayers.coverage, coverageCarrier),
+    terrainLayers.weather,
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -347,7 +355,17 @@ export default function LayersPopover({
                                 },
                               },
                             }
-                          : {})}
+                          : key === "weather"
+                            ? {
+                                choice: {
+                                  value: weatherLayerKey,
+                                  onChange: (value: string) =>
+                                    onWeatherLayerChange(
+                                      weatherLayer(value).key,
+                                    ),
+                                },
+                              }
+                            : {})}
                       />
                     ))}
                   <OverlayRow
@@ -655,16 +673,18 @@ export function OverlayLegendRow({
         )}
         <p>{legend.intro}</p>
         <ul className={classes.legendList}>
-          {legend.rows.map(({ label, colour, pattern }) => (
-            <li key={label}>
-              {pattern ? (
-                <IconTile pattern={pattern} hue={colour} />
-              ) : (
-                <IconTile icon="layers" hue={colour} />
-              )}
-              {label}
-            </li>
-          ))}
+          {overlayLegendRows(legend, choice?.value).map(
+            ({ label, colour, pattern }) => (
+              <li key={label}>
+                {pattern ? (
+                  <IconTile pattern={pattern} hue={colour} />
+                ) : (
+                  <IconTile icon="layers" hue={colour} />
+                )}
+                {label}
+              </li>
+            ),
+          )}
         </ul>
         <p>{legend.caveat}</p>
         <p>{legend.credit}</p>

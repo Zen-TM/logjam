@@ -55,6 +55,8 @@ function popover(
         onTerrainLayerChange={noop}
         coverageCarrier="telstra"
         onCoverageCarrierChange={noop}
+        weatherLayer="rain"
+        onWeatherLayerChange={noop}
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}

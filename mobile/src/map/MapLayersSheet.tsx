@@ -57,7 +57,7 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
-  type CarrierId,
+  overlayLegendRows,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type OverlayLegend,
@@ -184,8 +184,9 @@ export function MapLayersSheet({
   downBasemaps,
   terrainLayers,
   onTerrainLayerChange,
-  coverageCarrier,
-  onCoverageCarrierChange,
+  choices,
+  onChoiceChange,
+  weatherKept,
   artifacts,
   layers,
   hasVegetation,
@@ -204,10 +205,12 @@ export function MapLayersSheet({
   downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
-  /** The network the Coverage overlay draws, a per-device choice: null until
-   *  the user picks. */
-  coverageCarrier: CarrierId | null;
-  onCoverageCarrierChange: (id: CarrierId) => void;
+  /** What each overlay with a `choice` draws, a per-device choice: Coverage's network, Weather's layer.
+   *  Null until picked, for an overlay that waits on one. */
+  choices: Partial<Record<OverlayTerrainKey, string | null>>;
+  onChoiceChange: (key: OverlayTerrainKey, value: string) => void;
+  /** A weather run is kept with a saved area, so Weather draws offline. */
+  weatherKept: boolean;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -272,13 +275,14 @@ export function MapLayersSheet({
                 basemapId,
                 online,
                 artifacts,
+                weatherKept,
               ),
             ]),
           ) as Record<OverlayTerrainKey, TerrainSwitchState>
         }
         onOverlayChange={onTerrainLayerChange}
         onOpenOverlayLegend={setLegend}
-        choices={{ coverage: coverageCarrier }}
+        choices={choices}
       />
     ),
     offline: () => (
@@ -308,26 +312,29 @@ export function MapLayersSheet({
         legend && isOverlayTerrainKey(legend) ? (
           <OverlayLegendSheet
             legend={OVERLAY_LEGENDS[legend]}
-            {...(legend === "coverage"
+            {...(OVERLAY_LEGENDS[legend].choice
               ? {
                   choice: {
-                    value: coverageCarrier,
+                    value: choices[legend],
                     onChange: (value: string) =>
-                      pickCoverageCarrier(
-                        value,
-                        coverageCarrier,
-                        terrainSwitch(
-                          "coverage",
-                          terrainLayers.coverage,
-                          basemapId,
-                          online,
-                          artifacts,
-                        ).disabled,
-                        {
-                          choose: onCoverageCarrierChange,
-                          turnOn: () => onTerrainLayerChange("coverage", true),
-                        },
-                      ),
+                      legend === "coverage"
+                        ? pickCoverageCarrier(
+                            value,
+                            choices.coverage ?? null,
+                            terrainSwitch(
+                              "coverage",
+                              terrainLayers.coverage,
+                              basemapId,
+                              online,
+                              artifacts,
+                            ).disabled,
+                            {
+                              choose: (id) => onChoiceChange("coverage", id),
+                              turnOn: () =>
+                                onTerrainLayerChange("coverage", true),
+                            },
+                          )
+                        : onChoiceChange(legend, value),
                   },
                 }
               : {})}
@@ -561,7 +568,10 @@ function OverlayLegendSheet({
 }: {
   legend: OverlayLegend;
   /** The value of `legend.choice`, for an overlay that has one. */
-  choice?: { value: string | null; onChange: (value: string) => void };
+  choice?: {
+    value: string | null | undefined;
+    onChange: (value: string) => void;
+  };
 }) {
   const styles = useStyles();
   return (
@@ -576,26 +586,30 @@ function OverlayLegendSheet({
         </Field>
       ) : null}
       <Text style={styles.legend}>{legend.intro}</Text>
-      {legend.rows.map(({ label, colour, pattern }) => (
-        <View key={label} style={styles.legendRow}>
-          <View
-            style={[
-              styles.legendSwatch,
-              pattern ? styles.patternSwatch : null,
-              { backgroundColor: colour },
-            ]}
-          >
-            {pattern ? (
-              <Image
-                source={{ uri: pattern }}
-                resizeMode="repeat"
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
+      {overlayLegendRows(legend, choice?.value).map((row) => {
+        const { label, colour } = row;
+        const pattern = "pattern" in row ? row.pattern : undefined;
+        return (
+          <View key={label} style={styles.legendRow}>
+            <View
+              style={[
+                styles.legendSwatch,
+                pattern ? styles.patternSwatch : null,
+                { backgroundColor: colour },
+              ]}
+            >
+              {pattern ? (
+                <Image
+                  source={{ uri: pattern }}
+                  resizeMode="repeat"
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : null}
+            </View>
+            <Text style={styles.legend}>{label}</Text>
           </View>
-          <Text style={styles.legend}>{label}</Text>
-        </View>
-      ))}
+        );
+      })}
       <Text style={styles.legend}>{legend.caveat}</Text>
       <Text style={styles.legend}>{legend.credit}</Text>
     </>
@@ -716,7 +730,8 @@ function LayersTab({
     const legend = OVERLAY_LEGENDS[key];
     const state = overlays[key];
     const openLegend = () => onOpenOverlayLegend(key);
-    if (legend.choice && overlayAwaitsChoice(legend, choices[key]))
+    const choose = legend.choice?.choose;
+    if (choose !== undefined && overlayAwaitsChoice(legend, choices[key]))
       return (
         <Row
           icon="layers"
@@ -727,7 +742,7 @@ function LayersTab({
             <Button
               compact
               variant="outlineAccent"
-              label={legend.choice.choose}
+              label={choose}
               onPress={openLegend}
             />
           }
@@ -765,6 +780,7 @@ function LayersTab({
     land: () => overlayRow("land"),
     fire: () => overlayRow("fire"),
     coverage: () => overlayRow("coverage"),
+    weather: () => overlayRow("weather"),
     gauges: () => entryRow("gauges"),
     mgaGrid: () => entryRow("mgaGrid"),
     geoPdfs: () => entryRow("geoPdfs"),

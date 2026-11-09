@@ -117,6 +117,15 @@ export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
 
 /**
+ * The latest weather run kept with a saved area, shared by all areas
+ * (`weatherMap/weatherMapStorage.ts`, ADR 0048): the manifest and every file of
+ * its run, replaced by the next. WIPED, though the files are public and the
+ * same for everyone, because every on-device store joins the wipe (ADR 0006);
+ * saving an area fetches them again.
+ */
+export const WEATHER_MAP_DIR = `${FileSystem.documentDirectory}weather-map/`;
+
+/**
  * A trip plan's files, downloaded for the trip (`plans/planFiles.ts`): one
  * folder per plan, its photos and files inside. WIPED: they are other
  * people's places and photos, shared with this account only. A plan dropped
@@ -138,6 +147,7 @@ export const WIPED_DIRS = [
   SENSOR_LOG_DIR,
   WEATHER_DIR,
   GAUGES_DIR,
+  WEATHER_MAP_DIR,
   TILEJSON_DIR,
   SHARPENED_AREAS_DIR,
   PLAN_DIR,

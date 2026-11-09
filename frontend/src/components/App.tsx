@@ -73,6 +73,9 @@ import {
 } from "./dialogs/addWayModel";
 import { useConfirm } from "./sidebar/panels/useConfirm";
 import LayersPopover from "./map/LayersPopover";
+import WeatherBar from "./map/WeatherBar";
+import { useWeatherMap } from "./map/useWeatherMap";
+import { useOnline } from "./weather/useWeather";
 import { findRouteById } from "./sidebar/panels/inboxModel";
 import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
@@ -130,6 +133,8 @@ import {
   normalizeTerrainLayers,
   normalizeCarrier,
   drawsCoverage,
+  WEATHER_LAYER_DEFAULT,
+  weatherLayer,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -248,6 +253,13 @@ function App() {
     null,
   );
   const coverageCarrier = normalizeCarrier(storedCarrier);
+  const [storedWeatherLayer, setWeatherLayer] = useStoredState<unknown>(
+    "logjam.weatherLayer",
+    WEATHER_LAYER_DEFAULT,
+  );
+  const weatherLayerKey = weatherLayer(
+    typeof storedWeatherLayer === "string" ? storedWeatherLayer : undefined,
+  ).key;
   const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
     setStoredTerrainLayers((prev: unknown) => ({
       ...normalizeTerrainLayers(prev),
@@ -525,7 +537,16 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, coverage, fire, slope, land, hillshade } = terrainLayers;
+  const { contours, weather, coverage, fire, slope, land, hillshade } =
+    terrainLayers;
+  const weatherMap = useWeatherMap(weather, weatherLayerKey);
+  const weatherUrl = weatherMap.drawnUrl;
+  const { archiveGone: weatherArchiveGone } = weatherMap;
+  const mapWeather = useMemo(
+    () => ({ layer: weatherLayerKey, arrows: weatherMap.arrows }),
+    [weatherLayerKey, weatherMap.arrows],
+  );
+  const online = useOnline();
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -537,6 +558,7 @@ function App() {
     const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
+      weather: weatherUrl !== null,
       coverage: drawsCoverage(coverage, coverageCarrier),
       fire,
       slope,
@@ -547,12 +569,17 @@ function App() {
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
         .filter((key) => shown[key])
-        .map((key) => entries[key]),
+        .map((key) =>
+          key === "weather" && weatherUrl
+            ? { ...entries.weather, pmtilesUrl: weatherUrl }
+            : entries[key],
+        ),
       ...vegetationLayers,
     ];
   }, [
     activeLayerId,
     contours,
+    weatherUrl,
     coverage,
     coverageCarrier,
     fire,
@@ -573,6 +600,10 @@ function App() {
       const terrainKey = TERRAIN_LAYER_KEYS.find(
         (key) => TERRAIN_ENTRIES[key].id === entryId,
       );
+      if (terrainKey === "weather") {
+        weatherArchiveGone();
+        return;
+      }
       if (terrainKey) {
         toast.error(
           `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
@@ -586,7 +617,7 @@ function App() {
         );
       }
     },
-    [toast],
+    [toast, weatherArchiveGone],
   );
 
   const startPickingCoords = useCallback(
@@ -1579,7 +1610,7 @@ function App() {
     setSelectedPlanId(null);
     setActivePanel(null);
   };
-  const notices = planOnMap ? (
+  const mapNotice = planOnMap ? (
     <Notice
       icon="plan"
       twoLines
@@ -1613,6 +1644,22 @@ function App() {
       Places filter: {filteredPlaces.length} of {allPlaces.length} shown
     </Notice>
   ) : null;
+  const notices = weather ? (
+    <>
+      {mapNotice}
+      <WeatherBar
+        state={weatherMap.state}
+        layerKey={weatherLayerKey}
+        now={weatherMap.now}
+        settled={weatherMap.settled}
+        onSettle={weatherMap.settle}
+        online={online}
+        onRetry={weatherMap.retry}
+      />
+    </>
+  ) : (
+    mapNotice
+  );
 
   // Opening Make a map anew: no stale form, and no pick result from last time.
   const freshExportDialog = () => {
@@ -2150,6 +2197,7 @@ function App() {
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
             coverageCarrier={coverageCarrier}
+            weather={mapWeather}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2232,6 +2280,8 @@ function App() {
           onTerrainLayerChange={setTerrainLayer}
           coverageCarrier={coverageCarrier}
           onCoverageCarrierChange={setCoverageCarrier}
+          weatherLayer={weatherLayerKey}
+          onWeatherLayerChange={setWeatherLayer}
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}

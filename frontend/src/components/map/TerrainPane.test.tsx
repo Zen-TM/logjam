@@ -202,6 +202,7 @@ describe("the Terrain group on Logjam Web", () => {
       );
     const stored = {
       contours: true,
+      weather: false,
       coverage: false,
       fire: false,
       slope: true,
@@ -420,5 +421,62 @@ describe("the Coverage row on Logjam Web", () => {
   it("is an overlay row, not a Terrain one", () => {
     draw();
     expect(screen.queryByRole("switch", { name: "Show coverage" })).toBeNull();
+  });
+});
+
+describe("the Weather row on Logjam Web", () => {
+  const row = (props: {
+    onToggle?: (on: boolean) => void;
+    onChange?: (value: string) => void;
+    value?: string;
+  }) =>
+    render(
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.weather}
+        checked={TERRAIN_LAYER_DEFAULTS.weather}
+        onToggle={props.onToggle ?? vi.fn()}
+        choice={{
+          value: props.value ?? "temperature",
+          onChange: props.onChange ?? vi.fn(),
+        }}
+      />,
+    );
+
+  // Mutation: start it on, or drop the subtitle, and every map opens under a
+  // forecast nobody asked for, or for a layer nobody can see.
+  it("is off by default, switches the weather key, and names its layer", () => {
+    const onToggle = vi.fn();
+    row({ onToggle });
+    const weather = screen.getByRole("switch", { name: "Show weather" });
+    expect(weather.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(weather);
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Temperature")).toBeTruthy();
+  });
+
+  // Mutation: render `legend.rows` as the key (the default layer's), and
+  // Temperature's legend lists rain's mm/h.
+  it("picks the layer in its legend, over the chosen layer's own key", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    row({ onChange, onToggle });
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherAbout }));
+    const legend = screen.getByRole("dialog", { name: copy.weather });
+    for (const { label } of OVERLAY_LEGENDS.weather.choice!.options)
+      expect(screen.getByRole("radio", { name: label })).toBeTruthy();
+    expect(legend.textContent).toContain("22°");
+    expect(legend.textContent).not.toContain("mm/h");
+    fireEvent.click(screen.getByRole("radio", { name: "Rain, past 72 h" }));
+    expect(onChange).toHaveBeenCalledWith("rainPast72");
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(legend.textContent).toContain(copy.weatherLegend);
+    expect(legend.textContent).toContain(copy.weatherCaveat);
+    expect(legend.textContent).toContain(OVERLAY_LEGENDS.weather.credit);
+  });
+
+  // Mutation: list it among the Terrain rows, and it shows twice.
+  it("is an overlay row, not a Terrain one", () => {
+    draw();
+    expect(screen.queryByRole("switch", { name: "Show weather" })).toBeNull();
   });
 });

@@ -74,8 +74,13 @@ export function Notice({
   tone = "info",
   controls,
   twoLines = false,
+  quiet = false,
 }: {
   children: ReactNode;
+  /** Words that change as the user moves a control in it (the weather bar's
+   *  time), kept out of the stack's live region: the control says its own
+   *  value, and re-reading the notice on each notch would talk over it. */
+  quiet?: boolean;
   action?: ReactNode;
   /** Controls in a row under the words, for a notice that is a mode with
    *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
@@ -109,6 +114,7 @@ export function Notice({
       ].join(" ")}
       data-tone={tone}
       role={tone === "info" ? undefined : "alert"}
+      aria-live={quiet ? "off" : undefined}
     >
       {controls ? (
         <>

@@ -41,6 +41,7 @@ export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
+export { Scrubber, SCRUBBER_WIDTH } from "./Scrubber";
 export { MapBanner } from "./MapBanner";
 export { NavReadout } from "./NavReadout";
 export { holdTick } from "./holdTick";
