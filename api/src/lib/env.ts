@@ -156,6 +156,16 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(24),
+  // The month's compute credits (vCPU-minutes) all accounts share, checked
+  // before a launch beside the per-user allowance (lib/computeCredits.ts). A
+  // credit is about US$0.001 of Fargate at ap-southeast-2 on-demand prices
+  // (about US$0.062 per vCPU-hour with the workers' 2 GiB per vCPU), so 15000
+  // credits, 250 vCPU-hours, is about US$15 a month. 0 = no site-wide cap.
+  SITE_MONTHLY_COMPUTE_CREDITS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(15000),
   // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
   // existing interval rather than owning a timer — it is incremental and does
   // nothing when no new log objects have been delivered.

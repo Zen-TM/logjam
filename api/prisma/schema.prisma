@@ -43,6 +43,7 @@ model User {
   notifications           Notification[]
   topoJobs                TopoJob[]
   topoExportJobs          TopoExportJob[]
+  computeUsageCarryover   ComputeUsageCarryover[]
   tripLogs                TripLog[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
@@ -614,6 +615,29 @@ model TopoExportJob {
 
   @@index([userId, createdAt])
   @@map("topo_export_jobs")
+}
+
+// What deleting a finished job would erase of this month's compute usage: a
+// trigger on topo_jobs and topo_export_jobs adds the deleted row's credits
+// here (migration 20261110000000_compute_usage_carryover). Usage of rows that
+// exist stays derived (lib/computeCredits.ts). monthStart is the Sydney month
+// the job started in, as a UTC instant.
+model ComputeUsageCarryover {
+  userId     String   @map("user_id")
+  monthStart DateTime @map("month_start")
+  credits    BigInt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, monthStart])
+  @@map("compute_usage_carryover")
+}
+
+// The same, for the site-wide pool, with no owner: it outlives the account.
+model SiteComputeCarryover {
+  monthStart DateTime @id @map("month_start")
+  credits    BigInt
+
+  @@map("site_compute_carryover")
 }
 
 model TopoTemplate {
