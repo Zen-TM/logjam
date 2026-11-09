@@ -54,6 +54,8 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
   "0044-river-gauges-are-public-files-from-waternsw-and-bom.md": [
     "master/gauges/v1/",
   ],
+  "0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md":
+    ["master/weather/v1/"],
 };
 
 // A backticked token with a slash that ends in an extension or a slash. Globs

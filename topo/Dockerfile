@@ -123,6 +123,7 @@ COPY build_place_registry.py /app/build_place_registry.py
 COPY build_gauges.py /app/build_gauges.py
 COPY build_fire_history.py /app/build_fire_history.py
 COPY build_coverage.py /app/build_coverage.py
+COPY build_weather.py /app/build_weather.py
 COPY gauges.json /app/gauges.json
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
@@ -130,13 +131,14 @@ COPY icons/ /app/icons/
 # ------------------------------------------------------------
 # 5. Entrypoint
 # ------------------------------------------------------------
-# Single image, six ECS task definitions:
+# Single image, seven ECS task definitions:
 #   - logjam-topo-worker         → the default command below, python3 /app/worker.py
 #   - logjam-topo-export-worker  → entryPoint ["python3", "/app/export_worker.py"]
 #   - logjam-gauges              → ["python3", "/app/build_gauges.py", "run"], every 2 hours on a schedule; needs S3_BUCKET_TOPO, AWS_REGION and WATERNSW_API_KEY
 #   - logjam-place-registry      → ["python3", "/app/build_place_registry.py", "publish"], monthly on a schedule; needs only S3_BUCKET_TOPO and AWS_REGION
 #   - logjam-fire-history        → ["python3", "/app/build_fire_history.py", "publish"], monthly on a schedule; needs only S3_BUCKET_TOPO and AWS_REGION
 #   - logjam-coverage            → ["python3", "/app/build_coverage.py", "publish"], monthly on a schedule; needs only S3_BUCKET_TOPO and AWS_REGION
+#   - logjam-weather             → ["python3", "/app/build_weather.py", "run"], hourly on a schedule; needs only S3_BUCKET_TOPO and AWS_REGION
 # The topo worker's is a CMD, not an ENTRYPOINT, so that a RunTask command
 # override can run another script from this image under the same task role: the
 # slope archive build (topo/README.md, "The statewide slope archive"). A task

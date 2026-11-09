@@ -143,3 +143,4 @@ supersede instead.
 | [0044](0044-river-gauges-are-public-files-from-waternsw-and-bom.md) | River gauges are public files, with readings from WaterNSW and history from the Bureau of Meteorology | 2026-10-30 | Accepted |
 | [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
 | [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
+| [0048](0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md) | The Weather overlay is public files cut from Open-Meteo's grids by a scheduled job, which alone runs Open-Meteo's GPL reader | 2026-11-07 | Accepted |

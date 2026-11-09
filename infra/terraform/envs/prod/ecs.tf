@@ -1,6 +1,7 @@
 # ECS task definitions for the three on-demand Fargate workers, the
 # pre-deploy migrate one-shot, the monthly place registry, fire history and
-# coverage builds and the two-hourly river gauges job. Workers are launched via RunTask
+# coverage builds, the two-hourly river gauges job and the hourly weather job.
+# Workers are launched via RunTask
 # (api/src/lib/ecsRunTask.ts), the rest by their schedules below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
@@ -669,6 +670,87 @@ resource "aws_scheduler_schedule" "coverage" {
 
     ecs_parameters {
       task_definition_arn = aws_ecs_task_definition.coverage.arn_without_revision
+      launch_type         = "FARGATE"
+
+      network_configuration {
+        subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
+        security_groups  = [aws_security_group.worker.id]
+        assign_public_ip = true
+      }
+    }
+  }
+}
+
+# The Weather overlay (topo/build_weather.py, ADR 0048): every hour, read
+# Open-Meteo's latest ECMWF IFS run description and, when a new run has
+# landed, cut NSW out of it and publish it under master/weather/ in the topo
+# bucket. Runs land four times a day, 5 to 8 hours after their run time, so
+# most hours read one small file and stop. Same image as the topo workers, so
+# pin-release.sh repins it on each topo deploy; no database and no secrets.
+resource "aws_ecs_task_definition" "weather" {
+  container_definitions = jsonencode([{
+    entryPoint = ["python3", "/app/build_weather.py", "run"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "S3_BUCKET_TOPO"
+      value = module.topo_jobs.bucket_id
+    }]
+    essential = true
+    # Floor only — CI re-registers this def pinned to a sha (see header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.weather.name
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    name = "weather"
+  }])
+  # A build reads about 270 MB of NSW in 64 KB range requests on 16 threads
+  # and writes about 420 small archives, holding one step at a time per
+  # thread: 7 minutes and 2.7 minutes of CPU on a laptop. One vCPU for the PNG
+  # encoding, and memory to spare.
+  cpu                      = "1024"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  family                   = "logjam-weather"
+  memory                   = "2048"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.weather.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+}
+
+# Its own schedule group, as the gauges have: the not-launched alarm's only
+# dimension is the group.
+resource "aws_scheduler_schedule_group" "weather" {
+  name = "logjam-weather"
+}
+
+# Hourly, at 20 past: a run that lands is published within the hour, and a
+# fixed six-hourly time would wait or miss as the model's delay varies.
+resource "aws_scheduler_schedule" "weather" {
+  name                = "logjam-weather"
+  group_name          = aws_scheduler_schedule_group.weather.name
+  schedule_expression = "cron(20 * * * ? *)"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.weather_scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.weather.arn_without_revision
       launch_type         = "FARGATE"
 
       network_configuration {

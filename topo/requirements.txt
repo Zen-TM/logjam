@@ -13,6 +13,11 @@ pmtiles>=3.8.1,<4.0
 shapely>=2.2.0,<3.0
 # Reads the OpenStreetMap extract for build_place_registry.py.
 osmium>=4.3.2,<5.0
+# Open-Meteo's .om reader, for build_weather.py. GPL-2.0-only, which can't be
+# combined with Logjam's AGPL-3.0 in anything conveyed, so it lives in this
+# private image alone and never in a client: ADR 0048, guard
+# tests/test_weather.py ("reader is in the worker image only").
+omfiles>=1.2.0,<2.0
 
 # GDAL Python bindings are installed dynamically in the Dockerfile.
 # If running outside Docker, install manually:

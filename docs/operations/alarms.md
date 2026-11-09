@@ -17,7 +17,7 @@ that goes wrong between deploys.
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
-| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges, fire history, coverage) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
+| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges, fire history, coverage, weather) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
 | `logjam-place-registry-not-launched` | EventBridge Scheduler's call to start the monthly build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
@@ -27,6 +27,8 @@ that goes wrong between deploys.
 | `logjam-fire-history-not-launched` | EventBridge Scheduler's call to start the monthly fire history build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-coverage-failed` | The monthly coverage build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-coverage` |
 | `logjam-coverage-not-launched` | EventBridge Scheduler's call to start the monthly coverage build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
+| `logjam-weather-failed` | The hourly weather job stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-weather` |
+| `logjam-weather-not-launched` | EventBridge Scheduler's call to start the hourly weather job returned an error | Check whether the next hour's task ran; if not, read the `RunTask` error in CloudTrail |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -291,5 +293,43 @@ since the next scheduled run is a month away.
 1. Look in ECS for a `logjam-coverage` task started after the alarm; if one
    ran, this was a passing error.
 2. If none ran, find the `RunTask` call by the role `logjam-coverage-scheduler`
+   in CloudTrail and read its error: a role, subnet or task definition
+   problem, fixed in Terraform.
+
+## Weather
+
+The Weather overlay's files, under `master/weather/v1/` in the topo bucket,
+are written by the ECS task `logjam-weather`, which EventBridge Scheduler
+starts at 20 past every hour from its own schedule group
+([0048](../decisions/0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md)).
+It reads Open-Meteo's `latest.json` for ECMWF IFS and stops unless a run newer
+than the published one is complete; four hours a day it builds. A run that
+fails never uploads `latest.json`, so clients keep drawing the published run,
+with its age, and the next hour tries again.
+
+### `logjam-weather-failed`
+
+A metric filter on `/aws/events/logjam-worker-failures` counts this family's
+failed stops as `WeatherFailures` in namespace `Logjam/Workers`. One failure
+fires: most hours read one small file, so a failure is rarely chance.
+
+1. Read `/aws/events/logjam-worker-failures`: `detail.containers[0].exitCode`
+   (137 is an out-of-memory kill) and `detail.stoppedReason`.
+2. Read `/ecs/logjam-weather`. After a passing HTTP error the next hour's
+   run fixes itself: watch for "published" or "up to date" an hour later.
+   "is not complete", "no longer on O1280", "lacks [...]" or a `ValueError` from
+   the reader means Open-Meteo changed its layout or grid: the overlay ages
+   until `topo/build_weather.py` follows it. Anything else is a bug in the
+   job or the topo worker image; if a worker deploy just ran, roll the worker
+   back ([rollback.md](rollback.md)).
+
+### `logjam-weather-not-launched`
+
+EventBridge Scheduler's `TargetErrorCount` for the `logjam-weather` schedule
+group.
+
+1. Look in ECS for a `logjam-weather` task started after the alarm; if one
+   ran, this was a passing error.
+2. If none ran, find the `RunTask` call by the role `logjam-weather-scheduler`
    in CloudTrail and read its error: a role, subnet or task definition
    problem, fixed in Terraform.
