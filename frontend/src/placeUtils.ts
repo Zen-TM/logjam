@@ -800,6 +800,8 @@ export type ComputeEstimate = {
   remaining: number;
   resetAt: string;
   wouldExceed: boolean;
+  /** The API's sentence, present only when the site-wide pool is why. */
+  refusal?: string;
 };
 
 export type ComputeEstimateRequest = { kind: "topo"; tileCount: number | null };

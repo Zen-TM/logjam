@@ -13,7 +13,11 @@ import { z } from "zod";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { malformed } from "../middleware/errorHandler";
 import { resolveUser as getUser } from "../lib/resolveUser";
-import { getMonthlyCreditUsage } from "../lib/computeCredits";
+import {
+  getMonthlyCreditUsage,
+  poolHasNoRoomFor,
+  POOL_SPENT_SENTENCE,
+} from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { estimateCredits } from "@logjam/shared";
 
@@ -55,6 +59,12 @@ router.post(
     );
     const credits = estimateCredits(request.kind, estimatedSeconds);
 
+    const userWouldExceed =
+      usage.used >= usage.quota ||
+      (credits !== null && usage.used + credits > usage.quota);
+    // The user's own allowance is told first, as the refusal does.
+    const poolSpent = !userWouldExceed && (await poolHasNoRoomFor(credits));
+
     res.json({
       estimatedSeconds,
       // null = the adaptive estimator has too little history to have an opinion.
@@ -65,10 +75,12 @@ router.post(
       remaining: usage.remaining,
       resetAt: usage.resetAt,
       // Whether submitting would be refused, so a dialog can disable its button
-      // instead of letting the user find out via a 429.
-      wouldExceed:
-        usage.used >= usage.quota ||
-        (credits !== null && usage.used + credits > usage.quota),
+      // instead of letting the user find out via a 429. True for the site-wide
+      // pool too; `used`/`quota` are the user's own and do not say so.
+      wouldExceed: userWouldExceed || poolSpent,
+      // Present only when the pool is the reason: the sentence the refusal would
+      // carry, for a client to show instead of "try a smaller area".
+      ...(poolSpent && { refusal: POOL_SPENT_SENTENCE }),
     });
   },
 );

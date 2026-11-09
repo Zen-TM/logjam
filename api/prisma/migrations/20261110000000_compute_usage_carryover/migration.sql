@@ -77,6 +77,11 @@ BEGIN
       topo_job_credits(OLD.status, OLD.pipeline_metrics, OLD.started_at, OLD.updated_at));
   END IF;
   RETURN OLD;
+EXCEPTION WHEN OTHERS THEN
+  -- The accounting must never block a delete (a user's, a sweep's, an account's).
+  -- No row value in the text: the Postgres log leaves the box.
+  RAISE WARNING 'compute carry-over skipped on delete from %', TG_TABLE_NAME;
+  RETURN OLD;
 END
 $$;
 
@@ -86,6 +91,11 @@ BEGIN
     PERFORM add_compute_carryover(OLD.user_id, OLD.started_at,
       topo_export_job_credits(OLD.completed_at, OLD.started_at));
   END IF;
+  RETURN OLD;
+EXCEPTION WHEN OTHERS THEN
+  -- The accounting must never block a delete (a user's, a sweep's, an account's).
+  -- No row value in the text: the Postgres log leaves the box.
+  RAISE WARNING 'compute carry-over skipped on delete from %', TG_TABLE_NAME;
   RETURN OLD;
 END
 $$;

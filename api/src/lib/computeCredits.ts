@@ -116,6 +116,26 @@ export function getSiteCreditUsage(db: DbClient = prisma): Promise<number> {
   return creditsUsedThisMonth(null, db);
 }
 
+/** What a refusal for the site-wide pool says, here and in POST /compute-estimate. */
+export const POOL_SPENT_SENTENCE = say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
+
+/**
+ * Whether the site-wide pool is spent, or cannot hold a job of `projected`
+ * credits (null = no estimate: refused only once spent).
+ */
+export async function poolHasNoRoomFor(
+  projected: number | null,
+  db: DbClient = prisma,
+): Promise<boolean> {
+  const poolCap = getEnv().SITE_MONTHLY_COMPUTE_CREDITS;
+  if (poolCap === 0) return false;
+  const siteUsed = await getSiteCreditUsage(db);
+  return (
+    siteUsed >= poolCap ||
+    (projected !== null && siteUsed + projected > poolCap)
+  );
+}
+
 /**
  * Throws 429 when submitting a job of `kind` expected to take
  * `estimatedSeconds` would exceed the monthly allowance.
@@ -174,18 +194,7 @@ export async function assertHasCredits(
   // reaper ceiling (TOPO_REAPER_PROCESSING_TIMEOUT_MS, 6 h), 8640 credits,
   // about US$8.60. Reserve each job's credits at its reaper deadline when that
   // matters (issue #567).
-  const poolCap = getEnv().SITE_MONTHLY_COMPUTE_CREDITS;
-  if (poolCap > 0) {
-    const siteUsed = await getSiteCreditUsage(db);
-    if (
-      siteUsed >= poolCap ||
-      (projected !== null && siteUsed + projected > poolCap)
-    ) {
-      throw new AppError(
-        429,
-        say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`,
-        { resetAt: usage.resetAt },
-      );
-    }
+  if (await poolHasNoRoomFor(projected, db)) {
+    throw new AppError(429, POOL_SPENT_SENTENCE, { resetAt: usage.resetAt });
   }
 }

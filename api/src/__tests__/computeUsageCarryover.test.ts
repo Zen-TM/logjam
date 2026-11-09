@@ -128,6 +128,29 @@ describe("the site-wide pool", () => {
     await request(API_URL).delete(`/topo-jobs/${res.body.jobId}`).set(BOB);
   });
 
+  const estimate = () =>
+    request(API_URL)
+      .post("/compute-estimate")
+      .set(BOB)
+      .send({ kind: "topo", tileCount: null });
+
+  // Mutation that turns this red: drop poolHasNoRoomFor from the route's
+  // wouldExceed.
+  it("tells the estimate that a spent pool would refuse, with the API's sentence", async () => {
+    const open = await estimate();
+    expect(open.body.wouldExceed).toBe(false);
+    expect(open.body).not.toHaveProperty("refusal");
+
+    await spent();
+    const res = await estimate();
+    expect(res.status).toBe(200);
+    expect(res.body.wouldExceed).toBe(true);
+    expect(res.body.refusal).toMatch(/everyone on Logjam/);
+    // used and quota stay the user's own.
+    expect(res.body.quota).toBe(open.body.quota);
+    expect(res.body.used).toBe(open.body.used);
+  });
+
   // Mutation that turns this red: skip the pool block in assertHasCredits.
   it("refuses a new job with the pool's sentence once it is spent, and creates nothing", async () => {
     await spent();
@@ -142,6 +165,51 @@ describe("the site-wide pool", () => {
     expect(await prisma.topoJob.count({ where: { userId: BOB_ID } })).toBe(
       jobs,
     );
+  });
+});
+
+describe("a carry-over that fails never blocks a delete", () => {
+  // A wallSeconds that is not a number makes topo_job_credits raise inside the
+  // trigger. Mutation that turns this red: remove the EXCEPTION handler from
+  // carry_over_topo_job in the migration.
+  const badJob = (userId: string) =>
+    prisma.topoJob.create({
+      data: {
+        userId,
+        status: "complete",
+        startedAt: new Date(),
+        pipelineMetrics: { wallSeconds: "not a number" },
+      },
+    });
+
+  it("deletes the row, and the account that owns one", async () => {
+    const tag = randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        subject: `carryover-bad-${tag}`,
+        username: `cb-${tag.slice(0, 8)}`,
+        email: `cb-${tag}@example.invalid`,
+      },
+    });
+    const siteBefore = await prisma.siteComputeCarryover.count();
+
+    const job = await badJob(user.id);
+    await prisma.topoJob.delete({ where: { id: job.id } });
+    expect(
+      await prisma.topoJob.findUnique({ where: { id: job.id } }),
+    ).toBeNull();
+
+    const other = await badJob(user.id);
+    const res = await request(API_URL)
+      .delete("/users/me")
+      .set(as(user.subject));
+    expect(res.status).toBe(204);
+    expect(
+      await prisma.topoJob.findUnique({ where: { id: other.id } }),
+    ).toBeNull();
+    expect(await prisma.user.findUnique({ where: { id: user.id } })).toBeNull();
+    // Nothing was carried over for either.
+    expect(await prisma.siteComputeCarryover.count()).toBe(siteBefore);
   });
 });
 
