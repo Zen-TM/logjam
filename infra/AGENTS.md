@@ -36,8 +36,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
 - **The brain's signals bucket holds no user data** (`release.json`,
-  `serving`, `status.json`, `drill.json`: a release pointer, a switch and
-  health files). The brain and the watchdog read it; CI only writes
+  `status.json`, `drill.json`: a release pointer and health files). The brain and the watchdog read it; CI only writes
   `release.json` to it and never reads it, so it is not an exception of the CI
   privacy Deny, and nor is the backup bucket. Because the Deny stops reads,
   Terraform cannot manage an object in either bucket (creating one reads it
@@ -53,5 +52,5 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_postgres_image_is_immutable`.
 - **The brain's instance role** (`logjam-brain`) holds only the grants in
   `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
-  app database, origin-verify and Resend, no write to `release.json` or
-  `serving`, and no AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.
+  app database, origin-verify and Resend, no write to `release.json`, and no
+  AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.

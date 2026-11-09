@@ -1,10 +1,10 @@
 # The brain: one EC2 host that will run prod's Postgres and API
-# (private/plans design, issue #565). This first slice is inert: buckets, an
-# image repository, a role, log groups and a security group, and no instance.
-# The defaults below keep it that way; the next change reads the last three.
+# (#565). This first slice is inert: buckets, an image repository, a role, log
+# groups and a security group, and no instance. The defaults below keep it that
+# way; the next change reads all four.
 
 variable "brain_serving" {
-  description = "Whether the brain may start the API (the `serving` switch). Off until the cutover. Unused until the switch exists."
+  description = "Whether the brain may start the API: the next change sets the instance tag `brain-serving` from it. Off until the cutover."
   type        = bool
   default     = false
 }

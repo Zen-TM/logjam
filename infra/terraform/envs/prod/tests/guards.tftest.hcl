@@ -642,10 +642,9 @@ run "brain_deploy_role_writes_only_release_json" {
     override_during = plan
   }
 
-  # Mutation: widening the S3 resource (`/*`, the bucket, `serving`,
-  # `status.json`) or adding an action lets CI write what the brain runs or
-  # whether it serves; adding another repository lets CI push images the
-  # brain pulls.
+  # Mutation: widening the S3 resource (`/*`, the bucket, `status.json`) or
+  # adding an action lets CI write more than the release pointer the brain
+  # runs; adding another repository lets CI push images the brain pulls.
   assert {
     condition = (
       [for st in jsondecode(aws_iam_role_policy.gha_brain_deploy.policy).Statement : st.Resource] == [
@@ -789,17 +788,17 @@ run "brain_role_has_only_its_grants" {
 
   # Mutation: giving the signals read statement Put/Delete, widening
   # SignalsWriteStatus past status.json, or any other statement on the
-  # signals bucket lets the host (or a compromised API) change the release or
-  # the serving switch that CI and Terraform decide.
+  # signals bucket lets the host (or a compromised API) change the release that
+  # CI decides.
   assert {
     condition = [
       for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : [st.Sid, flatten([st.Action]), flatten([st.Resource])]
       if strcontains(jsonencode(st.Resource), "logjam-brain-signals")
       ] == [
-      ["SignalsRead", ["s3:GetObject"], ["arn:aws:s3:::logjam-brain-signals-620853681701/release.json", "arn:aws:s3:::logjam-brain-signals-620853681701/serving"]],
+      ["SignalsRead", ["s3:GetObject"], ["arn:aws:s3:::logjam-brain-signals-620853681701/release.json"]],
       ["SignalsWriteStatus", ["s3:PutObject"], ["arn:aws:s3:::logjam-brain-signals-620853681701/status.json"]],
       ["SignalsList", ["s3:ListBucket"], ["arn:aws:s3:::logjam-brain-signals-620853681701"]],
     ]
-    error_message = "The brain's role may read release.json and serving, list the signals bucket and write status.json: nothing else."
+    error_message = "The brain's role may read release.json, list the signals bucket and write status.json: nothing else."
   }
 }

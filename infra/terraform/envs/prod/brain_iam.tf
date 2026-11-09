@@ -145,13 +145,12 @@ resource "aws_iam_role_policy" "brain" {
         Resource = "${aws_s3_bucket.brain_backups.arn}/*"
       },
       {
-        # The brain reads the release and serving switch and writes its own
-        # status. It cannot write the first two: CI and Terraform decide what
-        # runs, not the host.
+        # The brain reads the release and writes its own status. It cannot
+        # write the release: CI decides what runs, not the host.
         Sid      = "SignalsRead"
         Effect   = "Allow"
         Action   = "s3:GetObject"
-        Resource = ["${aws_s3_bucket.brain_signals.arn}/release.json", "${aws_s3_bucket.brain_signals.arn}/serving"]
+        Resource = "${aws_s3_bucket.brain_signals.arn}/release.json"
       },
       {
         Sid      = "SignalsWriteStatus"

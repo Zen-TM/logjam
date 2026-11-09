@@ -91,12 +91,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_backups" {
 
 # ── Signals: what the brain and CI tell each other ──────────────────────────
 #
-# release.json (CI writes), serving (a later change writes it), status.json (the
-# brain writes), drill.json (the restore drill writes). None of it is user
-# data. The brain and the watchdog read it; CI only writes release.json and
-# stays denied by local.ci_readonly_privacy_deny, which has no exception for
-# it. That also means Terraform cannot manage an object here: creating one
-# reads it back, which the Deny refuses. Guard: tests/guards.tftest.hcl
+# release.json (CI writes), status.json (the brain writes), drill.json (the
+# restore drill writes). None of it is user data. The serving switch is not
+# here: it is the instance tag brain-serving. The brain and the watchdog read
+# the bucket; CI only writes release.json and stays denied by
+# local.ci_readonly_privacy_deny, which has no exception for it. That also
+# means Terraform cannot manage an object here: creating one reads it back,
+# which the Deny refuses. Guard: tests/guards.tftest.hcl
 # (ci_reads_no_secret_or_user_data).
 resource "aws_s3_bucket" "brain_signals" {
   bucket = local.brain_signals_bucket
