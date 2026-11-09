@@ -98,9 +98,9 @@ export function fireAt(
 
 /**
  * What the Coverage overlay predicts at `point` (pixels; `at` is the same
- * spot as [lng, lat]) for `carrier` ("Telstra: no mobile reception"), or null: the overlay is off, or the point is off the
- * land it covers. Where there is reception the fill is clear, and still
- * answers.
+ * spot as [lng, lat]) for `carrier` ("Telstra: no mobile reception"), or
+ * null: the overlay is off, or the point is off the land it covers. Where
+ * there is reception the fill is clear, and still answers.
  */
 export function coverageAt(
   map: RenderedQuery,

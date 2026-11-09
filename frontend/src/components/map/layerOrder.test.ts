@@ -136,6 +136,44 @@ describe("coverageAt", () => {
     );
     expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
   });
+
+  // Mutation: drop `at` on its way to coverageNameOf, or swap it with the
+  // pixel point (here or in MapPointPopover), and a tap in a clear patch that
+  // is a hole in an "external" area answers "no mobile reception" or nothing.
+  it("names the patch a tap is in, not the area it is a hole of", () => {
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const map = {
+      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: () => [
+        {
+          properties: { level: "external" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              ring(150, -34, 151, -33),
+              ring(150.4, -33.6, 150.6, -33.4),
+            ],
+          },
+        },
+        {
+          properties: { level: "outdoor" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [ring(150.4, -33.6, 150.6, -33.4)],
+          },
+        },
+      ],
+    };
+    expect(coverageAt(map, [1, 2], [150.5, -33.5], "telstra")).toBe(
+      "Telstra: mobile reception",
+    );
+  });
 });
 
 describe("the Fire history layer ids", () => {

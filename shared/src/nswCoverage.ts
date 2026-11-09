@@ -140,20 +140,19 @@ export function polygonHolds(
  * "Telstra: no mobile reception": what "What is here?" says of the levels a
  * map's own query found on its coverage layer at `at` ([lng, lat]), or null.
  * The layer is filtered to one carrier, so any feature found is that
- * carrier's. Only a feature whose polygon holds `at` counts (`polygonHolds`);
- * if float error leaves none, all found do. On the line between two levels
- * any without reception wins: the map hatches the spot, since a clear fill
- * over a hatch hides nothing.
+ * carrier's. Only a feature whose polygon holds `at` counts (`polygonHolds`),
+ * so a tap in a hole nothing fills (water inside the land) says nothing. Two
+ * holding it are the same area from two sources (a saved clip and the CDN);
+ * should their levels differ, any without reception wins.
  */
 export function coverageNameOf(
   features: readonly QueriedFeature[],
   carrier: CarrierId,
   at: readonly [number, number],
 ): string | null {
-  const holding = features.filter((f) => polygonHolds(f.geometry, at));
-  const levels = (holding.length > 0 ? holding : features).map(
-    (f) => f.properties?.[NSW_COVERAGE.levelProperty],
-  );
+  const levels = features
+    .filter((f) => polygonHolds(f.geometry, at))
+    .map((f) => f.properties?.[NSW_COVERAGE.levelProperty]);
   const known = levels.filter((l) =>
     (COVERAGE_LEVELS as readonly unknown[]).includes(l),
   );

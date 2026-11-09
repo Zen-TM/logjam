@@ -150,11 +150,15 @@ describe("coverageNameOf", () => {
         ],
       },
     };
+    // Two polygons, the second far off: a tap there is in the patch alone.
     const patch = {
       ...at("outdoor"),
       geometry: {
         type: "MultiPolygon",
-        coordinates: [[square(150.4, -33.6, 150.6, -33.4)]],
+        coordinates: [
+          [square(150.4, -33.6, 150.6, -33.4)],
+          [square(152, -35, 152.1, -34.9)],
+        ],
       },
     };
     expect(coverageNameOf([holed, patch], "telstra", TAP)).toBe(
@@ -164,6 +168,27 @@ describe("coverageNameOf", () => {
     expect(coverageNameOf([holed, patch], "telstra", [150.2, -33.2])).toBe(
       "Telstra: no mobile reception",
     );
+    // Mutation: ask every polygon of a MultiPolygon to hold the tap, and a
+    // tap on the patch's second polygon answers nothing.
+    expect(coverageNameOf([holed, patch], "telstra", [152.05, -34.95])).toBe(
+      "Telstra: mobile reception",
+    );
+  });
+
+  // Mutation: fall back to every feature found when none holds the tap, or
+  // take a MultiPolygon as holding whatever it is asked, and a tap on water
+  // inside the land (a hole nothing fills) answers "no mobile reception".
+  it("says nothing for a tap in a hole nothing fills", () => {
+    const lake = {
+      ...at("external"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [square(150, -34, 151, -33), square(150.4, -33.6, 150.6, -33.4)],
+        ],
+      },
+    };
+    expect(coverageNameOf([lake], "telstra", TAP)).toBeNull();
   });
 
   // Mutation: answer with a level for nothing found, and a tap at sea says
