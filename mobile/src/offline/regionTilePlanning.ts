@@ -7,6 +7,8 @@
 // 200 carrying an error page being written into the archive as a tile.
 import {
   NSW_REGION,
+  NSW_COVERAGE,
+  NSW_FIRE,
   type RegionBbox,
   type RegionTilePlan,
 } from "@logjam/shared";
@@ -70,7 +72,7 @@ export function tileUrlFrom(
 
 /**
  * The clips every saved area carries, whoever saves it: one of each DEM
- * archive the area touches, the statewide contours, slope and land, and the
+ * archive the area touches, the statewide contours, slope, land, fire history and coverage, and the
  * vector map. They cost a few to a few tens of megabytes, and without them the Vector map is blank out
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
@@ -98,6 +100,8 @@ export function regionClipSpecs(
     clip(NSW_REGION.terrain.contours.id, { contours: true }),
     clip(NSW_REGION.terrain.slope.id, { slope: true }),
     clip(NSW_REGION.terrain.land.id, { land: true }),
+    clip(NSW_FIRE.id, { fire: true }),
+    clip(NSW_COVERAGE.id, { coverage: true }),
     clip("protomaps"),
   ];
 }
@@ -106,7 +110,7 @@ export function regionClipSpecs(
 export function regionClipKind(
   spec: Pick<
     RegionClipSpec,
-    "demSourceId" | "contours" | "slope" | "land" | "area"
+    "demSourceId" | "contours" | "slope" | "land" | "fire" | "coverage" | "area"
   >,
 ): MapArtifact["kind"] {
   // `dem-region` is the kind the sampler filters saved files on
@@ -116,6 +120,8 @@ export function regionClipKind(
   if (spec.contours) return "contours-region";
   if (spec.slope) return "slope-region";
   if (spec.land) return "land-region";
+  if (spec.fire) return "fire-region";
+  if (spec.coverage) return "coverage-region";
   return "basemap-region";
 }
 

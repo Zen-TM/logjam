@@ -150,7 +150,10 @@ resource "github_repository_ruleset" "main_review" {
 
 # A mobile-v* tag push is a Logjam GPS release (deploy-mobile.yml), and the
 # workflow also accepts a tag on a release/mobile-v* branch: only admins may
-# create, move or delete either.
+# create, move or delete either. An OTA hotfix publishes from the release
+# branch, so ota-hotfix.yml may also push one, with a deploy key held in the
+# main-only mobile-ota Environment. Not GitHub Actions as a whole: any
+# collaborator's pull-request workflow can ask for a write token.
 import {
   to = github_repository_ruleset.mobile_release_tags
   id = "logjam:24101808"
@@ -208,6 +211,11 @@ resource "github_repository_ruleset" "mobile_release_branches" {
     actor_id    = local.admin_bypass.actor_id
     actor_type  = local.admin_bypass.actor_type
     bypass_mode = local.admin_bypass.bypass_mode
+  }
+
+  bypass_actors {
+    actor_type  = "DeployKey"
+    bypass_mode = "always"
   }
 
   rules {

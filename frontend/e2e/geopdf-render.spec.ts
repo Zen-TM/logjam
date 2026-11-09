@@ -125,11 +125,12 @@ test.describe("the in-browser GeoPDF renderer", () => {
     });
   }
 
-  // On the map Land goes in below the base's water (TERRAIN_BASEMAP_ANCHORS).
-  // Mutation: in render.ts, draw the base's next band before `drawLandOnce` for
-  // the slope case, or move `drawLandOnce` after step 3 for the plain one.
+  // On the map Land's edges go over the base's water, the fire tint and the
+  // slope (TERRAIN_BASEMAP_ANCHORS, TERRAIN_LAYER_KEYS), and the print stacks
+  // them the same way. Mutation: in render.ts, draw Land before
+  // `basemapBandsTo(2)`, and the water covers it.
   for (const overlays of [[], ["slope"]] as const) {
-    test(`Land lies under a vector base's water, with [${overlays}]`, async ({
+    test(`Land lies over a vector base's water, with [${overlays}]`, async ({
       page,
     }) => {
       await stubNetwork(page);
@@ -140,7 +141,7 @@ test.describe("the in-browser GeoPDF renderer", () => {
       );
       expect(r.water).toBeGreaterThan(1000);
       expect(r.restChanged).toBeGreaterThan(100);
-      expect(r.waterChanged).toBe(0);
+      expect(r.waterChanged).toBeGreaterThan(1000);
     });
   }
 

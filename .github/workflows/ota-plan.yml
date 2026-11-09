@@ -1,0 +1,147 @@
+name: ota-plan
+
+# The check for an OTA hotfix: what merging a PR labelled `ota-hotfix` would
+# publish (ota-hotfix.yml), or why it can't. It patches the fix onto the
+# newest release's branch as the merge would, refuses what an update must not
+# carry (mobile/scripts/ota-hotfix.js), then runs Logjam GPS's checks and the
+# emulator smoke on the patched tree. ota-hotfix.yml publishes only when this
+# passed on the PR's head. Procedure: docs/operations/mobile-release.md.
+#
+# Runs on any label event, since a trigger can't filter by label; the jobs
+# skip unless this one is on. No secrets: it runs the PR's own code.
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+permissions:
+  contents: read
+
+# Another label's event belongs to a separate group, so it can't cancel a plan.
+concurrency:
+  group: ota-plan-${{ github.event.pull_request.number }}-${{ github.event.action != 'labeled' || github.event.label.name == 'ota-hotfix' }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'ota-hotfix') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'ota-hotfix')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      base: ${{ steps.plan.outputs.base }}
+      runtime: ${{ steps.plan.outputs.runtime }}
+      refusal: ${{ steps.plan.outputs.refusal }}
+    env:
+      GIT_AUTHOR_NAME: ota-plan
+      GIT_AUTHOR_EMAIL: ota-plan@users.noreply.github.com
+      GIT_COMMITTER_NAME: ota-plan
+      GIT_COMMITTER_EMAIL: ota-plan@users.noreply.github.com
+      # Beside the checkout, not in it. runner.temp is not available here.
+      TREE: ${{ github.workspace }}/../hotfix
+    steps:
+      # Every branch and tag: the plan looks for the newest release tag and
+      # its branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            shared/package-lock.json
+            mobile/package-lock.json
+
+      # The squash merge commits the PR's diff from where it left main, which
+      # is this commit's.
+      - name: Plan
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          squash=$(git commit-tree "$HEAD_SHA^{tree}" -p "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" -m "PR #$PR")
+          node mobile/scripts/ota-hotfix.js plan "$TREE" "$squash" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Build shared
+        if: steps.plan.outputs.refusal == ''
+        working-directory: ${{ env.TREE }}/shared
+        run: npm ci && npm run build
+      - name: Lint
+        if: steps.plan.outputs.refusal == ''
+        working-directory: ${{ env.TREE }}/mobile
+        run: npm run lint
+      - name: Typecheck
+        if: steps.plan.outputs.refusal == ''
+        working-directory: ${{ env.TREE }}/mobile
+        run: npm run typecheck
+      - name: Unit tests
+        if: steps.plan.outputs.refusal == ''
+        working-directory: ${{ env.TREE }}/mobile
+        run: npm test
+
+      - name: Save the fix as a patch on the release branch
+        if: steps.plan.outputs.refusal == ''
+        env:
+          BASE: ${{ steps.plan.outputs.base }}
+        run: git -C "$TREE" diff --binary "$BASE" HEAD > "$RUNNER_TEMP/hotfix.patch"
+      - if: steps.plan.outputs.refusal == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: ota-hotfix-patch
+          path: ${{ runner.temp }}/hotfix.patch
+          retention-days: 7
+
+  smoke:
+    needs: plan
+    if: needs.plan.outputs.refusal == ''
+    uses: ./.github/workflows/mobile-emulator.yml
+    with:
+      ref: ${{ needs.plan.outputs.base }}
+      patch: ota-hotfix-patch
+
+  # The one check ota-hotfix.yml reads, and the PR's comment.
+  ota-plan:
+    needs: [plan, smoke]
+    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: mobile/scripts
+      - name: Comment, and pass only if the hotfix may publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          RUNTIME: ${{ needs.plan.outputs.runtime }}
+          REFUSAL: ${{ needs.plan.outputs.refusal }}
+          PLAN: ${{ needs.plan.result }}
+          SMOKE: ${{ needs.smoke.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          node mobile/scripts/ota-hotfix.js comment > "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md"
+          # A fork's PR gets a read-only token: the check alone says it.
+          if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+            existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- ota-plan -->"))) | .id' \
+              | tail -n1)
+            if [ -n "$existing" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+            else
+              gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+            fi
+          fi
+          [ -z "$REFUSAL" ] && [ "$PLAN" = success ] && [ "$SMOKE" = success ]

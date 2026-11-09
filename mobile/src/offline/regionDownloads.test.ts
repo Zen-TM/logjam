@@ -109,8 +109,14 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_REGION, planExtract } =
-  await import("@logjam/shared");
+const {
+  fetchExtractRequest,
+  LAND_EDGE_MINZOOM,
+  NSW_COVERAGE,
+  NSW_FIRE,
+  NSW_REGION,
+  planExtract,
+} = await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
@@ -339,6 +345,8 @@ describe("runRegionClip", () => {
     expect(await run({ contours: true })).toEqual({ status: "cancelled" });
     expect(await run({ slope: true })).toEqual({ status: "cancelled" });
     expect(await run({ land: true })).toEqual({ status: "cancelled" });
+    expect(await run({ fire: true })).toEqual({ status: "cancelled" });
+    expect(await run({ coverage: true })).toEqual({ status: "cancelled" });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",
@@ -382,6 +390,39 @@ describe("runRegionClip", () => {
         kind: "land-region",
         logicalKey: NSW_REGION.terrain.land.id,
         minzoom: LAND_EDGE_MINZOOM,
+      }),
+    );
+  });
+
+  // Mutation: cut Fire from `LAND_EDGE_MINZOOM` or file it as a land clip, and
+  // the map's fire from z8 to z11 is missing offline, or its clip is read as
+  // Land's.
+  it("cuts a fire clip from the archive's own first zoom", async () => {
+    expect((await run({ fire: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/${NSW_FIRE.archivePath}`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "fire-region",
+        logicalKey: NSW_FIRE.id,
+        sourceType: "vector",
+        minzoom: NSW_FIRE.minzoom,
+      }),
+    );
+  });
+
+  // Mutation: cut Coverage from another archive or file it as a fire clip, and
+  // the hatch is missing offline, or its clip is read as Fire's.
+  it("cuts a coverage clip from the whole coverage archive", async () => {
+    expect((await run({ coverage: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/${NSW_COVERAGE.archivePath}`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "coverage-region",
+        logicalKey: NSW_COVERAGE.id,
+        sourceType: "vector",
+        minzoom: NSW_COVERAGE.minzoom,
       }),
     );
   });
