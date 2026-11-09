@@ -16,6 +16,7 @@ const saved = [
   clip("contours-region", "nsw-contours"),
   clip("slope-region", "nsw-5m-slope"),
   clip("land-region", "nsw-land"),
+  clip("fire-region", "nsw-fire"),
   clip("dem-region", "nsw-5m"),
 ];
 
@@ -74,6 +75,9 @@ describe("terrainSwitch", () => {
       terrainSwitch("hillshade", true, "protomaps", false, [
         clip("dem-region", "nsw-5m", 15),
       ]).disabled,
+    ).toBe(true);
+    expect(
+      terrainSwitch("fire", true, "protomaps", false, [saved[2]!]).disabled,
     ).toBe(true);
   });
 });

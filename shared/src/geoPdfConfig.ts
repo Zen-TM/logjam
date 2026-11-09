@@ -44,10 +44,11 @@ export const VALID_GEOPDF_BASE_LAYERS = new Set<string>(
 );
 
 // The Terrain group's layers (the statewide ones, and a sharpened area's own
-// of the same name) and the vegetation only a sharpened area draws. Guard:
+// of the same name) and the vegetation only a sharpened area draws. Fire
+// history doesn't print yet: the GeoPDF has no drawing of it. Guard:
 // geoPdfConfig.test.ts.
 export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>([
-  ...TERRAIN_LAYER_KEYS,
+  ...TERRAIN_LAYER_KEYS.filter((key) => key !== "fire"),
   "vegetation",
 ]);
 

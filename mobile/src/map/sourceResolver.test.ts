@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SharpenedOverlay } from "@logjam/shared";
+import { NSW_FIRE, type SharpenedOverlay } from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
@@ -502,6 +502,35 @@ describe("statewide slope and hillshade", () => {
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/land/nsw-tenure.pmtiles",
+    );
+  });
+
+  // Mutation: resolve Fire with no `mainRegion`, and two saved areas that
+  // share a low-zoom tile paint its translucent tint twice, with a seam.
+  it("draws one fire clip offline, and the archive online", () => {
+    const at = (id: string, west: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "fire-region",
+        logicalKey: "nsw-fire",
+        sourceType: "vector",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, west + 0.1, -33.7],
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
+    });
+    const drawn = resolveMapSource({ kind: "nsw-fire" }, offline);
+    expect(drawn).toHaveLength(1);
+    const [online] = resolveMapSource({ kind: "nsw-fire" }, ctx({}));
+    expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
+    // Mutation: credit the source with anything but NSW_FIRE's own line, and
+    // the map's credits drop a CC BY term of the data, online or off.
+    for (const source of [online, drawn[0]])
+      expect(source).toMatchObject({ attribution: NSW_FIRE.credit });
+    expect(online!.status === "ok" && online!.url).toContain(
+      "master/fire/nsw-fire-history.pmtiles",
     );
   });
 

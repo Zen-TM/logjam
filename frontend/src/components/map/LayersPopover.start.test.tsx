@@ -152,3 +152,17 @@ describe("the Layers popover's light dismiss", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("the Layers popover's overlays", () => {
+  // Mutation: list the overlay rows in OVERLAY_TERRAIN_KEYS (stacking) order,
+  // and Fire history comes above Land tenure, against the contract.
+  it("lists each statewide overlay once, in the contract's order", () => {
+    render(popover(true, null));
+    fireEvent.click(chip("Overlays"));
+    const names = screen
+      .getAllByRole("switch")
+      .map((s) => s.getAttribute("aria-label"))
+      .filter((n) => n === "Show land tenure" || n === "Show fire history");
+    expect(names).toEqual(["Show land tenure", "Show fire history"]);
+  });
+});

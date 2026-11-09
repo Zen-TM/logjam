@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { NSW_CONTOURS } from "./nswContours.js";
+import { NSW_FIRE } from "./nswFire.js";
 import {
   CONTOUR_LABELS_MIN_ZOOM,
   CONTOURS_MIN_ZOOM,
   CONTOURS_MINOR_MIN_ZOOM,
+  FIRE_MIN_ZOOM,
   GAUGES_MIN_ZOOM,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
@@ -33,6 +35,9 @@ describe("zoom floors", () => {
     expect(CONTOURS_MIN_ZOOM).toBeGreaterThan(NSW_CONTOURS.minzoom);
     expect(SLOPE_MIN_ZOOM).toBeGreaterThanOrEqual(NSW_SLOPE.minzoom);
     expect(SLOPE_MIN_ZOOM).toBeLessThanOrEqual(NSW_SLOPE.maxzoom);
+    // Mutation: FIRE_MIN_ZOOM outside the archive's z8–z12.
+    expect(FIRE_MIN_ZOOM).toBeGreaterThanOrEqual(NSW_FIRE.minzoom);
+    expect(FIRE_MIN_ZOOM).toBeLessThan(NSW_FIRE.maxzoom);
   });
   it("bring contour detail in coarse to fine", () => {
     expect(CONTOURS_MIN_ZOOM).toBeLessThan(CONTOUR_LABELS_MIN_ZOOM);

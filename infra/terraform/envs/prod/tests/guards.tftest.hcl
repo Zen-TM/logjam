@@ -312,7 +312,8 @@ run "fire_history_role_writes_only_fire" {
 
   # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
   # prefix condition, or adding an action or a statement lets the monthly
-  # build see, write or delete more than the fire history raster.
+  # build see, write or delete more than the fire history raster and the
+  # Fire history overlay's archive.
   assert {
     condition = jsondecode(aws_iam_role_policy.fire_history.policy).Statement == [
       {
@@ -322,6 +323,12 @@ run "fire_history_role_writes_only_fire" {
         Resource = "arn:aws:s3:::logjam-topo-jobs/fire/*"
       },
       {
+        Sid      = "PublishFireOverlay"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/fire/*"
+      },
+      {
         Sid       = "ListFireHistory"
         Effect    = "Allow"
         Action    = "s3:ListBucket"
@@ -329,7 +336,7 @@ run "fire_history_role_writes_only_fire" {
         Condition = { StringLike = { "s3:prefix" = "fire/*" } }
       },
     ]
-    error_message = "The fire history role may only list, read and write objects under fire/ in the topo bucket."
+    error_message = "The fire history role may only list, read and write objects under fire/ in the topo bucket, and write them under master/fire/."
   }
 }
 

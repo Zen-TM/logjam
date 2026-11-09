@@ -171,6 +171,7 @@ import {
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
+import { fireLayerSpecs } from "./fireLayers";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
@@ -725,7 +726,7 @@ function Map({
     id: string;
     pmtilesUrl: string;
     /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
-    format?: "raster" | "vector" | "slope" | "hillshade" | "land";
+    format?: "raster" | "vector" | "slope" | "hillshade" | "land" | "fire";
     attribution?: string;
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
@@ -2993,6 +2994,14 @@ function Map({
             attribution,
           });
         }
+      }
+
+      if (fmt === "fire") {
+        // The tint ages by the month: a map left open for weeks is at most
+        // that stale.
+        for (const layer of fireLayerSpecs(srcId, new Date()))
+          if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
       }
 
       if (fmt === "land") {

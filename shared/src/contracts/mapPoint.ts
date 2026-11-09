@@ -55,6 +55,8 @@ export const MAP_POINT = {
     // Read from the Land overlay's own tiles on the device, only while it is
     // drawn: no coordinate goes anywhere for this.
     { key: "land" },
+    // The same, from the Fire history overlay's tiles.
+    { key: "fire" },
   ],
   copy: {
     position: "Position",
@@ -63,6 +65,7 @@ export const MAP_POINT = {
     bearing: "Bearing",
     slope: "Slope",
     land: "Land tenure",
+    fire: "Last burnt",
     accuracy: "Accuracy",
     fixAge: "Updated",
     // The title when the point is the viewer's own fix.
@@ -255,7 +258,8 @@ export type MapPointFact = {
     | "distance"
     | "bearing"
     | "slope"
-    | "land";
+    | "land"
+    | "fire";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -293,6 +297,7 @@ export type MapPointFix = {
  * the fine DEM cannot tell, and then there is no slope figure at all. `land`
  * is the Land overlay's name for the class drawn at the point: null or absent
  * with the overlay off or nothing there, and then there is no land figure.
+ * `fire` is `fireNameOf`'s answer from the Fire history overlay, the same way.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
@@ -300,10 +305,11 @@ export function mapPointFacts(input: {
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
   land?: string | null;
+  fire?: string | null;
   /** Given when the point IS the viewer's fix: how good and how old it is. */
   fix?: MapPointFix;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees, land, fix } = input;
+  const { point, elevation, from, slopeDegrees, land, fire, fix } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -377,5 +383,6 @@ export function mapPointFacts(input: {
       value: `${Math.round(slopeDegrees)}°`,
     });
   if (land) facts.push({ key: "land", label: copy.land, value: land });
+  if (fire) facts.push({ key: "fire", label: copy.fire, value: fire });
   return facts;
 }

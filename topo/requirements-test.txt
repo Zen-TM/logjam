@@ -9,3 +9,4 @@ Pillow
 requests
 pmtiles
 aiosmtpd>=1.4.6,<2.0
+shapely

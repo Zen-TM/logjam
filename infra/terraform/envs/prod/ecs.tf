@@ -547,8 +547,9 @@ resource "aws_ecs_task_definition" "fire_history" {
     }
     name = "fire-history"
   }])
-  # About 760 MB peak; six minutes to page through the service and one to
-  # build, on the November 2026 service (38,238 polygons).
+  # About 770 MB peak; nine minutes in all, six of them paging through the
+  # service, then one for the raster and two for the overlay's archive, on the
+  # November 2026 service (38,238 polygons).
   cpu                      = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   family                   = "logjam-fire-history"
