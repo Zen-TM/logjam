@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { composeDatabaseUrl, databaseUrlFromEnv } from "./databaseUrl";
-import { composeDatabaseUrl as prismaConfigCompose } from "../../prisma.config";
+import {
+  composeDatabaseUrl as prismaConfigCompose,
+  migrateDatabaseUrl,
+} from "../../prisma.config";
 
 // prisma.config.ts loads .env on import; this test wants neither its values
 // nor its side effect.
@@ -38,6 +41,32 @@ describe("composeDatabaseUrl", () => {
     ]) {
       expect(prismaConfigCompose(parts)).toBe(composeDatabaseUrl(parts));
     }
+  });
+});
+
+describe("migrateDatabaseUrl", () => {
+  const url = "postgresql://u:p@db:5432/n";
+
+  it("leaves the URL as it is without an explicit DATABASE_SSL_CA (the RDS path)", () => {
+    expect(migrateDatabaseUrl(url, {})).toBe(url);
+  });
+
+  it("leaves the URL as it is when DATABASE_SSL=disable", () => {
+    expect(
+      migrateDatabaseUrl(url, {
+        DATABASE_SSL: "disable",
+        DATABASE_SSL_CA: "/etc/ca.pem",
+      }),
+    ).toBe(url);
+  });
+
+  // Mutation: drop `sslaccept=strict`; Prisma then trusts any certificate.
+  it("verifies against the named CA and fails closed when it is set", () => {
+    expect(
+      migrateDatabaseUrl(url, { DATABASE_SSL_CA: "/etc/brain ca.pem" }),
+    ).toBe(
+      `${url}?sslmode=require&sslaccept=strict&sslcert=%2Fetc%2Fbrain%20ca.pem`,
+    );
   });
 });
 
@@ -84,6 +113,16 @@ describe("databaseUrlFromEnv", () => {
       expect(msg).not.toContain("secret-value");
       expect(msg).not.toContain("localhost");
     }
+  });
+
+  // Mutation: append the migrate ssl parameters in composeDatabaseUrl.
+  it("never adds ssl parameters, which node-postgres would misread", () => {
+    process.env.DB_HOST = "db";
+    process.env.DB_NAME = "n";
+    process.env.DB_USER = "u";
+    process.env.DB_PASSWORD = "p";
+    process.env.DATABASE_SSL_CA = "/etc/ca.pem";
+    expect(databaseUrlFromEnv()).toBe("postgresql://u:p@db:5432/n");
   });
 
   it("lists all four var names when all are missing", () => {
