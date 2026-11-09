@@ -87,7 +87,14 @@ export default function MapPointPopover({
     return {
       land: landClassAt(map, [x, y]),
       fire: fireAt(map, [x, y]),
-      coverage: coverageCarrier && coverageAt(map, [x, y], coverageCarrier),
+      coverage:
+        coverageCarrier &&
+        coverageAt(
+          map,
+          [x, y],
+          [point.longitude, point.latitude],
+          coverageCarrier,
+        ),
     };
   });
 

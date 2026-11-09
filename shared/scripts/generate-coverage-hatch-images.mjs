@@ -21,7 +21,7 @@ const EDGE_WIDTH = 1.5;
 
 // Sparse and faint enough to leave the map readable under it: it covers
 // most of the bush.
-const HATCH = { spacing: 24, core: 0.45, edge: 0.35 };
+const HATCH = { spacing: 24, core: 0.35, edge: 0.27 };
 
 function render({ spacing, core, edge }) {
   const rgba = Buffer.alloc(SIZE * SIZE * 4);

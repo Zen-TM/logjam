@@ -60,7 +60,10 @@ type RenderedQuery = {
   queryRenderedFeatures(
     point: [number, number],
     options: { layers: string[] },
-  ): { properties?: Record<string, unknown> | null }[];
+  ): {
+    properties?: Record<string, unknown> | null;
+    geometry?: { type: string; coordinates?: unknown } | null;
+  }[];
 };
 
 /**
@@ -94,20 +97,22 @@ export function fireAt(
 }
 
 /**
- * What the Coverage overlay predicts at `point` for `carrier` ("Telstra: no
- * mobile reception"), or null: the overlay is off, or the point is off the
+ * What the Coverage overlay predicts at `point` (pixels; `at` is the same
+ * spot as [lng, lat]) for `carrier` ("Telstra: no mobile reception"), or null: the overlay is off, or the point is off the
  * land it covers. Where there is reception the fill is clear, and still
  * answers.
  */
 export function coverageAt(
   map: RenderedQuery,
   point: [number, number],
+  at: readonly [number, number],
   carrier: CarrierId,
 ): string | null {
   if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
   return coverageNameOf(
     map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
     carrier,
+    at,
   );
 }
 

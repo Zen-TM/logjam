@@ -117,7 +117,7 @@ describe("coverageAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(coverageAt(off, [1, 2], "telstra")).toBeNull();
+    expect(coverageAt(off, [1, 2], [150, -33], "telstra")).toBeNull();
   });
 
   // Mutation: query a layer id other than the hatch, or name another carrier
@@ -131,7 +131,9 @@ describe("coverageAt", () => {
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
     };
-    expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: no mobile reception");
+    expect(coverageAt(map, [1, 2], [150, -33], "tpg")).toBe(
+      "TPG: no mobile reception",
+    );
     expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
   });
 });

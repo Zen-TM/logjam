@@ -3,4 +3,4 @@
 // 48x48 tiles of diagonal lines: a 2.5px core in #4E4944 with a
 // 1.5px #F7F3EC edge each side, every 24px.
 export const COVERAGE_HATCH_URI =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAkUlEQVR42u3YsQ2AIBSE4beKu9jY2Fs7giNZWbgZHQWtuRedgFhc+EkoIOH4KLlYl/m4r3NvtWytlik6hs4rR3nK/eaf+eGMzwc447UOZ7z2wxnflQ8ePHjw4MGDBw8e/OD49wJbfJ53xuePzBmff2JnfLYS9EL0QvRC9ELgwYMHDx48ePDgwdML0QvRCw3ZCz0Wk9mqhGyLegAAAABJRU5ErkJggg==";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAkUlEQVR42u3YIQ6AMBBE0T0H5wFBAniuB6qiN6urqCW7gRM0iEk/CYakw0Py7VjnM6d7a7UsrZbJOi4/7zs5Xbvvfvef+6aMjw9Qxvu+KeP9uSnju/bBgwcPHjx48ODBgx8c/75AFh/nlfHxR6aM931TxkeVoAvRhehCdCHw4MGDBw8ePHjw4OlCdCG60JBd6AFxi5bqKO4IxwAAAABJRU5ErkJggg==";

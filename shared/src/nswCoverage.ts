@@ -95,18 +95,63 @@ export function coverageOpacity(): unknown[] {
   return ["match", ["get", NSW_COVERAGE.levelProperty], RECEPTION_LEVEL, 0, 1];
 }
 
+type Ring = readonly (readonly number[])[];
+type QueriedFeature = {
+  properties?: Record<string, unknown> | null;
+  geometry?: { type: string; coordinates?: unknown } | null;
+};
+
+/** Even-odd: whether `ring` ([lng, lat] pairs) encloses `at`. */
+function ringHolds(ring: Ring, [x, y]: readonly [number, number]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i] as [number, number];
+    const [xj, yj] = ring[j] as [number, number];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Whether a GeoJSON Polygon or MultiPolygon holds `at` ([lng, lat]), its holes
+ * excluded. MapLibre Native's query tests each ring of a polygon alone, so a
+ * point in a hole returns the polygon around it too (seen on Logjam GPS: a
+ * clear patch inside an "external" area answered "no mobile reception");
+ * GL JS does not. Anything else is taken as holding it.
+ */
+export function polygonHolds(
+  geometry: QueriedFeature["geometry"],
+  at: readonly [number, number],
+): boolean {
+  const polygons =
+    geometry?.type === "Polygon"
+      ? [geometry.coordinates as Ring[]]
+      : geometry?.type === "MultiPolygon"
+        ? (geometry.coordinates as Ring[][])
+        : null;
+  if (!polygons) return true;
+  return polygons.some(
+    (rings) => rings.filter((ring) => ringHolds(ring, at)).length % 2 === 1,
+  );
+}
+
 /**
  * "Telstra: no mobile reception": what "What is here?" says of the levels a
- * map's own query found on its coverage layer at a point, or null. The layer
- * is filtered to one carrier, so any feature found is that carrier's. On the
- * line between two levels any without reception wins: the map hatches the
- * spot, since a clear fill over a hatch hides nothing.
+ * map's own query found on its coverage layer at `at` ([lng, lat]), or null.
+ * The layer is filtered to one carrier, so any feature found is that
+ * carrier's. Only a feature whose polygon holds `at` counts (`polygonHolds`);
+ * if float error leaves none, all found do. On the line between two levels
+ * any without reception wins: the map hatches the spot, since a clear fill
+ * over a hatch hides nothing.
  */
 export function coverageNameOf(
-  features: readonly { properties?: Record<string, unknown> | null }[],
+  features: readonly QueriedFeature[],
   carrier: CarrierId,
+  at: readonly [number, number],
 ): string | null {
-  const levels = features.map(
+  const holding = features.filter((f) => polygonHolds(f.geometry, at));
+  const levels = (holding.length > 0 ? holding : features).map(
     (f) => f.properties?.[NSW_COVERAGE.levelProperty],
   );
   const known = levels.filter((l) =>

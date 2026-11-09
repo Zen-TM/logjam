@@ -49,6 +49,16 @@ const at = (level: string) => ({
   properties: { [NSW_COVERAGE.levelProperty]: level },
 });
 
+/** A square ring [lng, lat] from (x0, y0) to (x1, y1). */
+const square = (x0: number, y0: number, x1: number, y1: number) => [
+  [x0, y0],
+  [x1, y0],
+  [x1, y1],
+  [x0, y1],
+  [x0, y0],
+];
+const TAP = [150.5, -33.5] as const;
+
 describe("the Coverage hatches", () => {
   // Mutation: edit coverageHatchImages.ts by hand, or change the generator
   // without rerunning it, and the committed hatch drifts from its source.
@@ -115,22 +125,52 @@ describe("coverageNameOf", () => {
   // Mutation: name "external" as reception, or take the first feature found,
   // and a tap on a hatched spot says there is reception.
   it("names the carrier, and reception only where every level found has it", () => {
-    expect(coverageNameOf([at("outdoor")], "telstra")).toBe(
+    expect(coverageNameOf([at("outdoor")], "telstra", TAP)).toBe(
       "Telstra: mobile reception",
     );
-    expect(coverageNameOf([at("external")], "tpg")).toBe(
+    expect(coverageNameOf([at("external")], "tpg", TAP)).toBe(
       "TPG: no mobile reception",
     );
-    expect(coverageNameOf([at("outdoor"), at("none")], "optus")).toBe(
+    expect(coverageNameOf([at("outdoor"), at("none")], "optus", TAP)).toBe(
       "Optus: no mobile reception",
+    );
+  });
+
+  // Mutation: drop the polygonHolds filter, and a tap in a clear patch that
+  // is a hole in an "external" area answers "no mobile reception": MapLibre
+  // Native returns the holed polygon too (the S9 at -33.38428, 150.31676).
+  it("counts only polygons that hold the tap, holes excluded", () => {
+    const holed = {
+      ...at("external"),
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          square(150, -34, 151, -33),
+          square(150.4, -33.6, 150.6, -33.4),
+        ],
+      },
+    };
+    const patch = {
+      ...at("outdoor"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [[square(150.4, -33.6, 150.6, -33.4)]],
+      },
+    };
+    expect(coverageNameOf([holed, patch], "telstra", TAP)).toBe(
+      "Telstra: mobile reception",
+    );
+    // Outside the hole the area holds the tap, and the patch doesn't.
+    expect(coverageNameOf([holed, patch], "telstra", [150.2, -33.2])).toBe(
+      "Telstra: no mobile reception",
     );
   });
 
   // Mutation: answer with a level for nothing found, and a tap at sea says
   // there is reception.
   it("says nothing where nothing was found", () => {
-    expect(coverageNameOf([], "telstra")).toBeNull();
-    expect(coverageNameOf([at("unknown")], "telstra")).toBeNull();
+    expect(coverageNameOf([], "telstra", TAP)).toBeNull();
+    expect(coverageNameOf([at("unknown")], "telstra", TAP)).toBeNull();
   });
 });
 

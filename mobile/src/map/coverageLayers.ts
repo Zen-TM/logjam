@@ -55,9 +55,11 @@ export function coverageMinZoom(layerMinZoom: number | undefined): number {
 }
 
 /**
- * "What is here?"'s coverage figure for a press at `point` (dp): the map's own
- * query of the coverage layers there, named for `carrier`, or null with no
- * carrier or no coverage layer drawn.
+ * "What is here?"'s coverage figure for a press at `point` (dp) and `at`
+ * ([lng, lat], the same spot): the map's own query of the coverage layers
+ * there, named for `carrier` by shared `coverageNameOf`, which drops the
+ * polygons MapLibre Native returns for a point in one of their holes. Null
+ * with no carrier or no coverage layer drawn.
  */
 export async function coverageAtTap(
   map:
@@ -65,11 +67,17 @@ export async function coverageAtTap(
         queryRenderedFeatures(
           point: [number, number],
           options: { layers: string[] },
-        ): Promise<readonly { properties?: Record<string, unknown> | null }[]>;
+        ): Promise<
+          readonly {
+            properties?: Record<string, unknown> | null;
+            geometry?: { type: string; coordinates?: unknown } | null;
+          }[]
+        >;
       }
     | null
     | undefined,
   point: [number, number],
+  at: readonly [number, number],
   layers: readonly string[],
   carrier: CarrierId | null,
 ): Promise<string | null> {
@@ -77,7 +85,7 @@ export async function coverageAtTap(
   const features = await map.queryRenderedFeatures(point, {
     layers: [...layers],
   });
-  return coverageNameOf(features, carrier);
+  return coverageNameOf(features, carrier, at);
 }
 
 /**

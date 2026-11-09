@@ -2383,6 +2383,7 @@ export function MapScreen({
       coverageAtTap(
         mapRef.current,
         event.nativeEvent.point,
+        [lon, lat],
         coverageLayerIdList,
         coverageCarrier,
       )
