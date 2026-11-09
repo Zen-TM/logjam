@@ -5,6 +5,10 @@ const baseSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
+  // Proxies in front of the API that append to X-Forwarded-For (index.ts).
+  // 2 is CloudFront -> Elastic Beanstalk's nginx; a host with CloudFront
+  // straight to the container sets 1.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(2),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -24,6 +28,10 @@ const baseSchema = z.object({
   DB_SECRET_ID: z.string().optional(),
 
   AUTH_MODE: z.enum(["fake", "oidc"]),
+  // Set to "prod" by a host that has no AWS-injected variables for
+  // middleware/auth.ts to key on; there it forces real auth. Read from
+  // process.env at module load, declared here so it is validated at boot.
+  LOGJAM_RUNTIME: z.enum(["prod"]).optional(),
   FAKE_USER_SUB: z.string().optional(),
   // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
   // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens

@@ -9,14 +9,18 @@ import { getEnv } from "../lib/env";
 // These two guards read process.env, not getEnv(), on purpose: they are a
 // second lock beside validateEnv's own fake-in-production check, independent
 // of it, so a bug in either still fails closed.
-// Three independent signals — any one is sufficient to refuse:
+// Four independent signals — any one is sufficient to refuse:
 //   1. NODE_ENV is not "development" or "test"
 //   2. AWS runtime env vars present (ECS/EB inject these)
 //   3. DB_HOST points to a non-local host
+//   4. LOGJAM_RUNTIME=prod, which a host with no AWS-injected variables (a
+//      plain Docker Compose host) sets itself
+const isProdRuntime = process.env.LOGJAM_RUNTIME === "prod";
 if (process.env.AUTH_MODE === "fake") {
   const env = process.env.NODE_ENV;
   const looksProd = env !== "development" && env !== "test";
   const hasAwsRuntime =
+    isProdRuntime ||
     Boolean(process.env.AWS_EXECUTION_ENV) ||
     Boolean(process.env.ECS_CONTAINER_METADATA_URI_V4) ||
     Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -32,16 +36,17 @@ if (process.env.AUTH_MODE === "fake") {
   }
 }
 
-// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
-// MUST run real auth ("oidc"). This catches a
+// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate),
+// or a host that declares LOGJAM_RUNTIME=prod, MUST run real auth ("oidc").
+// This catches a
 // misconfigured prod task even if the AUTH_MODE=fake heuristics above were
 // somehow all defeated. Guard: src/middleware/auth.unit.test.ts.
 if (
-  process.env.ECS_CONTAINER_METADATA_URI_V4 &&
+  (process.env.ECS_CONTAINER_METADATA_URI_V4 || isProdRuntime) &&
   process.env.AUTH_MODE !== "oidc"
 ) {
   throw new Error(
-    `AUTH_MODE must be "oidc" in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
+    `AUTH_MODE must be "oidc" in a prod or AWS container runtime (got "${process.env.AUTH_MODE}").`,
   );
 }
 

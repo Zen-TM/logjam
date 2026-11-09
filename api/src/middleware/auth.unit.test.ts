@@ -308,7 +308,41 @@ describe("requireAuth — oidc mode, real tokens", () => {
 
 describe("auth module-load fail-closed guards", () => {
   // Mutation: delete the positive check, let it accept "cognito" again, or
-  // drop the fake-refused guard, and the matching test goes red.
+  // drop the fake-refused guard, and the matching test goes red. Dropping
+  // `isProdRuntime` from either check in auth.ts turns the LOGJAM_RUNTIME
+  // tests red.
+
+  function plainComposeHost() {
+    delete process.env.ECS_CONTAINER_METADATA_URI_V4;
+    delete process.env.AWS_EXECUTION_ENV;
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+    process.env.LOGJAM_RUNTIME = "prod";
+  }
+
+  it("refuses AUTH_MODE=fake when LOGJAM_RUNTIME=prod, however the rest reads", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "fake";
+    process.env.NODE_ENV = "development";
+    process.env.DB_HOST = "postgres";
+    await expect(import("./auth")).rejects.toThrow(/refused/);
+  });
+
+  it("refuses any other AUTH_MODE when LOGJAM_RUNTIME=prod", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "cognito";
+    process.env.NODE_ENV = "production";
+    await expect(import("./auth")).rejects.toThrow(/must be "oidc"/);
+  });
+
+  it("accepts AUTH_MODE=oidc when LOGJAM_RUNTIME=prod", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "oidc";
+    process.env.NODE_ENV = "production";
+    await expect(import("./auth")).resolves.toBeDefined();
+  });
 
   it("refuses AUTH_MODE=fake in a production NODE_ENV", async () => {
     vi.resetModules();
