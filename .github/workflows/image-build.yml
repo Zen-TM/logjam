@@ -5,6 +5,12 @@ name: Image build
 # merge: merging deploys (deploy-api.yml, deploy-topo-worker.yml), and nothing
 # else builds either image first. The commands match the deploy builds.
 #
+# The API image is built for every architecture deploy-api.yml publishes, each
+# on a native runner (the image compiles `canvas`, so no emulation), so an
+# arm64-only break fails here and not after merge. `api-image` is the required
+# check: it passes when every architecture's build did. pin-release.sh
+# --self-test holds the platform lists to the task definitions' architectures.
+#
 # api-image and topo-image are required checks
 # (infra/terraform/envs/github/rulesets.tf). A required check whose workflow
 # never starts leaves the pull request waiting forever, so this workflow
@@ -31,10 +37,18 @@ permissions:
   contents: read
 
 jobs:
-  api-image:
-    name: api-image
-    runs-on: ubuntu-latest
+  api-image-build:
+    name: api-image-build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,7 +67,18 @@ jobs:
           fi
       - name: Build the API image
         if: steps.scope.outputs.build == 'true'
-        run: docker build -f api/Dockerfile .
+        run: docker build --platform ${{ matrix.platform }} -f api/Dockerfile .
+
+  api-image:
+    name: api-image
+    needs: api-image-build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every architecture built
+        env:
+          RESULT: ${{ needs.api-image-build.result }}
+        run: test "$RESULT" = success
 
   topo-image:
     name: topo-image
