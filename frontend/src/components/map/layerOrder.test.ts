@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 
 import { TERRAIN_ENTRIES } from "./terrainEntries";
 import {
+  coverageAt,
+  COVERAGE_FILL_LAYER,
   fireAt,
   FIRE_EDGE_LAYER,
   FIRE_FILL_LAYER,
@@ -105,6 +107,75 @@ describe("fireAt", () => {
   });
 });
 
+describe("coverageAt", () => {
+  // Mutation: drop the `getLayer` test, and with the overlay off MapLibre is
+  // queried for a layer it does not have, and throws.
+  it("reads nothing with the overlay off", () => {
+    const off = {
+      getLayer: () => undefined,
+      queryRenderedFeatures: () => {
+        throw new Error("no such layer");
+      },
+    };
+    expect(coverageAt(off, [1, 2], [150, -33], "telstra")).toBeNull();
+  });
+
+  // Mutation: query a layer id other than the hatch, or name another carrier
+  // than the one drawn, and a tap answers nothing or for the wrong network.
+  it("names the drawn carrier's reception at the point", () => {
+    const asked: unknown[] = [];
+    const map = {
+      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: (at: unknown, options: { layers: string[] }) => {
+        asked.push([at, options.layers]);
+        return [{ properties: { level: "external", carrier: "tpg" } }];
+      },
+    };
+    expect(coverageAt(map, [1, 2], [150, -33], "tpg")).toBe(
+      "TPG: no mobile reception",
+    );
+    expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
+  });
+
+  // Mutation: drop `at` on its way to coverageNameOf, or swap it with the
+  // pixel point (here or in MapPointPopover), and a tap in a clear patch that
+  // is a hole in an "external" area answers "no mobile reception" or nothing.
+  it("names the patch a tap is in, not the area it is a hole of", () => {
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const map = {
+      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      queryRenderedFeatures: () => [
+        {
+          properties: { level: "external" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              ring(150, -34, 151, -33),
+              ring(150.4, -33.6, 150.6, -33.4),
+            ],
+          },
+        },
+        {
+          properties: { level: "outdoor" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [ring(150.4, -33.6, 150.6, -33.4)],
+          },
+        },
+      ],
+    };
+    expect(coverageAt(map, [1, 2], [150.5, -33.5], "telstra")).toBe(
+      "Telstra: mobile reception",
+    );
+  });
+});
+
 describe("the Fire history layer ids", () => {
   // Mutation: rename the entry or a layer alone, and the stack and the
   // basemap move never find the layers: Map.tsx owns `topo-<entry id>-*`.
@@ -170,6 +241,7 @@ describe("moveTerrainIntoBasemap", () => {
       map,
       {
         contours: ["topo-nswcontours-minor", "topo-nswcontours-labels"],
+        coverage: [],
         fire: [],
         slope: ["topo-nswslope-dem"],
         land: ["topo-nswland-fill"],

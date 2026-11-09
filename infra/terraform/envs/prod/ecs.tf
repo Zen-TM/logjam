@@ -1,6 +1,6 @@
 # ECS task definitions for the three on-demand Fargate workers, the
-# pre-deploy migrate one-shot, the monthly place registry and fire history
-# builds and the two-hourly river gauges job. Workers are launched via RunTask
+# pre-deploy migrate one-shot, the monthly place registry, fire history and
+# coverage builds and the two-hourly river gauges job. Workers are launched via RunTask
 # (api/src/lib/ecsRunTask.ts), the rest by their schedules below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
@@ -587,6 +587,88 @@ resource "aws_scheduler_schedule" "fire_history" {
 
     ecs_parameters {
       task_definition_arn = aws_ecs_task_definition.fire_history.arn_without_revision
+      launch_type         = "FARGATE"
+
+      network_configuration {
+        subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
+        security_groups  = [aws_security_group.worker.id]
+        assign_public_ip = true
+      }
+    }
+  }
+}
+
+# Mobile coverage (topo/build_coverage.py): once a month, ask data.gov.au
+# whether the ACCC's coverage release has new maps and, when it has, rebuild
+# the Coverage overlay's archive under master/coverage/ in the topo bucket.
+# Same image as the topo workers, so pin-release.sh repins it on each topo
+# deploy; no database and no secrets.
+resource "aws_ecs_task_definition" "coverage" {
+  container_definitions = jsonencode([{
+    entryPoint = ["python3", "/app/build_coverage.py", "publish"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "S3_BUCKET_TOPO"
+      value = module.topo_jobs.bucket_id
+    }]
+    essential = true
+    # Floor only — CI re-registers this def pinned to a sha (see header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.coverage.name
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    name = "coverage"
+  }])
+  # On the 2026 release, on a 4-core box under a 4 GB cap: 44 minutes for
+  # z12 alone. Tiling z8 to z12 took 47, 8 of them on every core, mostly
+  # under 2.5 GB with two moments at the cap, and about 10 GB of disk at once
+  # (4.3 GB of maps). Two vCPUs for the tiling, and twice the memory it was
+  # measured under.
+  cpu                      = "2048"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  family                   = "logjam-coverage"
+  memory                   = "8192"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.coverage.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+}
+
+# Its own schedule group, as the gauges have: the not-launched alarm's only
+# dimension is the group.
+resource "aws_scheduler_schedule_group" "coverage" {
+  name = "logjam-coverage"
+}
+
+# 04:00 Sydney on the 6th of each month: the place registry's hour, a day
+# after it and the fire history build.
+resource "aws_scheduler_schedule" "coverage" {
+  name                         = "logjam-coverage"
+  group_name                   = aws_scheduler_schedule_group.coverage.name
+  schedule_expression          = "cron(0 4 6 * ? *)"
+  schedule_expression_timezone = "Australia/Sydney"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.coverage_scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.coverage.arn_without_revision
       launch_type         = "FARGATE"
 
       network_configuration {

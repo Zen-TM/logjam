@@ -53,6 +53,8 @@ function popover(
         onActiveLayerChange={noop}
         terrainLayers={TERRAIN_LAYER_DEFAULTS}
         onTerrainLayerChange={noop}
+        coverageCarrier="telstra"
+        onCoverageCarrierChange={noop}
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}

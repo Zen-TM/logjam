@@ -500,3 +500,61 @@ resource "aws_cloudwatch_metric_alarm" "fire_history_not_launched" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# ── Coverage ───────────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, as for
+# the place registry. A release caught mid-upload, or a map with nothing in
+# NSW, exits non-zero with the published archive left in place.
+resource "aws_cloudwatch_log_metric_filter" "coverage_failures" {
+  name           = "logjam-coverage-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.coverage.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "CoverageFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "coverage_failed" {
+  alarm_name        = "logjam-coverage-failed"
+  alarm_description = "The monthly coverage build stopped with a non-zero exit or failed to start; the published archive is unchanged and a release behind. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.coverage.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.coverage_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.coverage_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule.
+resource "aws_cloudwatch_metric_alarm" "coverage_not_launched" {
+  alarm_name        = "logjam-coverage-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly coverage build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.coverage.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.coverage_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.coverage.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

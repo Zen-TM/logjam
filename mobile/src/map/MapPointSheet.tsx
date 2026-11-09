@@ -51,6 +51,7 @@ export function MapPointSheet({
   userCoord,
   land,
   fire,
+  coverage,
   onClose,
   onClosed,
   run,
@@ -67,6 +68,8 @@ export function MapPointSheet({
   land: string | null;
   /** The latest fire at the point, or null: the Fire history overlay off or empty there. */
   fire: string | null;
+  /** The carrier's predicted reception at the point, or null: the Coverage overlay off, no carrier chosen, or nothing known there. */
+  coverage: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   onClose: () => void;
@@ -131,6 +134,7 @@ export function MapPointSheet({
           point={point}
           land={land}
           fire={fire}
+          coverage={coverage}
           userCoord={userCoord}
           run={run}
           onInfo={onInfo}
@@ -214,6 +218,7 @@ function PointDetail({
   point,
   land,
   fire,
+  coverage,
   userCoord,
   run,
   onInfo,
@@ -225,6 +230,7 @@ function PointDetail({
   point: MapPoint;
   land: string | null;
   fire: string | null;
+  coverage: string | null;
   userCoord: [number, number] | null;
   run: MapHoldRun;
   onInfo: (message: string) => void;
@@ -299,6 +305,7 @@ function PointDetail({
     slopeDegrees: slopeDeg,
     land,
     fire,
+    coverage,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

@@ -534,6 +534,30 @@ describe("statewide slope and hillshade", () => {
     );
   });
 
+  // Mutation: resolve Coverage with no `mainRegion`, and two saved areas that
+  // share a low-zoom tile hatch it twice, with a seam.
+  it("draws one coverage clip offline, and the archive online", () => {
+    const at = (id: string, west: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "coverage-region",
+        logicalKey: "nsw-coverage",
+        sourceType: "vector",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, west + 0.1, -33.7],
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
+    });
+    expect(resolveMapSource({ kind: "nsw-coverage" }, offline)).toHaveLength(1);
+    const [online] = resolveMapSource({ kind: "nsw-coverage" }, ctx({}));
+    expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
+    expect(online!.status === "ok" && online!.url).toContain(
+      "master/coverage/nsw-coverage.pmtiles",
+    );
+  });
+
   // Mutation: drop the `logicalKey` test, and a sharpened area's contour or
   // slope clip (filed as the same kind) enables the statewide switch.
   it("holdsContours and holdsSlope: the statewide clip, not an area's", () => {

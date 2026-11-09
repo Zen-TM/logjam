@@ -9,6 +9,7 @@ import {
   mapPointStepBack,
   mapPointVerbs,
   type MapPointView,
+  type CarrierId,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
@@ -25,7 +26,7 @@ import {
   StatGrid,
   type Stat,
 } from "../../ui";
-import { fireAt, landClassAt } from "./layerOrder";
+import { coverageAt, fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
 import classes from "./MapPointPopover.module.css";
 
@@ -46,6 +47,7 @@ export default function MapPointPopover({
   map,
   point,
   from,
+  coverageCarrier,
   startAt,
   onClose,
   onAddPlace,
@@ -56,6 +58,8 @@ export default function MapPointPopover({
   point: MapPointCoord;
   /** The viewer's fix if the browser already has one, else null. */
   from: MapPointCoord | null;
+  /** The carrier the Coverage overlay draws, or null before one is picked. */
+  coverageCarrier: CarrierId | null;
   /** A right-click opens the panel on Options, with no facts to go back to. */
   startAt?: "options";
   onClose: () => void;
@@ -78,9 +82,20 @@ export default function MapPointPopover({
     point.latitude,
   );
   const metres = reading?.elevationM ?? null;
-  const [{ land, fire }] = useState(() => {
+  const [{ land, fire, coverage }] = useState(() => {
     const { x, y } = map.project([point.longitude, point.latitude]);
-    return { land: landClassAt(map, [x, y]), fire: fireAt(map, [x, y]) };
+    return {
+      land: landClassAt(map, [x, y]),
+      fire: fireAt(map, [x, y]),
+      coverage:
+        coverageCarrier &&
+        coverageAt(
+          map,
+          [x, y],
+          [point.longitude, point.latitude],
+          coverageCarrier,
+        ),
+    };
   });
 
   // Options and the weather swap the body in place and back out one step
@@ -128,6 +143,7 @@ export default function MapPointPopover({
     slopeDegrees: reading?.slopeDegrees ?? null,
     land,
     fire,
+    coverage,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

@@ -84,6 +84,7 @@ export * from "./demSources.js";
 export * from "./nswContours.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";
+export * from "./nswCoverage.js";
 export * from "./nswFire.js";
 export * from "./nswLand.js";
 export * from "./overlayLegends.js";

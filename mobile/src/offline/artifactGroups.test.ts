@@ -179,6 +179,7 @@ describe("REGION_ARTIFACT_KINDS", () => {
         "slope-region",
         "land-region",
         "fire-region",
+        "coverage-region",
         "basemap-region",
       ]),
     );
@@ -203,6 +204,7 @@ describe("isBundledRegionMember", () => {
     expect(member("slope-region", "nsw-slope")).toBe(true);
     expect(member("land-region", "nsw-land")).toBe(true);
     expect(member("fire-region", "nsw-fire")).toBe(true);
+    expect(member("coverage-region", "nsw-coverage")).toBe(true);
     expect(member("dem-region", "lidar-abc")).toBe(true);
   });
 });

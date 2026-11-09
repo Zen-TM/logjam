@@ -236,6 +236,7 @@ function regionMemberName(artifact: MapArtifact): string {
   if (artifact.kind === "slope-region") return "Slope";
   if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
   if (artifact.kind === "fire-region") return MAP_TERRAIN.copy.fire;
+  if (artifact.kind === "coverage-region") return MAP_TERRAIN.copy.coverage;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
   return artifact.logicalKey === NSW_5M.id
     ? "Elevation data, NSW 5 m"

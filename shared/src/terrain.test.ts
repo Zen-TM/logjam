@@ -165,6 +165,7 @@ describe("normalizeTerrainLayers", () => {
     expect(normalizeTerrainLayers(null)).toEqual(TERRAIN_LAYER_DEFAULTS);
     expect(TERRAIN_LAYER_DEFAULTS).toEqual({
       contours: true,
+      coverage: false,
       fire: false,
       slope: true,
       land: false,
@@ -176,6 +177,7 @@ describe("normalizeTerrainLayers", () => {
   it("keeps what was stored and defaults the rest", () => {
     expect(normalizeTerrainLayers({ contours: false, slope: "yes" })).toEqual({
       contours: false,
+      coverage: false,
       fire: false,
       slope: true,
       land: false,
@@ -264,10 +266,10 @@ describe("terrainBeforeIds", () => {
 
   // Mutation: anchor the slope apart from the contours (say under `water`, with
   // the shading), and a water fill or a land fill lands between them.
-  // Mutation: anchor fire or Land under the water, with the shading, and the
-  // slope colours cover them; list Land under fire, and the tint washes out
-  // its edges.
-  it("puts the shading over the land, and the slope, the fire tint then Land's edges directly under the contours, under the roads", () => {
+  // Mutation: anchor fire, coverage or Land under the water, with the
+  // shading, and the slope colours cover them; list Land under fire or the
+  // hatch, and they wash out its edges.
+  it("puts the shading over the land, and the slope, the fire tint, the coverage hatch then Land's edges directly under the contours, under the roads", () => {
     const style = [
       "pm-earth",
       "pm-landcover",
@@ -279,6 +281,7 @@ describe("terrainBeforeIds", () => {
     const moves = terrainBeforeIds(
       {
         contours: ["c-minor", "c-major", "c-labels"],
+        coverage: ["coverage-fill"],
         fire: ["fire-fill", "fire-edge"],
         slope: ["slope"],
         land: ["land"],
@@ -294,6 +297,7 @@ describe("terrainBeforeIds", () => {
       "slope",
       "fire-fill",
       "fire-edge",
+      "coverage-fill",
       "land",
       "c-minor",
       "c-major",

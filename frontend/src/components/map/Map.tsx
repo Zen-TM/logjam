@@ -50,6 +50,10 @@ import {
   landEdgeOpacity,
   nswContourStyle,
   NSW_LAND,
+  COVERAGE_HATCH_PIXEL_RATIO,
+  COVERAGE_HATCH_URIS,
+  coverageFilter,
+  type CarrierId,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -69,6 +73,7 @@ import {
   GRID_LABELS,
   GRID_LINES,
   LAND_EDGE_LAYER,
+  COVERAGE_FILL_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
   pressClosedGauge,
@@ -171,6 +176,7 @@ import {
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
+import { coverageLayerSpec } from "./coverageLayers";
 import { fireLayerSpecs } from "./fireLayers";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
@@ -619,6 +625,7 @@ function Map({
   sharpenedAreas,
   onBasemapHealth,
   slopeBands,
+  coverageCarrier = null,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -726,7 +733,14 @@ function Map({
     id: string;
     pmtilesUrl: string;
     /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
-    format?: "raster" | "vector" | "slope" | "hillshade" | "land" | "fire";
+    format?:
+      | "raster"
+      | "vector"
+      | "slope"
+      | "hillshade"
+      | "land"
+      | "fire"
+      | "coverage";
     attribution?: string;
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
@@ -737,6 +751,8 @@ function Map({
   onBasemapHealth?: (id: string, down: boolean) => void;
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
+  /** The carrier a `coverage` entry draws. */
+  coverageCarrier?: CarrierId | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -829,6 +845,7 @@ function Map({
   const prevTopoKeyRef = useRef<string>("");
 
   const slopeBandsRef = useRef(slopeBands);
+  const coverageCarrierRef = useRef(coverageCarrier);
 
   // Keep refs up to date for use inside event handlers
   const selectPlaceRef = useRef(selectPlace);
@@ -1021,6 +1038,10 @@ function Map({
   useEffect(() => {
     slopeBandsRef.current = slopeBands;
   }, [slopeBands]);
+
+  useEffect(() => {
+    coverageCarrierRef.current = coverageCarrier;
+  }, [coverageCarrier]);
 
   // Initialise map once
   useEffect(() => {
@@ -2797,15 +2818,23 @@ function Map({
             ? GAUGE_ICON_SDF_URI
             : null;
       // Badges are plain bitmaps, two colours and a rim, so there is no tint
-      // to protect and MapLibre can take the decoded element itself.
-      const badgeUri = (PLACE_BADGE_URIS as Record<string, string>)[id];
-      if (badgeUri) {
+      // to protect and MapLibre can take the decoded element itself. So are
+      // the Coverage hatches, which are drawn at 2x.
+      const hatchUri = (COVERAGE_HATCH_URIS as Record<string, string>)[id];
+      const bitmapUri =
+        (PLACE_BADGE_URIS as Record<string, string>)[id] ?? hatchUri;
+      if (bitmapUri) {
         if (map.hasImage(id)) return;
-        const badge = new Image();
-        badge.onload = () => {
-          if (!map.hasImage(id)) map.addImage(id, badge);
+        const bitmap = new Image();
+        bitmap.onload = () => {
+          if (map.hasImage(id)) return;
+          map.addImage(
+            id,
+            bitmap,
+            hatchUri ? { pixelRatio: COVERAGE_HATCH_PIXEL_RATIO } : {},
+          );
         };
-        badge.src = badgeUri;
+        bitmap.src = bitmapUri;
         return;
       }
       if (sdfUri) {
@@ -2996,6 +3025,14 @@ function Map({
         }
       }
 
+      if (fmt === "coverage") {
+        const carrier = coverageCarrierRef.current;
+        if (!carrier) return;
+        const layer = coverageLayerSpec(srcId, carrier);
+        if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
+      }
+
       if (fmt === "fire") {
         // The tint ages by the month: a map left open for weeks is at most
         // that stale.
@@ -3169,6 +3206,16 @@ function Map({
         );
     }
   }, [topoLayers, slopeBands, mapLoaded]);
+
+  // The carrier, live, the same way: a filter change, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+      mapRef.current.setFilter(
+        COVERAGE_FILL_LAYER,
+        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+      );
+  }, [topoLayers, coverageCarrier, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3720,6 +3767,7 @@ function Map({
           map={drawableMap}
           point={asked.point}
           from={asked.from}
+          coverageCarrier={coverageCarrier}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

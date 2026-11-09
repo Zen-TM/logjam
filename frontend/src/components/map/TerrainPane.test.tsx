@@ -1,7 +1,16 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CARRIERS,
   fireLegendRows,
+  NSW_COVERAGE,
   MAP_TERRAIN,
   NSW_FIRE,
   NSW_LAND,
@@ -10,6 +19,15 @@ import {
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
 import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
+
+// jsdom has no ResizeObserver, which the Coverage legend's ChipRail uses.
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    disconnect() {}
+  },
+);
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
 HTMLDialogElement.prototype.showModal = function showModal() {
@@ -184,6 +202,7 @@ describe("the Terrain group on Logjam Web", () => {
       );
     const stored = {
       contours: true,
+      coverage: false,
       fire: false,
       slope: true,
       land: false,
@@ -288,5 +307,118 @@ describe("the Fire history row on Logjam Web", () => {
     expect(
       screen.queryByRole("switch", { name: "Show fire history" }),
     ).toBeNull();
+  });
+});
+
+describe("the Coverage row on Logjam Web", () => {
+  const row = (props: {
+    onToggle?: (on: boolean) => void;
+    onChange?: (value: string) => void;
+    value?: string | null;
+  }) =>
+    render(
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.coverage}
+        checked={TERRAIN_LAYER_DEFAULTS.coverage}
+        onToggle={props.onToggle ?? vi.fn()}
+        choice={{
+          value: props.value === undefined ? "optus" : props.value,
+          onChange: props.onChange ?? vi.fn(),
+        }}
+      />,
+    );
+
+  // Mutation: draw the switch before a carrier is picked, or let the button
+  // open anything but the carrier choice, and the overlay can be on with no
+  // network to draw; skip turning it on at the first pick, and the user has
+  // to find the switch they were never shown.
+  it("offers one button to choose the carrier until one is picked", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    row({ onChange, onToggle, value: null });
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: copy.coverageAbout }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.coverageChooseCarrier }),
+    );
+    screen.getByRole("dialog", { name: copy.coverage });
+    expect(
+      screen
+        .getAllByRole("radio")
+        .some((r) => r.getAttribute("aria-checked") === "true"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: "Telstra" }));
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith("telstra");
+  });
+
+  // Mutation: drop the hand-off to help on close, and the first pick, which
+  // unmounts the button that opened the legend, leaves keyboard focus on the
+  // page's body.
+  it("gives focus to the row's help when the first pick's legend closes", async () => {
+    function Picking() {
+      const [value, setValue] = useState<string | null>(null);
+      return (
+        <OverlayLegendRow
+          legend={OVERLAY_LEGENDS.coverage}
+          checked={value !== null}
+          onToggle={vi.fn()}
+          choice={{ value, onChange: setValue }}
+        />
+      );
+    }
+    render(<Picking />);
+    const choose = screen.getByRole("button", {
+      name: copy.coverageChooseCarrier,
+    });
+    choose.focus();
+    fireEvent.click(choose);
+    fireEvent.click(screen.getByRole("radio", { name: "Optus" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: copy.coverageAbout }),
+      ),
+    );
+  });
+
+  // Mutation: start it on, or drop the row's subtitle, and every map opens
+  // under a hatch nobody asked for, or for a carrier nobody can see.
+  it("is off by default, switches the coverage key, and names its carrier", () => {
+    const onToggle = vi.fn();
+    row({ onToggle });
+    const coverage = screen.getByRole("switch", { name: "Show coverage" });
+    expect(coverage.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(coverage);
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Optus")).toBeTruthy();
+  });
+
+  // Mutation: drop the rail, the caveat or the credit, and a user can't pick
+  // their network, a prediction reads as a promise, or a CC BY term goes unmet.
+  it("picks the carrier in its legend, beside the key, caveat and credit", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    row({ onChange, onToggle });
+    fireEvent.click(screen.getByRole("button", { name: copy.coverageAbout }));
+    const legend = screen.getByRole("dialog", { name: copy.coverage });
+    for (const { name } of CARRIERS)
+      expect(screen.getByRole("radio", { name })).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "TPG" }));
+    expect(onChange).toHaveBeenCalledWith("tpg");
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(legend.textContent).toContain(copy.coverageLegend);
+    for (const { label } of OVERLAY_LEGENDS.coverage.rows)
+      expect(legend.textContent).toContain(label);
+    expect(legend.textContent).toContain(copy.coverageCaveat);
+    expect(legend.textContent).toContain(NSW_COVERAGE.credit);
+  });
+
+  // Mutation: list it among the Terrain rows, and it shows twice.
+  it("is an overlay row, not a Terrain one", () => {
+    draw();
+    expect(screen.queryByRole("switch", { name: "Show coverage" })).toBeNull();
   });
 });
