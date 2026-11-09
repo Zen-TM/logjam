@@ -7,6 +7,8 @@ import {
   normalizeThemeSchemeId,
   normalizeUserUiPreferencesKeepingNoPick,
   MAX_SLOPE_BANDS,
+  normalizeRegionIds,
+  REGIONS,
   parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
@@ -335,6 +337,9 @@ router.get(
   },
 );
 
+/** Far over any list of regions there will be; the body cap is no substitute. */
+const MAX_REGIONS = 64;
+
 // PATCH /users/me — update current user's profile
 router.patch(
   "/me",
@@ -357,6 +362,7 @@ router.patch(
       copyPlaceMedia,
       leaderboardOptIn,
       slopeBands,
+      regions,
       consentVersion,
     } = req.body as {
       username?: unknown;
@@ -366,6 +372,7 @@ router.patch(
       copyPlaceMedia?: unknown;
       leaderboardOptIn?: unknown;
       slopeBands?: unknown;
+      regions?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -416,7 +423,8 @@ router.patch(
       importMergePolicy !== undefined ||
       copyPlaceMedia !== undefined ||
       leaderboardOptIn !== undefined ||
-      slopeBands !== undefined
+      slopeBands !== undefined ||
+      regions !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -450,6 +458,23 @@ router.patch(
       if (nextSlopeBands === null) {
         throw malformed("Invalid slopeBands");
       }
+      if (regions !== undefined) {
+        if (
+          !Array.isArray(regions) ||
+          regions.length === 0 ||
+          !regions.every((id) => typeof id === "string")
+        ) {
+          throw malformed("Invalid regions");
+        }
+        if (regions.length > MAX_REGIONS) {
+          throw malformed(`At most ${MAX_REGIONS} regions`, 413);
+        }
+        // An unknown id among known ones is dropped (a newer client's); a
+        // choice of none that this server knows would be stored as NSW.
+        if (!REGIONS.some((region) => regions.includes(region.id))) {
+          throw malformed("No known region in regions");
+        }
+      }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
         if (!normalized) {
@@ -478,6 +503,10 @@ router.patch(
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
         ...(leaderboardOptIn !== undefined ? { leaderboardOptIn } : {}),
         ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
+        // An id no region has is dropped, as a stored one is on read.
+        ...(regions !== undefined
+          ? { regions: normalizeRegionIds(regions) }
+          : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),

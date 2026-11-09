@@ -1,5 +1,5 @@
 import { VALID_GEOPDF_BASE_LAYERS } from "@logjam/shared";
-import { BASE_LAYERS } from "../map/Map";
+import { BASE_LAYERS } from "../map/baseLayers";
 
 // The base layer a GeoPDF is printed from, and what the map shows while the
 // area is framed (shared/DESIGN.md §11: a preview shows the result as it will be

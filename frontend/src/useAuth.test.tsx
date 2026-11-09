@@ -391,6 +391,7 @@ describe("useAuth password sign-in", () => {
   });
 
   it("leaves a failed consent record to the gate", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     oidc.signInWithPassword.mockResolvedValue(true);
     recordConsent.mockRejectedValueOnce(new Error("taken"));
     const { result } = await signedOut();
@@ -398,5 +399,24 @@ describe("useAuth password sign-in", () => {
       result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
     );
     expect(result.current.state).toBe("authenticated");
+    // The gate asks the regions then; a second step here would ask twice.
+    expect(result.current.newAccount).toBe(false);
+  });
+
+  // Mutation: set newAccount for any password sign-in, or never, and one of
+  // the two halves goes red; App's region step hangs on this flag.
+  it("reports a new account after the sign-up form, not a plain sign-in, until finished", async () => {
+    oidc.signInWithPassword.mockResolvedValue(true);
+    const { result } = await signedOut();
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(result.current.newAccount).toBe(false);
+
+    await act(() =>
+      result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
+    );
+    expect(result.current.newAccount).toBe(true);
+
+    act(() => result.current.finishNewAccount());
+    expect(result.current.newAccount).toBe(false);
   });
 });

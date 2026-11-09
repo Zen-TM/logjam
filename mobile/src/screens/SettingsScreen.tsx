@@ -14,8 +14,9 @@
 // LAYOUT: a plain list under the title-and-back Hero `AppShell` draws, as on
 // every destination in More.
 //
-// Row subtitles: none on the page rows (§7 — a navigation row's subtitle is live
-// STATE, never an explanation of what is behind it). The field rows keep theirs
+// Row subtitles: none on the page rows bar Regions, whose subtitle is what is
+// chosen (§7 — a navigation row's subtitle is live STATE, never an explanation
+// of what is behind it). The field rows keep theirs
 // because a count IS state, and Notifications keeps the reason slot free for
 // §10's "Needs an account".
 //
@@ -54,6 +55,8 @@ import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
+import { useRegions } from "../regionsPreference";
+import { regionsSettingsRow } from "./regionChoice";
 import { makeStyles, muted } from "../theme";
 import {
   BottomSheet,
@@ -69,6 +72,7 @@ import {
 /** The sub-pages, in the order someone goes looking for them. */
 export type SettingsPage =
   | "display"
+  | "regions"
   | "map"
   | "notifications"
   | "offline"
@@ -78,6 +82,7 @@ const copy = SETTINGS.copy;
 
 const PAGE_ICONS: Record<SettingsPage, Glyph> = {
   display: "typography",
+  regions: "region",
   map: "map",
   notifications: "notifications",
   offline: "device",
@@ -161,11 +166,13 @@ export function SettingsScreen({
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 
-  const pageRow = (page: SettingsPage) => (
+  const regionIds = useRegions();
+  const pageRow = (page: SettingsPage, subtitle?: string) => (
     <Row
       key={page}
       icon={PAGE_ICONS[page]}
       title={copy[page]}
+      subtitle={subtitle}
       // Notifications is an account-backed page, so it says so on the way
       // in rather than after the tap (DESIGN.md). Offline and storage
       // opens for a guest and sorts its own rows.
@@ -184,6 +191,10 @@ export function SettingsScreen({
     () => ReactNode
   > = {
     display: () => pageRow("display"),
+    regions: () => {
+      const row = regionsSettingsRow(regionIds);
+      return row && pageRow("regions", row.subtitle);
+    },
     map: () => pageRow("map"),
     notifications: () => pageRow("notifications"),
     offline: () => pageRow("offline"),

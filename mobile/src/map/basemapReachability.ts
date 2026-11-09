@@ -10,7 +10,7 @@ import {
   withBasemapDown,
 } from "@logjam/shared";
 
-import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
+import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 // The Katoomba tile the bundled swatches are cut from.
@@ -18,9 +18,10 @@ const PROBE_TILE = { z: 13, x: 7516, y: 4911 };
 
 /** The fetched basemaps. The drawn one is read from our own archive and has no
  *  third-party server to probe. */
-export const PROBED_BASEMAPS = MOBILE_BASEMAPS.filter(
-  (id) => BASEMAP_CATALOG.find((e) => e.id === id)?.kind === "raster",
-);
+export const probedBasemaps = (regionIds: readonly string[]): BasemapId[] =>
+  mobileBasemaps(regionIds).filter(
+    (id) => BASEMAP_CATALOG.find((e) => e.id === id)?.kind === "raster",
+  );
 
 function probeUrl(id: BasemapId): string {
   const entry = BASEMAP_CATALOG.find((e) => e.id === id);
@@ -37,16 +38,19 @@ function probeUrl(id: BasemapId): string {
 export function basemapFallbackFor(
   picked: BasemapId,
   down: ReadonlySet<BasemapId>,
+  regionIds: readonly string[],
 ): BasemapId {
-  return picked === DEFAULT_BASEMAP || down.has(DEFAULT_BASEMAP)
-    ? "protomaps"
-    : DEFAULT_BASEMAP;
+  const fallback = defaultBasemap(regionIds);
+  return picked === fallback || down.has(fallback) ? "protomaps" : fallback;
 }
 
 /** The basemaps whose server did not answer, and `probe`, which asks again (the
  *  Layers sheet opening). Probes on mount and whenever the phone comes online;
  *  an offline phone marks nothing down. */
-export function useDownBasemaps(online: boolean): {
+export function useDownBasemaps(
+  online: boolean,
+  regionIds: readonly string[],
+): {
   down: ReadonlySet<BasemapId>;
   probe: () => void;
 } {
@@ -61,7 +65,7 @@ export function useDownBasemaps(online: boolean): {
   const probe = useCallback(() => {
     if (!online) return;
     const mine = ++latest.current;
-    for (const id of PROBED_BASEMAPS) {
+    for (const id of probedBasemaps(regionIds)) {
       void serverAnswers(probeUrl(id)).then((ok) => {
         if (latest.current !== mine) return;
         const next = withBasemapDown(verdict.current, id, !ok);
@@ -70,7 +74,7 @@ export function useDownBasemaps(online: boolean): {
         setDown(next);
       });
     }
-  }, [online]);
+  }, [online, regionIds]);
   useEffect(() => {
     probe();
     return () => {

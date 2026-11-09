@@ -4,6 +4,8 @@ import {
   CURRENT_CONSENT_VERSION,
   currentConsentVersionOf,
   needsReconsent,
+  offersRegionChoice,
+  type Region,
 } from "@logjam/shared";
 
 export { CURRENT_CONSENT_VERSION, currentConsentVersionOf, needsReconsent };
@@ -29,4 +31,15 @@ export function consentGate(
   if (!currentUser) return { blocked: false, settled: false };
   const blocked = needsReconsent(currentUser);
   return { blocked, settled: !blocked };
+}
+
+/** Whether the region step follows a sign-up the form just completed. */
+export function showsRegionStep({
+  signedUpNow,
+  regions,
+}: {
+  signedUpNow: boolean;
+  regions?: readonly Region[];
+}): boolean {
+  return signedUpNow && offersRegionChoice(regions);
 }

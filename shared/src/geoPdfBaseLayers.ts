@@ -1,6 +1,6 @@
 import { NSW_FIRE } from "./nswFire.js";
 import type { TopoLayerName } from "./topoSettings.js";
-import { NSW_REGION } from "./regions.js";
+import { NSW_REGION, REGIONS, regionsOf, type Region } from "./regions.js";
 
 // Data from NSW Spatial Services' web services is licensed CC BY, subject to one
 // extra term in their Terms and Conditions (cl. 3.1.1): they assert the right to
@@ -81,6 +81,8 @@ export type BasemapCatalogEntry = {
    * (see SIX_EXTRACTION_CREDIT_PREFIX above) appended at draw time.
    */
   requiresExtractionDate?: boolean;
+  /** False for an entry neither client's picker lists (`offeredBasemaps`). */
+  offered?: false;
 };
 
 // Order is the pickers' order: the OSM family, then the SIX sheets.
@@ -121,6 +123,10 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
+    // The vector basemap draws the same OpenStreetMap cartography, and two
+    // renderings of one map side by side, one of which can't be saved, is a
+    // choice with no answer.
+    offered: false,
     // The OSMF tile policy calls "any pre-emptive fetching of tiles other than
     // those a user is actively viewing" bulk downloading, and forbids it. A
     // print is exactly that (operations.osmfoundation.org/policies/tiles).
@@ -205,6 +211,40 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     requiresExtractionDate: true,
   },
 ];
+
+/**
+ * The basemaps a picker lists for a user who chose `regionIds`, in the
+ * catalogue's order: the worldwide ones and their regions' own. A stored pick
+ * that is no longer offered falls back to the default on both clients.
+ * Guard: `regions.test.ts`.
+ */
+export function offeredBasemaps(
+  regionIds: readonly string[],
+  regions: readonly Region[] = REGIONS,
+): BasemapCatalogEntry[] {
+  const chosen = new Set(
+    regionsOf(regionIds, regions).flatMap((r) => r.basemaps),
+  );
+  const owned = new Set(regions.flatMap((r) => r.basemaps));
+  return BASEMAP_CATALOG.filter(
+    (entry) =>
+      entry.offered !== false && (!owned.has(entry.id) || chosen.has(entry.id)),
+  );
+}
+
+/**
+ * The basemap Logjam GPS opens on before the user picks: the first chosen
+ * region's, or the first worldwide one when no chosen region has one.
+ */
+export function defaultBasemapFor(
+  regionIds: readonly string[],
+  regions: readonly Region[] = REGIONS,
+): string {
+  return (
+    regionsOf(regionIds, regions)[0]?.defaultBasemap ??
+    offeredBasemaps(regionIds, regions)[0]!.id
+  );
+}
 
 // Keyed view of the raster entries, the ones the GeoPDF renderer fetches as XYZ
 // tiles. Derived: never hand-edit; extend BASEMAP_CATALOG instead.

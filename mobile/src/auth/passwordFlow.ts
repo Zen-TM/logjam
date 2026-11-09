@@ -41,8 +41,8 @@ export function usesOwnForms(
 export type FormAnswer = Extract<PasswordSignInResult, { type: "form" }>;
 
 export type PasswordSignInResult =
-  /** Signed in and the phone is ready: open Logjam GPS. */
-  | { type: "signedIn" }
+  /** Signed in and the phone is ready: open Logjam GPS. `newAccount`: the sign-up form just made it. */
+  | { type: "signedIn"; newAccount: boolean }
   /** Only the provider's page can finish this: open the browser sheet. */
   | { type: "provider" }
   /** Stays on the form with `message`; `unconfirmed` asks for the emailed code. */
@@ -97,5 +97,5 @@ export async function signInWithPasswordFlow(
       )
       .catch(() => console.error("Couldn't record consent at sign-up"));
   }
-  return { type: "signedIn" };
+  return { type: "signedIn", newAccount: !!newAccountUsername };
 }

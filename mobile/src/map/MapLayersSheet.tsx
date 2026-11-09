@@ -88,7 +88,8 @@ import {
   type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { mobileBasemaps } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
@@ -374,12 +375,13 @@ function BasemapTab({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const regionIds = useRegions();
   // The map draws the fallback while the pick's server is down (MapScreen);
   // the pick itself stays, so it comes back with the server.
   const shown = basemapToShow(
     basemapId,
     down,
-    basemapFallbackFor(basemapId, down),
+    basemapFallbackFor(basemapId, down, regionIds),
   );
   const name = (id: string) =>
     BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
@@ -391,10 +393,10 @@ function BasemapTab({
   return (
     <View style={styles.body}>
       {notice != null && <Text style={styles.legend}>{notice}</Text>}
-      {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
+      {/* Order and membership are `mobileBasemaps`', not the catalog's — see
           basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
           raster). */}
-      {MOBILE_BASEMAPS.map((id) => {
+      {mobileBasemaps(regionIds).map((id) => {
         const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
         // Fail loudly: an id the catalog doesn't know is a programming error.
         if (!entry) throw new Error(`Unknown basemap id: ${id}`);

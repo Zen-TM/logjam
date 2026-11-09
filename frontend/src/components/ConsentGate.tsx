@@ -2,11 +2,15 @@ import { useState } from "react";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  offersRegionChoice,
+  REGIONS,
   SIGN_IN_COPY,
   USERNAME_HINT,
+  type Region,
 } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
 import BrandMark from "./brand/BrandMark";
+import RegionStep from "./RegionStep";
 import TermsTick from "./TermsTick";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
 import classes from "./ConsentGate.module.css";
@@ -23,6 +27,9 @@ import classes from "./ConsentGate.module.css";
  * it is welcomed rather than told the terms changed, and picks its username and
  * confirms its age here, in the same request that records the consent.
  *
+ * Once there is more than one region, a new account is then asked where it
+ * canyons (RegionStep).
+ *
  * The links to read are in the tick's own sentence (TermsTick), and opening one
  * does not answer the question about it.
  */
@@ -32,6 +39,7 @@ function ConsentGate({
   currentUsername,
   onAccepted,
   onSignOut,
+  regions = REGIONS,
 }: {
   /** The version the server named, which is the only one it will record. */
   consentVersion: string;
@@ -41,6 +49,8 @@ function ConsentGate({
   currentUsername: string;
   onAccepted: (user: TUser) => void;
   onSignOut: () => void;
+  /** The regions to ask about; only a test passes more than the real ones. */
+  regions?: readonly Region[];
 }) {
   const [agreed, setAgreed] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -48,6 +58,7 @@ function ConsentGate({
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [askingRegions, setAskingRegions] = useState(false);
 
   async function handleAgree(): Promise<void> {
     const problem = consentFormProblem({
@@ -70,6 +81,11 @@ function ConsentGate({
       const user = newAccount
         ? await recordConsent(consentVersion, username.trim())
         : await recordConsent(consentVersion);
+      if (newAccount && offersRegionChoice(regions)) {
+        setAskingRegions(true);
+        setSubmitting(false);
+        return;
+      }
       // Parent swaps in the updated user, unmounting this gate — no state
       // updates after this point.
       onAccepted(user);
@@ -82,6 +98,12 @@ function ConsentGate({
       else setError(failure.message);
       setSubmitting(false);
     }
+  }
+
+  if (askingRegions) {
+    return (
+      <RegionStep onDone={onAccepted} onSignOut={onSignOut} regions={regions} />
+    );
   }
 
   return (

@@ -30,6 +30,7 @@ import {
   keepAccountSlopeBands,
   setSlopeBandsAccount,
 } from "./map/slopeBandsPreference";
+import { keepAccountRegions } from "./regionsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -84,6 +85,8 @@ import { PickAreaScreen } from "./map/PickAreaScreen";
 import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
+import { RegionStep } from "./screens/RegionStep";
+import { showsRegionStep } from "./screens/regionChoice";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -102,6 +105,7 @@ import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen"
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
 import { NotificationSettingsScreen } from "./screens/settings/NotificationSettingsScreen";
 import { OfflineSettingsScreen } from "./screens/settings/OfflineSettingsScreen";
+import { RegionsSettingsScreen } from "./screens/settings/RegionsSettingsScreen";
 import { PrivacySettingsScreen } from "./screens/settings/PrivacySettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import type { MirrorTrip } from "./sync/mirrorStore";
@@ -305,6 +309,7 @@ type MoreStackParams = {
   // Settings sub-pages. One route each rather than one parameterised route: the
   // back stack reads Settings › Map the way the user got there.
   SettingsDisplay: undefined;
+  SettingsRegions: undefined;
   SettingsMap: undefined;
   SettingsNotifications: undefined;
   SettingsOffline: undefined;
@@ -314,6 +319,7 @@ type MoreStackParams = {
 /** Settings root → the route that page lives at. */
 const SETTINGS_ROUTES: Record<SettingsPage, keyof MoreStackParams> = {
   display: "SettingsDisplay",
+  regions: "SettingsRegions",
   map: "SettingsMap",
   notifications: "SettingsNotifications",
   offline: "SettingsOffline",
@@ -1009,10 +1015,16 @@ Notifications.setNotificationHandler({
 
 export function AppShell({
   accountState,
+  newAccount = false,
+  onNewAccountDone,
   onLinkAccount,
   onSignOut,
 }: {
   accountState: AccountState;
+  /** The sign-up form just made the account: ask for its regions first. */
+  newAccount?: boolean;
+  /** The region step is done, wherever it was asked: never ask it again. */
+  onNewAccountDone?: () => void;
   onLinkAccount: () => void;
   onSignOut: SignOutHandler;
 }) {
@@ -1078,6 +1090,13 @@ export function AppShell({
     setSlopeBandsAccount({ signedIn: !isGuest, id: accountId ?? null });
     keepAccountSlopeBands(slopeBandsFetched, accountId);
   }, [slopeBandsFetched, accountId, isGuest]);
+
+  // The account's regions, kept the same way: they set what the pickers offer.
+  const accountRegions = userQuery.data?.uiPreferences?.regions;
+  const accountLoaded = userQuery.data != null;
+  useEffect(() => {
+    if (!isGuest && accountLoaded) keepAccountRegions(accountRegions);
+  }, [accountRegions, accountLoaded, isGuest]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
@@ -1179,11 +1198,26 @@ export function AppShell({
         consentVersion={currentConsentVersionOf(user)}
         newAccount={user.consentVersion === null}
         currentUsername={user.username}
+        accountState={accountState}
         onConsented={() => {
           setConsented(true);
+          // Its own region step has run for a new account.
+          onNewAccountDone?.();
           userQuery.refetch();
         }}
         onSignOut={onSignOut}
+      />
+    );
+  }
+
+  // Logjam GPS's sign-up form records consent itself, so the gate above never
+  // shows for an account it makes: its region step comes here instead.
+  if (showsRegionStep(newAccount)) {
+    return (
+      <RegionStep
+        accountState={accountState}
+        onDone={() => onNewAccountDone?.()}
+        onSignOut={() => onSignOut()}
       />
     );
   }
@@ -1684,6 +1718,20 @@ export function AppShell({
                         route={route}
                       >
                         <DisplaySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SettingsRegions"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.regions}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <RegionsSettingsScreen />
                       </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>

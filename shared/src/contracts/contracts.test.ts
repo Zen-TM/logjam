@@ -1552,15 +1552,17 @@ describe("SETTINGS", () => {
   // so this order is both clients'. Mutation: move "privacy" above
   // "notifications", or give "map" no `on`.
   it("lists the pages in one order, the phone-only ones marked", () => {
-    expect(contractSectionKeys(SETTINGS, "gps").slice(0, 5)).toEqual([
+    expect(contractSectionKeys(SETTINGS, "gps").slice(0, 6)).toEqual([
       "display",
+      "regions",
       "map",
       "notifications",
       "offline",
       "privacy",
     ]);
-    expect(contractSectionKeys(SETTINGS, "web").slice(0, 3)).toEqual([
+    expect(contractSectionKeys(SETTINGS, "web").slice(0, 4)).toEqual([
       "display",
+      "regions",
       "notifications",
       "privacy",
     ]);
