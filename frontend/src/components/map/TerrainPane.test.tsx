@@ -307,15 +307,45 @@ describe("the Coverage row on Logjam Web", () => {
   const row = (props: {
     onToggle?: (on: boolean) => void;
     onChange?: (value: string) => void;
+    value?: string | null;
   }) =>
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.coverage}
         checked={TERRAIN_LAYER_DEFAULTS.coverage}
         onToggle={props.onToggle ?? vi.fn()}
-        choice={{ value: "optus", onChange: props.onChange ?? vi.fn() }}
+        choice={{
+          value: props.value === undefined ? "optus" : props.value,
+          onChange: props.onChange ?? vi.fn(),
+        }}
       />,
     );
+
+  // Mutation: draw the switch before a carrier is picked, or let the button
+  // open anything but the carrier choice, and the overlay can be on with no
+  // network to draw; skip turning it on at the first pick, and the user has
+  // to find the switch they were never shown.
+  it("offers one button to choose the carrier until one is picked", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    row({ onChange, onToggle, value: null });
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: copy.coverageAbout }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.coverageChooseCarrier }),
+    );
+    screen.getByRole("dialog", { name: copy.coverage });
+    expect(
+      screen
+        .getAllByRole("radio")
+        .some((r) => r.getAttribute("aria-checked") === "true"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: "Telstra" }));
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith("telstra");
+  });
 
   // Mutation: start it on, or drop the row's subtitle, and every map opens
   // under a hatch nobody asked for, or for a carrier nobody can see.

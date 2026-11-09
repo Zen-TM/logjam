@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
+  coverageQueryBox,
   drawsOverTerrain,
   NSW_FIRE,
   NSW_LAND,
@@ -121,21 +122,23 @@ describe("coverageAt", () => {
   });
 
   // Mutation: query a layer id other than the hatch, or name another carrier
-  // than the one drawn, and a tap answers nothing or for the wrong network.
-  it("names the drawn carrier's level at the point", () => {
-    const asked: string[][] = [];
+  // than the one drawn, and a tap answers nothing or for the wrong network;
+  // query the tap's pixel instead of shared's box, and it answers for a cell
+  // between two hatch lines that the eye can't see.
+  it("names the drawn carrier's reception over shared's box", () => {
+    const asked: unknown[] = [];
     const map = {
       getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
       queryRenderedFeatures: (
-        _point: [number, number],
+        at: unknown,
         options: { layers: string[] },
       ) => {
-        asked.push(options.layers);
+        asked.push([at, options.layers]);
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
     };
-    expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: external antenna only");
-    expect(asked).toEqual([[COVERAGE_FILL_LAYER]]);
+    expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: no mobile reception");
+    expect(asked).toEqual([[coverageQueryBox([1, 2]), [COVERAGE_FILL_LAYER]]]);
   });
 });
 

@@ -1,7 +1,7 @@
 import {
+  COVERAGE_HATCH_IMAGE,
   coverageFilter,
   coverageOpacity,
-  coveragePattern,
   NSW_COVERAGE,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -22,7 +22,7 @@ describe("the Coverage layer", () => {
       minzoom: NSW_COVERAGE.minzoom,
       filter: coverageFilter("optus"),
       paint: {
-        "fill-pattern": coveragePattern(),
+        "fill-pattern": COVERAGE_HATCH_IMAGE,
         "fill-opacity": coverageOpacity(),
       },
     });

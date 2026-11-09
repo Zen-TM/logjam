@@ -4,12 +4,14 @@
 // holds every carrier: each area is a carrier's `level` there, and the map
 // draws only the user's carrier.
 //
-// It hatches the gaps and draws nothing where a phone in the hand should
-// work: a fill over the whole state would hide Slope and Land.
+// It hatches where there is no mobile reception and draws nothing where a
+// phone in the hand should work: a fill over the whole state would hide Slope
+// and Land.
 import {
-  COVERAGE_HATCH_DENSE_URI,
-  COVERAGE_HATCH_LIGHT_URI,
+  COVERAGE_HATCH_SPACING,
+  COVERAGE_HATCH_URI,
 } from "./coverageHatchImages.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { NSW_5M } from "./demSources.js";
 
 export const NSW_COVERAGE = {
@@ -48,95 +50,87 @@ export const CARRIERS = [
 
 export type CarrierId = (typeof CARRIERS)[number]["id"];
 
-/** The network most of the state's coverage is on, until the user picks. */
-export const DEFAULT_CARRIER: CarrierId = "telstra";
-
-/** A stored carrier, or the default for anything that isn't one. */
-export function normalizeCarrier(value: unknown): CarrierId {
-  return CARRIERS.find((c) => c.id === value)?.id ?? DEFAULT_CARRIER;
+/** A stored carrier, or null for anything that isn't one: until the user
+ *  picks, the overlay has no carrier and draws nothing. */
+export function normalizeCarrier(value: unknown): CarrierId | null {
+  return CARRIERS.find((c) => c.id === value)?.id ?? null;
 }
 
-/** Style-image names, registered on each map with `COVERAGE_HATCH_URIS`. */
-export const COVERAGE_HATCH_LIGHT_IMAGE = "coverage-hatch-light";
-export const COVERAGE_HATCH_DENSE_IMAGE = "coverage-hatch-dense";
+/** The style image's name, registered on each map with `COVERAGE_HATCH_URIS`. */
+export const COVERAGE_HATCH_IMAGE = "coverage-hatch";
 
 export const COVERAGE_HATCH_URIS = {
-  [COVERAGE_HATCH_LIGHT_IMAGE]: COVERAGE_HATCH_LIGHT_URI,
-  [COVERAGE_HATCH_DENSE_IMAGE]: COVERAGE_HATCH_DENSE_URI,
+  [COVERAGE_HATCH_IMAGE]: COVERAGE_HATCH_URI,
 } as const;
 
-/** The hatches are drawn at 2x (generate-coverage-hatch-images.mjs). */
+/** The hatch is drawn at 2x (generate-coverage-hatch-images.mjs). */
 export const COVERAGE_HATCH_PIXEL_RATIO = 2;
 
 /**
- * The archive's levels, best first, as "What is here?" names them and the
- * hatch each draws. `LEVELS` in the build script lists the same `level`s
- * (test_coverage.py).
+ * The archive's levels, best first. `LEVELS` in the build script lists the
+ * same `level`s (test_coverage.py). Only a handset outdoors is mobile
+ * reception: the overlay is for a phone in the hand, and a place an external
+ * antenna alone reaches has none for it.
  */
-export const COVERAGE_LEVELS = [
-  { level: "outdoor", name: "handset outdoors", hatch: null },
-  {
-    level: "external",
-    name: "external antenna only",
-    hatch: COVERAGE_HATCH_LIGHT_IMAGE,
-  },
-  {
-    level: "none",
-    name: "no predicted coverage",
-    hatch: COVERAGE_HATCH_DENSE_IMAGE,
-  },
-] as const;
+export const COVERAGE_LEVELS = ["outdoor", "external", "none"] as const;
+export const RECEPTION_LEVEL = "outdoor";
 
 /** The layer's `filter`: the user's carrier alone. */
 export function coverageFilter(carrier: CarrierId): unknown[] {
   return ["==", ["get", NSW_COVERAGE.carrierProperty], carrier];
 }
 
-const hatched = COVERAGE_LEVELS.filter((l) => l.hatch !== null);
-
-/** The `fill-pattern` expression: each gap's hatch. */
-export function coveragePattern(): unknown[] {
-  return [
-    "match",
-    ["get", NSW_COVERAGE.levelProperty],
-    ...hatched.flatMap((l) => [l.level, l.hatch]),
-    COVERAGE_HATCH_LIGHT_IMAGE,
-  ];
-}
-
 /**
- * The `fill-opacity` expression: clear where a handset works, so the area is
- * still there for a tap to read, and drawn nowhere.
+ * The `fill-opacity` expression: clear where there is reception, so the area
+ * is still there for a tap to read, and hatched everywhere else.
  */
 export function coverageOpacity(): unknown[] {
+  return ["match", ["get", NSW_COVERAGE.levelProperty], RECEPTION_LEVEL, 0, 1];
+}
+
+/**
+ * The box "What is here?" queries the coverage layer over: a hatch line
+ * either way of the tap. The hatch shows a gap only as lines, so a patch
+ * narrower than their spacing can sit between two of them and look clear, or
+ * a clear patch look hatched; the archive's cells are finer than that from
+ * the zoom the overlay is drawn at. Read over one line's spacing, the answer
+ * agrees with the lines the eye sees at the tap. `[x, y]` is in the map's
+ * own pixels (CSS pixels on Logjam Web, dp on Logjam GPS), the hatch's scale.
+ */
+export function coverageQueryBox(
+  point: readonly [number, number],
+): [[number, number], [number, number]] {
+  const r = COVERAGE_HATCH_SPACING / COVERAGE_HATCH_PIXEL_RATIO / 2;
+  const [x, y] = point;
   return [
-    "match",
-    ["get", NSW_COVERAGE.levelProperty],
-    hatched.map((l) => l.level),
-    1,
-    0,
+    [x - r, y - r],
+    [x + r, y + r],
   ];
 }
 
 /**
- * "Telstra: external antenna only": what "What is here?" says of the level a
- * map's own query found on its coverage layer at a point, or null. The layer
- * is filtered to one carrier, so any feature found is that carrier's; a tap
- * that finds two levels (on the line between them, from two tiles' margins)
- * gives the worse, which is the safer one to plan on.
+ * "Telstra: no mobile reception": what "What is here?" says of the levels a
+ * map's own query found on its coverage layer over `coverageQueryBox`, or
+ * null. The layer is filtered to one carrier, so any feature found is that
+ * carrier's. Any level without reception wins: the box then has hatch lines
+ * in it, and it is the safer answer to plan on.
  */
 export function coverageNameOf(
   features: readonly { properties?: Record<string, unknown> | null }[],
   carrier: CarrierId,
 ): string | null {
-  let worst = -1;
-  for (const feature of features) {
-    const at = COVERAGE_LEVELS.findIndex(
-      (l) => l.level === feature.properties?.[NSW_COVERAGE.levelProperty],
-    );
-    worst = Math.max(worst, at);
-  }
-  if (worst < 0) return null;
+  const levels = features.map(
+    (f) => f.properties?.[NSW_COVERAGE.levelProperty],
+  );
+  const known = levels.filter((l) =>
+    (COVERAGE_LEVELS as readonly unknown[]).includes(l),
+  );
+  if (known.length === 0) return null;
   const name = CARRIERS.find((c) => c.id === carrier)?.name ?? carrier;
-  return `${name}: ${COVERAGE_LEVELS[worst]!.name}`;
+  const copy = MAP_TERRAIN.copy;
+  return `${name}: ${
+    known.every((l) => l === RECEPTION_LEVEL)
+      ? copy.coverageReception
+      : copy.coverageNoReception
+  }`;
 }

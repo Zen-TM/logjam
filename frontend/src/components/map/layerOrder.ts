@@ -7,6 +7,7 @@
 import {
   type CarrierId,
   coverageNameOf,
+  coverageQueryBox,
   fireNameOf,
   landNameOf,
   terrainBeforeIds,
@@ -58,7 +59,7 @@ export const COVERAGE_FILL_LAYER = "topo-nswcoverage-fill";
 type RenderedQuery = {
   getLayer(id: string): unknown;
   queryRenderedFeatures(
-    point: [number, number],
+    at: [number, number] | [[number, number], [number, number]],
     options: { layers: string[] },
   ): { properties?: Record<string, unknown> | null }[];
 };
@@ -94,10 +95,10 @@ export function fireAt(
 }
 
 /**
- * What the Coverage overlay predicts at `point` for `carrier` ("Telstra:
- * external antenna only"), or null: the overlay is off, or the point is off
- * the land it covers. Where a handset works the fill is clear, and still
- * answers.
+ * What the Coverage overlay predicts at `point` for `carrier` ("Telstra: no
+ * mobile reception"), or null: the overlay is off, or the point is off the
+ * land it covers. Where there is reception the fill is clear, and still
+ * answers. Read over `coverageQueryBox`, as Logjam GPS reads it.
  */
 export function coverageAt(
   map: RenderedQuery,
@@ -106,7 +107,9 @@ export function coverageAt(
 ): string | null {
   if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
   return coverageNameOf(
-    map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
+    map.queryRenderedFeatures(coverageQueryBox(point), {
+      layers: [COVERAGE_FILL_LAYER],
+    }),
     carrier,
   );
 }

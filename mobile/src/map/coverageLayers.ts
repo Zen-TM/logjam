@@ -1,12 +1,12 @@
 // The Coverage overlay as MapScreen mounts it: one hatched fill, with the
-// hatch images registered beside it (shared nswCoverage.ts holds the levels).
+// hatch image registered beside it (shared nswCoverage.ts holds the levels).
 import {
   type CarrierId,
+  COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
   coverageOpacity,
-  coveragePattern,
   NSW_COVERAGE,
 } from "@logjam/shared";
 import type { FillLayerSpecification } from "@maplibre/maplibre-react-native";
@@ -18,8 +18,8 @@ export function coverageLayerId(sourceKey: string): string {
 }
 
 /**
- * For `<Images images>`: each hatch under the name the pattern expression
- * uses, at the pixel ratio it is drawn at, so it is as fine as Logjam Web's.
+ * For `<Images images>`: the hatch under the name the paint uses, at the pixel
+ * ratio it is drawn at, so it is as fine as Logjam Web's.
  */
 export const COVERAGE_IMAGES = Object.fromEntries(
   Object.entries(COVERAGE_HATCH_URIS).map(([name, uri]) => [
@@ -36,7 +36,7 @@ export function coverageLayerFilter(
 
 export function coverageLayerPaint(): FillPaint {
   return {
-    "fill-pattern": coveragePattern() as FillPaint["fill-pattern"],
+    "fill-pattern": COVERAGE_HATCH_IMAGE,
     "fill-opacity": coverageOpacity() as FillPaint["fill-opacity"],
   };
 }

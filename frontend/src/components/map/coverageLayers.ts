@@ -1,8 +1,8 @@
 import {
   type CarrierId,
+  COVERAGE_HATCH_IMAGE,
   coverageFilter,
   coverageOpacity,
-  coveragePattern,
   NSW_COVERAGE,
 } from "@logjam/shared";
 import type {
@@ -28,7 +28,7 @@ export function coverageLayerSpec(
     minzoom: NSW_COVERAGE.minzoom,
     filter: coverageFilter(carrier) as FilterSpecification,
     paint: {
-      "fill-pattern": coveragePattern() as Expr,
+      "fill-pattern": COVERAGE_HATCH_IMAGE,
       "fill-opacity": coverageOpacity() as Expr,
     },
   };

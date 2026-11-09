@@ -93,6 +93,7 @@ import {
   landEdgeOpacity,
   landNameOf,
   coverageNameOf,
+  coverageQueryBox,
   fireNameOf,
   NSW_COVERAGE,
   NSW_FIRE,
@@ -1637,9 +1638,11 @@ export function MapScreen({
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
   const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
+  // Until a carrier is picked there is no map to draw.
+  const coverageOn = terrainLayers.coverage && coverageCarrier !== null;
   const coverageResolved = useMemo(
     () =>
-      terrainLayers.coverage
+      coverageOn
         ? writeTileJsons(
             resolveMapSource(
               { kind: "nsw-coverage", viewport: viewportBbox },
@@ -1648,7 +1651,7 @@ export function MapScreen({
             areasEpoch,
           )
         : [],
-    [terrainLayers.coverage, viewportBbox, ctx, areasEpoch],
+    [coverageOn, viewportBbox, ctx, areasEpoch],
   );
   const coverageLayerIdList = useMemo(
     () => coverageResolved.map((r) => coverageLayerId(r.key)),
@@ -1656,7 +1659,7 @@ export function MapScreen({
   );
   const coveragePaint = useMemo(() => coverageLayerPaint(), []);
   const coverageFilterExpr = useMemo(
-    () => coverageLayerFilter(coverageCarrier),
+    () => (coverageCarrier ? coverageLayerFilter(coverageCarrier) : undefined),
     [coverageCarrier],
   );
   const slopeResolved = useMemo(
@@ -2380,12 +2383,14 @@ export function MapScreen({
       }
       if (coverageLayerIdList.length > 0) {
         mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
+          ?.queryRenderedFeatures(coverageQueryBox(event.nativeEvent.point), {
             layers: coverageLayerIdList,
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedCoverage(coverageNameOf(features, coverageCarrier));
+              setTappedCoverage(
+                coverageCarrier && coverageNameOf(features, coverageCarrier),
+              );
           })
           .catch(() => undefined);
       }

@@ -6,6 +6,7 @@ import {
   MAP_OVERLAYS,
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
+  overlayAwaitsChoice,
   overlayChoiceLabel,
   normalizeCarrier,
   type CarrierId,
@@ -25,6 +26,7 @@ import SharpenedAreasView from "./SharpenedAreasView";
 import BasemapGallery, { type BaseLayer } from "./BasemapGallery";
 import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import {
+  Button,
   ChipRail,
   Dialog,
   Icon,
@@ -122,7 +124,7 @@ export default function LayersPopover({
   onBasemapHealth?: (id: string, down: boolean) => void;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
-  coverageCarrier: CarrierId;
+  coverageCarrier: CarrierId | null;
   onCoverageCarrierChange: (carrier: CarrierId) => void;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
@@ -172,7 +174,7 @@ export default function LayersPopover({
     showWays,
     terrainLayers.land,
     terrainLayers.fire,
-    terrainLayers.coverage,
+    terrainLayers.coverage && coverageCarrier !== null,
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -338,10 +340,10 @@ export default function LayersPopover({
                           ? {
                               choice: {
                                 value: coverageCarrier,
-                                onChange: (value: string) =>
-                                  onCoverageCarrierChange(
-                                    normalizeCarrier(value),
-                                  ),
+                                onChange: (value: string) => {
+                                  const next = normalizeCarrier(value);
+                                  if (next) onCoverageCarrierChange(next);
+                                },
                               },
                             }
                           : {})}
@@ -594,21 +596,37 @@ export function OverlayLegendRow({
   legend: OverlayLegend;
   checked: boolean;
   onToggle: (next: boolean) => void;
-  /** The value of `legend.choice`, for an overlay that has one. */
-  choice?: { value: string; onChange: (value: string) => void };
+  /** The value of `legend.choice`, for an overlay that has one: null until
+   *  one is picked, when the row offers the legend's choice in place of its
+   *  switch. */
+  choice?: { value: string | null; onChange: (value: string) => void };
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const openLegend = () => setLegendOpen(true);
   return (
     <>
-      <OverlayRow
-        icon="layers"
-        hue={legend.hue}
-        title={legend.title}
-        subtitle={overlayChoiceLabel(legend, choice?.value)}
-        checked={checked}
-        onToggle={onToggle}
-        help={{ label: legend.about, onClick: () => setLegendOpen(true) }}
-      />
+      {legend.choice && overlayAwaitsChoice(legend, choice?.value) ? (
+        <Row
+          leading={<IconTile icon="layers" hue={legend.hue} />}
+          title={legend.title}
+          onPress={openLegend}
+          trailing={
+            <Button compact variant="outline" onClick={openLegend}>
+              {legend.choice.choose}
+            </Button>
+          }
+        />
+      ) : (
+        <OverlayRow
+          icon="layers"
+          hue={legend.hue}
+          title={legend.title}
+          subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
+          checked={checked}
+          onToggle={onToggle}
+          help={{ label: legend.about, onClick: openLegend }}
+        />
+      )}
       <Dialog
         open={legendOpen}
         title={legend.title}
@@ -618,8 +636,13 @@ export function OverlayLegendRow({
           <ChipRail
             label={legend.choice.label}
             options={legend.choice.options}
-            value={choice.value}
-            onChange={choice.onChange}
+            value={choice.value ?? ""}
+            onChange={(value) => {
+              // The first pick comes from the row's button: the overlay was
+              // asked for, so it comes on.
+              if (choice.value === null) onToggle(true);
+              choice.onChange(value);
+            }}
             wrap
           />
         )}

@@ -1,9 +1,9 @@
 import {
+  COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
   coverageOpacity,
-  coveragePattern,
   NSW_COVERAGE,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -16,12 +16,12 @@ import {
 } from "./coverageLayers";
 
 describe("coverageLayerPaint", () => {
-  // Mutation: build the pattern or the opacity from anything but shared's
-  // expressions, and the map hatches a level the legend does not name, or
-  // hides the levels it does.
+  // Mutation: build the pattern or the opacity from anything but shared's,
+  // and the map hatches where the legend says there is reception, or draws a
+  // hatch it doesn't key.
   it("paints with exactly shared's expressions", () => {
     expect(coverageLayerPaint()).toEqual({
-      "fill-pattern": coveragePattern(),
+      "fill-pattern": COVERAGE_HATCH_IMAGE,
       "fill-opacity": coverageOpacity(),
     });
   });
@@ -38,10 +38,10 @@ describe("coverageLayerFilter", () => {
 });
 
 describe("COVERAGE_IMAGES", () => {
-  // Mutation: drop one hatch, or key it by anything but shared's name, and the
+  // Mutation: key the hatch by anything but shared's name, and the
   // fill-pattern names an image the style does not have: the gap draws bare.
   // Drop the scale, and the 2x hatch draws twice as coarse as Logjam Web's.
-  it("registers every hatch shared's pattern names, at its pixel ratio", () => {
+  it("registers the hatch shared's paint names, at its pixel ratio", () => {
     expect(COVERAGE_IMAGES).toEqual(
       Object.fromEntries(
         Object.entries(COVERAGE_HATCH_URIS).map(([name, uri]) => [
@@ -50,7 +50,7 @@ describe("COVERAGE_IMAGES", () => {
         ]),
       ),
     );
-    expect(Object.keys(COVERAGE_IMAGES)).toHaveLength(2);
+    expect(Object.keys(COVERAGE_IMAGES)).toEqual([COVERAGE_HATCH_IMAGE]);
   });
 });
 
