@@ -10,7 +10,12 @@
 #   brain-entrypoint.sh: BRAIN_INIT defaulting to bootstrap (no accidental
 #     database);
 #   pg_hba.prod.conf: any plain `host` line (the HBA checks);
-#   brain-entrypoint.sh: dropping the dev certificate step (existing volume).
+#   brain-entrypoint.sh: dropping the dev certificate step (existing volume);
+#   brain-entrypoint.sh: dropping the leading-dash normalisation (the server
+#     the prod container starts with only -c flags);
+#   brain-entrypoint.sh: dropping ${BRAIN_RESTORE_OPTS} (restore keeps archiving);
+#   pg_ident.conf: dropping the brain_agent line;
+#   Dockerfile: dropping ca-certificates (the S3 handshake).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 IMAGE=${IMAGE:-brain-postgres:test}
@@ -21,6 +26,8 @@ fails=0
 ok() { echo "ok   - $1"; }
 bad() { echo "FAIL - $1"; fails=1; }
 not() { ! "$@"; }
+# For a command whose own output is noise: the check still reports.
+quiet() { "$@" > /dev/null 2>&1; }
 check() { if "${@:2}"; then ok "$1"; else bad "$1"; fi; }
 cleanup() {
   docker ps -aq --filter name=brain-pg-test | xargs -r docker rm -f -v > /dev/null 2>&1
@@ -98,6 +105,7 @@ WANT
 check "auto_explain is not configured" [ "$(sql -c "select count(*) from pg_settings where name like 'auto_explain.%'")" = 0 ]
 check "pgaudit extension exists in the first database" [ "$(sql -c "select count(*) from pg_extension where extname='pgaudit'")" = 1 ]
 
+check "pgaudit is loaded in the server" [ "$(sql -c "select count(*) from pg_settings where name = 'pgaudit.log'")" = 1 ]
 check "prod pg_hba.conf has no plain host line" not grep -Eq '^host[[:space:]]' pg_hba.prod.conf
 check "the installed pg_hba.conf has no plain host line" not docker exec $C grep -Eq '^host[[:space:]]' $DATA/pg_hba.conf
 err=$(conn "host=127.0.0.1 user=postgres dbname=postgres sslmode=disable" 2>&1); rc=$?
@@ -106,8 +114,13 @@ check "...by pg_hba.conf, not by the password" grep -q 'no pg_hba.conf entry' <<
 check "verify-full pinning the generated certificate connects over TLS" \
   [ "$(conn "host=localhost user=postgres dbname=postgres sslmode=verify-full sslrootcert=$DATA/server.crt" 'select ssl from pg_stat_ssl where pid=pg_backend_pid()')" = t ]
 check "verify-full refuses a name the certificate does not carry" \
-  not conn "host=127.0.0.1 user=postgres dbname=postgres sslmode=verify-full sslrootcert=$DATA/server.crt" > /dev/null 2>&1
+  not quiet conn "host=127.0.0.1 user=postgres dbname=postgres sslmode=verify-full sslrootcert=$DATA/server.crt"
 check "the server key is 0600 and owned by postgres" [ "$(docker exec $C stat -c '%a %U' $DATA/server.key)" = "600 postgres" ]
+
+sql -c 'create role brain_agent login' -c 'create role third_role login' > /dev/null
+check "OS user postgres connects as brain_agent under the prod HBA" \
+  [ "$(docker exec -u postgres $C psql -U brain_agent -d postgres -tAXqc 'select current_user' 2>&1)" = brain_agent ]
+check "...and as a third role is refused" not quiet docker exec -u postgres $C psql -U third_role -d postgres -tAXqc 'select 1'
 
 secret=SECRET_LITERAL_9f3a1c
 # \bind sends the value as a parameter, as Prisma does.
@@ -121,6 +134,75 @@ check "pgaudit logs the write" grep -Eq 'AUDIT: SESSION,[0-9]+,[0-9]+,WRITE,INSE
 check "the parameter value is in no log line" not grep -q "$secret" <<<"$logs"
 check "the duplicate-key error was logged, without its row" \
   bash -c 'grep -q "violates unique constraint" <<<"$1" && ! grep -q "Key (v)" <<<"$1"' _ "$logs"
+
+# A command of only flags, as a Compose `command: ["-c", ...]` gives, on the data
+# directory that now has a database: without the settings file the server
+# would boot on upstream defaults.
+docker rm -f $C > /dev/null
+docker run -d --name $C -v brain-pg-test-prod:$DATA "${PROD_ENV[@]}" "$IMAGE" -c shared_buffers=64MB > /dev/null
+if wait_up $C; then
+  check "a -c flag on a command of only flags is applied" [ "$(sql -c 'show shared_buffers')" = 64MB ]
+  check "a command of only -c flags still reads postgresql.conf (log_error_verbosity)" [ "$(sql -c 'show log_error_verbosity')" = terse ]
+  check "...and loads pgaudit" [ "$(sql -c 'show shared_preload_libraries')" = pgaudit ]
+else
+  bad "the prod container starts with only flags"
+fi
+cleanup
+
+# --- commands that are not the server ---------------------------------------
+# The host runs `pgbackrest info` through this image to choose restore or bootstrap.
+BUCKET_ENV=(-e BRAIN_BACKUP_BUCKET=conf-bucket -e AWS_REGION=ap-southeast-2)
+check "pgbackrest runs on no data directory and no BRAIN_INIT" quiet docker run --rm "$IMAGE" pgbackrest version
+check "bash runs on no data directory and no BRAIN_INIT" quiet docker run --rm "$IMAGE" bash -c true
+check "psql --help runs" quiet docker run --rm "$IMAGE" psql --help
+check "postgres --version runs without a data directory" quiet docker run --rm "$IMAGE" postgres --version
+check "a non-server command with no bucket does not need one" quiet docker run --rm "$IMAGE" true
+conf=$(docker run --rm "${BUCKET_ENV[@]}" "$IMAGE" cat /etc/pgbackrest/pgbackrest.conf 2>&1)
+check "a non-server command renders pgbackrest.conf when the bucket is set" grep -q '^repo1-s3-bucket=conf-bucket$' <<<"$conf"
+check "pgbackrest.conf has bundling and start-fast" bash -c 'grep -q "^repo1-bundle=y$" <<<"$1" && grep -q "^start-fast=y$" <<<"$1"' _ "$conf"
+check "the archive queue defaults to 8GiB" grep -q '^archive-push-queue-max=8GiB$' <<<"$conf"
+check "no pg1-user without BRAIN_BACKUP_PG_USER" not grep -q '^pg1-user' <<<"$conf"
+conf=$(docker run --rm "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_PG_USER=brain_agent -e BRAIN_ARCHIVE_QUEUE_MAX=1GiB -e AWS_ACCESS_KEY_ID=AKIAEXAMPLE -e AWS_SECRET_ACCESS_KEY=s -e AWS_SESSION_TOKEN=tok "$IMAGE" cat /etc/pgbackrest/pgbackrest.conf 2>&1)
+check "BRAIN_BACKUP_PG_USER becomes pg1-user" grep -q '^pg1-user=brain_agent$' <<<"$conf"
+check "AWS_SESSION_TOKEN becomes repo1-s3-token" grep -q '^repo1-s3-token=tok$' <<<"$conf"
+check "BRAIN_ARCHIVE_QUEUE_MAX overrides the default" grep -q '^archive-push-queue-max=1GiB$' <<<"$conf"
+check "TLS verification is on by default" not grep -q 'verify-tls' <<<"$conf"
+check "BRAIN_BACKUP_VERIFY_TLS=n is refused without an endpoint" \
+  not quiet docker run --rm "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_VERIFY_TLS=n "$IMAGE" true
+conf=$(docker run --rm "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_VERIFY_TLS=n -e BRAIN_BACKUP_ENDPOINT=stand-in:9000 "$IMAGE" cat /etc/pgbackrest/pgbackrest.conf 2>&1)
+check "...and turns verification off with one" grep -q '^repo1-storage-verify-tls=n$' <<<"$conf"
+check "a non-root user can render the config" quiet docker run --rm --user postgres "${BUCKET_ENV[@]}" "$IMAGE" pgbackrest version
+check "the image verifies the regional S3 certificate (ca-certificates)" \
+  docker run --rm --entrypoint sh "$IMAGE" -c "echo | openssl s_client -connect s3.ap-southeast-2.amazonaws.com:443 -servername s3.ap-southeast-2.amazonaws.com -verify_return_error 2>&1 | grep -q 'Verify return code: 0'"
+
+# --- backup and restore (a posix repository stands in for S3) ----------------
+# BRAIN_RESTORE_OPTS=--archive-mode=off is what a restore drill passes.
+R=(-e POSTGRES_PASSWORD=pw "${BUCKET_ENV[@]}" -e PGBACKREST_REPO1_TYPE=posix -e PGBACKREST_REPO1_PATH=/repo -v brain-pg-test-repo:/repo)
+docker volume create brain-pg-test-repo > /dev/null
+docker run --rm -v brain-pg-test-repo:/repo --entrypoint chmod "$IMAGE" 777 /repo
+C=brain-pg-test-src
+docker run -d --name $C -v brain-pg-test-src:$DATA -e BRAIN_INIT=bootstrap "${R[@]}" "$IMAGE" > /dev/null
+if wait_up $C; then
+  as_pg() { docker exec -u postgres $C "$@"; }
+  quiet as_pg pgbackrest --stanza=logjam stanza-create
+  quiet as_pg psql -U postgres -qAtc "create table t(v text); insert into t values ('before')"
+  quiet as_pg pgbackrest --stanza=logjam --type=full backup
+  quiet as_pg psql -U postgres -qAtc "insert into t values ('after'); select pg_switch_wal()"
+  sleep 3
+  docker stop $C > /dev/null
+  C=brain-pg-test-restored
+  docker run -d --name $C -v brain-pg-test-restored:$DATA -e BRAIN_INIT=restore -e BRAIN_RESTORE_OPTS=--archive-mode=off "${R[@]}" "$IMAGE" > /dev/null
+  if wait_up $C; then
+    check "BRAIN_INIT=restore brings back the backup and the archived WAL" \
+      [ "$(sql -c "select string_agg(v, ',' order by v) from t")" = after,before ]
+    check "BRAIN_RESTORE_OPTS reaches the restore (archive_mode off)" [ "$(sql -c 'show archive_mode')" = off ]
+    check "the restored server uses postgresql.conf" [ "$(sql -c 'show log_error_verbosity')" = terse ]
+  else
+    bad "a restore starts"
+  fi
+else
+  bad "the backup source starts"
+fi
 cleanup
 
 # --- dev mode on a volume the stock image made -------------------------------
@@ -134,7 +216,7 @@ if wait_up $C; then
   ok "an existing stock volume starts"
   PW=logjam
   check "plain TCP with the dev password works" [ "$(conn 'host=127.0.0.1 user=logjam dbname=logjam sslmode=disable' 2>/dev/null)" = 1 ]
-  check "the passwordless local socket works (make dev-snapshot)" docker exec $C psql -U logjam logjam -tAqc 'select 1' > /dev/null 2>&1
+  check "the passwordless local socket works (make dev-snapshot)" quiet docker exec $C psql -U logjam logjam -tAqc 'select 1'
   check "the -c archive_mode=off from Compose wins" [ "$(docker exec $C psql -U logjam logjam -tAXqc 'show archive_mode' 2>/dev/null)" = off ]
   check "a volume made by stock postgres:16 gives no collation warning" \
     not grep -q 'collation version' <<<"$(docker exec $C psql -U logjam logjam -tAqc 'select 1' 2>&1)"

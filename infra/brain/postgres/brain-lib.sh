@@ -1,11 +1,13 @@
 # Sourced by brain-entrypoint.sh and initdb/10-brain-init.sh. Runs as the user
 # that owns the data directory.
 
-# Prod's pg_hba.conf unless BRAIN_DEV=1. Replaces the file initdb wrote.
+# Prod's pg_hba.conf unless BRAIN_DEV=1, and the ident map it names. Replaces
+# the files initdb wrote.
 brain_install_hba() {
   local src=prod
   [ "${BRAIN_DEV:-}" = 1 ] && src=dev
   install -m 0600 "/etc/postgresql/pg_hba.$src.conf" "$PGDATA/pg_hba.conf"
+  install -m 0600 /etc/postgresql/pg_ident.conf "$PGDATA/pg_ident.conf"
 }
 
 # A self-signed certificate that is its own CA, so clients pin it as
