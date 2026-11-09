@@ -149,7 +149,6 @@ export default function TopoDialog({
   // Preferred over recomputing used + cost > quota on the client, so there is
   // one rule for the decision rather than two that can disagree.
   const [jobWouldExceed, setJobWouldExceed] = useState(false);
-  const [jobRefusal, setJobRefusal] = useState<string | null>(null);
   const [storageUsed, setStorageUsed] = useState<number | null>(null);
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
@@ -234,7 +233,6 @@ export default function TopoDialog({
         setJobCredits(estimate.credits);
         setJobSeconds(estimate.estimatedSeconds);
         setJobWouldExceed(estimate.wouldExceed);
-        setJobRefusal(estimate.refusal ?? null);
         // The estimate response carries a fresher balance than the one loaded
         // when the dialog opened, so adopt it rather than keeping two views.
         setCreditsUsed(estimate.used);
@@ -513,12 +511,7 @@ export default function TopoDialog({
             pendingBbox={pendingBbox}
             area={area}
             onSelectBbox={onSelectBbox}
-            creditsWarning={
-              jobWouldExceed && stats === null
-                ? (jobRefusal ??
-                  "An area this size may cost more credits than you have left this month. Try a smaller one.")
-                : null
-            }
+            warnCredits={jobWouldExceed && stats === null}
           />
         ) : (
           <div className={classes.form}>
@@ -730,12 +723,12 @@ function ElvisInstructions({
   pendingBbox,
   area,
   onSelectBbox,
-  creditsWarning,
+  warnCredits,
 }: {
   pendingBbox: TBbox | null;
   area: number | null;
   onSelectBbox: () => void;
-  creditsWarning: string | null;
+  warnCredits: boolean;
 }) {
   return (
     <ol className={classes.steps}>
@@ -764,7 +757,9 @@ function ElvisInstructions({
               </Button>
             )}
           </div>
-          {creditsWarning && <FieldError message={creditsWarning} />}
+          {warnCredits && (
+            <FieldError message="An area this size may cost more credits than you have left this month. Try a smaller one." />
+          )}
         </div>
       </li>
 

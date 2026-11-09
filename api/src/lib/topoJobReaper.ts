@@ -514,7 +514,12 @@ export async function reapStuckTopoJobs(
       (id) =>
         prisma.topoExportJob.updateMany({
           where: { id, status: "running" },
-          data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+          // completedAt ends the export's credits (topo_export_job_credits).
+          data: {
+            status: "failed",
+            errorMessage: REAPER_EXPORT_MESSAGE,
+            completedAt: new Date(),
+          },
         }),
       exportJobEntry,
     );

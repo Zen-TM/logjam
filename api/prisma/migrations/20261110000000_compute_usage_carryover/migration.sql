@@ -22,23 +22,35 @@ CREATE TABLE "site_compute_carryover" (
 ALTER TABLE "compute_usage_carryover" ADD CONSTRAINT "compute_usage_carryover_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Credits (vCPU-minutes) of one job, rounded up. The vCPU counts are the
--- WORKER_SPECS in shared/src/computeCredits.ts.
+-- WORKER_SPECS in shared/src/computeCredits.ts. Only a job in flight (the
+-- statuses lib/fargateCapacity.ts calls in flight) is measured against NOW():
+-- a finished row keeps the end it was left with, so a reaped job stops costing.
+-- Total on any row: a wallSeconds that is not a number, or is absurd, is
+-- ignored rather than raised, because the usage query runs these over every
+-- account on every submission.
 CREATE FUNCTION topo_job_credits(status text, pipeline_metrics jsonb, started_at timestamp, updated_at timestamp)
 RETURNS numeric LANGUAGE sql STABLE AS $$
   SELECT CEIL(
     8::numeric * COALESCE(
-      NULLIF((pipeline_metrics ->> 'wallSeconds'), '')::numeric,
+      CASE WHEN jsonb_typeof(pipeline_metrics -> 'wallSeconds') = 'number'
+        THEN LEAST((pipeline_metrics ->> 'wallSeconds')::numeric, 31536000) END,
       EXTRACT(EPOCH FROM (
-        CASE WHEN status IN ('complete', 'failed') THEN updated_at ELSE NOW() END
+        CASE WHEN status IN ('pending', 'processing') THEN NOW() ELSE updated_at END
         - started_at
       ))
     ) / 60.0
   )
 $$;
 
-CREATE FUNCTION topo_export_job_credits(completed_at timestamp, started_at timestamp)
+-- topo_export_jobs has no updated_at, so a finished export with no completed_at
+-- (one a reaper failed before it stamped it) costs nothing beyond its start.
+CREATE FUNCTION topo_export_job_credits(status text, completed_at timestamp, started_at timestamp)
 RETURNS numeric LANGUAGE sql STABLE AS $$
-  SELECT CEIL(4::numeric * EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - started_at)) / 60.0)
+  SELECT CEIL(4::numeric * EXTRACT(EPOCH FROM (
+    CASE WHEN status IN ('queued', 'running') THEN COALESCE(completed_at, NOW())
+         ELSE COALESCE(completed_at, started_at) END
+    - started_at
+  )) / 60.0)
 $$;
 
 -- The start of the Sydney month a job started in, as the UTC timestamp
@@ -89,7 +101,7 @@ CREATE FUNCTION carry_over_topo_export_job() RETURNS trigger LANGUAGE plpgsql AS
 BEGIN
   IF OLD.started_at IS NOT NULL THEN
     PERFORM add_compute_carryover(OLD.user_id, OLD.started_at,
-      topo_export_job_credits(OLD.completed_at, OLD.started_at));
+      topo_export_job_credits(OLD.status, OLD.completed_at, OLD.started_at));
   END IF;
   RETURN OLD;
 EXCEPTION WHEN OTHERS THEN

@@ -5,6 +5,7 @@ import { WORKER_SPECS, currentMonthStart } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 import prisma from "../services/prisma";
 import { getSiteCreditUsage } from "../lib/computeCredits";
+import { reapStuckTopoJobs } from "../lib/topoJobReaper";
 
 // Requires the API (AUTH_MODE=fake). Usage of rows that exist is derived from
 // the job tables; what a delete would erase is carried over by a trigger
@@ -88,6 +89,8 @@ describe("deleting a job does not erase its compute usage", () => {
     expect(await getSiteCreditUsage()).toBe(siteBefore + EXPORT_CREDITS);
   });
 
+  // Mutation that turns this red: drop the started_at check from
+  // carry_over_topo_job.
   it("a job that never started adds nothing when it is deleted", async () => {
     const [before, siteBefore] = [await bobUsed(), await getSiteCreditUsage()];
     const job = await topoJob(BOB_ID, null);
@@ -128,29 +131,6 @@ describe("the site-wide pool", () => {
     await request(API_URL).delete(`/topo-jobs/${res.body.jobId}`).set(BOB);
   });
 
-  const estimate = () =>
-    request(API_URL)
-      .post("/compute-estimate")
-      .set(BOB)
-      .send({ kind: "topo", tileCount: null });
-
-  // Mutation that turns this red: drop poolHasNoRoomFor from the route's
-  // wouldExceed.
-  it("tells the estimate that a spent pool would refuse, with the API's sentence", async () => {
-    const open = await estimate();
-    expect(open.body.wouldExceed).toBe(false);
-    expect(open.body).not.toHaveProperty("refusal");
-
-    await spent();
-    const res = await estimate();
-    expect(res.status).toBe(200);
-    expect(res.body.wouldExceed).toBe(true);
-    expect(res.body.refusal).toMatch(/everyone on Logjam/);
-    // used and quota stay the user's own.
-    expect(res.body.quota).toBe(open.body.quota);
-    expect(res.body.used).toBe(open.body.used);
-  });
-
   // Mutation that turns this red: skip the pool block in assertHasCredits.
   it("refuses a new job with the pool's sentence once it is spent, and creates nothing", async () => {
     await spent();
@@ -168,21 +148,79 @@ describe("the site-wide pool", () => {
   });
 });
 
-describe("a carry-over that fails never blocks a delete", () => {
-  // A wallSeconds that is not a number makes topo_job_credits raise inside the
-  // trigger. Mutation that turns this red: remove the EXCEPTION handler from
-  // carry_over_topo_job in the migration.
-  const badJob = (userId: string) =>
-    prisma.topoJob.create({
+describe("only a job in flight accrues against the clock", () => {
+  // Mutation that turns this red: count any export with no completed_at
+  // against NOW(), as topo_export_job_credits did (the status argument).
+  it("a failed export with no completed_at costs nothing more", async () => {
+    const before = await bobUsed();
+    const job = await prisma.topoExportJob.create({
       data: {
-        userId,
-        status: "complete",
-        startedAt: new Date(),
-        pipelineMetrics: { wallSeconds: "not a number" },
+        userId: BOB_ID,
+        sourceJobIds: [],
+        layers: [],
+        format: "mbtiles",
+        bundling: "composite",
+        vectorStyleSnapshot: {},
+        status: "failed",
+        startedAt: new Date(Date.now() - 60 * 60_000),
       },
     });
+    expect(await bobUsed()).toBe(before);
+    await prisma.topoExportJob.delete({ where: { id: job.id } });
+    expect(await bobUsed()).toBe(before);
+  });
 
-  it("deletes the row, and the account that owns one", async () => {
+  // Mutation that turns this red: drop completedAt from the reaper's failure
+  // write for an overdue running export (topoJobReaper.ts).
+  it("the reaper stamps completed_at on an export it fails", async () => {
+    const job = await prisma.topoExportJob.create({
+      data: {
+        userId: BOB_ID,
+        sourceJobIds: [],
+        layers: [],
+        format: "mbtiles",
+        bundling: "composite",
+        vectorStyleSnapshot: {},
+        status: "running",
+        startedAt: new Date(Date.now() - 24 * 60 * 60_000),
+      },
+    });
+    await reapStuckTopoJobs();
+    const row = await prisma.topoExportJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(row.status).toBe("failed");
+    expect(row.completedAt).not.toBeNull();
+  });
+});
+
+describe("a job row with a bad wallSeconds does not break usage", () => {
+  // Mutations that turn this red: drop the jsonb_typeof guard from
+  // topo_job_credits (the string), or drop its LEAST cap (the huge number).
+  // Either makes every usage query, the pool's included, fail for everyone.
+  it("falls back to the timestamps for a string and for an absurd number", async () => {
+    const before = await bobUsed();
+    for (const wallSeconds of ["not a number", 1e30]) {
+      const job = await prisma.topoJob.create({
+        data: {
+          userId: BOB_ID,
+          status: "failed",
+          startedAt: new Date(),
+          pipelineMetrics: { wallSeconds },
+        },
+      });
+      expect(await bobUsed()).toBeGreaterThanOrEqual(before);
+      expect(await getSiteCreditUsage()).toBeGreaterThanOrEqual(0);
+      await prisma.topoJob.delete({ where: { id: job.id } });
+    }
+  });
+});
+
+describe("a carry-over that fails never blocks a delete", () => {
+  // The carry-over fails here because its insert is refused by a constraint
+  // this test adds for its duration. Mutation that turns this red: remove the
+  // EXCEPTION handler from carry_over_topo_job in the migration.
+  it("deletes the row, and the account that owns one, and carries nothing over", async () => {
     const tag = randomUUID();
     const user = await prisma.user.create({
       data: {
@@ -191,25 +229,35 @@ describe("a carry-over that fails never blocks a delete", () => {
         email: `cb-${tag}@example.invalid`,
       },
     });
-    const siteBefore = await prisma.siteComputeCarryover.count();
+    const siteBefore = await getSiteCreditUsage();
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE compute_usage_carryover ADD CONSTRAINT refuse_carryover CHECK (false) NOT VALID",
+    );
+    try {
+      const job = await topoJob(user.id);
+      await prisma.topoJob.delete({ where: { id: job.id } });
+      expect(
+        await prisma.topoJob.findUnique({ where: { id: job.id } }),
+      ).toBeNull();
 
-    const job = await badJob(user.id);
-    await prisma.topoJob.delete({ where: { id: job.id } });
-    expect(
-      await prisma.topoJob.findUnique({ where: { id: job.id } }),
-    ).toBeNull();
-
-    const other = await badJob(user.id);
-    const res = await request(API_URL)
-      .delete("/users/me")
-      .set(as(user.subject));
-    expect(res.status).toBe(204);
-    expect(
-      await prisma.topoJob.findUnique({ where: { id: other.id } }),
-    ).toBeNull();
-    expect(await prisma.user.findUnique({ where: { id: user.id } })).toBeNull();
-    // Nothing was carried over for either.
-    expect(await prisma.siteComputeCarryover.count()).toBe(siteBefore);
+      const other = await topoJob(user.id);
+      const res = await request(API_URL)
+        .delete("/users/me")
+        .set(as(user.subject));
+      expect(res.status).toBe(204);
+      expect(
+        await prisma.topoJob.findUnique({ where: { id: other.id } }),
+      ).toBeNull();
+      expect(
+        await prisma.user.findUnique({ where: { id: user.id } }),
+      ).toBeNull();
+    } finally {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE compute_usage_carryover DROP CONSTRAINT refuse_carryover",
+      );
+    }
+    // The site row the handler rolled back is not half-written.
+    expect(await getSiteCreditUsage()).toBe(siteBefore);
   });
 });
 
@@ -252,11 +300,13 @@ describe("the SQL that prices a job agrees with WORKER_SPECS", () => {
     >`
       SELECT
         topo_job_credits('complete', '{"wallSeconds": 60}'::jsonb, NOW()::timestamp, NOW()::timestamp)::bigint AS "topo",
-        topo_export_job_credits(NOW()::timestamp, (NOW() - interval '60 seconds')::timestamp)::bigint AS "topoExport"`;
+        topo_export_job_credits('completed', NOW()::timestamp, (NOW() - interval '60 seconds')::timestamp)::bigint AS "topoExport"`;
     expect(Number(topo)).toBe(WORKER_SPECS.topo.vcpus);
     expect(Number(topoExport)).toBe(WORKER_SPECS.topoExport.vcpus);
   });
 
+  // Mutation that turns this red: drop the Australia/Sydney conversion from
+  // compute_month_start.
   it("names the month a job started in as currentMonthStart does, across DST", async () => {
     // Sydney's day-light saving ends 2026-04-05 and starts 2026-10-04.
     const instants = [

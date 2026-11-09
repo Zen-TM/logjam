@@ -72,7 +72,7 @@ async function creditsUsedThisMonth(
 
         UNION ALL
 
-        SELECT topo_export_job_credits(completed_at, started_at)
+        SELECT topo_export_job_credits(status, completed_at, started_at)
         FROM topo_export_jobs
         WHERE started_at IS NOT NULL
           AND started_at >= ${monthStart}
@@ -116,14 +116,14 @@ export function getSiteCreditUsage(db: DbClient = prisma): Promise<number> {
   return creditsUsedThisMonth(null, db);
 }
 
-/** What a refusal for the site-wide pool says, here and in POST /compute-estimate. */
-export const POOL_SPENT_SENTENCE = say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
+/** What a refusal for the site-wide pool says. */
+const POOL_SPENT_SENTENCE = say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
 
 /**
  * Whether the site-wide pool is spent, or cannot hold a job of `projected`
  * credits (null = no estimate: refused only once spent).
  */
-export async function poolHasNoRoomFor(
+async function poolHasNoRoomFor(
   projected: number | null,
   db: DbClient = prisma,
 ): Promise<boolean> {
