@@ -38,8 +38,8 @@ export const MAP_TERRAIN = {
     vegetationAbout: "About vegetation",
     vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
-    // Land tenure stacks with this group, but its row is in `MAP_OVERLAYS`:
-    // who holds the land is no part of the shape of the ground.
+    // Land tenure, Fire history and Coverage stack with this group, but their
+    // rows are in `MAP_OVERLAYS`: none is part of the shape of the ground.
     // Behind that row's help button, titled with its label.
     landAbout: "About land tenure",
     landLegend:
@@ -47,6 +47,32 @@ export const MAP_TERRAIN = {
     // The source's two known gaps, said beside the legend they qualify.
     landCaveat:
       "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
+    fire: "Fire history",
+    // Behind that row's help button, titled with its label; the legend's rows
+    // are `fireLegendRows`.
+    fireAbout: "About fire history",
+    fireLegend:
+      "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.",
+    // The source's gap, said beside the legend it qualifies.
+    fireCaveat:
+      "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
+    coverage: "Coverage",
+    // Behind that row's help button, titled with its label, over a picker of
+    // `CARRIERS` and a swatch of the hatch.
+    coverageAbout: "About coverage",
+    coverageCarrier: "Your carrier",
+    // In place of the row's switch until a carrier is picked: the overlay
+    // draws one carrier's map, and there is no default.
+    coverageChooseCarrier: "Choose your carrier",
+    coverageLegend:
+      "Hatching marks where your carrier's own model predicts no mobile reception for a phone in your hand outdoors.",
+    // What "What is here?" says after the carrier; the first is the
+    // legend's swatch too.
+    coverageNoReception: "no mobile reception",
+    coverageReception: "mobile reception",
+    // The source's limits, said beside the legend they qualify.
+    coverageCaveat:
+      "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
     slopeBands: "Slope bands",
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.

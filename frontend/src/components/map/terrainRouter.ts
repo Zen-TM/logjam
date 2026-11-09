@@ -19,14 +19,15 @@ import {
   terrainTileArchive,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
+  type OverlayTerrainKey,
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 
 export const TERRAIN_PROTOCOL = "logjam-terrain";
 
-/** Land is no surface a sharpened area replaces: its archive is read as it is. */
-export type RoutedTerrainKey = Exclude<TerrainLayerKey, "land">;
+/** An overlay is no surface a sharpened area replaces: its archive is read as it is. */
+export type RoutedTerrainKey = Exclude<TerrainLayerKey, OverlayTerrainKey>;
 
 /**
  * Each Terrain layer's statewide archive, declared once: the unrouted

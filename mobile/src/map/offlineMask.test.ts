@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NSW_REGION } from "@logjam/shared";
+import { NSW_COVERAGE, NSW_FIRE, NSW_REGION } from "@logjam/shared";
 
 import {
   offlineCoverageMask,
@@ -125,6 +125,8 @@ describe("offlineMaskBoxes", () => {
     ["contours", clip("contours-region", NSW_REGION.terrain.contours.id)],
     ["slope", clip("slope-region", NSW_REGION.terrain.slope.id)],
     ["land", clip("land-region", NSW_REGION.terrain.land.id)],
+    ["fire", clip("fire-region", NSW_FIRE.id)],
+    ["coverage", clip("coverage-region", NSW_COVERAGE.id)],
     ["hillshade", clip("dem-region", NSW_REGION.terrain.heights.id)],
   ])("leaves a save's %s clear when its basemap clip failed", (_, terrain) => {
     const boxes = offlineMaskBoxes([savedBasemap], [terrain])!;

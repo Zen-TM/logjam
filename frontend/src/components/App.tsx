@@ -134,6 +134,8 @@ import {
   drawsNswContours,
   drawsNswHillshade,
   normalizeTerrainLayers,
+  normalizeCarrier,
+  drawsCoverage,
   normalizeUserUiPreferences,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
@@ -238,6 +240,11 @@ function App() {
     TERRAIN_LAYER_DEFAULTS,
   );
   const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
+  const [storedCarrier, setCoverageCarrier] = useStoredState<unknown>(
+    "logjam.coverageCarrier",
+    null,
+  );
+  const coverageCarrier = normalizeCarrier(storedCarrier);
   const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
     setStoredTerrainLayers((prev: unknown) => ({
       ...normalizeTerrainLayers(prev),
@@ -534,7 +541,7 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, slope, land, hillshade } = terrainLayers;
+  const { contours, coverage, fire, slope, land, hillshade } = terrainLayers;
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -546,6 +553,8 @@ function App() {
     const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
+      coverage: drawsCoverage(coverage, coverageCarrier),
+      fire,
       slope,
       land,
       hillshade: drawsNswHillshade(activeLayerId, hillshade),
@@ -560,6 +569,9 @@ function App() {
   }, [
     activeLayerId,
     contours,
+    coverage,
+    coverageCarrier,
+    fire,
     slope,
     land,
     hillshade,
@@ -2167,6 +2179,7 @@ function App() {
             topoLayers={mapTopoLayers}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
+            coverageCarrier={coverageCarrier}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2247,6 +2260,8 @@ function App() {
           onBasemapHealth={setBasemapHealth}
           terrainLayers={terrainLayers}
           onTerrainLayerChange={setTerrainLayer}
+          coverageCarrier={coverageCarrier}
+          onCoverageCarrierChange={setCoverageCarrier}
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}

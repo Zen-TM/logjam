@@ -398,8 +398,8 @@ elif _svtm_s3_raw == "":
 else:
     SVTM_FORMATION_RASTER = _svtm_s3_raw
 
-# Fire history raster: per-cell most-recent-fire year, preprocessed once by
-# build_fire_history.py (see topo/fire/fire_history_year.tif). Consumed at job
+# Fire history raster: per-cell most-recent-fire year, rebuilt monthly from
+# NPWS's map service by `build_fire_history.py publish`. Consumed at job
 # time only to flag cells where the fire happened AFTER the LiDAR capture —
 # see apply_fire_history. Density itself is never adjusted: baseline testing
 # showed the LiDAR captures post-fire regrowth directly, so a regrowth

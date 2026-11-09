@@ -304,6 +304,164 @@ run "gauges_role_writes_only_master_gauges" {
   }
 }
 
+run "fire_history_role_writes_only_fire" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.fire_history]
+  }
+
+  # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
+  # prefix condition, or adding an action or a statement lets the monthly
+  # build see, write or delete more than the fire history raster and the
+  # Fire history overlay's archive.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.fire_history.policy).Statement == [
+      {
+        Sid      = "PublishFireHistory"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/fire/*"
+      },
+      {
+        Sid      = "PublishFireOverlay"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/fire/*"
+      },
+      {
+        Sid       = "ListFireHistory"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "fire/*" } }
+      },
+    ]
+    error_message = "The fire history role may only list, read and write objects under fire/ in the topo bucket, and write them under master/fire/."
+  }
+}
+
+run "pin_role_passes_every_topo_task_role" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_role_policy.gha_pin_task_defs,
+      aws_iam_role_policy.fire_history_scheduler,
+      aws_ecs_task_definition.topo_worker,
+      aws_ecs_task_definition.topo_export_worker,
+      aws_ecs_task_definition.place_registry,
+      aws_ecs_task_definition.gauges,
+      aws_ecs_task_definition.fire_history,
+      aws_ecs_task_definition.coverage,
+    ]
+  }
+
+  # A mocked provider makes up no ARN to compare: each role gets its own.
+  override_resource {
+    target          = aws_iam_role.ecs_task_execution
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-execution" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.topo_worker
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-topo-worker-role" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.place_registry
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-place-registry" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.gauges
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-gauges" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.fire_history
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-fire-history" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.coverage
+    values          = { arn = "arn:aws:iam::620853681701:role/mock-coverage" }
+    override_during = plan
+  }
+  override_resource {
+    target = aws_ecs_task_definition.fire_history
+    values = {
+      arn                  = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-fire-history:1"
+      arn_without_revision = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-fire-history"
+    }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_ecs_cluster.main
+    values          = { arn = "arn:aws:ecs:ap-southeast-2:620853681701:cluster/mock" }
+    override_during = plan
+  }
+
+  # Mutation: leave a topo-image task's role, or the execution role, out of
+  # PassWorkerRoles, and pin-release.sh's re-registration of that family is
+  # refused, so every topo deploy and worker rollback fails. The list here is
+  # held to pin-release.sh's families by its --self-test.
+  assert {
+    condition = alltrue([
+      for arn in [
+        aws_iam_role.ecs_task_execution.arn,
+        aws_ecs_task_definition.topo_worker.task_role_arn,
+        aws_ecs_task_definition.topo_export_worker.task_role_arn,
+        aws_ecs_task_definition.place_registry.task_role_arn,
+        aws_ecs_task_definition.gauges.task_role_arn,
+        aws_ecs_task_definition.fire_history.task_role_arn,
+        aws_ecs_task_definition.coverage.task_role_arn,
+        ] : contains(one([
+          for s in jsondecode(aws_iam_role_policy.gha_pin_task_defs.policy).Statement : s
+          if try(s.Sid, "") == "PassWorkerRoles"
+      ]).Resource, arn)
+    ])
+    error_message = "The pin role must be able to pass the execution role and the task role of every family pin-release.sh pins for the topo image."
+  }
+
+  # Mutation: add another task's role to the fire history scheduler's
+  # PassRole, and the schedule can launch a task with more than its own grant.
+  assert {
+    condition = toset(one([
+      for s in jsondecode(aws_iam_role_policy.fire_history_scheduler.policy).Statement : s
+      if try(s.Sid, "") == "PassFireHistoryRoles"
+    ]).Resource) == toset([aws_iam_role.ecs_task_execution.arn, aws_iam_role.fire_history.arn])
+    error_message = "The fire history scheduler may pass only the execution role and the fire history task role."
+  }
+}
+
+run "coverage_role_writes_only_master_coverage" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.coverage]
+  }
+
+  # Mutation: widening a Resource (`/*`) or the list prefix, dropping the
+  # prefix condition, or adding an action or a statement lets the monthly
+  # build see, write or delete more than the Coverage archive and its state.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.coverage.policy).Statement == [
+      {
+        Sid      = "PublishCoverage"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/coverage/*"
+      },
+      {
+        Sid       = "ListCoverage"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/coverage/*" } }
+      },
+    ]
+    error_message = "The coverage role may only list, read and write objects under master/coverage/ in the topo bucket."
+  }
+}
+
 run "api_rate_limit_is_one_plain_ip_rule" {
   command = plan
   plan_options {
