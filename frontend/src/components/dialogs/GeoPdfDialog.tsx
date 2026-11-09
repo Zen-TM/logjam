@@ -75,6 +75,7 @@ import {
   areaInTerrainRegion,
   areaSizeKm,
   EXPORT_FORMAT_LABELS,
+  isOverlayTerrainKey,
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
@@ -163,10 +164,12 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "enNorthing", label: "E/N" },
 ];
 
-// Land tenure is a Terrain layer to the map's stacking but an overlay to the
+// The overlay keys are Terrain layers to the map's stacking but overlays to the
 // user, in the layers control and here: who holds the land is no part of the
 // shape of the ground (`MAP_TERRAIN`).
-const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter((key) => key !== "land");
+const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
+  (key) => !isOverlayTerrainKey(key),
+);
 
 // The Overlays group's chips that are not layers of the map.
 const MY_PLACES = "my-places";

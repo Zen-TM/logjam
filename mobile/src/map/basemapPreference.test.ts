@@ -9,6 +9,7 @@ let storedValue: string | null = null;
 
 const {
   readBasemapPreference,
+  readCoverageCarrier,
   readGaugesLayer,
   readMgaGridLayer,
   readTerrainLayers,
@@ -53,6 +54,8 @@ describe("readTerrainLayers", () => {
     expect(readTerrainLayers()).toEqual({
       contours: true,
       slope: true,
+      fire: false,
+      coverage: false,
       land: false,
       hillshade: false,
       vegetation: true,
@@ -68,9 +71,25 @@ describe("readTerrainLayers", () => {
     expect(readTerrainLayers()).toEqual({
       contours: false,
       slope: true,
+      fire: false,
+      coverage: false,
       land: false,
       hillshade: false,
       vegetation: true,
     });
+  });
+});
+
+describe("readCoverageCarrier", () => {
+  // Mutation: return the stored string as it is, and a value no build offers
+  // reaches the layer's filter, which then matches no carrier and draws
+  // nothing; fall back to a carrier, and the overlay draws one never picked.
+  it("reads a carrier the build offers, and nothing for anything else", () => {
+    storedValue = "optus";
+    expect(readCoverageCarrier()).toBe("optus");
+    for (const stale of [null, "vodafone", ""]) {
+      storedValue = stale;
+      expect(readCoverageCarrier()).toBeNull();
+    }
   });
 });

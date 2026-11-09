@@ -29,8 +29,11 @@ concurrency:
 jobs:
   release:
     name: Check tag, build and submit
-    # EXPO_TOKEN lives only in this Environment, whose deployment rule admits
-    # `mobile-v*` tags alone, so a workflow on any branch cannot read it.
+    # EXPO_TOKEN lives in this Environment, whose deployment rule admits
+    # `mobile-v*` tags alone, and in the main-only `mobile-ota` (OTA hotfixes),
+    # so a workflow on any other branch cannot read it. Guard: the
+    # releases_stay_the_maintainers and ota_updates_are_signed_on_main_only
+    # runs in infra/terraform/envs/github/tests/guards.tftest.hcl.
     environment: mobile-release
     runs-on: ubuntu-latest
     permissions:

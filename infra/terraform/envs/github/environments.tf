@@ -5,12 +5,17 @@
 # signs PR plan comments (.github/workflows/terraform-plan-sign.yml): on any
 # other ref, a PR's own code could sign a plan it never ran. Guard:
 # tests/guards.tftest.hcl.
-# `mobile-release` holds EXPO_TOKEN, which is set by hand; Terraform does not
-# manage secrets.
+# `mobile-ota` holds what publishes a Logjam GPS OTA hotfix (ota-hotfix.yml,
+# ota-rollback.yml): the OTA signing key, so on any other ref a branch's own
+# code could sign an update phones would run
+# (docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md).
+# `mobile-release` and `mobile-ota` hold secrets set by hand; Terraform does
+# not manage secrets.
 locals {
   environments = {
     prod                = { branch_pattern = "main", tag_pattern = null }
     mobile-release      = { branch_pattern = null, tag_pattern = "mobile-v*" }
+    mobile-ota          = { branch_pattern = "main", tag_pattern = null }
     terraform-plan-sign = { branch_pattern = "main", tag_pattern = null }
   }
 

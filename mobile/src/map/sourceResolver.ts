@@ -17,6 +17,8 @@
 import {
   BASEMAP_CATALOG,
   NSW_REGION,
+  NSW_COVERAGE,
+  NSW_FIRE,
   type BasemapCatalogEntry,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
@@ -64,6 +66,10 @@ export type LogicalLayerRef =
   | { kind: "nsw-hillshade"; viewport?: Viewport | null }
   /** The Land overlay (`shared/src/nswLand.ts`); `viewport` as for the slope. */
   | { kind: "nsw-land"; viewport?: Viewport | null }
+  /** The Fire history overlay (`shared/src/nswFire.ts`), the same way. */
+  | { kind: "nsw-fire"; viewport?: Viewport | null }
+  /** The Coverage overlay (`shared/src/nswCoverage.ts`), the same way. */
+  | { kind: "nsw-coverage"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -113,6 +119,10 @@ export interface MapArtifact {
     | "slope-region"
     /** A clip of the Land overlay, saved the same way. */
     | "land-region"
+    /** A clip of the Fire history overlay, saved the same way. */
+    | "fire-region"
+    /** A clip of the Coverage overlay, saved the same way. */
+    | "coverage-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
@@ -596,6 +606,12 @@ export const holdsSlope = (
 export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
   artifact.kind === "land-region";
 
+export const holdsFire = (artifact: Pick<MapArtifact, "kind">): boolean =>
+  artifact.kind === "fire-region";
+
+export const holdsCoverage = (artifact: Pick<MapArtifact, "kind">): boolean =>
+  artifact.kind === "coverage-region";
+
 /**
  * Whether a saved file is one the Terrain group can draw offline, whatever
  * its switch says.
@@ -607,6 +623,8 @@ export const drawsTerrain = (
   holdsContours(artifact) ||
   holdsSlope(artifact) ||
   holdsLand(artifact) ||
+  holdsFire(artifact) ||
+  holdsCoverage(artifact) ||
   holdsHillshade(artifact);
 
 /**
@@ -752,6 +770,22 @@ export function resolveMapSource(
         NSW_REGION.terrain.land,
         "vector",
         "land-region",
+        ctx,
+        mainRegion(ref.viewport),
+      );
+    case "nsw-fire":
+      return resolveStatewide(
+        NSW_FIRE,
+        "vector",
+        "fire-region",
+        ctx,
+        mainRegion(ref.viewport),
+      );
+    case "nsw-coverage":
+      return resolveStatewide(
+        NSW_COVERAGE,
+        "vector",
+        "coverage-region",
         ctx,
         mainRegion(ref.viewport),
       );

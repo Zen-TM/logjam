@@ -1,15 +1,21 @@
-import { useState, type ReactNode, type RefObject } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   contractSectionKeys,
-  LAND_CLASSES,
+  isOverlayTerrainKey,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  NSW_REGION,
+  OVERLAY_LEGENDS,
+  overlayAwaitsChoice,
+  drawsCoverage,
+  overlayChoiceLabel,
+  normalizeCarrier,
+  type CarrierId,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
   takesNswHillshade,
+  type OverlayLegend,
   type SectionKeysOn,
   type SlopeBand,
   type TerrainSwitchKey,
@@ -21,6 +27,7 @@ import SharpenedAreasView from "./SharpenedAreasView";
 import BasemapGallery, { type BaseLayer } from "./BasemapGallery";
 import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import {
+  Button,
   ChipRail,
   Dialog,
   Icon,
@@ -77,6 +84,8 @@ export default function LayersPopover({
   onBasemapHealth,
   terrainLayers,
   onTerrainLayerChange,
+  coverageCarrier,
+  onCoverageCarrierChange,
   slopeBands,
   onSlopeBandsChange,
   mapView,
@@ -116,6 +125,8 @@ export default function LayersPopover({
   onBasemapHealth?: (id: string, down: boolean) => void;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
+  coverageCarrier: CarrierId | null;
+  onCoverageCarrierChange: (carrier: CarrierId) => void;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
@@ -163,6 +174,8 @@ export default function LayersPopover({
     showPlaces,
     showWays,
     terrainLayers.land,
+    terrainLayers.fire,
+    drawsCoverage(terrainLayers.coverage, coverageCarrier),
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -316,10 +329,27 @@ export default function LayersPopover({
                     checked={showWays}
                     onToggle={setShowWays}
                   />
-                  <LandRow
-                    checked={terrainLayers.land}
-                    onToggle={(on) => onTerrainLayerChange("land", on)}
-                  />
+                  {contractSectionKeys(MAP_OVERLAYS, "web")
+                    .filter(isOverlayTerrainKey)
+                    .map((key) => (
+                      <OverlayLegendRow
+                        key={key}
+                        legend={OVERLAY_LEGENDS[key]}
+                        checked={terrainLayers[key]}
+                        onToggle={(on) => onTerrainLayerChange(key, on)}
+                        {...(key === "coverage"
+                          ? {
+                              choice: {
+                                value: coverageCarrier,
+                                onChange: (value: string) => {
+                                  const next = normalizeCarrier(value);
+                                  if (next) onCoverageCarrierChange(next);
+                                },
+                              },
+                            }
+                          : {})}
+                      />
+                    ))}
                   <OverlayRow
                     icon="gauge"
                     hue="var(--color-accent)"
@@ -495,7 +525,7 @@ export function TerrainPane({
         onClose={() => setSlopeLegendOpen(false)}
       >
         <p>{terrainCopy.slopeLegend}</p>
-        <ul className={classes.landLegend}>
+        <ul className={classes.legendList}>
           {slopeLegendRows(slopeBands).map(({ label, colour }) => (
             <li key={label}>
               <IconTile icon="layers" hue={colour} />
@@ -553,44 +583,91 @@ function SlopeBandsView({
   );
 }
 
-/** The Land tenure row, with the legend its help button opens. */
-export function LandRow({
+/**
+ * A statewide overlay's row, with the legend its help button opens: what the
+ * colours mean, the key, the source's caveat and its credit
+ * (`OVERLAY_LEGENDS`).
+ */
+export function OverlayLegendRow({
+  legend,
   checked,
   onToggle,
+  choice,
 }: {
+  legend: OverlayLegend;
   checked: boolean;
   onToggle: (next: boolean) => void;
+  /** The value of `legend.choice`, for an overlay that has one: null until
+   *  one is picked, when the row offers the legend's choice in place of its
+   *  switch. */
+  choice?: { value: string | null; onChange: (value: string) => void };
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const openLegend = () => setLegendOpen(true);
+  const helpRef = useRef<HTMLButtonElement>(null);
+  // The first pick swaps the button that opened the legend for the switch and
+  // help, so the Dialog has no opener to hand focus back to: help takes it.
+  const closeLegend = () => {
+    setLegendOpen(false);
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) helpRef.current?.focus();
+    });
+  };
   return (
     <>
-      <OverlayRow
-        icon="layers"
-        hue={LAND_CLASSES[0].colour}
-        title={terrainCopy.land}
-        checked={checked}
-        onToggle={onToggle}
-        help={{
-          label: terrainCopy.landAbout,
-          onClick: () => setLegendOpen(true),
-        }}
-      />
-      <Dialog
-        open={legendOpen}
-        title={terrainCopy.land}
-        onClose={() => setLegendOpen(false)}
-      >
-        <p>{terrainCopy.landLegend}</p>
-        <ul className={classes.landLegend}>
-          {LAND_CLASSES.map(({ name, colour }) => (
-            <li key={name}>
-              <IconTile icon="layers" hue={colour} />
-              {name}
+      {legend.choice && overlayAwaitsChoice(legend, choice?.value) ? (
+        <Row
+          leading={<IconTile icon="layers" hue={legend.hue} />}
+          title={legend.title}
+          onPress={openLegend}
+          trailing={
+            <Button compact variant="outline" onClick={openLegend}>
+              {legend.choice.choose}
+            </Button>
+          }
+        />
+      ) : (
+        <OverlayRow
+          icon="layers"
+          hue={legend.hue}
+          title={legend.title}
+          subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
+          checked={checked}
+          onToggle={onToggle}
+          help={{ label: legend.about, onClick: openLegend }}
+          helpRef={helpRef}
+        />
+      )}
+      <Dialog open={legendOpen} title={legend.title} onClose={closeLegend}>
+        {legend.choice && choice && (
+          <ChipRail
+            label={legend.choice.label}
+            options={legend.choice.options}
+            value={choice.value ?? ""}
+            onChange={(value) => {
+              // The first pick comes from the row's button: the overlay was
+              // asked for, so it comes on.
+              if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
+              choice.onChange(value);
+            }}
+            wrap
+          />
+        )}
+        <p>{legend.intro}</p>
+        <ul className={classes.legendList}>
+          {legend.rows.map(({ label, colour, pattern }) => (
+            <li key={label}>
+              {pattern ? (
+                <IconTile pattern={pattern} hue={colour} />
+              ) : (
+                <IconTile icon="layers" hue={colour} />
+              )}
+              {label}
             </li>
           ))}
         </ul>
-        <p>{terrainCopy.landCaveat}</p>
-        <p>{NSW_REGION.terrain.land.credit}</p>
+        <p>{legend.caveat}</p>
+        <p>{legend.credit}</p>
       </Dialog>
     </>
   );
@@ -606,6 +683,7 @@ function OverlayRow({
   onOpen,
   openLabel,
   help,
+  helpRef,
 }: {
   icon: Glyph;
   hue: string;
@@ -616,6 +694,7 @@ function OverlayRow({
   onOpen?: () => void;
   openLabel?: string;
   help?: { label: string; onClick: () => void };
+  helpRef?: RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <Row
@@ -626,7 +705,12 @@ function OverlayRow({
       trailing={
         <>
           {help && (
-            <IconButton icon="help" label={help.label} onClick={help.onClick} />
+            <IconButton
+              icon="help"
+              label={help.label}
+              onClick={help.onClick}
+              ref={helpRef}
+            />
           )}
           {onOpen && (
             <IconButton

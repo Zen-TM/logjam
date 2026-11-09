@@ -25,6 +25,8 @@ export const REGION_ARTIFACT_KINDS: readonly MapArtifact["kind"][] = [
   "contours-region",
   "slope-region",
   "land-region",
+  "fire-region",
+  "coverage-region",
 ];
 
 export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
@@ -33,7 +35,7 @@ export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
 
 /**
  * Whether a file of a saved area came without the user picking it: the vector
- * map, the elevation, contours, slope and land clips and a sharpened area's
+ * map, the elevation, contours, slope, land, fire and coverage clips and a sharpened area's
  * clips. The user picked only the raster maps, so only those can go on their
  * own; deleting any other leaves an area that quietly loses a tool offline.
  * Guard: `artifactGroups.test.ts` ("isBundledRegionMember").

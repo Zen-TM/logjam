@@ -1,3 +1,4 @@
+import { NSW_FIRE } from "./nswFire.js";
 import type { TopoLayerName } from "./topoSettings.js";
 import { NSW_REGION } from "./regions.js";
 
@@ -263,7 +264,8 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
     "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
   vegetation:
-    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
+    NSW_FIRE.credit,
   features: "Features © OpenStreetMap contributors",
   land: NSW_REGION.terrain.land.credit,
 };

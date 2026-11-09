@@ -5,6 +5,9 @@
 // basemap the Terrain group goes inside the basemap instead, under its roads
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
 import {
+  type CarrierId,
+  coverageNameOf,
+  fireNameOf,
   landNameOf,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -46,6 +49,22 @@ export const PRESSABLE_LAYERS = [
 /** The Land overlay's fill, by the id `topo-<entry id>-<suffix>` every topo layer has. */
 export const LAND_FILL_LAYER = "topo-nswland-fill";
 export const LAND_EDGE_LAYER = "topo-nswland-edge";
+/** The Fire history overlay's tint and its edge, named the same way. */
+export const FIRE_FILL_LAYER = "topo-nswfire-fill";
+export const FIRE_EDGE_LAYER = "topo-nswfire-edge";
+/** The Coverage overlay's hatch, the same way. */
+export const COVERAGE_FILL_LAYER = "topo-nswcoverage-fill";
+
+type RenderedQuery = {
+  getLayer(id: string): unknown;
+  queryRenderedFeatures(
+    point: [number, number],
+    options: { layers: string[] },
+  ): {
+    properties?: Record<string, unknown> | null;
+    geometry?: { type: string; coordinates?: unknown } | null;
+  }[];
+};
 
 /**
  * The name of the land class drawn at `point`, or null: the overlay is off, or
@@ -53,18 +72,47 @@ export const LAND_EDGE_LAYER = "topo-nswland-edge";
  * sends no coordinate anywhere to answer.
  */
 export function landClassAt(
-  map: {
-    getLayer(id: string): unknown;
-    queryRenderedFeatures(
-      point: [number, number],
-      options: { layers: string[] },
-    ): { properties?: Record<string, unknown> | null }[];
-  },
+  map: RenderedQuery,
   point: [number, number],
 ): string | null {
   if (!map.getLayer(LAND_FILL_LAYER)) return null;
   return landNameOf(
     map.queryRenderedFeatures(point, { layers: [LAND_FILL_LAYER] }),
+  );
+}
+
+/**
+ * The most recent fire drawn at `point` ("Wildfire, Dec 2019"), or null: the
+ * overlay is off, or nothing burnt there. The fill is queried even at opacity
+ * 0, so a fire over ten years old still answers.
+ */
+export function fireAt(
+  map: RenderedQuery,
+  point: [number, number],
+): string | null {
+  if (!map.getLayer(FIRE_FILL_LAYER)) return null;
+  return fireNameOf(
+    map.queryRenderedFeatures(point, { layers: [FIRE_FILL_LAYER] }),
+  );
+}
+
+/**
+ * What the Coverage overlay predicts at `point` (pixels; `at` is the same
+ * spot as [lng, lat]) for `carrier` ("Telstra: no mobile reception"), or
+ * null: the overlay is off, or the point is off the land it covers. Where
+ * there is reception the fill is clear, and still answers.
+ */
+export function coverageAt(
+  map: RenderedQuery,
+  point: [number, number],
+  at: readonly [number, number],
+  carrier: CarrierId,
+): string | null {
+  if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
+  return coverageNameOf(
+    map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
+    carrier,
+    at,
   );
 }
 
