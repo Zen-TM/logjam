@@ -1,0 +1,15 @@
+[Unit]
+Description=Mount the brain's data volume and start Postgres
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# A restore replays WAL for as long as it takes.
+TimeoutStartSec=infinity
+ExecStart=/opt/brain/host/boot.sh
+
+[Install]
+WantedBy=multi-user.target

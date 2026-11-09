@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly full backup, on a timer
+After=brain-boot.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Australia/Sydney
+# A host that was down at 03:00 backs up when it is back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

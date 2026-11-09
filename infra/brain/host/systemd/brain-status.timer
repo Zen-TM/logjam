@@ -1,0 +1,12 @@
+[Unit]
+Description=Write the canary and status.json, on a timer
+# After, not Requires: if boot.sh refuses, status.json still goes out saying so.
+After=brain-boot.service
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

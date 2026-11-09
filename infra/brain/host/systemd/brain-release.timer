@@ -1,0 +1,12 @@
+[Unit]
+Description=Make the API match the release pointer, on a timer
+# After, not Requires: if boot.sh refuses, status.json still goes out saying so.
+After=brain-boot.service
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

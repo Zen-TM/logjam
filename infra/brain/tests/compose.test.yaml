@@ -1,0 +1,18 @@
+# Added by tests/e2e.sh (through BRAIN_COMPOSE_EXTRA) and never on a real host:
+# the stand-in S3 and Secrets Manager run on the test host, and the API trusts
+# the certificate the test's own Postgres generated.
+services:
+  postgres: &stand-in
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      PGBACKREST_REPO1_S3_VERIFY_TLS: "n"
+  repo: *stand-in
+  api:
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - type: bind
+        source: /data/postgres/server.crt
+        target: /app/brain-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false

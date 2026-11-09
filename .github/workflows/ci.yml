@@ -30,6 +30,7 @@ jobs:
       migrations: ${{ steps.scope.outputs.migrations }}
       topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
       brain_postgres: ${{ steps.scope.outputs.brain_postgres }}
+      brain_e2e: ${{ steps.scope.outputs.brain_e2e }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -562,6 +563,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the image and test it
         run: infra/brain/postgres/tests/test.sh
+
+  brain-e2e:
+    # The brain host's whole life on the runner, no AWS: bootstrap, reboot,
+    # refusing an empty database, releases, losing the disk and restoring. The
+    # mutation each scenario names is in tests/e2e.sh. Both architectures: the
+    # brain is arm64, and this is the only place it runs before a real machine.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.brain_e2e != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Play the brain's life
+        run: infra/brain/tests/e2e.sh
 
   topo:
     runs-on: ubuntu-latest

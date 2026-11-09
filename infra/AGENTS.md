@@ -40,3 +40,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   statement parameters out of logs; `brain/postgres/tests/test.sh` (CI job
   `brain-postgres`) reads the live settings back. Never give `BRAIN_INIT` a
   default: an empty data directory must stop the container, not create a database.
+- **The brain host** (`brain/host/`, `brain/compose.yaml`) holds a database's
+  disk. `boot.sh` formats only a device blank to `blkid`, `wipefs` and a zeroed
+  first MiB, and starts Postgres with `BRAIN_INIT=bootstrap` only when the
+  flag is exactly `1`; keep both, and keep `create_host_path: false` on the
+  data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
+  on a loop device; each mutation it names turns it red.
