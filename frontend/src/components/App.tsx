@@ -525,9 +525,7 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, fire, slope, land, hillshade } = terrainLayers;
-  // A boolean, so a change of carrier is a filter, not a new layer list.
-  const coverageDrawn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
+  const { contours, coverage, fire, slope, land, hillshade } = terrainLayers;
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -539,7 +537,7 @@ function App() {
     const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
-      coverage: coverageDrawn,
+      coverage: drawsCoverage(coverage, coverageCarrier),
       fire,
       slope,
       land,
@@ -555,7 +553,8 @@ function App() {
   }, [
     activeLayerId,
     contours,
-    coverageDrawn,
+    coverage,
+    coverageCarrier,
     fire,
     slope,
     land,

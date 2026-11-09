@@ -634,7 +634,8 @@ export function OverlayLegendRow({
           subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
           checked={checked}
           onToggle={onToggle}
-          help={{ label: legend.about, onClick: openLegend, ref: helpRef }}
+          help={{ label: legend.about, onClick: openLegend }}
+          helpRef={helpRef}
         />
       )}
       <Dialog open={legendOpen} title={legend.title} onClose={closeLegend}>
@@ -682,6 +683,7 @@ function OverlayRow({
   onOpen,
   openLabel,
   help,
+  helpRef,
 }: {
   icon: Glyph;
   hue: string;
@@ -691,11 +693,8 @@ function OverlayRow({
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
   openLabel?: string;
-  help?: {
-    label: string;
-    onClick: () => void;
-    ref?: RefObject<HTMLButtonElement | null>;
-  };
+  help?: { label: string; onClick: () => void };
+  helpRef?: RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <Row
@@ -710,7 +709,7 @@ function OverlayRow({
               icon="help"
               label={help.label}
               onClick={help.onClick}
-              ref={help.ref}
+              ref={helpRef}
             />
           )}
           {onOpen && (
