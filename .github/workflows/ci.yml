@@ -29,6 +29,7 @@ jobs:
       mobile: ${{ steps.scope.outputs.mobile }}
       migrations: ${{ steps.scope.outputs.migrations }}
       topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
+      brain_postgres: ${{ steps.scope.outputs.brain_postgres }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -549,6 +550,18 @@ jobs:
         run: npm ci
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
+
+  brain-postgres:
+    # The Postgres image local dev runs (docker-compose.yml) and prod's will.
+    # The tests read the live server's logging settings, so a mistake in
+    # postgresql.conf fails here; the mutation each guard names is in test.sh.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.brain_postgres != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the image and test it
+        run: infra/brain/postgres/tests/test.sh
 
   topo:
     runs-on: ubuntu-latest

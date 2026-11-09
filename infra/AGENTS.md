@@ -35,3 +35,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   values. Objects in this account's buckets and log events are denied by
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
+- **The Postgres image** (`brain/postgres/`) is what local dev runs and what
+  prod's database will run. Its `postgresql.conf` keeps row values and
+  statement parameters out of logs; `brain/postgres/tests/test.sh` (CI job
+  `brain-postgres`) reads the live settings back. Never give `BRAIN_INIT` a
+  default: an empty data directory must stop the container, not create a database.
