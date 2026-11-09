@@ -13,18 +13,34 @@ name: Mobile emulator
 # The flow is mobile/maestro/smoke.yaml and the driving logic is
 # mobile/scripts/emulator-smoke.sh. The emulator renders on a software GPU, so
 # the flow asserts the UI around the map and never the map's pixels.
+#
+# ota-plan.yml calls it on an OTA hotfix's patched release branch: `ref` is the
+# release branch or tag, and `patch` the artifact holding the fix as a diff
+# from it, since the patched tree exists only in the caller's run.
 
 on:
   pull_request:
   schedule:
     - cron: "37 16 * * *"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to check out instead of the event's
+        type: string
+        required: true
+      patch:
+        description: Artifact of this run holding hotfix.patch, applied on top of ref
+        type: string
+        required: true
 
 permissions:
   contents: read
 
+# A caller's github.ref is its PR's, so `ref` keeps a hotfix plan's run from
+# cancelling that PR's own.
 concurrency:
-  group: mobile-emulator-${{ github.ref }}
+  group: mobile-emulator-${{ github.ref }}-${{ inputs.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -43,8 +59,9 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CALLED_REF: ${{ inputs.ref }}
         run: |
-          if [ "$EVENT" = pull_request ]; then
+          if [ "$EVENT" = pull_request ] && [ -z "$CALLED_REF" ]; then
             infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
           else
             infra/scripts/ci-scope.sh all
@@ -109,7 +126,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
+      - if: ${{ inputs.patch }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.patch }}
+          path: ${{ runner.temp }}/patch
+      - if: ${{ inputs.patch }}
+        run: git apply --index "$RUNNER_TEMP/patch/hotfix.patch"
       - run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots"
 
       # A hit skips Gradle: the key is the native inputs (the action says which).

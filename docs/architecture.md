@@ -327,7 +327,7 @@ releases Logjam GPS.
 | `topo/` | `deploy-topo-worker.yml`, after CI passes on `main` | Build and push the worker image, then pin the topo task definitions to it. The next job runs it. |
 | `infra/terraform/envs/prod/` (and `modules/`), `infra/lambda/` | `terraform-plan.yml` (`plan-prod`) on the PR, `terraform-apply.yml` (`apply-prod`) on merge | The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0026](decisions/0026-plan-fingerprint-covers-planned-values.md)). |
 | `infra/terraform/envs/github/` | `terraform-plan.yml` (`plan-github`) on the PR, `terraform-apply.yml` (`apply-github`) on merge | The repository's own GitHub settings: rulesets, Environments, Actions variables, labels. The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0025](decisions/0025-github-settings-in-terraform.md)). |
-| Logjam GPS | `deploy-mobile.yml`, on a `mobile-v*` tag the maintainer pushes | EAS builds it; a release tag also submits a draft to Google Play. OTA updates are signed and published by hand. See [`operations/mobile-release.md`](operations/mobile-release.md). |
+| Logjam GPS | `deploy-mobile.yml`, on a `mobile-v*` tag the maintainer pushes | EAS builds it; a release tag also submits a draft to Google Play. An OTA hotfix publishes from `ota-hotfix.yml` when the maintainer merges a PR labelled `ota-hotfix`, signed in the `mobile-ota` Environment ([0046](decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)). See [`operations/mobile-release.md`](operations/mobile-release.md). |
 
 Migrations run before the new API version serves traffic, so every migration
 must also work with the release before it
@@ -344,8 +344,9 @@ roles, all in `envs/prod/iam.tf` and `envs/prod/iam_apply.tf`:
 | apply (`github_actions_apply_role_arn`) | `terraform-apply.yml`: `apply-prod`, and `apply-github` only to write its state; the `envs/github` drift run only to read it | the job runs in the `prod` Environment; a permission boundary denies it user data, the database, secrets and changes to itself |
 | plan (`github_actions_plan_role_arn`) | `terraform-plan.yml` and the `envs/prod` drift run; for `plan-github`, only to read its state | a pull request, or `main`; read-only, and denied user data and secret values |
 
-Logjam GPS releases use a separate `mobile-release` Environment and never
-touch AWS.
+Logjam GPS releases use a separate `mobile-release` Environment (`mobile-v*`
+tags only), and OTA hotfixes and rollbacks a `mobile-ota` Environment (`main`
+only, holding the signing key); neither touches AWS.
 
 `envs/github` changes GitHub, not AWS, so it reaches GitHub through two
 GitHub Apps installed on this repository only, mirroring the plan and apply

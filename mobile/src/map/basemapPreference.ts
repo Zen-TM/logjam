@@ -48,8 +48,8 @@ export function setTerrainLayers(
 
 const COVERAGE_CARRIER_PREF_KEY = "mapCoverageCarrier";
 
-/** The network the Coverage overlay draws, the default until the user picks. */
-export const readCoverageCarrier = (): CarrierId =>
+/** The network the Coverage overlay draws, or null until the user picks. */
+export const readCoverageCarrier = (): CarrierId | null =>
   normalizeCarrier(readPref(COVERAGE_CARRIER_PREF_KEY));
 
 export const setCoverageCarrier = (id: CarrierId): boolean =>

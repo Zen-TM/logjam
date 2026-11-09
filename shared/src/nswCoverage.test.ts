@@ -6,17 +6,18 @@ import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { MAP_INK } from "./designTokens.js";
-import { OVERLAY_LEGENDS, overlayChoiceLabel } from "./overlayLegends.js";
+import {
+  OVERLAY_LEGENDS,
+  overlayAwaitsChoice,
+  overlayChoiceLabel,
+} from "./overlayLegends.js";
 import {
   CARRIERS,
-  COVERAGE_HATCH_DENSE_IMAGE,
-  COVERAGE_HATCH_LIGHT_IMAGE,
+  COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_URIS,
-  COVERAGE_LEVELS,
   coverageNameOf,
   coverageOpacity,
-  coveragePattern,
-  DEFAULT_CARRIER,
+  drawsCoverage,
   normalizeCarrier,
   NSW_COVERAGE,
 } from "./nswCoverage.js";
@@ -44,18 +45,19 @@ function decode(uri: string) {
   return { width, px };
 }
 
-/** How much of the tile the lines cover, 0 to 1. */
-function ink(uri: string) {
-  const { width, px } = decode(uri);
-  let alpha = 0;
-  for (let y = 0; y < width; y++)
-    for (let x = 0; x < width; x++) alpha += px(x, y)[3]!;
-  return alpha / (255 * width * width);
-}
-
 const at = (level: string) => ({
   properties: { [NSW_COVERAGE.levelProperty]: level },
 });
+
+/** A square ring [lng, lat] from (x0, y0) to (x1, y1). */
+const square = (x0: number, y0: number, x1: number, y1: number) => [
+  [x0, y0],
+  [x1, y0],
+  [x1, y1],
+  [x0, y1],
+  [x0, y0],
+];
+const TAP = [150.5, -33.5] as const;
 
 describe("the Coverage hatches", () => {
   // Mutation: edit coverageHatchImages.ts by hand, or change the generator
@@ -81,14 +83,6 @@ describe("the Coverage hatches", () => {
     }
   });
 
-  // Mutation: swap the two images, and "no coverage" draws lighter than
-  // "external antenna only".
-  it("draw no coverage denser than an antenna's reach", () => {
-    expect(
-      ink(COVERAGE_HATCH_URIS[COVERAGE_HATCH_DENSE_IMAGE]),
-    ).toBeGreaterThan(2 * ink(COVERAGE_HATCH_URIS[COVERAGE_HATCH_LIGHT_IMAGE]));
-  });
-
   // Mutation: let a line run off one edge and not come in at the opposite one
   // (a spacing that doesn't divide the tile), and the map draws a grid.
   it("tile without a seam", () => {
@@ -104,83 +98,129 @@ describe("the Coverage hatches", () => {
 
 describe("the Coverage layer's paint", () => {
   // Mutation: hatch the "outdoor" level, and the whole state is hatched where
-  // a phone works; drop it from the layer, and a tap there answers nothing.
-  it("draws each gap's hatch and leaves handset coverage clear", () => {
-    const pattern = coveragePattern();
-    const opacity = coverageOpacity();
-    expect(pattern).toEqual([
+  // a phone works; leave "external" clear, and an antenna's reach reads as
+  // reception for a phone in the hand.
+  it("hatches every level but a handset's and leaves that clear", () => {
+    expect(coverageOpacity()).toEqual([
       "match",
       ["get", "level"],
-      "external",
-      COVERAGE_HATCH_LIGHT_IMAGE,
-      "none",
-      COVERAGE_HATCH_DENSE_IMAGE,
-      COVERAGE_HATCH_LIGHT_IMAGE,
-    ]);
-    expect(opacity).toEqual([
-      "match",
-      ["get", "level"],
-      ["external", "none"],
-      1,
-      0,
-    ]);
-    expect(COVERAGE_LEVELS.map((l) => l.level)).toEqual([
       "outdoor",
-      "external",
-      "none",
+      0,
+      1,
     ]);
+  });
+});
+
+describe("drawsCoverage", () => {
+  // Mutation: ignore the carrier, and a stored "on" from before the pick
+  // draws a layer with no network to filter to.
+  it("draws only when on and a carrier is picked", () => {
+    expect(drawsCoverage(true, "tpg")).toBe(true);
+    expect(drawsCoverage(true, null)).toBe(false);
+    expect(drawsCoverage(false, "tpg")).toBe(false);
   });
 });
 
 describe("coverageNameOf", () => {
-  // Mutation: take the first feature found, and a tap on the line between two
-  // levels can promise a signal the other side doesn't have.
-  it("names the carrier and the worse level found", () => {
-    expect(coverageNameOf([at("outdoor")], "telstra")).toBe(
-      "Telstra: handset outdoors",
+  // Mutation: name "external" as reception, or take the first feature found,
+  // and a tap on a hatched spot says there is reception.
+  it("names the carrier, and reception only where every level found has it", () => {
+    expect(coverageNameOf([at("outdoor")], "telstra", TAP)).toBe(
+      "Telstra: mobile reception",
     );
-    expect(coverageNameOf([at("none"), at("external")], "tpg")).toBe(
-      "TPG: no predicted coverage",
+    expect(coverageNameOf([at("external")], "tpg", TAP)).toBe(
+      "TPG: no mobile reception",
     );
-    expect(coverageNameOf([at("outdoor"), at("external")], "optus")).toBe(
-      "Optus: external antenna only",
+    expect(coverageNameOf([at("outdoor"), at("none")], "optus", TAP)).toBe(
+      "Optus: no mobile reception",
     );
   });
 
+  // Mutation: drop the polygonHolds filter, and a tap in a clear patch that
+  // is a hole in an "external" area answers "no mobile reception": MapLibre
+  // Native returns the holed polygon too (the S9 at -33.38428, 150.31676).
+  it("counts only polygons that hold the tap, holes excluded", () => {
+    const holed = {
+      ...at("external"),
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          square(150, -34, 151, -33),
+          square(150.4, -33.6, 150.6, -33.4),
+        ],
+      },
+    };
+    // Two polygons, the second far off: a tap there is in the patch alone.
+    const patch = {
+      ...at("outdoor"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [square(150.4, -33.6, 150.6, -33.4)],
+          [square(152, -35, 152.1, -34.9)],
+        ],
+      },
+    };
+    expect(coverageNameOf([holed, patch], "telstra", TAP)).toBe(
+      "Telstra: mobile reception",
+    );
+    // Outside the hole the area holds the tap, and the patch doesn't.
+    expect(coverageNameOf([holed, patch], "telstra", [150.2, -33.2])).toBe(
+      "Telstra: no mobile reception",
+    );
+    // Mutation: ask every polygon of a MultiPolygon to hold the tap, and a
+    // tap on the patch's second polygon answers nothing.
+    expect(coverageNameOf([holed, patch], "telstra", [152.05, -34.95])).toBe(
+      "Telstra: mobile reception",
+    );
+  });
+
+  // Mutation: fall back to every feature found when none holds the tap, or
+  // take a MultiPolygon as holding whatever it is asked, and a tap on water
+  // inside the land (a hole nothing fills) answers "no mobile reception".
+  it("says nothing for a tap in a hole nothing fills", () => {
+    const lake = {
+      ...at("external"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [square(150, -34, 151, -33), square(150.4, -33.6, 150.6, -33.4)],
+        ],
+      },
+    };
+    expect(coverageNameOf([lake], "telstra", TAP)).toBeNull();
+  });
+
   // Mutation: answer with a level for nothing found, and a tap at sea says
-  // there is coverage.
+  // there is reception.
   it("says nothing where nothing was found", () => {
-    expect(coverageNameOf([], "telstra")).toBeNull();
-    expect(coverageNameOf([at("unknown")], "telstra")).toBeNull();
+    expect(coverageNameOf([], "telstra", TAP)).toBeNull();
+    expect(coverageNameOf([at("unknown")], "telstra", TAP)).toBeNull();
   });
 });
 
 describe("normalizeCarrier", () => {
-  // Mutation: return the stored value unchecked, and an older build's or a
-  // corrupt value filters the layer down to nothing.
-  it("keeps a known carrier and defaults the rest", () => {
+  // Mutation: fall back to a carrier, and the overlay draws a network the
+  // user never picked; return the stored value unchecked, and a corrupt one
+  // filters the layer down to nothing.
+  it("keeps a known carrier and nothing else", () => {
     expect(normalizeCarrier("tpg")).toBe("tpg");
-    expect(normalizeCarrier("vodafone")).toBe(DEFAULT_CARRIER);
-    expect(normalizeCarrier(null)).toBe(DEFAULT_CARRIER);
+    expect(normalizeCarrier("vodafone")).toBeNull();
+    expect(normalizeCarrier(null)).toBeNull();
   });
 });
 
 describe("the Coverage legend", () => {
   const legend = OVERLAY_LEGENDS.coverage;
 
-  // Mutation: list a row without its hatch, or the handset level, and the
-  // legend shows a colour the map never draws.
-  it("keys each hatch the map draws, over the light land it is drawn on", () => {
+  // Mutation: list a row without the hatch, or a second state, and the
+  // legend shows something the map never draws.
+  it("keys the hatch the map draws, over the light land it is drawn on", () => {
     expect(legend.rows).toEqual([
       {
-        label: "External antenna only",
+        label: "No mobile reception",
         colour: MAP_INK.label,
-        pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_LIGHT_IMAGE],
-      },
-      {
-        label: "No predicted coverage",
-        colour: MAP_INK.label,
-        pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_DENSE_IMAGE],
+        pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE],
       },
     ]);
   });
@@ -193,5 +233,15 @@ describe("the Coverage legend", () => {
     );
     expect(overlayChoiceLabel(legend, "tpg")).toBe("TPG");
     expect(overlayChoiceLabel(OVERLAY_LEGENDS.land, "tpg")).toBeUndefined();
+  });
+
+  // Mutation: answer true for a picked carrier, or false for none, and a
+  // client draws the switch with no network to draw, or hides it after the
+  // pick; answer true for an overlay with no choice, and Land loses its switch.
+  it("asks for the carrier, in place of the switch, until one is picked", () => {
+    expect(overlayAwaitsChoice(legend, null)).toBe(true);
+    expect(overlayAwaitsChoice(legend, "tpg")).toBe(false);
+    expect(overlayAwaitsChoice(OVERLAY_LEGENDS.land, null)).toBe(false);
+    expect(legend.choice?.choose).toBe("Choose your carrier");
   });
 });

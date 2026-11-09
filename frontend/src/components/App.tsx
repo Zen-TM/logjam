@@ -129,7 +129,7 @@ import {
   drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
-  DEFAULT_CARRIER,
+  drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -245,7 +245,7 @@ function App() {
   const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
   const [storedCarrier, setCoverageCarrier] = useStoredState<unknown>(
     "logjam.coverageCarrier",
-    DEFAULT_CARRIER,
+    null,
   );
   const coverageCarrier = normalizeCarrier(storedCarrier);
   const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
@@ -537,7 +537,7 @@ function App() {
     const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
-      coverage,
+      coverage: drawsCoverage(coverage, coverageCarrier),
       fire,
       slope,
       land,
@@ -554,6 +554,7 @@ function App() {
     activeLayerId,
     contours,
     coverage,
+    coverageCarrier,
     fire,
     slope,
     land,

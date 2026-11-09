@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CARRIERS,
@@ -307,15 +314,75 @@ describe("the Coverage row on Logjam Web", () => {
   const row = (props: {
     onToggle?: (on: boolean) => void;
     onChange?: (value: string) => void;
+    value?: string | null;
   }) =>
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.coverage}
         checked={TERRAIN_LAYER_DEFAULTS.coverage}
         onToggle={props.onToggle ?? vi.fn()}
-        choice={{ value: "optus", onChange: props.onChange ?? vi.fn() }}
+        choice={{
+          value: props.value === undefined ? "optus" : props.value,
+          onChange: props.onChange ?? vi.fn(),
+        }}
       />,
     );
+
+  // Mutation: draw the switch before a carrier is picked, or let the button
+  // open anything but the carrier choice, and the overlay can be on with no
+  // network to draw; skip turning it on at the first pick, and the user has
+  // to find the switch they were never shown.
+  it("offers one button to choose the carrier until one is picked", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    row({ onChange, onToggle, value: null });
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: copy.coverageAbout }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.coverageChooseCarrier }),
+    );
+    screen.getByRole("dialog", { name: copy.coverage });
+    expect(
+      screen
+        .getAllByRole("radio")
+        .some((r) => r.getAttribute("aria-checked") === "true"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: "Telstra" }));
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith("telstra");
+  });
+
+  // Mutation: drop the hand-off to help on close, and the first pick, which
+  // unmounts the button that opened the legend, leaves keyboard focus on the
+  // page's body.
+  it("gives focus to the row's help when the first pick's legend closes", async () => {
+    function Picking() {
+      const [value, setValue] = useState<string | null>(null);
+      return (
+        <OverlayLegendRow
+          legend={OVERLAY_LEGENDS.coverage}
+          checked={value !== null}
+          onToggle={vi.fn()}
+          choice={{ value, onChange: setValue }}
+        />
+      );
+    }
+    render(<Picking />);
+    const choose = screen.getByRole("button", {
+      name: copy.coverageChooseCarrier,
+    });
+    choose.focus();
+    fireEvent.click(choose);
+    fireEvent.click(screen.getByRole("radio", { name: "Optus" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: copy.coverageAbout }),
+      ),
+    );
+  });
 
   // Mutation: start it on, or drop the row's subtitle, and every map opens
   // under a hatch nobody asked for, or for a carrier nobody can see.

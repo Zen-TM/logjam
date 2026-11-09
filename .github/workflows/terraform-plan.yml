@@ -69,13 +69,15 @@ jobs:
           PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
           SETTINGS_PLAN_APP_KEY: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
           SETTINGS_APPLY_APP_KEY: ${{ secrets.SETTINGS_APPLY_APP_KEY }}
+          OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
+          RELEASE_BRANCH_DEPLOY_KEY: ${{ secrets.RELEASE_BRANCH_DEPLOY_KEY }}
         run: |
           found=""
-          for name in PLAN_FINGERPRINT_KEY SETTINGS_PLAN_APP_KEY SETTINGS_APPLY_APP_KEY; do
+          for name in PLAN_FINGERPRINT_KEY SETTINGS_PLAN_APP_KEY SETTINGS_APPLY_APP_KEY OTA_PRIVATE_KEY RELEASE_BRANCH_DEPLOY_KEY; do
             if [ -n "${!name}" ]; then found="$found $name"; fi
           done
           if [ -n "$found" ]; then
-            echo "::error::Repository secrets that must be Environment secrets:$found. Any pull request's workflow can read a repository secret. Set each in its Environment (PLAN_FINGERPRINT_KEY in terraform-plan-sign and prod, SETTINGS_PLAN_APP_KEY in terraform-plan, SETTINGS_APPLY_APP_KEY in prod), then delete the repository copy."
+            echo "::error::Repository secrets that must be Environment secrets:$found. Any pull request's workflow can read a repository secret. Set each in its Environment (PLAN_FINGERPRINT_KEY in terraform-plan-sign and prod, SETTINGS_PLAN_APP_KEY in terraform-plan, SETTINGS_APPLY_APP_KEY in prod, OTA_PRIVATE_KEY and RELEASE_BRANCH_DEPLOY_KEY in mobile-ota), then delete the repository copy."
             exit 1
           fi
 

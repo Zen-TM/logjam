@@ -68,7 +68,7 @@ export function MapPointSheet({
   land: string | null;
   /** The latest fire at the point, or null: the Fire history overlay off or empty there. */
   fire: string | null;
-  /** The carrier's predicted coverage at the point, or null: the Coverage overlay off or clear there. */
+  /** The carrier's predicted reception at the point, or null: the Coverage overlay off, no carrier chosen, or nothing known there. */
   coverage: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;

@@ -479,15 +479,15 @@ image:
 docker compose run --rm topo python3 /app/build_coverage.py fetch /output/coverage
 docker compose run --rm topo python3 /app/build_coverage.py build \
   /output/coverage /output/coverage/nsw-coverage.pmtiles
-pmtiles show output/coverage/nsw-coverage.pmtiles   # zoom 8 to 12, bounds are the NSW box
+pmtiles show output/coverage/nsw-coverage.pmtiles   # zoom 12 alone, bounds are the NSW box
 ```
 
 `fetch` asks data.gov.au's CKAN API for the release and downloads the latest
 year's maps and the ABS coastline: 21 maps and 4.3 GB for the 2026 release.
 `build` stops if a carrier lacks an Outdoor or an Ext Ant map that year, or a
-map has nothing in the NSW box. On the 2026 release it took 47 minutes on 4
-cores, mostly under 2.5 GB, for a 292 MB archive; a 40 km box of it is a
-4.5 MB clip. Of 4,800 random points in four boxes (Blue Mountains, Budawangs,
+map has nothing in the NSW box. On the 2026 release it took 44 minutes on 4
+cores under a 4 GB cap, for a 70 MB archive of z12 alone; a 40 km box of it
+is a 346 KB clip. Of 4,800 random points in four boxes (Blue Mountains, Budawangs,
 Kosciuszko, Western Division), 98% read the same level from the z12 tiles as
 from the source polygons, and every other one was within 26 m of a source
 edge, under one grid cell.

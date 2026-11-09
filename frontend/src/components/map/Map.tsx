@@ -53,7 +53,6 @@ import {
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
-  DEFAULT_CARRIER,
   type CarrierId,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
@@ -626,7 +625,7 @@ function Map({
   sharpenedAreas,
   onBasemapHealth,
   slopeBands,
-  coverageCarrier = DEFAULT_CARRIER,
+  coverageCarrier = null,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -753,7 +752,7 @@ function Map({
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
   /** The carrier a `coverage` entry draws. */
-  coverageCarrier?: CarrierId;
+  coverageCarrier?: CarrierId | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -3027,7 +3026,9 @@ function Map({
       }
 
       if (fmt === "coverage") {
-        const layer = coverageLayerSpec(srcId, coverageCarrierRef.current);
+        const carrier = coverageCarrierRef.current;
+        if (!carrier) return;
+        const layer = coverageLayerSpec(srcId, carrier);
         if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
@@ -3209,7 +3210,7 @@ function Map({
   // The carrier, live, the same way: a filter change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    if (mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
       mapRef.current.setFilter(
         COVERAGE_FILL_LAYER,
         coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,

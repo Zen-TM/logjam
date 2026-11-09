@@ -1,9 +1,11 @@
 import {
   type CarrierId,
+  COVERAGE_HATCH_IMAGE,
+  COVERAGE_MIN_ZOOM,
   coverageFilter,
   coverageOpacity,
-  coveragePattern,
   NSW_COVERAGE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import type {
   ExpressionSpecification,
@@ -25,11 +27,11 @@ export function coverageLayerSpec(
     type: "fill",
     source,
     "source-layer": NSW_COVERAGE.sourceLayer,
-    minzoom: NSW_COVERAGE.minzoom,
+    minzoom: COVERAGE_MIN_ZOOM,
     filter: coverageFilter(carrier) as FilterSpecification,
     paint: {
-      "fill-pattern": coveragePattern() as Expr,
-      "fill-opacity": coverageOpacity() as Expr,
+      "fill-pattern": COVERAGE_HATCH_IMAGE,
+      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity()) as Expr,
     },
   };
 }

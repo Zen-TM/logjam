@@ -58,8 +58,8 @@ export default function MapPointPopover({
   point: MapPointCoord;
   /** The viewer's fix if the browser already has one, else null. */
   from: MapPointCoord | null;
-  /** The carrier the Coverage overlay draws. */
-  coverageCarrier: CarrierId;
+  /** The carrier the Coverage overlay draws, or null before one is picked. */
+  coverageCarrier: CarrierId | null;
   /** A right-click opens the panel on Options, with no facts to go back to. */
   startAt?: "options";
   onClose: () => void;
@@ -87,7 +87,14 @@ export default function MapPointPopover({
     return {
       land: landClassAt(map, [x, y]),
       fire: fireAt(map, [x, y]),
-      coverage: coverageAt(map, [x, y], coverageCarrier),
+      coverage:
+        coverageCarrier &&
+        coverageAt(
+          map,
+          [x, y],
+          [point.longitude, point.latitude],
+          coverageCarrier,
+        ),
     };
   });
 

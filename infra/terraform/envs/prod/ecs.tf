@@ -627,10 +627,11 @@ resource "aws_ecs_task_definition" "coverage" {
     }
     name = "coverage"
   }])
-  # On the 2026 release, on a 4-core box under a 4 GB cap: 47 minutes, 8 of
-  # them tiling on every core; mostly under 2.5 GB, with two moments at the
-  # cap; about 10 GB of disk at once (4.3 GB of maps). Two vCPUs for the
-  # tiling, and twice the memory it was measured under.
+  # On the 2026 release, on a 4-core box under a 4 GB cap: 44 minutes for
+  # z12 alone. Tiling z8 to z12 took 47, 8 of them on every core, mostly
+  # under 2.5 GB with two moments at the cap, and about 10 GB of disk at once
+  # (4.3 GB of maps). Two vCPUs for the tiling, and twice the memory it was
+  # measured under.
   cpu                      = "2048"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   family                   = "logjam-coverage"

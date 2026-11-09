@@ -427,19 +427,14 @@ const FIRE_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
   };
 
 /**
- * MEASURED bytes of one tile of the Coverage overlay at each zoom, as stored
- * (gzip), every carrier's together, from every tile of a 40 km Blue Mountains
- * box, in the 2026 release's build. A coarse tile holds the whole of every
- * carrier's patchwork under it, so it weighs most.
+ * MEASURED bytes of one tile of the Coverage overlay, as stored (gzip), every
+ * carrier's together, from every tile of a 40 km Blue Mountains box, in the
+ * 2026 release's build. The archive holds z12 alone.
  */
 const COVERAGE_TILE_BYTES: Record<
   number,
   { meanBytes: number; p90Bytes: number }
 > = {
-  8: { meanBytes: 971_000, p90Bytes: 1_397_000 },
-  9: { meanBytes: 304_000, p90Bytes: 400_000 },
-  10: { meanBytes: 90_000, p90Bytes: 106_000 },
-  11: { meanBytes: 28_500, p90Bytes: 42_000 },
   12: { meanBytes: 8_300, p90Bytes: 13_900 },
 };
 

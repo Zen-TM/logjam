@@ -1,8 +1,10 @@
 import {
+  FIRE_MIN_ZOOM,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
   NSW_FIRE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import type { ExpressionSpecification, LayerSpecification } from "maplibre-gl";
 
@@ -24,7 +26,7 @@ export function fireLayerSpecs(
   const common = {
     source,
     "source-layer": NSW_FIRE.sourceLayer,
-    minzoom: NSW_FIRE.minzoom,
+    minzoom: FIRE_MIN_ZOOM,
   };
   return [
     {
@@ -33,7 +35,7 @@ export function fireLayerSpecs(
       type: "fill",
       paint: {
         "fill-color": fireColor(now) as Expr,
-        "fill-opacity": fireFillOpacity(now) as Expr,
+        "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(now)) as Expr,
       },
     },
     {
@@ -43,7 +45,7 @@ export function fireLayerSpecs(
       paint: {
         "line-color": fireColor(now) as Expr,
         "line-width": 1,
-        "line-opacity": fireEdgeOpacity(now) as Expr,
+        "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(now)) as Expr,
       },
     },
   ];

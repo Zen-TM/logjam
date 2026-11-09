@@ -1,8 +1,9 @@
 import {
+  FIRE_MIN_ZOOM,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
-  NSW_FIRE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import { fireLayerIds, fireLayerPaints, fireMinZoom } from "./fireLayers";
@@ -16,12 +17,12 @@ describe("fireLayerPaints", () => {
     const { fill, edge } = fireLayerPaints(NOW);
     expect(fill).toEqual({
       "fill-color": fireColor(NOW),
-      "fill-opacity": fireFillOpacity(NOW),
+      "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(NOW)),
     });
     expect(edge).toEqual({
       "line-color": fireColor(NOW),
       "line-width": 1,
-      "line-opacity": fireEdgeOpacity(NOW),
+      "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(NOW)),
     });
   });
 });
@@ -39,10 +40,10 @@ describe("fireLayerIds", () => {
 
 describe("fireMinZoom", () => {
   // Mutation: return `layerMinZoom ?? 0` alone, and a CDN source draws fire
-  // below the archive's own first zoom.
-  it("never draws below the archive's first zoom", () => {
-    expect(fireMinZoom(undefined)).toBe(NSW_FIRE.minzoom);
-    expect(fireMinZoom(NSW_FIRE.minzoom - 2)).toBe(NSW_FIRE.minzoom);
-    expect(fireMinZoom(NSW_FIRE.minzoom + 1)).toBe(NSW_FIRE.minzoom + 1);
+  // below the zoom it fades in from.
+  it("never draws below FIRE_MIN_ZOOM", () => {
+    expect(fireMinZoom(undefined)).toBe(FIRE_MIN_ZOOM);
+    expect(fireMinZoom(FIRE_MIN_ZOOM - 2)).toBe(FIRE_MIN_ZOOM);
+    expect(fireMinZoom(FIRE_MIN_ZOOM + 1)).toBe(FIRE_MIN_ZOOM + 1);
   });
 });
