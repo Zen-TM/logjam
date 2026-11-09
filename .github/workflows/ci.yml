@@ -551,17 +551,38 @@ jobs:
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
 
-  brain-postgres:
+  brain-postgres-image:
     # The Postgres image local dev runs (docker-compose.yml) and prod's will.
     # The tests read the live server's logging settings, so a mistake in
     # postgresql.conf fails here; the mutation each guard names is in test.sh.
+    # Each architecture builds and runs natively: prod is arm64, dev is either.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.brain_postgres != 'false' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the image and test it
         run: infra/brain/postgres/tests/test.sh
+
+  # One stable name for a required-check rule: the matrix's own names carry
+  # the architecture. A scoped-out run skips the matrix and passes.
+  brain-postgres:
+    needs: brain-postgres-image
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every architecture passed or was scoped out
+        env:
+          RESULT: ${{ needs.brain-postgres-image.result }}
+        run: test "$RESULT" = success -o "$RESULT" = skipped
 
   topo:
     runs-on: ubuntu-latest
