@@ -89,8 +89,8 @@ describe("deleting a job does not erase its compute usage", () => {
     expect(await getSiteCreditUsage()).toBe(siteBefore + EXPORT_CREDITS);
   });
 
-  // Mutation that turns this red: drop the started_at check from
-  // carry_over_topo_job.
+  // Mutation that turns this red: in carry_over_topo_job, drop the started_at
+  // check and price the row from COALESCE(started_at, created_at).
   it("a job that never started adds nothing when it is deleted", async () => {
     const [before, siteBefore] = [await bobUsed(), await getSiteCreditUsage()];
     const job = await topoJob(BOB_ID, null);
