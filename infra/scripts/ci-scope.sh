@@ -30,12 +30,13 @@
 # fails "a rename out of an area"; dropping the worker image's paths from
 # topo_e2e fails "topo_e2e: worker source" and dropping the RunTask files fails
 # "topo_e2e: the start route"; dropping lockfiles from setup_smoke
-# fails "setup_smoke: a nested lockfile"; a scoped job in any workflow whose
+# fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
+# brain_postgres fails "brain_postgres: the Compose file that builds it"; a scoped job in any workflow whose
 # `if:` is not the fail-open expression, or a `changes` output wired to another
 # area's value, fails that workflow's checks.
 set -uo pipefail
 
-AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke"
+AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke brain_postgres"
 
 # A change to the gate itself runs the whole gate.
 ALWAYS='^(\.github/workflows/ci\.yml|infra/scripts/ci-scope\.sh)$'
@@ -67,6 +68,9 @@ paths_for() {
     terraform) echo '^(infra/terraform/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
     # What `make setup` reads on a fresh machine (setup-smoke.yml).
     setup_smoke) echo '^(mise\.toml|Makefile|docs/dev-setup\.md|\.github/workflows/setup-smoke\.yml)$|(^|/)package-lock\.json$|^topo/requirements[^/]*\.txt$' ;;
+    # The Postgres image's build context and tests, and the Compose file that
+    # builds it for local dev.
+    brain_postgres) echo '^(infra/brain/postgres/|docker-compose\.yml$)' ;;
     *) return 1 ;;
   esac
 }
@@ -157,6 +161,10 @@ self_test() {
   check "setup_smoke: topo requirements"                  setup_smoke true  0 'topo/requirements-test.txt'
   check "setup_smoke: the guide"                          setup_smoke true  0 'docs/dev-setup.md'
   check "setup_smoke: a package.json alone"               setup_smoke false 0 'api/package.json'
+  check "brain_postgres: the image's config"             brain_postgres true  0 'infra/brain/postgres/postgresql.conf'
+  check "brain_postgres: its tests"                       brain_postgres true  0 'infra/brain/postgres/tests/test.sh'
+  check "brain_postgres: the Compose file that builds it" brain_postgres true  0 'docker-compose.yml'
+  check "brain_postgres: other infra"                     brain_postgres false 0 'infra/scripts/deploy-guard.sh'
   check "empty diff"                                      api_integration false 0 ''
   check "diff unreadable"                                 mobile true  128 'fatal: bad revision'
 
