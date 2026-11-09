@@ -17,7 +17,7 @@ import {
   COVERAGE_HATCH_URIS,
   coverageNameOf,
   coverageOpacity,
-  coverageQueryBox,
+  drawsCoverage,
   normalizeCarrier,
   NSW_COVERAGE,
 } from "./nswCoverage.js";
@@ -101,16 +101,13 @@ describe("the Coverage layer's paint", () => {
   });
 });
 
-describe("coverageQueryBox", () => {
-  // Mutation: return the tap's own pixel (as both clients queried before),
-  // and a tap between two hatch lines answers for a 50 m cell the eye can't
-  // see: the panel says reception where the map is hatched. Shrink it, and a
-  // tap can land between two lines again.
-  it("spans one hatch line's spacing, centred on the tap", () => {
-    expect(coverageQueryBox([100, 50])).toEqual([
-      [94, 44],
-      [106, 56],
-    ]);
+describe("drawsCoverage", () => {
+  // Mutation: ignore the carrier, and a stored "on" from before the pick
+  // draws a layer with no network to filter to.
+  it("draws only when on and a carrier is picked", () => {
+    expect(drawsCoverage(true, "tpg")).toBe(true);
+    expect(drawsCoverage(true, null)).toBe(false);
+    expect(drawsCoverage(false, "tpg")).toBe(false);
   });
 });
 

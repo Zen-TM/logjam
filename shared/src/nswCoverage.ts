@@ -7,10 +7,7 @@
 // It hatches where there is no mobile reception and draws nothing where a
 // phone in the hand should work: a fill over the whole state would hide Slope
 // and Land.
-import {
-  COVERAGE_HATCH_SPACING,
-  COVERAGE_HATCH_URI,
-} from "./coverageHatchImages.js";
+import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { NSW_5M } from "./demSources.js";
 
@@ -25,9 +22,10 @@ export const NSW_COVERAGE = {
   carrierProperty: "carrier",
   /** A `COVERAGE_LEVELS` level. */
   levelProperty: "level",
-  /** The build script's zooms: its grid is about 50 m, finer than z12's
-   *  pixels. Deeper zooms overzoom. */
-  minzoom: 8,
+  /** The build script's zooms: z12 alone, where the overlay is drawn from
+   *  (`COVERAGE_MIN_ZOOM`); its grid is about 50 m, finer than z12's pixels.
+   *  Deeper zooms overzoom. */
+  minzoom: 12,
   maxzoom: 12,
   coverage: NSW_5M.coverage,
   credit:
@@ -73,7 +71,16 @@ export const COVERAGE_HATCH_PIXEL_RATIO = 2;
  * antenna alone reaches has none for it.
  */
 export const COVERAGE_LEVELS = ["outdoor", "external", "none"] as const;
-export const RECEPTION_LEVEL = "outdoor";
+export const RECEPTION_LEVEL = COVERAGE_LEVELS[0];
+
+/**
+ * Whether the overlay is drawn: switched on, with a carrier picked. Before a
+ * pick there is no network to draw, so a stored "on" draws nothing. Both
+ * clients gate the layer on this.
+ */
+export function drawsCoverage(on: boolean, carrier: CarrierId | null): boolean {
+  return on && carrier !== null;
+}
 
 /** The layer's `filter`: the user's carrier alone. */
 export function coverageFilter(carrier: CarrierId): unknown[] {
@@ -89,31 +96,11 @@ export function coverageOpacity(): unknown[] {
 }
 
 /**
- * The box "What is here?" queries the coverage layer over: a hatch line
- * either way of the tap. The hatch shows a gap only as lines, so a patch
- * narrower than their spacing can sit between two of them and look clear, or
- * a clear patch look hatched; the archive's cells are finer than that from
- * the zoom the overlay is drawn at. Read over one line's spacing, the answer
- * agrees with the lines the eye sees at the tap. `[x, y]` is in the map's
- * own pixels (CSS pixels on Logjam Web, dp on Logjam GPS), the hatch's scale.
- */
-export function coverageQueryBox(
-  point: readonly [number, number],
-): [[number, number], [number, number]] {
-  const r = COVERAGE_HATCH_SPACING / COVERAGE_HATCH_PIXEL_RATIO / 2;
-  const [x, y] = point;
-  return [
-    [x - r, y - r],
-    [x + r, y + r],
-  ];
-}
-
-/**
  * "Telstra: no mobile reception": what "What is here?" says of the levels a
- * map's own query found on its coverage layer over `coverageQueryBox`, or
- * null. The layer is filtered to one carrier, so any feature found is that
- * carrier's. Any level without reception wins: the box then has hatch lines
- * in it, and it is the safer answer to plan on.
+ * map's own query found on its coverage layer at a point, or null. The layer
+ * is filtered to one carrier, so any feature found is that carrier's. On the
+ * line between two levels any without reception wins: the map hatches the
+ * spot, since a clear fill over a hatch hides nothing.
  */
 export function coverageNameOf(
   features: readonly { properties?: Record<string, unknown> | null }[],

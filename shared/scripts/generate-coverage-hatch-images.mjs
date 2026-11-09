@@ -21,7 +21,7 @@ const EDGE_WIDTH = 1.5;
 
 // Sparse and faint enough to leave the map readable under it: it covers
 // most of the bush.
-const HATCH = { spacing: 24, core: 0.6, edge: 0.45 };
+const HATCH = { spacing: 24, core: 0.45, edge: 0.35 };
 
 function render({ spacing, core, edge }) {
   const rgba = Buffer.alloc(SIZE * SIZE * 4);
@@ -72,7 +72,6 @@ writeFileSync(
 //
 // ${SIZE}x${SIZE} tiles of diagonal lines: a ${CORE_WIDTH}px core in #4E4944 with a
 // ${EDGE_WIDTH}px #F7F3EC edge each side, every ${HATCH.spacing}px.
-export const COVERAGE_HATCH_SPACING = ${HATCH.spacing};
 export const COVERAGE_HATCH_URI =
   "data:image/png;base64,${render(HATCH)}";
 `,

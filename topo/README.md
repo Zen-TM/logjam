@@ -478,7 +478,7 @@ image:
 docker compose run --rm topo python3 /app/build_coverage.py fetch /output/coverage
 docker compose run --rm topo python3 /app/build_coverage.py build \
   /output/coverage /output/coverage/nsw-coverage.pmtiles
-pmtiles show output/coverage/nsw-coverage.pmtiles   # zoom 8 to 12, bounds are the NSW box
+pmtiles show output/coverage/nsw-coverage.pmtiles   # zoom 12 alone, bounds are the NSW box
 ```
 
 `fetch` asks data.gov.au's CKAN API for the release and downloads the latest

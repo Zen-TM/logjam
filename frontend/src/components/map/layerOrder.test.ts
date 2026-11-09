@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
-  coverageQueryBox,
   drawsOverTerrain,
   NSW_FIRE,
   NSW_LAND,
@@ -122,10 +121,8 @@ describe("coverageAt", () => {
   });
 
   // Mutation: query a layer id other than the hatch, or name another carrier
-  // than the one drawn, and a tap answers nothing or for the wrong network;
-  // query the tap's pixel instead of shared's box, and it answers for a cell
-  // between two hatch lines that the eye can't see.
-  it("names the drawn carrier's reception over shared's box", () => {
+  // than the one drawn, and a tap answers nothing or for the wrong network.
+  it("names the drawn carrier's reception at the point", () => {
     const asked: unknown[] = [];
     const map = {
       getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
@@ -135,7 +132,7 @@ describe("coverageAt", () => {
       },
     };
     expect(coverageAt(map, [1, 2], "tpg")).toBe("TPG: no mobile reception");
-    expect(asked).toEqual([[coverageQueryBox([1, 2]), [COVERAGE_FILL_LAYER]]]);
+    expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
   });
 });
 

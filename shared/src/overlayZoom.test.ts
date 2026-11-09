@@ -43,7 +43,7 @@ describe("zoom floors", () => {
     // Mutation: COVERAGE_MIN_ZOOM outside the archive's zooms, or no deeper
     // than fire's.
     expect(COVERAGE_MIN_ZOOM).toBeGreaterThanOrEqual(NSW_COVERAGE.minzoom);
-    expect(COVERAGE_MIN_ZOOM).toBeLessThan(NSW_COVERAGE.maxzoom);
+    expect(COVERAGE_MIN_ZOOM).toBeLessThanOrEqual(NSW_COVERAGE.maxzoom);
     expect(COVERAGE_MIN_ZOOM).toBeGreaterThan(FIRE_MIN_ZOOM);
   });
   it("bring contour detail in coarse to fine", () => {

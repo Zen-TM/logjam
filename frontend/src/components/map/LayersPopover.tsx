@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type RefObject } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   contractSectionKeys,
   isOverlayTerrainKey,
@@ -7,6 +7,7 @@ import {
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
   overlayAwaitsChoice,
+  drawsCoverage,
   overlayChoiceLabel,
   normalizeCarrier,
   type CarrierId,
@@ -174,7 +175,7 @@ export default function LayersPopover({
     showWays,
     terrainLayers.land,
     terrainLayers.fire,
-    terrainLayers.coverage && coverageCarrier !== null,
+    drawsCoverage(terrainLayers.coverage, coverageCarrier),
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -603,6 +604,15 @@ export function OverlayLegendRow({
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
   const openLegend = () => setLegendOpen(true);
+  const helpRef = useRef<HTMLButtonElement>(null);
+  // The first pick swaps the button that opened the legend for the switch and
+  // help, so the Dialog has no opener to hand focus back to: help takes it.
+  const closeLegend = () => {
+    setLegendOpen(false);
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) helpRef.current?.focus();
+    });
+  };
   return (
     <>
       {legend.choice && overlayAwaitsChoice(legend, choice?.value) ? (
@@ -624,14 +634,10 @@ export function OverlayLegendRow({
           subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
           checked={checked}
           onToggle={onToggle}
-          help={{ label: legend.about, onClick: openLegend }}
+          help={{ label: legend.about, onClick: openLegend, ref: helpRef }}
         />
       )}
-      <Dialog
-        open={legendOpen}
-        title={legend.title}
-        onClose={() => setLegendOpen(false)}
-      >
+      <Dialog open={legendOpen} title={legend.title} onClose={closeLegend}>
         {legend.choice && choice && (
           <ChipRail
             label={legend.choice.label}
@@ -640,7 +646,7 @@ export function OverlayLegendRow({
             onChange={(value) => {
               // The first pick comes from the row's button: the overlay was
               // asked for, so it comes on.
-              if (choice.value === null) onToggle(true);
+              if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
               choice.onChange(value);
             }}
             wrap
@@ -685,7 +691,11 @@ function OverlayRow({
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
   openLabel?: string;
-  help?: { label: string; onClick: () => void };
+  help?: {
+    label: string;
+    onClick: () => void;
+    ref?: RefObject<HTMLButtonElement | null>;
+  };
 }) {
   return (
     <Row
@@ -696,7 +706,12 @@ function OverlayRow({
       trailing={
         <>
           {help && (
-            <IconButton icon="help" label={help.label} onClick={help.onClick} />
+            <IconButton
+              icon="help"
+              label={help.label}
+              onClick={help.onClick}
+              ref={help.ref}
+            />
           )}
           {onOpen && (
             <IconButton

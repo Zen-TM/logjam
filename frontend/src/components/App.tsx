@@ -129,6 +129,7 @@ import {
   drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
+  drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -524,8 +525,9 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, coverage, fire, slope, land, hillshade } = terrainLayers;
-  const hasCarrier = coverageCarrier !== null;
+  const { contours, fire, slope, land, hillshade } = terrainLayers;
+  // A boolean, so a change of carrier is a filter, not a new layer list.
+  const coverageDrawn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -537,8 +539,7 @@ function App() {
     const entries = terrainEntries(sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
-      // Until a carrier is picked there is no map to draw.
-      coverage: coverage && hasCarrier,
+      coverage: coverageDrawn,
       fire,
       slope,
       land,
@@ -554,8 +555,7 @@ function App() {
   }, [
     activeLayerId,
     contours,
-    coverage,
-    hasCarrier,
+    coverageDrawn,
     fire,
     slope,
     land,

@@ -92,8 +92,7 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
-  coverageNameOf,
-  coverageQueryBox,
+  drawsCoverage,
   fireNameOf,
   NSW_COVERAGE,
   NSW_FIRE,
@@ -423,6 +422,7 @@ import {
 } from "./layerOrder";
 import {
   COVERAGE_IMAGES,
+  coverageAtTap,
   coverageLayerFilter,
   coverageLayerId,
   coverageLayerPaint,
@@ -1638,8 +1638,7 @@ export function MapScreen({
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
   const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
-  // Until a carrier is picked there is no map to draw.
-  const coverageOn = terrainLayers.coverage && coverageCarrier !== null;
+  const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
   const coverageResolved = useMemo(
     () =>
       coverageOn
@@ -2381,19 +2380,16 @@ export function MapScreen({
           })
           .catch(() => undefined);
       }
-      if (coverageLayerIdList.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(coverageQueryBox(event.nativeEvent.point), {
-            layers: coverageLayerIdList,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedCoverage(
-                coverageCarrier && coverageNameOf(features, coverageCarrier),
-              );
-          })
-          .catch(() => undefined);
-      }
+      coverageAtTap(
+        mapRef.current,
+        event.nativeEvent.point,
+        coverageLayerIdList,
+        coverageCarrier,
+      )
+        .then((name) => {
+          if (landAskedFor.current === tapped) setTappedCoverage(name);
+        })
+        .catch(() => undefined);
     },
     [
       addToolPoint,

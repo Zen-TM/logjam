@@ -57,7 +57,6 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
-  normalizeCarrier,
   type CarrierId,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
@@ -94,6 +93,7 @@ import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { SlopeBandsEditor } from "./SlopeBandsEditor";
+import { pickCoverageCarrier } from "./coverageLayers";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -312,15 +312,22 @@ export function MapLayersSheet({
               ? {
                   choice: {
                     value: coverageCarrier,
-                    onChange: (value: string) => {
-                      const next = normalizeCarrier(value);
-                      if (!next) return;
-                      // Picked from the row's button: the overlay was asked
-                      // for, so it comes on.
-                      if (coverageCarrier === null)
-                        onTerrainLayerChange("coverage", true);
-                      onCoverageCarrierChange(next);
-                    },
+                    onChange: (value: string) =>
+                      pickCoverageCarrier(
+                        value,
+                        coverageCarrier,
+                        terrainSwitch(
+                          "coverage",
+                          terrainLayers.coverage,
+                          basemapId,
+                          online,
+                          artifacts,
+                        ).disabled,
+                        {
+                          choose: onCoverageCarrierChange,
+                          turnOn: () => onTerrainLayerChange("coverage", true),
+                        },
+                      ),
                   },
                 }
               : {})}

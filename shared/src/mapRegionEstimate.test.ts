@@ -297,13 +297,13 @@ describe("planRegionForBasemaps", () => {
   // the measured clip. (Leaving it out of the totals turns the two sum tests
   // above red.)
   it("prices the coverage clip from its measured tiles", () => {
-    // A real clip of 40 km of the Blue Mountains is 4.5 MB.
+    // A real clip of 40 km of the Blue Mountains is 346 KB: 42 z12 tiles.
     const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
     const { coverage } = planRegionForBasemaps(box, [], 15, maxZoomFor);
-    expect(coverage.meanBytes).toBeGreaterThan(3_800_000);
-    expect(coverage.meanBytes).toBeLessThan(5_200_000);
-    expect(coverage.p90Bytes).toBeGreaterThan(4_500_000);
-    expect(coverage.p90Bytes).toBeLessThan(9_000_000);
+    expect(coverage.meanBytes).toBeGreaterThan(300_000);
+    expect(coverage.meanBytes).toBeLessThan(400_000);
+    expect(coverage.p90Bytes).toBeGreaterThan(400_000);
+    expect(coverage.p90Bytes).toBeLessThan(700_000);
   });
 
   // Mutation: halve LAND_TILE_BYTES, and the estimate no longer brackets the

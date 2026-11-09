@@ -98,7 +98,8 @@ export const OVERLAY_LEGENDS: Readonly<
 /**
  * Whether `legend`'s row offers its choice (one button that opens the legend)
  * in place of its switch: it has a choice, and nothing is picked yet. Both
- * clients draw the row from this.
+ * clients draw the row from this, and a pick made while it holds turns the
+ * overlay on, since the button was the request for it.
  */
 export function overlayAwaitsChoice(
   legend: OverlayLegend,

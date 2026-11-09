@@ -115,7 +115,9 @@ SPLIT_POINTS = 2_000
 BLOCK = 1024
 
 SOURCE_LAYER = "coverage"
-ZMIN = 8
+# z12 alone: the clients draw the overlay from z12 (COVERAGE_MIN_ZOOM in
+# shared/src/overlayZoom.ts), so coarser tiles would be fetched by no one.
+ZMIN = 12
 ZMAX = 12
 CREDIT = (
     "Mobile coverage: ACCC Mobile Infrastructure Report data release"
