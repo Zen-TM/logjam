@@ -765,6 +765,24 @@ run "brain_role_has_only_its_grants" {
     error_message = "The brain's role may reach only the media, topo, access-log, backup and signals buckets: never the audit bucket."
   }
 
+  # Mutation: dropping s3:ListBucketVersions or s3:GetObjectVersion from the
+  # backup statements breaks point-in-time recovery (`--repo-target-time` gets a
+  # 403 reading the versioned bucket); adding s3:DeleteObjectVersion,
+  # s3:BypassGovernanceRetention or s3:PutObjectRetention (here or in any
+  # statement) lets a compromised API weaken the lock on the backups.
+  assert {
+    condition = (
+      length(setsubtract(["s3:ListBucketVersions", "s3:GetObjectVersion"], flatten([
+        for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : st.Action
+        if strcontains(jsonencode(st.Resource), "logjam-brain-backups")
+      ]))) == 0 &&
+      length(setintersection(["s3:DeleteObjectVersion", "s3:BypassGovernanceRetention", "s3:PutObjectRetention", "s3:PutObjectLegalHold", "s3:PutBucketObjectLockConfiguration"], flatten([
+        for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : st.Action
+      ]))) == 0
+    )
+    error_message = "The brain's role must list and read backup versions and must not delete versions or touch the lock."
+  }
+
   # Mutation: adding the RDS master secret, a wildcard or any other secret
   # to the secrets statement, or a second statement with secretsmanager actions.
   assert {

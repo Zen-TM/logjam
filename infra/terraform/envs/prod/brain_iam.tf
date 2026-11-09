@@ -133,15 +133,19 @@ resource "aws_iam_role_policy" "brain" {
       },
       {
         # pgBackRest's repository: list, read, write and delete, on this bucket.
+        # The version actions let `--repo-target-time` read the bucket as of a
+        # past time. Never DeleteObjectVersion (pgBackRest's expire only adds
+        # delete markers) nor the retention-bypass actions: the lock is what
+        # protects the backups from this role.
         Sid      = "BackupRepositoryList"
         Effect   = "Allow"
-        Action   = "s3:ListBucket"
+        Action   = ["s3:ListBucket", "s3:ListBucketVersions"]
         Resource = aws_s3_bucket.brain_backups.arn
       },
       {
         Sid      = "BackupRepositoryObjects"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.brain_backups.arn}/*"
       },
       {
