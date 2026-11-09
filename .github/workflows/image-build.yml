@@ -65,14 +65,10 @@ jobs:
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: TEMP probe
-        run: |
-          docker version --format '{{.Server.Version}}'
-          docker info | grep -iE 'driver|storage|containerd|Architecture' || true
-          docker buildx inspect || true
-          docker buildx version
       - name: Build the API image
         if: steps.scope.outputs.build == 'true'
+        # No attestations, as in deploy-api.yml: a release is exactly three ECR
+        # images, which the lifecycle count in ecr.tf relies on.
         run: docker build --provenance=false --sbom=false --platform ${{ matrix.platform }} -f api/Dockerfile .
 
   api-image:

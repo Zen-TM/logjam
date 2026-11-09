@@ -108,7 +108,11 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           ARCH_IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-${PLATFORM#linux/}
-          docker build --platform $PLATFORM -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ARCH_IMAGE .
+          # No attestations: ubuntu-latest's Docker uses the containerd image
+          # store, which would add an untagged attestation image per
+          # architecture. A release must be exactly three ECR images, which the
+          # lifecycle count in ecr.tf relies on.
+          docker build --provenance=false --sbom=false --platform $PLATFORM -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ARCH_IMAGE .
           docker push $ARCH_IMAGE
 
   deploy:
