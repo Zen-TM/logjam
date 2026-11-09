@@ -129,10 +129,7 @@ describe("coverageAt", () => {
     const asked: unknown[] = [];
     const map = {
       getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
-      queryRenderedFeatures: (
-        at: unknown,
-        options: { layers: string[] },
-      ) => {
+      queryRenderedFeatures: (at: unknown, options: { layers: string[] }) => {
         asked.push([at, options.layers]);
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
@@ -219,9 +216,9 @@ describe("moveTerrainIntoBasemap", () => {
       "pm-earth",
       "pm-landcover",
       "topo-nswhillshade-dem",
-      "topo-nswland-fill",
       "pm-water",
       "topo-nswslope-dem",
+      "topo-nswland-fill",
       "topo-nswcontours-minor",
       "topo-nswcontours-labels",
       "pm-water_stream",

@@ -5,9 +5,10 @@ import {
   COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
+  COVERAGE_MIN_ZOOM,
   coverageFilter,
   coverageOpacity,
-  NSW_COVERAGE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import type { FillLayerSpecification } from "@maplibre/maplibre-react-native";
 
@@ -37,11 +38,14 @@ export function coverageLayerFilter(
 export function coverageLayerPaint(): FillPaint {
   return {
     "fill-pattern": COVERAGE_HATCH_IMAGE,
-    "fill-opacity": coverageOpacity() as FillPaint["fill-opacity"],
+    "fill-opacity": zoomFadeIn(
+      COVERAGE_MIN_ZOOM,
+      coverageOpacity(),
+    ) as FillPaint["fill-opacity"],
   };
 }
 
-/** A clip may hold fewer zooms than the archive; never draw below its own. */
+/** Drawn from `COVERAGE_MIN_ZOOM`, or a clip's own first zoom if that is deeper. */
 export function coverageMinZoom(layerMinZoom: number | undefined): number {
-  return Math.max(layerMinZoom ?? 0, NSW_COVERAGE.minzoom);
+  return Math.max(layerMinZoom ?? 0, COVERAGE_MIN_ZOOM);
 }

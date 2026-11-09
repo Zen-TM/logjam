@@ -105,7 +105,7 @@ supersede instead.
 | [0006](0006-on-device-data-privacy.md) | On-device data privacy: app lock off by default, declared stores, one wipe path | 2026-08-04 | Accepted |
 | [0007](0007-guest-mode-is-dont-sync-yet.md) | Guest mode is "don't sync yet", not a separate storage path | 2026-08-05 | Accepted |
 | [0008](0008-geopdf-import-by-file-uri.md) | GeoPDF import takes a file URI, never bytes | 2026-08-10 | Accepted |
-| [0009](0009-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Accepted |
+| [0009](0009-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Superseded by [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) |
 | [0010](0010-map-sensors-only-while-focused.md) | Map sensors run only while the map is focused and foregrounded; the heading lives outside React state | 2026-08-17 | Accepted |
 | [0011](0011-compass-heading-pipeline.md) | Compass heading: gyro-fused source, one camera writer, a rate-tracking display | 2026-08-17 | Accepted |
 | [0012](0012-declination-and-compass-fault-warnings.md) | Declination is learned from the platform; compass faults are warned about, not corrected | 2026-08-17 | Accepted |
@@ -142,3 +142,4 @@ supersede instead.
 | [0043](0043-geopdfs-render-in-the-browser.md) | GeoPDFs render in the browser, and nothing about one reaches the server | 2026-10-29 | Accepted |
 | [0044](0044-river-gauges-are-public-files-from-waternsw-and-bom.md) | River gauges are public files, with readings from WaterNSW and history from the Bureau of Meteorology | 2026-10-30 | Accepted |
 | [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
+| [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |

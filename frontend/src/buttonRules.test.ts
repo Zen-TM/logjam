@@ -98,7 +98,7 @@ describe("a primary action is never disabled for validation", () => {
       );
     });
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   it("lists only files that still have one", () => {
     const stale = ALLOWED.filter(

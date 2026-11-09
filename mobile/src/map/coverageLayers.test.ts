@@ -2,9 +2,10 @@ import {
   COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
+  COVERAGE_MIN_ZOOM,
   coverageFilter,
   coverageOpacity,
-  NSW_COVERAGE,
+  zoomFadeIn,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,11 +19,11 @@ import {
 describe("coverageLayerPaint", () => {
   // Mutation: build the pattern or the opacity from anything but shared's,
   // and the map hatches where the legend says there is reception, or draws a
-  // hatch it doesn't key.
+  // hatch it doesn't key; drop the fade, and it pops in at its first zoom.
   it("paints with exactly shared's expressions", () => {
     expect(coverageLayerPaint()).toEqual({
       "fill-pattern": COVERAGE_HATCH_IMAGE,
-      "fill-opacity": coverageOpacity(),
+      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity()),
     });
   });
 });
@@ -63,14 +64,10 @@ describe("coverageLayerId", () => {
 
 describe("coverageMinZoom", () => {
   // Mutation: return `layerMinZoom ?? 0` alone, and a CDN source draws
-  // coverage below the archive's own first zoom.
-  it("never draws below the archive's first zoom", () => {
-    expect(coverageMinZoom(undefined)).toBe(NSW_COVERAGE.minzoom);
-    expect(coverageMinZoom(NSW_COVERAGE.minzoom - 2)).toBe(
-      NSW_COVERAGE.minzoom,
-    );
-    expect(coverageMinZoom(NSW_COVERAGE.minzoom + 1)).toBe(
-      NSW_COVERAGE.minzoom + 1,
-    );
+  // coverage from the archive's z8, where it is a speckle.
+  it("never draws below COVERAGE_MIN_ZOOM", () => {
+    expect(coverageMinZoom(undefined)).toBe(COVERAGE_MIN_ZOOM);
+    expect(coverageMinZoom(COVERAGE_MIN_ZOOM - 2)).toBe(COVERAGE_MIN_ZOOM);
+    expect(coverageMinZoom(COVERAGE_MIN_ZOOM + 1)).toBe(COVERAGE_MIN_ZOOM + 1);
   });
 });

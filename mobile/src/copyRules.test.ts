@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   copySay,
   copyViolations,
@@ -62,7 +62,9 @@ const baselined = (file: string, rule: string, text: string) =>
   );
 
 /** Every rule a user-facing string breaks, bar what ALLOWED excuses. */
-function hits() {
+let cached: ReturnType<typeof scan> | undefined;
+const hits = () => (cached ??= scan());
+function scan() {
   return [...sources(SRC), APP].flatMap((path) =>
     userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
       ({ line, text }) =>
@@ -88,7 +90,15 @@ function sources(dir: string): string[] {
   });
 }
 
+// The scan parses every source file, about a second alone and several under a
+// loaded machine, near vitest's 5 s default: it runs in a beforeAll with the
+// 30 s `switchCopy.test.ts` gives its own, so no test pays for it whatever
+// order they run in.
 describe("copy on Logjam GPS", () => {
+  beforeAll(() => {
+    hits();
+  }, 30_000);
+
   it("reads the strings of the net — a silent zero would pass forever", () => {
     const [first] = userFacingStrings(
       ts,
@@ -130,7 +140,7 @@ describe("copy on Logjam GPS", () => {
         ),
     );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   it("breaks no copy rule", () => {
     const offenders = hits()

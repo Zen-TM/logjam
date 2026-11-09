@@ -17,6 +17,21 @@ export const ZOOM_FADE_LEVELS = 1;
  */
 export const SLOPE_MIN_ZOOM = 11;
 
+/**
+ * Fire history. A burn is kilometres across, so it reads at the zoom a person
+ * picks a valley from; further out the tint covers the state in patches that
+ * hide the map. Like Land, it fades in rather than drawing everywhere.
+ */
+export const FIRE_MIN_ZOOM = 10;
+
+/**
+ * Coverage, a level deeper than Fire history. Its gaps are a valley floor or
+ * the far side of a ridge, a few hundred metres across, and the hatch shows
+ * one only as lines 12 px apart: at z10 that is about 1.5 km between lines,
+ * and the map is a speckle with no gap a person could plan around.
+ */
+export const COVERAGE_MIN_ZOOM = 11;
+
 /** Statewide contours (the archive starts at z11, `NSW_CONTOURS`). */
 export const CONTOURS_MIN_ZOOM = 12;
 export const CONTOUR_LABELS_MIN_ZOOM = 13;

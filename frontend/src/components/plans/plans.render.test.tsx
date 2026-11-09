@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
   planAddVerbLabel,
@@ -559,6 +559,15 @@ describe("someone asking to join", () => {
 });
 
 describe("pressing a person", () => {
+  // The sheet lists unanswered forms only before the plan ends, and the
+  // fixture's ends 2026-11-08: pin today inside it, or this goes red with the
+  // calendar.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 1));
+  });
+  afterEach(() => vi.useRealTimers());
+
   // Mutation: drop the row's onOpen, or the leader-only unanswered list, and
   // the sheet never opens or names no form.
   it("opens their sheet with unanswered forms and verbs", () => {
