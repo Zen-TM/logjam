@@ -1,7 +1,9 @@
 # The Postgres that prod runs, and local dev too (docker-compose.yml), so a
-# config mistake shows up on a laptop first. Pinned to the minor RDS runs; no
-# arch-specific steps, it builds for linux/amd64 and linux/arm64 as is.
-FROM postgres:16.13-bookworm
+# config mistake shows up on a laptop first. Pinned to the minor RDS runs, on
+# the Debian release stock `postgres:16` uses, so a dev volume made by the stock
+# image has the same glibc (a different one changes the collation version).
+# No arch-specific steps: it builds for linux/amd64 and linux/arm64 as is.
+FROM postgres:16.13-trixie
 
 # The base image already configures the PGDG apt repository.
 RUN apt-get update \

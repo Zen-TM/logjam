@@ -14,7 +14,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 IMAGE=${IMAGE:-brain-postgres:test}
-[ -n "${IMAGE_PREBUILT:-}" ] || docker build -q -t "$IMAGE" . > /dev/null || exit 1
+[ -n "${IMAGE_PREBUILT:-}" ] || docker build -q --provenance=false --sbom=false -t "$IMAGE" . > /dev/null || exit 1
 
 DATA=/var/lib/postgresql/data
 fails=0
@@ -136,6 +136,8 @@ if wait_up $C; then
   check "plain TCP with the dev password works" [ "$(conn 'host=127.0.0.1 user=logjam dbname=logjam sslmode=disable' 2>/dev/null)" = 1 ]
   check "the passwordless local socket works (make dev-snapshot)" docker exec $C psql -U logjam logjam -tAqc 'select 1' > /dev/null 2>&1
   check "the -c archive_mode=off from Compose wins" [ "$(docker exec $C psql -U logjam logjam -tAXqc 'show archive_mode' 2>/dev/null)" = off ]
+  check "a volume made by stock postgres:16 gives no collation warning" \
+    not grep -q 'collation version' <<<"$(docker exec $C psql -U logjam logjam -tAqc 'select 1' 2>&1)"
   check "the settings file still applies" [ "$(docker exec $C psql -U logjam logjam -tAXqc 'show log_error_verbosity' 2>/dev/null)" = terse ]
 else
   bad "an existing stock volume starts"
