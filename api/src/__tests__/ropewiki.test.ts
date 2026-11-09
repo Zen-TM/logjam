@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { API_URL, as, CAROL_SUB } from "./_actors";
 
-// routes/ropewiki.ts: only the validation paths of POST /ropewiki/import/apply,
-// which run before any RopeWiki fetch. /import and /refresh download the CSV
-// from ropewiki.com, so they are not exercised here. Sent as carol because
+// routes/ropewiki.ts: only the validation paths of POST /ropewiki/import/apply
+// (the region, then the decisions), which run before any RopeWiki fetch.
+// /import and /refresh download the CSV from ropewiki.com, so they are not
+// exercised here. Sent as carol because
 // ropeWikiHeavyLimiter allows 5 requests per 5 minutes per user. No
 // unauthenticated-401 case: fake auth treats a missing header as alice.
 describe("POST /ropewiki/import/apply validation", () => {
@@ -21,6 +22,28 @@ describe("POST /ropewiki/import/apply validation", () => {
       .post("/ropewiki/import/apply")
       .set(as(CAROL_SUB))
       .send({ decisions: [{ ropeWikiId: 1, action: "link" }] });
+    expect(res.status).toBe(400);
+  });
+
+  // Mutation: `req.query.region ?? ""` in canyonSource, and every build
+  // before regions, which sends no region, is refused.
+  it("reads no region as NSW", async () => {
+    const res = await request(API_URL)
+      .post("/ropewiki/import/apply")
+      .set(as(CAROL_SUB))
+      .send({ decisions: [] });
+    // Past the region check, at the decisions check that follows it.
+    expect(res.status).toBe(400);
+    expect(res.body.detail).toBe("decisions must be a non-empty array");
+  });
+
+  // Mutation: fall back to NSW for any `region`, and a client asking for a
+  // region with no canyon list gets NSW's canyons.
+  it("rejects a region with no canyon source with 400", async () => {
+    const res = await request(API_URL)
+      .post("/ropewiki/import/apply?region=atlantis")
+      .set(as(CAROL_SUB))
+      .send({ decisions: [{ ropeWikiId: 1, action: "skip" }] });
     expect(res.status).toBe(400);
   });
 });

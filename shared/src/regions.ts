@@ -249,6 +249,17 @@ export function regionsOf(
 }
 
 /**
+ * The chosen regions Logjam offers a canyon-list import for: one offer each.
+ * Guard: `regions.test.ts`.
+ */
+export function canyonRegionsOf(
+  ids: readonly string[],
+  regions: readonly Region[] = REGIONS,
+): Region[] {
+  return regionsOf(ids, regions).filter((region) => region.canyons !== null);
+}
+
+/**
  * Whether a user is asked where they canyon: only once there is a choice to
  * make. Guard: each client's region step and settings section tests.
  */

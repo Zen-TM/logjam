@@ -7,7 +7,8 @@
 // The two ways in are ROWS, not a stack of buttons: each is a thing to choose
 // with a sentence saying what it gets you, which is what a row carries and a
 // button does not (DESIGN.md). The recommended one is the accent tile.
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { ROPEWIKI_OFFER, type Region } from "@logjam/shared";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -20,49 +21,61 @@ import {
 } from "../../ui";
 import classes from "./OnboardingChoiceDialog.module.css";
 
+type RegionLoad = {
+  state: "idle" | "loading" | "done" | "error";
+  summary: string;
+  error: string | null;
+};
+
+const IDLE: RegionLoad = { state: "idle", summary: "", error: null };
+
 function OnboardingChoiceDialog({
   open,
+  canyonRegions,
   onImportFiles,
   onStartEmpty,
   onLoaded,
 }: {
   open: boolean;
+  /** The user's regions with a canyon list: one RopeWiki row each. */
+  canyonRegions: readonly Region[];
   onImportFiles: () => void;
   onStartEmpty: () => void;
   onLoaded: () => void;
 }) {
-  const [ropewikiState, setRopewikiState] = useState<
-    "idle" | "loading" | "done" | "error"
-  >("idle");
-  const [loadedSummary, setLoadedSummary] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const [loads, setLoads] = useState<Record<string, RegionLoad>>({});
+  const loadOf = (region: Region) => loads[region.id] ?? IDLE;
+  const setLoad = (region: Region, load: RegionLoad) =>
+    setLoads((prev) => ({ ...prev, [region.id]: load }));
 
-  async function handleLoadRopeWiki() {
-    setRopewikiState("loading");
-    setError(null);
+  async function handleLoadRopeWiki(region: Region) {
+    setLoad(region, { ...IDLE, state: "loading" });
     try {
-      const res = await importFromRopeWiki();
+      const res = await importFromRopeWiki(region.id);
       onLoaded();
       const skipped = res.skipped + res.errors.length;
-      setLoadedSummary(
-        `${res.imported} place${res.imported !== 1 ? "s" : ""} loaded` +
+      setLoad(region, {
+        ...IDLE,
+        state: "done",
+        summary:
+          `${res.imported} place${res.imported !== 1 ? "s" : ""} loaded` +
           (skipped > 0 ? `, ${skipped} skipped` : ""),
-      );
-      setRopewikiState("done");
+      });
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(
+      setLoad(region, {
+        ...IDLE,
+        state: "error",
+        error: messageFromError(
           err,
           "Couldn't load the RopeWiki database. You can try again later from the sidebar.",
         ),
-      );
-      setRopewikiState("error");
+      });
     }
   }
 
-  const loading = ropewikiState === "loading";
-  const loaded = ropewikiState === "done";
+  const loading = canyonRegions.some((r) => loadOf(r).state === "loading");
+  const loaded = canyonRegions.some((r) => loadOf(r).state === "done");
 
   return (
     <Dialog
@@ -88,34 +101,56 @@ function OnboardingChoiceDialog({
           How would you like to start? You can do any of these later, too.
         </p>
 
-        <Row
-          title="Load the NSW place database (RopeWiki)"
-          subtitle={
-            loaded
-              ? loadedSummary
-              : loading
-                ? "Loading…"
-                : "Recommended — hundreds of NSW canyons, so your trips have something to match against"
-          }
-          leading={
-            <IconTile
-              icon={loaded ? "done" : "place"}
-              hue={loaded ? "var(--color-success)" : "var(--color-accent)"}
-            />
-          }
-          // Absent, not disabled, once it has run: there is nothing left to
-          // press, and the subtitle says what arrived (DESIGN.md).
-          onOpen={loaded || loading ? undefined : handleLoadRopeWiki}
-        />
-        {loading && <ProgressBar label="Loading the RopeWiki database" />}
-
-        {error && (
-          <ErrorBanner
-            message={error}
-            onRetry={handleLoadRopeWiki}
-            onDismiss={() => setError(null)}
-          />
-        )}
+        {canyonRegions.map((region) => {
+          const { state, summary, error } = loadOf(region);
+          return (
+            <Fragment key={region.id}>
+              <Row
+                title={ROPEWIKI_OFFER.title(region)}
+                subtitle={
+                  state === "done"
+                    ? summary
+                    : state === "loading"
+                      ? "Loading…"
+                      : ROPEWIKI_OFFER.hint(region)
+                }
+                leading={
+                  <IconTile
+                    icon={state === "done" ? "done" : "place"}
+                    hue={
+                      state === "done"
+                        ? "var(--color-success)"
+                        : "var(--color-accent)"
+                    }
+                  />
+                }
+                // Absent, not disabled, once it has run: there is nothing left to
+                // press, and the subtitle says what arrived (DESIGN.md).
+                onOpen={
+                  state === "done" || state === "loading"
+                    ? undefined
+                    : () => void handleLoadRopeWiki(region)
+                }
+              />
+              {state === "loading" && (
+                <ProgressBar
+                  label={
+                    canyonRegions.length > 1
+                      ? `Loading the ${region.name} RopeWiki database`
+                      : "Loading the RopeWiki database"
+                  }
+                />
+              )}
+              {error && (
+                <ErrorBanner
+                  message={error}
+                  onRetry={() => void handleLoadRopeWiki(region)}
+                  onDismiss={() => setLoad(region, IDLE)}
+                />
+              )}
+            </Fragment>
+          );
+        })}
 
         <Row
           title="Import my own files"
