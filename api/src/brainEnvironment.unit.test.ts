@@ -49,6 +49,25 @@ describe("infra/brain/api.env", () => {
     ).toEqual([]);
   });
 
+  // The download meter charges only S3 reads signed by the API's own role,
+  // which it finds by this substring of the access log's requester. The
+  // schema's default names the role the API had on Elastic Beanstalk.
+  // Mutation: deleting the line from api.env, or renaming the brain's role in
+  // brain_iam.tf: the meter then matches nothing and no download is counted.
+  it("tells the download meter the role the brain's API signs with", () => {
+    const iam = readFileSync(
+      join(api, "..", "infra/terraform/envs/prod/brain_iam.tf"),
+      "utf8",
+    );
+    const role = /resource "aws_iam_role" "brain" \{\s+name\s+= "([^"]+)"/.exec(
+      iam,
+    )?.[1];
+    expect(role).toBeTruthy();
+    expect(brainMap.get("EGRESS_API_REQUESTER_PATTERN")).toBe(
+      `assumed-role/${role}/`,
+    );
+  });
+
   it("sets no variable twice", () => {
     expect(
       brain.filter(([key], i) => brain.findIndex(([k]) => k === key) !== i),
