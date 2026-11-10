@@ -343,3 +343,8 @@ pass the ceiling before it acts.
    policy being detached from `logjam-brain` (its attachments are managed
    exclusively, `brain_iam.tf`), and merging that plan lifts the deny on that
    role only. Reverse the action first.
+   If an apply already detached the policy from `logjam-brain`, attach
+   `logjam-cost-ceiling-deny` to that role again by hand before reversing the
+   action, or the reversal's detach has nothing to remove. IAM would probably
+   refuse it and Budgets would keep showing the action as executed; that is
+   inferred from how IAM behaves, not tested.
