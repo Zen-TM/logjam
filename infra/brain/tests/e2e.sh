@@ -227,6 +227,7 @@ AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 BRAIN_BACKUP_ENDPOINT=host.docker.internal:$TLS_PORT
 BRAIN_COMPOSE_EXTRA=/opt/brain/tests/compose.test.yaml
+BRAIN_REPO_WAIT=1
 BRAIN_SERVING_FILE=/run/brain-e2e-serving
 BRAIN_BOOTSTRAP_FILE=/run/brain-e2e-bootstrap
 EOF

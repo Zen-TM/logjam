@@ -80,7 +80,7 @@ try:
         sys.exit(1)
 except (ValueError, KeyError, TypeError):
     sys.exit(1)'; then return; fi
-    [ "$try" = 6 ] || sleep 20
+    [ "$try" = 6 ] || sleep "${BRAIN_REPO_WAIT:-20}"
   done
   echo "$out" >&2
   die "cannot read the backup repository"

@@ -6,7 +6,12 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     environment:
       BRAIN_BACKUP_VERIFY_TLS: "n"
-  repo: *stand-in
+  repo:
+    <<: *stand-in
+    environment:
+      BRAIN_BACKUP_VERIFY_TLS: "n"
+      # An unreachable endpoint fails fast, not after the default minute of retries.
+      PGBACKREST_IO_TIMEOUT: "3"
   api:
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
