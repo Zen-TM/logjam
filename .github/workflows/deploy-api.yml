@@ -141,10 +141,9 @@ jobs:
       contents: read
     outputs:
       swapped: ${{ steps.swap.outputs.swapped || steps.swap_brain.outputs.swapped }}
-      # Whether this run released to the brain (brain.auto.tfvars): the smoke
-      # job waits longer for the brain's release agent than for Elastic
-      # Beanstalk's swap.
-      serving: ${{ steps.mode.outputs.serving }}
+      # How many 10-second tries the smoke job gives (the brain's release
+      # agent needs longer than Elastic Beanstalk's swap), from the mode table.
+      attempts: ${{ steps.mode.outputs.attempts }}
 
     steps:
       - name: Checkout code
@@ -154,21 +153,13 @@ jobs:
           # (github.sha under workflow_run can be a newer, unvalidated commit).
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # Where this release goes, from the same file Terraform reads
-      # (infra/scripts/brain-setting.sh): the brain when brain_serving is
-      # true, Elastic Beanstalk otherwise. Read before anything is pinned or
-      # migrated, and it fails rather than guess: a file it cannot read stops
-      # the run here, with prod untouched. brain_public says whether the
-      # public URL shows the brain yet, which decides whether the smoke test
-      # below can see this release.
+      # Where this release goes, from the same file Terraform reads: one table
+      # in infra/scripts/brain-setting.sh (--mode) decides every output below
+      # and is tested there; nothing here decides. It fails rather than guess:
+      # a file it cannot read stops the run here, with prod untouched.
       - name: Where does this release go?
         id: mode
-        run: |
-          serving=$(infra/scripts/brain-setting.sh brain_serving)
-          public=$(infra/scripts/brain-setting.sh brain_public)
-          echo "serving=$serving" >> "$GITHUB_OUTPUT"
-          echo "public=$public" >> "$GITHUB_OUTPUT"
-          echo "==> brain_serving=$serving brain_public=$public ($([ "$serving" = true ] && echo "the brain" || echo "Elastic Beanstalk"))"
+        run: infra/scripts/brain-setting.sh --mode | tee -a "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -352,11 +343,11 @@ jobs:
       # can see the brain, and a failing one would roll back a healthy release.
       - name: Mark the swap (the brain)
         id: swap_brain
-        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.public == 'true'
+        if: steps.mode.outputs.swap_brain == 'true'
         run: echo "swapped=true" >> "$GITHUB_OUTPUT"
 
       - name: The brain is released but not public
-        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.public != 'true'
+        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.verify != 'true'
         run: echo "::notice::brain_public is off, so the public URL is still Elastic Beanstalk's and no smoke test can see this release. The pointer is written; check the brain through the host."
 
   # The smoke test is also the wait for the brain: CI may not read the brain's
@@ -370,7 +361,7 @@ jobs:
     with:
       target: api
       sha: ${{ github.event.workflow_run.head_sha }}
-      attempts: ${{ needs.deploy.outputs.serving == 'true' && 30 || 18 }}
+      attempts: ${{ fromJSON(needs.deploy.outputs.attempts || '18') }}
 
   # Single-instance EB: a bad release is total downtime until someone acts, so
   # a failed smoke test returns to the release that was live before this run.

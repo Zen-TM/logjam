@@ -38,7 +38,14 @@
 # The deploy's image pin and a change here do not undo each other: the pin
 # copies the latest revision whole and swaps the image (so a brain environment
 # survives it), and an apply after a pin registers a revision with the :latest
-# floor and this environment (so the next deploy re-pins it, as above).
+# floor and this environment. The next API deploy re-pins the two API families
+# (every merge to main deploys the API), but the two topo families stay on
+# :latest until deploy-topo-worker next runs, which it does only for a change
+# under topo/ or when the family's tag is not a sha (deploy-guard.yml treats
+# that as "live unknown" and deploys): so the topo image at :latest has to carry
+# the brain's certificate before brain_serving is set, and after the apply the
+# topo families are repinned by hand (rollback.yml, target worker, the sha they
+# carried before: the deploy workflow has no manual trigger).
 locals {
   rds_db_host = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
 

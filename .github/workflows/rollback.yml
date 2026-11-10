@@ -109,10 +109,10 @@ jobs:
       id-token: write
       contents: read
     outputs:
-      # Whether this run rolled the brain back (the smoke test waits longer
-      # for it), and whether the public URL can show that (see deploy-api.yml).
-      serving: ${{ steps.mode.outputs.serving }}
+      # From the mode table: whether the public URL can show this rollback,
+      # and how long the smoke test waits for it (see deploy-api.yml).
       verify: ${{ steps.mode.outputs.verify }}
+      attempts: ${{ steps.mode.outputs.attempts }}
     env:
       TARGET: ${{ inputs.target }}
       SHA: ${{ inputs.sha }}
@@ -129,20 +129,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Which release path the API takes, from the file Terraform reads
-      # (infra/scripts/brain-setting.sh); it fails rather than guess.
+      # Which release path the API takes: one table in
+      # infra/scripts/brain-setting.sh (--mode) decides every output below; it
+      # fails rather than guess.
       - name: Where does the API run?
         id: mode
         if: inputs.target == 'api'
-        run: |
-          serving=$(infra/scripts/brain-setting.sh brain_serving)
-          public=$(infra/scripts/brain-setting.sh brain_public)
-          verify=true
-          [ "$serving" = true ] && [ "$public" != true ] && verify=false
-          echo "serving=$serving" >> "$GITHUB_OUTPUT"
-          echo "verify=$verify" >> "$GITHUB_OUTPUT"
-          echo "==> brain_serving=$serving brain_public=$public ($([ "$serving" = true ] && echo "the brain" || echo "Elastic Beanstalk"))"
-          [ "$verify" = true ] || echo "::notice::brain_public is off: the public URL is still Elastic Beanstalk's, so no smoke test can see this rollback. Check the brain through the host."
+        run: infra/scripts/brain-setting.sh --mode | tee -a "$GITHUB_OUTPUT"
+
+      - name: No smoke test can see this rollback
+        if: inputs.target == 'api' && steps.mode.outputs.verify != 'true'
+        run: echo "::notice::brain_public is off, so the public URL is still Elastic Beanstalk's. The rollback is written; check the brain through the host."
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -279,4 +276,4 @@ jobs:
     with:
       target: ${{ inputs.target }}
       sha: ${{ inputs.sha }}
-      attempts: ${{ needs.rollback.outputs.serving == 'true' && 30 || 18 }}
+      attempts: ${{ fromJSON(needs.rollback.outputs.attempts || '18') }}

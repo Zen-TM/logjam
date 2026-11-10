@@ -106,15 +106,7 @@ jobs:
           set +e
           case "$TARGET" in
             api)
-              SERVING=$(infra/scripts/brain-setting.sh brain_serving)
-              case "$SERVING" in
-                true)
-                  LIVE=$(curl -sSf --max-time 15 "$API_URL/meta" | jq -r .sha) || LIVE="" ;;
-                false)
-                  LIVE=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
-                    --query 'Environments[0].VersionLabel' --output text) || LIVE="" ;;
-                *) LIVE="" ;;
-              esac ;;
+              LIVE=$(infra/scripts/brain-setting.sh --live) || LIVE="" ;;
             frontend)
               LIVE=$(aws s3api head-object --bucket "$FRONTEND_BUCKET" --key index.html \
                 --query 'Metadata."release-sha"' --output text) || LIVE="" ;;
