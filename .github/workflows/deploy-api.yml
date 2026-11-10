@@ -57,19 +57,17 @@ jobs:
       id-token: write
       contents: read
 
-  deploy:
-    name: Build and deploy
-    # The deploy role trusts only jobs in the `prod` Environment, which only
-    # main may deploy to — a workflow pushed to any other branch can't
-    # assume it.
+  # One native build per architecture (the image compiles `canvas`, so no
+  # emulation), pushed under a per-architecture tag. The deploy job below
+  # joins them into the one multi-architecture <sha> and latest the rest of the
+  # workflow uses. The platforms here are held to the architectures every
+  # consumer runs by infra/scripts/pin-release.sh --self-test. Same
+  # environment and guard as the deploy job: only main may assume the role.
+  build:
+    name: Build ${{ matrix.platform }}
     environment: prod
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: guard
-    # Only deploy when the triggering CI run passed, was a push (not a PR run),
-    # and targeted main. Belt-and-suspenders with the workflow_run `branches`
-    # filter above. `!cancelled()` so a guard that went red after deciding
-    # does not skip the deploy by itself; only its 'false' skips (stale, main
-    # unknown or missing config).
     if: >-
       !cancelled() &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -79,15 +77,18 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    outputs:
-      swapped: ${{ steps.swap.outputs.swapped }}
-
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Build the exact commit CI validated, not the default-branch HEAD
-          # (github.sha under workflow_run can be a newer, unvalidated commit).
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Configure AWS credentials
@@ -100,16 +101,90 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
-      - name: Build, tag, and push image to ECR
+      - name: Build and push the per-architecture image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          ARCH_IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-${PLATFORM#linux/}
+          # No attestations: ubuntu-latest's Docker uses the containerd image
+          # store, which would add an untagged attestation image per
+          # architecture. A release must be exactly three ECR images, which the
+          # lifecycle count in ecr.tf relies on.
+          docker build --provenance=false --sbom=false --platform $PLATFORM -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ARCH_IMAGE .
+          docker push $ARCH_IMAGE
+
+  deploy:
+    name: Build and deploy
+    # The deploy role trusts only jobs in the `prod` Environment, which only
+    # main may deploy to — a workflow pushed to any other branch can't
+    # assume it.
+    environment: prod
+    runs-on: ubuntu-latest
+    needs: [guard, build]
+    # Only deploy when the triggering CI run passed, was a push (not a PR run),
+    # and targeted main. Belt-and-suspenders with the workflow_run `branches`
+    # filter above. `!cancelled()` so a guard that went red after deciding
+    # does not skip the deploy by itself; only its 'false' skips (stale, main
+    # unknown or missing config). Both builds must have succeeded: with
+    # `!cancelled()` a failed or skipped build would not stop this job alone.
+    if: >-
+      !cancelled() &&
+      needs.build.result == 'success' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      needs.guard.outputs.proceed != 'false'
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      swapped: ${{ steps.swap.outputs.swapped || steps.swap_brain.outputs.swapped }}
+      # How many 10-second tries the smoke job gives (the brain's release
+      # agent needs longer than Elastic Beanstalk's swap), from the mode table.
+      attempts: ${{ steps.mode.outputs.attempts }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Build the exact commit CI validated, not the default-branch HEAD
+          # (github.sha under workflow_run can be a newer, unvalidated commit).
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Where this release goes, from the same file Terraform reads: one table
+      # in infra/scripts/brain-setting.sh (--mode) decides every output below
+      # and is tested there; nothing here decides. It fails rather than guess:
+      # a file it cannot read stops the run here, with prod untouched.
+      - name: Where does this release go?
+        id: mode
+        run: infra/scripts/brain-setting.sh --mode | tee -a "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      # Join the two per-architecture images into one manifest list under the
+      # <sha> and latest tags. Everything below sees the same reference as
+      # before: <registry>/logjam-api:<sha>, which now pulls the right
+      # architecture on x86 (EB, Fargate) and on arm64.
+      - name: Publish the multi-architecture image
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
-          docker build -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY
+          docker buildx imagetools create -t $IMAGE:$IMAGE_TAG -t $IMAGE:latest $IMAGE:$IMAGE_TAG-amd64 $IMAGE:$IMAGE_TAG-arm64
+          docker buildx imagetools inspect $IMAGE:$IMAGE_TAG
+          echo "image=$IMAGE:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       # Point the two logjam-api task definitions at the image just pushed,
       # by sha, rather than `:latest`: a moving tag can resolve to a stale image
@@ -121,6 +196,22 @@ jobs:
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         # Every family that runs this image: infra/scripts/pin-release.sh.
         run: infra/scripts/pin-release.sh "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # The migration runs on the revision just pinned, against the database
+      # that revision names. Terraform's apply for a change to
+      # brain.auto.tfvars is a separate workflow that starts at the same merge:
+      # if it has not landed, the revision still names the other database and
+      # this stops before the migration reaches it.
+      - name: The migrate task definition names the database this mode uses
+        env:
+          SERVING: ${{ steps.mode.outputs.serving }}
+        run: |
+          set -euo pipefail
+          MODE=off
+          [ "$SERVING" = true ] && MODE=on
+          aws ecs describe-task-definition --task-definition logjam-api-migrate \
+            --query taskDefinition --output json \
+            | infra/scripts/brain-setting.sh --check-taskdef "$MODE"
 
       # Gated pre-deploy migration. Run `prisma migrate deploy`
       # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
@@ -178,6 +269,7 @@ jobs:
           echo "Migrations applied cleanly; proceeding to EB deploy."
 
       - name: Update Dockerrun.aws.json with new image
+        if: steps.mode.outputs.serving != 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
@@ -188,6 +280,7 @@ jobs:
       # (e.g. the DB_* connection parts) apply atomically with the version
       # that requires them.
       - name: Create deployment bundle
+        if: steps.mode.outputs.serving != 'true'
         run: |
           cd api && zip -r deploy.zip Dockerrun.aws.json .ebextensions
 
@@ -196,9 +289,11 @@ jobs:
       # failure above left the old version serving untouched.
       - name: Mark the swap
         id: swap
+        if: steps.mode.outputs.serving != 'true'
         run: echo "swapped=true" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Elastic Beanstalk
+        if: steps.mode.outputs.serving != 'true'
         uses: einaregilsson/beanstalk-deploy@a67044fa332b06e68985b06d361934c28ab09007 # v23
         with:
           aws_access_key: ${{ env.AWS_ACCESS_KEY_ID }}
@@ -221,6 +316,44 @@ jobs:
           wait_for_environment_recovery: 180
           wait_for_deployment: true
 
+      # The brain's release pointer: the sha just deployed and infra/brain/api.env,
+      # which the brain's release agent makes its API match once it serves.
+      # With brain_serving off it comes after the EB step on purpose: EB is
+      # what serves, so a failure here must not hold back that release, but it
+      # still turns the run red. With it on, the pointer IS the release: the
+      # EB steps are skipped, and the swap is marked once the pointer is
+      # written. The role may only put this one key and not read the bucket
+      # (brain_ecr.tf), so there is no read-back; the file is made first because
+      # a failing script piped into `aws s3 cp -` would upload an empty pointer.
+      - name: Write the brain's release pointer
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          SIGNALS_BUCKET: logjam-brain-signals-${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          infra/scripts/brain-release.sh "$IMAGE_TAG" > "$RUNNER_TEMP/release.json"
+          aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
+            --content-type application/json
+
+      # The brain's swap happens on its own clock: the release agent makes the
+      # API match the pointer within its poll (30 s) plus an image pull. The
+      # smoke test below waits for the public /meta to name this sha, which
+      # only means something once brain_public has moved CloudFront: in
+      # between, the public URL is still Elastic Beanstalk's, no smoke test
+      # can see the brain, and a failing one would roll back a healthy release.
+      - name: Mark the swap (the brain)
+        id: swap_brain
+        if: steps.mode.outputs.swap_brain == 'true'
+        run: echo "swapped=true" >> "$GITHUB_OUTPUT"
+
+      - name: The brain is released but not public
+        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.verify != 'true'
+        run: echo "::notice::brain_public is off, so the public URL is still Elastic Beanstalk's and no smoke test can see this release. The pointer is written; check the brain through the host."
+
+  # The smoke test is also the wait for the brain: CI may not read the brain's
+  # signals bucket (infra/AGENTS.md), so "the brain runs this sha" is what the
+  # public /meta says, polled for 5 minutes (the rehearsal took 49 seconds;
+  # Elastic Beanstalk's swap gets the usual 3).
   smoke:
     needs: deploy
     if: ${{ !cancelled() && needs.deploy.outputs.swapped == 'true' }}
@@ -228,6 +361,7 @@ jobs:
     with:
       target: api
       sha: ${{ github.event.workflow_run.head_sha }}
+      attempts: ${{ fromJSON(needs.deploy.outputs.attempts || '18') }}
 
   # Single-instance EB: a bad release is total downtime until someone acts, so
   # a failed smoke test returns to the release that was live before this run.

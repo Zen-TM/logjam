@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
-import { messageFromError, ApiError } from "./apiErrors.js";
+import {
+  messageFromError,
+  ApiError,
+  SIGNUP_CAP_MESSAGE,
+  SIGNUP_CAP_SENTENCE,
+} from "./apiErrors.js";
 
 describe("messageFromError", () => {
   it("prefers a server-supplied message on an ApiError", () => {
@@ -66,5 +72,41 @@ describe("messageFromError", () => {
   it("returns the fallback for an unknown error", () => {
     expect(messageFromError(new Error("weird"), "fallback")).toBe("fallback");
     expect(messageFromError("a string", "fallback")).toBe("fallback");
+  });
+});
+
+describe("the sign-up cap", () => {
+  const cognito = (message: string) =>
+    Object.assign(new Error(message), {
+      name: "UserLambdaValidationException",
+    });
+
+  // Mutation: match on the exception name alone and any other trigger's
+  // failure tells people Logjam is full.
+  it("maps the pre sign-up refusal, and only that, to the closed-for-the-month sentence", () => {
+    expect(
+      messageFromError(
+        cognito(`PreSignUp failed with error ${SIGNUP_CAP_SENTENCE}.`),
+        "fallback",
+      ),
+    ).toBe(SIGNUP_CAP_MESSAGE);
+    expect(
+      messageFromError(
+        cognito("CustomEmailSender failed with error boom."),
+        "fallback",
+      ),
+    ).toBe("fallback");
+  });
+
+  // Mutation: reword the sentence in either place alone.
+  it("matches the sentence the Lambda throws", () => {
+    const lambda = readFileSync(
+      new URL(
+        "../../infra/lambda/cognito-pre-signup/src/index.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(lambda).toContain(`CAP_MESSAGE = "${SIGNUP_CAP_SENTENCE}"`);
   });
 });

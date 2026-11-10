@@ -104,6 +104,17 @@ locals {
   # referenced by name, never managed (logging.tf's header).
   eb_api_stdout_log_group = "/aws/elasticbeanstalk/${aws_elastic_beanstalk_environment.api.name}/var/log/eb-docker/containers/eb-current-app/stdouterr.log"
 
+  # The group of the API that CloudFront sends users to, for the filters that
+  # read the request log: Elastic Beanstalk's, or the brain's once brain_public
+  # moves the origin (not brain_serving: between the two the brain's API runs
+  # but serves nobody, and the filters would go blind to the one that does).
+  # The brain's container logs through Docker's awslogs driver, which ships
+  # each stdout line as one event, the same pino JSON line EB's stdouterr.log
+  # holds, so the filter patterns match both. A filter's group is fixed at
+  # creation: moving it replaces the filter, a few seconds without a datapoint.
+  # Guard: brain_public_moves_the_api_log_filters.
+  api_log_group = var.brain_public ? aws_cloudwatch_log_group.brain_api.name : local.eb_api_stdout_log_group
+
   alarms_doc = "https://github.com/Zen-TM/logjam/blob/main/docs/operations/alarms.md"
 }
 
@@ -113,10 +124,11 @@ locals {
 # CloudFront's 5xxErrorRate: CloudFront publishes only in us-east-1, where this
 # topic cannot be an alarm action, and a rate over a handful of requests is
 # 100% after one failure. A dead container writes no log line, so it cannot
-# raise this count; api_environment_degraded below covers that case.
+# raise this count; api_environment_degraded below covers that case, and the
+# watchdog (brain_watchdog.tf) once the brain serves.
 resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   name           = "logjam-api-5xx"
-  log_group_name = local.eb_api_stdout_log_group
+  log_group_name = local.api_log_group
   pattern        = "{ $.res.statusCode >= 500 }"
 
   metric_transformation {
@@ -163,6 +175,14 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 # a deploy's cold restart is Severe for a minute or two, so a shorter window
 # would page on every release. Maximum, not Minimum, so a container that
 # restarts and dies again inside each minute still counts.
+#
+# Once brain_public moves CloudFront to the brain this environment idles until
+# its teardown, so the alarm stops paging (actions_enabled) and stays: a
+# rollback that sends CloudFront back to it needs the alarm watching it, and
+# reverting brain_public turns the actions on again in the same apply. The
+# brain's own crash-loop and dead-host cases are the watchdog's (api_unready,
+# status_missing) and the EC2 status-check alarms (brain_alarms.tf). Guard:
+# brain_public_moves_the_api_log_filters.
 resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
   alarm_name        = "logjam-api-environment-degraded"
   alarm_description = "Elastic Beanstalk ${aws_elastic_beanstalk_environment.api.name} has been Degraded or Severe for 10 minutes. First: read the environment's health causes (console or `aws elasticbeanstalk describe-environment-health --environment-name ${aws_elastic_beanstalk_environment.api.name} --attribute-names All`); if a deploy just ran, roll it back (docs/operations/rollback.md). ${local.alarms_doc}"
@@ -180,8 +200,9 @@ resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
   threshold           = 20
   treat_missing_data  = "missing"
 
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
+  actions_enabled = !var.brain_public
+  alarm_actions   = [aws_sns_topic.alerts.arn]
+  ok_actions      = [aws_sns_topic.alerts.arn]
 }
 
 # ── Workers ────────────────────────────────────────────────────────────────

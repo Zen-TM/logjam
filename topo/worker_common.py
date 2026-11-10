@@ -31,6 +31,12 @@ def compose_database_url() -> str:
     User and password are URL-quoted (safe="") because RDS-generated passwords
     contain characters like "!" that aren't valid unescaped in a URL. Fails
     loud, listing missing var NAMES only (never values).
+
+    A connect timeout and TCP keepalives are always set, so a replaced database
+    host does not leave a worker on a dead socket. DATABASE_SSL_CA (the path
+    the API's own client also reads) turns on `sslmode=verify-full` against that
+    file; unset, or with DATABASE_SSL=disable (local workers, ADR 0001), the
+    connection negotiates TLS as libpq does by default.
     """
     host = os.environ.get("DB_HOST")
     name = os.environ.get("DB_NAME")
@@ -53,9 +59,20 @@ def compose_database_url() -> str:
             f"Missing required environment variables for database connection: {', '.join(missing)}"
         )
 
+    params = [
+        "connect_timeout=10",
+        "keepalives=1",
+        "keepalives_idle=30",
+        "keepalives_interval=10",
+        "keepalives_count=3",
+    ]
+    ca = os.environ.get("DATABASE_SSL_CA")
+    if ca and os.environ.get("DATABASE_SSL") != "disable":
+        params += ["sslmode=verify-full", f"sslrootcert={quote(ca, safe='/')}"]
+
     return (
         f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{host}:{port}/{name}"
+        f"@{host}:{port}/{name}?{'&'.join(params)}"
     )
 
 

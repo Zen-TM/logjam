@@ -14,10 +14,16 @@ The Lambda is the exception: its types must match its own runtime, not the
 toolchain, because AWS decides when a runtime exists. That pair is checked
 against `lambda_cognito_email.tf` instead.
 
+A Node Lambda is any directory under `infra/lambda` with a `package.json`, so a
+new one is checked without being listed here. It is also installed by
+`make setup`, built by the plan, apply and drift workflows and watched by
+Dependabot: each of those files must name its directory.
+
 Mutations that turn the self-test red: a workflow pin behind mise, the api
 image behind mise, an @types/node pin ahead of mise, and the Lambda's types
 disagreeing with its runtime, the Lambda's esbuild target disagreeing with its
-runtime, a setup-node step with no node-version, and a pin class that matches nothing (a regex
+runtime, a setup-node step with no node-version, a Lambda directory one of
+those files does not name, and a pin class that matches nothing (a regex
 that stops matching must not pass the check by checking nothing).
 """
 
@@ -34,6 +40,20 @@ MISE_PIN = re.compile(r'^\s*node\s*=\s*"([^"]+)"', re.MULTILINE)
 RUNTIME = re.compile(r'runtime\s*=\s*"nodejs(\d+)\.x"')
 
 ROOT = Path(__file__).resolve().parents[2]
+# Every file that names each Node Lambda's directory.
+REGISTERED_IN = (
+    "Makefile",
+    ".github/dependabot.yml",
+    ".github/workflows/terraform-plan.yml",
+    ".github/workflows/terraform-apply.yml",
+    ".github/workflows/terraform-drift.yml",
+)
+
+
+def lambdas(root):
+    """The pre sign-up function takes its runtime from the email sender's
+    (cognito_signup_cap.tf), so one runtime check covers every Lambda."""
+    return sorted(p.parent.name for p in (root / "infra/lambda").glob("*/package.json"))
 
 
 def major(value):
@@ -54,11 +74,12 @@ def find(paths, pattern):
 
 def pins(root):
     mise = MISE_PIN.search((root / "mise.toml").read_text())
+    names = lambdas(root)
     runtime = RUNTIME.search(
         (root / "infra/terraform/envs/prod/lambda_cognito_email.tf").read_text()
     )
     lambda_types = find(
-        [root / "infra/lambda/cognito-email-sender/package.json"], TYPES_PIN
+        [root / f"infra/lambda/{name}/package.json" for name in names], TYPES_PIN
     )
     workflows = sorted((root / ".github/workflows").glob("*.yml"))
     unpinned = [
@@ -67,9 +88,18 @@ def pins(root):
         if len(SETUP_NODE.findall(path.read_text())) != len(find([path], WORKFLOW_PIN))
     ]
     target = find(
-        [root / "infra/lambda/cognito-email-sender/build.mjs"], ESBUILD_TARGET
+        [root / f"infra/lambda/{name}/build.mjs" for name in names], ESBUILD_TARGET
     )
     return {
+        "lambdas": names,
+        "unregistered": [
+            (path, name)
+            for path in REGISTERED_IN
+            for name in names
+            if not re.search(
+                rf"infra/lambda/{re.escape(name)}(?![\w-])", (root / path).read_text()
+            )
+        ],
         "unpinned": unpinned,
         "lambda_target": [value for _, _, value in target],
         "mise": major(mise.group(1)) if mise else None,
@@ -105,13 +135,20 @@ def problems(found):
         return errors
     for path in found["unpinned"]:
         errors.append(f"{path}: a setup-node step has no node-version")
-    if found["lambda_target"] != [found["lambda_runtime"]]:
+    if not found["lambdas"]:
+        errors.append("no Lambda found under infra/lambda: its pattern matches nothing")
+    for path, name in found["unregistered"]:
+        errors.append(
+            f"{path}: does not name infra/lambda/{name} (make setup installs every "
+            "Node Lambda, plan, apply and drift build it, Dependabot watches it)"
+        )
+    if found["lambda_target"] != [found["lambda_runtime"]] * len(found["lambdas"]):
         errors.append(
             f"build.mjs esbuild target node{found['lambda_target']} != Lambda "
             f"runtime nodejs{found['lambda_runtime']}.x"
         )
-    if not found["lambda_types"]:
-        errors.append("the Lambda has no @types/node pin")
+    if len(found["lambda_types"]) != len(found["lambdas"]):
+        errors.append("a Lambda has no @types/node pin")
     for path, number, value in found["lambda_types"]:
         if value != found["lambda_runtime"]:
             errors.append(
@@ -123,13 +160,15 @@ def problems(found):
 
 def self_test():
     base = {
+        "lambdas": ["a", "b"],
+        "unregistered": [],
         "unpinned": [],
-        "lambda_target": ["22"],
+        "lambda_target": ["22", "22"],
         "mise": "26",
         "workflows": [(Path("ci.yml"), 1, "26")],
         "docker": [(Path("api/Dockerfile"), 1, "26-slim")],
         "types": [(Path("frontend/package.json"), 1, "^26.6.5")],
-        "lambda_types": [(Path("package.json"), 1, "22")],
+        "lambda_types": [(Path("package.json"), 1, "22")] * 2,
         "lambda_runtime": "22",
     }
     cases = [
@@ -148,10 +187,35 @@ def self_test():
         (
             "the Lambda's types ahead of its runtime",
             "fail",
-            {"lambda_types": [(Path("package.json"), 1, "26")]},
+            {
+                "lambda_types": [
+                    (Path("package.json"), 1, "22"),
+                    (Path("package.json"), 1, "26"),
+                ]
+            },
+        ),
+        (
+            "a Lambda with no @types/node pin",
+            "fail",
+            {"lambda_types": [(Path("package.json"), 1, "22")]},
         ),
         ("a setup-node with no pin", "fail", {"unpinned": [Path("ci.yml")]}),
-        ("the esbuild target ahead of the runtime", "fail", {"lambda_target": ["26"]}),
+        (
+            "the esbuild target ahead of the runtime",
+            "fail",
+            {"lambda_target": ["22", "26"]},
+        ),
+        ("a Lambda with no esbuild target", "fail", {"lambda_target": ["22"]}),
+        (
+            "a Lambda the Makefile does not name",
+            "fail",
+            {"unregistered": [("Makefile", "b")]},
+        ),
+        (
+            "no Lambda found",
+            "fail",
+            {"lambdas": [], "lambda_target": [], "lambda_types": []},
+        ),
         ("no mise pin", "fail", {"mise": None}),
         ("no workflow pins found", "fail", {"workflows": []}),
         ("no api image pin found", "fail", {"docker": []}),

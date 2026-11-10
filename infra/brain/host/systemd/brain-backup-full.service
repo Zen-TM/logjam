@@ -1,0 +1,8 @@
+[Unit]
+Description=Nightly full backup, then expire
+After=brain-boot.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+ExecStart=/opt/brain/host/backup-full.sh

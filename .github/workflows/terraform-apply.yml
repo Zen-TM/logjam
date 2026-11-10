@@ -32,6 +32,10 @@ on:
       - "infra/terraform/templates/**"
       - "infra/terraform/envs/github/**"
       - "infra/lambda/**"
+      - "infra/brain/**"
+      - "!infra/brain/postgres/**"
+      - "!infra/brain/tests/**"
+      - "!infra/brain/api.env"
       - "infra/scripts/plan-summary*"
       - ".github/workflows/terraform-plan.yml"
       - ".github/workflows/terraform-plan-sign.yml"
@@ -131,6 +135,9 @@ jobs:
           node-version: 26
       - name: Build cognito-email-sender Lambda
         working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm run build
+      - name: Build cognito-pre-signup Lambda
+        working-directory: infra/lambda/cognito-pre-signup
         run: npm ci && npm run build
 
       - name: terraform init

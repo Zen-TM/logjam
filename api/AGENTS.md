@@ -51,8 +51,15 @@
   thrown error: pass it through `safeErrorForLog`. Prisma renders place names
   and coordinates into its messages, which `redact.paths` cannot reach.
 - **Env is read through `getEnv()` (`lib/env.ts`).** A new variable goes in its
-  schema and in `infra/terraform/templates/env.local.tftpl`, which renders
-  `.env.local`.
+  schema; one with no default also goes in
+  `infra/terraform/templates/env.local.tftpl`, which renders `.env.local`
+  (`lib/env.unit.test.ts`).
+- **A background sweep runs inside `startTopoJobReaper`'s tick, never on its
+  own timer:** the tick runs only in the process holding the database's
+  advisory lock (`lib/sweepLeader.ts`), so two API processes never sweep
+  twice. Guards: `lib/topoJobReaper.leader.unit.test.ts` (a tick goes through
+  the leader), `lib/noOwnTimer.unit.test.ts` (no other `setInterval`),
+  `src/__tests__/sweepLeader.test.ts`.
 - **AWS clients are the singletons in `services/awsClients.ts`:** they honour
   `AWS_ENDPOINT_URL`, so local dev stays on MiniStack.
 
@@ -86,10 +93,10 @@
 
 ## Testing
 
-| Suite       | Command                                           | Needs                                                |
-| ----------- | ------------------------------------------------- | ---------------------------------------------------- |
-| unit        | `npm run test:unit` (`*.unit.test.ts`, colocated) | nothing; a unit test that needs a server is misfiled |
-| integration | `npm test` (`src/__tests__/*.test.ts`)            | a running local API (`make dev`); it starts none     |
+| Suite       | Command                                           | Needs                                                             |
+| ----------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| unit        | `npm run test:unit` (`*.unit.test.ts`, colocated) | nothing; a unit test that needs the API or a database is misfiled |
+| integration | `npm test` (`src/__tests__/*.test.ts`)            | a running local API (`make dev`); it starts none                  |
 
 - Unit tests mock Prisma (`vi.mock("../services/prisma")`) and the `@aws-sdk/*`
   modules. Don't unit-test a thin Prisma/AWS pass-through; integration covers

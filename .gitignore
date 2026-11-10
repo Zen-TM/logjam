@@ -18,6 +18,8 @@ __pycache__/
 # Terraform var files may carry secrets
 *.tfvars
 *.auto.tfvars
+# The brain's switches carry no secret, and the deploy workflows read the file.
+!infra/terraform/envs/prod/brain.auto.tfvars
 
 # Sanitised prod DB dumps written by `make snapshot`
 snapshots/*.sql

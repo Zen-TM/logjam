@@ -3,11 +3,11 @@ import {
   say,
   currentMonthStart,
   nextMonthReset,
-  WORKER_SPECS,
   estimateCredits,
   type WorkerKind,
 } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
+import { getEnv } from "./env";
 import type { DbClient } from "./storageQuota";
 
 /**
@@ -23,6 +23,9 @@ import type { DbClient } from "./storageQuota";
  * a purely on-completion charge would allow: without it, a user could hold
  * five 3-hour exports open and show zero usage the entire time.
  *
+ * What deleting a job would erase is the one thing that is stored: a delete
+ * trigger carries the row's credits over (see `creditsUsedThisMonth`).
+ *
  * Deliberately NOT reserve-then-reconcile: nothing is written at submit, so
  * there is no reservation to leak when a job dies between the pre-check and
  * the launch. The residual overshoot is bounded by the per-user concurrency
@@ -30,13 +33,15 @@ import type { DbClient } from "./storageQuota";
  * once, at a month boundary.
  */
 
-const VCPUS = {
-  topo: WORKER_SPECS.topo.vcpus,
-  topoExport: WORKER_SPECS.topoExport.vcpus,
-};
-
 /**
- * Credits used this month, summed across all three worker tables.
+ * Credits used this month by `userId`, or by every account when it is null.
+ *
+ * What rows that exist cost is derived from the job tables with the SQL
+ * functions `topo_job_credits` and `topo_export_job_credits` (migration
+ * 20261110000000_compute_usage_carryover): the same functions a delete trigger
+ * uses to carry a deleted row's credits into `compute_usage_carryover` and
+ * `site_compute_carryover`, so deleting a finished job, or a sweep deleting an
+ * export, never lowers usage. Guard: `__tests__/computeUsageCarryover.test.ts`.
  *
  * Elapsed time per job, in priority order:
  *  1. topo only — `pipeline_metrics.wallSeconds`, the worker's own measurement.
@@ -48,47 +53,55 @@ const VCPUS = {
  * started_at IS NULL means the task never launched, so uploading/pending/queued
  * rows contribute nothing and cost the user nothing.
  */
+async function creditsUsedThisMonth(
+  userId: string | null,
+  db: DbClient,
+): Promise<number> {
+  const monthStart = currentMonthStart();
+
+  const rows = await db.$queryRaw<
+    { derived: bigint | null; carried: bigint | null }[]
+  >`
+    SELECT
+      (SELECT COALESCE(SUM(credits), 0)::bigint FROM (
+        SELECT topo_job_credits(status, pipeline_metrics, started_at, updated_at) AS credits
+        FROM topo_jobs
+        WHERE started_at IS NOT NULL
+          AND started_at >= ${monthStart}
+          AND (${userId}::text IS NULL OR user_id = ${userId})
+
+        UNION ALL
+
+        SELECT topo_export_job_credits(status, completed_at, started_at)
+        FROM topo_export_jobs
+        WHERE started_at IS NOT NULL
+          AND started_at >= ${monthStart}
+          AND (${userId}::text IS NULL OR user_id = ${userId})
+      ) AS per_job) AS derived,
+      (SELECT COALESCE(SUM(credits), 0)::bigint FROM (
+        SELECT credits FROM compute_usage_carryover
+        WHERE ${userId}::text IS NOT NULL AND user_id = ${userId}
+          AND month_start >= ${monthStart}
+        UNION ALL
+        SELECT credits FROM site_compute_carryover
+        WHERE ${userId}::text IS NULL AND month_start >= ${monthStart}
+      ) AS carried_over) AS carried
+  `;
+
+  // A clock skew that puts completed_at before started_at would make a job's
+  // contribution negative and could mask real usage. Floor the derived total at
+  // 0; the carry-over is never negative.
+  return (
+    Math.max(0, Number(rows[0]?.derived ?? 0)) + Number(rows[0]?.carried ?? 0)
+  );
+}
+
 export async function getMonthlyCreditUsage(
   userId: string,
   monthlyComputeCredits: number,
   db: DbClient = prisma,
 ) {
-  const monthStart = currentMonthStart();
-
-  const rows = await db.$queryRaw<{ credits: bigint | null }[]>`
-    SELECT COALESCE(SUM(credits), 0)::bigint AS credits
-    FROM (
-      SELECT CEIL(
-        ${VCPUS.topo}::numeric * COALESCE(
-          NULLIF((pipeline_metrics ->> 'wallSeconds'), '')::numeric,
-          EXTRACT(EPOCH FROM (
-            CASE WHEN status IN ('complete', 'failed') THEN updated_at ELSE NOW() END
-            - started_at
-          ))
-        ) / 60.0
-      ) AS credits
-      FROM topo_jobs
-      WHERE user_id = ${userId}
-        AND started_at IS NOT NULL
-        AND started_at >= ${monthStart}
-
-      UNION ALL
-
-      SELECT CEIL(
-        ${VCPUS.topoExport}::numeric
-        * EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - started_at))
-        / 60.0
-      )
-      FROM topo_export_jobs
-      WHERE user_id = ${userId}
-        AND started_at IS NOT NULL
-        AND started_at >= ${monthStart}
-    ) AS per_job
-  `;
-
-  // A clock skew that puts completed_at before started_at would make a job's
-  // contribution negative and could mask real usage. Floor the total at 0.
-  const used = Math.max(0, Number(rows[0]?.credits ?? 0));
+  const used = await creditsUsedThisMonth(userId, db);
 
   return {
     used,
@@ -96,6 +109,31 @@ export async function getMonthlyCreditUsage(
     remaining: Math.max(0, monthlyComputeCredits - used),
     resetAt: nextMonthReset().toISOString(),
   };
+}
+
+/** Credits used this month by every account, deleted ones included. */
+export function getSiteCreditUsage(db: DbClient = prisma): Promise<number> {
+  return creditsUsedThisMonth(null, db);
+}
+
+/** What a refusal for the site-wide pool says. */
+const POOL_SPENT_SENTENCE = say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
+
+/**
+ * Whether the site-wide pool is spent, or cannot hold a job of `projected`
+ * credits (null = no estimate: refused only once spent).
+ */
+async function poolHasNoRoomFor(
+  projected: number | null,
+  db: DbClient = prisma,
+): Promise<boolean> {
+  const poolCap = getEnv().SITE_MONTHLY_COMPUTE_CREDITS;
+  if (poolCap === 0) return false;
+  const siteUsed = await getSiteCreditUsage(db);
+  return (
+    siteUsed >= poolCap ||
+    (projected !== null && siteUsed + projected > poolCap)
+  );
 }
 
 /**
@@ -144,5 +182,19 @@ export async function assertHasCredits(
         resetAt: usage.resetAt,
       },
     );
+  }
+
+  // The site-wide pool, after the user's own allowance so a user over their own
+  // is told that. Only the reset date goes back: the pool's size and use are not
+  // the user's to see, and AppErrorDetails is a whitelist.
+  //
+  // ponytail: no reservation. A job counts at its elapsed time, and the pool is
+  // not serialised across users, so jobs admitted just under the cap keep
+  // running past it: at most MAX_CONCURRENT_WORKER_VCPUS (24) for the longest
+  // reaper ceiling (TOPO_REAPER_PROCESSING_TIMEOUT_MS, 6 h), 8640 credits,
+  // about US$8.60. Reserve each job's credits at its reaper deadline when that
+  // matters (issue #567).
+  if (await poolHasNoRoomFor(projected, db)) {
+    throw new AppError(429, POOL_SPENT_SENTENCE, { resetAt: usage.resetAt });
   }
 }

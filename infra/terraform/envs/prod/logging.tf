@@ -85,7 +85,7 @@ resource "aws_cloudwatch_log_group" "rds_postgresql" {
 # emits too many distinct values, which bounds anyone sending made-up versions.
 resource "aws_cloudwatch_log_metric_filter" "sync_client" {
   name           = "logjam-sync-client"
-  log_group_name = local.eb_api_stdout_log_group
+  log_group_name = local.api_log_group
   pattern        = "{ $.msg = \"sync_client\" && $.client_platform = \"mobile\" }"
 
   metric_transformation {
