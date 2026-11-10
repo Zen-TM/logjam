@@ -669,10 +669,18 @@ check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 #   postgres/drill.sh: one more key in the verdict;
 #   postgres/drill.sh: not reading the task role's credentials;
 #   postgres/drill.sh: dropping the `pg_ctl status` liveness check in the recovery wait (error timed_out, not start_failed);
-#   postgres/drill.sh: `LAG=$((recovered - at))` -> `LAG=$((START - at))` (reads 0 when the canary is replayed).
+#   postgres/drill.sh: `LAG=$((recovered - at))` -> `LAG=$((START - at))` (reads 0 when the canary is replayed);
+#   postgres/drill.sh: the `replay_short` line deleted (a restore that replayed nothing says ok);
+#   postgres/drill.sh: the three `set enable_... = off` statements dropped from the counts' session;
+#   postgres/drill.sh: the `[ -z "$tables" ]` return deleted (an empty `public` fails on _prisma_migrations);
+#   postgres/drill.sh: the `_prisma_migrations` read deleted (tables with no migrations table say ok);
+#   postgres/drill.sh: the stdin-fed psql run deleted (tables_read counts the list, not the run);
+#   postgres/drill.sh: the `canary_unreadable` guard deleted;
+#   postgres/drill.sh: `RESTORE_SECONDS=$((recovered - t0))` -> `RESTORE_SECONDS=-1`.
 S="11 the restore drill"
 serving off; agent # the API's own connections would hide a drill that reached the live Postgres in its log
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
+canary_segment=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
@@ -708,6 +716,7 @@ check "drill.json has exactly the allowlisted keys" \
 check "it says ok" [ "$(drill_field ok)" = True ]
 check "...with no error" [ "$(drill_field error)" = None ]
 check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
+check "restore_seconds is a whole number of seconds, 0 or more" [[ "$(drill_field restore_seconds)" =~ ^[0-9]+$ ]]
 # canary_lag_seconds: the canary's age when recovery ended, i.e. what losing the disk then would have cost.
 # Healthy archiving: seconds here (status.sh ran just before), never 0, which is what measuring from the drill's start gives.
 lag=$(drill_field canary_lag_seconds)
@@ -744,6 +753,50 @@ chmod 755 "$WORK/psql-stub"
 drill "$BACKUPS" -e BRAIN_DRILL_TIMEOUT=90 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -v "$WORK/psql-stub:/usr/local/bin/psql:ro"; rc=$?
 check "a server killed in recovery: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
 check "...and says start_failed, not timed_out" [ "$(drill_field error)" = start_failed ]
+
+# What the drill does with each thing it reads, shown with a stand-in psql that fails or empties one query
+# (STUB names which) and keeps what the drill feeds it on stdin. Everything else goes to the real psql.
+cat > "$WORK/psql-stub" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *brain.canary*) [ "$STUB" = canary ] && exit 1 ;;
+  *pg_tables*) [ "$STUB" = empty ] && exit 0 ;;
+  *_prisma_migrations*) case "$STUB" in empty | nomig) exit 1 ;; esac ;;
+  *" -c "*) ;;
+  *) cat > /stubout/stdin; [ "$STUB" = stdin_fails ] && exit 1; exec /usr/bin/psql "$@" < /stubout/stdin ;;
+esac
+exec /usr/bin/psql "$@"
+EOF
+mkdir -m 777 "$WORK/stubout"
+stub() { drill "$BACKUPS" -e STUB="$1" -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -v "$WORK/psql-stub:/usr/local/bin/psql:ro" -v "$WORK/stubout:/stubout"; }
+# The three settings must precede the first count, or an index-only scan can skip the heap's checksums.
+fed_settings_first() { r awk '/^select count/ { seen = 1; exit } /enable_indexonlyscan = off/ { a = 1 } /enable_indexscan = off/ { b = 1 } /enable_bitmapscan = off/ { c = 1 } END { exit !(seen && a && b && c) }' "$WORK/stubout/stdin"; }
+stub canary; rc=$?
+check "the canary cannot be read: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and canary_unreadable" [ "$(drill_field error)" = canary_unreadable ]
+stub nomig; rc=$?
+check "tables but no _prisma_migrations: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and migrations_unreadable" [ "$(drill_field error)" = migrations_unreadable ]
+stub empty; rc=$?
+check "an empty public (a brain before the cutover's copy): exit 0 (got $rc)" [ "$rc" = 0 ]
+check "...ok, with no error" [ "$(drill_field ok)/$(drill_field error)" = True/None ]
+check "...and no table read" [ "$(drill_field tables_read)" = 0 ]
+stub stdin_fails; rc=$?
+check "the counts fail: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...tables_unreadable, ok false, and no tables_read" [ "$(drill_field error)/$(drill_field ok)/$(drill_field tables_read)" = tables_unreadable/False/None ]
+check "the counts' session turns off the index scans first" fed_settings_first
+
+# A restore whose WAL replay stops short promotes without an error. A copy of the repository with the WAL from the
+# canary's segment on removed replays nothing after the base backup, and a lag bound of 10 s tells that from a restore
+# that took a while (the real bound is 900 s; the canary before this one is minutes old).
+aws s3 mb "s3://e2e-short" > /dev/null
+aws s3 sync "s3://$BACKUPS" "s3://e2e-short" --only-show-errors
+aws s3 ls "s3://e2e-short/archive/" --recursive | awk -v from="$canary_segment" '{ n = split($4, a, "/"); if (a[n] ~ /^[0-9A-F]{24}-/ && substr(a[n], 1, 24) >= from) print $4 }' \
+  | while read -r key; do aws s3 rm "s3://e2e-short/$key" --only-show-errors; done
+drill e2e-short -e BRAIN_DRILL_MAX_LAG=10 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
+check "a restore that replayed nothing after the backup: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and says replay_short" [ "$(drill_field error)" = replay_short ]
+aws s3 rb "s3://e2e-short" --force > /dev/null
 
 # An empty repository is a failed drill, said in a fixed code.
 drill e2e-empty -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
