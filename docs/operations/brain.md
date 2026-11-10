@@ -252,15 +252,19 @@ the brain serves nobody until the cutover.
    aws ssm wait command-executed --command-id "$CID" --instance-id "$IID"
    aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" \
      --query StandardOutputContent --output text > infra/brain/brain-ca.pem
+   cp infra/brain/brain-ca.pem topo/brain-ca.pem
    openssl x509 -in infra/brain/brain-ca.pem -noout -subject -enddate -ext subjectAltName
    ```
+
+   The second copy is for the topo worker image, whose build cannot reach
+   outside `topo/`; CI fails if the two files differ.
 
    Look for a subject and one `DNS:` name equal to `ec2-…ap-southeast-2.compute.amazonaws.com`
    (`terraform -chdir=infra/terraform/envs/prod output brain_public_dns` prints the
    same name), plus
    `postgres` and `localhost`, and an end date ten years out. The file is
    public, so it is safe to commit. The rehearsal copy (step 9) then proves it is
-   the brain's: a wrong file fails verification and the copy refuses. Commit it to
+   the brain's: a wrong file fails verification and the copy refuses. Commit both copies to
    the draft branch, take it out of draft, merge. That deploys the API image and,
    because the change touches `topo/`, the topo worker image: check both
    deploys went green, and that the images carry it (not yet run anywhere):
