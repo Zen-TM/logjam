@@ -62,8 +62,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The brain host** (`brain/host/`, `brain/compose.yaml`) holds a database's
   disk. `boot.sh` formats only a device blank to `blkid`, `wipefs` and a zeroed
   first MiB, and starts Postgres with `BRAIN_INIT=bootstrap` only when the
-  flag is exactly `1`; keep both, and keep `create_host_path: false` on the
-  data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
+  tag is exactly `1` and the backup repository is positively empty (`pgbackrest
+  info` exits 0 for an unreachable one: read its JSON); keep both, and keep
+  `create_host_path: false` on the data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
   on a loop device; each mutation it names turns it red.
 - **The brain's instance exists only while `var.brain_pg_image_tag` is set**:
   with the default, no instance, data volume, Elastic IP or alarm is planned

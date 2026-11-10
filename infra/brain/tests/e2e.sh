@@ -28,6 +28,10 @@
 #   host/agent.sql: GRANT ALL ON brain.canary [1]
 #   compose.yaml: dropping BRAIN_BACKUP_PG_USER (pgBackRest connects as the superuser) [2]
 #   host/status.sh: dropping `SELECT pg_switch_wal()` [8b]
+#   host/boot.sh: an unreadable repository read as empty (`elif stanzas and all(` -> `elif True or all(`) [3]
+#   host/boot.sh: dropping the pg_control check (`-e /data/postgres/global/pg_control` -> `-e /nonexistent`) [8c]
+#   host/boot.sh: the restart baseline (`"true $restarts"` -> `"true 0"`) [2]
+#   host/release-agent.sh: keeping the new api.env after a failed `compose up` (no `rm -f`) [7]
 #   host/boot.sh: ignoring the restore marker (`if [ -e "$marker" ]` -> `if false`) [8c]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
@@ -112,6 +116,7 @@ status_field() { aws s3 cp "s3://$SIGNALS/status.json" - | python3 -c 'import js
 fingerprint() { r openssl x509 -in /data/postgres/server.crt -noout -fingerprint -sha256; }
 ready() { curl -fsS -o /dev/null -m 3 http://127.0.0.1:80/ready; }
 api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | grep -qx "$1"; }
+pg_ready() { r docker exec "$(cid postgres)" pg_isready -q -h 127.0.0.1; }
 pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | grep -qx "$1"; }
 superuser_connected() { # <extra docker logs args>
   r docker logs "$@" "$(cid postgres)" 2>&1 | grep -q 'connection authorized: user=postgres'
@@ -222,6 +227,7 @@ AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 BRAIN_BACKUP_ENDPOINT=host.docker.internal:$TLS_PORT
 BRAIN_COMPOSE_EXTRA=/opt/brain/tests/compose.test.yaml
+BRAIN_REPO_WAIT=1
 BRAIN_SERVING_FILE=/run/brain-e2e-serving
 BRAIN_BOOTSTRAP_FILE=/run/brain-e2e-bootstrap
 EOF
@@ -256,6 +262,19 @@ r rm -f /run/brain-e2e-bootstrap; refused "no bootstrap tag"
 r mkdir /run/brain-e2e-bootstrap; refused "an unreadable bootstrap tag"; r rmdir /run/brain-e2e-bootstrap
 check "the backup repository is still empty" [ -z "$(aws s3 ls "s3://$BACKUPS" --recursive)" ]
 check "the boot mode is refused" [ "$(cat /run/brain/boot-mode)" = refused ]
+
+# `pgbackrest info` exits 0 when the repository cannot be reached, with an empty backup list: that
+# must not read as an empty repository, or a blank volume with the tag at 1 would bootstrap.
+S="3 an unreadable repository is not an empty one"
+bootstrap_flag 1
+brain_env BRAIN_BACKUP_ENDPOINT "host.docker.internal:1"
+boot; rc=$?
+check "boot.sh exits non-zero with the tag at 1 (got $rc)" [ "$rc" != 0 ]
+check "...and names the repository" grep -q "cannot read the backup repository" "$WORK/boot.log"
+check "...creates no data directory" [ ! -e /data/postgres ]
+check "...starts no container" [ -z "$(r docker ps -aq --filter label=com.docker.compose.project=brain)" ]
+check "...and the boot mode is failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+brain_env BRAIN_BACKUP_ENDPOINT "host.docker.internal:$TLS_PORT"
 
 S="3 never formatting what has a signature"
 bootstrap_flag 0
@@ -324,6 +343,12 @@ check "the same roles and databases, nothing new" [ "$(identity)" = "$identity1"
 check "the same certificate" [ "$(fingerprint)" = "$cert1" ]
 check "no extra full backup" [ "$(fulls)" = "$fulls1" ]
 check "no API container with serving off" [ -z "$(cid api)" ]
+# A container that restarted once under its policy is healthy: its restart count is not a crash loop.
+r docker exec "$(cid postgres)" kill -QUIT 1 # an immediate shutdown: the container exits and its policy restarts it
+check "Postgres restarts by itself" wait_for 60 pg_ready
+check "...and the container's restart count is 1" [ "$(r docker inspect -f '{{.RestartCount}}' "$(cid postgres)")" = 1 ]
+boot; rc=$?
+check "boot.sh on that container, restart count 1, still succeeds (exit $rc)" [ "$rc" = 0 ]
 
 # --- 9. status.json ---------------------------------------------------------------------------
 S="9 status.json"
@@ -364,10 +389,14 @@ check "serving off with a pointer present: no API container" [ -z "$(cid api)" ]
 serving on; agent || { bad "the agent failed with serving on"; tail -5 "$WORK/agent.log"; }
 check "serving on: the API runs at the pointer's release" [ "$(api_tag)" = "$API_REPO:release-a" ]
 check "...and /ready answers 200 on port 80" wait_for 90 ready
+r /opt/brain/host/status.sh || bad "status.sh failed"
+check "status.json carries the live release" [ "$(status_field api_sha)" = release-a ]
 check "the API publishes port 80 and nothing else" \
   [ "$(r docker inspect -f '{{json .HostConfig.PortBindings}}' "$(cid api)")" = '{"8080/tcp":[{"HostIp":"","HostPort":"80"}]}' ]
 serving off; agent
 check "serving back off: the container is gone after one run" [ -z "$(cid api)" ]
+r /opt/brain/host/status.sh || bad "status.sh failed"
+check "status.json has no release then" [ "$(status_field api_sha)" = None ]
 # Anything but exactly on is off: other words, other case, an unreadable source.
 for word in yes ON true 1 "on please" ""; do
   serving on; agent; serving "$word"; agent
@@ -434,6 +463,9 @@ before=$(r cat /etc/brain/api.env)
 point release-a "BAD=a'b"; agent; rc=$?
 check "a release with an unquotable value is refused (exit $rc)" [ "$rc" != 0 ]
 check "...and changes nothing" [ "$(r cat /etc/brain/api.env)" = "$before" ]
+point release-a 'BAD=a\b'; agent; rc=$?
+check "so is one with a backslash (exit $rc)" [ "$rc" != 0 ]
+check "...and changes nothing" [ "$(r cat /etc/brain/api.env)" = "$before" ]
 
 # --- 7. releases and rollbacks -----------------------------------------------------------------------------------
 S="7 releases and rollbacks"
@@ -446,6 +478,14 @@ check "the same pointer again changes nothing" [ "$(cid api)" = "$id" ]
 point release-a; agent
 check "the old pointer: back on release-a" [ "$(api_tag)" = "$API_REPO:release-a" ]
 check "...with its environment" not api_has CORS_ORIGIN=https://b.example
+check "...and answers /ready" wait_for 90 ready
+id=$(cid api)
+point release-missing; agent; rc=$?
+check "a release whose image cannot be pulled fails (exit $rc)" [ "$rc" != 0 ]
+check "...leaves no api.env behind, so the next run tries again" not r test -e /etc/brain/api.env
+check "...and the running API is untouched" [ "$(cid api)" = "$id" ]
+point release-a; agent
+check "the next run applies the release again" [ "$(api_tag)" = "$API_REPO:release-a" ]
 check "...and answers /ready" wait_for 90 ready
 
 # --- 8. losing the disk ---------------------------------------------------------------------------------------------
@@ -525,6 +565,35 @@ reboot
 boot > /dev/null 2>&1; rc=$?
 check "an existing database is not touched by a boot without the marker (exit $rc)" [ "$rc" = 0 ]
 check "...and its extra files stay" r test -d /data/postgres/junk
+
+# A restore that did finish copying (pg_control is written last) but whose boot died before the
+# marker went: the database is complete, and a row written after the last archive push is only
+# in its pg_wal. It must start as it is, not be emptied and restored from the archive.
+S="8c a restore that finished copying"
+sql logjam "create table e2e_keep as select 1 as n" > /dev/null
+r docker kill "$(cid postgres)" > /dev/null
+r touch /data/.restore-in-progress
+reboot
+boot; rc=$?
+check "boot.sh starts the finished copy (exit $rc)" [ "$rc" = 0 ]
+check "the row written after the last archive push survived" [ "$(sql logjam 'select count(*) from e2e_keep')" = 1 ]
+check "the marker is gone" [ ! -e /data/.restore-in-progress ]
+check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
+
+# A restore whose server crash-loops: the next boot, once the cause is gone, finds the marker and
+# the finished copy, and succeeds with a new container.
+S="8d a crash-looping restore"
+lose_disk
+brain_env BRAIN_PG_FLAGS "-c no_such_setting=1"
+boot; rc=$?
+check "boot.sh stops on a server that will not start (exit $rc)" [ "$rc" != 0 ]
+check "the marker stays" [ -e /data/.restore-in-progress ]
+check "the boot mode is failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+brain_env BRAIN_PG_FLAGS "-c shared_buffers=64MB -c max_wal_size=256MB"
+boot; rc=$?
+check "the next boot, with the cause removed, succeeds (exit $rc)" [ "$rc" = 0 ]
+check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
+check "the marker is gone" [ ! -e /data/.restore-in-progress ]
 
 [ "$fails" = 0 ] || dump
 exit "$fails"

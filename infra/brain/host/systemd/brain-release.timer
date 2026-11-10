@@ -1,6 +1,6 @@
 [Unit]
 Description=Make the API match the release pointer, on a timer
-# After, not Requires: if boot.sh refuses, status.json still goes out saying so.
+# After, not Requires: boot.sh can fail late (an S3 blip) with the database fine, and Requires= would keep the API down for it.
 After=brain-boot.service
 
 [Timer]
