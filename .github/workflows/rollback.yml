@@ -5,14 +5,20 @@ name: Rollback
 # post-deploy smoke test fails. The same steps as plain AWS CLI, for when
 # GitHub Actions itself is down: docs/operations/rollback.md.
 #
-#   api:      EB back to the version labelled <sha> (every deployed sha is
+#   api:      With brain_serving off (infra/terraform/envs/prod/brain.auto.tfvars):
+#             EB back to the version labelled <sha> (every deployed sha is
 #             one), the task defs that run the API image repinned
 #             (infra/scripts/pin-release.sh) and the brain's release pointer
-#             rewritten for <sha>. No migration: the schema stays
-#             forward. rollback-compat.yml tests only the release that was live
-#             when a migration merged against it, so going back further than
-#             one release can cross a contract migration: check
-#             api/prisma/migrations/ between <sha> and live first.
+#             rewritten for <sha>. With it on: the task defs repinned and the
+#             pointer rewritten, nothing of EB's; the brain's release agent
+#             makes its API match, and the smoke test waits for it. A <sha>
+#             without infra/brain/api.env, or built before the image carried
+#             the brain's certificate, cannot be rolled back to there. No
+#             migration: the schema stays forward. rollback-compat.yml tests
+#             only the release that was live when a migration merged against
+#             it, so going back further than one release can cross a contract
+#             migration: check api/prisma/migrations/ between <sha> and live
+#             first.
 #   frontend: releases/<sha>/index.html copied over index.html. The deploy
 #             keeps old hashed assets for 30 days, so the old index.html finds
 #             its chunks. Only index.html is restored: unhashed public/ files
@@ -102,6 +108,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    outputs:
+      # Whether this run rolled the brain back (the smoke test waits longer
+      # for it), and whether the public URL can show that (see deploy-api.yml).
+      serving: ${{ steps.mode.outputs.serving }}
+      verify: ${{ steps.mode.outputs.verify }}
     env:
       TARGET: ${{ inputs.target }}
       SHA: ${{ inputs.sha }}
@@ -118,6 +129,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Which release path the API takes, from the file Terraform reads
+      # (infra/scripts/brain-setting.sh); it fails rather than guess.
+      - name: Where does the API run?
+        id: mode
+        if: inputs.target == 'api'
+        run: |
+          serving=$(infra/scripts/brain-setting.sh brain_serving)
+          public=$(infra/scripts/brain-setting.sh brain_public)
+          verify=true
+          [ "$serving" = true ] && [ "$public" != true ] && verify=false
+          echo "serving=$serving" >> "$GITHUB_OUTPUT"
+          echo "verify=$verify" >> "$GITHUB_OUTPUT"
+          echo "==> brain_serving=$serving brain_public=$public ($([ "$serving" = true ] && echo "the brain" || echo "Elastic Beanstalk"))"
+          [ "$verify" = true ] || echo "::notice::brain_public is off: the public URL is still Elastic Beanstalk's, so no smoke test can see this rollback. Check the brain through the host."
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
@@ -125,7 +151,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Roll back the API
-        if: inputs.target == 'api'
+        if: inputs.target == 'api' && steps.mode.outputs.serving != 'true'
         env:
           EB_APPLICATION: ${{ secrets.EB_APPLICATION_NAME }}
           EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
@@ -163,19 +189,41 @@ jobs:
             echo "::error::EB finished updating on $LIVE, not $SHA"; exit 1
           fi
 
+      # With the brain serving there is no EB to roll back: the API task
+      # definitions go back to the image (the migrate and script tasks), and
+      # the pointer below does the rest. The migrate definition is checked as
+      # a deploy checks it.
+      - name: Roll back the API's task definitions (the brain)
+        if: inputs.target == 'api' && steps.mode.outputs.serving == 'true'
+        run: |
+          set -euo pipefail
+          if ! aws ecr describe-images --repository-name logjam-api --image-ids "imageTag=$SHA" > /dev/null; then
+            echo "::error::logjam-api:$SHA is no longer in ECR"; exit 1
+          fi
+          infra/scripts/pin-release.sh "$REGISTRY/logjam-api:$SHA"
+          aws ecs describe-task-definition --task-definition logjam-api-migrate \
+            --query taskDefinition --output json \
+            | infra/scripts/brain-setting.sh --check-taskdef on
+
       # The brain's release pointer for the sha, with the env that sha shipped
-      # (see deploy-api.yml). A sha from before the brain has no
-      # infra/brain/api.env: nothing to point at, so skip. The pointer is
-      # written after EB is back, and only when it is.
+      # (see deploy-api.yml). With EB serving, a sha from before the brain has
+      # no infra/brain/api.env: nothing to point at, so skip, and the pointer
+      # is written after EB is back, and only when it is. With the brain
+      # serving the pointer is the whole rollback, so that sha is an error.
       - name: Point the brain at the rolled-back release
         if: inputs.target == 'api'
         env:
           SIGNALS_BUCKET: logjam-brain-signals-${{ secrets.AWS_ACCOUNT_ID }}
+          SERVING: ${{ steps.mode.outputs.serving }}
         run: |
           set -euo pipefail
           # The checkout is shallow and may not hold the sha.
           git fetch --depth=1 origin "$SHA"
           if ! git cat-file -e "FETCH_HEAD:infra/brain/api.env" 2> /dev/null; then
+            if [ "$SERVING" = true ]; then
+              echo "::error::$SHA predates the brain (no infra/brain/api.env): the brain has no release to run for it, so it cannot be rolled back to there"
+              exit 1
+            fi
             echo "::notice::$SHA predates the brain (no infra/brain/api.env), so there is no release pointer to write"
             exit 0
           fi
@@ -226,8 +274,9 @@ jobs:
     # !cancelled(), as on rollback: a deploy's automatic rollback skips
     # preflight, and without it the implicit success() skips this smoke
     # test too, leaving the restored release unchecked.
-    if: ${{ !cancelled() && needs.rollback.result == 'success' && inputs.target != 'worker' }}
+    if: ${{ !cancelled() && needs.rollback.result == 'success' && inputs.target != 'worker' && needs.rollback.outputs.verify != 'false' }}
     uses: ./.github/workflows/smoke.yml
     with:
       target: ${{ inputs.target }}
       sha: ${{ inputs.sha }}
+      attempts: ${{ needs.rollback.outputs.serving == 'true' && 30 || 18 }}

@@ -47,7 +47,10 @@ A metric filter counts every line of the API's request log (pino-http, in the
 Elastic Beanstalk group
 `/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log`)
 whose `res.statusCode` is 500 or more, as metric `Responses5xx` in namespace
-`Logjam/Api`.
+`Logjam/Api`. Once `brain_public` is set in `brain.auto.tfvars` and CloudFront
+sends users to the brain, the filter reads the brain's group
+`/logjam/brain/api` instead (the same JSON lines); moving it replaces the
+filter, a few seconds without a datapoint.
 
 Why these numbers: one phone whose sync keeps failing retries on a backoff
 from 1 second to 5 minutes, so it sends about ten requests in its first few
@@ -70,7 +73,12 @@ writes no log line. The next alarm covers that.
 Elastic Beanstalk's enhanced health rolls the instance, the container and
 the share of failing requests into one status. The alarm fires when it has
 been Degraded or Severe for ten minutes. A deploy restarts the API cold and
-shows Severe for a minute or two, which is why the window is ten.
+shows Severe for a minute or two, which is why the window is ten. Once
+`brain_public` moves CloudFront to the brain, this environment idles until its
+teardown: the alarm stays but its actions are disabled, so it does not page,
+and reverting `brain_public` (a rollback to Elastic Beanstalk) enables them
+again. A crash loop or dead host of the brain's API is the watchdog's
+(`api_unready`) and the EC2 status-check alarms.
 
 1. Read why: Elastic Beanstalk console → `logjam-api-prod` → Health, or
    `aws elasticbeanstalk describe-environment-health --environment-name logjam-api-prod --attribute-names All`.

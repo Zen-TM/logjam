@@ -35,7 +35,7 @@
 # scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
 # infra/brain/ from terraform fails "terraform: a brain host file its guards read"; dropping infra/lambda/brain-watchdog/ from terraform fails "terraform: the watchdog source the plan zips"; a scoped job in any workflow whose
 # scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; a scoped job in any workflow whose
+# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; narrowing terraform to .tf files fails "terraform: the brain's settings file"; a scoped job in any workflow whose
 # `if:` is not the fail-open expression, or a `changes` output wired to another
 # area's value, fails that workflow's checks.
 set -uo pipefail
@@ -164,6 +164,7 @@ self_test() {
   check "rollback_compat: its workflow"                   rollback_compat true  0 '.github/workflows/rollback-compat.yml'
   check "rollback_compat: the schema alone"               rollback_compat false 0 'api/prisma/schema.prisma'
   check "terraform: a root"                               terraform true  0 'infra/terraform/envs/prod/ecs.tf'
+  check "terraform: the brain's settings file"            terraform true  0 'infra/terraform/envs/prod/brain.auto.tfvars'
   check "terraform: the plan-summary script"              terraform true  0 'infra/scripts/plan-summary.mjs'
   check "terraform: its workflow"                         terraform true  0 '.github/workflows/terraform-ci.yml'
   check "terraform: another infra script"                 terraform false 0 'infra/scripts/deploy-guard.sh'

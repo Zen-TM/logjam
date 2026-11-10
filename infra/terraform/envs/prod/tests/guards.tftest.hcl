@@ -11,6 +11,23 @@ mock_provider "aws" {
 mock_provider "random" {}
 mock_provider "archive" {}
 
+# terraform test loads *.auto.tfvars from the root, so brain.auto.tfvars (prod's
+# switches, edited at the cutover) would otherwise decide what every run
+# plans. These pin every setting that file carries to the dormant values, so
+# the suite says the same whatever the file says; a run that needs another
+# value sets it in its own variables block, which wins over this one. Guard:
+# brain_settings_do_not_change_the_suite (it reads the file and fails if a
+# setting here is missing).
+variables {
+  brain_pg_image_tag        = ""
+  brain_bootstrap           = false
+  brain_serving             = false
+  brain_public              = false
+  brain_instance_type       = "t4g.small"
+  brain_data_volumes        = { "1" = { az = "ap-southeast-2a", size_gb = 20 } }
+  brain_data_volume_current = "1"
+}
+
 # The brain runs choose a subnet by zone, which a mock would make up.
 override_data {
   target = data.aws_subnet.worker_a
@@ -894,9 +911,11 @@ run "brain_is_absent_by_default" {
     ]
   }
 
-  # Mutation: a non-empty default for brain_pg_image_tag, or taking the count
-  # off any of these resources, makes merging the change start paying for an
-  # instance, a volume or an address before anyone asked for one.
+  # Mutation: taking the count off any of these resources, makes merging the
+  # change start paying for an instance, a volume or an address before anyone
+  # asked for one. The variables' own defaults are guarded by
+  # brain_variable_defaults_are_inert: this file pins the settings, so a
+  # default changed here would not show.
   assert {
     condition = (
       length(aws_instance.brain) == 0 &&
@@ -1949,5 +1968,259 @@ run "brain_drill_runs_daily_after_the_backup_on_arm" {
   assert {
     condition     = length(aws_security_group.brain_drill[0].ingress) == 0
     error_message = "The restore drill's security group must have no ingress."
+  }
+}
+
+# ── The switch: what brain.auto.tfvars flips (cloudfront.tf, ecs.tf, monitoring.tf) ──
+
+run "brain_settings_are_one_file_and_read_by_the_workflows" {
+  command = plan
+  plan_options {
+    target = [aws_sns_topic.alerts]
+  }
+
+  # The deploy workflows read brain_serving from brain.auto.tfvars with
+  # infra/scripts/brain-setting.sh, which reads one-line settings, so that file
+  # is the only place a setting may come from: another *.tfvars (or .json) file
+  # would be loaded after it and win in Terraform, unseen by the workflows. And
+  # every setting the file carries is pinned at the top of this file, so the
+  # suite says the same whatever the file says.
+  # Mutation: a second terraform.tfvars or zz.auto.tfvars in this directory;
+  # brain_serving or brain_public written as an expression or a quoted string;
+  # a setting added to brain.auto.tfvars (say brain_cpu_credits = "standard")
+  # and not to the variables block at the top of this file.
+  assert {
+    condition = (
+      aws_sns_topic.alerts.name == "logjam-alerts" &&
+      fileset(".", "*.tfvars*") == toset(["brain.auto.tfvars"]) &&
+      alltrue([for l in ["brain_serving", "brain_public", "brain_bootstrap"] : can(regex("(?m)^${l} = (true|false)( #.*)?$", file("brain.auto.tfvars")))]) &&
+      length(setsubtract(
+        toset(flatten(regexall("(?m)^(brain_[a-z_]+) *=", file("brain.auto.tfvars")))),
+        toset(flatten(regexall("(?m)^  (brain_[a-z_]+) *=", file("tests/guards.tftest.hcl"))))
+      )) == 0
+    )
+    error_message = "brain.auto.tfvars must be the only tfvars file, hold brain_serving, brain_public and brain_bootstrap as one-line true or false, and every setting in it must be pinned in the variables block at the top of tests/guards.tftest.hcl."
+  }
+}
+
+run "brain_variable_defaults_are_inert" {
+  command = plan
+  plan_options {
+    target = [aws_sns_topic.alerts]
+  }
+
+  # The suite pins the settings (above), so the defaults are read from the
+  # source. Mutation: default = "x" on brain_pg_image_tag, or true on
+  # brain_serving, brain_public or brain_bootstrap: a plan with the settings
+  # file absent (or one that leaves a line out) would build or switch things on.
+  assert {
+    condition = (
+      aws_sns_topic.alerts.name == "logjam-alerts" &&
+      can(regex("variable \"brain_pg_image_tag\" \\{[^}]*default += \"\"", file("brain_variables.tf"))) &&
+      alltrue([for v in ["brain_serving", "brain_public", "brain_bootstrap"] : can(regex("variable \"${v}\" \\{[^}]*default += false", file("brain_variables.tf")))])
+    )
+    error_message = "brain_pg_image_tag must default to empty and brain_serving, brain_public and brain_bootstrap to false (brain_variables.tf)."
+  }
+}
+
+run "brain_public_without_brain_serving_is_refused" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_serving      = false
+    brain_public       = true
+  }
+  # Targets that use the variable (two, so that a mutation of one does not hide
+  # the validation): a plan evaluates only the variables the targeted resources
+  # need, and validation runs with the variable.
+  plan_options {
+    target = [aws_cloudfront_distribution.api, aws_cloudwatch_metric_alarm.api_environment_degraded]
+  }
+
+  # Mutation: dropping the validation on brain_public points CloudFront at a
+  # brain whose API is not running.
+  expect_failures = [var.brain_public]
+}
+
+run "brain_serving_without_an_image_tag_is_refused" {
+  command = plan
+  variables {
+    brain_pg_image_tag = ""
+    brain_serving      = true
+  }
+  plan_options {
+    target = [aws_ecs_task_definition.api_migrate, aws_instance.brain]
+  }
+
+  # Mutation: dropping the validation on brain_serving points every task
+  # definition at an address that does not exist.
+  expect_failures = [var.brain_serving]
+}
+
+run "brain_is_dormant_for_cloudfront_and_tasks" {
+  command = plan
+  override_resource {
+    target          = aws_security_group.worker
+    values          = { id = "sg-mockworker" }
+    override_during = plan
+  }
+  plan_options {
+    target = [
+      aws_cloudfront_distribution.api,
+      aws_ecs_task_definition.api_script,
+      aws_ecs_task_definition.topo_worker,
+      aws_ecs_task_definition.api_migrate,
+      aws_ecs_task_definition.topo_export_worker,
+      aws_cloudwatch_log_metric_filter.api_5xx,
+      aws_cloudwatch_log_metric_filter.sync_client,
+      aws_cloudwatch_metric_alarm.api_environment_degraded,
+    ]
+  }
+
+  # With the settings off (the pinned values) everything the switch reaches is
+  # as it is today: CloudFront's API origin is Elastic Beanstalk's name, the
+  # four task definitions with a DB_HOST name RDS and set no DATABASE_SSL_CA,
+  # the request-log filters read Elastic Beanstalk's group and its health alarm
+  # pages. Mutation: changing the Elastic Beanstalk or RDS literal, or the
+  # else branch of local.db_environment or of the origin's domain_name.
+  assert {
+    condition = (
+      one(aws_cloudfront_distribution.api.origin).domain_name == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com" &&
+      one(aws_cloudfront_distribution.api.origin).origin_id == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl" &&
+      aws_cloudfront_distribution.api.default_cache_behavior[0].target_origin_id == one(aws_cloudfront_distribution.api.origin).origin_id &&
+      alltrue([
+        for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
+        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DB_HOST"] == "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com" &&
+        !contains([for e in jsondecode(td.container_definitions)[0].environment : e.name], "DATABASE_SSL_CA")
+      ]) &&
+      [for e in jsondecode(aws_ecs_task_definition.api_migrate.container_definitions)[0].environment : e.name] == ["AWS_REGION", "DB_HOST", "DB_NAME", "DB_PORT", "NODE_ENV"] &&
+      aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log" &&
+      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == aws_cloudwatch_log_metric_filter.api_5xx.log_group_name &&
+      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == true
+    )
+    error_message = "With brain_serving and brain_public off, CloudFront, the four database task definitions, the request-log filters and the health alarm must be exactly as they are with Elastic Beanstalk serving."
+  }
+}
+
+run "brain_serving_points_every_database_task_at_the_brain" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_serving      = true
+  }
+  override_resource {
+    target          = aws_security_group.worker
+    values          = { id = "sg-mockworker" }
+    override_during = plan
+  }
+  plan_options {
+    target = [
+      aws_cloudfront_distribution.api,
+      aws_ecs_task_definition.api_script,
+      aws_ecs_task_definition.topo_worker,
+      aws_ecs_task_definition.api_migrate,
+      aws_ecs_task_definition.topo_export_worker,
+      aws_cloudwatch_log_metric_filter.api_5xx,
+      aws_cloudwatch_log_metric_filter.sync_client,
+      aws_cloudwatch_metric_alarm.api_environment_degraded,
+    ]
+  }
+
+  # Every task definition that has a DB_HOST names the brain's address with the
+  # certificate path to verify it by, so a worker left on RDS would write its
+  # job results to a database nobody reads. The definitions are enumerated
+  # here and the DB_HOST literals counted in every .tf file (the two entries of
+  # local.db_environment), so a new definition with a DB_HOST of its own fails
+  # until it follows brain_serving. And serving alone moves nothing else:
+  # CloudFront, the filters and the health alarm wait for brain_public.
+  # Mutation: one definition's `local.db_environment` replaced by a literal
+  # DB_HOST (RDS's name); a new task definition with a literal DB_HOST; the
+  # certificate entry dropped from local.db_environment; the origin's domain or
+  # a filter's group following brain_serving instead of brain_public.
+  assert {
+    condition = (
+      alltrue([
+        for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
+        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DB_HOST"] == aws_eip.brain[0].public_dns &&
+        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DATABASE_SSL_CA"] == "/app/brain-ca.pem"
+      ]) &&
+      sum([for f in fileset(".", "*.tf") : length(regexall("\"DB_HOST\"", file(f)))]) == 2 &&
+      one(aws_cloudfront_distribution.api.origin).domain_name == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com" &&
+      aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log" &&
+      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == aws_cloudwatch_log_metric_filter.api_5xx.log_group_name &&
+      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == true
+    )
+    error_message = "With brain_serving, every task definition with a DB_HOST must name the brain and set DATABASE_SSL_CA, and nothing CloudFront-side may move yet."
+  }
+}
+
+run "brain_public_points_cloudfront_at_the_brain" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_serving      = true
+    brain_public       = true
+  }
+  # The alarm is imported (monitoring.tf), which a mocked provider cannot do.
+  override_resource {
+    target          = aws_cloudwatch_metric_alarm.api_5xx
+    values          = {}
+    override_during = plan
+  }
+  plan_options {
+    target = [
+      aws_cloudfront_distribution.api,
+      aws_cloudwatch_log_metric_filter.api_5xx,
+      aws_cloudwatch_log_metric_filter.sync_client,
+      aws_cloudwatch_metric_alarm.api_environment_degraded,
+      aws_cloudwatch_metric_alarm.api_5xx,
+    ]
+  }
+
+  # CloudFront's API origin is the brain's address and nothing else about the
+  # origin moves: the id the behavior names, plain HTTP on 80 and the
+  # X-Origin-Verify header the API insists on. The request-log filters follow
+  # to the brain's group (the health alarm of the idle Elastic Beanstalk stops
+  # paging; the 5xx alarm still does).
+  # Mutation: dropping the custom_header block (the API would refuse every
+  # request), another port or protocol, the domain left on Elastic Beanstalk,
+  # a filter left on Elastic Beanstalk's group, the health alarm still paging.
+  assert {
+    condition     = one(aws_cloudfront_distribution.api.origin).domain_name == aws_eip.brain[0].public_dns
+    error_message = "With brain_public, CloudFront's API origin must be the brain's address."
+  }
+
+  assert {
+    condition     = one(aws_cloudfront_distribution.api.origin).origin_id == aws_cloudfront_distribution.api.default_cache_behavior[0].target_origin_id
+    error_message = "The API origin's id must stay the one the default behavior names."
+  }
+
+  assert {
+    condition     = [for h in one(aws_cloudfront_distribution.api.origin).custom_header : h.name] == ["X-Origin-Verify"]
+    error_message = "The API origin must keep sending X-Origin-Verify: the API refuses a request without it."
+  }
+
+  assert {
+    condition = (
+      one(aws_cloudfront_distribution.api.origin).custom_origin_config[0].http_port == 80 &&
+      one(aws_cloudfront_distribution.api.origin).custom_origin_config[0].origin_protocol_policy == "http-only"
+    )
+    error_message = "The API origin must stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/logjam/brain/api" &&
+      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == "/logjam/brain/api"
+    )
+    error_message = "With brain_public, the request-log filters must read the brain's API log group."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == false &&
+      aws_cloudwatch_metric_alarm.api_5xx.alarm_actions == toset(["arn:aws:sns:ap-southeast-2:620853681701:logjam-alerts"])
+    )
+    error_message = "With brain_public, the idle Elastic Beanstalk health alarm must not page and the 5xx alarm must."
   }
 }

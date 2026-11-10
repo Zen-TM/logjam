@@ -109,6 +109,9 @@ test("the apply-role guard is envs/prod's alone", () => {
 // [path, in envs/prod's plan, in envs/github's plan]
 const SCOPE_CASES = [
   ["infra/terraform/envs/prod/s3.tf", true, false],
+  // The brain's switches: a change to this file alone is a prod plan and an
+  // apply (and the deploy workflows read it too).
+  ["infra/terraform/envs/prod/brain.auto.tfvars", true, false],
   ["infra/terraform/modules/storage/main.tf", true, false],
   ["infra/terraform/templates/env.local.tftpl", true, false],
   ["infra/terraform/bootstrap/main.tf", false, false],
@@ -135,9 +138,10 @@ const SCOPE_CASES = [
 test("each root plans and applies exactly its own changes", () => {
   // The plan and apply workflows both ask inScope(): a root applied without
   // having been planned refuses, so the two must agree. Mutation: widening
-  // prod's scope to all of infra/terraform/, dropping infra/brain/ from it, or
+  // prod's scope to all of infra/terraform/, dropping infra/brain/ from it,
   // widening it to postgres/, tests/ or api.env (which the user data does not
-  // embed) turns this red.
+  // embed), or narrowing envs/prod to *.tf (the settings file is
+  // brain.auto.tfvars) turns this red.
   for (const [path, prod, github] of SCOPE_CASES) {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);

@@ -47,9 +47,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   only backup after a run of failed nights. Its Object Lock stays COMPLIANCE,
   7 days. Guard: `brain_backups_are_locked_and_never_expire`.
 - **The brain's Postgres image tag is immutable and pinned** in Terraform
-  (`var.brain_pg_image_tag`); the repository refuses a push to an existing tag,
-  so publish a new tag and change the variable, never retag. Guard:
-  `brain_postgres_image_is_immutable`.
+  (`brain_pg_image_tag` in `brain.auto.tfvars`); the repository refuses a push
+  to an existing tag, so publish a new tag and change the setting, never
+  retag. Guard: `brain_postgres_image_is_immutable`.
 - **The brain's instance role** (`logjam-brain`) holds only the grants in
   `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
   app database, origin-verify and Resend, no write to `release.json`, and no
@@ -66,8 +66,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   info` exits 0 for an unreachable one: read its JSON); keep both, and keep
   `create_host_path: false` on the data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
   on a loop device; each mutation it names turns it red.
-- **The brain's instance exists only while `var.brain_pg_image_tag` is set**:
-  with the default, no instance, data volume, Elastic IP or alarm is planned
+- **The brain's instance exists only while `brain_pg_image_tag` is set** (its
+  default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no instance, data volume, Elastic IP or alarm is planned
   (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
   containers use the instance role), has no key pair, and takes its two
   switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
@@ -80,7 +80,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The brain's data volume and Elastic IP are never destroyed** (`prevent_destroy`:
   the disk holds the only copy of the database between backups, the address's
   DNS name is in the database certificate). Only the current entry of
-  `var.brain_data_volumes` is attached; replacing a lost disk or zone adds an
+  `brain_data_volumes` (in `brain.auto.tfvars`) is attached; replacing a lost disk or zone adds an
   entry and makes it current, and a later change drops the old one with a
   `removed` block. Changing the current entry replaces the instance at plan
   time (`terraform_data.brain_volume` and `replace_triggered_by`), so the
@@ -142,3 +142,25 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   (archiving, expiring) would break the thing the drill proves. Its log group has
   no subscription filter, so it never reaches the audit bucket. Guards:
   `brain_drill_role_cannot_write_the_backups`, `brain_drill_log_is_not_the_audit_trail`.
+- **The brain's settings are one file, `terraform/envs/prod/brain.auto.tfvars`,
+  which Terraform and the deploy workflows both read**
+  (`scripts/brain-setting.sh`). Flip a setting by changing its line there:
+  never a variable default, `-var` or another tfvars file, which the
+  workflows would not see (and `terraform test` loads this file, so the suite
+  pins every setting it carries at the top of `guards.tftest.hcl`). The order
+  is image tag, bootstrap, `brain_serving`, `brain_public`; `brain_public`
+  needs `brain_serving`, which needs a tag. Guards:
+  `brain_settings_are_one_file_and_read_by_the_workflows`,
+  `brain_variable_defaults_are_inert`, `brain_public_without_brain_serving_is_refused`,
+  `brain_serving_without_an_image_tag_is_refused`, and `brain-setting.sh --self-test`.
+- **What `brain_serving` and `brain_public` move.** `brain_serving` points every
+  task definition with a `DB_HOST` at the brain (`local.db_environment` in
+  `ecs.tf`: a new definition takes it, never a literal host) and makes the
+  deploy and rollback workflows release to the brain, so every Elastic
+  Beanstalk step carries `if: steps.mode.outputs.serving != 'true'`.
+  `brain_public` alone moves CloudFront's API origin and the API request-log
+  filters (`local.api_log_group`): between the two the brain's API runs and
+  serves nobody. Guards: `brain_serving_points_every_database_task_at_the_brain`,
+  `brain_public_points_cloudfront_at_the_brain`,
+  `brain_is_dormant_for_cloudfront_and_tasks`, and the workflow check in
+  `brain-setting.sh --self-test`.

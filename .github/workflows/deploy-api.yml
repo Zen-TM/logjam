@@ -140,7 +140,11 @@ jobs:
       id-token: write
       contents: read
     outputs:
-      swapped: ${{ steps.swap.outputs.swapped }}
+      swapped: ${{ steps.swap.outputs.swapped || steps.swap_brain.outputs.swapped }}
+      # Whether this run released to the brain (brain.auto.tfvars): the smoke
+      # job waits longer for the brain's release agent than for Elastic
+      # Beanstalk's swap.
+      serving: ${{ steps.mode.outputs.serving }}
 
     steps:
       - name: Checkout code
@@ -149,6 +153,22 @@ jobs:
           # Build the exact commit CI validated, not the default-branch HEAD
           # (github.sha under workflow_run can be a newer, unvalidated commit).
           ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Where this release goes, from the same file Terraform reads
+      # (infra/scripts/brain-setting.sh): the brain when brain_serving is
+      # true, Elastic Beanstalk otherwise. Read before anything is pinned or
+      # migrated, and it fails rather than guess: a file it cannot read stops
+      # the run here, with prod untouched. brain_public says whether the
+      # public URL shows the brain yet, which decides whether the smoke test
+      # below can see this release.
+      - name: Where does this release go?
+        id: mode
+        run: |
+          serving=$(infra/scripts/brain-setting.sh brain_serving)
+          public=$(infra/scripts/brain-setting.sh brain_public)
+          echo "serving=$serving" >> "$GITHUB_OUTPUT"
+          echo "public=$public" >> "$GITHUB_OUTPUT"
+          echo "==> brain_serving=$serving brain_public=$public ($([ "$serving" = true ] && echo "the brain" || echo "Elastic Beanstalk"))"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -185,6 +205,22 @@ jobs:
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         # Every family that runs this image: infra/scripts/pin-release.sh.
         run: infra/scripts/pin-release.sh "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # The migration runs on the revision just pinned, against the database
+      # that revision names. Terraform's apply for a change to
+      # brain.auto.tfvars is a separate workflow that starts at the same merge:
+      # if it has not landed, the revision still names the other database and
+      # this stops before the migration reaches it.
+      - name: The migrate task definition names the database this mode uses
+        env:
+          SERVING: ${{ steps.mode.outputs.serving }}
+        run: |
+          set -euo pipefail
+          MODE=off
+          [ "$SERVING" = true ] && MODE=on
+          aws ecs describe-task-definition --task-definition logjam-api-migrate \
+            --query taskDefinition --output json \
+            | infra/scripts/brain-setting.sh --check-taskdef "$MODE"
 
       # Gated pre-deploy migration. Run `prisma migrate deploy`
       # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
@@ -242,6 +278,7 @@ jobs:
           echo "Migrations applied cleanly; proceeding to EB deploy."
 
       - name: Update Dockerrun.aws.json with new image
+        if: steps.mode.outputs.serving != 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
@@ -252,6 +289,7 @@ jobs:
       # (e.g. the DB_* connection parts) apply atomically with the version
       # that requires them.
       - name: Create deployment bundle
+        if: steps.mode.outputs.serving != 'true'
         run: |
           cd api && zip -r deploy.zip Dockerrun.aws.json .ebextensions
 
@@ -260,9 +298,11 @@ jobs:
       # failure above left the old version serving untouched.
       - name: Mark the swap
         id: swap
+        if: steps.mode.outputs.serving != 'true'
         run: echo "swapped=true" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Elastic Beanstalk
+        if: steps.mode.outputs.serving != 'true'
         uses: einaregilsson/beanstalk-deploy@a67044fa332b06e68985b06d361934c28ab09007 # v23
         with:
           aws_access_key: ${{ env.AWS_ACCESS_KEY_ID }}
@@ -287,9 +327,11 @@ jobs:
 
       # The brain's release pointer: the sha just deployed and infra/brain/api.env,
       # which the brain's release agent makes its API match once it serves.
-      # After the EB step on purpose: until the cutover, EB is what serves, so
-      # a failure here must not hold back that release, but it still turns the
-      # run red. The role may only put this one key and not read the bucket
+      # With brain_serving off it comes after the EB step on purpose: EB is
+      # what serves, so a failure here must not hold back that release, but it
+      # still turns the run red. With it on, the pointer IS the release: the
+      # EB steps are skipped, and the swap is marked once the pointer is
+      # written. The role may only put this one key and not read the bucket
       # (brain_ecr.tf), so there is no read-back; the file is made first because
       # a failing script piped into `aws s3 cp -` would upload an empty pointer.
       - name: Write the brain's release pointer
@@ -302,6 +344,25 @@ jobs:
           aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
             --content-type application/json
 
+      # The brain's swap happens on its own clock: the release agent makes the
+      # API match the pointer within its poll (30 s) plus an image pull. The
+      # smoke test below waits for the public /meta to name this sha, which
+      # only means something once brain_public has moved CloudFront: in
+      # between, the public URL is still Elastic Beanstalk's, no smoke test
+      # can see the brain, and a failing one would roll back a healthy release.
+      - name: Mark the swap (the brain)
+        id: swap_brain
+        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.public == 'true'
+        run: echo "swapped=true" >> "$GITHUB_OUTPUT"
+
+      - name: The brain is released but not public
+        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.public != 'true'
+        run: echo "::notice::brain_public is off, so the public URL is still Elastic Beanstalk's and no smoke test can see this release. The pointer is written; check the brain through the host."
+
+  # The smoke test is also the wait for the brain: CI may not read the brain's
+  # signals bucket (infra/AGENTS.md), so "the brain runs this sha" is what the
+  # public /meta says, polled for 5 minutes (the rehearsal took 49 seconds;
+  # Elastic Beanstalk's swap gets the usual 3).
   smoke:
     needs: deploy
     if: ${{ !cancelled() && needs.deploy.outputs.swapped == 'true' }}
@@ -309,6 +370,7 @@ jobs:
     with:
       target: api
       sha: ${{ github.event.workflow_run.head_sha }}
+      attempts: ${{ needs.deploy.outputs.serving == 'true' && 30 || 18 }}
 
   # Single-instance EB: a bad release is total downtime until someone acts, so
   # a failed smoke test returns to the release that was live before this run.
