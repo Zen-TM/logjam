@@ -63,6 +63,7 @@ not() { ! "$@"; }
 # grep -q leaves at its first match; under pipefail a writer that is still writing then dies of
 # SIGPIPE and the pipeline reads as no match. This one reads to the end.
 has() { grep "$@" > /dev/null; }
+whole_number() { [[ $1 =~ ^[0-9]+$ ]]; }
 fatal() { bad "$1"; dump; exit 1; }
 wait_for() { # <seconds> <command...>
   local n=$1; shift
@@ -716,7 +717,7 @@ check "drill.json has exactly the allowlisted keys" \
 check "it says ok" [ "$(drill_field ok)" = True ]
 check "...with no error" [ "$(drill_field error)" = None ]
 check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
-check "restore_seconds is a whole number of seconds, 0 or more" bash -c '[[ $1 =~ ^[0-9]+$ ]]' _ "$(drill_field restore_seconds)"
+check "restore_seconds is a whole number of seconds, 0 or more" whole_number "$(drill_field restore_seconds)"
 # canary_lag_seconds: the canary's age when recovery ended, i.e. what losing the disk then would have cost.
 # Healthy archiving: seconds here (status.sh ran just before), never 0, which is what measuring from the drill's start gives.
 lag=$(drill_field canary_lag_seconds)
