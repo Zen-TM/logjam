@@ -82,6 +82,49 @@ describe("graceful shutdown", () => {
     expect(exits).toEqual([0]);
   });
 
+  it("forces an exit when a request outlasts the deadline", async () => {
+    const exits: number[] = [];
+    let stops = 0;
+    const lifecycle = createShutdown({
+      timeoutMs: 100,
+      stop: () => void stops++,
+      finish: async () => {},
+      exit: (code) => void exits.push(code),
+    });
+    // A request whose handler never answers, so the server never closes.
+    server = express()
+      .get("/hang", () => {})
+      .listen(0);
+    const socket = net.connect((server.address() as AddressInfo).port, () =>
+      socket.write("GET /hang HTTP/1.1\r\nHost: x\r\n\r\n"),
+    );
+    socket.on("error", () => {});
+    await new Promise((r) => setTimeout(r, 100));
+    lifecycle.begin(server, "test");
+    await new Promise((r) => setTimeout(r, 400)); // well past the deadline
+    socket.destroy();
+    expect(exits).toEqual([1]);
+    expect(stops).toBe(1);
+  });
+
+  it("exits 1 when finish rejects", async () => {
+    const exits: number[] = [];
+    let stops = 0;
+    const lifecycle = createShutdown({
+      timeoutMs: 20_000,
+      stop: () => void stops++,
+      finish: async () => {
+        throw new Error("disconnect failed");
+      },
+      exit: (code) => void exits.push(code),
+    });
+    server = express().listen(0);
+    lifecycle.begin(server, "test");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(exits).toEqual([1]);
+    expect(stops).toBe(1);
+  });
+
   it("completes quickly while keep-alive clients keep sending", async () => {
     // A handler that takes a moment keeps requests in flight on every
     // connection when shutdown begins, as a loaded API would have.

@@ -16,8 +16,13 @@ interface ShutdownOptions {
 // idle: measured on a scratch copy, 2026-11-11, a release under 40 requests a
 // second sat until Docker's 10 s kill. So once shutdown has begun every
 // response says `Connection: close`, ending each connection with the request
-// in flight on it. A request already in flight still finishes; only
-// `timeoutMs` bounds one that does not.
+// in flight on it. A request already in flight is answered, and only
+// `timeoutMs` bounds one that never is. A response of several megabytes to a
+// slow reader can still be cut: Node counts a socket idle once the response
+// has ended, before its bytes are flushed, and `server.close()` alone does the
+// same. Accepted here: the peer is always a buffering proxy (nginx, CloudFront)
+// that reads at full speed. A request pipelined behind another on the same
+// connection loses its response; nothing in front of the API pipelines.
 // Guard: src/lib/shutdown.unit.test.ts.
 export function createShutdown(opts: ShutdownOptions) {
   let shuttingDown = false;
