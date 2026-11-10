@@ -15,7 +15,8 @@
 #     the prod container starts with only -c flags);
 #   brain-entrypoint.sh: dropping ${BRAIN_RESTORE_OPTS} (restore keeps archiving);
 #   pg_ident.conf: dropping the brain_agent line;
-#   Dockerfile: dropping ca-certificates (the S3 handshake).
+#   Dockerfile: dropping ca-certificates (the S3 handshake);
+#   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 IMAGE=${IMAGE:-brain-postgres:test}
@@ -156,6 +157,7 @@ check "pgbackrest runs on no data directory and no BRAIN_INIT" quiet docker run 
 check "bash runs on no data directory and no BRAIN_INIT" quiet docker run --rm "$IMAGE" bash -c true
 check "psql --help runs" quiet docker run --rm "$IMAGE" psql --help
 check "postgres --version runs without a data directory" quiet docker run --rm "$IMAGE" postgres --version
+check "the host's Compose plugin is in the image and prints its version" docker run --rm --entrypoint /usr/local/lib/brain/docker-compose "$IMAGE" version
 check "a non-server command with no bucket does not need one" quiet docker run --rm "$IMAGE" true
 conf=$(docker run --rm "${BUCKET_ENV[@]}" "$IMAGE" cat /etc/pgbackrest/pgbackrest.conf 2>&1)
 check "a non-server command renders pgbackrest.conf when the bucket is set" grep -q '^repo1-s3-bucket=conf-bucket$' <<<"$conf"

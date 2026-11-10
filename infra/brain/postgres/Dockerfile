@@ -13,6 +13,11 @@ RUN apt-get update \
  && mkdir -p /etc/pgbackrest /etc/postgresql \
  && chown postgres:postgres /etc/pgbackrest
 
+# The host's Docker Compose plugin (no AL2023 package): user data copies it out
+# of this image, so a replacement instance boots with only AWS reachable.
+# Not used inside the container.
+COPY --from=docker/compose-bin:v2.40.3@sha256:e39da8206cc48c6e2c99ce371935eef9d7eff7db600a993fd357de8b75621edf /docker-compose /usr/local/lib/brain/docker-compose
+
 COPY postgresql.conf pg_hba.prod.conf pg_hba.dev.conf pg_ident.conf /etc/postgresql/
 COPY brain-lib.sh pgbackrest-conf.sh /usr/local/lib/brain/
 COPY brain-entrypoint.sh /usr/local/bin/
