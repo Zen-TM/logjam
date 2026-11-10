@@ -52,7 +52,7 @@ locals {
     "gitleaks",
     "pr-closes",
     "expo-doctor",
-    "brain-e2e-gate",
+    "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
   ]
 }
 
