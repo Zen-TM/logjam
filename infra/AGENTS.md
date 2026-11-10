@@ -51,9 +51,12 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   to an existing tag, so publish a new tag and change the setting, never
   retag. Guard: `brain_postgres_image_is_immutable`.
 - **The brain's instance role** (`logjam-brain`) holds only the grants in
-  `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
-  app database, origin-verify and Resend, no write to `release.json`, and no
-  AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.
+  `brain_iam.tf`: no audit bucket, no secret beyond the app database,
+  origin-verify and Resend, no write to `release.json`, and no AWS-managed
+  broad policy. Its inline policies are managed exclusively; its managed
+  attachments are not, because AWS Budgets attaches the cost-ceiling deny to
+  it and an exclusive resource would detach that at the next apply. Guard:
+  `brain_role_has_only_its_grants`.
 - **The brain's timers never start the `aws` CLI.** `release-agent.sh` and
   `status.sh` make their S3 calls with `s3_get` and `s3_put` in `brain/host/lib.sh`
   (`curl --aws-sigv4`): a CLI start costs 66 MB and 0.65 s of CPU on a `t4g.micro`, three times a
@@ -175,3 +178,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_public_points_cloudfront_at_the_brain`,
   `brain_is_dormant_for_cloudfront_and_tasks`, and the workflow check in
   `brain-setting.sh --self-test`.
+- **The cost-ceiling deny never covers the brain's backup or signals bucket.**
+  AWS Budgets attaches it to the brain's role, which pgBackRest shares with the
+  API, so its S3 resources are exactly `logjam-media/*` and `logjam-topo-jobs/*`.
+  Guard: `cost_ceiling_denies_only_workers_and_uploads`.

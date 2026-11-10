@@ -14,9 +14,12 @@
 # and adds ecs:StopTask, which the API calls (topoJobs.ts, topoJobReaper.ts) and
 # the live role never allowed.
 #
-# Only the policies below may be on the role: the exclusive resources undo
-# anything attached by hand. Guards: tests/guards.tftest.hcl
-# (brain_role_*).
+# Only the inline policy below may be on the role: the exclusive resource
+# undoes any other inline policy added by hand. Managed policies are not
+# managed exclusively: AWS Budgets attaches the cost-ceiling deny to this role
+# when spend passes the ceiling (budget_breaker.tf), and exclusive management
+# would detach it at the next apply, lifting the block with nobody deciding
+# to. Guards: tests/guards.tftest.hcl (brain_role_*).
 resource "aws_iam_role" "brain" {
   name = "logjam-brain"
   assume_role_policy = jsonencode({
@@ -39,11 +42,6 @@ resource "aws_iam_instance_profile" "brain" {
 resource "aws_iam_role_policy_attachment" "brain_ssm" {
   role       = aws_iam_role.brain.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachments_exclusive" "brain" {
-  role_name   = aws_iam_role.brain.name
-  policy_arns = [aws_iam_role_policy_attachment.brain_ssm.policy_arn]
 }
 
 resource "aws_iam_role_policies_exclusive" "brain" {

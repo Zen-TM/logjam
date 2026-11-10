@@ -37,6 +37,7 @@ that goes wrong between deploys.
 | `logjam-brain-cpu-high` | The brain's CPU has averaged 20% or more for an hour | Find out what is using the CPU (growth, one client misbehaving, or a runaway process). Above the free allowance it costs cents; at 50% the API is three quarters of the way to its limit of about 80 requests a second, and a bigger instance of the same family adds memory, not speed |
 | `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
 | `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
+| `logjam-ceiling` (an AWS Budget, not a CloudWatch alarm) | Actual spend this month reached US$100 before tax, and AWS attached a deny policy to the API's roles | New worker jobs fail and uploads are refused. Find what ran the bill up, then undo the deny ([Cost ceiling](#cost-ceiling)) |
 
 ## API
 
@@ -439,3 +440,51 @@ means the schedule or the function is gone, not that the brain is unhealthy.
    the last run.
 3. If both look right, run the function once from the Lambda console and see
    what it logs.
+
+## Cost ceiling
+
+`infra/terraform/envs/prod/budget_breaker.tf` holds a second AWS Budget,
+`logjam-ceiling`: US$100 a month, before tax (`var.cost_ceiling_usd`). It
+emails `logjam-budget-alerts` at 80% of actual spend and at 100% forecast. At
+100% of actual spend, AWS Budgets itself attaches the managed policy
+`logjam-cost-ceiling-deny` to the roles `logjam-eb-role` and `logjam-brain`,
+with no approval step and no code of ours running. It is the backstop under the
+compute pool's polite refusals and should never fire in a normal month. The
+earlier warning is `logjam-monthly` in `budgets.tf`, which includes tax and is
+US$50.
+
+The policy denies `ecs:RunTask` on every task definition and `s3:PutObject` on
+`logjam-media` and `logjam-topo-jobs`, nothing else. So:
+
+- Starting a LiDAR job, an export or any other worker from the API fails, and
+  so does creating or finishing an upload, including a presigned URL already
+  handed out, because S3 checks the signer when the URL is used. The user
+  sees an error where they would otherwise have seen a polite refusal.
+- Everything already stored is untouched. Downloads and reads work, jobs
+  already running finish, and the brain's backups and signals bucket are never
+  denied.
+
+The budget's figures lag by hours, so the breaker is late by design: spend can
+pass the ceiling before it acts.
+
+1. Find what spent the money: Cost Explorer grouped by service, then by usage
+   type, for this month.
+2. Stop it at the source. Raising the ceiling alone does not lift the deny.
+3. Undo the deny with AWS Budgets, not by detaching the policy by hand, so it
+   knows the action was reversed. In the console: Budgets → `logjam-ceiling` →
+   Action history → Reverse. Or with the CLI (`<id>` is `ActionId` in the first
+   command's output):
+
+   ```sh
+   aws budgets describe-budget-actions-for-budget \
+     --account-id 620853681701 --budget-name logjam-ceiling
+   aws budgets execute-budget-action --account-id 620853681701 \
+     --budget-name logjam-ceiling --action-id <id> \
+     --execution-type REVERSE_BUDGET_ACTION
+   ```
+
+   A reversed action is not evaluated again for the rest of the month; choose
+   Reset in the console if it should re-arm.
+4. A Terraform apply does not lift the deny: Terraform does not manage which
+   managed policies are attached to `logjam-brain` or `logjam-eb-role`, so
+   the block stays until the action is reversed.
