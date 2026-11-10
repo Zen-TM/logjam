@@ -35,6 +35,7 @@ that goes wrong between deploys.
 | `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
 | `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode, the default) | Find what is using the CPU; the worst case is about US$47 a month on a `t4g.small` |
 | `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
+| `logjam-brain-cpu-high` | The brain's CPU has averaged 50% or more for 15 minutes | Find out whether it is growth or one client misbehaving (the API's request log); the API is one process and saturates near 80 requests a second, and a bigger instance of the same family adds memory, not speed |
 | `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
 | `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
 
@@ -359,6 +360,19 @@ balance averages under 30 for six readings in a row (30 minutes).
 
 1. Find the cause as above.
 2. If the load is real, switch to `unlimited` credits or a bigger instance type.
+
+### `logjam-brain-cpu-high`
+
+The API is one Node process, so it uses one of the instance's two vCPUs and
+saturates near 80 requests a second. On a scratch copy (2026-11-10) the stack
+passed 60 requests a second at 50% of the instance and 80 at 64%, and failed at
+100. So 50% for 15 minutes (three readings of five minutes) is about three
+quarters of the limit. A daily full backup and a boot do not hold it that long.
+
+1. Find out whether this is growth or one client misbehaving: the API's request
+   log in `/logjam/brain/api`, by client and path.
+2. If the load is real, a bigger instance of the same family adds memory, not
+   speed.
 
 ### `logjam-brain-checks-failing`
 

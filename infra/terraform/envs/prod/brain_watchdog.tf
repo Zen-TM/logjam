@@ -189,3 +189,29 @@ resource "aws_cloudwatch_metric_alarm" "brain_watchdog_dead" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# Measured on a scratch copy on 2026-11-10: the stack passed 60 requests a
+# second at 50% of the instance's two vCPUs and 80 at 64%, and failed at 100
+# because the API is one Node process on one core, so 50% for 15 minutes is
+# about three quarters of the limit. A daily full backup (about a minute) and a
+# boot do not hold 50% for 15 minutes.
+resource "aws_cloudwatch_metric_alarm" "brain_cpu_high" {
+  count = local.brain_enabled ? 1 : 0
+
+  alarm_name        = "logjam-brain-cpu-high"
+  alarm_description = "The brain's CPU has averaged 50% or more for 15 minutes. First: find out whether this is growth or one client misbehaving (the API's request log). The API is one process and saturates near 80 requests a second; a bigger instance of the same family adds memory, not speed. ${local.alarms_doc}"
+
+  namespace   = "AWS/EC2"
+  metric_name = "CPUUtilization"
+  dimensions  = { InstanceId = aws_instance.brain[0].id }
+
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 3
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 50
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

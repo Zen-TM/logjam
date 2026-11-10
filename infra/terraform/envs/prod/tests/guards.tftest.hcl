@@ -890,6 +890,7 @@ run "brain_is_absent_by_default" {
       aws_cloudwatch_metric_alarm.brain_instance_status_failed,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
       aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
+      aws_cloudwatch_metric_alarm.brain_cpu_high,
     ]
   }
 
@@ -907,7 +908,8 @@ run "brain_is_absent_by_default" {
       length(aws_cloudwatch_metric_alarm.brain_system_status_failed) == 0 &&
       length(aws_cloudwatch_metric_alarm.brain_instance_status_failed) == 0 &&
       length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 &&
-      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0
+      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_cpu_high) == 0
     )
     error_message = "With the default variables the brain must have no instance, volume, address or alarm."
   }
@@ -1247,6 +1249,7 @@ run "brain_alarms_act_on_the_instance" {
       aws_cloudwatch_metric_alarm.brain_instance_status_failed,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
       aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
+      aws_cloudwatch_metric_alarm.brain_cpu_high,
     ]
   }
 
@@ -1262,11 +1265,29 @@ run "brain_alarms_act_on_the_instance" {
       aws_cloudwatch_metric_alarm.brain_instance_status_failed[0].metric_name == "StatusCheckFailed_Instance" &&
       toset(aws_cloudwatch_metric_alarm.brain_instance_status_failed[0].alarm_actions) == toset(["arn:aws:automate:ap-southeast-2:ec2:reboot", aws_sns_topic.alerts.arn]) &&
       alltrue([
-        for a in [aws_cloudwatch_metric_alarm.brain_system_status_failed[0], aws_cloudwatch_metric_alarm.brain_instance_status_failed[0], aws_cloudwatch_metric_alarm.brain_cpu_credits_low[0]] :
+        for a in [aws_cloudwatch_metric_alarm.brain_system_status_failed[0], aws_cloudwatch_metric_alarm.brain_instance_status_failed[0], aws_cloudwatch_metric_alarm.brain_cpu_credits_low[0], aws_cloudwatch_metric_alarm.brain_cpu_high[0]] :
         a.dimensions["InstanceId"] == aws_instance.brain[0].id && length(a.dimensions) == 1 && strcontains(a.alarm_description, "First: ")
       ])
     )
     error_message = "The status-check alarms must recover (system) and reboot (instance) this instance and tell the topic, and each says what to do first."
+  }
+
+  # Mutation: another metric, statistic, period, evaluation count or threshold
+  # (50% of two vCPUs for 15 minutes is about three quarters of what one Node
+  # process can serve), missing data breaching, or no topic.
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].namespace == "AWS/EC2" &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].metric_name == "CPUUtilization" &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].statistic == "Average" &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].period == 300 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].evaluation_periods == 3 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].threshold == 50 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.brain_cpu_high[0].alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "The CPU alarm must fire on an average of 50% or more for three five-minute periods and tell the alerts topic."
   }
 
   # Mutation: dropping the credit-mode condition. Standard mode watches the
