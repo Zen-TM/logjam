@@ -738,11 +738,12 @@ run "brain_role_has_only_its_grants" {
   }
 
   # Mutation: a second inline policy by hand in Terraform, dropping the
-  # exclusive resource, or pointing the one managed attachment at a broader
-  # policy (CloudWatchFullAccess, a revived AmazonS3FullAccess), widens a role
-  # the whole API runs as. Managed attachments are not exclusive on purpose:
-  # AWS Budgets attaches the cost-ceiling deny to this role, and an exclusive
-  # resource would detach it at the next apply (brain_iam.tf).
+  # exclusive inline resource, or pointing the one managed attachment at a
+  # broader policy (CloudWatchFullAccess, a revived AmazonS3FullAccess), widens
+  # a role the whole API runs as. Re-adding exclusive management of the role's
+  # managed attachments lifts the cost-ceiling deny at the next apply: AWS
+  # Budgets attaches that deny to this role, and an exclusive resource would
+  # detach it (brain_iam.tf).
   assert {
     condition = (
       aws_iam_role_policy_attachment.brain_ssm.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" &&
