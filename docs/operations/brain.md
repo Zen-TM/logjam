@@ -152,7 +152,8 @@ step says why.
    [infra/AGENTS.md](../../infra/AGENTS.md)). A plan of `main` must show the
    brain and nothing else to create: stop if it shows the bucket, the roles or
    the boundary. Read it, from a checkout of `main`, from the repository root,
-   with the maintainer's credentials (run on a scratch copy):
+   with the maintainer's credentials (the commands ran on a scratch copy; that
+   the plan shows the brain and nothing else is not yet run anywhere):
 
    ```sh
    for l in cognito-email-sender cognito-pre-signup; do
@@ -225,7 +226,8 @@ step says why.
    (`brain-ca.pem` in `infra/brain/` and `topo/`) still fits. It does not fit
    if the Elastic IP changed (its DNS name is in the certificate): then the
    API and the workers fail at start, never silently unverified. Compare the
-   host's with the committed one (run on a scratch copy):
+   host's with the committed one (the host's file was fetched on a scratch copy;
+   the comparison is not yet run anywhere):
 
    ```sh
    CID=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript \
@@ -433,7 +435,7 @@ that was live.
 ## Deleting an old volume
 
 A volume left by a recovery or a rewind holds a full copy of the database until
-it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 7), and costs a
+it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 6), and costs a
 little. Delete it only when it is no longer the undo: after you are sure of the
 new database, and not before the next nightly full has run on it. Deleting it is
 final: its data cannot be recovered (the backups are what remain).
@@ -517,50 +519,70 @@ say otherwise.
 ## The retired stack: what to delete by hand
 
 Elastic Beanstalk and RDS were removed by Terraform (the teardown's two pull
-requests). What Terraform never owned is left, and one set of leftovers holds
-user data, so it goes first. The maintainer's credentials; every command here
-is **not yet run anywhere**. The reads were run on 2026-11-11 (before the
-removal) and showed the first two lists below not empty.
+requests). [infra/AGENTS.md](../../infra/AGENTS.md) says AWS changes only
+through Terraform; the steps below are the exception, each for the reason
+beside it: Terraform never owned the thing (the Elastic Beanstalk service, the
+RDS console or an old hand step made it), it is deleted once, and importing it
+into Terraform only to remove it would add a resource to the code for a single
+deletion. One set of leftovers holds user data, so it goes first and **before
+the second pull request is merged**: [the policy](../DATA-ACCESS-POLICY.md)
+says the old stack and its snapshots are gone when that merge has applied, and
+that what remains is deleted by hand the same day.
 
-1. **Snapshots and backups of the old database.** `skip_final_snapshot` and
-   `delete_automated_backups` mean the instance's own go with it; a manual
-   snapshot does not. List them, delete the cutover snapshot
-   (`logjam-cutover-final`) and any other the lists show (on 2026-11-11 there
-   was also `logjam-db-final-2026-06-23-enc`, from the encryption migration),
-   then list again until both are empty:
+The maintainer's credentials; every command here is **not yet run anywhere**.
+The reads were run on 2026-11-11 (before the removal) and showed the first list
+below not empty.
+
+**Before the second pull request is merged**
+
+1. **Manual snapshots of the old database.** Nothing needs them once the
+   removal is decided, and `skip_final_snapshot` and `delete_automated_backups`
+   take only the instance's own; a snapshot was never in Terraform (it is made
+   by a console or CLI call), so no apply deletes one. List them, delete the
+   cutover snapshot (`logjam-cutover-final`) and any other the list shows (on
+   2026-11-11 there was also `logjam-db-final-2026-06-23-enc`, from the
+   encryption migration), then list again until it is empty:
 
    ```sh
    aws rds describe-db-snapshots --snapshot-type manual \
      --query 'DBSnapshots[].[DBSnapshotIdentifier,DBInstanceIdentifier]' --output text
-   aws rds describe-db-instance-automated-backups \
-     --query 'DBInstanceAutomatedBackups[].[DBInstanceIdentifier,Status]' --output text
    aws rds delete-db-snapshot --db-snapshot-identifier logjam-cutover-final
    ```
 
-   Both lists must print nothing. A snapshot copied to another region or
-   shared with another account is listed there, not here: check
+   The list must print nothing. A snapshot copied to another region or shared
+   with another account is listed there, not here: check
    `aws rds describe-db-snapshot-attributes --db-snapshot-identifier <id>` for
    a snapshot you delete.
-2. **The Elastic Beanstalk log groups** keep the old API's request log (IPs
-   and paths) until their retention ends (14 days; the health log 7), because
-   the environment was set not to delete them. To drop them now, list
-   (`aws logs describe-log-groups --log-group-name-prefix /aws/elasticbeanstalk`)
-   and `aws logs delete-log-group --log-group-name <name>` each.
-3. **IAM, before the apply of the second pull request:** detach the RDS
-   master-secret policy from the old instance role, because IAM refuses to
-   delete a policy that is attached, and Terraform deletes that policy:
+
+**After the apply of the second pull request, the same day**
+
+2. **The old database's leftovers.** Both lists must print nothing (the
+   instance's automated backups went with it); the log group, which the
+   instance was still publishing to while Terraform deleted it, must not exist,
+   and is deleted if RDS made it again:
 
    ```sh
-   aws iam detach-role-policy --role-name logjam-eb-role \
-     --policy-arn arn:aws:iam::620853681701:policy/DatabasePasswordAccess
+   aws rds describe-db-instance-automated-backups \
+     --query 'DBInstanceAutomatedBackups[].[DBInstanceIdentifier,Status]' --output text
+   aws rds describe-db-snapshots --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
+   aws logs describe-log-groups --log-group-name-prefix /aws/rds/instance/logjam-db-enc
+   # if it is listed: aws logs delete-log-group --log-group-name /aws/rds/instance/logjam-db-enc/postgresql
    ```
-
-   After the apply, the old role has nothing of Terraform's left on it. Remove
-   what it was made with: its inline policies (`logjam-api-ecs-runtask`, which
-   was never in Terraform), its managed attachments
-   (`aws iam list-attached-role-policies --role-name logjam-eb-role`), then the
-   instance profile and the role, and the Elastic Beanstalk service role
-   `logjam-eb-service-role`:
+3. **The Elastic Beanstalk log groups** keep the old API's request log (IPs
+   and paths) until their retention ends (14 days; the health log 7), because
+   the environment was set not to delete them. The Elastic Beanstalk service
+   made them, not Terraform, and there are ten, deleted once. To drop them now,
+   list (`aws logs describe-log-groups --log-group-name-prefix /aws/elasticbeanstalk`)
+   and `aws logs delete-log-group --log-group-name <name>` each.
+4. **The old instance role.** The apply took off it everything Terraform put
+   there, including `DatabasePasswordAccess`, whose by-hand attachment the
+   first pull request imported so that the apply detaches it before it deletes
+   the policy. What is left was made outside Terraform (the Elastic Beanstalk
+   service made the role and its instance profile, and an old hand step made
+   `logjam-api-ecs-runtask`) and is deleted once: its inline policies, its
+   managed attachments (`aws iam list-attached-role-policies --role-name logjam-eb-role`),
+   then the instance profile and the role, and the Elastic Beanstalk service
+   role `logjam-eb-service-role`:
 
    ```sh
    aws iam remove-role-from-instance-profile --instance-profile-name logjam-eb-role --role-name logjam-eb-role
@@ -568,13 +590,16 @@ removal) and showed the first two lists below not empty.
    # detach each managed policy listed, delete each inline one, then:
    aws iam delete-role --role-name logjam-eb-role
    ```
-4. **The database subnet group and the old deploy bucket.** The subnet group
-   `logjam-db-subnet-group` is free and unused once the instance is gone
+5. **The database subnet group and the old deploy bucket.** The subnet group
+   `logjam-db-subnet-group` was made with the instance in the RDS console, not
+   by Terraform, and is free and unused once the instance is gone
    (`aws rds delete-db-subnet-group --db-subnet-group-name logjam-db-subnet-group`).
-   The bucket `elasticbeanstalk-ap-southeast-2-620853681701` holds the old
-   application versions and rotated logs, and is empty-then-delete by hand when
-   nothing needs them. The CI privacy Deny still names it, so deleting it does
-   not widen anything.
-5. **The two repository secrets** `EB_APPLICATION_NAME` and
-   `EB_ENVIRONMENT_NAME`: no workflow reads them. Delete them in the
-   repository's settings (`gh secret delete <name>`).
+   The bucket `elasticbeanstalk-ap-southeast-2-620853681701` was made by the
+   Elastic Beanstalk service and holds 556 application versions and rotated
+   logs: emptying it is a one-off that would need `force_destroy` in Terraform
+   for a bucket that is never recreated, so it is emptied and deleted by hand.
+   The CI privacy Deny still names it, so deleting it does not widen anything.
+6. **The two repository secrets** `EB_APPLICATION_NAME` and
+   `EB_ENVIRONMENT_NAME`: no workflow reads them. Secret values are set by hand, outside
+   Terraform ([0025](../decisions/0025-github-settings-in-terraform.md)), so they
+   are deleted by hand too. Delete them in the repository's settings (`gh secret delete <name>`).

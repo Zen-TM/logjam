@@ -173,15 +173,14 @@ fails when it is broken.
    `infra/scripts/brain-setting.sh`, which fails rather than guess), so they
    cannot disagree about the mode. In order: the image tag, the bootstrap
    flag, `brain_serving` (the instance tag, and the workflows' wait for the
-   release to be live), then `brain_public` (CloudFront's API origin).
-   `brain_public` needs `brain_serving`, and `brain_serving` needs a tag; each
-   refusal names the setting. Guards:
-   `brain_settings_are_one_file_and_read_by_the_workflows`,
+   release to be live). `brain_serving` needs a tag, and the refusal names the
+   setting. (Updated 2026-11-11: a further `brain_public` setting, which
+   CloudFront's API origin followed, is gone; the origin and the task
+   definitions' database name the brain unconditionally. See the Update
+   below.) Guards: `brain_settings_are_one_file_and_read_by_the_workflows`,
    `brain_variable_defaults_are_inert`,
    `brain_serving_without_an_image_tag_is_refused`, and `brain-setting.sh
-   --self-test` (`infra-scripts`). (Updated 2026-11-11: `brain_public` is
-   removed and the task definitions' database no longer follows a setting; see
-   the Update below.)
+   --self-test` (`infra-scripts`).
 9. **A restore follows the newest backup, and a rewind is a new volume.** A
    restore target (`restore_to`, a time with a UTC offset) lives on a data
    volume's entry in `var.brain_data_volumes`, never in a setting of its own:

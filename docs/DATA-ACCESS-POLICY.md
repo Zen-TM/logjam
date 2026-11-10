@@ -15,8 +15,11 @@ rather than take my word.
 
 Logjam's API and database run on one server I run myself, called the brain
 ([the decision](decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md)).
-They used to run on Elastic Beanstalk and RDS, which are deleted, along with the
-database's backups and snapshots there.
+They used to run on Elastic Beanstalk and RDS. Both are deleted, and with the
+database its automated backups; no final snapshot was kept, and its manual
+snapshots were deleted before the removal. The old API's request logs and
+deployment files are not part of that removal: I delete them by hand, the same
+day.
 
 ## My commitment
 
