@@ -17,7 +17,8 @@ release=$(s3_get release.json) || die "serving is on but release.json cannot be 
 
 # The file is rendered from the release's env, then the host's own line goes
 # LAST: a later duplicate wins in an env_file, so no release can unset it.
-# Values are single-quoted so Compose does not interpolate them.
+# Values are single-quoted so Compose does not interpolate them, which is also
+# why a quote or a backslash in one refuses the release.
 new=$(mktemp /etc/brain/api.env.XXXXXX)
 trap 'rm -f "$new"' EXIT
 sha=$(RELEASE=$release python3 - "$new" <<'PY'
@@ -28,7 +29,7 @@ assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", sha), "bad sha"
 with open(sys.argv[1], "w") as f:
     for k, v in env.items():
         assert re.fullmatch(r"[A-Z][A-Z0-9_]*", k), "bad name"
-        assert isinstance(v, str) and not re.search(r"[\x00-\x1f\x7f']", v), "bad value for " + k
+        assert isinstance(v, str) and not re.search(r"[\x00-\x1f\x7f'\\]", v), "bad value for " + k
         f.write(f"{k}='{v}'\n")
     f.write("LOGJAM_RUNTIME=prod\n")
 print(sha)
@@ -47,4 +48,7 @@ fi
 chmod 0600 "$new"
 mv "$new" /etc/brain/api.env
 # --no-deps: only boot.sh starts Postgres. The image is pulled if it is not here (tags are immutable).
-compose up -d --no-deps --force-recreate api
+# A failed `up` takes the new file away again, or the next run would see nothing to change.
+compose up -d --no-deps --force-recreate api || { rm -f /etc/brain/api.env; die "the API did not start at $sha: the next run tries again"; }
+# Old releases would fill the root disk. Images of containers are kept; a rollback pulls an old one again.
+docker image prune -af --filter until=72h > /dev/null || true
