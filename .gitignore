@@ -45,6 +45,3 @@ CLAUDE.local.md
 # Scratch space: everything under private/ stays on your machine (see
 # private/.gitignore). Machine-specific ignores belong in .git/info/exclude.
 .test-out/
-
-# The topo image build copies the brain certificate in (topo/Dockerfile).
-topo/brain-ca.pem

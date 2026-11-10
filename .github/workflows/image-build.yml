@@ -104,6 +104,4 @@ jobs:
           fi
       - name: Build the topo worker image
         if: steps.scope.outputs.build == 'true'
-        run: |
-          cp infra/brain/brain-ca.pem topo/brain-ca.pem
-          docker build ./topo
+        run: docker build ./topo

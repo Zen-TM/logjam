@@ -110,9 +110,10 @@ RUN python -c "from osgeo import gdal_array"
 # ------------------------------------------------------------
 WORKDIR /app
 # The brain's Postgres certificate, which DATABASE_SSL_CA points at when
-# brain_serving is on (ecs.tf). It lives at infra/brain/brain-ca.pem, outside
-# this build context, so the workflows that build this image copy it to
-# topo/brain-ca.pem first (git ignores that copy). The build fails without it.
+# brain_serving is on (ecs.tf). A build cannot reach outside its context, and
+# this image's is topo/, so the certificate is committed twice: at
+# infra/brain/brain-ca.pem (what Terraform and the API image read) and here.
+# CI fails when the two differ (ci.yml, infra-scripts). The build fails without it.
 COPY brain-ca.pem /app/brain-ca.pem
 COPY worker.py /app/worker.py
 COPY pipeline.py /app/pipeline.py
