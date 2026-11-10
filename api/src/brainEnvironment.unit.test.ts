@@ -1,18 +1,17 @@
 // infra/brain/api.env is the API's complete non-secret environment on the
-// brain. Every variable in it is one the schema (lib/env.ts) declares, it
-// keeps today's Elastic Beanstalk values, and it leaves LOGJAM_RUNTIME and
-// secrets to the host.
+// brain. Every variable in it is one the schema (lib/env.ts) declares, it sets
+// the brain's own database host, certificate and proxy hops, and it leaves
+// LOGJAM_RUNTIME and secrets to the host.
 //
-// Mutation that turns it red: adding `LOGJAM_RUNTIME=prod` or `SMTP_PASSWORD=x`
-// to the file, changing a shared value from what .ebextensions sets, or
-// dropping a variable .ebextensions still sets.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+// Mutation that turns it red: adding `LOGJAM_RUNTIME=prod`, `SMTP_PASSWORD=x`
+// or a variable the schema lacks to the file, or changing DB_HOST,
+// DATABASE_SSL_CA or TRUST_PROXY_HOPS.
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const api = join(import.meta.dirname, "..");
 const schema = readFileSync(join(api, "src", "lib", "env.ts"), "utf8");
-const ebDir = join(api, ".ebextensions");
 
 function parseEnvFile(text: string): [string, string][] {
   return text
@@ -22,18 +21,6 @@ function parseEnvFile(text: string): [string, string][] {
       line.slice(0, line.indexOf("=")),
       line.slice(line.indexOf("=") + 1),
     ]);
-}
-
-function ebEnvironment(text: string): [string, string][] {
-  const start = text.indexOf("aws:elasticbeanstalk:application:environment:");
-  if (start === -1) return [];
-  const pairs: [string, string][] = [];
-  for (const line of text.slice(start).split("\n").slice(1)) {
-    const match = /^ {4}([A-Z0-9_]+): "?([^"]*)"?$/.exec(line);
-    if (!match) break;
-    pairs.push([match[1], match[2]]);
-  }
-  return pairs;
 }
 
 const brain = parseEnvFile(
@@ -63,32 +50,9 @@ describe("infra/brain/api.env", () => {
     expect(keys).not.toContain("LOGJAM_RUNTIME");
   });
 
-  it("differs from Elastic Beanstalk only in the database host, its CA and the proxy hops", () => {
+  it("names the Compose database, its certificate and the one proxy hop", () => {
     expect(brainMap.get("DB_HOST")).toBe("postgres");
     expect(brainMap.get("DATABASE_SSL_CA")).toBe("/app/brain-ca.pem");
     expect(brainMap.get("TRUST_PROXY_HOPS")).toBe("1");
-  });
-
-  // The directory goes when Elastic Beanstalk does; the file then stands alone.
-  describe.skipIf(!existsSync(ebDir))("against .ebextensions", () => {
-    const eb = readdirSync(ebDir)
-      .filter((file) => file.endsWith(".config"))
-      .flatMap((file) =>
-        ebEnvironment(readFileSync(join(ebDir, file), "utf8")),
-      );
-    const different = new Set(["DB_HOST"]);
-
-    it("sets every variable Elastic Beanstalk sets", () => {
-      expect(eb.length).toBeGreaterThan(15);
-      expect(eb.filter(([key]) => !brainMap.has(key))).toEqual([]);
-    });
-
-    it("keeps their values", () => {
-      expect(
-        eb.filter(
-          ([key, value]) => !different.has(key) && brainMap.get(key) !== value,
-        ),
-      ).toEqual([]);
-    });
   });
 });

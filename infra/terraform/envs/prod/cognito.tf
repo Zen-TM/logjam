@@ -116,7 +116,7 @@ resource "aws_cognito_user_pool_client" "main" {
   allowed_oauth_flows_user_pool_client = true
   # profile: the code flow's ID token carries no profile claims without it.
   # aws.cognito.signin.user.admin: what change-email and GlobalSignOut call
-  # Cognito with. Guard: guards.tftest.hcl (cognito_client_scopes_and_api_grant).
+  # Cognito with. Guard: guards.tftest.hcl (cognito_client_scopes).
   allowed_oauth_scopes  = ["aws.cognito.signin.user.admin", "email", "openid", "phone", "profile"]
   auth_session_validity = 3
   # Logjam Web redirects to location.origin + "/" and the site answers on both

@@ -105,7 +105,7 @@ drill() {
   local tables
   tables=$(q logjam "select format('select count(*) from %I.%I;', schemaname, tablename) from pg_tables where schemaname = 'public' order by 1") \
     || { ERROR=tables_unreadable; return; }
-  # A brain that has not had the cutover's copy has no tables yet: nothing to read, and no _prisma_migrations.
+  # A brain with no tables yet has nothing to read, and no _prisma_migrations.
   if [ -z "$tables" ]; then TABLES=0; return; fi
   q logjam 'select count(*) from _prisma_migrations' > /dev/null 2>&1 || { ERROR=migrations_unreadable; return; }
   psql -h "$SOCK" -U postgres -d logjam -v ON_ERROR_STOP=1 -tAXq > /dev/null 2>&1 <<< "set enable_indexonlyscan = off; set enable_indexscan = off; set enable_bitmapscan = off;

@@ -1,32 +1,24 @@
-# The brain: one EC2 host that will run prod's Postgres and API (#565). The
-# defaults below keep it inert: with an empty brain_pg_image_tag there is no
-# instance, no data volume and no Elastic IP (brain_instance.tf), so none of it
-# costs anything. Guard: tests/guards.tftest.hcl (brain_is_absent_by_default).
+# The brain: one EC2 host that runs prod's Postgres and API (#565). The
+# defaults below keep a root without settings inert: with an empty
+# brain_pg_image_tag there is no instance, no data volume and no Elastic IP
+# (brain_instance.tf), so none of it costs anything. Prod's root does not plan
+# without a brain though: CloudFront's origin and every task definition's
+# database name its address. Guard: tests/guards.tftest.hcl
+# (brain_is_absent_by_default).
 #
 # prod's values are not these defaults but brain.auto.tfvars, the one file the
-# deploy workflows read too (brain_serving decides where they release). The
-# defaults stay empty and off, so a guard can say "absent by default" without
-# knowing the file.
+# deploy workflows read too (brain_serving decides whether they wait for the
+# release to be live). The defaults stay empty and off, so a guard can say
+# "absent by default" without knowing the file.
 
 variable "brain_serving" {
-  description = "Whether the brain serves: sets the instance tag `brain-serving`, which the host reads from instance metadata to start the API; points every task definition with a database at the brain; and makes the deploy and rollback workflows release to the brain instead of Elastic Beanstalk. Off until the cutover."
+  description = "Whether the API runs on the host: sets the instance tag `brain-serving`, which the host reads from instance metadata to start the API, and makes the deploy and rollback workflows wait for the release to be live. Off keeps the host's API stopped, for a rebuild from backups that must not serve (or sweep) before the data is checked."
   type        = bool
   default     = false
 
   validation {
     condition     = !var.brain_serving || var.brain_pg_image_tag != ""
     error_message = "brain_serving needs a brain: set brain_pg_image_tag in brain.auto.tfvars first (or set brain_serving back to false)."
-  }
-}
-
-variable "brain_public" {
-  description = "Whether CloudFront's API origin is the brain (and not Elastic Beanstalk), and the API's 5xx alarm and client metric read the brain's log group. Needs brain_serving. Set it in a later merge than brain_serving, once the brain answers."
-  type        = bool
-  default     = false
-
-  validation {
-    condition     = !var.brain_public || var.brain_serving
-    error_message = "brain_public needs brain_serving: set brain_serving = true in brain.auto.tfvars first (or set brain_public back to false), so CloudFront never points at a brain whose API is not running."
   }
 }
 

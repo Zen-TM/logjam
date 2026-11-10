@@ -33,7 +33,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 - Node.js + Express 5 + TypeScript
 - Prisma ORM (driver adapter: `@prisma/adapter-pg`)
-- PostgreSQL (AWS RDS in prod)
+- PostgreSQL (on the brain, one EC2 instance, in prod)
 - zod (env + input validation), pino (logging)
 
 ### Topo pipeline
@@ -49,8 +49,8 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 ### AWS
 
 - Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
-- ECS Fargate (topo/export workers) · Elastic Beanstalk (API) · ECR (images)
-- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email, over SMTP)
+- EC2 (the brain: the API and Postgres under Docker Compose) · ECS Fargate (topo/export workers) · ECR (images)
+- S3 Object Lock (the brain's backups) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email, over SMTP)
 
 ### Infrastructure as Code & local dev
 
@@ -262,7 +262,7 @@ GitHub Actions (`.github/workflows/`):
 | `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate`, and `envs/github`'s guard test (no AWS access) |
 | `terraform-plan.yml` | PRs touching `infra/terraform/{envs/prod,modules,templates}/` (`plan-prod`) or `infra/terraform/envs/github/` (`plan-github`) | read-only `terraform plan` of prod AWS or of this repository's GitHub settings, posted as a PR comment |
 | `terraform-apply.yml` | push to `main` (path-filtered) | applies each plan the merged PR showed, and refuses any other ([0026](docs/decisions/0026-plan-fingerprint-covers-planned-values.md), [0025](docs/decisions/0025-github-settings-in-terraform.md)) |
-| `deploy-api.yml` / `deploy-frontend.yml` / `deploy-topo-worker.yml` | push to `main` (path-filtered) | build + deploy to ECR/EB, S3+CloudFront, ECR respectively |
+| `deploy-api.yml` / `deploy-frontend.yml` / `deploy-topo-worker.yml` | push to `main` (path-filtered) | build + deploy the API (ECR image + the brain's release pointer), the frontend (S3+CloudFront) and the topo worker (ECR) respectively |
 
 ### Troubleshooting
 
@@ -293,8 +293,8 @@ Logjam is deployed to AWS in the `ap-southeast-2` (Sydney) region.
 | Component          | Service           |
 | ------------------ | ----------------- |
 | Frontend           | S3 + CloudFront   |
-| Backend API        | Elastic Beanstalk |
-| Database           | RDS PostgreSQL    |
+| Backend API        | EC2 (the brain)   |
+| Database           | PostgreSQL on the brain |
 | Container registry | ECR               |
 | Auth               | Cognito           |
 | Media storage      | S3                |

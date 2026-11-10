@@ -1,12 +1,12 @@
 // Composes a Postgres connection string from discrete DB_* env vars.
 //
-// The DB password lives only in AWS Secrets Manager (RDS-managed secret,
-// {"username","password"}). ECS task defs inject DB_USER/DB_PASSWORD via the
-// ECS secrets mechanism; the EB API container resolves DB_SECRET_ID into
-// DB_USER/DB_PASSWORD at boot (see src/boot.ts). Nothing should read
-// DATABASE_URL — compose it here instead.
+// The DB password lives only in AWS Secrets Manager ({"username","password"}).
+// ECS task defs inject DB_USER/DB_PASSWORD via the ECS secrets mechanism; the
+// brain's API container resolves DB_SECRET_ID into DB_USER/DB_PASSWORD at boot
+// (see src/boot.ts). Nothing should read DATABASE_URL — compose it here
+// instead.
 //
-// User and password are URL-encoded because RDS-generated passwords contain
+// User and password are URL-encoded because generated passwords can contain
 // characters like "!" that are not valid unescaped in a URL.
 
 export interface DatabaseUrlParts {

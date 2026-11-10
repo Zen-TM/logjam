@@ -950,9 +950,8 @@ jobs:
       - name: Brain release pointer
         run: infra/scripts/brain-release.sh --self-test
       # The one settings file the deploy workflows and Terraform both read
-      # (brain.auto.tfvars): how it is parsed, what a deploy asks of the
-      # migrate task definition, and that no Elastic Beanstalk step runs when
-      # the brain serves.
+      # (brain.auto.tfvars): how it is parsed, and that the workflows read
+      # brain_serving and gate their smoke tests on it.
       - name: Brain settings
         run: infra/scripts/brain-setting.sh --self-test
       # What image-build.yml builds, checked against the Dockerfiles' COPY

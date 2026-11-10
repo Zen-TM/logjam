@@ -24,7 +24,6 @@ variables {
   brain_pg_image_tag        = ""
   brain_bootstrap           = false
   brain_serving             = false
-  brain_public              = false
   brain_instance_type       = "t4g.small"
   brain_data_volumes        = { "1" = { az = "ap-southeast-2a", size_gb = 20 } }
   brain_data_volume_current = "1"
@@ -518,6 +517,10 @@ run "fire_history_role_writes_only_fire" {
 
 run "pin_role_passes_every_topo_task_role" {
   command = plan
+  # The task definitions name the brain's address, so a brain must exist.
+  variables {
+    brain_pg_image_tag = "test"
+  }
   plan_options {
     target = [
       aws_iam_role_policy.gha_pin_task_defs,
@@ -663,29 +666,10 @@ run "api_rate_limit_is_one_plain_ip_rule" {
   }
 }
 
-run "postgres_errors_log_no_row_values" {
+run "cognito_client_scopes" {
   command = plan
   plan_options {
-    target = [aws_db_parameter_group.pgaudit]
-  }
-
-  # At the default verbosity, a constraint violation logs a DETAIL line with
-  # the failing row's values ("Failing row contains (...)"), which can carry a
-  # place's name or coordinates into the postgresql log and its WORM sink.
-  # Mutation: drop the log_error_verbosity parameter, or set it to "default"
-  # or "verbose", and this turns red.
-  assert {
-    condition = contains([
-      for p in aws_db_parameter_group.pgaudit.parameter : p.value if p.name == "log_error_verbosity"
-    ], "terse")
-    error_message = "The RDS parameter group must set log_error_verbosity = terse, so Postgres errors never log row values."
-  }
-}
-
-run "cognito_client_scopes_and_api_grant" {
-  command = plan
-  plan_options {
-    target = [aws_cognito_user_pool_client.main, aws_iam_role_policy.eb_cognito_admin_getuser]
+    target = [aws_cognito_user_pool_client.main]
   }
 
   # Mutation: dropping `aws.cognito.signin.user.admin` breaks change-email
@@ -694,18 +678,6 @@ run "cognito_client_scopes_and_api_grant" {
   assert {
     condition     = length(setintersection(aws_cognito_user_pool_client.main.allowed_oauth_scopes, ["aws.cognito.signin.user.admin", "profile"])) == 2
     error_message = "The app client must allow the aws.cognito.signin.user.admin and profile scopes (cognito.tf)."
-  }
-
-  # Mutation: adding any action (a revived AdminCreateUser, ListUsers) or a
-  # second statement widens what a compromised API can do to the user
-  # directory; dropping AdminDeleteUser makes account deletion fail at Cognito.
-  assert {
-    condition = (
-      length(jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement) == 1 &&
-      toset(flatten([jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement[0].Action])) == toset(["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]) &&
-      jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement[0].Resource == "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
-    )
-    error_message = "The API's Cognito grant must be exactly AdminGetUser and AdminDeleteUser on the one pool (iam.tf)."
   }
 }
 
@@ -933,7 +905,7 @@ run "brain_role_has_only_its_grants" {
     error_message = "The brain's role must list and read backup versions and must not delete versions or touch the lock."
   }
 
-  # Mutation: adding the RDS master secret, a wildcard or any other secret
+  # Mutation: adding a database master secret, a wildcard or any other secret
   # to the secrets statement, or a second statement with secretsmanager actions.
   assert {
     condition = (
@@ -968,6 +940,20 @@ run "brain_role_has_only_its_grants" {
       ["SignalsList", ["s3:ListBucket"], ["arn:aws:s3:::logjam-brain-signals-620853681701"]],
     ]
     error_message = "The brain's role may read release.json, list the signals bucket and write status.json: nothing else."
+  }
+
+  # Mutation: adding any action (a revived AdminCreateUser, ListUsers) to the
+  # Cognito statement, or widening its resource past the one pool, widens what a
+  # compromised API can do to the user directory; dropping AdminDeleteUser makes
+  # account deletion fail at Cognito.
+  assert {
+    condition = (
+      [for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : [flatten([st.Action]), st.Resource] if st.Sid == "CognitoAdminUser"] == [
+        [["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"], "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"]
+      ] &&
+      length([for st in jsondecode(aws_iam_role_policy.brain.policy).Statement : st if anytrue([for a in flatten([st.Action]) : startswith(a, "cognito-idp:")])]) == 1
+    )
+    error_message = "The brain's Cognito grant must be exactly AdminGetUser and AdminDeleteUser on the one pool (brain_iam.tf)."
   }
 }
 
@@ -1577,161 +1563,6 @@ run "brain_instance_sizes_set_postgres_and_api_memory" {
   }
 }
 
-# ── The cutover's data copy (brain_copy.tf) ──────────────────────────────────
-
-run "brain_copy_is_absent_by_default" {
-  command = plan
-  plan_options {
-    target = [
-      aws_ecs_task_definition.brain_copy,
-      aws_iam_role.brain_copy,
-      aws_iam_role_policy.brain_copy,
-      aws_cloudwatch_log_group.brain_copy,
-    ]
-  }
-
-  # Mutation: taking the count off any of these resources, so merging the
-  # change registers a task definition (and a role) before the brain exists.
-  assert {
-    condition = (
-      length(aws_ecs_task_definition.brain_copy) == 0 &&
-      length(aws_iam_role.brain_copy) == 0 &&
-      length(aws_iam_role_policy.brain_copy) == 0 &&
-      length(aws_cloudwatch_log_group.brain_copy) == 0
-    )
-    error_message = "With the default variables the data copy must have no task definition, role or log group."
-  }
-}
-
-run "brain_copy_task_reads_only_status_json" {
-  command = plan
-  variables {
-    brain_pg_image_tag = "test"
-  }
-  plan_options {
-    target = [aws_ecs_task_definition.brain_copy, aws_iam_role_policy.brain_copy]
-  }
-
-  override_resource {
-    target          = aws_s3_bucket.brain_signals
-    values          = { arn = "arn:aws:s3:::logjam-brain-signals-mock" }
-    override_during = plan
-  }
-  override_resource {
-    target = aws_db_instance.main
-    values = {
-      address            = "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
-      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds-mock", kms_key_id = "", secret_status = "active" }]
-    }
-    override_during = plan
-  }
-  override_resource {
-    target          = aws_iam_role.brain_copy
-    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-copy" }
-    override_during = plan
-  }
-  override_resource {
-    target          = aws_iam_role.ecs_task_execution
-    values          = { arn = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole" }
-    override_during = plan
-  }
-  override_resource {
-    target          = aws_secretsmanager_secret.app_db
-    values          = { arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-mock" }
-    override_during = plan
-  }
-
-  # Mutation: any second statement or action on the task role, a wider
-  # resource than status.json (the signals bucket also holds release.json,
-  # which the copy has no business reading), or a credential given to the
-  # task as plain environment. The role is what makes "the copy reads one
-  # file and writes nothing" true.
-  assert {
-    condition = (
-      length(jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement) == 1 &&
-      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Effect == "Allow" &&
-      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Action == "s3:GetObject" &&
-      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Resource == "arn:aws:s3:::logjam-brain-signals-mock/status.json"
-    )
-    error_message = "The data copy's task role may read status.json and nothing else."
-  }
-
-  # Mutation: another command or architecture, the brain's name taken from
-  # anywhere but the Elastic IP, or a key in the plain environment.
-  assert {
-    condition = (
-      aws_ecs_task_definition.brain_copy[0].runtime_platform[0].cpu_architecture == "ARM64" &&
-      jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].command == ["/usr/local/lib/brain/copy.sh"] &&
-      endswith(jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].image, "/logjam-brain-postgres:test") &&
-      alltrue([for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : !can(regex("(?i)password|secret|key|token", e.name))]) &&
-      [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_HOST"][0] == "ec2-203-0-113-7.ap-southeast-2.compute.amazonaws.com" &&
-      [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_SOURCE_HOST"][0] == "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
-    )
-    error_message = "The data copy must run copy.sh on ARM64 from the brain's image, between RDS and the brain's own name, with no credential in its environment."
-  }
-
-  # The names copy.sh reads (`${NAME:?}` or `${NAME:-...}`) and the task
-  # definition's environment plus secrets are one list. The three optional
-  # overrides are in the script only: the task never sets them, a person adds
-  # them to a run (COPY_SOURCE_CA_FILE is for tests). Mutation: renaming
-  # BRAIN_SIGNALS_BUCKET in brain_copy.tf (the task would stop at start, in
-  # the cutover window), or reading a new name in copy.sh.
-  assert {
-    condition = (
-      setsubtract(
-        toset([for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):[?-]", file("../../../brain/postgres/copy.sh")) : m[0]]),
-        ["COPY_REPLACE", "COPY_ALLOW_LIVE_SOURCE", "COPY_SOURCE_CA_FILE"]
-        ) == toset(concat(
-          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.name],
-          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].secrets : e.name]
-      ))
-    )
-    error_message = "copy.sh and the data copy's task definition must name the same environment variables."
-  }
-
-  # Without infra/brain/brain-ca.pem (committed once the brain has booted) the
-  # task still plans, with an empty CA, and the script refuses. Mutation:
-  # reading the file without the fileexists guard (the plan errors).
-  assert {
-    condition     = [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_CA"][0] == ""
-    error_message = "Until brain-ca.pem exists the data copy's CA must be empty."
-  }
-}
-
-run "brain_copy_is_never_scheduled" {
-  command = plan
-  variables {
-    brain_pg_image_tag = "test"
-  }
-  plan_options {
-    target = [aws_ecs_task_definition.brain_copy]
-  }
-  override_resource {
-    target = aws_db_instance.main
-    values = {
-      address            = "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
-      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds-mock", kms_key_id = "", secret_status = "active" }]
-    }
-    override_during = plan
-  }
-
-  # Nothing may start the task but a person. A plan cannot list the
-  # schedules that name it, so this reads every .tf file: no other file may
-  # mention the task definition, and brain_copy.tf holds no schedule, event
-  # rule or pipe. Mutation: an aws_scheduler_schedule (or event target) in any
-  # file naming aws_ecs_task_definition.brain_copy, or one added to
-  # brain_copy.tf. A copy run after the cutover replaces the live database
-  # with RDS's frozen copy.
-  assert {
-    condition = (
-      length(aws_ecs_task_definition.brain_copy) == 1 &&
-      alltrue([for f in setunion(fileset(".", "*.tf")) : f == "brain_copy.tf" || !strcontains(file(f), "aws_ecs_task_definition.brain_copy")]) &&
-      !can(regex("aws_scheduler|aws_cloudwatch_event|aws_pipes|aws_batch", file("brain_copy.tf")))
-    )
-    error_message = "The data copy must have no schedule: only a person starts it (brain_copy.tf)."
-  }
-}
-
 # ── The brain's watchdog and restore drill (brain_watchdog.tf, brain_drill.tf) ──
 
 run "brain_watchdog_and_drill_are_absent_by_default" {
@@ -2021,7 +1852,6 @@ run "brain_drill_log_is_not_the_audit_trail" {
     target = [
       aws_cloudwatch_log_group.brain_drill,
       aws_cloudwatch_log_subscription_filter.brain_pgaudit_to_firehose,
-      aws_cloudwatch_log_subscription_filter.pgaudit_to_firehose,
     ]
   }
 
@@ -2033,13 +1863,13 @@ run "brain_drill_log_is_not_the_audit_trail" {
 
   # Mutation: a subscription filter on /logjam/brain/drill (to the audit
   # Firehose or any other): the drill's log would land in the WORM bucket as
-  # if it were prod's audit trail. The test covers the two filters that exist
+  # if it were prod's audit trail. The test covers the filter that exists
   # and every .tf file: a new filter resource anywhere must not name the group,
   # by its resource or by its literal name.
   assert {
     condition = alltrue(concat(
       [
-        for f in [aws_cloudwatch_log_subscription_filter.brain_pgaudit_to_firehose, aws_cloudwatch_log_subscription_filter.pgaudit_to_firehose] :
+        for f in [aws_cloudwatch_log_subscription_filter.brain_pgaudit_to_firehose] :
         f.log_group_name != aws_cloudwatch_log_group.brain_drill[0].name
       ],
       flatten([
@@ -2115,7 +1945,7 @@ run "brain_drill_runs_daily_after_the_backup_on_arm" {
   }
 }
 
-# ── The switch: what brain.auto.tfvars flips (cloudfront.tf, ecs.tf, monitoring.tf) ──
+# ── The settings (brain.auto.tfvars) and what prod points at the brain (cloudfront.tf, ecs.tf, monitoring.tf) ──
 
 run "brain_settings_are_one_file_and_read_by_the_workflows" {
   command = plan
@@ -2130,20 +1960,20 @@ run "brain_settings_are_one_file_and_read_by_the_workflows" {
   # every setting the file carries is pinned at the top of this file, so the
   # suite says the same whatever the file says.
   # Mutation: a second terraform.tfvars or zz.auto.tfvars in this directory;
-  # brain_serving or brain_public written as an expression or a quoted string;
+  # brain_serving written as an expression or a quoted string;
   # a setting added to brain.auto.tfvars (say brain_cpu_credits = "standard")
   # and not to the variables block at the top of this file.
   assert {
     condition = (
       aws_sns_topic.alerts.name == "logjam-alerts" &&
       fileset(".", "*.tfvars*") == toset(["brain.auto.tfvars"]) &&
-      alltrue([for l in ["brain_serving", "brain_public", "brain_bootstrap"] : can(regex("(?m)^${l} = (true|false)( #.*)?$", file("brain.auto.tfvars")))]) &&
+      alltrue([for l in ["brain_serving", "brain_bootstrap"] : can(regex("(?m)^${l} = (true|false)( #.*)?$", file("brain.auto.tfvars")))]) &&
       length(setsubtract(
         toset(flatten(regexall("(?m)^(brain_[a-z_]+) *=", file("brain.auto.tfvars")))),
         toset(flatten(regexall("(?m)^  (brain_[a-z_]+) *=", file("tests/guards.tftest.hcl"))))
       )) == 0
     )
-    error_message = "brain.auto.tfvars must be the only tfvars file, hold brain_serving, brain_public and brain_bootstrap as one-line true or false, and every setting in it must be pinned in the variables block at the top of tests/guards.tftest.hcl."
+    error_message = "brain.auto.tfvars must be the only tfvars file, hold brain_serving and brain_bootstrap as one-line true or false, and every setting in it must be pinned in the variables block at the top of tests/guards.tftest.hcl."
   }
 }
 
@@ -2155,35 +1985,16 @@ run "brain_variable_defaults_are_inert" {
 
   # The suite pins the settings (above), so the defaults are read from the
   # source. Mutation: default = "x" on brain_pg_image_tag, or true on
-  # brain_serving, brain_public or brain_bootstrap: a plan with the settings
+  # brain_serving or brain_bootstrap: a plan with the settings
   # file absent (or one that leaves a line out) would build or switch things on.
   assert {
     condition = (
       aws_sns_topic.alerts.name == "logjam-alerts" &&
       can(regex("variable \"brain_pg_image_tag\" \\{[^}]*default += \"\"", file("brain_variables.tf"))) &&
-      alltrue([for v in ["brain_serving", "brain_public", "brain_bootstrap"] : can(regex("variable \"${v}\" \\{[^}]*default += false", file("brain_variables.tf")))])
+      alltrue([for v in ["brain_serving", "brain_bootstrap"] : can(regex("variable \"${v}\" \\{[^}]*default += false", file("brain_variables.tf")))])
     )
-    error_message = "brain_pg_image_tag must default to empty and brain_serving, brain_public and brain_bootstrap to false (brain_variables.tf)."
+    error_message = "brain_pg_image_tag must default to empty and brain_serving and brain_bootstrap to false (brain_variables.tf)."
   }
-}
-
-run "brain_public_without_brain_serving_is_refused" {
-  command = plan
-  variables {
-    brain_pg_image_tag = "test"
-    brain_serving      = false
-    brain_public       = true
-  }
-  # Targets that use the variable (two, so that a mutation of one does not hide
-  # the validation): a plan evaluates only the variables the targeted resources
-  # need, and validation runs with the variable.
-  plan_options {
-    target = [aws_cloudfront_distribution.api, aws_cloudwatch_metric_alarm.api_environment_degraded]
-  }
-
-  # Mutation: dropping the validation on brain_public points CloudFront at a
-  # brain whose API is not running.
-  expect_failures = [var.brain_public]
 }
 
 run "brain_serving_without_an_image_tag_is_refused" {
@@ -2193,117 +2004,26 @@ run "brain_serving_without_an_image_tag_is_refused" {
     brain_serving      = true
   }
   plan_options {
-    target = [aws_ecs_task_definition.api_migrate, aws_instance.brain]
+    target = [aws_instance.brain]
   }
 
-  # Mutation: dropping the validation on brain_serving points every task
-  # definition at an address that does not exist.
+  # Mutation: dropping the validation on brain_serving lets the serving switch
+  # be on with no brain to serve.
   expect_failures = [var.brain_serving]
 }
 
-run "brain_is_dormant_for_cloudfront_and_tasks" {
+run "prod_runs_on_the_brain" {
   command = plan
-  override_resource {
-    target          = aws_security_group.worker
-    values          = { id = "sg-mockworker" }
-    override_during = plan
-  }
-  plan_options {
-    target = [
-      aws_cloudfront_distribution.api,
-      aws_ecs_task_definition.api_script,
-      aws_ecs_task_definition.topo_worker,
-      aws_ecs_task_definition.api_migrate,
-      aws_ecs_task_definition.topo_export_worker,
-      aws_cloudwatch_log_metric_filter.api_5xx,
-      aws_cloudwatch_log_metric_filter.sync_client,
-      aws_cloudwatch_metric_alarm.api_environment_degraded,
-    ]
-  }
-
-  # With the settings off (the pinned values) everything the switch reaches is
-  # as it is today: CloudFront's API origin is Elastic Beanstalk's name, the
-  # four task definitions with a DB_HOST name RDS and set no DATABASE_SSL_CA,
-  # the request-log filters read Elastic Beanstalk's group and its health alarm
-  # pages. Mutation: changing the Elastic Beanstalk or RDS literal, or the
-  # else branch of local.db_environment or of the origin's domain_name.
-  assert {
-    condition = (
-      one(aws_cloudfront_distribution.api.origin).domain_name == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com" &&
-      one(aws_cloudfront_distribution.api.origin).origin_id == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl" &&
-      aws_cloudfront_distribution.api.default_cache_behavior[0].target_origin_id == one(aws_cloudfront_distribution.api.origin).origin_id &&
-      alltrue([
-        for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
-        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DB_HOST"] == "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com" &&
-        !contains([for e in jsondecode(td.container_definitions)[0].environment : e.name], "DATABASE_SSL_CA")
-      ]) &&
-      [for e in jsondecode(aws_ecs_task_definition.api_migrate.container_definitions)[0].environment : e.name] == ["AWS_REGION", "DB_HOST", "DB_NAME", "DB_PORT", "NODE_ENV"] &&
-      aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log" &&
-      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == aws_cloudwatch_log_metric_filter.api_5xx.log_group_name &&
-      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == true
-    )
-    error_message = "With brain_serving and brain_public off, CloudFront, the four database task definitions, the request-log filters and the health alarm must be exactly as they are with Elastic Beanstalk serving."
-  }
-}
-
-run "brain_serving_points_every_database_task_at_the_brain" {
-  command = plan
+  # Serving is off on purpose: neither the database nor the origin may depend
+  # on it.
   variables {
     brain_pg_image_tag = "test"
-    brain_serving      = true
+    brain_serving      = false
   }
   override_resource {
     target          = aws_security_group.worker
     values          = { id = "sg-mockworker" }
     override_during = plan
-  }
-  plan_options {
-    target = [
-      aws_cloudfront_distribution.api,
-      aws_ecs_task_definition.api_script,
-      aws_ecs_task_definition.topo_worker,
-      aws_ecs_task_definition.api_migrate,
-      aws_ecs_task_definition.topo_export_worker,
-      aws_cloudwatch_log_metric_filter.api_5xx,
-      aws_cloudwatch_log_metric_filter.sync_client,
-      aws_cloudwatch_metric_alarm.api_environment_degraded,
-    ]
-  }
-
-  # Every task definition that has a DB_HOST names the brain's address with the
-  # certificate path to verify it by, so a worker left on RDS would write its
-  # job results to a database nobody reads. The definitions are enumerated
-  # here and the DB_HOST literals counted in every .tf file (the two entries of
-  # local.db_environment), so a new definition with a DB_HOST of its own fails
-  # until it follows brain_serving. And serving alone moves nothing else:
-  # CloudFront, the filters and the health alarm wait for brain_public.
-  # Mutation: one definition's `local.db_environment` replaced by a literal
-  # DB_HOST (RDS's name); a new task definition with a literal DB_HOST; the
-  # certificate entry dropped from local.db_environment; the origin's domain or
-  # a filter's group following brain_serving instead of brain_public.
-  assert {
-    condition = (
-      alltrue([
-        for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
-        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DB_HOST"] == aws_eip.brain[0].public_dns &&
-        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DATABASE_SSL_CA"] == "/app/brain-ca.pem"
-      ]) &&
-      sum([for f in fileset(".", "*.tf") : length(regexall("\"DB_HOST\"", file(f)))]) == 2 &&
-      one(aws_cloudfront_distribution.api.origin).domain_name == "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com" &&
-      aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log" &&
-      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == aws_cloudwatch_log_metric_filter.api_5xx.log_group_name &&
-      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == true
-    )
-    error_message = "With brain_serving, every task definition with a DB_HOST must name the brain and set DATABASE_SSL_CA, and nothing CloudFront-side may move yet."
-  }
-}
-
-run "brain_public_points_cloudfront_at_the_brain" {
-  command = plan
-  variables {
-    brain_pg_image_tag = "test"
-    brain_serving      = true
-    brain_public       = true
   }
   # The alarm is imported (monitoring.tf), which a mocked provider cannot do.
   override_resource {
@@ -2314,58 +2034,63 @@ run "brain_public_points_cloudfront_at_the_brain" {
   plan_options {
     target = [
       aws_cloudfront_distribution.api,
+      aws_ecs_task_definition.api_script,
+      aws_ecs_task_definition.topo_worker,
+      aws_ecs_task_definition.api_migrate,
+      aws_ecs_task_definition.topo_export_worker,
       aws_cloudwatch_log_metric_filter.api_5xx,
       aws_cloudwatch_log_metric_filter.sync_client,
-      aws_cloudwatch_metric_alarm.api_environment_degraded,
       aws_cloudwatch_metric_alarm.api_5xx,
     ]
   }
 
-  # CloudFront's API origin is the brain's address and nothing else about the
-  # origin moves: the id the behavior names, plain HTTP on 80 and the
-  # X-Origin-Verify header the API insists on. The request-log filters follow
-  # to the brain's group (the health alarm of the idle Elastic Beanstalk stops
-  # paging; the 5xx alarm still does).
-  # Mutation: dropping the custom_header block (the API would refuse every
-  # request), another port or protocol, the domain left on Elastic Beanstalk,
-  # a filter left on Elastic Beanstalk's group, the health alarm still paging.
-  assert {
-    condition     = one(aws_cloudfront_distribution.api.origin).domain_name == aws_eip.brain[0].public_dns
-    error_message = "With brain_public, CloudFront's API origin must be the brain's address."
-  }
-
-  assert {
-    condition     = one(aws_cloudfront_distribution.api.origin).origin_id == aws_cloudfront_distribution.api.default_cache_behavior[0].target_origin_id
-    error_message = "The API origin's id must stay the one the default behavior names."
-  }
-
-  assert {
-    condition     = [for h in one(aws_cloudfront_distribution.api.origin).custom_header : h.name] == ["X-Origin-Verify"]
-    error_message = "The API origin must keep sending X-Origin-Verify: the API refuses a request without it."
-  }
-
+  # Prod has no other database and no other origin: every task definition that
+  # has a DB_HOST names the brain's address with the certificate path to
+  # verify it by, and CloudFront's API origin is the brain's address, whatever
+  # the settings say. The definitions are enumerated here and the DB_HOST
+  # literals counted in every .tf file (the one entry of local.db_environment),
+  # so a new definition with a DB_HOST of its own fails until it follows the
+  # local. Mutation: a conditional on brain_serving coming back around
+  # local.db_environment or the origin's domain_name (`var.brain_serving ?
+  # brain : "other-host"`: this run has serving off, so it takes the other
+  # branch); one definition's `local.db_environment` replaced by a literal
+  # DB_HOST; a new task definition with a literal DB_HOST; the certificate
+  # entry dropped from local.db_environment.
   assert {
     condition = (
+      alltrue([
+        for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
+        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DB_HOST"] == aws_eip.brain[0].public_dns &&
+        { for e in jsondecode(td.container_definitions)[0].environment : e.name => e.value }["DATABASE_SSL_CA"] == "/app/brain-ca.pem"
+      ]) &&
+      sum([for f in fileset(".", "*.tf") : length(regexall("\"DB_HOST\"", file(f)))]) == 1 &&
+      one(aws_cloudfront_distribution.api.origin).domain_name == aws_eip.brain[0].public_dns
+    )
+    error_message = "Every task definition with a DB_HOST must name the brain and set DATABASE_SSL_CA, and CloudFront's API origin must be the brain's address."
+  }
+
+  # Mutation: dropping the custom_header block (the API would refuse every
+  # request), another port or protocol, or an origin id that is not the one the
+  # default behavior names.
+  assert {
+    condition = (
+      one(aws_cloudfront_distribution.api.origin).origin_id == aws_cloudfront_distribution.api.default_cache_behavior[0].target_origin_id &&
+      [for h in one(aws_cloudfront_distribution.api.origin).custom_header : h.name] == ["X-Origin-Verify"] &&
       one(aws_cloudfront_distribution.api.origin).custom_origin_config[0].http_port == 80 &&
       one(aws_cloudfront_distribution.api.origin).custom_origin_config[0].origin_protocol_policy == "http-only"
     )
-    error_message = "The API origin must stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
+    error_message = "The API origin must keep its id, send X-Origin-Verify, and stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
   }
 
+  # Mutation: a filter pointed at another group (the old Elastic Beanstalk one),
+  # or the 5xx alarm's actions dropped.
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/logjam/brain/api" &&
-      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == "/logjam/brain/api"
-    )
-    error_message = "With brain_public, the request-log filters must read the brain's API log group."
-  }
-
-  assert {
-    condition = (
-      aws_cloudwatch_metric_alarm.api_environment_degraded.actions_enabled == false &&
+      aws_cloudwatch_log_metric_filter.sync_client.log_group_name == "/logjam/brain/api" &&
       aws_cloudwatch_metric_alarm.api_5xx.alarm_actions == toset(["arn:aws:sns:ap-southeast-2:620853681701:logjam-alerts"])
     )
-    error_message = "With brain_public, the idle Elastic Beanstalk health alarm must not page and the 5xx alarm must."
+    error_message = "The request-log filters must read the brain's API log group and the 5xx alarm must page."
   }
 }
 
@@ -2412,7 +2137,7 @@ run "cost_ceiling_role_attaches_only_the_deny" {
   }
 
   # Mutation: dropping the `iam:PolicyARN` condition (Budgets' role could then
-  # attach any policy, AdministratorAccess included, to those roles), another
+  # attach any policy, AdministratorAccess included, to that role), another
   # action or resource, or a role in the resources list.
   assert {
     condition = (
@@ -2420,14 +2145,13 @@ run "cost_ceiling_role_attaches_only_the_deny" {
       jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Effect == "Allow" &&
       jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Action == ["iam:AttachRolePolicy", "iam:DetachRolePolicy"] &&
       toset(jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Resource) == toset([
-        "arn:aws:iam::620853681701:role/logjam-eb-role",
         "arn:aws:iam::620853681701:role/logjam-brain",
       ]) &&
       try(jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Condition, null) == {
         ArnEquals = { "iam:PolicyARN" = "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny" }
       }
     )
-    error_message = "The budget role may only attach or detach the cost-ceiling deny policy, on the EB role and the brain role."
+    error_message = "The budget role may only attach or detach the cost-ceiling deny policy, on the brain role."
   }
 
   # Mutation: removing either condition lets any budget (or, for the account,
@@ -2462,7 +2186,7 @@ run "cost_ceiling_action_fires_on_actual_spend_and_is_pre_tax" {
 
   # Mutation: notification_type = "FORECASTED" (fires on a projection, before
   # anything is spent), approval_model = "MANUAL" (nobody is awake to approve),
-  # a threshold below 100, a role other than the two, or a different policy.
+  # a threshold below 100, a role other than the brain's, or a different policy.
   assert {
     condition = (
       aws_budgets_budget_action.ceiling.notification_type == "ACTUAL" &&
@@ -2470,10 +2194,10 @@ run "cost_ceiling_action_fires_on_actual_spend_and_is_pre_tax" {
       aws_budgets_budget_action.ceiling.action_type == "APPLY_IAM_POLICY" &&
       aws_budgets_budget_action.ceiling.action_threshold[0].action_threshold_value == 100 &&
       aws_budgets_budget_action.ceiling.action_threshold[0].action_threshold_type == "PERCENTAGE" &&
-      toset(aws_budgets_budget_action.ceiling.definition[0].iam_action_definition[0].roles) == toset(["logjam-eb-role", "logjam-brain"]) &&
+      toset(aws_budgets_budget_action.ceiling.definition[0].iam_action_definition[0].roles) == toset(["logjam-brain"]) &&
       aws_budgets_budget_action.ceiling.definition[0].iam_action_definition[0].policy_arn == "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny"
     )
-    error_message = "The ceiling action must attach the deny policy to the EB and brain roles automatically at 100% of actual spend."
+    error_message = "The ceiling action must attach the deny policy to the brain role automatically at 100% of actual spend."
   }
 
   # Mutation: include_tax = true counts GST towards a pre-tax ceiling, so the

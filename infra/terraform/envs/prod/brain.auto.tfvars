@@ -1,10 +1,9 @@
-# The brain's switches: the one file prod's Terraform and the deploy workflows
+# The brain's settings: the one file prod's Terraform and the deploy workflows
 # both read (infra/scripts/brain-setting.sh reads the one-line settings; the
-# defaults in brain_variables.tf stay as they are, empty and off). Each line is
-# flipped by one step of the cutover, in this order, as a one-line change that
-# merges and applies like any other prod change; undoing a step is reverting
-# its line. Never set these with -var or a TF_VAR_: the workflows would not see
-# them. This is the only *.tfvars file in this directory (guard:
+# defaults in brain_variables.tf stay as they are, empty and off). A change is
+# a one-line change that merges and applies like any other prod change. Never
+# set these with -var or a TF_VAR_: the workflows would not see them. This is
+# the only *.tfvars file in this directory (guard:
 # brain_settings_are_one_file_and_read_by_the_workflows).
 
 # The image of infra/brain/postgres. Non-empty creates the instance, its data
@@ -16,18 +15,11 @@ brain_pg_image_tag = ""
 # volume with a backup restores whatever this says.
 brain_bootstrap = false
 
-# True when the brain's API runs. Also: every task definition with a database
-# (the workers and the migrate task) points at the brain, and the deploy and
-# rollback workflows release to the brain instead of Elastic Beanstalk. The
-# brain's API runs the same background sweeps as Elastic Beanstalk's, and they
-# delete media that has no row in their own database: turned on before the
-# final data copy, or with Elastic Beanstalk's sweeps still on, two APIs would
-# sweep two different databases.
+# True when the brain's API runs, and the deploy and rollback workflows wait for
+# the release to be live. The API's background sweeps delete media that has no
+# row in their own database: never turn it on for a brain rebuilt from backups
+# until its data is checked.
 brain_serving = false
-
-# True when CloudFront's API origin is the brain. Requires brain_serving; flip
-# it in a later merge, once the brain answers.
-brain_public = true
 
 # t4g.micro was chosen after the rehearsal. Moving up a size (t4g.small) is
 # this one line and about two minutes of downtime.

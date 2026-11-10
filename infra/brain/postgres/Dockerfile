@@ -1,6 +1,5 @@
 # The Postgres that prod runs, and local dev too (docker-compose.yml), so a
-# config mistake shows up on a laptop first. Pinned to a minor at or above RDS's 16.13 (prod's data arrives by dump and
-# restore, so any 16.x at or above it is fine), on
+# config mistake shows up on a laptop first. Pinned to a 16 minor, on
 # the Debian release stock `postgres:16` uses, so a dev volume made by the stock
 # image has the same glibc (a different one changes the collation version).
 # No arch-specific steps: it builds for linux/amd64 and linux/arm64 as is.
@@ -22,7 +21,7 @@ COPY postgresql.conf pg_hba.prod.conf pg_hba.dev.conf pg_ident.conf /etc/postgre
 COPY brain-lib.sh pgbackrest-conf.sh /usr/local/lib/brain/
 COPY brain-entrypoint.sh /usr/local/bin/
 COPY initdb/ /docker-entrypoint-initdb.d/
-COPY task-lib.sh drill.sh copy.sh /usr/local/lib/brain/
+COPY task-lib.sh drill.sh /usr/local/lib/brain/
 
 ENTRYPOINT ["brain-entrypoint.sh"]
 CMD ["postgres"]

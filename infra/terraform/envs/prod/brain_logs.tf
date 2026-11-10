@@ -11,9 +11,8 @@ resource "aws_cloudwatch_log_group" "brain_api" {
 }
 
 # Postgres's log, pgaudit lines included. It reaches the WORM bucket through
-# the delivery stream the RDS log group uses (audit.tf), so what the brain's
-# Postgres logs is as tamper-evident as RDS's export is today. The stalled
-# alarm in monitoring.tf watches that stream for both sources.
+# the delivery stream in audit.tf, so what the brain's Postgres logs is
+# tamper-evident. The stalled alarm in monitoring.tf watches that stream.
 resource "aws_cloudwatch_log_group" "brain_postgres" {
   name              = local.brain_log_group_postgres
   retention_in_days = local.operational_log_retention_days
