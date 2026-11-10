@@ -43,14 +43,9 @@ ERROR='' LABEL='' STOP='' RESTORE_SECONDS='' LAG='' TABLES=''
 stop_pg() { pg_ctl -D "$PGDATA" status > /dev/null 2>&1 && { pg_ctl -D "$PGDATA" -m fast -w stop > /dev/null 2>&1 || pg_ctl -D "$PGDATA" -m immediate -w stop > /dev/null 2>&1; }; return 0; }
 trap 'stop_pg; rm -rf "$WORK"' EXIT
 
-# Fargate has no instance metadata: the task role is behind a local URL.
-if [ -z "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_CONTAINER_CREDENTIALS_RELATIVE_URI:-}${AWS_CONTAINER_CREDENTIALS_FULL_URI:-}" ]; then
-  uri=${AWS_CONTAINER_CREDENTIALS_FULL_URI:-http://169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI}
-  creds=$(curl -fsS -m 10 "$uri" | jq -r '[.AccessKeyId, .SecretAccessKey, .Token] | @tsv') || creds=
-  read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<< "$creds"
-  [ -n "$AWS_SESSION_TOKEN" ] || { echo "drill: cannot read the task's credentials" >&2; exit 1; }
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-fi
+# shellcheck source=task-lib.sh
+. "$(dirname "$0")/task-lib.sh"
+task_credentials || exit 1
 # Our own file, because the entrypoint rendered one before the credentials were known.
 export PGBACKREST_CONFIG=$WORK/pgbackrest.conf
 /usr/local/lib/brain/pgbackrest-conf.sh > "$PGBACKREST_CONFIG" || exit 1
@@ -121,19 +116,8 @@ verdict=$(jq -n --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg error "$ERROR"
   {schema: 1, time: $time, ok: ($error == ""), error: ($error | s), backup_label: ($label | s), backup_stop_time: ($stop | s),
    restore_seconds: ($rs | n), canary_lag_seconds: ($lag | n), tables_read: ($tables | n)}') || exit 1
 
-# The image has no aws CLI, and pgBackRest cannot write an arbitrary object, so
-# curl signs the one PUT. The payload hash is given so the signed headers are fixed.
-if [ -n "${BRAIN_BACKUP_ENDPOINT:-}" ]; then
-  url=https://$BRAIN_BACKUP_ENDPOINT/$BRAIN_SIGNALS_BUCKET/drill.json
-else
-  url=https://$BRAIN_SIGNALS_BUCKET.s3.$AWS_REGION.amazonaws.com/drill.json
-fi
-args=(-fsS -m 30 --aws-sigv4 "aws:amz:$AWS_REGION:s3" --user "${AWS_ACCESS_KEY_ID:-}:${AWS_SECRET_ACCESS_KEY:-}"
-  -H "x-amz-content-sha256: $(printf '%s' "$verdict" | sha256sum | cut -d' ' -f1)" -H "content-type: application/json")
-[ -z "${AWS_SESSION_TOKEN:-}" ] || args+=(-H "x-amz-security-token: $AWS_SESSION_TOKEN")
-[ "${BRAIN_BACKUP_VERIFY_TLS:-y}" != n ] || args+=(-k)
 printf '%s' "$verdict" > "$WORK/drill.json"
-curl "${args[@]}" -T "$WORK/drill.json" "$url" > /dev/null || { echo "drill: the verdict was not written" >&2; exit 1; }
+s3_curl "$BRAIN_SIGNALS_BUCKET" drill.json "$WORK/drill.json" > /dev/null || { echo "drill: the verdict was not written" >&2; exit 1; }
 
 echo "drill: ${ERROR:-ok}"
 [ -z "$ERROR" ]

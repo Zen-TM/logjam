@@ -1271,3 +1271,139 @@ run "brain_instance_sizes_set_postgres_and_api_memory" {
     error_message = "A t4g.micro must run Postgres with shared_buffers=128MB and effective_cache_size=256MB and the API with a 384m limit."
   }
 }
+
+# ── The cutover's data copy (brain_copy.tf) ──────────────────────────────────
+
+run "brain_copy_is_absent_by_default" {
+  command = plan
+  plan_options {
+    target = [
+      aws_ecs_task_definition.brain_copy,
+      aws_iam_role.brain_copy,
+      aws_iam_role_policy.brain_copy,
+      aws_cloudwatch_log_group.brain_copy,
+    ]
+  }
+
+  # Mutation: taking the count off any of these resources, so merging the
+  # change registers a task definition (and a role) before the brain exists.
+  assert {
+    condition = (
+      length(aws_ecs_task_definition.brain_copy) == 0 &&
+      length(aws_iam_role.brain_copy) == 0 &&
+      length(aws_iam_role_policy.brain_copy) == 0 &&
+      length(aws_cloudwatch_log_group.brain_copy) == 0
+    )
+    error_message = "With the default variables the data copy must have no task definition, role or log group."
+  }
+}
+
+run "brain_copy_task_reads_only_status_json" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_ecs_task_definition.brain_copy, aws_iam_role_policy.brain_copy]
+  }
+
+  override_resource {
+    target          = aws_s3_bucket.brain_signals
+    values          = { arn = "arn:aws:s3:::logjam-brain-signals-mock" }
+    override_during = plan
+  }
+  override_resource {
+    target = aws_db_instance.main
+    values = {
+      address            = "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
+      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds-mock", kms_key_id = "", secret_status = "active" }]
+    }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.brain_copy
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-copy" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.ecs_task_execution
+    values          = { arn = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_secretsmanager_secret.app_db
+    values          = { arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-mock" }
+    override_during = plan
+  }
+
+  # Mutation: any second statement or action on the task role, a wider
+  # resource than status.json (the signals bucket also holds release.json,
+  # which the copy has no business reading), or a credential given to the
+  # task as plain environment. The role is what makes "the copy reads one
+  # file and writes nothing" true.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Effect == "Allow" &&
+      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Action == "s3:GetObject" &&
+      jsondecode(aws_iam_role_policy.brain_copy[0].policy).Statement[0].Resource == "arn:aws:s3:::logjam-brain-signals-mock/status.json"
+    )
+    error_message = "The data copy's task role may read status.json and nothing else."
+  }
+
+  # Mutation: another command or architecture, the brain's name taken from
+  # anywhere but the Elastic IP, or a key in the plain environment.
+  assert {
+    condition = (
+      aws_ecs_task_definition.brain_copy[0].runtime_platform[0].cpu_architecture == "ARM64" &&
+      jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].command == ["/usr/local/lib/brain/copy.sh"] &&
+      endswith(jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].image, "/logjam-brain-postgres:test") &&
+      alltrue([for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : !can(regex("(?i)password|secret|key|token", e.name))]) &&
+      [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_HOST"][0] == "ec2-203-0-113-7.ap-southeast-2.compute.amazonaws.com" &&
+      [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_SOURCE_HOST"][0] == "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
+    )
+    error_message = "The data copy must run copy.sh on ARM64 from the brain's image, between RDS and the brain's own name, with no credential in its environment."
+  }
+
+  # Without infra/brain/brain-ca.pem (committed once the brain has booted) the
+  # task still plans, with an empty CA, and the script refuses. Mutation:
+  # reading the file without the fileexists guard (the plan errors).
+  assert {
+    condition     = [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_CA"][0] == ""
+    error_message = "Until brain-ca.pem exists the data copy's CA must be empty."
+  }
+}
+
+run "brain_copy_is_never_scheduled" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_ecs_task_definition.brain_copy]
+  }
+  override_resource {
+    target = aws_db_instance.main
+    values = {
+      address            = "logjam-db-enc.example.ap-southeast-2.rds.amazonaws.com"
+      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds-mock", kms_key_id = "", secret_status = "active" }]
+    }
+    override_during = plan
+  }
+
+  # Nothing may start the task but a person. A plan cannot list the
+  # schedules that name it, so this reads every .tf file: no other file may
+  # mention the task definition, and brain_copy.tf holds no schedule, event
+  # rule or pipe. Mutation: an aws_scheduler_schedule (or event target) in any
+  # file naming aws_ecs_task_definition.brain_copy, or one added to
+  # brain_copy.tf. A copy run after the cutover replaces the live database
+  # with RDS's frozen copy.
+  assert {
+    condition = (
+      length(aws_ecs_task_definition.brain_copy) == 1 &&
+      alltrue([for f in setunion(fileset(".", "*.tf")) : f == "brain_copy.tf" || !strcontains(file(f), "aws_ecs_task_definition.brain_copy")]) &&
+      !can(regex("aws_scheduler|aws_cloudwatch_event|aws_pipes|aws_batch", file("brain_copy.tf")))
+    )
+    error_message = "The data copy must have no schedule: only a person starts it (brain_copy.tf)."
+  }
+}

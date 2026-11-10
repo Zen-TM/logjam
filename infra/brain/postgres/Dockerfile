@@ -22,7 +22,7 @@ COPY postgresql.conf pg_hba.prod.conf pg_hba.dev.conf pg_ident.conf /etc/postgre
 COPY brain-lib.sh pgbackrest-conf.sh /usr/local/lib/brain/
 COPY brain-entrypoint.sh /usr/local/bin/
 COPY initdb/ /docker-entrypoint-initdb.d/
-COPY drill.sh /usr/local/lib/brain/
+COPY task-lib.sh drill.sh copy.sh /usr/local/lib/brain/
 
 ENTRYPOINT ["brain-entrypoint.sh"]
 CMD ["postgres"]
