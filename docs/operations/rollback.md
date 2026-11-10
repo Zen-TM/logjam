@@ -261,8 +261,8 @@ infra/scripts/pin-release.sh "$REGISTRY/logjam-topo-worker:$SHA"
   (in that order) and some hand steps; writes made on the brain are not on
   RDS. That is the cutover runbook's, not this page's.
 - **Terraform.** Revert the PR, merge, apply. A destroyed stateful resource is
-  not revertible; `prevent_destroy`, RDS deletion protection and snapshots
-  are the net.
+  not revertible; `prevent_destroy` and snapshots are the net (RDS's deletion
+  protection is off from the teardown's first pull request on).
 
 ## After a rollback
 

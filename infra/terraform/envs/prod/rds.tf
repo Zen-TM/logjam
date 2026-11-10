@@ -3,26 +3,34 @@
 # rds!db-... Secrets Manager secret — the app re-resolves it per connection
 # (api/src/lib/dbPassword.ts), so Terraform does not manage or replace it.
 #
-# prevent_destroy guards Terraform from destroying it; deletion_protection
-# guards AWS-side too. backup_retention_period = 7 enables daily snapshots and
-# point-in-time recovery.
+# prevent_destroy guards Terraform from destroying it. deletion_protection is
+# off so the instance can be deleted once the brain has proved itself
+# (docs/operations/brain-cutover.md, "The days after").
+# backup_retention_period = 7 enables daily snapshots and point-in-time
+# recovery.
 resource "aws_db_instance" "main" {
-  allocated_storage               = 20
-  apply_immediately               = true
-  auto_minor_version_upgrade      = false
-  availability_zone               = "ap-southeast-2a"
-  backup_retention_period         = 7
-  backup_target                   = "region"
-  backup_window                   = "16:32-17:02"
-  ca_cert_identifier              = "rds-ca-rsa2048-g1"
-  copy_tags_to_snapshot           = true
-  customer_owned_ip_enabled       = false
-  database_insights_mode          = "standard"
-  db_name                         = "logjam"
-  db_subnet_group_name            = "logjam-db-subnet-group"
-  dedicated_log_volume            = false
-  delete_automated_backups        = false
-  deletion_protection             = true
+  allocated_storage          = 20
+  apply_immediately          = true
+  auto_minor_version_upgrade = false
+  availability_zone          = "ap-southeast-2a"
+  backup_retention_period    = 7
+  backup_target              = "region"
+  backup_window              = "16:32-17:02"
+  ca_cert_identifier         = "rds-ca-rsa2048-g1"
+  copy_tags_to_snapshot      = true
+  customer_owned_ip_enabled  = false
+  database_insights_mode     = "standard"
+  db_name                    = "logjam"
+  db_subnet_group_name       = "logjam-db-subnet-group"
+  dedicated_log_volume       = false
+  # true: deleting the instance deletes its automated backups and their seven
+  # days of point-in-time recovery, so no copy of a deleted account's data
+  # outlives it.
+  delete_automated_backups = true
+  # false: AWS refuses a delete while this is on, and Terraform deletes with the
+  # settings last applied, so it changes in a merge before the one that removes
+  # the resource.
+  deletion_protection             = false
   enabled_cloudwatch_logs_exports = ["postgresql"]
   engine                          = "postgres"
   # Enrolled in RDS Extended Support. engine_lifecycle_support is a create/restore-time
@@ -51,16 +59,11 @@ resource "aws_db_instance" "main" {
   performance_insights_enabled = false
   port                         = 5432
   publicly_accessible          = false
-  skip_final_snapshot          = false
-  # Belt-and-suspenders behind prevent_destroy + deletion_protection —
-  # both already guard against an accidental terraform destroy or console
-  # delete, but neither guards a *deliberate* one from losing everything. A
-  # static identifier is fine: this only matters if the instance is actually
-  # ever deleted, at which point whoever is running that delete picks a fresh
-  # name if this one is taken.
-  final_snapshot_identifier = "logjam-db-enc-final"
-  storage_encrypted         = true
-  kms_key_id                = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
+  # true: no final snapshot. The brain's backups are the record by then, and a
+  # snapshot left behind would hold a deleted account's data.
+  skip_final_snapshot = true
+  storage_encrypted   = true
+  kms_key_id          = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
   # gp3, not gp2: cheaper per GB AND faster at this size. gp2 derives IOPS from
   # volume size (3 IOPS/GB — just 60 provisioned IOPS on a 20 GB volume, leaning
   # on burst credits), while gp3's 3000 IOPS baseline is included at no extra
