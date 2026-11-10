@@ -11,6 +11,8 @@ import { createShutdown } from "./shutdown";
 //    and "carries Connection: close" tests fail.
 //  - drop the `closeIdleConnections` sweep: "in flight when shutdown begins"
 //    fails (its connection idles until the keep-alive timeout).
+//  - drop `clearTimeout(force)` after `finish`: "a clean shutdown is not
+//    reported again as a forced one" fails (exit is called a second time).
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: 8 });
 let server: Server;
@@ -66,6 +68,20 @@ const within = (ms: number, p: Promise<unknown>) =>
   ]);
 
 describe("graceful shutdown", () => {
+  it("a clean shutdown is not reported again as a forced one", async () => {
+    const exits: number[] = [];
+    const lifecycle = createShutdown({
+      timeoutMs: 150,
+      stop: () => {},
+      finish: async () => {},
+      exit: (code) => void exits.push(code),
+    });
+    server = express().listen(0);
+    lifecycle.begin(server, "SIGTERM");
+    await new Promise((r) => setTimeout(r, 400)); // well past the deadline
+    expect(exits).toEqual([0]);
+  });
+
   it("completes quickly while keep-alive clients keep sending", async () => {
     // A handler that takes a moment keeps requests in flight on every
     // connection when shutdown begins, as a loaded API would have.

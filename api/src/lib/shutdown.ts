@@ -35,6 +35,7 @@ export function createShutdown(opts: ShutdownOptions) {
     opts.stop();
 
     const force = setTimeout(() => {
+      clearInterval(sweep);
       logger.error("shutdown_timeout_force_exit");
       opts.exit(1);
     }, opts.timeoutMs);
@@ -51,11 +52,16 @@ export function createShutdown(opts: ShutdownOptions) {
       clearInterval(sweep);
       if (err)
         logger.error({ err: safeErrorForLog(err) }, "server_close_error");
+      // The deadline covers `finish` too, so it is only called off once that
+      // has returned: where `exit` does not end the process (a test), a
+      // deadline left running would report a clean shutdown as a forced one.
       try {
         await opts.finish();
+        clearTimeout(force);
         logger.info("shutdown_complete");
         opts.exit(0);
       } catch (finishErr) {
+        clearTimeout(force);
         logger.error(
           { err: safeErrorForLog(finishErr) },
           "prisma_disconnect_error",
