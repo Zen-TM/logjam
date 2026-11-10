@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Wraps the official entrypoint. A server start on a data directory with no
 # database only fills it on purpose: BRAIN_INIT=bootstrap makes one,
-# BRAIN_INIT=restore restores the latest backup, anything else stops.
+# BRAIN_INIT=restore restores the latest backup (or the time in BRAIN_RESTORE_TARGET),
+# anything else stops.
 # Otherwise a volume that failed to mount would come up empty and look healthy.
 # Any other command (`pgbackrest info`, `bash`, `postgres --version`) skips
 # all that and runs as given.
@@ -50,10 +51,18 @@ if [ "$server" = 1 ]; then
         # volume here, never the filesystem's own mount point (lost+found).
         if [ "$(id -u)" = 0 ]; then chown postgres:postgres "$PGDATA"; fi
         chmod 0700 "$PGDATA"
+        # BRAIN_RESTORE_TARGET (the host checked it is an RFC 3339 time with an offset): stop at
+        # that time, in the form pgBackRest takes (a space for the T, +00 for Z). Without
+        # --target-action=promote recovery pauses at the target and never opens for writes.
+        target=()
+        if [ -n "${BRAIN_RESTORE_TARGET:-}" ]; then
+          t=${BRAIN_RESTORE_TARGET/T/ }
+          target=(--type=time "--target=${t/%Z/+00}" --target-action=promote)
+        fi
         # BRAIN_RESTORE_OPTS, unquoted so it splits into options: a drill adds
         # --archive-mode=off so a restored copy never archives into the live repository.
         # shellcheck disable=SC2086
-        as_pg pgbackrest --stanza=logjam restore ${BRAIN_RESTORE_OPTS:-} ;;
+        as_pg pgbackrest --stanza=logjam restore "${target[@]}" ${BRAIN_RESTORE_OPTS:-} ;;
       *)
         echo "brain-entrypoint: $PGDATA has no database and BRAIN_INIT is '${BRAIN_INIT:-}', not bootstrap or restore: refusing to create one" >&2
         exit 1 ;;

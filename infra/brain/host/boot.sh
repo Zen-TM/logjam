@@ -108,6 +108,18 @@ else
 fi
 log "boot mode: $mode"
 
+# A time to restore to belongs to a restore that starts now, on a blank disk: an existing
+# database or a resumed restore ignores it, in silence. brain.env is not trusted to be
+# well formed: the shape is checked here, and compose.yaml passes it on only as a value.
+target=
+if [ "$mode" = restore ] && [ -z "$resume" ] && [ -n "${BRAIN_RESTORE_TARGET:-}" ]; then
+  target=$BRAIN_RESTORE_TARGET
+  [[ $target =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$ ]] ||
+    die "BRAIN_RESTORE_TARGET is not a time with an offset, like 2026-11-20T03:15:00+11:00: not restoring"
+  log "restoring to $target: the newest backup before it, then archived WAL up to it"
+fi
+export BRAIN_RESTORE_TARGET=$target
+
 case $mode in
   existing) export BRAIN_INIT=none ;;
   *)
@@ -144,9 +156,11 @@ if [ "$mode" = restore ]; then
   # the gap with every other check green. Not for a resumed restore: the status
   # timer may have written the canary since.
   if [ -z "$resume" ]; then
-    lag=$(psql_agent -c 'select extract(epoch from now() - at)::bigint from brain.canary')
+    # To a chosen time, how stale the data is is measured from that time, not from now.
+    ref='now()'; [ -z "$target" ] || ref="'$target'::timestamptz"
+    lag=$(psql_agent -c "select extract(epoch from $ref - at)::bigint from brain.canary")
     if [[ $lag =~ ^[0-9]+$ ]]; then
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $lag" > /data/brain/last-restore.tmp
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $lag${target:+ $target}" > /data/brain/last-restore.tmp
       mv /data/brain/last-restore.tmp /data/brain/last-restore
     fi
   fi

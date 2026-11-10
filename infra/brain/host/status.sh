@@ -53,8 +53,8 @@ print(json.dumps({
     "api_sha": e["API_IMAGE"].rsplit(":", 1)[1] if ":" in e["API_IMAGE"] else None,
     "serving": e["SERVING"] == "on",
     "boot_mode": e["BOOT_MODE"] or None,
-    "last_restore_at": restore[0] if len(restore) == 2 else None,
-    "last_restore_lag_seconds": int(restore[1]) if len(restore) == 2 else None,
+    "last_restore_at": restore[0] if len(restore) >= 2 else None,
+    "last_restore_lag_seconds": int(restore[1]) if len(restore) >= 2 else None,
 }))
 PY
 )

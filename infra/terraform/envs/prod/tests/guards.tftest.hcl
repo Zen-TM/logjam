@@ -1142,23 +1142,23 @@ run "brain_env_is_plain_key_value_the_host_files_read" {
       toset(flatten([
         for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) :
         [for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):\\?", file("../../../brain/${f}")) : m[0]]
-      ])) == setsubtract(toset(keys(output.brain_host_env)), ["BRAIN_PG_FLAGS", "BRAIN_API_MEM_LIMIT"]) &&
+      ])) == setsubtract(toset(keys(output.brain_host_env)), ["BRAIN_PG_FLAGS", "BRAIN_API_MEM_LIMIT", "BRAIN_RESTORE_TARGET"]) &&
       alltrue([
         for k in keys(output.brain_host_env) : anytrue([
           for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) : strcontains(file("../../../brain/${f}"), k)
         ])
       ])
     )
-    error_message = "brain.env must hold exactly the keys the host scripts and Compose require, plus the optional BRAIN_PG_FLAGS and BRAIN_API_MEM_LIMIT."
+    error_message = "brain.env must hold exactly the keys the host scripts and Compose require, plus the optional BRAIN_PG_FLAGS, BRAIN_API_MEM_LIMIT and BRAIN_RESTORE_TARGET."
   }
 
   # Mutation: quoting a value or putting a newline in one. lib.sh reads
   # the file line by line as KEY=value and does not unquote.
   assert {
     condition = alltrue([
-      for v in values(output.brain_host_env) : !can(regex("[\"'\\n]", v)) && v != ""
+      for k, v in output.brain_host_env : !can(regex("[\"'\\n]", v)) && (v != "" || k == "BRAIN_RESTORE_TARGET")
     ])
-    error_message = "brain.env values must be unquoted, single-line and non-empty."
+    error_message = "brain.env values must be unquoted, single-line and non-empty (BRAIN_RESTORE_TARGET is empty unless the current volume has a restore_to)."
   }
 
   # Mutation: a memory setting for another size, or the flags not following
@@ -1177,6 +1177,93 @@ run "brain_env_is_plain_key_value_the_host_files_read" {
     condition     = output.brain_host_env["BRAIN_TLS_SANS"] == "ec2-203-0-113-7.ap-southeast-2.compute.amazonaws.com,postgres,localhost"
     error_message = "BRAIN_TLS_SANS must be the Elastic IP's DNS name, postgres and localhost."
   }
+}
+
+run "brain_restore_target_comes_only_from_the_current_volume" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_data_volumes = {
+      "1" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-11-20T03:15:00+11:00" }
+      "2" = { az = "ap-southeast-2a", size_gb = 20 }
+    }
+    brain_data_volume_current = "2"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # The target is the new volume's own: a later volume added without one gets
+  # the latest state, however many earlier entries carry a time.
+  # Mutation: reading restore_to from any entry (the first non-empty one, or
+  # the key "1") instead of the current one.
+  assert {
+    condition     = output.brain_host_env["BRAIN_RESTORE_TARGET"] == ""
+    error_message = "A time on an earlier volume's entry must not reach the host: only the current volume's restore_to does."
+  }
+}
+
+run "brain_restore_target_reaches_the_host_from_the_current_volume" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_data_volumes = {
+      "1" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-11-19T00:00:00Z" }
+      "2" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-11-20T03:15:00.250+11:00" }
+    }
+    brain_data_volume_current = "2"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: reading restore_to from any entry but the current one, or not
+  # putting it in brain.env (the host then restores the latest state without a
+  # word, which is the failure this feature exists to prevent).
+  assert {
+    condition     = output.brain_host_env["BRAIN_RESTORE_TARGET"] == "2026-11-20T03:15:00.250+11:00"
+    error_message = "BRAIN_RESTORE_TARGET must be the current volume's restore_to."
+  }
+}
+
+run "brain_restore_to_without_an_offset_is_refused" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_data_volumes = {
+      "1" = { az = "ap-southeast-2a", size_gb = 20 }
+      "2" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-11-20T03:15:00" }
+    }
+    brain_data_volume_current = "2"
+  }
+
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: deleting the validation, or both its halves at once (the offset
+  # optional in the pattern, `timecmp` replaced by `true`): either half alone
+  # still refuses a time with no offset. A time without a zone is read in the
+  # host's.
+  expect_failures = [var.brain_data_volumes]
+}
+
+run "brain_restore_to_must_be_a_real_time" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_data_volumes = {
+      "1" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-13-45T25:61:00+11:00" }
+    }
+  }
+
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: dropping the `timecmp` half of the validation (the pattern alone
+  # accepts month 13).
+  expect_failures = [var.brain_data_volumes]
 }
 
 run "brain_switches_are_in_place_tags_first" {

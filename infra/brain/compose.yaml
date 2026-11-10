@@ -21,6 +21,8 @@ services:
       # empty directory. The image refuses to create a database for anything
       # else, so a restart on a bare directory cannot make one.
       BRAIN_INIT: ${BRAIN_INIT:-none}
+      # boot.sh sets it only for a restore it starts; empty restores the latest state.
+      BRAIN_RESTORE_TARGET: ${BRAIN_RESTORE_TARGET:-}
       BRAIN_TLS_SANS: ${BRAIN_TLS_SANS:?}
       # pgBackRest connects as the agent, not the superuser (host/agent.sql).
       BRAIN_BACKUP_PG_USER: brain_agent

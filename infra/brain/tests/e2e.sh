@@ -222,6 +222,7 @@ BRAIN_BACKUP_BUCKET=$BACKUPS
 BRAIN_SIGNALS_BUCKET=$SIGNALS
 BRAIN_TLS_SANS=brain.e2e.test,postgres,localhost
 BRAIN_PG_FLAGS=-c shared_buffers=64MB -c max_wal_size=256MB
+BRAIN_RESTORE_TARGET=
 BRAIN_APP_DB_SECRET_ID=logjam/app-db-password
 BRAIN_LOG_GROUP_API=
 BRAIN_LOG_GROUP_PG=
@@ -921,6 +922,115 @@ check "no run printed a value from the database" not grep -q "$VALUE" "$WORK/cop
 check "...or the password" not grep -q "$APP_PW" "$WORK/copy-all.log"
 check "the brain's audit log has the restore's COPY statements" bash -c "$SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'AUDIT: SESSION,.*,WRITE,COPY,,,\"COPY public.announcements'"
 check "...and no value in any line" bash -c "! $SUDO docker logs '$(cid postgres)' 2>&1 | grep -q '$VALUE'"
+
+
+# --- 13. restore to a point in time -----------------------------------------------------------------------------------------
+# The same boot as losing the disk, with BRAIN_RESTORE_TARGET (Terraform: the current volume's restore_to) set to a time.
+# Mutations (each applied once and seen red):
+#   compose.yaml: BRAIN_RESTORE_TARGET not passed to the Postgres container (B is there: the latest state came back);
+#   host/boot.sh: the target applied to any boot (`[ "$mode" = restore ] && [ -z "$resume" ] &&` dropped from its condition): the
+#     existing-database boots log a restore and refuse a malformed value;
+#   postgres/brain-entrypoint.sh: `--target-action=promote` dropped (recovery pauses at the target, the database never opens
+#     for writes and boot.sh waits for ever: boot_limited ends at 300 s with exit 124).
+S="13 point in time"
+serving off; agent
+pitr_rows() { sql logjam "select coalesce(string_agg(v, ',' order by v), '') from e2e_pitr"; }
+force_wal() { # sets WAL to the segment that holds everything written so far, once it is in the repository
+  WAL=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
+  sql postgres "select pg_switch_wal()" > /dev/null
+  wait_for 120 archived "$WAL"
+}
+newest_full_stop() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print(max(b["timestamp"]["stop"] for s in json.load(sys.stdin) for b in s["backup"] if b["type"] == "full"))'; }
+timeline() { sql postgres "select timeline_id from pg_control_checkpoint()"; }
+in_repo() { local keys; keys=$(aws s3 ls "s3://$BACKUPS" --recursive) && grep -q "$1" <<< "$keys"; }
+sql logjam "create table e2e_pitr (v text); insert into e2e_pitr values ('A')" > /dev/null
+force_wal
+r /opt/brain/host/status.sh || bad "status.sh failed" # a canary just before T, so the restore's staleness reads in seconds
+T=$(sql logjam "select to_char(now() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') || 'Z'")
+sleep 2
+sql logjam "insert into e2e_pitr values ('B')" > /dev/null
+force_wal
+tl0=$(timeline)
+
+brain_env BRAIN_RESTORE_TARGET "$T"
+started=$(date +%s)
+lose_disk
+boot_limited; rc=$?
+check "a blank disk with a target restores (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not restore to $T"; }
+check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
+check "boot.sh says it is restoring to the target" grep -q "restoring to $T" "$WORK/boot.log"
+check "A is there and B is not" [ "$(pitr_rows)" = A ]
+check "the database is out of recovery" [ "$(sql postgres 'select pg_is_in_recovery()')" = f ]
+check "...and takes a write" sql logjam "insert into e2e_pitr values ('C')"
+check "...on a new timeline ($(timeline), was $tl0)" [ "$(timeline)" -gt "$tl0" ]
+force_wal
+check "a WAL object of the new timeline reaches the repository" in_repo "$WAL"
+check "...named for it" [ "${WAL:0:8}" = "$(printf '%08X' "$(timeline)")" ]
+check "a full backup was taken after the restore started" [ "$(newest_full_stop)" -ge "$started" ]
+r /opt/brain/host/status.sh || bad "status.sh failed after the rewind"
+check "status.json still says restore, and when" restore_reported
+check "...and measures staleness from the target, not from now" [ "$(status_field last_restore_lag_seconds)" -lt 30 ]
+check "last-restore records the target next to the lag" [ "$(r cut -d' ' -f3 /data/brain/last-restore)" = "$T" ]
+check "...with no key added to status.json" [ "$(status_keys | wc -w)" = 13 ]
+
+# The next loss of the disk, with no target (the next volume's entry has none): the latest state, on the new timeline.
+brain_env BRAIN_RESTORE_TARGET
+lose_disk
+boot_limited; rc=$?
+check "a blank disk with no target restores (exit $rc)" [ "$rc" = 0 ]
+check "A and C are there, B is not" [ "$(pitr_rows)" = A,C ]
+check "boot.sh does not mention a target" not grep -q "restoring to" "$WORK/boot.log"
+
+# A disk that already holds a database: the target is ignored in silence, even a malformed one.
+for value in 2026-01-01T00:00:00+11:00 "not a time"; do
+  brain_env BRAIN_RESTORE_TARGET "$value"
+  reboot
+  boot; rc=$?
+  check "an existing database starts with the target '$value' (exit $rc)" [ "$rc" = 0 ]
+  check "...boot mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+  check "...unchanged" [ "$(pitr_rows)" = A,C ]
+  check "...with nothing logged about a target" not grep -q "restoring to\|BRAIN_RESTORE_TARGET" "$WORK/boot.log"
+  check "...and no target in the container" pg_has BRAIN_RESTORE_TARGET=
+done
+
+# A target that is not an RFC 3339 time with an offset never reaches a command line.
+# shellcheck disable=SC2016 # the last value is meant to stay literal
+for value in 2026-11-20T03:15:00 "2026-11-20 03:15:00+11:00" "2026-11-20T03:15:00Z;touch /tmp/e2e-injected" 'x$(id)'; do
+  brain_env BRAIN_RESTORE_TARGET "$value"
+  reboot; new_disk
+  boot; rc=$?
+  check "a blank disk with the target '$value' is refused (exit $rc)" [ "$rc" != 0 ]
+  check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+  check "...naming the format" grep -q "like 2026-11-20T03:15:00+11:00" "$WORK/boot.log"
+  check "...with no data directory and no container" bash -c "[ ! -e /data/postgres ] && [ -z \"\$($SUDO docker ps -aq --filter label=com.docker.compose.project=brain)\" ]"
+done
+check "...and nothing in the target ran" [ ! -e /tmp/e2e-injected ]
+
+# A target the archive cannot reach ends the boot as failed, with no database serving and no API.
+serving on
+brain_env BRAIN_RESTORE_TARGET "$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)"
+reboot; new_disk
+boot_limited; rc=$?
+check "a target after the last archived WAL fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...and does not wait for ever" [ "$rc" != 124 ]
+check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+check "...no API container" [ -z "$(cid api)" ]
+check "...Postgres stopped at the end of the archive" bash -c "$SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'recovery ended before configured recovery target was reached'"
+check "...and never opened for writes" bash -c "! $SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'selected new timeline'"
+brain_env BRAIN_RESTORE_TARGET 2000-01-01T00:00:00Z
+reboot; new_disk
+boot_limited; rc=$?
+check "a target before the oldest backup fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...and does not wait for ever" [ "$rc" != 124 ]
+check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+check "...no API container" [ -z "$(cid api)" ]
+check "...pgBackRest found no backup to start from" bash -c "$SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'unable to find backup set'"
+serving off
+brain_env BRAIN_RESTORE_TARGET
+reboot
 
 [ "$fails" = 0 ] || dump
 exit "$fails"

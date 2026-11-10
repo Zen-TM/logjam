@@ -87,6 +87,16 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   recovery applies in one run. Guards: `brain_data_volume_and_address_keep_prevent_destroy`,
   `brain_only_the_current_volume_is_attached_in_its_zone`,
   `brain_instance_is_replaced_when_the_current_volume_changes`.
+- **A restore target lives on a volume's entry, never in a setting of its own.**
+  Rewinding past bad data is the disk-loss change with `restore_to` (a time
+  with a UTC offset) on the new entry; it reaches the host as
+  `BRAIN_RESTORE_TARGET` and only a boot onto a blank disk uses it. A variable
+  of its own would outlive the disk it was meant for and rewind the next
+  restore as well. The old volume stays detached with the data as it was before
+  the rewind: making it current again is the undo. Guards:
+  `brain_restore_target_comes_only_from_the_current_volume`,
+  `brain_restore_to_without_an_offset_is_refused`, and the point-in-time
+  scenario of `brain/tests/e2e.sh`.
 - **The brain's host files travel inline in its user data**, so any change to
   `brain/` (outside `postgres/`, `tests/`, `api.env` and the committed
   `brain-ca.pem`, which a commit after first boot must not turn into a

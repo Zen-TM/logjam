@@ -31,6 +31,8 @@ locals {
   # KEY=value, no secrets: lib.sh does not unquote. Guard:
   # brain_env_is_plain_key_value_the_host_files_read (the keys must equal the
   # ones the host files require, plus the optional ones named there).
+  # BRAIN_RESTORE_TARGET is the current volume's restore_to and nothing else's.
+  # Guard: brain_restore_target_comes_only_from_the_current_volume.
   brain_env = local.brain_enabled ? {
     AWS_REGION             = "ap-southeast-2"
     BRAIN_DATA_DEVICE      = "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(aws_ebs_volume.brain_data[var.brain_data_volume_current].id, "-", "")}"
@@ -39,6 +41,7 @@ locals {
     BRAIN_BACKUP_BUCKET    = aws_s3_bucket.brain_backups.bucket
     BRAIN_SIGNALS_BUCKET   = aws_s3_bucket.brain_signals.bucket
     BRAIN_TLS_SANS         = "${aws_eip.brain[0].public_dns},postgres,localhost"
+    BRAIN_RESTORE_TARGET   = var.brain_data_volumes[var.brain_data_volume_current].restore_to
     BRAIN_PG_FLAGS         = "-c shared_buffers=${local.brain_pg_memory[var.brain_instance_type].shared_buffers} -c effective_cache_size=${local.brain_pg_memory[var.brain_instance_type].effective_cache_size}"
     BRAIN_API_MEM_LIMIT    = local.brain_pg_memory[var.brain_instance_type].api_mem_limit
     BRAIN_APP_DB_SECRET_ID = aws_secretsmanager_secret.app_db.name

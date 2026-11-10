@@ -48,14 +48,31 @@ variable "brain_bootstrap" {
 # volume stays, detached, until a later change drops its entry with a `removed`
 # block. Losing the zone is the same change with another `az`. Volumes are never
 # replaced in place: prevent_destroy makes a changed `az` an error.
+#
+# Bad data is the same change with one more field on the new entry, restore_to:
+# the new volume restores to that time and not to the latest state. It lives on
+# the entry so it can never apply to a later volume (the next loss adds a key
+# without it and gets the latest state), and a boot only restores into a blank
+# disk, so leaving it on the entry is harmless. The old volume keeps the data as
+# it was before the rewind: making it current again is the undo.
 variable "brain_data_volumes" {
-  description = "The brain's data volumes by key: availability zone (one of the two subnets in network.tf) and size in GB."
-  type        = map(object({ az = string, size_gb = number }))
+  description = "The brain's data volumes by key: availability zone (one of the two subnets in network.tf), size in GB, and optionally restore_to, a time with a UTC offset (2026-11-20T03:15:00+11:00) the volume's first boot restores to instead of the latest state."
+  type        = map(object({ az = string, size_gb = number, restore_to = optional(string, "") }))
   default     = { "1" = { az = "ap-southeast-2a", size_gb = 20 } }
 
   validation {
     condition     = alltrue([for v in values(var.brain_data_volumes) : contains(["ap-southeast-2a", "ap-southeast-2b"], v.az)])
     error_message = "A data volume's az must be ap-southeast-2a or ap-southeast-2b: the zones of the subnets network.tf names."
+  }
+
+  validation {
+    condition = alltrue([
+      for v in values(var.brain_data_volumes) : v.restore_to == "" || (
+        can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$", v.restore_to)) &&
+        can(timecmp(v.restore_to, "2000-01-01T00:00:00Z"))
+      )
+    ])
+    error_message = "A data volume's restore_to must be a real time with a UTC offset, like 2026-11-20T03:15:00+11:00 (Z for UTC). A time without an offset is refused: it would be read in whatever zone the host happens to use."
   }
 }
 
