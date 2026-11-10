@@ -212,6 +212,10 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "not per user: how far the egress meter has read the storage access logs",
   Announcement:
     "not per user: the maintainer's own messages; each user's copy is a row under notifications",
+  ComputeUsageCarryover:
+    "bookkeeping: one credit total per month for jobs the user deleted, naming no job or place, kept so a deleted job still counts against the allowance",
+  SiteComputeCarryover:
+    "not per user: the same total for every account together",
   TripPlanSection:
     "a plan's write-up belongs to its group, not to one member; the plans the user is in are under tripPlanMemberships",
 };
