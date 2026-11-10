@@ -5,7 +5,9 @@ import { currentDbPassword } from "./dbPassword";
 
 // How every Postgres connection the API opens is made: the Prisma pool
 // (services/prisma.ts) and the sweep lock's own client (lib/sweepLeader.ts)
-// both take this, so they cannot drift apart on URL, TLS or password.
+// both take this, so they cannot drift apart on URL, TLS or password. Guards:
+// services/prisma.unit.test.ts (the pool) and lib/sweepLeader.unit.test.ts
+// (the lock client).
 //
 // node-postgres does NOT negotiate TLS by
 // default, and RDS rejects unencrypted connections ("no pg_hba.conf entry ...

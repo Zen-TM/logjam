@@ -21,8 +21,8 @@ beforeEach(() => {
 
 // Mutation: drop keepAlive or connectionTimeoutMillis from dbConnectionConfig()
 // (lib/dbConnection.ts). The pool reaches it through the real services/prisma
-// import, and the sweep lock's client through the same function, so one
-// config covers both.
+// import. The sweep lock's client reaches the same function; its half is
+// guarded in lib/sweepLeader.unit.test.ts.
 it("keeps connections alive and bounds the connect", async () => {
   await import("./prisma");
   const { dbConnectionConfig } = await import("../lib/dbConnection");
