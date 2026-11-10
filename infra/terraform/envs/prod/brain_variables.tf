@@ -54,7 +54,10 @@ variable "brain_bootstrap" {
 # the entry so it can never apply to a later volume (the next loss adds a key
 # without it and gets the latest state), and a boot only restores into a blank
 # disk, so leaving it on the entry is harmless. The old volume keeps the data as
-# it was before the rewind: making it current again is the undo.
+# it was before the rewind: making it current again is the undo. After an undo
+# the archive's newest timeline is still the rewound one, so a later disk loss
+# cannot restore until pgBackRest is given `--target-timeline=current` (error
+# 058 otherwise); no host script passes it yet.
 variable "brain_data_volumes" {
   description = "The brain's data volumes by key: availability zone (one of the two subnets in network.tf), size in GB, and optionally restore_to, a time with a UTC offset (2026-11-20T03:15:00+11:00) the volume's first boot restores to instead of the latest state."
   type        = map(object({ az = string, size_gb = number, restore_to = optional(string, "") }))

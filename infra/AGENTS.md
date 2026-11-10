@@ -93,7 +93,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `BRAIN_RESTORE_TARGET` and only a boot onto a blank disk uses it. A variable
   of its own would outlive the disk it was meant for and rewind the next
   restore as well. The old volume stays detached with the data as it was before
-  the rewind: making it current again is the undo. Guards:
+  the rewind: making it current again is the undo, after which a disk loss
+  needs `--target-timeline=current` on its restore (see `brain_variables.tf`). Guards:
   `brain_restore_target_comes_only_from_the_current_volume`,
   `brain_restore_to_without_an_offset_is_refused`, and the point-in-time
   scenario of `brain/tests/e2e.sh`.
