@@ -60,23 +60,16 @@ resource "aws_security_group" "worker" {
 }
 
 # Dedicated RDS security group (logjam-db-sg). Allows Postgres (5432) from the
-# EB instance SG (sg-016b93b75c584bd70, EB-managed) and from the dedicated
-# Fargate worker SG (aws_security_group.worker). Both referenced by id.
-# Least-privilege: only the API and worker compute, not the whole VPC CIDR
-# and not the account-default SG. This is the SG attached to
+# dedicated Fargate worker SG (aws_security_group.worker) only: not the whole
+# VPC CIDR and not the account-default SG. This is the SG attached to
 # aws_db_instance.main.
+# The rule that admitted the Elastic Beanstalk instance SG is gone: EC2 refuses
+# to delete a group that another group's rule names, so it would make the
+# environment's termination fail while the database is still being deleted.
 resource "aws_security_group" "rds" {
   name        = "logjam-db-sg"
   description = "Created by RDS management console"
   vpc_id      = data.aws_vpc.main.id
-
-  ingress {
-    description     = "Allow PostgreSQL from EB"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = ["sg-016b93b75c584bd70"]
-  }
 
   ingress {
     description     = "Allow PostgreSQL from Fargate workers (logjam-worker-sg)"
