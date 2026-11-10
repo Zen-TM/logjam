@@ -60,6 +60,9 @@ ok() { echo "ok   - $S: $1"; }
 bad() { echo "FAIL - $S: $1"; fails=1; [ -z "${E2E_FAIL_FAST:-}" ] || exit 1; }
 check() { if "${@:2}"; then ok "$1"; else bad "$1"; fi; }
 not() { ! "$@"; }
+# grep -q leaves at its first match; under pipefail a writer that is still writing then dies of
+# SIGPIPE and the pipeline reads as no match. This one reads to the end.
+has() { grep "$@" > /dev/null; }
 fatal() { bad "$1"; dump; exit 1; }
 wait_for() { # <seconds> <command...>
   local n=$1; shift
@@ -119,16 +122,16 @@ status_keys() { aws s3 cp "s3://$SIGNALS/status.json" - | python3 -c 'import jso
 status_field() { aws s3 cp "s3://$SIGNALS/status.json" - | python3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
 fingerprint() { r openssl x509 -in /data/postgres/server.crt -noout -fingerprint -sha256; }
 ready() { curl -fsS -o /dev/null -m 3 http://127.0.0.1:80/ready; }
-api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | grep -qx "$1"; }
+api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | has -x "$1"; }
 pg_ready() { r docker exec "$(cid postgres)" pg_isready -q -h 127.0.0.1; }
-pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | grep -qx "$1"; }
+pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | has -x "$1"; }
 superuser_connected() { # <extra docker logs args>
-  r docker logs "$@" "$(cid postgres)" 2>&1 | grep -q 'connection authorized: user=postgres'
+  r docker logs "$@" "$(cid postgres)" 2>&1 | has 'connection authorized: user=postgres'
 }
 restore_reported() {
   [ "$(status_field last_restore_at)" != None ] && [ "$(status_field last_restore_lag_seconds)" -ge 0 ]
 }
-api_refused() { r docker logs "$(cid api)" 2>&1 | grep -q 'AUTH_MODE=fake refused'; }
+api_refused() { r docker logs "$(cid api)" 2>&1 | has 'AUTH_MODE=fake refused'; }
 archived() { # <wal file>: that segment or a later one reached the repository
   local got; got=$(sql postgres 'select last_archived_wal from pg_stat_archiver')
   [ -n "$got" ] && [[ ! $got < $1 ]]
@@ -164,7 +167,7 @@ trap cleanup EXIT
 if [ -e /opt/brain ] || [ -e /etc/brain ] || [ -e /data/postgres ] || mountpoint -q /data; then
   echo "refusing: this host already has a brain (/opt/brain, /etc/brain, /data/postgres or a mounted /data)"; trap - EXIT; exit 1
 fi
-if ss -ltn 'sport = :80' | grep -q LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
+if ss -ltn 'sport = :80' | has LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
 r rm -rf /run/brain-e2e-serving /run/brain-e2e-bootstrap # a killed earlier run's switches
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-southeast-2
 export AWS_ENDPOINT_URL=http://127.0.0.1:$MS_PORT
