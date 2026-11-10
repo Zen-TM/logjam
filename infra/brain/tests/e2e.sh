@@ -517,14 +517,14 @@ r umount "$WORK/m"
 boot; rc=$?
 check "boot.sh restores over the half-finished directory (exit $rc)" [ "$rc" = 0 ]
 check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
-check "its leftovers are gone" [ ! -e /data/postgres/base/1/partial ]
+check "its leftovers are gone" not r test -e /data/postgres/base/1/partial
 check "the marker is gone" [ ! -e /data/.restore-in-progress ]
 check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
 r mkdir -p /data/postgres/junk
 reboot
 boot > /dev/null 2>&1; rc=$?
 check "an existing database is not touched by a boot without the marker (exit $rc)" [ "$rc" = 0 ]
-check "...and its extra files stay" [ -d /data/postgres/junk ]
+check "...and its extra files stay" r test -d /data/postgres/junk
 
 [ "$fails" = 0 ] || dump
 exit "$fails"
