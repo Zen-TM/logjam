@@ -54,10 +54,13 @@ if [ "$server" = 1 ]; then
         # BRAIN_RESTORE_TARGET (the host checked it is an RFC 3339 time with an offset): stop at
         # that time, in the form pgBackRest takes (a space for the T, +00 for Z). Without
         # --target-action=promote recovery pauses at the target and never opens for writes.
-        target=()
+        # Every restore follows the timeline its backup was taken on. Postgres's own default
+        # follows the newest timeline in the archive, which after a rewind is a branch the
+        # backup may never have been on. Guard: tests/test.sh, tests/e2e.sh scenario 13.
+        target=(--target-timeline=current)
         if [ -n "${BRAIN_RESTORE_TARGET:-}" ]; then
           t=${BRAIN_RESTORE_TARGET/T/ }
-          target=(--type=time "--target=${t/%Z/+00}" --target-action=promote)
+          target+=(--type=time "--target=${t/%Z/+00}" --target-action=promote)
         fi
         # BRAIN_RESTORE_OPTS, unquoted so it splits into options: a drill adds
         # --archive-mode=off so a restored copy never archives into the live repository.

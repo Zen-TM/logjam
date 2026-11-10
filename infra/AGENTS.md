@@ -88,16 +88,22 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_only_the_current_volume_is_attached_in_its_zone`,
   `brain_instance_is_replaced_when_the_current_volume_changes`.
 - **A restore target lives on a volume's entry, never in a setting of its own.**
-  Rewinding past bad data is the disk-loss change with `restore_to` (a time
-  with a UTC offset) on the new entry; it reaches the host as
-  `BRAIN_RESTORE_TARGET` and only a boot onto a blank disk uses it. A variable
+  `restore_to` (a time with a UTC offset) on the new entry reaches the host as
+  `BRAIN_RESTORE_TARGET`, and only a boot onto a blank disk uses it. A variable
   of its own would outlive the disk it was meant for and rewind the next
-  restore as well. The old volume stays detached with the data as it was before
-  the rewind: making it current again is the undo, after which a disk loss
-  needs `--target-timeline=current` on its restore (see `brain_variables.tf`). Guards:
+  restore as well. Leave it on the entry afterwards: removing it changes the
+  user data and replaces the host for nothing. Guards:
   `brain_restore_target_comes_only_from_the_current_volume`,
-  `brain_restore_to_without_an_offset_is_refused`, and the point-in-time
-  scenario of `brain/tests/e2e.sh`.
+  `brain_restore_to_without_an_offset_is_refused`, scenario 13 of
+  `brain/tests/e2e.sh`.
+- **Every restore follows its own backup's timeline, and the newest backup is
+  always the live database's.** The entrypoint and `drill.sh` pass
+  `--target-timeline=current` (Postgres's default follows the newest timeline
+  in the archive, which after a rewind is another history), and `boot.sh`
+  takes a full backup, before the API starts, when an existing database finds
+  the newest backup on another timeline. Drop either and a second rewind, or a
+  volume made current again, comes back as the wrong history with no error.
+  Guards: `postgres/tests/test.sh`, scenario 13b of `brain/tests/e2e.sh`.
 - **The brain's host files travel inline in its user data**, so any change to
   `brain/` (outside `postgres/`, `tests/`, `api.env` and the committed
   `brain-ca.pem`, which a commit after first boot must not turn into a
