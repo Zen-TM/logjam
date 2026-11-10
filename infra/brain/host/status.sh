@@ -19,15 +19,16 @@ if [ "$boot_mode" != restoring ]; then
     2> /dev/null | tail -1) || pgq=
 fi
 
-api_cid=$(compose ps -aq api 2> /dev/null || true)
+api_cid=$(COMPOSE_PROFILES=api compose ps -q api 2> /dev/null || true)
 api_image=
 [ -z "$api_cid" ] || api_image=$(docker inspect -f '{{.Config.Image}}' "$api_cid" 2> /dev/null || true)
 serving=$(serving_state)
 backups=$(pgb info --output=json 2> /dev/null || true)
-disk=$(df --output=pcent /data 2> /dev/null | tail -1 | tr -dc 0-9 || true)
+disk=
+if mountpoint -q /data; then disk=$(df --output=pcent /data | tail -1 | tr -dc 0-9); fi
 restore=$(cat /data/brain/last-restore 2> /dev/null || true)
 
-PGQ=$pgq API_IMAGE=$api_image SERVING=$serving BACKUPS=$backups DISK=$disk BOOT_MODE=$boot_mode RESTORE=$restore python3 - <<'PY' | s3_put status.json
+json=$(PGQ=$pgq API_IMAGE=$api_image SERVING=$serving BACKUPS=$backups DISK=$disk BOOT_MODE=$boot_mode RESTORE=$restore python3 - <<'PY'
 import json, os, time
 e = os.environ
 pgq = e["PGQ"].split("|") if e["PGQ"] else None
@@ -50,7 +51,10 @@ print(json.dumps({
     "api_sha": e["API_IMAGE"].rsplit(":", 1)[1] if ":" in e["API_IMAGE"] else None,
     "serving": e["SERVING"] == "on",
     "boot_mode": e["BOOT_MODE"] or None,
-    "last_restore_at": restore[0] if restore else None,
-    "last_restore_lag_seconds": int(restore[1]) if restore else None,
+    "last_restore_at": restore[0] if len(restore) == 2 else None,
+    "last_restore_lag_seconds": int(restore[1]) if len(restore) == 2 else None,
 }))
 PY
+)
+# Rendered first: an error above must not upload an empty status.json.
+printf '%s\n' "$json" | s3_put status.json

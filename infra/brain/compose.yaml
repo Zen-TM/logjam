@@ -29,6 +29,12 @@ services:
       # shapes is replaced by the image's prod one before the server listens,
       # which allows no password-less connection except the local socket.
       POSTGRES_HOST_AUTH_METHOD: trust
+    # The default 10 s then SIGKILL would turn a reboot with a long shutdown
+    # checkpoint into a crash that never archives its last WAL segment. The
+    # official image's stop signal (fast shutdown) is the right one.
+    stop_grace_period: 120s
+    # Docker's 64 MB /dev/shm is too small for parallel queries.
+    shm_size: 256mb
     ports:
       - "5432:5432"
     volumes:
@@ -53,6 +59,8 @@ services:
     # Only host/release-agent.sh enables this profile.
     profiles: [api]
     # Written by release-agent.sh before it starts this service.
+    # A leaking API is killed in its own cgroup, not by the kernel choosing Postgres.
+    mem_limit: ${BRAIN_API_MEM_LIMIT:-768m}
     env_file:
       - path: /etc/brain/api.env
         required: false
