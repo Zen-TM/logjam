@@ -56,12 +56,21 @@ Each of these is its own merge or check, done in the days before.
    NET="awsvpcConfiguration={subnets=[subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231],securityGroups=[$SG],assignPublicIp=ENABLED}"
    ```
 
-   The first copy into an empty brain (run on a scratch copy, against a scratch
-   RDS):
+   RDS is live until the window, and the copy stops on a source that is not
+   read-only. The two rehearsal commands below therefore carry
+   `COPY_ALLOW_LIVE_SOURCE=1`, which lets it copy from a live source: counts then
+   may differ, and the last line says the source was live instead of
+   `every check held`. The window's copy (step 4 below) is the same command
+   **without** that entry, so a forgotten read-only step stops the copy. The flag
+   itself has **not yet been run on AWS**; the copy's other behaviour is as marked.
+
+   The first copy into an empty brain (the same command, before the flag existed,
+   run on a scratch copy against a scratch RDS):
 
    ```sh
    TASK=$(aws ecs run-task --cluster $CLUSTER --launch-type FARGATE --count 1 \
      --task-definition logjam-brain-copy --network-configuration "$NET" \
+     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_ALLOW_LIVE_SOURCE","value":"1"}]}]}' \
      --query 'tasks[0].taskArn' --output text)
    aws logs tail /ecs/logjam-brain-copy --follow --since 5m
    aws ecs wait tasks-stopped --cluster $CLUSTER --tasks "$TASK"
@@ -70,8 +79,9 @@ Each of these is its own merge or check, done in the days before.
    ```
 
    (Stop the `logs tail` with Ctrl-C when the task has stopped.) The log has
-   table names and counts only. Look for exit code `0` and the last line
-   `copy: ok: every check held`. Anything else (`NOT VERIFIED: ...`,
+   table names and counts only. Look for exit code `0` and a last line that
+   starts `copy: ok` (`copy: ok: the source was live, ...` for these rehearsals).
+   Anything else (`NOT VERIFIED: ...`,
    `RESTORED BUT NOT VERIFIED: do not serve from this copy`, exit 1) means do not
    serve: read the reason and re-run. This is also what proves the committed
    certificate is the brain's: a wrong file fails verification and the copy
@@ -82,7 +92,7 @@ Each of these is its own merge or check, done in the days before.
    ```sh
    TASK=$(aws ecs run-task --cluster $CLUSTER --launch-type FARGATE --count 1 \
      --task-definition logjam-brain-copy --network-configuration "$NET" \
-     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_REPLACE","value":"1"}]}]}' \
+     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_REPLACE","value":"1"},{"name":"COPY_ALLOW_LIVE_SOURCE","value":"1"}]}]}' \
      --query 'tasks[0].taskArn' --output text)
    ```
 
@@ -229,8 +239,10 @@ below), no hand workflow runs other than the one named in step 6a, no hand
    aws rds wait db-snapshot-available --db-snapshot-identifier logjam-cutover-final
    ```
 
-4. **The copy**, over the rehearsal's copy, with `COPY_REPLACE=1` (the command in
-   "Before the window"; measured 197 s for 1,764 MB on a scratch copy). Check: exit
+4. **The copy**, over the rehearsal's copy, with `COPY_REPLACE=1` and **without**
+   `COPY_ALLOW_LIVE_SOURCE` (the second command in "Before the window" with that
+   one entry removed, so a source that is not read-only stops the copy at once;
+   measured 197 s for 1,764 MB on a scratch copy). Check: exit
    code `0` and `copy: ok: every check held` as the last log line. Row counts and
    sequence values are exact because the source is read-only; the log lists any
    difference. If it ends in

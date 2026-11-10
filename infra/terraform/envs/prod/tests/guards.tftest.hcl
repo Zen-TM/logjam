@@ -1670,6 +1670,25 @@ run "brain_copy_task_reads_only_status_json" {
     error_message = "The data copy must run copy.sh on ARM64 from the brain's image, between RDS and the brain's own name, with no credential in its environment."
   }
 
+  # The names copy.sh reads (`${NAME:?}` or `${NAME:-...}`) and the task
+  # definition's environment plus secrets are one list. The three optional
+  # overrides are in the script only: the task never sets them, a person adds
+  # them to a run (COPY_SOURCE_CA_FILE is for tests). Mutation: renaming
+  # BRAIN_SIGNALS_BUCKET in brain_copy.tf (the task would stop at start, in
+  # the cutover window), or reading a new name in copy.sh.
+  assert {
+    condition = (
+      setsubtract(
+        toset([for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):[?-]", file("../../../brain/postgres/copy.sh")) : m[0]]),
+        ["COPY_REPLACE", "COPY_ALLOW_LIVE_SOURCE", "COPY_SOURCE_CA_FILE"]
+        ) == toset(concat(
+          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.name],
+          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].secrets : e.name]
+      ))
+    )
+    error_message = "copy.sh and the data copy's task definition must name the same environment variables."
+  }
+
   # Without infra/brain/brain-ca.pem (committed once the brain has booted) the
   # task still plans, with an empty CA, and the script refuses. Mutation:
   # reading the file without the fileexists guard (the plan errors).

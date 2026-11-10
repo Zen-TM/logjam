@@ -155,9 +155,11 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain/tests/e2e.sh` (the repository listing must not change).
 - **The cutover's data copy** (`brain/postgres/copy.sh`, `brain_copy.tf`) is
   started by a person, never on a schedule, and never against a serving brain:
-  it stops unless `status.json` is fresh and says `serving` is false (read
-  before the dump and again before the restore), because a copy then replaces
-  live data with RDS's frozen copy. Keep both reads, keep certificate
+  it stops unless `status.json` is fresh, says `serving` is false and names no
+  running API (`api_sha` null; read before the dump and again before the
+  restore), because a copy then replaces live data with RDS's frozen copy. It
+  also stops on a source that is not read-only unless `COPY_ALLOW_LIVE_SOURCE=1`
+  (a rehearsal; the window's copy never sets it). Keep both reads, keep certificate
   verification on both ends, and keep its task role to `s3:GetObject` on
   `status.json`. Guards: `brain_copy_is_never_scheduled`,
   `brain_copy_task_reads_only_status_json`, and the copy scenario of
