@@ -32,7 +32,8 @@
 #   host/boot.sh: dropping the pg_control check (`-e /data/postgres/global/pg_control` -> `-e /nonexistent`) [8c]
 #   host/boot.sh: the restart baseline (`"true $restarts"` -> `"true 0"`) [2]
 #   host/release-agent.sh: keeping the new api.env after a failed `compose up` (no `rm -f`) [7]
-#   host/boot.sh: ignoring the restore marker (`if [ -e "$marker" ]` -> `if false`) [8c]
+#   host/boot.sh: ignoring the setup marker (`if [ -e "$marker" ]` -> `if false`) [8c]
+#   host/boot.sh: not writing the marker for a bootstrap (`echo "$mode" > "$marker"` -> `true`) [1]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit
@@ -68,6 +69,7 @@ cid() { r docker ps -aq --filter label=com.docker.compose.project=brain --filter
 lcompose() { r bash -c '. /opt/brain/host/lib.sh; compose "$@"' _ "$@"; }
 sql() { r docker exec -u postgres "$(cid postgres)" psql -U postgres -d "$1" -tAXqc "$2"; }
 boot() { r /opt/brain/host/boot.sh > "$WORK/boot.log" 2>&1; }
+boot_limited() { r timeout 300 /opt/brain/host/boot.sh > "$WORK/boot.log" 2>&1; } # a regression fails instead of hanging
 agent() { r /opt/brain/host/release-agent.sh > "$WORK/agent.log" 2>&1; }
 brain_env() { # <KEY> [value]: set the line, or remove it when no value is given
   r sed -i "/^$1=/d" /etc/brain/brain.env
@@ -307,7 +309,23 @@ lcompose --profile '*' down > /dev/null 2>&1
 S="1 bootstrap"
 new_disk
 bootstrap_flag 1
-boot || fatal "boot.sh failed on a blank volume with the bootstrap tag at 1"
+# A first boot that dies at the roles step (an unreadable secret) leaves a cluster and the setup
+# marker. The next boot finishes that bootstrap on the same cluster: it never deletes it, as the
+# API may already have written to it, and never waits on a role that was not made yet.
+brain_env BRAIN_APP_DB_SECRET_ID logjam/no-such-secret
+boot; rc=$?
+check "a bootstrap that cannot read the app secret fails (exit $rc)" [ "$rc" != 0 ]
+check "...leaves the marker naming the bootstrap" [ "$(cat /data/.setup-in-progress)" = bootstrap ]
+check "...and the cluster it made" r test -e /data/postgres/global/pg_control
+check "...and the boot mode is failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+sysid0=$(sql postgres "select system_identifier from pg_control_system()")
+brain_env BRAIN_APP_DB_SECRET_ID logjam/app-db-password
+boot_limited; rc=$?
+check "the next boot finishes it (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || fatal "boot.sh did not finish the bootstrap"
+check "...on the same cluster" [ "$(sql postgres "select system_identifier from pg_control_system()")" = "$sysid0" ]
+check "...with the marker gone" [ ! -e /data/.setup-in-progress ]
+check "...and the boot mode bootstrap" [ "$(cat /run/brain/boot-mode)" = bootstrap ]
 check "the device is formatted and mounted at /data" [ "$(findmnt -n -o FSTYPE /data)" = ext4 ]
 check "the database logjam exists" [ "$(sql postgres "select count(*) from pg_database where datname='logjam'")" = 1 ]
 check "logjam_app exists and is not a superuser" [ "$(sql postgres "select count(*) from pg_roles where rolname='logjam_app' and not rolsuper and not rolcreatedb and not rolcreaterole")" = 1 ]
@@ -552,13 +570,13 @@ r mkfs.ext4 -q -L brain-data "$LOOP"
 r mount "$LOOP" "$WORK/m"
 r mkdir -p "$WORK/m/postgres/base/1"
 echo 16 | r tee "$WORK/m/postgres/PG_VERSION" "$WORK/m/postgres/base/1/partial" > /dev/null
-r touch "$WORK/m/.restore-in-progress"
+r touch "$WORK/m/.setup-in-progress"
 r umount "$WORK/m"
 boot; rc=$?
 check "boot.sh restores over the half-finished directory (exit $rc)" [ "$rc" = 0 ]
 check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
 check "its leftovers are gone" not r test -e /data/postgres/base/1/partial
-check "the marker is gone" [ ! -e /data/.restore-in-progress ]
+check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
 r mkdir -p /data/postgres/junk
 reboot
@@ -572,12 +590,12 @@ check "...and its extra files stay" r test -d /data/postgres/junk
 S="8c a restore that finished copying"
 sql logjam "create table e2e_keep as select 1 as n" > /dev/null
 r docker kill "$(cid postgres)" > /dev/null
-r touch /data/.restore-in-progress
+echo restore | r tee /data/.setup-in-progress > /dev/null
 reboot
 boot; rc=$?
 check "boot.sh starts the finished copy (exit $rc)" [ "$rc" = 0 ]
 check "the row written after the last archive push survived" [ "$(sql logjam 'select count(*) from e2e_keep')" = 1 ]
-check "the marker is gone" [ ! -e /data/.restore-in-progress ]
+check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
 
 # A restore whose server crash-loops: the next boot, once the cause is gone, finds the marker and
@@ -587,13 +605,13 @@ lose_disk
 brain_env BRAIN_PG_FLAGS "-c no_such_setting=1"
 boot; rc=$?
 check "boot.sh stops on a server that will not start (exit $rc)" [ "$rc" != 0 ]
-check "the marker stays" [ -e /data/.restore-in-progress ]
+check "the marker stays" [ -e /data/.setup-in-progress ]
 check "the boot mode is failed" [ "$(cat /run/brain/boot-mode)" = failed ]
 brain_env BRAIN_PG_FLAGS "-c shared_buffers=64MB -c max_wal_size=256MB"
 boot; rc=$?
 check "the next boot, with the cause removed, succeeds (exit $rc)" [ "$rc" = 0 ]
 check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
-check "the marker is gone" [ ! -e /data/.restore-in-progress ]
+check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 
 # --- 11. the restore drill -------------------------------------------------------------------------------------------
 # infra/brain/postgres/drill.sh, as a scheduled task runs it: its own container, no route to the live Postgres,
