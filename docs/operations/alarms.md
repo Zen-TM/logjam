@@ -35,6 +35,9 @@ that goes wrong between deploys.
 | `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
 | `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode, the default) | Find what is using the CPU; the worst case is about US$47 a month on a `t4g.small` |
 | `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
+| `logjam-brain-cpu-high` | The brain's CPU has averaged 50% or more for 15 minutes | Find out whether it is growth or one client misbehaving (the API's request log); the API is one process and saturates near 80 requests a second, and a bigger instance of the same family adds memory, not speed |
+| `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
+| `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
 
 ## API
 
@@ -301,10 +304,10 @@ since the next scheduled run is a month away.
 
 ## The brain
 
-These four alarms exist only while the brain's EC2 instance does
-(`infra/terraform/envs/prod/brain_alarms.tf`), and the two credit alarms only
-for the credit mode in use. Do not test the two status alarms with
-`set-alarm-state`: their actions recover or reboot the host.
+These alarms exist only while the brain's EC2 instance does
+(`infra/terraform/envs/prod/brain_alarms.tf` and `brain_watchdog.tf`), and the
+two credit alarms only for the credit mode in use. Do not test the two status
+alarms with `set-alarm-state`: their actions recover or reboot the host.
 
 ### `logjam-brain-system-status-failed`
 
@@ -357,3 +360,76 @@ balance averages under 30 for six readings in a row (30 minutes).
 
 1. Find the cause as above.
 2. If the load is real, switch to `unlimited` credits or a bigger instance type.
+
+### `logjam-brain-cpu-high`
+
+The API is one Node process, so it uses one of the instance's two vCPUs and
+saturates near 80 requests a second. On a scratch copy (2026-11-10) the stack
+passed 60 requests a second at 50% of the instance and 80 at 64%, and failed at
+100. So 50% for 15 minutes (three readings of five minutes) is about three
+quarters of the limit. A daily full backup and a boot do not hold it that long.
+
+1. Find out whether this is growth or one client misbehaving: the API's request
+   log in `/logjam/brain/api`, by client and path.
+2. If the load is real, a bigger instance of the same family adds memory, not
+   speed.
+
+### `logjam-brain-checks-failing`
+
+The brain tells the world how it is doing by writing `status.json` every
+minute, but a machine that is down cannot say so. So a small function, the
+watchdog (`infra/lambda/brain-watchdog`), looks from outside every 5 minutes:
+at that report, at the backup bucket, at the restore drill's report and at the
+public API. A run that finds anything wrong fails on purpose, and the alarm
+fires when two of the last three runs failed, so a single blip does not email.
+
+**Which checks failed:** open the log group `/aws/lambda/logjam-brain-watchdog`
+and read the latest line. It is `{"failed": ["wal_stale", ...]}`: codes only,
+never any data. While the brain is not serving, the line also has
+`"ready_probe"`: the HTTP status the public `/ready` answered to one try, or
+`null` if it could not connect. Before the cutover the old API answers it, so a
+`200` shows the firewall lets the watchdog through; a `403` means it does not.
+The probe never fails a run. Then find each code below. The same line also shows when the
+alarm clears (`{"failed": []}`).
+
+The shell steps need a Session Manager shell on the brain
+(`aws ssm start-session --target <instance id>`). Containers are
+`brain-postgres-1` and `brain-api-1`.
+
+| Code | What it means | First thing to do |
+|---|---|---|
+| `status_missing` | The function could not read `status.json` from the signals bucket: the brain has not written one yet, or cannot | Is the instance running (EC2 console)? In a shell, `journalctl -u brain-status -n 50` shows why the status timer fails |
+| `status_stale` | `status.json` was last written more than 3 minutes ago: the host is down or its status timer stopped | As `status_missing`. If the instance is stopped or unreachable, see the two status-check alarms above |
+| `status_invalid` | `status.json` is not valid JSON or its `schema` is not 1 | Someone changed `infra/brain/host/status.sh` without the watchdog. Read the file (`aws s3 cp s3://<signals bucket>/status.json -`) and fix whichever side is wrong |
+| `boot_failed` | The boot unit's mode is `failed` or `refused`: Postgres was not started on purpose or by mistake | `journalctl -b -u brain-boot`. `refused` means a blank data disk with no backup and no permission to create a database; never set `brain_bootstrap` just to silence it |
+| `postgres_down` | Postgres is not answering, and no restore is running | `docker ps` and `docker logs --tail 50 brain-postgres-1`. The boot unit restarts it; `systemctl restart brain-boot` if it does not |
+| `disk_high` | The data disk is 80% full (or its usage could not be read) | `df -h /data`, then what is big: `du -sh /data/postgres/pg_wal` is the usual suspect when archiving is stuck (see `wal_stale`). A full disk stops Postgres; grow the volume (`brain_data_volumes`) before it fills |
+| `wal_stale` | Postgres is up, but no new WAL has reached the backup bucket for 5 minutes. A restore from now would lose everything since. This is the one check that can catch a backup that has silently stopped, and it does not trust the brain's own report | `docker logs --tail 50 brain-postgres-1` and look for `archive-push` errors (an expired role, S3 unreachable, bucket policy). Once fixed, run `systemctl start brain-backup-full`: if archiving was stuck for hours, the safety limit may have dropped WAL, and until a new full backup exists a restore would stop at the gap while every other check looks green |
+| `full_stale` | The newest full backup is more than 26 hours old (or there is none) | `journalctl -u brain-backup-full -n 100`, then `systemctl start brain-backup-full` |
+| `memory_low` | Postgres is up and the host has under 100 MiB available (or `status.json` does not say). On a `t4g.micro` the lowest seen in a rehearsal was 164 under a release swap with a 1.7 GB database, 331 idle | The host is close to running out of memory: move `brain_instance_type` up one size (about two minutes of downtime) |
+| `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
+| `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
+| `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` |
+| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
+
+`wal_stale`, `status_*` and `postgres_down` can all fire together when the
+host goes down: start with the status-check alarms.
+
+There is no code for how stale a restore came up. That number is the age of the
+newest restored data when recovery ends, so it is the outage plus the loss: any
+real recovery takes more than five minutes, and a check would stay red for a day
+after every one, hiding other failures. `last_restore_lag_seconds` stays in
+`status.json` for the recovery runbook.
+
+### `logjam-brain-watchdog-not-running`
+
+The check that watches the brain must itself be watched. This alarm fires when
+the function was not invoked at all in 15 minutes (missing data counts), which
+means the schedule or the function is gone, not that the brain is unhealthy.
+
+1. In the EventBridge console check the rule `logjam-brain-watchdog` is
+   enabled and has the function as its target.
+2. Check the function `logjam-brain-watchdog` exists and read its log group for
+   the last run.
+3. If both look right, run the function once from the Lambda console and see
+   what it logs.
