@@ -15,9 +15,10 @@
 #
 # The checks are the agent's three patterns, copied. --self-test fails when
 # either file stops containing the other's. Mutations that turn it red: dropping
-# the single quote from the value pattern here fails "a value with a single
-# quote" and the shared-pattern check; loosening the key pattern in
-# release-agent.sh alone fails the shared-pattern check.
+# the single quote or the backslash from the value pattern here fails "a value
+# with a single quote" or "a value with a backslash" and the shared-pattern
+# check; loosening the key pattern in release-agent.sh alone fails the
+# shared-pattern check.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,8 +42,8 @@ with open(path) as f:
             sys.exit(f"brain-release: {where}: not KEY=value")
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", k):
             sys.exit(f"brain-release: {where}: bad name")
-        if re.search(r"[\x00-\x1f\x7f']", v):
-            sys.exit(f"brain-release: {where}: the release agent refuses a value with a control character or a single quote ({k})")
+        if re.search(r"[\x00-\x1f\x7f'\\]", v):
+            sys.exit(f"brain-release: {where}: the release agent refuses a value with a control character, a single quote or a backslash ({k})")
         if k in env:
             sys.exit(f"brain-release: {where}: {k} is set twice")
         env[k] = v
@@ -69,6 +70,7 @@ self_test() {
   check "a bad key"                        fail "$A" $'a=1\n'
   check "a key that starts with a digit"   fail "$A" $'1A=1\n'
   check "a line without ="                 fail "$A" $'A\n'
+  check "a value with a backslash"         fail "$A" $'A=a\\b\n'
   check "a control character in a value"   fail "$A" $'A=a\tb\n'
   check "a key set twice"                  fail "$A" $'A=1\nA=2\n'
   check "a bad sha"                        fail "not a sha!" $'A=1\n'
@@ -84,7 +86,7 @@ self_test() {
 
   # The agent's patterns are these patterns.
   local p
-  for p in '[A-Za-z0-9][A-Za-z0-9_.-]{0,127}' '[A-Z][A-Z0-9_]*' "[\\x00-\\x1f\\x7f']"; do
+  for p in '[A-Za-z0-9][A-Za-z0-9_.-]{0,127}' '[A-Z][A-Z0-9_]*' "[\\x00-\\x1f\\x7f'\\\\]"; do
     if grep -qF "\"$p\"" "$HERE/../brain/host/release-agent.sh" && grep -qF "\"$p\"" "${BASH_SOURCE[0]}"; then
       echo "ok   — release-agent.sh and this script share $p"
     else
