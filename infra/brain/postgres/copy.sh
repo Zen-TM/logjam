@@ -110,7 +110,10 @@ brain_is_dormant
 # owns the schema, and the dump's CREATE SCHEMA (or, with --clean, DROP SCHEMA) needs
 # a right it does not have. (A `--schema=public` dump carries no extensions: the
 # brain makes its own pgaudit.)
-pg_restore -l "$WORK/dump" | grep -vE '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - public |COMMENT - SCHEMA public )' > "$WORK/list"
+pg_restore -l "$WORK/dump" > "$WORK/toc" 2> "$WORK/err" || { tail -3 "$WORK/err"; die "cannot list the dump: the brain is untouched"; }
+# grep -v exits 1 when nothing is left: a dump with nothing to restore is a stop too.
+grep -vE '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - public |COMMENT - SCHEMA public )' "$WORK/toc" > "$WORK/list" \
+  || die "the dump lists nothing to restore: the brain is untouched"
 clean=()
 [ "${COPY_REPLACE:-}" != 1 ] || clean=(--clean --if-exists)
 if ! on_target pg_restore --single-transaction --no-owner --no-privileges "${clean[@]}" --use-list="$WORK/list" --dbname="$DB" "$WORK/dump" > /dev/null 2> "$WORK/err"; then
@@ -130,7 +133,7 @@ row_counts() { # name|rows for every table in public
   qry=$(q "$1" "select coalesce(string_agg(format('select %L, count(*) from public.%I', tablename, tablename), ' union all ' order by tablename), 'select null::text, null::bigint where false') from pg_tables where schemaname = 'public'") || return 1
   q "$1" "select a || '|' || b from ($qry) as t(a, b) order by 1"
 }
-sequence_values() { q "$1" "select sequencename || '|' || coalesce(last_value::text, '') from pg_sequences where schemaname = 'public' order by 1"; }
+sequence_values() { q "$1" "select sequencename || '|' || coalesce(last_value::text, 'unset') from pg_sequences where schemaname = 'public' order by 1"; }
 counts_src=$(row_counts on_source) || fail "a row count could not be read"
 counts_dst=$(row_counts on_target) || fail "a row count could not be read"
 seqs_src=$(sequence_values on_source) || fail "a sequence could not be read"
@@ -149,6 +152,11 @@ say "tables and rows (table | rows in the brain):"
 echo "$counts_dst" | tr '|' ' ' | sed 's/^/  /'
 tables_src=$(cut -d'|' -f1 <<< "$counts_src") tables_dst=$(cut -d'|' -f1 <<< "$counts_dst")
 [ "$tables_src" = "$tables_dst" ] || fail "the brain's tables are not the source's"
+seqnames_src=$(cut -d'|' -f1 <<< "$seqs_src") seqnames_dst=$(cut -d'|' -f1 <<< "$seqs_dst")
+if [ "$seqnames_src" != "$seqnames_dst" ]; then
+  fail "the brain's sequences are not the source's:"
+  comm -3 <(sort <<< "$seqnames_src") <(sort <<< "$seqnames_dst") | sed 's/^\t/  only in the brain: /; t; s/^/  only in the source: /'
+fi
 differ "row counts" "$counts_src" "$counts_dst"
 differ "sequence values" "$seqs_src" "$seqs_dst"
 
