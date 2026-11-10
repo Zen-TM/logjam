@@ -196,11 +196,13 @@ resource "aws_cloudwatch_metric_alarm" "brain_watchdog_dead" {
 # calculated from their measured per-call CPU, not measured on a whole brain).
 # A scratch copy measured 21, 36, 50 and 64% at 20, 40, 60 and 80 requests a
 # second; the API is one Node process on one core and fails at 100. A
-# t4g.micro's free allowance is 10% (0.2 vCPU), so a month spent just under
-# this alarm costs at most US$5.84 in surplus credits (0.2 vCPU above the
-# baseline at US$0.04 a vCPU-hour), and anything more trips it. A daily full
-# backup (about a minute) and a boot do not hold 20% for an hour. Standard
-# credit mode has its own alarm (brain_cpu_credits_low).
+# t4g.micro's free allowance is 10% (0.2 vCPU), so a month in which no hour
+# averages 20% costs at most US$5.84 in surplus credits (0.2 vCPU above the
+# baseline at US$0.04 a vCPU-hour). One reading of an hour, not four of 15
+# minutes: four readings must all be high, so a load that rests for one
+# quarter of every hour would never fire while costing several times that. A
+# daily full backup (about a minute) and a boot do not bring an hour to 20%.
+# Standard credit mode has its own alarm (brain_cpu_credits_low).
 resource "aws_cloudwatch_metric_alarm" "brain_cpu_high" {
   count = local.brain_enabled ? 1 : 0
 
@@ -212,8 +214,8 @@ resource "aws_cloudwatch_metric_alarm" "brain_cpu_high" {
   dimensions  = { InstanceId = aws_instance.brain[0].id }
 
   statistic           = "Average"
-  period              = 900
-  evaluation_periods  = 4
+  period              = 3600
+  evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 20
   treat_missing_data  = "notBreaching"

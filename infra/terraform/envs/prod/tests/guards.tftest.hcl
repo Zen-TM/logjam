@@ -1357,22 +1357,24 @@ run "brain_alarms_act_on_the_instance" {
   }
 
   # Mutation: another metric, statistic, period, evaluation count or threshold
-  # (20% for an hour is the whole of one alarm: a lower one pages on idle, a
-  # higher one lets a month of surplus credits through unnoticed), missing
+  # (20% over one hour is the whole of one alarm: a lower one pages on idle, a
+  # higher one lets a month of surplus credits through unnoticed, and several
+  # shorter readings that must all be high miss a load that rests between
+  # bursts), missing
   # data breaching, or no topic.
   assert {
     condition = (
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].namespace == "AWS/EC2" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].metric_name == "CPUUtilization" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].statistic == "Average" &&
-      aws_cloudwatch_metric_alarm.brain_cpu_high[0].period == 900 &&
-      aws_cloudwatch_metric_alarm.brain_cpu_high[0].evaluation_periods == 4 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].period == 3600 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].evaluation_periods == 1 &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].threshold == 20 &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].treat_missing_data == "notBreaching" &&
       contains(aws_cloudwatch_metric_alarm.brain_cpu_high[0].alarm_actions, aws_sns_topic.alerts.arn)
     )
-    error_message = "The CPU alarm must fire on an average of 20% or more for four fifteen-minute periods and tell the alerts topic."
+    error_message = "The CPU alarm must fire on one hour averaging 20% or more and tell the alerts topic."
   }
 
   # Mutation: dropping the credit-mode condition. Only standard mode can run

@@ -352,9 +352,11 @@ unlimited credit mode (`brain_cpu_credits`, the default): it never throttles,
 and CPU beyond the free allowance is billed at US$0.04 per vCPU-hour. The
 allowance is 10% of the instance on a `t4g.micro` (0.2 vCPU of two) and 20% on
 a `t4g.small`. Idle is about 5% of the instance, and a daily full backup or a
-boot does not hold 20% for an hour, so the alarm fires at 20% averaged over an
-hour (four readings of 15 minutes). Staying just under it all month costs a
-`t4g.micro` at most about US$5.84 in surplus credits; anything more trips it.
+boot does not bring an hour to 20%, so the alarm fires when one hour averages
+20% or more. A month in which no hour reaches that costs a `t4g.micro` at most
+about US$5.84 in surplus credits. It is one reading of an hour on purpose:
+several shorter readings that must all be high would miss a load that rests
+between bursts.
 
 How much traffic that is: on a scratch copy (2026-11-10), 20, 40, 60 and 80
 requests a second used 21, 36, 50 and 64% of the instance. The API is one Node
