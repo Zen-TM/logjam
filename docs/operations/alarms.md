@@ -392,7 +392,7 @@ The shell steps need a Session Manager shell on the brain
 | `disk_high` | The data disk is 80% full (or its usage could not be read) | `df -h /data`, then what is big: `du -sh /data/postgres/pg_wal` is the usual suspect when archiving is stuck (see `wal_stale`). A full disk stops Postgres; grow the volume (`brain_data_volumes`) before it fills |
 | `wal_stale` | Postgres is up, but no new WAL has reached the backup bucket for 5 minutes. A restore from now would lose everything since. This is the one check that can catch a backup that has silently stopped, and it does not trust the brain's own report | `docker logs --tail 50 brain-postgres-1` and look for `archive-push` errors (an expired role, S3 unreachable, bucket policy). Once fixed, run `systemctl start brain-backup-full`: if archiving was stuck for hours, the safety limit may have dropped WAL, and until a new full backup exists a restore would stop at the gap while every other check looks green |
 | `full_stale` | The newest full backup is more than 26 hours old (or there is none) | `journalctl -u brain-backup-full -n 100`, then `systemctl start brain-backup-full` |
-| `restore_lag_high` | The last restore (in the past day) came up more than 5 minutes behind: the copy was staler than the 60-second goal | Check `wal_stale` was not also failing, then take a fresh full backup (`systemctl start brain-backup-full`). Only a restore sets this, so it clears itself a day later |
+| `memory_low` | Postgres is up and the host has under 100 MiB available (or `status.json` does not say). On a `t4g.micro` the lowest seen in a rehearsal was 164 under a release swap with a 1.7 GB database, 331 idle | The host is close to running out of memory: move `brain_instance_type` up one size (about two minutes of downtime) |
 | `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
 | `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
 | `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` |
@@ -400,6 +400,12 @@ The shell steps need a Session Manager shell on the brain
 
 `wal_stale`, `status_*` and `postgres_down` can all fire together when the
 host goes down: start with the status-check alarms.
+
+There is no code for how stale a restore came up. That number is the age of the
+newest restored data when recovery ends, so it is the outage plus the loss: any
+real recovery takes more than five minutes, and a check would stay red for a day
+after every one, hiding other failures. `last_restore_lag_seconds` stays in
+`status.json` for the recovery runbook.
 
 ### `logjam-brain-watchdog-not-running`
 

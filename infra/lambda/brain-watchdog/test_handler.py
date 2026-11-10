@@ -9,8 +9,8 @@ Mutations that turn this red (each applied once and seen to fail):
   - choosing the lexicographically last archive id, or any directory but the
     last: the listing tests;
   - dropping the `serving` condition on the API check: test_api_not_checked_when_not_serving;
-  - a lag of None compared with the threshold (the pre-fix code, which reported
-    restore_lag_high): test_a_restore_with_no_recorded_lag_is_not_a_high_lag;
+  - `< MEMORY_MIN_MB` to `<=`, or checking memory while Postgres is down:
+    test_memory_low;
   - the probe failing the run on a bad answer, or skipped when not serving:
     the probe tests.
 """
@@ -58,6 +58,7 @@ def good_status(**changes):
         "boot_mode": "existing",
         "last_restore_at": None,
         "last_restore_lag_seconds": None,
+        "mem_available_mb": 331,
     }
     status.update(changes)
     return status
@@ -245,27 +246,18 @@ class Codes(unittest.TestCase):
             self.failed(status=good_status(last_full_time=iso(ago(26 * 3600 - 1)))), []
         )
 
-    def test_restore_lag_high(self):
-        recent = dict(last_restore_at=iso(ago(3600)), last_restore_lag_seconds=301)
-        self.assertEqual(
-            self.failed(status=good_status(**recent)), ["restore_lag_high"]
-        )
-        recent["last_restore_lag_seconds"] = 300
-        self.assertEqual(self.failed(status=good_status(**recent)), [])
-        old = dict(
-            last_restore_at=iso(ago(24 * 3600 + 1)), last_restore_lag_seconds=9999
-        )
-        self.assertEqual(self.failed(status=good_status(**old)), [])
-
-    def test_a_restore_with_no_recorded_lag_is_not_a_high_lag(self):
-        unrecorded = {
-            "last_restore_at": iso(ago(3600)),
-            "last_restore_lag_seconds": None,
-        }
-        self.assertEqual(self.failed(status=good_status(**unrecorded)), [])
-        status = good_status(**unrecorded)
-        del status["last_restore_lag_seconds"]
-        self.assertEqual(self.failed(status=status), [])
+    def test_memory_low(self):
+        for mem in (99, 0, None):
+            self.assertEqual(
+                self.failed(status=good_status(mem_available_mb=mem)), ["memory_low"]
+            )
+        self.assertEqual(self.failed(status=good_status(mem_available_mb=100)), [])
+        status = good_status()
+        del status["mem_available_mb"]
+        self.assertEqual(self.failed(status=status), ["memory_low"])
+        # Postgres down is its own code, and memory is not judged meanwhile.
+        down = good_status(postgres_up=False, mem_available_mb=10)
+        self.assertEqual(self.failed(status=down), ["postgres_down"])
 
     def test_drill_missing(self):
         self.assertEqual(self.failed(drill=False), ["drill_missing"])

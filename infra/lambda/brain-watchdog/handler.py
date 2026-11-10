@@ -24,8 +24,9 @@ WAL_MAX_AGE = 5 * 60
 FULL_MAX_AGE = 26 * 3600
 DRILL_MAX_AGE = 50 * 3600
 DISK_MAX_PERCENT = 80
-RESTORE_LAG_MAX = 300
-RESTORE_RECENT = 24 * 3600
+# On a t4g.micro the lowest MemAvailable seen in a rehearsal was 164 MiB under a
+# release swap with a 1.7 GB database (331 idle): under 100 is the next size up.
+MEMORY_MIN_MB = 100
 READY_TIMEOUT = 10
 READY_TRIES = 2
 
@@ -78,12 +79,10 @@ def check_full(status, now):
     return [] if last and age(parse_time(last), now) <= FULL_MAX_AGE else ["full_stale"]
 
 
-def check_restore_lag(status, now):
-    at, lag = status.get("last_restore_at"), status.get("last_restore_lag_seconds")
-    if lag is None:
-        return []  # not recorded is not a high lag
-    if at and age(parse_time(at), now) <= RESTORE_RECENT and lag > RESTORE_LAG_MAX:
-        return ["restore_lag_high"]
+def check_memory(status):
+    mem = status.get("mem_available_mb")
+    if status.get("postgres_up") and (mem is None or mem < MEMORY_MIN_MB):
+        return ["memory_low"]
     return []
 
 
@@ -199,7 +198,7 @@ def run(s3, opener, now, env):
         attempt(["boot_failed"], check_boot_and_postgres, status)
         attempt(["disk_high"], check_disk, status)
         attempt(["full_stale"], check_full, status, now)
-        attempt(["restore_lag_high"], check_restore_lag, status, now)
+        attempt(["memory_low"], check_memory, status)
     if status is not None and status.get("serving") is True:
         attempt(["api_unready"], check_ready, env["READY_URL"], opener)
     else:
