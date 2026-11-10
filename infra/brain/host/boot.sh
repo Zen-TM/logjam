@@ -88,12 +88,6 @@ for i in $(seq 900); do
   sleep 2
 done
 
-# The agent's identity map (the image's pg_hba.conf names it). A restored directory has it already.
-if ! grep -qs '^agent ' /data/postgres/pg_ident.conf; then
-  echo 'agent postgres brain_agent' >> /data/postgres/pg_ident.conf
-  psql_super -d postgres -c 'select pg_reload_conf()' > /dev/null
-fi
-
 if [ "$mode" != bootstrap ]; then
   until [ "$(psql_agent -c 'select pg_is_in_recovery()')" = f ]; do sleep 2; done
 fi

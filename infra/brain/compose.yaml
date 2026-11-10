@@ -23,7 +23,7 @@ services:
       BRAIN_INIT: ${BRAIN_INIT:-none}
       BRAIN_TLS_SANS: ${BRAIN_TLS_SANS:?}
       # pgBackRest connects as the agent, not the superuser (host/agent.sql).
-      PGBACKREST_PG1_USER: brain_agent
+      BRAIN_BACKUP_PG_USER: brain_agent
       POSTGRES_DB: logjam
       # Gives the superuser no password: the initial pg_hba.conf this setting
       # shapes is replaced by the image's prod one before the server listens,
@@ -75,11 +75,6 @@ services:
   repo:
     image: ${BRAIN_PG_IMAGE:?}
     profiles: [tools]
-    entrypoint:
-      - /bin/sh
-      - -c
-      - /usr/local/lib/brain/pgbackrest-conf.sh > /etc/pgbackrest/pgbackrest.conf && exec gosu postgres "$$@"
-      - sh
-    command: ["pgbackrest", "--stanza=logjam", "info", "--output=json"]
+    command: ["gosu", "postgres", "pgbackrest", "--stanza=logjam", "info", "--output=json"]
     environment:
       <<: *pgbackrest-env

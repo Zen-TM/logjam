@@ -26,7 +26,7 @@
 #   host/status.sh: one more key in status.json [9]
 #   compose.yaml: dropping `create_host_path: false` from the data mount [10]
 #   host/agent.sql: GRANT ALL ON brain.canary [1]
-#   compose.yaml: dropping PGBACKREST_PG1_USER (pgBackRest connects as the superuser) [2]
+#   compose.yaml: dropping BRAIN_BACKUP_PG_USER (pgBackRest connects as the superuser) [2]
 #   host/status.sh: dropping `SELECT pg_switch_wal()` [8b]
 #   host/boot.sh: ignoring the restore marker (`if [ -e "$marker" ]` -> `if false`) [8c]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for

@@ -5,7 +5,7 @@ services:
   postgres: &stand-in
     extra_hosts: ["host.docker.internal:host-gateway"]
     environment:
-      PGBACKREST_REPO1_S3_VERIFY_TLS: "n"
+      BRAIN_BACKUP_VERIFY_TLS: "n"
   repo: *stand-in
   api:
     extra_hosts: ["host.docker.internal:host-gateway"]
