@@ -32,10 +32,15 @@ data "archive_file" "cognito_pre_signup" {
 }
 
 # One item per month ("YYYY-MM"), attribute n. No user data.
+#
+# Protected from deletion: the function fails open when the table is missing,
+# so deleting it lifts the cap. Guard: guards.tftest.hcl
+# (signup_cap_counter_table_cannot_be_deleted).
 resource "aws_dynamodb_table" "signup_counter" {
-  name         = "logjam-signup-counter"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "month"
+  name                        = "logjam-signup-counter"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "month"
+  deletion_protection_enabled = true
 
   attribute {
     name = "month"
@@ -86,8 +91,10 @@ resource "aws_iam_role_policy" "cognito_pre_signup" {
   })
 }
 
-# Cognito gives a trigger 5 seconds, so a longer timeout buys nothing. JSON
-# logs: the count line is an object the metric filter below reads.
+# Cognito gives a trigger 5 seconds, so a longer timeout buys nothing. 256 MB:
+# CPU scales with memory, and a cold start on 128 MB is where a TLS connect to
+# DynamoDB runs slow. JSON logs: the count line is an object the metric filter
+# below reads.
 resource "aws_lambda_function" "cognito_pre_signup" {
   function_name    = "logjam-cognito-pre-signup"
   role             = aws_iam_role.cognito_pre_signup.arn
@@ -96,7 +103,7 @@ resource "aws_lambda_function" "cognito_pre_signup" {
   filename         = data.archive_file.cognito_pre_signup.output_path
   source_code_hash = data.archive_file.cognito_pre_signup.output_base64sha256
   timeout          = 5
-  memory_size      = 128
+  memory_size      = 256
 
   environment {
     variables = {
@@ -138,8 +145,11 @@ resource "aws_cloudwatch_log_metric_filter" "signup_counted" {
   }
 }
 
-# A day-long period keeps the alarm up once it fires, rather than flapping with
-# each hour that has no sign-up. The count restarts on the 1st, so it clears.
+# A day-long period and treat_missing_data = "ignore" hold the alarm in ALARM
+# through quiet days: the metric only has a point when a sign-up is counted, and
+# once the cap is full none are. It clears at the first counted sign-up of the
+# next month (a low count), not on the 1st itself; a month with no sign-ups
+# leaves it up.
 resource "aws_cloudwatch_metric_alarm" "signup_cap_80_percent" {
   alarm_name        = "logjam-signup-cap-80-percent"
   alarm_description = "Sign-ups this month reached 80% of the cap (${floor(var.signup_cap_per_month * 0.8)} of ${var.signup_cap_per_month}). At the cap Logjam stops taking new accounts until the 1st. First: decide whether this is real growth or an attack, and whether to raise the cap (docs/operations/alarms.md). ${local.alarms_doc}"
@@ -152,7 +162,7 @@ resource "aws_cloudwatch_metric_alarm" "signup_cap_80_percent" {
   evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = floor(var.signup_cap_per_month * 0.8)
-  treat_missing_data  = "notBreaching"
+  treat_missing_data  = "ignore"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]

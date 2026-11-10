@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import type { PreSignUpTriggerEvent } from "aws-lambda";
-import { CAP_MESSAGE, clientConfig, makeHandler } from "./index.js";
+import { CAP_MESSAGE, clientConfig, DEADLINE_MS, makeHandler } from "./index.js";
 
 const SECRET = "someone.private@example.test";
 
@@ -57,6 +57,9 @@ beforeEach(() => {
 });
 afterEach(() => Object.assign(console, real));
 
+// Mutation: set autoConfirmUser or autoVerifyEmail to true, or change the
+// signup_counted payload (the metric filter in cognito_signup_cap.tf reads
+// message.msg and message.n).
 test("under the cap: returns the event unchanged and logs only the count and cap", async () => {
   const f = fake(() => counted(2));
   const e = event();
@@ -154,16 +157,35 @@ test("fails open when its configuration is missing", async () => {
   const e = event();
   assert.equal(await makeHandler({ client: f.client, table: undefined, cap: 3, now })(e), e);
   assert.equal(await makeHandler({ client: f.client, table: "t", cap: NaN, now })(e), e);
+  // A cap of 0 would refuse everyone after the first: misconfigured, not closed.
+  assert.equal(await makeHandler({ client: f.client, table: "t", cap: 0, now })(e), e);
   assert.equal(f.sent.length, 0);
 });
 
+// Mutation: drop the deadline race in src/index.ts and a DynamoDB call that
+// never answers outlives Cognito's 5 seconds, which fails the sign-up.
+test("fails open when DynamoDB never answers", { timeout: 2000 }, async () => {
+  const hung = { send: () => new Promise(() => undefined) } as never;
+  const e = event();
+  const h = makeHandler({ client: hung, table: "tbl", cap: 3, now, deadlineMs: 20 });
+  assert.equal(await h(e), e);
+  assert.deepEqual(logged, [
+    JSON.stringify([{ msg: "signup_counter_unavailable", error: "DeadlineExceeded" }]),
+  ]);
+});
+
 // Mutation: console.log(event) (or the username, an attribute, or an error's
-// message) anywhere in src/index.ts.
+// message) anywhere in src/index.ts, including the uncounted-source and
+// remembered-refusal branches.
 test("logs nothing of the person on any path", async () => {
   const paths = [fake(() => counted(1)), fake(capReached), fake(() => { throw new Error(SECRET); })];
   for (const f of paths) {
     await make(f.client)(event()).catch(() => undefined);
   }
+  const capped = make(fake(capReached).client);
+  await capped(event()).catch(() => undefined);
+  await capped(event()).catch(() => undefined); // the remembered refusal
+  await make(fake(capReached).client)(event("PreSignUp_AdminCreateUser"));
   assert.ok(logged.length > 0);
   for (const line of logged) {
     assert.ok(!line.includes("example.test"), line);
@@ -171,10 +193,12 @@ test("logs nothing of the person on any path", async () => {
   }
 });
 
-// Mutation: a longer timeout or more attempts than Cognito's 5 seconds allow
-// turns a slow DynamoDB into a failed sign-up.
+// Mutation: drop throwOnRequestTimeout (the SDK then only warns when a request
+// passes requestTimeout), or raise the deadline past what Cognito's 5 seconds
+// leaves room for.
 test("bounds its DynamoDB call well inside Cognito's 5 seconds", () => {
   const { maxAttempts, requestHandler } = clientConfig;
-  assert.ok(maxAttempts === 2);
-  assert.ok(maxAttempts * (requestHandler.requestTimeout + requestHandler.connectionTimeout) <= 4000);
+  assert.equal(maxAttempts, 2);
+  assert.equal(requestHandler.throwOnRequestTimeout, true);
+  assert.ok(DEADLINE_MS <= 3000);
 });

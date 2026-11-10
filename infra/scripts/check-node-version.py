@@ -113,8 +113,8 @@ def problems(found):
             f"build.mjs esbuild target node{found['lambda_target']} != Lambda "
             f"runtime nodejs{found['lambda_runtime']}.x"
         )
-    if not found["lambda_types"]:
-        errors.append("the Lambda has no @types/node pin")
+    if len(found["lambda_types"]) != len(LAMBDAS):
+        errors.append("a Lambda has no @types/node pin")
     for path, number, value in found["lambda_types"]:
         if value != found["lambda_runtime"]:
             errors.append(
@@ -151,7 +151,17 @@ def self_test():
         (
             "the Lambda's types ahead of its runtime",
             "fail",
-            {"lambda_types": [(Path("package.json"), 1, "26")]},
+            {
+                "lambda_types": [
+                    (Path("package.json"), 1, "22"),
+                    (Path("package.json"), 1, "26"),
+                ]
+            },
+        ),
+        (
+            "a Lambda with no @types/node pin",
+            "fail",
+            {"lambda_types": [(Path("package.json"), 1, "22")]},
         ),
         ("a setup-node with no pin", "fail", {"unpinned": [Path("ci.yml")]}),
         (

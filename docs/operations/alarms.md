@@ -168,7 +168,7 @@ per UTC month, attribute `n`) and refuses them once `signup_cap_per_month`
 (`infra/terraform/envs/prod/cognito_signup_cap.tf`, 9000) is reached. People
 already signed up are untouched, and so are accounts an administrator creates.
 Both clients tell a refused person "Logjam isn't taking new accounts right now.
-Please try again next month." The count starts again on the 1st (UTC).
+Try again next month." The count starts again on the 1st (UTC).
 
 If the counter cannot be reached, the sign-up goes through uncounted rather
 than fail, so a DynamoDB outage can let a few past the cap but never blocks
@@ -178,16 +178,23 @@ anyone.
 
 A metric filter on the function's log group reads each `signup_counted` line
 (`n` this month, `cap`) as `SignupsThisMonth` in namespace `Logjam/Signup`.
-The alarm fires when the day's highest count reaches 80% of the cap and stays
-up until the count restarts on the 1st.
+The alarm fires when the day's highest count reaches 80% of the cap. The metric
+only has a point when a sign-up is counted, and once the cap is full none are,
+so the alarm holds its state through quiet days instead of clearing. After the
+1st it clears at the first counted sign-up of the new month, not at midnight; if
+nobody signs up, it stays up.
 
 1. See the count: `aws dynamodb get-item --table-name logjam-signup-counter
    --key '{"month":{"S":"2026-11"}}'` (use the current UTC month). The item
    holds a number and nothing else.
-2. Real growth: raise `signup_cap_per_month` in `cognito_signup_cap.tf` (a
-   normal PR; the apply changes the function's environment only). Its ceiling
-   is 9000: Cognito's 10,000 free active users a month also have to cover
-   people who sign in, so check the user pool's active users before raising it.
+2. Real growth: the cap is already 9000, the ceiling of the free tier:
+   Cognito's 10,000 free active users a month also have to cover people who
+   sign in. Going higher is a billing decision, not a quick fix: it takes a PR
+   that changes `signup_cap_per_month` and the variable's validation in
+   `cognito_signup_cap.tf` together with its guard in `guards.tftest.hcl`
+   (`signup_cap_variable_stays_inside_the_free_tier`). Check the user pool's
+   active users first. (If someone lowered the cap, raising it back up to 9000
+   is an ordinary PR whose apply changes the function's environment only.)
 3. A flood: leave the cap. At the cap it stops the bill, at the price of
    closing sign-ups until the 1st.
 

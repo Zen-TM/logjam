@@ -571,6 +571,21 @@ run "signup_cap_role_does_one_update_and_writes_its_logs" {
   }
 }
 
+run "signup_cap_counter_table_cannot_be_deleted" {
+  command = plan
+  plan_options {
+    target = [aws_dynamodb_table.signup_counter]
+  }
+
+  # Mutation: dropping deletion_protection_enabled lets a destroy delete the
+  # counter, and the function, which fails open on a missing table, then stops
+  # capping sign-ups.
+  assert {
+    condition     = aws_dynamodb_table.signup_counter.deletion_protection_enabled == true
+    error_message = "The sign-up counter table must be protected from deletion: deleting it lifts the cap (cognito_signup_cap.tf)."
+  }
+}
+
 run "signup_cap_variable_stays_inside_the_free_tier" {
   command = plan
   plan_options {

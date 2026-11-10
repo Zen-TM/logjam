@@ -15,15 +15,24 @@ import type { PreSignUpTriggerEvent } from "aws-lambda";
 
 // Both clients match on this sentence inside Cognito's
 // "PreSignUp failed with error <text>" (shared/src/apiErrors.ts). Guard:
-// shared/src/signupCap.test.ts reads this line.
+// shared/src/apiErrors.test.ts reads this line.
 export const CAP_MESSAGE = "Logjam is not taking new accounts this month";
 
-// Cognito gives a trigger 5 seconds in all and may retry it. Two attempts of
-// at most 1 second each leave the handler well inside that.
+// Cognito gives a trigger 5 seconds in all and may retry it. The SDK's own
+// timeouts are the first line: two attempts of at most 1 second each. Without
+// throwOnRequestTimeout, @smithy/node-http-handler only logs a warning when
+// requestTimeout passes and the call keeps waiting. The deadline below is the
+// last line, whatever the SDK, a cold start or the network does.
 export const clientConfig = {
   maxAttempts: 2,
-  requestHandler: { requestTimeout: 1000, connectionTimeout: 1000 },
+  requestHandler: {
+    requestTimeout: 1000,
+    connectionTimeout: 1000,
+    throwOnRequestTimeout: true,
+  },
 };
+
+export const DEADLINE_MS = 2500;
 
 const COUNTED_SOURCES = new Set(["PreSignUp_SignUp", "PreSignUp_ExternalProvider"]);
 
@@ -39,9 +48,21 @@ type Deps = {
   table: string | undefined;
   cap: number;
   now: () => Date;
+  deadlineMs?: number;
 };
 
-export function makeHandler({ client, table, cap, now }: Deps) {
+function within<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(Object.assign(new Error("deadline"), { name: "DeadlineExceeded" })),
+      ms,
+    );
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
+export function makeHandler({ client, table, cap, now, deadlineMs = DEADLINE_MS }: Deps) {
   let refusedMonth = "";
   let refusedUntil = 0;
 
@@ -55,8 +76,11 @@ export function makeHandler({ client, table, cap, now }: Deps) {
 
     let n: number;
     try {
-      if (!table || !Number.isFinite(cap)) throw new TypeError("misconfigured");
-      const out = await client.send(
+      if (!table || !Number.isFinite(cap) || cap < 1) {
+        throw new TypeError("misconfigured");
+      }
+      const out = await within(
+        client.send(
         new UpdateItemCommand({
           TableName: table,
           Key: { month: { S: month } },
@@ -69,6 +93,8 @@ export function makeHandler({ client, table, cap, now }: Deps) {
           },
           ReturnValues: "UPDATED_NEW",
         }),
+        ),
+        deadlineMs,
       );
       n = Number(out.Attributes?.n?.N);
       if (!Number.isFinite(n)) throw new TypeError("no count");
