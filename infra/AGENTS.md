@@ -35,6 +35,16 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   values. Objects in this account's buckets and log events are denied by
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
+- **The privacy Deny lists every route to a command's output and to a disk
+  snapshot's contents** (`ssm:GetCommandInvocation`, `ssm:ListCommandInvocations`,
+  `ssm:ListCommands`; `ebs:GetSnapshotBlock`, `ebs:ListSnapshotBlocks`,
+  `ebs:ListChangedBlocks`): `ReadOnlyAccess` allows the `ssm:` ones. Guard:
+  `ci_reads_no_secret_or_user_data`.
+- **A bucket that holds user data or a copy of the database gets object events
+  on the audit trail** (`audit_event_selectors` in `audit.tf`), and the trail
+  records EBS direct API calls on snapshots; the audit bucket itself never
+  does. The trail uses advanced selectors only, so a new bucket is a new
+  selector there, not a basic one. Guard: `audit_trail_records_every_route_to_user_data`.
 - **The brain's signals bucket holds no user data** (`release.json`,
   `status.json`, `drill.json`: a release pointer and health files). The brain and the watchdog read it; CI only writes
   `release.json` to it and never reads it, so it is not an exception of the CI
