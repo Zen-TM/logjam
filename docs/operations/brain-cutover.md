@@ -327,6 +327,20 @@ below), no hand workflow runs other than the one named in step 6a, no hand
    period, about US$10 a month (its instance cost US$9.82 in October). Nobody has
    checked a way to scale it down from this repository, so it is left running
    until the teardown; a deploy no longer touches it.
+9. **See the download meter count.** It charges a user's downloads from S3's
+   access logs, by the role that signed them, and the brain's API signs with a
+   different role from Elastic Beanstalk's (`EGRESS_API_REQUESTER_PATTERN` in
+   `infra/brain/api.env`). Download something through Logjam Web as yourself
+   (a topo, a GeoPDF). S3 delivers its logs within about an hour and the API
+   sweeps them every 5 minutes; then the API's log has a line
+   `egress_sweep_processed` whose `users` is 1 or more (counts only; **not yet
+   run anywhere**):
+
+   ```sh
+   aws logs filter-log-events --log-group-name /logjam/brain/api \
+     --start-time $(($(date +%s) - 7200))000 --filter-pattern egress_sweep_processed \
+     --query 'events[-3:].message' --output text
+   ```
 
 ## Rolling back
 
