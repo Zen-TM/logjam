@@ -32,17 +32,16 @@ instance id found there.
 Each of these is its own merge or check, done in the days before.
 
 1. **The brain is up and healthy** ([brain.md](brain.md), "Bringing it up from
-   nothing", all ten steps): the stack landed in order, the audit-trail change
-   applied by hand, the Postgres image published and pinned, the brain created
-   and its bootstrap flag turned off again, the drill started once by hand and
+   nothing", all ten steps): the stack landed, the boundary change applied by
+   hand, the Postgres image published and pinned, the brain created and its
+   bootstrap flag turned off again, the drill started once by hand and
    passing, the certificate fetched and its pull request finished and deployed
    (**both** the API image and the topo worker image carry
-   `/app/brain-ca.pem`), `release.json` present, the watchdog green. The API
-   shutdown fix (#875) should be merged too: without it a release under load
-   fails requests for about 13 seconds instead of about 4 (brain.md, "A release
-   and a rollback").
-2. **The audit trail is applied before real data reaches the brain.** Step 2 of
-   bring-up. The next step is the first time real data does.
+   `/app/brain-ca.pem`), `release.json` naming the live release, the watchdog
+   green.
+2. **The audit trail and the boundary change are applied before real data
+   reaches the brain.** Steps 1 and 2 of bring-up. The next step is the first
+   time real data does.
 3. **Rehearse the copy, at least once.** Against the brain while it is not
    serving, with the same task the window uses. The brain must be up and writing
    a fresh `status.json` (no file, or one older than 3 minutes, is a refusal),

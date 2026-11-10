@@ -99,7 +99,13 @@ resource "aws_iam_policy" "github_actions_apply_boundary" {
       # The CI privacy Deny (iam.tf): user data, logs and audit objects,
       # every secret value, the Cognito CMK. It holds only Denies; the filter
       # keeps any Allow added there for the read-only roles out of here.
-      [for s in jsondecode(local.ci_readonly_privacy_deny).Statement : s if s.Effect == "Deny"],
+      # The three statements named here wait for a change of their own:
+      # terraform-apply.yml refuses a whole plan that edits this boundary, so
+      # arriving with other changes they would stop all of them being applied.
+      [
+        for s in jsondecode(local.ci_readonly_privacy_deny).Statement : s
+        if s.Effect == "Deny" && !contains(["DenySnapshotBlocks", "DenyShells", "DenyCommandOutput"], try(s.Sid, ""))
+      ],
     )
   })
 }
