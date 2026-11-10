@@ -731,7 +731,10 @@ check "...and nothing measured" [ "$(drill_field restore_seconds)/$(drill_field 
 #   postgres/copy.sh: `[ "$readonly_source" = on ]` -> `false` in differ (a count mismatch from a read-only source);
 #   postgres/copy.sh: the same condition -> `true` (a count mismatch from a live source is only a warning);
 #   postgres/copy.sh: pg_restore's stderr printed whole (a message that quotes a value);
-#   postgres/copy.sh: the `show default_transaction_read_only` check inverted.
+#   postgres/copy.sh: the `show default_transaction_read_only` check inverted;
+#   postgres/copy.sh: the `|| { ...; die "cannot list the dump..." }` after `pg_restore -l` dropped (a dump that cannot be listed);
+#   postgres/copy.sh: the sequence name-set check removed (a sequence missing from the brain, source live);
+#   postgres/copy.sh: `coalesce(last_value::text, 'unset')` -> `coalesce(last_value::text, '')` (an unused sequence missing on one side).
 S="12 the data copy"
 SRC=brain-e2e-src
 r docker run -d --name "$SRC" --network brain-e2e -e BRAIN_DEV=1 -e BRAIN_INIT=bootstrap -e POSTGRES_PASSWORD=e2e-src-superuser \
@@ -758,6 +761,8 @@ insert into public.legacy_things (note) values ('legacy copy-secret-7731');
 alter table public.legacy_things owner to legacy_owner;
 alter sequence public.legacy_things_id_seq owner to legacy_owner;
 grant all on public.legacy_things, public.legacy_things_id_seq to logjam_app;
+create sequence public.e2e_unused_seq;
+alter sequence public.e2e_unused_seq owner to logjam_app;
 SQL
 VALUE=copy-secret-7731
 QUOTED=e2e-quoted-4471
@@ -810,6 +815,7 @@ check "...the table another role owned is owned by logjam_app" [ "$(sql logjam "
 check "...every relation in public is owned by logjam_app" [ "$(sql logjam "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relowner <> 'logjam_app'::regrole")" = 0 ]
 check "...the advanced sequence carries on from the source's value" [ "$(sql logjam "select last_value from pg_sequences where sequencename = 'sync_tombstones_id_seq'")" = 500 ]
 check "...the brain is not read-only" [ "$(sql logjam "show default_transaction_read_only")" = off ]
+check "...a sequence never used on the source arrives, still unused" [ "$(sql logjam "select last_value is null from pg_sequences where sequencename = 'e2e_unused_seq'")" = t ]
 check "...it lists the tables with their counts" grep -q '^  users 2$' "$WORK/copy.log"
 check "...and the last migration matches" [ "$(sql logjam "select migration_name from _prisma_migrations order by migration_name desc limit 1")" = "$(src_sql -c "select migration_name from _prisma_migrations order by migration_name desc limit 1")" ]
 as_app() { # the next `prisma migrate deploy` runs as this role and needs to own what it changes
@@ -915,6 +921,34 @@ src_sql -c "alter database logjam reset default_transaction_read_only" -c "inser
 copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$(src_write "delete from announcements where id = 'a3'")"; rc=$?
 check "a live source that changed after the dump: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
 check "...with a warning" grep -q 'warning: row counts differ' "$WORK/copy.log"
+
+# A dump that cannot be listed stops the copy before the restore: the stand-in pg_dump empties the file it wrote.
+state0=$(brain_state)
+# shellcheck disable=SC2016 # runs inside the task
+copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP=': > "$(ls /tmp/tmp.*/dump)"'; rc=$?
+check "a dump that cannot be listed: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
+check "...says it cannot list the dump" grep -q 'cannot list the dump' "$WORK/copy.log"
+check "...restores nothing, and the brain is exactly as it was" bash -c "! grep -q 'copy: restored' '$WORK/copy.log'"
+check "...the brain is exactly as it was" [ "$(brain_state)" = "$state0" ]
+
+# A sequence that is gone from the brain after the copy fails the verification even when the source is live (a live
+# source only excuses differing values): a stand-in pg_restore drops it right after the restore. It was never used, so
+# its value is the word `unset` on the source and the difference must still be listed.
+cat > "$WORK/stub-restore" <<'EOF'
+#!/bin/sh
+/usr/bin/pg_restore "$@"; rc=$?
+case " $* " in *" -l "*) ;; *) sh -c "${AFTER_RESTORE:-true}" ;; esac
+exit $rc
+EOF
+chmod 755 "$WORK/stub-restore"
+brain_write() {
+  echo "echo \"\$COPY_TARGET_CA\" > /tmp/t.pem; PGPASSWORD=\$DB_PASSWORD psql \"host=\$COPY_TARGET_HOST dbname=logjam user=logjam_app sslmode=verify-full sslrootcert=/tmp/t.pem\" -qc \"$1\""
+}
+copy -e COPY_REPLACE=1 -v "$WORK/stub-restore:/usr/local/bin/pg_restore:ro" -e AFTER_RESTORE="$(brain_write "drop sequence public.e2e_unused_seq")"; rc=$?
+check "a sequence missing from the brain, source live: the copy says the source is live" grep -q 'source default_transaction_read_only = off' "$WORK/copy.log"
+check "...the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
+check "...names the sequence the brain lacks" grep -q 'only in the source: e2e_unused_seq' "$WORK/copy.log"
+check "...and lists its difference, though both sides read unset or missing" grep -q 'e2e_unused_seq: source unset, brain missing' "$WORK/copy.log"
 
 # Nothing a run printed holds a value, a row or the password; the brain's audit log records the restore as
 # statements, never rows.
