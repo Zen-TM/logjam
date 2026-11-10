@@ -14,7 +14,7 @@ alice user and inserts/cleans up its own topo_jobs row, leaving the seed intact.
 
 Run it from the worker image (psycopg2 present) against the dev DB:
     RUN_DB_IT=1 DB_HOST=postgres DB_NAME=logjam DB_USER=... DB_PASSWORD=... \
-        JOB_ID=unused python3 -m unittest tests.test_status_guard_db
+        DATABASE_SSL=disable JOB_ID=unused python3 -m unittest tests.test_status_guard_db
 """
 
 import os

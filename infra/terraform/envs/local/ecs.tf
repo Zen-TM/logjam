@@ -32,6 +32,9 @@ locals {
     { name = "DB_NAME", value = "logjam" },
     { name = "DB_USER", value = "logjam" },
     { name = "DB_PASSWORD", value = "logjam" },
+    # The local Postgres is plain TCP; a worker otherwise verifies the brain's
+    # certificate (topo/worker_common.py).
+    { name = "DATABASE_SSL", value = "disable" },
     { name = "S3_BUCKET_TOPO", value = module.topo.bucket_id },
     # Mail lands in Mailpit (docker-compose.yml); its inbox is localhost:8025.
     { name = "EMAIL_FROM", value = "noreply@logjam.local" },

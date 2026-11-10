@@ -165,10 +165,10 @@ describe("validateEnv — origin-verify", () => {
 describe("TLS env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
     process.env.DATABASE_SSL = "disable";
-    process.env.DATABASE_SSL_CA = "/app/rds-ca.pem";
+    process.env.DATABASE_SSL_CA = "/app/brain-ca.pem";
     const env = validateEnv();
     expect(env.DATABASE_SSL).toBe("disable");
-    expect(env.DATABASE_SSL_CA).toBe("/app/rds-ca.pem");
+    expect(env.DATABASE_SSL_CA).toBe("/app/brain-ca.pem");
   });
 
   it("rejects a near-miss DATABASE_SSL value instead of silently ignoring it", () => {
@@ -179,7 +179,7 @@ describe("TLS env vars are in the schema", () => {
   });
 
   // Mutation: delete the DATABASE_SSL production check in validateEnv.
-  it("refuses DATABASE_SSL=disable in production, where it would drop RDS TLS", () => {
+  it("refuses DATABASE_SSL=disable in production, where it would drop database TLS", () => {
     setEnv({
       NODE_ENV: "production",
       AUTH_MODE: "oidc",

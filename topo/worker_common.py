@@ -24,19 +24,25 @@ from urllib.parse import quote
 # children (pdal, a pool worker) still reads as the generic failure.
 TOO_BIG = "This area was too big to process. Try a smaller one."
 
+# The brain's Postgres certificate, which the worker image carries (Dockerfile).
+BRAIN_CA_PATH = "/app/brain-ca.pem"
+
 
 def compose_database_url() -> str:
     """Compose a Postgres connection string from discrete DB_* env vars.
 
-    User and password are URL-quoted (safe="") because RDS-generated passwords
-    contain characters like "!" that aren't valid unescaped in a URL. Fails
+    User and password are URL-quoted (safe="") because generated passwords
+    can contain characters like "!" that aren't valid unescaped in a URL. Fails
     loud, listing missing var NAMES only (never values).
 
     A connect timeout and TCP keepalives are always set, so a replaced database
-    host does not leave a worker on a dead socket. DATABASE_SSL_CA (the path
-    the API's own client also reads) turns on `sslmode=verify-full` against that
-    file; unset, or with DATABASE_SSL=disable (local workers, ADR 0001), the
-    connection negotiates TLS as libpq does by default.
+    host does not leave a worker on a dead socket. The connection is always
+    `sslmode=verify-full` against DATABASE_SSL_CA (the path the API's own client
+    also reads), or the brain's certificate the image carries when it is unset,
+    so a worker never connects in the clear and a missing file stops it at
+    connect ("root certificate file ... does not exist"). Only
+    DATABASE_SSL=disable (local workers, whose Postgres is plain TCP) drops it.
+    Guard: tests/test_worker_helpers.py.
     """
     host = os.environ.get("DB_HOST")
     name = os.environ.get("DB_NAME")
@@ -66,8 +72,8 @@ def compose_database_url() -> str:
         "keepalives_interval=10",
         "keepalives_count=3",
     ]
-    ca = os.environ.get("DATABASE_SSL_CA")
-    if ca and os.environ.get("DATABASE_SSL") != "disable":
+    if os.environ.get("DATABASE_SSL") != "disable":
+        ca = os.environ.get("DATABASE_SSL_CA") or BRAIN_CA_PATH
         params += ["sslmode=verify-full", f"sslrootcert={quote(ca, safe='/')}"]
 
     return (

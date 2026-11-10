@@ -47,8 +47,18 @@ describe("composeDatabaseUrl", () => {
 describe("migrateDatabaseUrl", () => {
   const url = "postgresql://u:p@db:5432/n";
 
-  it("leaves the URL as it is without an explicit DATABASE_SSL_CA (the RDS path)", () => {
+  it("leaves the URL as it is outside production without an explicit DATABASE_SSL_CA", () => {
     expect(migrateDatabaseUrl(url, {})).toBe(url);
+    expect(migrateDatabaseUrl(url, { NODE_ENV: "development" })).toBe(url);
+  });
+
+  // Mutation: dropping the NODE_ENV default in migrateDatabaseUrl
+  // (prisma.config.ts): a production migrate with no certificate configured
+  // would connect in the clear.
+  it("verifies against the brain's certificate in production by default", () => {
+    expect(migrateDatabaseUrl(url, { NODE_ENV: "production" })).toBe(
+      `${url}?sslmode=require&sslaccept=strict&sslcert=%2Fapp%2Fbrain-ca.pem`,
+    );
   });
 
   it("leaves the URL as it is when DATABASE_SSL=disable", () => {
