@@ -769,9 +769,20 @@ QUOTED=e2e-quoted-4471
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=other -addext subjectAltName=DNS:brain.e2e.test,DNS:$SRC \
   -keyout "$WORK/copy-other.key" -out "$WORK/copy-other.pem" 2> /dev/null
 
-# The brain's public schema, emptied: what a freshly bootstrapped brain holds.
-sql logjam "do \$\$ declare t text; begin for t in select tablename from pg_tables where schemaname = 'public' loop
-  execute format('drop table public.%I cascade', t); end loop; end \$\$" > /dev/null || fatal "the brain's public schema does not empty"
+# The brain's public schema, emptied: what a freshly bootstrapped brain holds. Not only tables:
+# a migration may create functions, standalone sequences or types, and the copy counts those
+# too. An extension's own objects (pgaudit's functions live in public) stay. The names are
+# collected before anything is dropped: a cascade may already have taken a later one.
+sql logjam "do \$\$ declare o text; begin
+  foreach o in array array(select format('table if exists public.%I', tablename) from pg_tables where schemaname = 'public')
+  loop execute 'drop ' || o || ' cascade'; end loop;
+  foreach o in array array(
+    select 'routine if exists ' || p.oid::regprocedure from pg_proc p where p.pronamespace = 'public'::regnamespace
+      and not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
+    union all select format('sequence if exists public.%I', sequencename) from pg_sequences where schemaname = 'public'
+    union all select 'type if exists ' || t.oid::regtype from pg_type t where t.typnamespace = 'public'::regnamespace and t.typtype in ('e', 'd')
+      and not exists (select 1 from pg_depend d where d.classid = 'pg_type'::regclass and d.objid = t.oid and d.deptype = 'e'))
+  loop execute 'drop ' || o || ' cascade'; end loop; end \$\$" > /dev/null || fatal "the brain's public schema does not empty"
 
 fresh() { r /opt/brain/host/status.sh || bad "status.sh failed"; } # a status.json that says serving false, just now
 signal() { # <serving true|false> <age in seconds>
