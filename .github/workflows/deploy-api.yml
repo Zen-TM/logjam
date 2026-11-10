@@ -57,6 +57,64 @@ jobs:
       id-token: write
       contents: read
 
+  # One native build per architecture (the image compiles `canvas`, so no
+  # emulation), pushed under a per-architecture tag. The deploy job below
+  # joins them into the one multi-architecture <sha> and latest the rest of the
+  # workflow uses. The platforms here are held to the architectures every
+  # consumer runs by infra/scripts/pin-release.sh --self-test. Same
+  # environment and guard as the deploy job: only main may assume the role.
+  build:
+    name: Build ${{ matrix.platform }}
+    environment: prod
+    runs-on: ${{ matrix.runner }}
+    needs: guard
+    if: >-
+      !cancelled() &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      needs.guard.outputs.proceed != 'false'
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Build and push the per-architecture image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          ARCH_IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-${PLATFORM#linux/}
+          # No attestations: ubuntu-latest's Docker uses the containerd image
+          # store, which would add an untagged attestation image per
+          # architecture. A release must be exactly three ECR images, which the
+          # lifecycle count in ecr.tf relies on.
+          docker build --provenance=false --sbom=false --platform $PLATFORM -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ARCH_IMAGE .
+          docker push $ARCH_IMAGE
+
   deploy:
     name: Build and deploy
     # The deploy role trusts only jobs in the `prod` Environment, which only
@@ -64,14 +122,16 @@ jobs:
     # assume it.
     environment: prod
     runs-on: ubuntu-latest
-    needs: guard
+    needs: [guard, build]
     # Only deploy when the triggering CI run passed, was a push (not a PR run),
     # and targeted main. Belt-and-suspenders with the workflow_run `branches`
     # filter above. `!cancelled()` so a guard that went red after deciding
     # does not skip the deploy by itself; only its 'false' skips (stale, main
-    # unknown or missing config).
+    # unknown or missing config). Both builds must have succeeded: with
+    # `!cancelled()` a failed or skipped build would not stop this job alone.
     if: >-
       !cancelled() &&
+      needs.build.result == 'success' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
@@ -100,16 +160,20 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
-      - name: Build, tag, and push image to ECR
+      # Join the two per-architecture images into one manifest list under the
+      # <sha> and latest tags. Everything below sees the same reference as
+      # before: <registry>/logjam-api:<sha>, which now pulls the right
+      # architecture on x86 (EB, Fargate) and on arm64.
+      - name: Publish the multi-architecture image
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
-          docker build -f api/Dockerfile --build-arg GIT_SHA=$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY
+          docker buildx imagetools create -t $IMAGE:$IMAGE_TAG -t $IMAGE:latest $IMAGE:$IMAGE_TAG-amd64 $IMAGE:$IMAGE_TAG-arm64
+          docker buildx imagetools inspect $IMAGE:$IMAGE_TAG
+          echo "image=$IMAGE:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       # Point the two logjam-api task definitions at the image just pushed,
       # by sha, rather than `:latest`: a moving tag can resolve to a stale image

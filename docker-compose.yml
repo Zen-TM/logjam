@@ -6,9 +6,16 @@
 name: logjam
 
 services:
+  # The image and postgresql.conf built for prod's Postgres (infra/brain/postgres),
+  # so a config mistake shows up here. BRAIN_DEV=1 keeps the plain-TCP
+  # pg_hba.conf the local API needs and adds a certificate to a volume the stock
+  # image made; archive_mode=off because dev has no S3 for its database.
   postgres:
-    image: postgres:16
+    build: infra/brain/postgres
+    command: ["postgres", "-c", "archive_mode=off"]
     environment:
+      BRAIN_DEV: "1"
+      BRAIN_INIT: bootstrap
       POSTGRES_DB: logjam
       POSTGRES_USER: logjam
       POSTGRES_PASSWORD: logjam

@@ -15,8 +15,11 @@ steps as plain AWS CLI commands.
 
 Limits:
 
-- **API and worker:** ECR keeps the newest 15 images per repository. A sha
+- **API and worker:** ECR keeps the newest 15 releases per repository. A sha
   whose image has been expired cannot be rolled back to.
+- **API, architecture:** the API image is built for amd64 and arm64
+  (`deploy-api.yml`). A release built before that is amd64 only: it still runs
+  on Elastic Beanstalk and Fargate, but not on an arm64 host.
 - **API, schema:** `rollback-compat` tests a migration only against the
   release that was live when the migration PR ran. Going back more than one
   release can cross a contract migration that dropped something the older

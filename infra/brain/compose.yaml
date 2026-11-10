@@ -1,0 +1,80 @@
+# The brain's two containers. Never run directly: host/boot.sh starts Postgres
+# and host/release-agent.sh starts the API, both through host/lib.sh, which
+# sets the project name, the compose files and the environment from
+# /etc/brain/brain.env.
+
+x-pgbackrest-env: &pgbackrest-env
+  AWS_REGION: ${AWS_REGION:?}
+  BRAIN_BACKUP_BUCKET: ${BRAIN_BACKUP_BUCKET:?}
+  BRAIN_BACKUP_ENDPOINT: ${BRAIN_BACKUP_ENDPOINT:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+
+services:
+  postgres:
+    image: ${BRAIN_PG_IMAGE:?}
+    # Flags are split by Compose like a shell line.
+    command: postgres ${BRAIN_PG_FLAGS:-}
+    environment:
+      <<: *pgbackrest-env
+      # boot.sh sets bootstrap or restore for the one start that may fill an
+      # empty directory. The image refuses to create a database for anything
+      # else, so a restart on a bare directory cannot make one.
+      BRAIN_INIT: ${BRAIN_INIT:-none}
+      BRAIN_TLS_SANS: ${BRAIN_TLS_SANS:?}
+      # pgBackRest connects as the agent, not the superuser (host/agent.sql).
+      BRAIN_BACKUP_PG_USER: brain_agent
+      POSTGRES_DB: logjam
+      # Gives the superuser no password: the initial pg_hba.conf this setting
+      # shapes is replaced by the image's prod one before the server listens,
+      # which allows no password-less connection except the local socket.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      # Not created for us: with the data volume unmounted Docker must fail
+      # to start this container, not fill the root disk. Guard: tests/e2e.sh
+      # "the volume is not mounted".
+      - type: bind
+        source: /data/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    restart: unless-stopped
+
+  api:
+    image: ${BRAIN_API_REPO:?}:${BRAIN_API_TAG:-unset}
+    # Only host/release-agent.sh enables this profile.
+    profiles: [api]
+    # Written by release-agent.sh before it starts this service.
+    env_file:
+      - path: /etc/brain/api.env
+        required: false
+    ports:
+      - "80:8080"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    restart: unless-stopped
+
+  # Reads the backup repository without touching the data directory: boot.sh
+  # asks it whether a backup exists before it decides what to start.
+  repo:
+    image: ${BRAIN_PG_IMAGE:?}
+    profiles: [tools]
+    command: ["gosu", "postgres", "pgbackrest", "--stanza=logjam", "info", "--output=json"]
+    environment:
+      <<: *pgbackrest-env

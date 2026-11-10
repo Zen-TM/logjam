@@ -90,7 +90,7 @@ inside the repo prints the major version `mise.toml` pins.
 make dev
 ```
 
-This builds the two worker images, starts Postgres, MiniStack and Mailpit in Docker,
+This builds the two worker images and the Postgres image, starts Postgres, MiniStack and Mailpit in Docker,
 provisions MiniStack's S3 buckets and ECS task definitions with Terraform
 (which also writes the root `.env.local` the API reads), runs the database
 migrations and seeds three users with sample places and trips. The first run
@@ -266,8 +266,8 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or
 in the Linux section, then add `eval "$(mise activate zsh)"` to `~/.zshrc`).
 Then follow the [Linux](#linux) steps from step 2.
 
-**Apple Silicon:** Postgres (`postgres:16`) and MiniStack
-(`ministackorg/ministack`) publish arm64 images and run natively. The two
+**Apple Silicon:** Postgres (built from `infra/brain/postgres`) and MiniStack
+(`ministackorg/ministack`) have arm64 images and run natively. The two
 worker images are built for `linux/amd64` on every host (`make build-workers`
 passes `--platform`), because that is what production runs. On Apple Silicon
 they build and run under emulation: turn on Docker Desktop's **Use Rosetta for x86/amd64
@@ -367,6 +367,7 @@ Maestro UI flows and their prerequisites are in
 | The API integration suite (`cd api && npm test`) fails with a refused connection, or 500s in tests your change does not touch | The dev database is not reachable: check `docker compose ps`, rerun `make dev`, restart the API. Not a regression. |
 | The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro and `-L 8025:localhost:8025` for Mailpit. Your editor's remote-development feature can forward them for you. |
 | Uploads fail with `InvalidAccessKeyId` (the integration suite's media, track and file tests fail with `presigned PUT failed 403`) | Your shell exports real AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`), which win over the MiniStack ones the API reads from its env file. Start the API without them: `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE npm run dev`. |
+| Postgres logs `database "logjam" has a collation version mismatch` | The volume was made by an older `postgres:16` image, built on an earlier Debian release than the one in `infra/brain/postgres`. Harmless for development: `make reset` starts a fresh database. A volume made by a current `postgres:16` gives no warning. |
 | Logjam GPS opens but has no data, or its edits never sync | `127.0.0.1` in `mobile/.env` means the phone: rerun `npm run dev:android` to restore the `adb reverse` tunnels. |
 
 More symptoms, with causes, for the stack and for Metro and devices are in the

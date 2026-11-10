@@ -597,7 +597,7 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           # rollback.yml checks the image it repins to still exists (ECR
-          # keeps 15). Also in ReadOnlyAccess; named so this policy stands on
+          # keeps 15 releases). Also in ReadOnlyAccess; named so this policy stands on
           # its own when that attachment narrows.
           "ecr:DescribeImages",
         ]

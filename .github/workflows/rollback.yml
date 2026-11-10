@@ -20,7 +20,7 @@ name: Rollback
 #   worker:   the topo task defs repinned to the <sha> image.
 #
 # Each target refuses before changing anything if the release is gone (ECR
-# keeps 15 images per repo; the frontend prunes after 30 days).
+# keeps 15 releases per repo; the frontend prunes after 30 days).
 #
 # No loop: this workflow never calls itself or a deploy. If its own smoke test
 # fails the run goes red and stops.

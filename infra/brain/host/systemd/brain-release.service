@@ -1,0 +1,7 @@
+[Unit]
+Description=Make the API match the release pointer
+After=brain-boot.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/brain/host/release-agent.sh
