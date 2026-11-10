@@ -1018,10 +1018,14 @@ run "brain_host_files_leave_out_the_committed_certificate" {
   # the tree, so the second line shows the filter itself works.
   # Mutation: taking "brain-ca.pem" out of local.brain_not_embedded, or the
   # `!contains(local.brain_not_embedded, f)` clause out of brain_host_file_set.
+  # The certificate is not in the tree yet, so the last line reads the filter
+  # itself: without it, a filter that names only api.env would leave this test
+  # failing on an unknown value, not on its message.
   assert {
     condition = (
       contains(local.brain_not_embedded, "brain-ca.pem") &&
-      alltrue([for f in local.brain_not_embedded : !contains(local.brain_host_file_set, f)])
+      alltrue([for f in local.brain_not_embedded : !contains(local.brain_host_file_set, f)]) &&
+      strcontains(file("brain_instance.tf"), "!contains(local.brain_not_embedded, f)")
     )
     error_message = "brain-ca.pem must not be embedded in the user data: committing it would replace the instance."
   }
