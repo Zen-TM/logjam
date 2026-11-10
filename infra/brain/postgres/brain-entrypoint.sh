@@ -62,8 +62,9 @@ if [ "$server" = 1 ]; then
           t=${BRAIN_RESTORE_TARGET/T/ }
           target+=(--type=time "--target=${t/%Z/+00}" --target-action=promote)
         fi
-        # BRAIN_RESTORE_OPTS, unquoted so it splits into options: a drill adds
-        # --archive-mode=off so a restored copy never archives into the live repository.
+        # BRAIN_RESTORE_OPTS, unquoted so it splits into options: extra pgbackrest restore
+        # options, such as --archive-mode=off. Nothing in production sets it; the drill runs
+        # pgbackrest itself (postgres/drill.sh).
         # shellcheck disable=SC2086
         as_pg pgbackrest --stanza=logjam restore "${target[@]}" ${BRAIN_RESTORE_OPTS:-} ;;
       *)

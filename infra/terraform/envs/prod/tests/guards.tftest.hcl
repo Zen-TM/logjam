@@ -3,6 +3,8 @@
 # Who may assume the CI roles, and what Terraform reads back. Each assert
 # names the mutation that turns it red. Each run plans only the resources it
 # asserts on: a mocked provider cannot import, or refresh every resource here.
+# A targeted plan validates only the variables its targets read, so a run with
+# expect_failures on a variable targets a resource that uses that variable.
 
 mock_provider "aws" {}
 mock_provider "aws" {
@@ -16,8 +18,8 @@ mock_provider "archive" {}
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
-# brain_settings_do_not_change_the_suite (it reads the file and fails if a
-# setting here is missing).
+# brain_settings_are_one_file_and_read_by_the_workflows (it reads the file
+# and fails if a setting here is missing).
 variables {
   brain_pg_image_tag        = ""
   brain_bootstrap           = false
@@ -201,13 +203,13 @@ run "ci_reads_no_secret_or_user_data" {
   }
 
   # Mutation: removing the DenyShells statement (or one action in it) lets a
-  # CI role, the apply role above all, open a shell on the brain or in a task.
+  # CI role open a shell on the brain or in a task. The apply role's boundary
+  # joins this list in the change that gives it the statement (iam_apply.tf).
   assert {
     condition = alltrue([
       for p in [
         aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
         aws_iam_role_policy.gha_readonly_privacy_deny.policy,
-        aws_iam_policy.github_actions_apply_boundary.policy,
         ] : alltrue([
           for a in ["ssm:SendCommand", "ssm:StartSession", "ssm:ResumeSession", "ecs:ExecuteCommand"] : anytrue([
             for st in jsondecode(p).Statement :
@@ -215,7 +217,7 @@ run "ci_reads_no_secret_or_user_data" {
           ])
       ])
     ])
-    error_message = "The CI privacy Deny, and the apply role's boundary, must deny shells on instances and in tasks (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must deny shells on instances and in tasks (local.ci_readonly_privacy_deny)."
   }
 }
 
@@ -1668,6 +1670,25 @@ run "brain_copy_task_reads_only_status_json" {
     error_message = "The data copy must run copy.sh on ARM64 from the brain's image, between RDS and the brain's own name, with no credential in its environment."
   }
 
+  # The names copy.sh reads (`${NAME:?}` or `${NAME:-...}`) and the task
+  # definition's environment plus secrets are one list. The three optional
+  # overrides are in the script only: the task never sets them, a person adds
+  # them to a run (COPY_SOURCE_CA_FILE is for tests). Mutation: renaming
+  # BRAIN_SIGNALS_BUCKET in brain_copy.tf (the task would stop at start, in
+  # the cutover window), or reading a new name in copy.sh.
+  assert {
+    condition = (
+      setsubtract(
+        toset([for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):[?-]", file("../../../brain/postgres/copy.sh")) : m[0]]),
+        ["COPY_REPLACE", "COPY_ALLOW_LIVE_SOURCE", "COPY_SOURCE_CA_FILE"]
+        ) == toset(concat(
+          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.name],
+          [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].secrets : e.name]
+      ))
+    )
+    error_message = "copy.sh and the data copy's task definition must name the same environment variables."
+  }
+
   # Without infra/brain/brain-ca.pem (committed once the brain has booted) the
   # task still plans, with an empty CA, and the script refuses. Mutation:
   # reading the file without the fileexists guard (the plan errors).
@@ -1855,7 +1876,7 @@ run "brain_watchdog_lists_the_archive_pgbackrest_writes" {
   }
 
   # Mutation: the timeout under the function's own two API tries (2 x 10 s)
-  # plus its S3 calls, or the runtime moved off a version the unit tests run on.
+  # plus its S3 calls.
   assert {
     condition     = aws_lambda_function.brain_watchdog[0].timeout == 60 && aws_lambda_function.brain_watchdog[0].handler == "handler.handler"
     error_message = "The watchdog's timeout is 60 seconds and its handler is handler.handler."
@@ -2013,7 +2034,8 @@ run "brain_drill_log_is_not_the_audit_trail" {
   # Mutation: a subscription filter on /logjam/brain/drill (to the audit
   # Firehose or any other): the drill's log would land in the WORM bucket as
   # if it were prod's audit trail. The test covers the two filters that exist
-  # and every .tf file: a new filter resource anywhere must not name the group.
+  # and every .tf file: a new filter resource anywhere must not name the group,
+  # by its resource or by its literal name.
   assert {
     condition = alltrue(concat(
       [
@@ -2022,7 +2044,7 @@ run "brain_drill_log_is_not_the_audit_trail" {
       ],
       flatten([
         for f in fileset(".", "*.tf") : [
-          for block in regexall("(?s)aws_cloudwatch_log_subscription_filter\" \"[a-z_]+\" \\{.*?\n\\}\n", file(f)) : !strcontains(block, "brain_drill")
+          for block in regexall("(?s)aws_cloudwatch_log_subscription_filter\" \"[a-z_]+\" \\{.*?\n\\}\n", file(f)) : !strcontains(block, "brain_drill") && !strcontains(block, "logjam/brain/drill")
         ]
       ]),
     ))

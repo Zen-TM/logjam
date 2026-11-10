@@ -60,6 +60,9 @@ ok() { echo "ok   - $S: $1"; }
 bad() { echo "FAIL - $S: $1"; fails=1; [ -z "${E2E_FAIL_FAST:-}" ] || exit 1; }
 check() { if "${@:2}"; then ok "$1"; else bad "$1"; fi; }
 not() { ! "$@"; }
+# grep -q leaves at its first match; under pipefail a writer that is still writing then dies of
+# SIGPIPE and the pipeline reads as no match. This one reads to the end.
+has() { grep "$@" > /dev/null; }
 fatal() { bad "$1"; dump; exit 1; }
 wait_for() { # <seconds> <command...>
   local n=$1; shift
@@ -119,16 +122,16 @@ status_keys() { aws s3 cp "s3://$SIGNALS/status.json" - | python3 -c 'import jso
 status_field() { aws s3 cp "s3://$SIGNALS/status.json" - | python3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
 fingerprint() { r openssl x509 -in /data/postgres/server.crt -noout -fingerprint -sha256; }
 ready() { curl -fsS -o /dev/null -m 3 http://127.0.0.1:80/ready; }
-api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | grep -qx "$1"; }
+api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | has -x "$1"; }
 pg_ready() { r docker exec "$(cid postgres)" pg_isready -q -h 127.0.0.1; }
-pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | grep -qx "$1"; }
+pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | has -x "$1"; }
 superuser_connected() { # <extra docker logs args>
-  r docker logs "$@" "$(cid postgres)" 2>&1 | grep -q 'connection authorized: user=postgres'
+  r docker logs "$@" "$(cid postgres)" 2>&1 | has 'connection authorized: user=postgres'
 }
 restore_reported() {
   [ "$(status_field last_restore_at)" != None ] && [ "$(status_field last_restore_lag_seconds)" -ge 0 ]
 }
-api_refused() { r docker logs "$(cid api)" 2>&1 | grep -q 'AUTH_MODE=fake refused'; }
+api_refused() { r docker logs "$(cid api)" 2>&1 | has 'AUTH_MODE=fake refused'; }
 archived() { # <wal file>: that segment or a later one reached the repository
   local got; got=$(sql postgres 'select last_archived_wal from pg_stat_archiver')
   [ -n "$got" ] && [[ ! $got < $1 ]]
@@ -164,7 +167,7 @@ trap cleanup EXIT
 if [ -e /opt/brain ] || [ -e /etc/brain ] || [ -e /data/postgres ] || mountpoint -q /data; then
   echo "refusing: this host already has a brain (/opt/brain, /etc/brain, /data/postgres or a mounted /data)"; trap - EXIT; exit 1
 fi
-if ss -ltn 'sport = :80' | grep -q LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
+if ss -ltn 'sport = :80' | has LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
 r rm -rf /run/brain-e2e-serving /run/brain-e2e-bootstrap # a killed earlier run's switches
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-southeast-2
 export AWS_ENDPOINT_URL=http://127.0.0.1:$MS_PORT
@@ -666,10 +669,18 @@ check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 #   postgres/drill.sh: one more key in the verdict;
 #   postgres/drill.sh: not reading the task role's credentials;
 #   postgres/drill.sh: dropping the `pg_ctl status` liveness check in the recovery wait (error timed_out, not start_failed);
-#   postgres/drill.sh: `LAG=$((recovered - at))` -> `LAG=$((START - at))` (reads 0 when the canary is replayed).
+#   postgres/drill.sh: `LAG=$((recovered - at))` -> `LAG=$((START - at))` (reads 0 when the canary is replayed);
+#   postgres/drill.sh: the `replay_short` line deleted (a restore that replayed nothing says ok);
+#   postgres/drill.sh: the three `set enable_... = off` statements dropped from the counts' session;
+#   postgres/drill.sh: the `[ -z "$tables" ]` return deleted (an empty `public` fails on _prisma_migrations);
+#   postgres/drill.sh: the `_prisma_migrations` read deleted (tables with no migrations table say ok);
+#   postgres/drill.sh: the stdin-fed psql run deleted (tables_read counts the list, not the run);
+#   postgres/drill.sh: the `canary_unreadable` guard deleted;
+#   postgres/drill.sh: `RESTORE_SECONDS=$((recovered - t0))` -> `RESTORE_SECONDS=-1`.
 S="11 the restore drill"
 serving off; agent # the API's own connections would hide a drill that reached the live Postgres in its log
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
+canary_segment=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
@@ -705,6 +716,7 @@ check "drill.json has exactly the allowlisted keys" \
 check "it says ok" [ "$(drill_field ok)" = True ]
 check "...with no error" [ "$(drill_field error)" = None ]
 check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
+check "restore_seconds is a whole number of seconds, 0 or more" [[ "$(drill_field restore_seconds)" =~ ^[0-9]+$ ]]
 # canary_lag_seconds: the canary's age when recovery ended, i.e. what losing the disk then would have cost.
 # Healthy archiving: seconds here (status.sh ran just before), never 0, which is what measuring from the drill's start gives.
 lag=$(drill_field canary_lag_seconds)
@@ -742,6 +754,50 @@ drill "$BACKUPS" -e BRAIN_DRILL_TIMEOUT=90 -e AWS_ACCESS_KEY_ID=test -e AWS_SECR
 check "a server killed in recovery: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
 check "...and says start_failed, not timed_out" [ "$(drill_field error)" = start_failed ]
 
+# What the drill does with each thing it reads, shown with a stand-in psql that fails or empties one query
+# (STUB names which) and keeps what the drill feeds it on stdin. Everything else goes to the real psql.
+cat > "$WORK/psql-stub" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *brain.canary*) [ "$STUB" = canary ] && exit 1 ;;
+  *pg_tables*) [ "$STUB" = empty ] && exit 0 ;;
+  *_prisma_migrations*) case "$STUB" in empty | nomig) exit 1 ;; esac ;;
+  *" -c "*) ;;
+  *) cat > /stubout/stdin; [ "$STUB" = stdin_fails ] && exit 1; exec /usr/bin/psql "$@" < /stubout/stdin ;;
+esac
+exec /usr/bin/psql "$@"
+EOF
+mkdir -m 777 "$WORK/stubout"
+stub() { drill "$BACKUPS" -e STUB="$1" -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -v "$WORK/psql-stub:/usr/local/bin/psql:ro" -v "$WORK/stubout:/stubout"; }
+# The three settings must precede the first count, or an index-only scan can skip the heap's checksums.
+fed_settings_first() { r awk '/^select count/ { seen = 1; exit } /enable_indexonlyscan = off/ { a = 1 } /enable_indexscan = off/ { b = 1 } /enable_bitmapscan = off/ { c = 1 } END { exit !(seen && a && b && c) }' "$WORK/stubout/stdin"; }
+stub canary; rc=$?
+check "the canary cannot be read: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and canary_unreadable" [ "$(drill_field error)" = canary_unreadable ]
+stub nomig; rc=$?
+check "tables but no _prisma_migrations: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and migrations_unreadable" [ "$(drill_field error)" = migrations_unreadable ]
+stub empty; rc=$?
+check "an empty public (a brain before the cutover's copy): exit 0 (got $rc)" [ "$rc" = 0 ]
+check "...ok, with no error" [ "$(drill_field ok)/$(drill_field error)" = True/None ]
+check "...and no table read" [ "$(drill_field tables_read)" = 0 ]
+stub stdin_fails; rc=$?
+check "the counts fail: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...tables_unreadable, ok false, and no tables_read" [ "$(drill_field error)/$(drill_field ok)/$(drill_field tables_read)" = tables_unreadable/False/None ]
+check "the counts' session turns off the index scans first" fed_settings_first
+
+# A restore whose WAL replay stops short promotes without an error. A copy of the repository with the WAL from the
+# canary's segment on removed replays nothing after the base backup, and a lag bound of 10 s tells that from a restore
+# that took a while (the real bound is 900 s; the canary before this one is minutes old).
+aws s3 mb "s3://e2e-short" > /dev/null
+aws s3 sync "s3://$BACKUPS" "s3://e2e-short" --only-show-errors
+aws s3 ls "s3://e2e-short/archive/" --recursive | awk -v from="$canary_segment" '{ n = split($4, a, "/"); if (a[n] ~ /^[0-9A-F]{24}-/ && substr(a[n], 1, 24) >= from) print $4 }' \
+  | while read -r key; do aws s3 rm "s3://e2e-short/$key" --only-show-errors; done
+drill e2e-short -e BRAIN_DRILL_MAX_LAG=10 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
+check "a restore that replayed nothing after the backup: exit non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and says replay_short" [ "$(drill_field error)" = replay_short ]
+aws s3 rb "s3://e2e-short" --force > /dev/null
+
 # An empty repository is a failed drill, said in a fixed code.
 drill e2e-empty -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
 check "an empty repository: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
@@ -769,7 +825,14 @@ check "...and nothing measured" [ "$(drill_field restore_seconds)/$(drill_field 
 #   postgres/copy.sh: the `show default_transaction_read_only` check inverted;
 #   postgres/copy.sh: the `|| { ...; die "cannot list the dump..." }` after `pg_restore -l` dropped (a dump that cannot be listed);
 #   postgres/copy.sh: the sequence name-set check removed (a sequence missing from the brain, source live);
-#   postgres/copy.sh: `coalesce(last_value::text, 'unset')` -> `coalesce(last_value::text, '')` (an unused sequence missing on one side).
+#   postgres/copy.sh: `coalesce(last_value::text, 'unset')` -> `coalesce(last_value::text, '')` (an unused sequence missing on one side);
+#   postgres/copy.sh: the `COPY_ALLOW_LIVE_SOURCE` refusal removed (a live source, no flag);
+#   postgres/copy.sh: the closing `[ "$readonly_source" = on ]` made `true` (a live source ending `every check held`);
+#   postgres/copy.sh: ` or .api_sha != null` dropped from brain_is_dormant (serving false, an API running);
+#   postgres/copy.sh: the `unowned` check removed (an object the brain's role does not own);
+#   postgres/copy.sh: the table-set check removed (a table missing from the brain, source live);
+#   postgres/copy.sh: `last_value` dropped from sequence_values, names only (a sequence value that differs, source read-only);
+#   postgres/copy.sh: the last-migration check removed (a migration missing from the brain, source read-only).
 S="12 the data copy"
 SRC=brain-e2e-src
 r docker run -d --name "$SRC" --network brain-e2e -e BRAIN_DEV=1 -e BRAIN_INIT=bootstrap -e POSTGRES_PASSWORD=e2e-src-superuser \
@@ -821,9 +884,11 @@ sql logjam "do \$\$ declare o text; begin
   loop execute 'drop ' || o || ' cascade'; end loop; end \$\$" > /dev/null || fatal "the brain's public schema does not empty"
 
 fresh() { r /opt/brain/host/status.sh || bad "status.sh failed"; } # a status.json that says serving false, just now
-signal() { # <serving true|false> <age in seconds>
-  printf '{"schema":1,"time":"%s","serving":%s}' "$(date -u -d "-$2 seconds" +%Y-%m-%dT%H:%M:%SZ)" "$1" | aws s3 cp - "s3://$SIGNALS/status.json" --only-show-errors
+signal() { # <serving true|false> <age in seconds> [api_sha as JSON, default null]
+  printf '{"schema":1,"time":"%s","serving":%s,"api_sha":%s}' "$(date -u -d "-$2 seconds" +%Y-%m-%dT%H:%M:%SZ)" "$1" "${3:-null}" | aws s3 cp - "s3://$SIGNALS/status.json" --only-show-errors
 }
+# Every copy but the read-only-source ones and the refusal runs against a live source, as a rehearsal does.
+live=(-e COPY_ALLOW_LIVE_SOURCE=1)
 copy_raw() { # [docker args]: the task, on the test network; the brain at its own name through the host's published port
   r docker run --rm --network brain-e2e --name brain-e2e-copy \
     --add-host brain.e2e.test:host-gateway --add-host host.docker.internal:host-gateway \
@@ -831,7 +896,7 @@ copy_raw() { # [docker args]: the task, on the test network; the brain at its ow
     -e COPY_SOURCE_CA_FILE=/source-ca.pem -v "$WORK/src.crt:/source-ca.pem:ro" \
     -e DB_USER=logjam_app -e DB_PASSWORD="$APP_PW" -e BRAIN_SIGNALS_BUCKET="$SIGNALS" -e AWS_REGION=ap-southeast-2 \
     -e BRAIN_BACKUP_ENDPOINT=host.docker.internal:"$TLS_PORT" -e CURL_CA_BUNDLE=/tls.crt -v "$WORK/tls.crt:/tls.crt:ro" \
-    -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test "$@" "$PG_IMAGE" /usr/local/lib/brain/copy.sh > "$WORK/copy.log" 2>&1
+    -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test "${live[@]}" "$@" "$PG_IMAGE" /usr/local/lib/brain/copy.sh > "$WORK/copy.log" 2>&1
   local rc=$?
   cat "$WORK/copy.log" >> "$WORK/copy-all.log"
   return "$rc"
@@ -852,7 +917,8 @@ refuses() { # <what>: the last run exited non-zero, said why, copied nothing and
 copy; rc=$?
 [ "$rc" = 0 ] || tail -20 "$WORK/copy.log"
 check "an empty brain: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
-check "...and says every check held" grep -q 'ok: every check held' "$WORK/copy.log"
+check "...and says the source was live, not that every check held" grep -q 'ok: the source was live' "$WORK/copy.log"
+check "...a live source never ends on \`every check held\`" not grep -q 'every check held' "$WORK/copy.log"
 for t in users announcements sync_tombstones legacy_things; do
   check "...$t has the source's rows" [ "$(sql logjam "select count(*) from $t")" = "$(src_sql -c "select count(*) from $t")" ]
 done
@@ -890,6 +956,11 @@ signal true 0
 copy_raw -e COPY_REPLACE=1; rc=$?
 check "serving true: the copy says so" grep -q 'does not say serving is false' "$WORK/copy.log"
 refuses "serving true"
+# One status tick that could not read instance metadata says serving false with the API up: the API running counts.
+signal false 0 '"e2e-sha"'
+copy_raw -e COPY_REPLACE=1; rc=$?
+check "serving false with an API running: the copy says so" grep -q 'does not say serving is false' "$WORK/copy.log"
+refuses "serving false with an API running"
 signal false 600
 copy_raw -e COPY_REPLACE=1; rc=$?
 check "a status.json ten minutes old: the copy says it is stale" grep -q 'stale' "$WORK/copy.log"
@@ -953,20 +1024,30 @@ state0=$(brain_state)
 
 # A read-only source, as in the window: its setting does not travel, and its counts must match exactly.
 src_sql -c "alter database logjam set default_transaction_read_only = on"
+live=()
 copy -e COPY_REPLACE=1; rc=$?
 check "a read-only source: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
 check "...and says the source is read-only" grep -q 'source default_transaction_read_only = on' "$WORK/copy.log"
+check "...and says every check held" grep -q 'ok: every check held' "$WORK/copy.log"
 check "...and the brain is not read-only" [ "$(sql logjam "show default_transaction_read_only")" = off ]
 state0=$(brain_state)
 copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$(src_write "delete from announcements where id = 'a1'")"; rc=$?
 check "a read-only source that changed after the dump: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
 check "...names the counts that differ" grep -q 'announcements: source 0, brain 1' "$WORK/copy.log"
 check "...and says not to serve from the copy" grep -q 'do not serve' "$WORK/copy.log"
-# A live source keeps writing: the same difference is only a warning.
+# A live source keeps writing: the same difference is only a warning, and the copy refuses to start unless it is told
+# the source is live.
 src_sql -c "alter database logjam reset default_transaction_read_only" -c "insert into announcements (id, title, body) values ('a3', 'Third', 'third made-up body')"
+state0=$(brain_state)
+copy -e COPY_REPLACE=1; rc=$?
+check "a live source, no COPY_ALLOW_LIVE_SOURCE: the copy says the source is not read-only" grep -q 'the source is not read-only' "$WORK/copy.log"
+refuses "a live source without the flag"
+live=(-e COPY_ALLOW_LIVE_SOURCE=1)
 copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$(src_write "delete from announcements where id = 'a3'")"; rc=$?
 check "a live source that changed after the dump: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
 check "...with a warning" grep -q 'warning: row counts differ' "$WORK/copy.log"
+check "...and a last line that says the source was live" grep -q 'ok: the source was live' "$WORK/copy.log"
+check "...never \`every check held\`" not grep -q 'every check held' "$WORK/copy.log"
 
 # A dump that cannot be listed stops the copy before the restore: the stand-in pg_dump empties the file it wrote.
 state0=$(brain_state)
@@ -995,6 +1076,35 @@ check "a sequence missing from the brain, source live: the copy says the source 
 check "...the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
 check "...names the sequence the brain lacks" grep -q 'only in the source: e2e_unused_seq' "$WORK/copy.log"
 check "...and lists its difference, though both sides read unset or missing" grep -q 'e2e_unused_seq: source unset, brain missing' "$WORK/copy.log"
+
+# The checks between "restored" and "verified", each with the one thing it exists for broken right after the restore
+# (the stand-in pg_restore runs the change). A role the brain's own role may become, for the ownership check:
+sql logjam "create role legacy_owner nologin; grant legacy_owner to logjam_app; grant create on schema public to legacy_owner" > /dev/null || fatal "no second role on the brain"
+restored_but() { # <what>: the copy exits non-zero, with the verdict that the copy must not be used
+  check "$1: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
+  check "...and says not to serve from it" grep -q 'RESTORED BUT NOT VERIFIED' "$WORK/copy.log"
+}
+stub_restore=(-e COPY_REPLACE=1 -v "$WORK/stub-restore:/usr/local/bin/pg_restore:ro")
+copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "alter table public.legacy_things owner to legacy_owner")"; rc=$?
+restored_but "an object the brain's role does not own"
+check "...names it" grep -q 'objects in public are not owned by logjam_app' "$WORK/copy.log"
+copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "drop table public.legacy_things")"; rc=$?
+restored_but "a table missing from the brain, source live"
+check "...says the tables are not the source's" grep -q "the brain's tables are not the source's" "$WORK/copy.log"
+# With the source read-only, so a difference is a failure and not a warning.
+src_sql -c "alter database logjam set default_transaction_read_only = on"
+live=()
+copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "select setval('sync_tombstones_id_seq', 1)")"; rc=$?
+restored_but "a sequence value that differs, source read-only"
+check "...names the sequence and both values" grep -q 'sync_tombstones_id_seq: source 500, brain 1' "$WORK/copy.log"
+copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "delete from _prisma_migrations where migration_name = (select max(migration_name) from _prisma_migrations)")"; rc=$?
+restored_but "a migration missing from the brain, source read-only"
+check "...says the last migration differs" grep -q 'the last migration differs' "$WORK/copy.log"
+copy -e COPY_REPLACE=1; rc=$?
+check "a plain copy afterwards puts it all right and says every check held (got $rc)" bash -c "[ '$rc' = 0 ] && grep -q 'ok: every check held' '$WORK/copy.log'"
+src_sql -c "alter database logjam reset default_transaction_read_only"
+live=(-e COPY_ALLOW_LIVE_SOURCE=1)
+sql logjam "drop owned by legacy_owner; drop role legacy_owner" > /dev/null || bad "the second role is still in use on the brain"
 
 # Nothing a run printed holds a value, a row or the password; the brain's audit log records the restore as
 # statements, never rows.

@@ -23,8 +23,14 @@ export interface LockClient {
 // its own: on a pooled connection it would be handed to the next borrower and
 // never released. This costs each sweeping process one more Postgres
 // connection (the brain's Postgres allows 50).
+//
+// query_timeout is here and not in dbConnectionConfig() because only this
+// client sits idle until a tick pings it: a connection that died without a
+// FIN would otherwise stall the ping for the kernel's TCP limit (~15 min), and
+// the Prisma pool must not cap slow queries. Guard: lib/sweepLeader.unit.test.ts
+// ("builds the lock client from dbConnectionConfig() plus a query timeout").
 export function newLockClient(): LockClient {
-  return new Client(dbConnectionConfig());
+  return new Client({ ...dbConnectionConfig(), query_timeout: 15_000 });
 }
 
 export interface SweepLeader {

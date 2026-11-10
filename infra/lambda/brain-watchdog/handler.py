@@ -6,11 +6,13 @@ inside the brain stays green. So this looks at the bucket and the public API
 from outside.
 
 Reads status.json and drill.json (signals bucket) and LISTs the backup bucket's
-WAL archive. It never reads an object from the backup bucket, and neither the
-error carries anything but the codes below, and the log line only those and
-one HTTP status number (the /ready probe while the brain is not serving). Each code, what
-it means and what to do first: docs/operations/alarms.md. Tests: test_handler.py
-(run by ci.yml's infra-scripts job).
+WAL archive. It never reads an object from the backup bucket (guards: the
+Terraform test brain_watchdog_role_reads_only_the_signals, and here
+test_three_listings_and_only_the_last_directory_is_listed). The error carries
+only the codes below, and the log line those and one HTTP status number (the
+/ready probe while the brain is not serving). Each code, what it means and what
+to do first: docs/operations/alarms.md. Tests: test_handler.py (run by ci.yml's
+infra-scripts job).
 """
 
 import json
@@ -141,13 +143,14 @@ def check_wal(s3, bucket, wal_prefix, now):
     return ["wal_stale"] if newest is None or age(newest, now) > WAL_MAX_AGE else []
 
 
+def _request(url):
+    return urllib.request.Request(url, headers={"User-Agent": "logjam-brain-watchdog"})
+
+
 def check_ready(url, opener):
     for _ in range(READY_TRIES):
         try:
-            request = urllib.request.Request(
-                url, headers={"User-Agent": "logjam-brain-watchdog"}
-            )
-            with opener(request, timeout=READY_TIMEOUT) as response:
+            with opener(_request(url), timeout=READY_TIMEOUT) as response:
                 if response.status == 200:
                     return []
         except Exception:
@@ -163,10 +166,7 @@ def probe_ready(url, opener):
     a 403, which is what the probe is there to show).
     """
     try:
-        request = urllib.request.Request(
-            url, headers={"User-Agent": "logjam-brain-watchdog"}
-        )
-        with opener(request, timeout=READY_TIMEOUT) as response:
+        with opener(_request(url), timeout=READY_TIMEOUT) as response:
             return response.status
     except urllib.error.HTTPError as e:
         return e.code

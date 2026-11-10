@@ -1,5 +1,24 @@
 import { describe, it, expect, vi } from "vitest";
-import { createSweepLeader, type LockClient } from "./sweepLeader";
+
+const { clientConfigs, connConfig } = vi.hoisted(() => ({
+  clientConfigs: [] as unknown[],
+  connConfig: { connectionString: "x", keepAlive: true, password: () => "p" },
+}));
+vi.mock("pg", () => ({
+  Client: class {
+    constructor(config: unknown) {
+      clientConfigs.push(config);
+    }
+  },
+}));
+vi.mock("./dbConnection", () => ({ dbConnectionConfig: () => connConfig }));
+
+import { logger } from "./logger";
+import {
+  createSweepLeader,
+  newLockClient,
+  type LockClient,
+} from "./sweepLeader";
 
 // Mutations that turn this file red (each applied once, see the PR):
 //  - runIfLeader ignores `rows[0].locked`: "skips while the lock is taken".
@@ -8,6 +27,14 @@ import { createSweepLeader, type LockClient } from "./sweepLeader";
 //    ping succeeds and not when it fails".
 //  - acquire runs on every call rather than only when not holding: "does not
 //    stack".
+//  - newLockClient builds `new Client({ connectionString })` (prod's TLS and
+//    password callback lost, so the lock is never taken on RDS): "builds the
+//    lock client from dbConnectionConfig() plus a query timeout".
+//  - `query_timeout` dropped from newLockClient: the same test.
+//  - the `if (!outageLogged)` guard removed, or `outageLogged` never reset
+//    on a successful acquire: "warns once per outage".
+//  - the `client.on("end", ...)` listener removed: "drops leadership when the
+//    connection ends".
 
 class FakeClient implements LockClient {
   static taken = false; // the "server": one session at a time may hold it
@@ -45,10 +72,10 @@ class FakeClient implements LockClient {
     return this;
   }
   // The server dropped the session: Postgres releases the lock itself.
-  kill() {
+  kill(event: "error" | "end" = "error") {
     if (this.holds) FakeClient.taken = false;
     this.holds = false;
-    this.listeners.error?.(new Error("terminated"));
+    this.listeners[event]?.(new Error("terminated"));
   }
 }
 
@@ -130,6 +157,49 @@ describe("sweep leader", () => {
     expect(clients).toHaveLength(2);
     expect(clients[1].holds).toBe(true);
     expect(tick).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops leadership when the connection ends", async () => {
+    const { leader, clients } = setup();
+    const tick = vi.fn();
+    await leader.runIfLeader(tick);
+    clients[0].kill("end");
+    expect(clients[0].ended).toBe(1);
+    await leader.runIfLeader(tick);
+    expect(clients).toHaveLength(2);
+    expect(clients[1].holds).toBe(true);
+  });
+
+  it("warns once per outage", async () => {
+    FakeClient.taken = false;
+    let fail = true;
+    const clients: FakeClient[] = [];
+    const leader = createSweepLeader(() => {
+      const c = new FakeClient();
+      c.failConnect = fail;
+      clients.push(c);
+      return c;
+    });
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    const tick = vi.fn();
+    await leader.runIfLeader(tick);
+    await leader.runIfLeader(tick);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // Recovery re-arms the warning: the next outage is reported once more.
+    fail = false;
+    expect(await leader.runIfLeader(tick)).toBe(true);
+    fail = true;
+    (clients.at(-1) as FakeClient).pingFails = true;
+    await leader.runIfLeader(tick);
+    await leader.runIfLeader(tick);
+    expect(warn).toHaveBeenCalledTimes(2);
+    await leader.stop();
+    warn.mockRestore();
+  });
+
+  it("builds the lock client from dbConnectionConfig() plus a query timeout", () => {
+    newLockClient();
+    expect(clientConfigs).toEqual([{ ...connConfig, query_timeout: 15_000 }]);
   });
 
   it("skips and recovers when the connection cannot be opened", async () => {

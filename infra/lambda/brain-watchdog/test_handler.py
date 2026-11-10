@@ -321,6 +321,16 @@ class Codes(unittest.TestCase):
             sorted(run(s3=s3)[0]), ["disk_high", "drill_missing", "full_stale"]
         )
 
+    def test_malformed_fields_report_their_own_code_only(self):
+        # Each check's fallback is its own code: a time that does not parse is
+        # full_stale and a number that is a string is memory_low, nothing else.
+        for field, want in (
+            ({"last_full_time": "garbage"}, ["full_stale"]),
+            ({"mem_available_mb": "x"}, ["memory_low"]),
+        ):
+            s3 = FakeS3(signals(status=good_status(**field)), fresh_wal())
+            self.assertEqual(run(s3=s3)[0], want)
+
     def test_the_bucket_listing_failing_is_wal_stale_only(self):
         class Broken(FakeS3):
             def list_objects_v2(self, **kw):

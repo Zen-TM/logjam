@@ -24,6 +24,7 @@ import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import { startPlaceRegistry } from "./services/placeRegistry";
 import { ROUTER_MOUNTS } from "./routes/mounts";
+import { createShutdown } from "./lib/shutdown";
 
 const env = getEnv();
 
@@ -38,7 +39,19 @@ const app = express();
 // validator fails loud on a wrong count. Guard: src/trustProxy.unit.test.ts.
 app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
-let shuttingDown = false;
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+// Declared first so its header covers every route, errors and /ready included.
+const lifecycle = createShutdown({
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+  stop: () => {
+    stopTopoJobReaper();
+    stopPlaceRegistry();
+  },
+  finish: () => prisma.$disconnect(),
+  exit: (code) => process.exit(code),
+});
+app.use(lifecycle.closeConnections);
 
 app.use(
   pinoHttp({
@@ -112,7 +125,7 @@ app.get("/health", (_req, res) => {
 
 // Readiness — checks DB; 503 during shutdown or DB outage
 app.get("/ready", async (_req, res) => {
-  if (shuttingDown) {
+  if (lifecycle.isShuttingDown()) {
     res.status(503).json({ status: "shutting_down" });
     return;
   }
@@ -184,37 +197,7 @@ const stopTopoJobReaper = startTopoJobReaper();
 // In the background: search answers 503 until the registry has loaded.
 const stopPlaceRegistry = startPlaceRegistry();
 
-const SHUTDOWN_TIMEOUT_MS = 25_000;
-
-function shutdown(signal: string) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  logger.info({ signal }, "shutdown_initiated");
-
-  stopTopoJobReaper();
-  stopPlaceRegistry();
-
-  const force = setTimeout(() => {
-    logger.error("shutdown_timeout_force_exit");
-    process.exit(1);
-  }, SHUTDOWN_TIMEOUT_MS);
-  force.unref();
-
-  server.close(async (err) => {
-    if (err) logger.error({ err: safeErrorForLog(err) }, "server_close_error");
-    try {
-      await prisma.$disconnect();
-      logger.info("shutdown_complete");
-      process.exit(0);
-    } catch (disconnectErr) {
-      logger.error(
-        { err: safeErrorForLog(disconnectErr) },
-        "prisma_disconnect_error",
-      );
-      process.exit(1);
-    }
-  });
-}
+const shutdown = (signal: string) => lifecycle.begin(server, signal);
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

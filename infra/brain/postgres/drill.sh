@@ -37,7 +37,7 @@ umask 077
 
 # The verdict's error codes: the only text in it that is not a time or a label.
 #   no_backup repo_unreadable restore_failed archive_mode_not_off start_failed
-#   timed_out canary_unreadable migrations_unreadable tables_unreadable
+#   timed_out replay_short canary_unreadable migrations_unreadable tables_unreadable
 ERROR='' LABEL='' STOP='' RESTORE_SECONDS='' LAG='' TABLES=''
 
 stop_pg() { pg_ctl -D "$PGDATA" status > /dev/null 2>&1 && { pg_ctl -D "$PGDATA" -m fast -w stop > /dev/null 2>&1 || pg_ctl -D "$PGDATA" -m immediate -w stop > /dev/null 2>&1; }; return 0; }
@@ -95,12 +95,21 @@ drill() {
   LAG=$((recovered - at))
   [ "$LAG" -ge 0 ] || LAG=0
 
-  q logjam 'select count(*) from _prisma_migrations' > /dev/null 2>&1 || { ERROR=migrations_unreadable; return; }
-  # One count(*) per table, thrown away: only how many tables were read leaves here.
+  # A recovery that could not fetch the next WAL segment ends and promotes without an error. The restore's own
+  # duration adds to the lag second for second, so it comes off.
+  [ $((LAG - RESTORE_SECONDS)) -le "${BRAIN_DRILL_MAX_LAG:-900}" ] || { ERROR=replay_short; return; }
+
+  # One count(*) per table, thrown away: only how many tables were read leaves here. Sequential scans only, so
+  # every heap page's checksum is verified (an index-only scan would skip the heap). Still unread: TOAST,
+  # indexes, and a file truncated at a page boundary.
   local tables
   tables=$(q logjam "select format('select count(*) from %I.%I;', schemaname, tablename) from pg_tables where schemaname = 'public' order by 1") \
     || { ERROR=tables_unreadable; return; }
-  psql -h "$SOCK" -U postgres -d logjam -v ON_ERROR_STOP=1 -tAXq <<< "$tables" > /dev/null 2>&1 || { ERROR=tables_unreadable; return; }
+  # A brain that has not had the cutover's copy has no tables yet: nothing to read, and no _prisma_migrations.
+  if [ -z "$tables" ]; then TABLES=0; return; fi
+  q logjam 'select count(*) from _prisma_migrations' > /dev/null 2>&1 || { ERROR=migrations_unreadable; return; }
+  psql -h "$SOCK" -U postgres -d logjam -v ON_ERROR_STOP=1 -tAXq > /dev/null 2>&1 <<< "set enable_indexonlyscan = off; set enable_indexscan = off; set enable_bitmapscan = off;
+$tables" || { ERROR=tables_unreadable; return; }
   TABLES=$(grep -c . <<< "$tables")
 }
 drill

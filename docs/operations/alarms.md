@@ -2,7 +2,7 @@
 
 Prod's CloudWatch alarms, what fires each one, and what to do first. They
 are defined in `infra/terraform/envs/prod/monitoring.tf` (the brain's, in
-`brain_alarms.tf`) and all send to the
+`brain_alarms.tf` and `brain_watchdog.tf`) and all send to the
 `logjam-alerts` SNS topic (`ap-southeast-2`), which emails the maintainer
 when an alarm fires and again when it clears. Every alarm's email repeats
 its first step and links here.
@@ -474,8 +474,8 @@ The shell steps need a Session Manager shell on the brain
 | `memory_low` | Postgres is up and the host has under 100 MiB available (or `status.json` does not say). On a `t4g.micro` the lowest seen in a rehearsal was 164 under a release swap with a 1.7 GB database, 331 idle | The host is close to running out of memory: move `brain_instance_type` in `brain.auto.tfvars` up one size (about two minutes of downtime) |
 | `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
 | `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
-| `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` |
-| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
+| `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` (its default in `brain_variables.tf`). `replay_short` means the restore replayed none of the recent WAL: if the brain was down or restoring around the drill's time, that outage is the cause and the next drill (or one run by hand) clears it; otherwise the archive has a hole after the last full backup, or the drill cannot read it, so read `/logjam/brain/drill` and take a full backup now, so a restore no longer depends on the missing WAL |
+| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row. Between the cutover's two flips the probe still reaches the old API, so the brain's own API is checked by hand then ([brain-cutover.md](brain-cutover.md), the host check) | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
 
 `wal_stale`, `status_*` and `postgres_down` can all fire together when the
 host goes down: start with the status-check alarms.

@@ -139,44 +139,49 @@ Limits, all met on the scratch copy:
 Do these in this order; each step says why. Nothing here changes what users see:
 the brain serves nobody until the cutover.
 
-1. **Land the stack in its merge order**, the order the pull requests' bodies
-   state. Two constraints matter. The backup, signals and role resources (the
-   first brain Terraform change) must be applied before the change that makes
-   `deploy-api.yml` write `release.json`: that workflow step writes into the
-   signals bucket, so until the bucket exists every deploy fails at it. And
-   merging the stack changes nothing running: with the settings dormant the plan
-   adds only dormant resources (nothing is created until step 4). The API
-   shutdown fix (#875) should also be merged before the cutover: without it a
-   release under load fails requests for about 13 seconds instead of about 4
-   (see "A release and a rollback").
-2. **Apply the audit-trail change by hand, before any real data reaches the
-   brain.** It changes the apply role's boundary, so `terraform-apply.yml`
-   refuses it ([infra/AGENTS.md](../../infra/AGENTS.md)). It is what makes
-   every read of a backup, and every shell on the host, a recorded event
-   ([the policy](../DATA-ACCESS-POLICY.md) is untrue without it). From a
-   checkout of `main`, from the repository root, with the maintainer's
-   credentials (**not yet run anywhere** as one sequence; `plan` and `apply`
-   with a saved plan ran on a scratch copy):
+1. **Land the stack: one merge.** It arrives as a single squash, and the merge
+   applies it (`terraform-apply.yml`): the buckets, roles and log groups, the
+   audit trail's wider selectors, the cost ceiling, and the one change to
+   something live, the user pool's pre sign-up function (the monthly cap on new
+   accounts). With the settings dormant nothing that runs is created; that is
+   step 4. The audit trail's change is what makes every read of a backup, and
+   every shell on the host, a recorded event
+   ([the policy](../DATA-ACCESS-POLICY.md) is untrue without it), and it takes
+   about three minutes to take effect (measured).
+
+   The same merge starts a deploy, whose last step writes `release.json` into
+   the signals bucket that the apply has just created; the apply finishes well
+   before the deploy reaches that step. If the step did fail because the bucket
+   was not there yet, the release itself is live and smoke-tested: re-run the
+   failed job, or let the next deploy write the file (**not yet run anywhere**).
+2. **Merge the boundary change and apply it by hand, before any real data
+   reaches the brain.** The stack keeps three Deny statements (a shell on an
+   instance or in a task, a command's output, a disk snapshot's blocks) out of
+   one place, the apply role's own boundary, because `terraform-apply.yml`
+   refuses a whole plan that edits that boundary
+   ([infra/AGENTS.md](../../infra/AGENTS.md)). They arrive in a pull request of
+   their own. Until it is applied, the role CI applies with could open a shell
+   on the brain; no other CI role can. Merge it: its apply run says
+   `refused, nothing applied`, as it should. Then, from a checkout of `main`,
+   from the repository root, with the maintainer's credentials (**not yet run
+   anywhere** as one sequence; `plan` and `apply` with a saved plan ran on a
+   scratch copy):
 
    ```sh
    for l in cognito-email-sender cognito-pre-signup; do
      npm --prefix infra/lambda/$l ci && npm --prefix infra/lambda/$l run build
    done
    terraform -chdir=infra/terraform/envs/prod init
-   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/audit.plan
+   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/boundary.plan
    ```
 
-   Read the plan. It must change the audit trail's selectors and the four
-   policies that carry the privacy Deny (`gha_plan_readonly_privacy_deny`,
-   `gha_readonly_privacy_deny`, the contributor group's policy, the apply
-   boundary), and nothing else; stop if it shows anything else. Then:
+   Read the plan. It must change `aws_iam_policy.github_actions_apply_boundary`
+   and nothing else, adding `DenySnapshotBlocks`, `DenyShells` and
+   `DenyCommandOutput`; stop if it shows anything else. Then:
 
    ```sh
-   terraform -chdir=infra/terraform/envs/prod apply /tmp/audit.plan
+   terraform -chdir=infra/terraform/envs/prod apply /tmp/boundary.plan
    ```
-
-   A change to what the trail records takes about three minutes to take effect
-   (measured), so wait that long before the next step.
 3. **Publish the Postgres image and note its tag.** Merging a change under
    `infra/brain/postgres/` publishes it (`publish-brain-postgres.yml`); to
    publish what is on `main` now: `gh workflow run publish-brain-postgres.yml --ref main`.
@@ -237,7 +242,9 @@ the brain serves nobody until the cutover.
    Look for exit code `0` and `"ok": true`, a `backup_label`, `restore_seconds`
    (7 to 8 seconds for a 28 MB database, 33 for 1.7 GB; the whole task about
    30 seconds, 21 of them pulling the image), `tables_read` (35 there), and no
-   `error`. Anything else is a backup that does not restore: stop and read
+   `error`. Before step 9's copy the database has no tables, so `tables_read`
+   is `0` and that is a pass; after the copy it is the number of tables.
+   Anything else is a backup that does not restore: stop and read
    `/logjam/brain/drill` before going further.
 7. **Fetch the certificate and finish its pull request.** The brain's
    certificate is made at first boot and cannot exist before. The images that
@@ -279,12 +286,22 @@ the brain serves nobody until the cutover.
 
    Each prints `/app/brain-ca.pem`. The file is not part of the host files, so
    committing it does not replace the instance.
-8. **Check `release.json` exists.** The release agent refuses to start the API
-   when serving is on and it cannot read it, and CI cannot read the bucket, so
-   only you can look (run on a scratch copy):
-   `aws s3 ls s3://logjam-brain-signals-620853681701/release.json`. The deploy of
-   step 7 writes it. (It lists nothing, with no error, when the object is
-   missing.)
+8. **Check `release.json` names the live release.** The release agent refuses
+   to start the API when serving is on and it cannot read the file, and it runs
+   whatever commit the file names. CI cannot read the bucket, so only you can
+   look (the read ran on a scratch copy; the comparison is **not yet run
+   anywhere**):
+
+   ```sh
+   aws s3 cp s3://logjam-brain-signals-620853681701/release.json - | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+   curl -s https://api.logjamnsw.com/meta | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+   ```
+
+   The two lines must be the same commit. The deploy of step 7 writes the
+   file. They differ after a deploy that was rolled back: a rollback to a
+   release from before the brain cannot rewrite the file, which then still
+   names the release that failed. Deploy once more (merge anything, or run
+   `deploy-api.yml` on `main`) and look again.
 9. **Rehearse the copy** against the brain while it is not serving, as
    [brain-cutover.md](brain-cutover.md#before-the-window) says. It is the first
    time real data reaches the brain, which is why step 2 comes first. On prod
@@ -292,6 +309,9 @@ the brain serves nobody until the cutover.
 10. **Check the watchdog is green.** Its log group's latest line is
     `{"failed": []}`. The first day can show `drill_missing` (cleared by step 6)
     and, in the first minutes, `status_missing`, `full_stale` and `wal_stale`.
+    `logjam-brain-watchdog-not-running` may also email once in its first
+    fifteen minutes, before the check's first run has been counted, and clear by
+    itself.
 
 ## A release and a rollback
 
