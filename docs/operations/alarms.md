@@ -1,7 +1,8 @@
 # Alarms
 
 Prod's CloudWatch alarms, what fires each one, and what to do first. They
-are defined in `infra/terraform/envs/prod/monitoring.tf` and all send to the
+are defined in `infra/terraform/envs/prod/monitoring.tf` (the brain's, in
+`brain_alarms.tf`) and all send to the
 `logjam-alerts` SNS topic (`ap-southeast-2`), which emails the maintainer
 when an alarm fires and again when it clears. Every alarm's email repeats
 its first step and links here.
@@ -32,8 +33,8 @@ that goes wrong between deploys.
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
 | `logjam-brain-system-status-failed` | AWS's system status check on the brain (the EC2 host) failed for 2 minutes; EC2 is recovering it onto new hardware | Wait for the OK email, then confirm the API answers and Postgres is up (the brain section below) |
 | `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
-| `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode) | Find what is using the CPU; at zero the brain is throttled to its baseline |
-| `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode) | Find what is using the CPU; the charge is about US$0.05 per vCPU-hour |
+| `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode, the default) | Find what is using the CPU; the worst case is about US$47 a month on a `t4g.small` |
+| `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
 
 ## API
 
@@ -317,8 +318,9 @@ are down until it is back, a few minutes.
 2. Check the API answers (`/ready` through CloudFront) and, in a Session
    Manager shell, that `docker ps` shows `brain-postgres-1` healthy. The boot
    unit starts Postgres again by itself.
-3. If it does not come back, ask Terraform to replace the instance (taint
-   `aws_instance.brain[0]`). The data volume is separate and is reattached.
+3. If it does not come back, the instance has to be replaced, which any change
+   to its user data does (a PR touching `infra/brain/`). The data volume is
+   separate and is reattached.
 
 ### `logjam-brain-instance-status-failed`
 
@@ -331,24 +333,27 @@ starts it again.
 2. If it comes back failing, open a Session Manager shell and read
    `journalctl -b -u brain-boot` and `df -h /`.
 
-### `logjam-brain-cpu-credits-low`
+### `logjam-brain-cpu-surplus-credits-charged`
 
-The `t4g.small` earns CPU credits and spends them above its baseline. In
-standard credit mode, when the balance reaches zero the instance is held to the
-baseline, which slows the API and Postgres together. The alarm fires when the
-balance averages under 30 for six readings in a row (30 minutes).
+The brain runs in unlimited credit mode (`brain_cpu_credits`, the default).
+It never throttles, and it is billed US$0.04 per vCPU-hour for the CPU it uses
+beyond its baseline (20% of each core on a `t4g.small`, 10% on a `t4g.micro`).
+The worst case, both cores pinned all month, is about US$47 a month on a
+`t4g.small` and US$53 on a `t4g.micro`. Any charge in an hour fires the alarm,
+which is how a charge gets noticed at all: it appears on the bill only.
 
 1. Find the cause: a runaway query (`docker exec` into Postgres and
    `select * from pg_stat_activity`), a restore, or a backup running at the same
    time as traffic.
-2. If the load is real, switch to `unlimited` credits (`brain_cpu_credits` in
-   Terraform) or a bigger instance type.
+2. A one-off is fine. A steady charge means the instance is too small for the
+   load: compare the charge with the next size up before changing.
 
-### `logjam-brain-cpu-surplus-credits-charged`
+### `logjam-brain-cpu-credits-low`
 
-In unlimited credit mode the instance never throttles and is billed for credits
-it spends beyond what it earned. Any charge in an hour fires the alarm.
+Only exists when `brain_cpu_credits` is `standard`. The instance earns CPU
+credits and spends them above its baseline; at zero it is held to the
+baseline, which slows the API and Postgres together. The alarm fires when the
+balance averages under 30 for six readings in a row (30 minutes).
 
-1. Find the cause as for `logjam-brain-cpu-credits-low`.
-2. A steady charge means the instance is too small for the load: compare the
-   charge with the next size up before changing.
+1. Find the cause as above.
+2. If the load is real, switch to `unlimited` credits or a bigger instance type.

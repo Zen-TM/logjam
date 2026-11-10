@@ -10,9 +10,9 @@ variable "brain_serving" {
 }
 
 variable "brain_cpu_credits" {
-  description = "CPU credit mode of the brain's instance (standard or unlimited)."
+  description = "CPU credit mode of the brain's instance: unlimited (the default: never throttled; credits spent beyond the baseline are billed, at most about US$47 a month on a t4g.small and US$53 on a t4g.micro with both cores pinned all month, and brain_cpu_surplus_credits_charged alarms on any charge) or standard (throttled to the baseline at zero credits; brain_cpu_credits_low alarms)."
   type        = string
-  default     = "standard"
+  default     = "unlimited"
 
   validation {
     condition     = contains(["standard", "unlimited"], var.brain_cpu_credits)

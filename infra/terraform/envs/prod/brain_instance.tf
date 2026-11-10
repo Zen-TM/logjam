@@ -10,12 +10,14 @@ locals {
   brain_enabled = var.brain_pg_image_tag != ""
 
   # Memory settings by instance size: 25% of RAM for shared_buffers and 50% for
-  # effective_cache_size. A type that is not here fails the plan (the
-  # brain_instance_type variable's validation).
+  # effective_cache_size, and the API container's memory limit (the rest of the
+  # budget; compose.yaml's BRAIN_API_MEM_LIMIT). A type that is not here fails
+  # the plan (the brain_instance_type variable's validation).
   brain_pg_memory = {
-    "t4g.small"  = { shared_buffers = "512MB", effective_cache_size = "1GB" }
-    "t4g.medium" = { shared_buffers = "1GB", effective_cache_size = "2GB" }
-    "t4g.large"  = { shared_buffers = "2GB", effective_cache_size = "4GB" }
+    "t4g.micro"  = { shared_buffers = "128MB", effective_cache_size = "256MB", api_mem_limit = "384m" }
+    "t4g.small"  = { shared_buffers = "512MB", effective_cache_size = "1GB", api_mem_limit = "768m" }
+    "t4g.medium" = { shared_buffers = "1GB", effective_cache_size = "2GB", api_mem_limit = "1536m" }
+    "t4g.large"  = { shared_buffers = "2GB", effective_cache_size = "4GB", api_mem_limit = "3072m" }
   }
 
   brain_current_az = var.brain_data_volumes[var.brain_data_volume_current].az
@@ -25,9 +27,10 @@ locals {
   }
   brain_registry = split("/", aws_ecr_repository.brain_postgres.repository_url)[0]
 
-  # What host/lib.sh reads, key for key (the table under "Interface between
-  # Terraform and the host" in the brain's design). Plain KEY=value, no
-  # secrets: that file has no quoting. Guard: brain_env_is_plain_key_value_the_host_files_read.
+  # The keys host/lib.sh and compose.yaml read from /etc/brain/brain.env. Plain
+  # KEY=value, no secrets: lib.sh does not unquote. Guard:
+  # brain_env_is_plain_key_value_the_host_files_read (the keys must equal the
+  # ones the host files require, plus the optional ones named there).
   brain_env = local.brain_enabled ? {
     AWS_REGION             = "ap-southeast-2"
     BRAIN_DATA_DEVICE      = "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(aws_ebs_volume.brain_data[var.brain_data_volume_current].id, "-", "")}"
@@ -37,6 +40,7 @@ locals {
     BRAIN_SIGNALS_BUCKET   = aws_s3_bucket.brain_signals.bucket
     BRAIN_TLS_SANS         = "${aws_eip.brain[0].public_dns},postgres,localhost"
     BRAIN_PG_FLAGS         = "-c shared_buffers=${local.brain_pg_memory[var.brain_instance_type].shared_buffers} -c effective_cache_size=${local.brain_pg_memory[var.brain_instance_type].effective_cache_size}"
+    BRAIN_API_MEM_LIMIT    = local.brain_pg_memory[var.brain_instance_type].api_mem_limit
     BRAIN_APP_DB_SECRET_ID = aws_secretsmanager_secret.app_db.name
     BRAIN_LOG_GROUP_API    = aws_cloudwatch_log_group.brain_api.name
     BRAIN_LOG_GROUP_PG     = aws_cloudwatch_log_group.brain_postgres.name
@@ -166,6 +170,33 @@ resource "aws_instance" "brain" {
 
   lifecycle {
     ignore_changes = [ami]
+
+    # The embedded files are checked here, against the one declaration that
+    # embeds them, so a file added under infra/brain/ is covered the moment the
+    # user data carries it. A file holding the delimiter would end its heredoc
+    # early and run the rest as root on the instance; the user data is readable
+    # by anyone who can describe the instance, so nothing in it may look like
+    # a secret. Guard: brain_host_files_embed_cleanly_and_hold_no_secret.
+    precondition {
+      condition = alltrue([
+        for f in local.brain_host_file_set :
+        !strcontains(file("${local.brain_dir}/${f}"), local.brain_heredoc_end)
+      ])
+      error_message = "A file under infra/brain/ contains ${local.brain_heredoc_end}, the line that ends its heredoc in the user data."
+    }
+    precondition {
+      condition = alltrue([
+        for text in concat(
+          [for f in local.brain_host_file_set : file("${local.brain_dir}/${f}")],
+          [file("${path.module}/brain_user_data.sh.tftpl"), jsonencode(local.brain_env)],
+          ) : (
+          !can(regex("(AKIA|ASIA)[0-9A-Z]{16}", text)) &&
+          !can(regex("-----BEGIN [A-Z ]*PRIVATE KEY", text)) &&
+          !can(regex("(?i)aws_secret_access_key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+]{20,}", text))
+        )
+      ])
+      error_message = "The brain's user data holds a secret-shaped value (an access key id, a private key or a secret access key)."
+    }
   }
 }
 

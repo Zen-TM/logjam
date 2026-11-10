@@ -71,8 +71,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
   containers use the instance role), has no key pair, and takes its two
   switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
-  in-place update. Guards: `brain_is_absent_by_default`,
-  `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`.
+  in-place update. Its credit mode is `unlimited` by default, and the surplus
+  alarm is what notices a charge. Guards: `brain_is_absent_by_default`,
+  `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`,
+  `brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus`.
 - **The brain's data volume and Elastic IP are never destroyed** (`prevent_destroy`:
   the disk holds the only copy of the database between backups, the address's
   DNS name is in the database certificate). Only the current entry of
@@ -83,7 +85,11 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The brain's host files travel inline in its user data**, so any change to
   `brain/` (outside `postgres/` and `tests/`) or to `brain.env` replaces the
   instance: minutes of downtime, data volume kept, and the signed plan shows it
-  as a changed `brain_user_data_sha256`. The gzipped script stays under 15,000
+  as a changed `brain_user_data_sha256`. So those files are in prod's plan
+  scope and the apply workflow's paths (`infra/scripts/plan-summary.mjs`,
+  `.github/workflows/terraform-apply.yml`; guard: the scope cases in
+  `plan-summary.test.mjs`): a PR touching them gets a signed plan and applies on
+  merge, and the instance never falls behind `main`. The gzipped script stays under 15,000
   bytes (EC2 refuses 16,384), holds no secret-shaped value, and the keys it
   writes to `brain.env` are the keys the host scripts require. Guards:
   `brain_user_data_stays_within_the_ec2_limit`,

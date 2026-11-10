@@ -1031,33 +1031,18 @@ run "brain_host_files_embed_cleanly_and_hold_no_secret" {
     target = [aws_instance.brain]
   }
 
-  # Mutation: a line `BRAIN_HOST_FILE_EOF` (or a trailing text containing it)
-  # in a file under infra/brain/host or compose*.yaml ends its heredoc early
-  # and the rest of the file runs as shell on the instance as root.
+  # The two checks are preconditions of aws_instance.brain, which run against
+  # the same list of files the user data embeds, so every run that plans the
+  # instance errors when one fails (the first of them is red, the rest skip).
+  # Mutation: a line `BRAIN_HOST_FILE_EOF` in any file under infra/brain/
+  # that is embedded (it would end its heredoc early and run the rest as root
+  # on the instance); an access key id (AKIA...), a private key block or an
+  # `aws_secret_access_key=<value>` line in one of them, in the user-data
+  # template or in brain.env (the user data is readable by anyone who can
+  # describe the instance, CI's read-only roles included).
   assert {
-    condition = length(aws_instance.brain) == 1 && alltrue([
-      for f in setunion(fileset("../../../brain", "host/**"), fileset("../../../brain", "compose*.yaml")) :
-      !strcontains(file("../../../brain/${f}"), "BRAIN_HOST_FILE_EOF")
-    ])
-    error_message = "A host file contains the heredoc delimiter that embeds it in the user data."
-  }
-
-  # Mutation: pasting an access key id (AKIA...), a private key block or an
-  # `aws_secret_access_key=<value>` line into a host file, the user-data template or
-  # brain.env. The user data is readable by anyone who can describe the
-  # instance, including CI's read-only roles.
-  assert {
-    condition = length(aws_instance.brain) == 1 && alltrue([
-      for f in concat(
-        [for f in setunion(fileset("../../../brain", "host/**"), fileset("../../../brain", "compose*.yaml")) : "../../../brain/${f}"],
-        ["brain_user_data.sh.tftpl", "brain_instance.tf"],
-        ) : (
-        !can(regex("(AKIA|ASIA)[0-9A-Z]{16}", file(f))) &&
-        !can(regex("-----BEGIN [A-Z ]*PRIVATE KEY", file(f))) &&
-        !can(regex("(?i)aws_secret_access_key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+]{20,}", file(f)))
-      )
-    ]) && !can(regex("(AKIA|ASIA)[0-9A-Z]{16}|PRIVATE KEY", jsonencode(output.brain_host_env)))
-    error_message = "A secret-shaped value is in the brain's user data sources (they are not secret: nothing in them may be)."
+    condition     = length(aws_instance.brain) == 1
+    error_message = "The brain's instance must plan: a host file holds the heredoc delimiter or a secret-shaped value (see the precondition errors above)."
   }
 }
 
@@ -1093,6 +1078,7 @@ run "brain_env_is_plain_key_value_the_host_files_read" {
     target = [aws_instance.brain]
   }
 
+  # The files that read the keys are the host scripts and the Compose files.
   # Mutation: renaming a key (BRAIN_SIGNALS_BUCKET to BRAIN_SIGNAL_BUCKET) or
   # dropping one in brain_instance.tf, or the same in the host files: lib.sh
   # and Compose (`${KEY:?}`) refuse to start without a key the host needs,
@@ -1102,14 +1088,14 @@ run "brain_env_is_plain_key_value_the_host_files_read" {
       toset(flatten([
         for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) :
         [for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):\\?", file("../../../brain/${f}")) : m[0]]
-      ])) == setsubtract(toset(keys(output.brain_host_env)), ["BRAIN_PG_FLAGS"]) &&
+      ])) == setsubtract(toset(keys(output.brain_host_env)), ["BRAIN_PG_FLAGS", "BRAIN_API_MEM_LIMIT"]) &&
       alltrue([
         for k in keys(output.brain_host_env) : anytrue([
           for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) : strcontains(file("../../../brain/${f}"), k)
         ])
       ])
     )
-    error_message = "brain.env must hold exactly the keys the host scripts and Compose require, plus BRAIN_PG_FLAGS."
+    error_message = "brain.env must hold exactly the keys the host scripts and Compose require, plus the optional BRAIN_PG_FLAGS and BRAIN_API_MEM_LIMIT."
   }
 
   # Mutation: quoting a value or putting a newline in one. lib.sh reads
@@ -1124,8 +1110,8 @@ run "brain_env_is_plain_key_value_the_host_files_read" {
   # Mutation: a memory setting for another size, or the flags not following
   # brain_instance_type.
   assert {
-    condition     = output.brain_host_env["BRAIN_PG_FLAGS"] == "-c shared_buffers=512MB -c effective_cache_size=1GB"
-    error_message = "A t4g.small must run Postgres with shared_buffers=512MB and effective_cache_size=1GB."
+    condition     = output.brain_host_env["BRAIN_PG_FLAGS"] == "-c shared_buffers=512MB -c effective_cache_size=1GB" && output.brain_host_env["BRAIN_API_MEM_LIMIT"] == "768m"
+    error_message = "A t4g.small must run Postgres with shared_buffers=512MB and effective_cache_size=1GB and the API with a 768m limit."
   }
 
   # Mutation: the by-id path built from anything but the current volume's id.
@@ -1199,6 +1185,7 @@ run "brain_alarms_act_on_the_instance" {
   command = plan
   variables {
     brain_pg_image_tag = "test"
+    brain_cpu_credits  = "standard"
   }
   plan_options {
     target = [
@@ -1211,7 +1198,9 @@ run "brain_alarms_act_on_the_instance" {
 
   # Mutation: swapping the two actions (a failed system check would reboot a
   # host that needs moving, a failed instance check would "recover" one that
-  # needs a reboot), dropping the topic from either, or another dimension.
+  # needs a reboot), dropping the topic from either, another dimension, or an
+  # alarm description without its "First:" step (alarms.md says each email
+  # repeats it).
   assert {
     condition = (
       aws_cloudwatch_metric_alarm.brain_system_status_failed[0].metric_name == "StatusCheckFailed_System" &&
@@ -1220,34 +1209,65 @@ run "brain_alarms_act_on_the_instance" {
       toset(aws_cloudwatch_metric_alarm.brain_instance_status_failed[0].alarm_actions) == toset(["arn:aws:automate:ap-southeast-2:ec2:reboot", aws_sns_topic.alerts.arn]) &&
       alltrue([
         for a in [aws_cloudwatch_metric_alarm.brain_system_status_failed[0], aws_cloudwatch_metric_alarm.brain_instance_status_failed[0], aws_cloudwatch_metric_alarm.brain_cpu_credits_low[0]] :
-        a.dimensions["InstanceId"] == aws_instance.brain[0].id && length(a.dimensions) == 1
+        a.dimensions["InstanceId"] == aws_instance.brain[0].id && length(a.dimensions) == 1 && strcontains(a.alarm_description, "First: ")
       ])
     )
-    error_message = "The status-check alarms must recover (system) and reboot (instance) this instance and tell the topic."
+    error_message = "The status-check alarms must recover (system) and reboot (instance) this instance and tell the topic, and each says what to do first."
   }
 
   # Mutation: dropping the credit-mode condition. Standard mode watches the
-  # balance; unlimited mode (next run) watches the surplus charge.
+  # balance; unlimited mode (the default, next run) watches the surplus charge.
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 1 && length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0
     error_message = "Standard credit mode must have the low-balance alarm and not the surplus alarm."
   }
 }
 
-run "brain_unlimited_credits_alarm_the_surplus" {
+run "brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus" {
   command = plan
   variables {
     brain_pg_image_tag = "test"
-    brain_cpu_credits  = "unlimited"
   }
   plan_options {
     target = [
+      aws_instance.brain,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
       aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
     ]
   }
+
+  # Mutation: the variable's default going back to "standard" (unlimited is
+  # the maintainer's choice), or the surplus alarm not following the mode. A
+  # surplus charge shows on the bill only, so the alarm is how it is noticed.
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 && length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 1
-    error_message = "Unlimited credit mode must have the surplus alarm and not the low-balance alarm."
+    condition = (
+      aws_instance.brain[0].credit_specification[0].cpu_credits == "unlimited" &&
+      length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 1 &&
+      strcontains(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged[0].alarm_description, "First: ")
+    )
+    error_message = "The brain's credit mode must default to unlimited, with the surplus alarm and no low-balance alarm."
+  }
+}
+
+run "brain_instance_sizes_set_postgres_and_api_memory" {
+  command = plan
+  variables {
+    brain_pg_image_tag  = "test"
+    brain_instance_type = "t4g.micro"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: a different number for a size in local.brain_pg_memory, or the
+  # API limit not following the instance type. Small's values are asserted in
+  # brain_env_is_plain_key_value_the_host_files_read.
+  assert {
+    condition = (
+      output.brain_host_env["BRAIN_PG_FLAGS"] == "-c shared_buffers=128MB -c effective_cache_size=256MB" &&
+      output.brain_host_env["BRAIN_API_MEM_LIMIT"] == "384m"
+    )
+    error_message = "A t4g.micro must run Postgres with shared_buffers=128MB and effective_cache_size=256MB and the API with a 384m limit."
   }
 }
