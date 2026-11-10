@@ -191,9 +191,9 @@ resource "aws_cloudwatch_metric_alarm" "brain_watchdog_dead" {
 }
 
 # One CPU alarm for both stories: a client or release eating the CPU, and
-# the bill. Idle is about 5% of the two vCPUs (measured on 2026-11-10 before
-# the timers stopped starting the AWS CLI, which should take it to about 3%:
-# calculated from their measured per-call CPU, not measured on a whole brain).
+# the bill. Idle is about 3% of the two vCPUs (0.066 vCPU, measured on a
+# scratch copy on 2026-11-11; it was 5% while the timers still started the AWS
+# CLI).
 # A scratch copy measured 21, 36, 50 and 64% at 20, 40, 60 and 80 requests a
 # second; the API is one Node process on one core and fails at 100. A
 # t4g.micro's free allowance is 10% (0.2 vCPU), so a month in which no hour
