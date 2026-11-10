@@ -33,7 +33,7 @@
 # fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
 # brain_postgres fails "brain_postgres: the Compose file that builds it"; dropping
 # scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/brain/ from terraform fails "terraform: a brain host file its guards read"; a scoped job in any workflow whose
+# infra/brain/ from terraform fails "terraform: a brain host file its guards read"; dropping infra/lambda/brain-watchdog/ from terraform fails "terraform: the watchdog source the plan zips"; a scoped job in any workflow whose
 # `if:` is not the fail-open expression, or a `changes` output wired to another
 # area's value, fails that workflow's checks.
 set -uo pipefail
@@ -70,7 +70,8 @@ paths_for() {
     # infra/brain/ because envs/prod/tests reads the host files the brain's
     # user data embeds (its size and secret guards); postgres/ and tests/ there
     # run it needlessly, which costs seconds.
-    terraform) echo '^(infra/terraform/|infra/brain/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
+    # infra/lambda/brain-watchdog/ because the plan zips it (source_code_hash).
+    terraform) echo '^(infra/terraform/|infra/brain/|infra/lambda/brain-watchdog/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
     # What `make setup` reads on a fresh machine (setup-smoke.yml).
     setup_smoke) echo '^(mise\.toml|Makefile|docs/dev-setup\.md|\.github/workflows/setup-smoke\.yml)$|(^|/)package-lock\.json$|^topo/requirements[^/]*\.txt$' ;;
     # The Postgres image's build context and tests, and the Compose file that
@@ -164,6 +165,7 @@ self_test() {
   check "terraform: its workflow"                         terraform true  0 '.github/workflows/terraform-ci.yml'
   check "terraform: another infra script"                 terraform false 0 'infra/scripts/deploy-guard.sh'
   check "terraform: a brain host file its guards read"    terraform true  0 'infra/brain/host/lib.sh'
+  check "terraform: the watchdog source the plan zips"    terraform true  0 'infra/lambda/brain-watchdog/handler.py'
   check "setup_smoke: a nested lockfile"                  setup_smoke true  0 'frontend/package-lock.json'
   check "setup_smoke: the root lockfile"                  setup_smoke true  0 'package-lock.json'
   check "setup_smoke: mise.toml"                          setup_smoke true  0 'mise.toml'
