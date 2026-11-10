@@ -57,7 +57,8 @@
 - **A background sweep runs inside `startTopoJobReaper`'s tick, never on its
   own timer:** the tick runs only in the process holding the database's
   advisory lock (`lib/sweepLeader.ts`), so two API processes never sweep
-  twice. Guards: `lib/topoJobReaper.leader.unit.test.ts`,
+  twice. Guards: `lib/topoJobReaper.leader.unit.test.ts` (a tick goes through
+  the leader), `lib/noOwnTimer.unit.test.ts` (no other `setInterval`),
   `src/__tests__/sweepLeader.test.ts`.
 - **AWS clients are the singletons in `services/awsClients.ts`:** they honour
   `AWS_ENDPOINT_URL`, so local dev stays on MiniStack.
