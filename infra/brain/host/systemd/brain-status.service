@@ -1,6 +1,5 @@
 [Unit]
 Description=Write the canary and status.json
-After=brain-boot.service
 
 [Service]
 Type=oneshot

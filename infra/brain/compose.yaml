@@ -22,6 +22,8 @@ services:
       # else, so a restart on a bare directory cannot make one.
       BRAIN_INIT: ${BRAIN_INIT:-none}
       BRAIN_TLS_SANS: ${BRAIN_TLS_SANS:?}
+      # pgBackRest connects as the agent, not the superuser (host/agent.sql).
+      PGBACKREST_PG1_USER: brain_agent
       POSTGRES_DB: logjam
       # Gives the superuser no password: the initial pg_hba.conf this setting
       # shapes is replaced by the image's prod one before the server listens,

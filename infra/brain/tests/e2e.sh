@@ -11,20 +11,24 @@
 # It refuses to run where /opt/brain, /etc/brain or a mounted /data exist, and
 # only ever formats, mounts or detaches the loop device it makes itself. Run it
 # on a CI runner or in a throwaway container, never on a real brain.
+# E2E_FAIL_FAST=1 stops at the first failure (for applying a mutation);
 # E2E_KEEP=1 leaves the host as it ends, for debugging (remove it by hand);
 # E2E_PREBUILT=1 skips the image builds (PG_IMAGE and API_IMAGE must exist);
 # E2E_MS_PORT and E2E_TLS_PORT move the two ports it publishes (default 56010
 # and 56011); the API listens on port 80 of the host, as on the brain.
 #
 # Mutations, each applied once and seen red (scenario in brackets):
-#   host/boot.sh: `[ "${BRAIN_BOOTSTRAP:-}" = 1 ]` -> `[ "${BRAIN_BOOTSTRAP:-1}" != 0 ]` [3]
+#   host/lib.sh: bootstrap_allowed true for anything but the exact value 1 (`= 1` -> `!= 0`) [3]
 #   host/boot.sh: format a device that has a signature (`0) ;;` -> `0) mkfs.ext4 -F ...`) [3]
 #   host/release-agent.sh: not reading the switch (`if false` for `!= on`) [5]
 #   host/lib.sh: serving_state answering on for anything but exactly on [5]
 #   host/release-agent.sh: writing LOGJAM_RUNTIME=prod before the release env [6]
 #   host/status.sh: one more key in status.json [9]
 #   compose.yaml: dropping `create_host_path: false` from the data mount [10]
-#   host/canary.sql: GRANT ALL ON brain.canary [1]
+#   host/agent.sql: GRANT ALL ON brain.canary [1]
+#   compose.yaml: dropping PGBACKREST_PG1_USER (pgBackRest connects as the superuser) [2]
+#   host/status.sh: dropping `SELECT pg_switch_wal()` [8b]
+#   host/boot.sh: ignoring the restore marker (`if [ -e "$marker" ]` -> `if false`) [8c]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit
@@ -46,7 +50,7 @@ fails=0
 S=setup
 
 ok() { echo "ok   - $S: $1"; }
-bad() { echo "FAIL - $S: $1"; fails=1; }
+bad() { echo "FAIL - $S: $1"; fails=1; [ -z "${E2E_FAIL_FAST:-}" ] || exit 1; }
 check() { if "${@:2}"; then ok "$1"; else bad "$1"; fi; }
 not() { ! "$@"; }
 fatal() { bad "$1"; dump; exit 1; }
@@ -91,7 +95,7 @@ cleanup() {
   r docker rm -f brain-e2e-ministack brain-e2e-tls > /dev/null 2>&1
   r docker network rm brain-e2e > /dev/null 2>&1
   detach_disk
-  r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-e2e-serving /run/brain-release.lock
+  r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-e2e-serving /run/brain-e2e-bootstrap /run/brain-release.lock
   [ -z "${IMDS_PID:-}" ] || kill "$IMDS_PID" 2> /dev/null
   rm -rf "$WORK"
 }
@@ -105,15 +109,20 @@ fingerprint() { r openssl x509 -in /data/postgres/server.crt -noout -fingerprint
 ready() { curl -fsS -o /dev/null -m 3 http://127.0.0.1:80/ready; }
 api_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid api)" | grep -qx "$1"; }
 pg_has() { r docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cid postgres)" | grep -qx "$1"; }
+superuser_connected() { # <extra docker logs args>
+  r docker logs "$@" "$(cid postgres)" 2>&1 | grep -q 'connection authorized: user=postgres'
+}
+restore_reported() {
+  [ "$(status_field last_restore_at)" != None ] && [ "$(status_field last_restore_lag_seconds)" -ge 0 ]
+}
 api_refused() { r docker logs "$(cid api)" 2>&1 | grep -q 'AUTH_MODE=fake refused'; }
 archived() { # <wal file>: that segment or a later one reached the repository
   local got; got=$(sql postgres 'select last_archived_wal from pg_stat_archiver')
   [ -n "$got" ] && [[ ! $got < $1 ]]
 }
-canary() { # <database> <psql args>: connect as the canary, as status.sh does
+as_agent() { # <database> <psql args>: connect as the agent role, as status.sh does
   local db=$1; shift
-  r docker exec -e PGPASSWORD="$(r cat /data/brain/canary.pw)" "$(cid postgres)" \
-    psql "host=localhost user=brain_canary dbname=$db sslmode=verify-full sslrootcert=/var/lib/postgresql/data/server.crt" -tAXq "$@"
+  r docker exec -u postgres "$(cid postgres)" psql -U brain_agent -d "$db" -tAXq "$@"
 }
 app_connects() {
   [ "$(r docker exec -e PGPASSWORD="$APP_PW" "$(cid postgres)" psql "host=localhost user=logjam_app dbname=logjam sslmode=verify-full sslrootcert=/var/lib/postgresql/data/server.crt" -tAXqc 'select current_user')" = logjam_app ]
@@ -135,6 +144,7 @@ PY
 }
 point() { release "$@" | aws s3 cp - "s3://$SIGNALS/release.json" --only-show-errors; }
 serving() { printf '%s' "$1" | r tee /run/brain-e2e-serving > /dev/null; }
+bootstrap_flag() { printf '%s' "$1" | r tee /run/brain-e2e-bootstrap > /dev/null; }
 
 trap cleanup EXIT
 
@@ -143,6 +153,7 @@ if [ -e /opt/brain ] || [ -e /etc/brain ] || mountpoint -q /data; then
   echo "refusing: this host already has a brain (/opt/brain, /etc/brain or a mounted /data)"; trap - EXIT; exit 1
 fi
 if ss -ltn 'sport = :80' | grep -q LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
+r rm -rf /run/brain-e2e-serving /run/brain-e2e-bootstrap # a killed earlier run's switches
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-southeast-2
 export AWS_ENDPOINT_URL=http://127.0.0.1:$MS_PORT
 MS_ENDPOINT_IN=http://host.docker.internal:$MS_PORT
@@ -193,7 +204,6 @@ r cp -a infra/brain/. /opt/brain/
 cat <<EOF | r tee /etc/brain/brain.env > /dev/null
 AWS_REGION=ap-southeast-2
 BRAIN_DATA_DEVICE=/run/brain-e2e-data
-BRAIN_BOOTSTRAP=1
 BRAIN_PG_IMAGE=$PG_IMAGE
 BRAIN_API_REPO=$API_REPO
 BRAIN_BACKUP_BUCKET=$BACKUPS
@@ -209,6 +219,7 @@ AWS_SECRET_ACCESS_KEY=test
 BRAIN_BACKUP_ENDPOINT=host.docker.internal:$TLS_PORT
 BRAIN_COMPOSE_EXTRA=/opt/brain/tests/compose.test.yaml
 BRAIN_SERVING_FILE=/run/brain-e2e-serving
+BRAIN_BOOTSTRAP_FILE=/run/brain-e2e-bootstrap
 EOF
 
 # --- static ----------------------------------------------------------------------
@@ -227,23 +238,23 @@ fi
 # --- 3. a blank volume with nothing to restore and no flag: refuse -----------------
 S="3 refusing an empty database"
 new_disk
-for flag in 0 "" yes true; do
-  brain_env BRAIN_BOOTSTRAP "$flag"
+refused() { # <what the switch is>: boot.sh stops, says so, and creates nothing
   boot; rc=$?
-  check "BRAIN_BOOTSTRAP='$flag' exits non-zero (got $rc)" [ "$rc" != 0 ]
-  check "BRAIN_BOOTSTRAP='$flag' says why" grep -q refusing "$WORK/boot.log"
-  check "BRAIN_BOOTSTRAP='$flag' creates no data directory" [ ! -e /data/postgres ]
-  check "BRAIN_BOOTSTRAP='$flag' starts no container" [ -z "$(r docker ps -aq --filter label=com.docker.compose.project=brain)" ]
+  check "$1: boot.sh exits non-zero (got $rc)" [ "$rc" != 0 ]
+  check "$1: and says why" grep -q refusing "$WORK/boot.log"
+  check "$1: no data directory" [ ! -e /data/postgres ]
+  check "$1: no container" [ -z "$(r docker ps -aq --filter label=com.docker.compose.project=brain)" ]
+}
+for flag in 0 "" yes true "1 please" 11; do
+  bootstrap_flag "$flag"; refused "the bootstrap tag reading '$flag'"
 done
-brain_env BRAIN_BOOTSTRAP
-boot; rc=$?
-check "an absent BRAIN_BOOTSTRAP exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "an absent BRAIN_BOOTSTRAP creates no data directory" [ ! -e /data/postgres ]
+r rm -f /run/brain-e2e-bootstrap; refused "no bootstrap tag"
+r mkdir /run/brain-e2e-bootstrap; refused "an unreadable bootstrap tag"; r rmdir /run/brain-e2e-bootstrap
 check "the backup repository is still empty" [ -z "$(aws s3 ls "s3://$BACKUPS" --recursive)" ]
 check "the boot mode is refused" [ "$(cat /run/brain/boot-mode)" = refused ]
 
 S="3 never formatting what has a signature"
-brain_env BRAIN_BOOTSTRAP 0
+bootstrap_flag 0
 reboot; new_disk
 r mkfs.ext4 -q -L precious "$LOOP"
 mkdir "$WORK/m" && r mount "$LOOP" "$WORK/m" && echo keep | r tee "$WORK/m/marker" > /dev/null && r umount "$WORK/m"
@@ -272,8 +283,8 @@ lcompose --profile '*' down > /dev/null 2>&1
 # --- 1. first boot ------------------------------------------------------------------
 S="1 bootstrap"
 new_disk
-brain_env BRAIN_BOOTSTRAP 1
-boot || fatal "boot.sh failed on a blank volume with BRAIN_BOOTSTRAP=1"
+bootstrap_flag 1
+boot || fatal "boot.sh failed on a blank volume with the bootstrap tag at 1"
 check "the device is formatted and mounted at /data" [ "$(findmnt -n -o FSTYPE /data)" = ext4 ]
 check "the database logjam exists" [ "$(sql postgres "select count(*) from pg_database where datname='logjam'")" = 1 ]
 check "logjam_app exists and is not a superuser" [ "$(sql postgres "select count(*) from pg_roles where rolname='logjam_app' and not rolsuper and not rolcreatedb and not rolcreaterole")" = 1 ]
@@ -284,11 +295,16 @@ for name in brain.e2e.test postgres localhost; do check "the certificate names $
 check "no API container" [ -z "$(cid api)" ]
 check "the boot mode is bootstrap" [ "$(cat /run/brain/boot-mode)" = bootstrap ]
 check "the repository holds a backup" [ "$(fulls)" = 1 ]
-check "the canary updates its row" canary postgres -c 'update brain.canary set at = now()'
-check "the canary cannot delete it" not canary postgres -c 'delete from brain.canary'
-check "the canary cannot make a table in its schema" not canary postgres -c 'create table brain.x (a int)'
-check "the canary cannot make a table in public" not canary postgres -c 'create table public.x (a int)'
-check "the canary cannot connect to the application's database" not canary logjam -c 'select 1'
+check "the agent is not a superuser" [ "$(sql postgres "select rolsuper from pg_roles where rolname='brain_agent'")" = f ]
+check "the agent has no password" [ "$(sql postgres "select rolpassword is null from pg_authid where rolname='brain_agent'")" = t ]
+check "the agent updates the canary's row" as_agent postgres -c 'update brain.canary set at = now()'
+check "the agent can run the backup functions" as_agent postgres -c "select pg_backup_start('e2e', true); select pg_backup_stop(true)"
+check "the agent cannot delete the row" not as_agent postgres -c 'delete from brain.canary'
+check "the agent cannot make a table in its schema" not as_agent postgres -c 'create table brain.x (a int)'
+check "the agent cannot make a table in public" not as_agent postgres -c 'create table public.x (a int)'
+check "the agent cannot read the roles' password hashes" not as_agent postgres -c 'select * from pg_authid'
+check "the agent cannot connect to the application's database" not as_agent logjam -c 'select 1'
+check "the agent cannot connect over TCP, with or without a password" not r docker exec -e PGPASSWORD=x "$(cid postgres)" psql "host=localhost user=brain_agent dbname=postgres sslmode=verify-full sslrootcert=/var/lib/postgresql/data/server.crt" -c 'select 1'
 identity1=$(identity); sysid1=$(sql postgres "select system_identifier from pg_control_system()")
 cert1=$(fingerprint); fulls1=$(fulls)
 
@@ -296,8 +312,9 @@ cert1=$(fingerprint); fulls1=$(fulls)
 S="2 boot again"
 reboot
 boot || fatal "boot.sh failed on a volume with a database"
+check "boot and stanza-create connected as nobody but the agent" not superuser_connected
 check "it starts on the existing data (mode existing)" [ "$(cat /run/brain/boot-mode)" = existing ]
-check "Postgres got BRAIN_INIT=none although the flag is still 1" pg_has BRAIN_INIT=none
+check "Postgres got BRAIN_INIT=none although the tag is still 1" pg_has BRAIN_INIT=none
 check "the same cluster (system identifier)" [ "$(sql postgres "select system_identifier from pg_control_system()")" = "$sysid1" ]
 check "the same roles and databases, nothing new" [ "$(identity)" = "$identity1" ]
 check "the same certificate" [ "$(fingerprint)" = "$cert1" ]
@@ -308,11 +325,12 @@ check "no API container with serving off" [ -z "$(cid api)" ]
 S="9 status.json"
 r /opt/brain/host/status.sh || bad "status.sh failed"
 check "status.json has exactly the allowlisted keys" \
-  [ "$(status_keys)" = "api_sha archive_failures boot_mode disk_used_percent last_archive_time last_full_time postgres_up schema serving time" ]
+  [ "$(status_keys)" = "api_sha archive_failures boot_mode disk_used_percent last_archive_time last_full_time last_restore_at last_restore_lag_seconds postgres_up schema serving time" ]
 check "it says Postgres is up" [ "$(status_field postgres_up)" = True ]
 check "it carries the boot mode" [ "$(status_field boot_mode)" = existing ]
 check "it carries the last full backup" [ "$(status_field last_full_time)" != None ]
 check "serving reads off" [ "$(status_field serving)" = False ]
+check "no restore yet" [ "$(status_field last_restore_at)" = None ]
 check "the canary wrote through status.sh" [ "$(sql postgres "select count(*) from brain.canary where at > now() - interval '2 minutes'")" = 1 ]
 
 # --- 4. migrate over TLS -------------------------------------------------------------------------
@@ -369,8 +387,9 @@ class H(http.server.BaseHTTPRequestHandler):
         self.reply(200 if ok else 400, b"tok")
     def do_GET(self):
         if self.headers.get("X-aws-ec2-metadata-token") != "tok": return self.reply(401)
-        if self.path == "/latest/meta-data/tags/instance/brain-serving" and os.path.exists(tag):
-            return self.reply(200, open(tag, "rb").read())
+        name = self.path.rsplit("/", 1)[1]
+        if self.path.startswith("/latest/meta-data/tags/instance/") and os.path.exists(f"{tag}.{name}"):
+            return self.reply(200, open(f"{tag}.{name}", "rb").read())
         self.reply(404)
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 PY
@@ -378,17 +397,25 @@ IMDS_PORT=${E2E_IMDS_PORT:-56012}
 python3 "$WORK/imds.py" "$IMDS_PORT" "$WORK/tag" & IMDS_PID=$!
 wait_for 20 curl -s "http://127.0.0.1:$IMDS_PORT/" || bad "the metadata stand-in does not start"
 brain_env BRAIN_SERVING_FILE
+brain_env BRAIN_BOOTSTRAP_FILE
 brain_env BRAIN_IMDS_URL "http://127.0.0.1:$IMDS_PORT"
 state() { r bash -c '. /opt/brain/host/lib.sh; serving_state'; }
-printf on > "$WORK/tag"; check "the instance tag on reads on" [ "$(state)" = on ]
-printf off > "$WORK/tag"; check "the instance tag off reads off" [ "$(state)" = off ]
-printf 'yes' > "$WORK/tag"; check "another tag value reads off" [ "$(state)" = off ]
-rm -f "$WORK/tag"; check "no tag reads off" [ "$(state)" = off ]
-printf on > "$WORK/tag"; brain_env BRAIN_IMDS_URL "http://127.0.0.1:1"
+tag() { printf '%s' "$2" > "$WORK/tag.$1"; }
+can_bootstrap() { r bash -c '. /opt/brain/host/lib.sh; if bootstrap_allowed; then echo yes; else echo no; fi'; }
+tag brain-serving on; check "the instance tag on reads on" [ "$(state)" = on ]
+tag brain-serving off; check "the instance tag off reads off" [ "$(state)" = off ]
+tag brain-serving yes; check "another tag value reads off" [ "$(state)" = off ]
+rm -f "$WORK/tag.brain-serving"; check "no tag reads off" [ "$(state)" = off ]
+tag brain-bootstrap 1; check "the bootstrap tag 1 allows a bootstrap" [ "$(can_bootstrap)" = yes ]
+for v in 0 true "" 2; do tag brain-bootstrap "$v"; check "the bootstrap tag '$v' does not" [ "$(can_bootstrap)" = no ]; done
+rm -f "$WORK/tag.brain-bootstrap"; check "no bootstrap tag does not" [ "$(can_bootstrap)" = no ]
+tag brain-serving on; tag brain-bootstrap 1; brain_env BRAIN_IMDS_URL "http://127.0.0.1:1"
 check "an unreachable metadata service reads off" [ "$(state)" = off ]
+check "...and does not allow a bootstrap" [ "$(can_bootstrap)" = no ]
 kill "$IMDS_PID"; IMDS_PID=
 brain_env BRAIN_IMDS_URL
 brain_env BRAIN_SERVING_FILE /run/brain-e2e-serving
+brain_env BRAIN_BOOTSTRAP_FILE /run/brain-e2e-bootstrap
 serving on; agent
 
 # --- 6. a release cannot weaken the host ----------------------------------------------------------------------
@@ -419,14 +446,17 @@ check "...and answers /ready" wait_for 90 ready
 
 # --- 8. losing the disk ---------------------------------------------------------------------------------------------
 S="8 losing the disk"
+since=$(date -u +%Y-%m-%dT%H:%M:%S)
 r /opt/brain/host/backup-full.sh > "$WORK/backup.log" 2>&1 || { bad "backup-full.sh failed"; tail "$WORK/backup.log"; }
+for _ in 1 2 3; do r /opt/brain/host/status.sh || bad "status.sh failed"; done
+check "a full backup and three canary runs connected as nobody but the agent" not superuser_connected --since "$since"
 check "backup-full.sh adds a full backup" [ "$(fulls)" = "$((fulls1 + 1))" ]
 sql logjam "create table e2e_rows as select g as n from generate_series(1, 1000) g" > /dev/null
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
 check "the WAL with the rows is archived" wait_for 120 archived "$want"
 fulls2=$(fulls)
-brain_env BRAIN_BOOTSTRAP 0
+# The bootstrap tag stays 1: a blank volume with a backup in the repository restores, whatever it says.
 reboot; new_disk
 boot; rc=$?
 [ "$rc" = 0 ] || fatal "boot.sh did not restore onto the blank volume (exit $rc)"
@@ -435,11 +465,62 @@ check "the rows are there" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1
 check "the same certificate came back" [ "$(fingerprint)" = "$cert1" ]
 check "a full backup was taken after the restore" [ "$(fulls)" = "$((fulls2 + 1))" ]
 check "logjam_app still connects with the secret's password" app_connects
-check "the canary works on the new volume" canary postgres -c 'update brain.canary set at = now()'
+check "the agent works on the new volume" as_agent postgres -c 'update brain.canary set at = now()'
 check "serving was on, so the API is back at the pointer's release" [ "$(api_tag)" = "$API_REPO:release-a" ]
 check "...and answers /ready" wait_for 90 ready
 r /opt/brain/host/status.sh || bad "status.sh failed after the restore"
 check "status.json says restore" [ "$(status_field boot_mode)" = restore ]
+check "...and when, and how stale the restored data was" restore_reported
+
+# --- 8b. the canary's minute, after a recovery --------------------------------------------------------------------
+# archive_timeout alone stalls for up to checkpoint_timeout after a restore or a crash
+# recovery, so rows written then are lost with the disk unless status.sh closes the WAL
+# segment itself. Each round: two minutes of one row a second, status.sh as its timer would
+# run it (at 0, 60 and 120 s), then the disk is lost and restored.
+S="8b the canary's minute"
+sql logjam "create table e2e_stream (ts timestamptz)" > /dev/null
+lost_seconds() { # two minutes of writes, the disk lost, restored; sets LOST to the seconds of rows that did not come back
+  r docker exec -u postgres "$(cid postgres)" psql -U postgres -d logjam -qXc \
+    "do \$\$ begin for i in 1..125 loop insert into e2e_stream values (clock_timestamp()); commit; perform pg_sleep(1); end loop; end \$\$" &
+  local writer=$! i disaster newest
+  for i in 1 2 3; do r /opt/brain/host/status.sh || bad "status.sh failed"; [ "$i" = 3 ] || sleep 60; done
+  wait "$writer"
+  disaster=$(date +%s)
+  reboot; new_disk
+  boot || fatal "boot.sh did not restore the volume"
+  newest=$(sql logjam 'select extract(epoch from max(ts))::bigint from e2e_stream')
+  LOST=$((disaster - newest))
+}
+lost_seconds
+check "after a restore, a second loss of the disk loses under 90 s of rows (lost $LOST s)" [ "$LOST" -lt 90 ]
+r docker kill "$(cid postgres)" > /dev/null; r docker start "$(cid postgres)" > /dev/null 2>&1
+check "Postgres is back on the same data after a kill" wait_for 120 bash -c "$SUDO docker exec $(cid postgres) pg_isready -q -h 127.0.0.1"
+until [ "$(as_agent postgres -c 'select pg_is_in_recovery()')" = f ]; do sleep 1; done
+lost_seconds
+check "after a crash recovery, a loss of the disk loses under 90 s of rows (lost $LOST s)" [ "$LOST" -lt 90 ]
+
+# --- 8c. a restore that did not finish -------------------------------------------------------------------------
+# What an interrupted restore leaves: a marker on the volume and a half-filled data directory
+# (here with a PG_VERSION, the worst case). boot.sh empties it and restores again.
+S="8c an interrupted restore"
+reboot; new_disk
+r mkfs.ext4 -q -L brain-data "$LOOP"
+r mount "$LOOP" "$WORK/m"
+r mkdir -p "$WORK/m/postgres/base/1"
+echo 16 | r tee "$WORK/m/postgres/PG_VERSION" "$WORK/m/postgres/base/1/partial" > /dev/null
+r touch "$WORK/m/.restore-in-progress"
+r umount "$WORK/m"
+boot; rc=$?
+check "boot.sh restores over the half-finished directory (exit $rc)" [ "$rc" = 0 ]
+check "boot mode: restore" [ "$(cat /run/brain/boot-mode)" = restore ]
+check "its leftovers are gone" [ ! -e /data/postgres/base/1/partial ]
+check "the marker is gone" [ ! -e /data/.restore-in-progress ]
+check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
+r mkdir -p /data/postgres/junk
+reboot
+boot > /dev/null 2>&1; rc=$?
+check "an existing database is not touched by a boot without the marker (exit $rc)" [ "$rc" = 0 ]
+check "...and its extra files stay" [ -d /data/postgres/junk ]
 
 [ "$fails" = 0 ] || dump
 exit "$fails"
