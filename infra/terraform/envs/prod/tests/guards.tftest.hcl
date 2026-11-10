@@ -2461,3 +2461,113 @@ run "cost_ceiling_action_fires_on_actual_spend_and_is_pre_tax" {
     error_message = "The cost ceiling is a monthly pre-tax figure."
   }
 }
+
+run "signup_cap_role_does_one_update_and_writes_its_logs" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.cognito_pre_signup]
+  }
+
+  override_resource {
+    target          = aws_dynamodb_table.signup_counter
+    values          = { arn = "arn:aws:dynamodb:ap-southeast-2:620853681701:table/mock" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.cognito_pre_signup
+    values          = { arn = "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/lambda/mock" }
+    override_during = plan
+  }
+
+  # Mutation: adding an action (GetItem, PutItem, DeleteItem, Scan), a second
+  # statement, or a Resource of "*" lets a compromised or buggy function read
+  # or rewrite the counter, or another table, or write another group's logs.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.cognito_pre_signup.policy).Statement) == 2 &&
+      anytrue([
+        for st in jsondecode(aws_iam_role_policy.cognito_pre_signup.policy).Statement :
+        st.Effect == "Allow" && st.Action == "dynamodb:UpdateItem" &&
+        st.Resource == "arn:aws:dynamodb:ap-southeast-2:620853681701:table/mock"
+      ]) &&
+      anytrue([
+        for st in jsondecode(aws_iam_role_policy.cognito_pre_signup.policy).Statement :
+        st.Effect == "Allow" && toset(st.Action) == toset(["logs:CreateLogStream", "logs:PutLogEvents"]) &&
+        st.Resource == "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/lambda/mock:*"
+      ])
+    )
+    error_message = "The pre sign-up function's role may only UpdateItem on the counter table and write its own log group (cognito_signup_cap.tf)."
+  }
+}
+
+run "signup_cap_counter_table_cannot_be_deleted" {
+  command = plan
+  plan_options {
+    target = [aws_dynamodb_table.signup_counter]
+  }
+
+  # Mutation: dropping deletion_protection_enabled lets a destroy delete the
+  # counter, and the function, which fails open on a missing table, then stops
+  # capping sign-ups.
+  assert {
+    condition     = aws_dynamodb_table.signup_counter.deletion_protection_enabled == true
+    error_message = "The sign-up counter table must be protected from deletion: deleting it lifts the cap (cognito_signup_cap.tf)."
+  }
+}
+
+run "signup_cap_variable_stays_inside_the_free_tier" {
+  command = plan
+  plan_options {
+    target = [aws_lambda_function.cognito_pre_signup]
+  }
+  variables {
+    signup_cap_per_month = 10000
+  }
+
+  # Mutation: raising the validation's upper bound to 10,000 or more, or
+  # dropping it, lets a cap sit at the whole free tier with existing users on
+  # top of it.
+  expect_failures = [var.signup_cap_per_month]
+}
+
+run "cognito_pool_keeps_email_sender_and_has_pre_sign_up" {
+  command = plan
+  plan_options {
+    target = [aws_cognito_user_pool.main]
+  }
+
+  override_resource {
+    target          = aws_lambda_function.cognito_email_sender
+    values          = { arn = "arn:aws:lambda:ap-southeast-2:620853681701:function:email-mock" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_lambda_function.cognito_pre_signup
+    values          = { arn = "arn:aws:lambda:ap-southeast-2:620853681701:function:signup-mock" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_kms_key.cognito_email
+    values          = { arn = "arn:aws:kms:ap-southeast-2:620853681701:key/mock" }
+    override_during = plan
+  }
+
+  # Mutation: rewriting lambda_config without custom_email_sender or its KMS
+  # key sends every verification code through Cognito's default sender, which
+  # spam filters bin, and nothing fails a plan or a deploy.
+  assert {
+    condition = (
+      length(aws_cognito_user_pool.main.lambda_config[0].custom_email_sender) == 1 &&
+      aws_cognito_user_pool.main.lambda_config[0].custom_email_sender[0].lambda_arn == "arn:aws:lambda:ap-southeast-2:620853681701:function:email-mock" &&
+      aws_cognito_user_pool.main.lambda_config[0].kms_key_id == "arn:aws:kms:ap-southeast-2:620853681701:key/mock"
+    )
+    error_message = "The user pool must keep custom_email_sender and its KMS key (cognito.tf)."
+  }
+
+  # Mutation: dropping pre_sign_up from lambda_config leaves sign-ups
+  # uncapped, and Cognito's bill without a ceiling.
+  assert {
+    condition     = aws_cognito_user_pool.main.lambda_config[0].pre_sign_up == "arn:aws:lambda:ap-southeast-2:620853681701:function:signup-mock"
+    error_message = "The user pool must run the pre sign-up function that caps new accounts (cognito.tf)."
+  }
+}

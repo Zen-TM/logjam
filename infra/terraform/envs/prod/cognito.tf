@@ -45,6 +45,9 @@ resource "aws_cognito_user_pool" "main" {
   # Lambda, which decrypts and sends.
   lambda_config {
     kms_key_id = aws_kms_key.cognito_email.arn
+    # Caps new accounts per month (cognito_signup_cap.tf). It sits in the path
+    # of every self-service sign-up.
+    pre_sign_up = aws_lambda_function.cognito_pre_signup.arn
     custom_email_sender {
       lambda_arn     = aws_lambda_function.cognito_email_sender.arn
       lambda_version = "V1_0"

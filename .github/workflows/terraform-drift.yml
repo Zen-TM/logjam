@@ -54,6 +54,9 @@ jobs:
       - name: Build cognito-email-sender Lambda
         working-directory: infra/lambda/cognito-email-sender
         run: npm ci && npm run build
+      - name: Build cognito-pre-signup Lambda
+        working-directory: infra/lambda/cognito-pre-signup
+        run: npm ci && npm run build
 
       - name: terraform init
         run: terraform -chdir=infra/terraform/envs/prod init -input=false

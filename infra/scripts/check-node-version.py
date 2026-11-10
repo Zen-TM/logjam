@@ -34,6 +34,9 @@ MISE_PIN = re.compile(r'^\s*node\s*=\s*"([^"]+)"', re.MULTILINE)
 RUNTIME = re.compile(r'runtime\s*=\s*"nodejs(\d+)\.x"')
 
 ROOT = Path(__file__).resolve().parents[2]
+# The pre sign-up function takes its runtime from the email sender's
+# (cognito_signup_cap.tf), so one runtime check covers both.
+LAMBDAS = ("cognito-email-sender", "cognito-pre-signup")
 
 
 def major(value):
@@ -58,7 +61,7 @@ def pins(root):
         (root / "infra/terraform/envs/prod/lambda_cognito_email.tf").read_text()
     )
     lambda_types = find(
-        [root / "infra/lambda/cognito-email-sender/package.json"], TYPES_PIN
+        [root / f"infra/lambda/{name}/package.json" for name in LAMBDAS], TYPES_PIN
     )
     workflows = sorted((root / ".github/workflows").glob("*.yml"))
     unpinned = [
@@ -67,7 +70,7 @@ def pins(root):
         if len(SETUP_NODE.findall(path.read_text())) != len(find([path], WORKFLOW_PIN))
     ]
     target = find(
-        [root / "infra/lambda/cognito-email-sender/build.mjs"], ESBUILD_TARGET
+        [root / f"infra/lambda/{name}/build.mjs" for name in LAMBDAS], ESBUILD_TARGET
     )
     return {
         "unpinned": unpinned,
@@ -105,13 +108,13 @@ def problems(found):
         return errors
     for path in found["unpinned"]:
         errors.append(f"{path}: a setup-node step has no node-version")
-    if found["lambda_target"] != [found["lambda_runtime"]]:
+    if found["lambda_target"] != [found["lambda_runtime"]] * len(LAMBDAS):
         errors.append(
             f"build.mjs esbuild target node{found['lambda_target']} != Lambda "
             f"runtime nodejs{found['lambda_runtime']}.x"
         )
-    if not found["lambda_types"]:
-        errors.append("the Lambda has no @types/node pin")
+    if len(found["lambda_types"]) != len(LAMBDAS):
+        errors.append("a Lambda has no @types/node pin")
     for path, number, value in found["lambda_types"]:
         if value != found["lambda_runtime"]:
             errors.append(
@@ -124,12 +127,12 @@ def problems(found):
 def self_test():
     base = {
         "unpinned": [],
-        "lambda_target": ["22"],
+        "lambda_target": ["22", "22"],
         "mise": "26",
         "workflows": [(Path("ci.yml"), 1, "26")],
         "docker": [(Path("api/Dockerfile"), 1, "26-slim")],
         "types": [(Path("frontend/package.json"), 1, "^26.6.5")],
-        "lambda_types": [(Path("package.json"), 1, "22")],
+        "lambda_types": [(Path("package.json"), 1, "22")] * 2,
         "lambda_runtime": "22",
     }
     cases = [
@@ -148,10 +151,25 @@ def self_test():
         (
             "the Lambda's types ahead of its runtime",
             "fail",
-            {"lambda_types": [(Path("package.json"), 1, "26")]},
+            {
+                "lambda_types": [
+                    (Path("package.json"), 1, "22"),
+                    (Path("package.json"), 1, "26"),
+                ]
+            },
+        ),
+        (
+            "a Lambda with no @types/node pin",
+            "fail",
+            {"lambda_types": [(Path("package.json"), 1, "22")]},
         ),
         ("a setup-node with no pin", "fail", {"unpinned": [Path("ci.yml")]}),
-        ("the esbuild target ahead of the runtime", "fail", {"lambda_target": ["26"]}),
+        (
+            "the esbuild target ahead of the runtime",
+            "fail",
+            {"lambda_target": ["22", "26"]},
+        ),
+        ("a Lambda with no esbuild target", "fail", {"lambda_target": ["22"]}),
         ("no mise pin", "fail", {"mise": None}),
         ("no workflow pins found", "fail", {"workflows": []}),
         ("no api image pin found", "fail", {"docker": []}),

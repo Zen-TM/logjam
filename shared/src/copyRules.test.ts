@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { ApiError, AUTH_ERROR_CODES, messageFromError } from "./apiErrors.js";
+import {
+  ApiError,
+  AUTH_ERROR_CODES,
+  messageFromError,
+  SIGNUP_CAP_MESSAGE,
+} from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
 import { copySay, copyViolations } from "./copyRules.js";
 import { NSW_REGION } from "./regions.js";
@@ -280,6 +285,7 @@ describe("shared copy outside contracts/", () => {
   it("keeps every sign-in and failure message to the register", () => {
     const messages = [
       ...Object.values(AUTH_ERROR_CODES),
+      SIGNUP_CAP_MESSAGE,
       ...Array.from({ length: 200 }, (_, i) =>
         messageFromError(
           new ApiError(400 + i, "/x", "GET"),

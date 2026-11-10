@@ -15,7 +15,7 @@ export PATH := $(MISE_PATH):$(PATH)
 endif
 
 LOCAL_TF := infra/terraform/envs/local
-PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender
+PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender infra/lambda/cognito-pre-signup
 
 
 # ── Primary targets ────────────────────────────────────────────────────────────
