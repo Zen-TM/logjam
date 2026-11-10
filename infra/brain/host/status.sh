@@ -27,8 +27,9 @@ backups=$(pgb info --output=json 2> /dev/null || true)
 disk=
 if mountpoint -q /data; then disk=$(df --output=pcent /data | tail -1 | tr -dc 0-9); fi
 restore=$(cat /data/brain/last-restore 2> /dev/null || true)
+mem=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
 
-json=$(PGQ=$pgq API_IMAGE=$api_image SERVING=$serving BACKUPS=$backups DISK=$disk BOOT_MODE=$boot_mode RESTORE=$restore python3 - <<'PY'
+json=$(PGQ=$pgq API_IMAGE=$api_image SERVING=$serving BACKUPS=$backups DISK=$disk MEM=$mem BOOT_MODE=$boot_mode RESTORE=$restore python3 - <<'PY'
 import json, os, time
 e = os.environ
 pgq = e["PGQ"].split("|") if e["PGQ"] else None
@@ -45,6 +46,7 @@ print(json.dumps({
     "time": iso(time.time()),
     "postgres_up": pgq is not None,
     "disk_used_percent": int(e["DISK"]) if e["DISK"] else None,
+    "mem_available_mb": int(e["MEM"]) if e["MEM"] else None,
     "last_archive_time": (pgq[0] or None) if pgq else None,
     "archive_failures": int(pgq[1]) if pgq else None,
     "last_full_time": iso(max(fulls)) if fulls else None,

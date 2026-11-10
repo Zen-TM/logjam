@@ -6,7 +6,7 @@
 #                        else bootstrap if the brain-bootstrap tag is exactly 1,
 #                        else refuse.
 # Never formats a device that has any signature. The one thing it deletes is
-# what its own unfinished restore left (see the marker). It never bootstraps
+# what its own unfinished setup left (see the marker). It never bootstraps
 # unless the repository is positively empty. Guard: tests/e2e.sh.
 . "$(dirname "$0")/lib.sh"
 
@@ -27,8 +27,9 @@ else
   rc=0; blkid -p "$dev" > /dev/null || rc=$?
   case $rc in
     0) ;; # a filesystem or some other signature: only ever mounted, below
-    2) # blkid sees nothing: still format only if the first MiB is zeros and wipefs sees nothing either
-      if [ -n "$(head -c 1048576 "$dev" | tr -d '\0' | head -c 1)" ] || [ -n "$(wipefs -n "$dev")" ]; then
+    2) # blkid sees nothing: still format only if wipefs sees nothing either. Not "the first MiB is
+      # zeros": the unwritten blocks of a new encrypted EBS volume read back as non-zero data.
+      if [ -n "$(wipefs -n "$dev")" ]; then
         die "$dev looks blank to blkid but is not: not formatting it"
       fi
       log "$dev is blank: formatting"
@@ -41,20 +42,24 @@ else
 fi
 mkdir -p /data/brain
 
-# An earlier restore did not finish. Its files are the only ones this script
-# ever deletes: the marker is written below only after the directory was seen
-# absent or empty, so everything in it now came from that restore. Nothing may
-# run on files that may go. pgBackRest writes global/pg_control last, so with it
-# the copy is whole and Postgres resumes the recovery itself.
-marker=/data/.restore-in-progress
+# A one-time setup, a restore or a bootstrap, did not finish. The marker holds
+# which (empty: restore) and is written below only after the directory was seen
+# absent or empty, so whatever is in it came from that setup. Nothing may run on
+# files that may go. pgBackRest writes global/pg_control last, and initdb writes
+# it before anything else is built on the cluster: without it nothing usable was
+# ever there and the directory is emptied (the only deletion any script makes);
+# with it nothing is deleted, as the database may already hold rows, and the
+# setup is finished with the same mode's steps, which are safe to repeat.
+marker=/data/.setup-in-progress
 resume=
 if [ -e "$marker" ]; then
   compose rm -sf postgres
   if [ -e /data/postgres/global/pg_control ]; then
-    log "an earlier restore finished copying: starting it as it is"
-    resume=1
+    resume=$(cat "$marker"); resume=${resume:-restore}
+    case $resume in restore | bootstrap) ;; *) die "$marker says '$resume': not touching /data/postgres" ;; esac
+    log "an earlier $resume finished creating the cluster: finishing it"
   else
-    log "an earlier restore did not finish: emptying /data/postgres to restore again"
+    log "an earlier setup did not get far: emptying /data/postgres to start it again"
     [ ! -d /data/postgres ] || find /data/postgres -mindepth 1 -delete
     rm -f "$marker"
   fi
@@ -87,7 +92,7 @@ except (ValueError, KeyError, TypeError):
 }
 
 if [ -n "$resume" ]; then
-  mode=restore
+  mode=$resume
 elif [ -s /data/postgres/PG_VERSION ]; then
   mode=existing
 else
@@ -112,10 +117,8 @@ case $mode in
       export BRAIN_INIT=none
     else
       export BRAIN_INIT=$mode
-      if [ "$mode" = restore ]; then
-        [ -z "$(ls -A /data/postgres)" ] || die "/data/postgres has files but no database: not restoring over them"
-        touch "$marker" && sync
-      fi
+      [ -z "$(ls -A /data/postgres)" ] || die "/data/postgres has files but no database: not creating one over them"
+      echo "$mode" > "$marker" && sync
     fi ;;
 esac
 # A restore is the one long wait, and status.json says so while it runs.
@@ -148,7 +151,6 @@ if [ "$mode" = restore ]; then
     fi
   fi
   echo restore > "$mode_file"
-  rm -f "$marker"
 fi
 
 if [ "$mode" != existing ]; then
@@ -162,6 +164,7 @@ if [ "$mode" != existing ]; then
     docker exec -i -e APP_PW -u postgres "$(pg_cid)" psql -U postgres -d logjam -X -q -v ON_ERROR_STOP=1 > /dev/null
   unset APP_PW
   psql_super -d postgres -f - < /opt/brain/host/agent.sql
+  rm -f "$marker" # only now: a boot that died before this is finished by the next one
 fi
 
 pgb stanza-create
