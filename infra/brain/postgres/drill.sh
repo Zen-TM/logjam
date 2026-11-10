@@ -13,6 +13,8 @@
 #
 # Environment: BRAIN_BACKUP_BUCKET, BRAIN_SIGNALS_BUCKET, AWS_REGION;
 # BRAIN_DRILL_TIMEOUT (seconds for restore and recovery, default 3600);
+# BRAIN_DRILL_MAX_LAG (seconds the replayed canary may trail the restore's
+# start before the verdict is replay_short, default 900);
 # BRAIN_DRILL_PGDATA (scratch directory, default under /var/lib/postgresql).
 # Credentials: AWS_ACCESS_KEY_ID and friends, else the ECS task role.
 # BRAIN_BACKUP_ENDPOINT and BRAIN_BACKUP_VERIFY_TLS=n point both buckets at an
