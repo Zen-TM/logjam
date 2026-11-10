@@ -194,10 +194,14 @@ run "audit_trail_records_every_route_to_user_data" {
   }
 
   # Mutation: dropping the media and topo selector, or narrowing it to writes
-  # only (a readOnly field), leaves reads of users' files unrecorded.
+  # only (a readOnly field), leaves reads of users' files unrecorded. Dropping
+  # the eventCategory = Data field from this or the next two selectors is also
+  # red here: CloudTrail rejects such a selector, and that would otherwise
+  # show only when the maintainer applies it.
   assert {
     condition = anytrue([
       for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
         toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::S3::Object"]) &&
         !contains([for f in sel.field_selector : f.field], "readOnly") &&
         toset({ for f in sel.field_selector : f.field => f }["resources.ARN"].starts_with) == toset(["arn:aws:s3:::logjam-media/", "arn:aws:s3:::logjam-topo-jobs/"])
@@ -212,6 +216,7 @@ run "audit_trail_records_every_route_to_user_data" {
   assert {
     condition = anytrue([
       for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
         toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::S3::Object"]) &&
         toset({ for f in sel.field_selector : f.field => f }["readOnly"].equals) == toset(["true"]) &&
         toset({ for f in sel.field_selector : f.field => f }["resources.ARN"].starts_with) == toset(["arn:aws:s3:::${local.brain_backups_bucket}/"])
@@ -226,6 +231,7 @@ run "audit_trail_records_every_route_to_user_data" {
   assert {
     condition = anytrue([
       for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
         toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::EC2::Snapshot"]) &&
         !contains([for f in sel.field_selector : f.field], "readOnly")
       )
