@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 import { validateEnv } from "./env";
 
@@ -69,6 +71,29 @@ describe("validateEnv — valid configurations", () => {
     expect(env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS).toBe(900_000);
     expect(env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS).toBe(10_800_000);
     expect(env.TOPO_EXPORT_TTL_MS).toBe(604_800_000);
+  });
+});
+
+describe("the local template", () => {
+  // Mutation: deleting the DB_NAME line from env.local.tftpl, or adding a
+  // variable with no default to the schema and not to the template.
+  it("sets every variable the schema has no default for", () => {
+    setEnv({});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => validateEnv()).toThrow(/process\.exit/);
+    const report = String(errors.mock.calls[0]?.[0]);
+    errors.mockRestore();
+    const needed = [...report.matchAll(/^ {2}- (\w+):/gm)].map((m) => m[1]);
+    const template = readFileSync(
+      join(
+        import.meta.dirname,
+        "../../../infra/terraform/templates/env.local.tftpl",
+      ),
+      "utf8",
+    );
+    const set = [...template.matchAll(/^(\w+)=/gm)].map((m) => m[1]);
+    expect(needed).toContain("DB_NAME");
+    expect(needed.filter((key) => !set.includes(key))).toEqual([]);
   });
 });
 

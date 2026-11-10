@@ -32,17 +32,16 @@ instance id found there.
 Each of these is its own merge or check, done in the days before.
 
 1. **The brain is up and healthy** ([brain.md](brain.md), "Bringing it up from
-   nothing", all ten steps): the stack landed in order, the audit-trail change
-   applied by hand, the Postgres image published and pinned, the brain created
-   and its bootstrap flag turned off again, the drill started once by hand and
+   nothing", all ten steps): the stack landed, the boundary change applied by
+   hand, the Postgres image published and pinned, the brain created and its
+   bootstrap flag turned off again, the drill started once by hand and
    passing, the certificate fetched and its pull request finished and deployed
    (**both** the API image and the topo worker image carry
-   `/app/brain-ca.pem`), `release.json` present, the watchdog green. The API
-   shutdown fix (#875) should be merged too: without it a release under load
-   fails requests for about 13 seconds instead of about 4 (brain.md, "A release
-   and a rollback").
-2. **The audit trail is applied before real data reaches the brain.** Step 2 of
-   bring-up. The next step is the first time real data does.
+   `/app/brain-ca.pem`), `release.json` naming the live release, the watchdog
+   green.
+2. **The audit trail and the boundary change are applied before real data
+   reaches the brain.** Steps 1 and 2 of bring-up. The next step is the first
+   time real data does.
 3. **Rehearse the copy, at least once.** Against the brain while it is not
    serving, with the same task the window uses. The brain must be up and writing
    a fresh `status.json` (no file, or one older than 3 minutes, is a refusal),
@@ -57,12 +56,21 @@ Each of these is its own merge or check, done in the days before.
    NET="awsvpcConfiguration={subnets=[subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231],securityGroups=[$SG],assignPublicIp=ENABLED}"
    ```
 
-   The first copy into an empty brain (run on a scratch copy, against a scratch
-   RDS):
+   RDS is live until the window, and the copy stops on a source that is not
+   read-only. The two rehearsal commands below therefore carry
+   `COPY_ALLOW_LIVE_SOURCE=1`, which lets it copy from a live source: counts then
+   may differ, and the last line says the source was live instead of
+   `every check held`. The window's copy (step 4 below) is the same command
+   **without** that entry, so a forgotten read-only step stops the copy. The flag
+   itself has **not yet been run on AWS**; the copy's other behaviour is as marked.
+
+   The first copy into an empty brain (the same command, before the flag existed,
+   run on a scratch copy against a scratch RDS):
 
    ```sh
    TASK=$(aws ecs run-task --cluster $CLUSTER --launch-type FARGATE --count 1 \
      --task-definition logjam-brain-copy --network-configuration "$NET" \
+     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_ALLOW_LIVE_SOURCE","value":"1"}]}]}' \
      --query 'tasks[0].taskArn' --output text)
    aws logs tail /ecs/logjam-brain-copy --follow --since 5m
    aws ecs wait tasks-stopped --cluster $CLUSTER --tasks "$TASK"
@@ -71,8 +79,9 @@ Each of these is its own merge or check, done in the days before.
    ```
 
    (Stop the `logs tail` with Ctrl-C when the task has stopped.) The log has
-   table names and counts only. Look for exit code `0` and the last line
-   `copy: ok: every check held`. Anything else (`NOT VERIFIED: ...`,
+   table names and counts only. Look for exit code `0` and a last line that
+   starts `copy: ok` (`copy: ok: the source was live, ...` for these rehearsals).
+   Anything else (`NOT VERIFIED: ...`,
    `RESTORED BUT NOT VERIFIED: do not serve from this copy`, exit 1) means do not
    serve: read the reason and re-run. This is also what proves the committed
    certificate is the brain's: a wrong file fails verification and the copy
@@ -83,7 +92,7 @@ Each of these is its own merge or check, done in the days before.
    ```sh
    TASK=$(aws ecs run-task --cluster $CLUSTER --launch-type FARGATE --count 1 \
      --task-definition logjam-brain-copy --network-configuration "$NET" \
-     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_REPLACE","value":"1"}]}]}' \
+     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_REPLACE","value":"1"},{"name":"COPY_ALLOW_LIVE_SOURCE","value":"1"}]}]}' \
      --query 'tasks[0].taskArn' --output text)
    ```
 
@@ -230,8 +239,10 @@ below), no hand workflow runs other than the one named in step 6a, no hand
    aws rds wait db-snapshot-available --db-snapshot-identifier logjam-cutover-final
    ```
 
-4. **The copy**, over the rehearsal's copy, with `COPY_REPLACE=1` (the command in
-   "Before the window"; measured 197 s for 1,764 MB on a scratch copy). Check: exit
+4. **The copy**, over the rehearsal's copy, with `COPY_REPLACE=1` and **without**
+   `COPY_ALLOW_LIVE_SOURCE` (the second command in "Before the window" with that
+   one entry removed, so a source that is not read-only stops the copy at once;
+   measured 197 s for 1,764 MB on a scratch copy). Check: exit
    code `0` and `copy: ok: every check held` as the last log line. Row counts and
    sequence values are exact because the source is read-only; the log lists any
    difference. If it ends in
@@ -355,19 +366,28 @@ on the brain: only roll back to releases built after.
   `drill.json`). The budget alert `logjam-monthly` (US$50) will fire while both
   stacks run; that is expected, estimated near US$60 a month, and the cost ceiling
   at US$100 is the backstop ([alarms.md](alarms.md#cost-ceiling)).
-- **Do not delete RDS or Elastic Beanstalk yet.** They are the rollback. The
-  cutover issue (#434) suggests, as an example, 30 days with no rollback used
-  and every nightly drill green; the period is the maintainer's call. Elastic
-  Beanstalk is left running meanwhile (step 8).
-- **The teardown is a separate pull request, or several, that stops at the
-  `prevent_destroy` guards for the maintainer.** What it removes: the RDS
+- **RDS and Elastic Beanstalk are the only way back, and they go once the
+  brain has proved itself.** The cutover issue (#434) suggested 30 days;
+  Logjam is in beta with no promise to its users, so the maintainer decided
+  against a waiting period (2026-11-11). Before removing them: a regression
+  and smoke sweep of prod on the brain, and, since it costs one night, the
+  first 03:00 full backup and one green 04:30 drill on the real data
+  (`last_full_time` and `drill.json`): that drill is the first proof that
+  prod's own data restores. Elastic Beanstalk is left running meanwhile
+  (step 8).
+- **The teardown is two pull requests, drafted ahead** (branches
+  `feat/brain-rds-deletable`, then `feat/brain-teardown`). The first only
+  lets the database be deleted: AWS refuses while deletion protection is on,
+  and Terraform deletes with the settings last applied, so those change in a
+  merge of their own. From that merge on, one click deletes the database. The
+  second removes: the RDS
   instance (`rds.tf`: with `delete_automated_backups = true` and
   `skip_final_snapshot = true` first, so neither its automated backups nor a new
   final snapshot outlives it), its parameter group and alarms (`logjam-rds-*`),
   the RDS pgaudit subscription, and the RDS CA bundle in `api/Dockerfile`; the
   cutover snapshot and `logjam-db-enc-final`, deleted by hand with
-  `aws rds delete-db-snapshot`, and an alarm for any manual RDS snapshot that
-  remains; the Elastic Beanstalk environment (`eb.tf`, `api/.ebextensions`, the
+  `aws rds delete-db-snapshot`, then a check by hand that no manual snapshot
+  or retained backup remains; the Elastic Beanstalk environment (`eb.tf`, `api/.ebextensions`, the
   EB steps of `deploy-api.yml` and `rollback.yml`, the live-sha lookup's
   Elastic Beanstalk arm in `infra/scripts/brain-setting.sh`, the
   `api_environment_degraded` alarm and the Elastic Beanstalk arm of

@@ -13,9 +13,13 @@
 # (brain_network.tf), so no rule is added. The task needs a public IP, as every
 # worker does, to fetch Amazon's RDS CA bundle and pull its image.
 #
-# Start (dress rehearsal; add COPY_REPLACE=1 to a later run over an earlier copy):
+# Start (dress rehearsal; add COPY_REPLACE=1 to a later run over an earlier copy).
+# RDS is live outside the cutover window, and the copy stops on a source that
+# is not read-only unless COPY_ALLOW_LIVE_SOURCE=1: a rehearsal carries it, the
+# window's copy does not (docs/operations/brain-cutover.md has the commands).
 #   aws ecs run-task --cluster logjam-cluster --launch-type FARGATE \
 #     --task-definition logjam-brain-copy \
+#     --overrides '{"containerOverrides":[{"name":"brain-copy","environment":[{"name":"COPY_ALLOW_LIVE_SOURCE","value":"1"}]}]}' \
 #     --network-configuration "awsvpcConfiguration={subnets=[<worker subnets>],securityGroups=[<logjam-worker-sg>],assignPublicIp=ENABLED}"
 locals {
   # infra/brain/brain-ca.pem is committed once the brain has booted and made

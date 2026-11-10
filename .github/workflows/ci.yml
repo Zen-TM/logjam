@@ -591,6 +591,19 @@ jobs:
       - name: Play the brain's life
         run: infra/brain/tests/e2e.sh
 
+  # One stable name for the required-check rule (envs/github/rulesets.tf): the
+  # matrix's own names carry the runner. A scoped-out run skips the matrix and
+  # passes.
+  brain-e2e-gate:
+    needs: brain-e2e
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every architecture passed or was scoped out
+        env:
+          RESULT: ${{ needs.brain-e2e.result }}
+        run: test "$RESULT" = success -o "$RESULT" = skipped
+
   # One stable name for a required-check rule: the matrix's own names carry
   # the architecture. A scoped-out run skips the matrix and passes.
   brain-postgres:

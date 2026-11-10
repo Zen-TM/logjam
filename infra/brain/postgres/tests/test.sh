@@ -187,7 +187,7 @@ check "the image verifies the host the copy fetches Amazon's RDS CA bundle from"
   docker run --rm --entrypoint sh "$IMAGE" -c "echo | openssl s_client -connect truststore.pki.rds.amazonaws.com:443 -servername truststore.pki.rds.amazonaws.com -verify_return_error 2>&1 | grep -q 'Verify return code: 0'"
 
 # --- backup and restore (a posix repository stands in for S3) ----------------
-# BRAIN_RESTORE_OPTS=--archive-mode=off is what a restore drill passes.
+# BRAIN_RESTORE_OPTS=--archive-mode=off: a restore that never archives (the drill passes the same option itself).
 R=(-e POSTGRES_PASSWORD=pw "${BUCKET_ENV[@]}" -e PGBACKREST_REPO1_TYPE=posix -e PGBACKREST_REPO1_PATH=/repo -v brain-pg-test-repo:/repo)
 docker volume create brain-pg-test-repo > /dev/null
 docker run --rm -v brain-pg-test-repo:/repo --entrypoint chmod "$IMAGE" 777 /repo

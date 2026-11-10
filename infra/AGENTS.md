@@ -150,14 +150,16 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The restore drill** (`brain/postgres/drill.sh`) restores with
   `--archive-mode=off` and refuses to start Postgres unless the restored
   `archive_mode` reads `off`: a restored copy that archives writes a timeline
-  into the live repository and breaks every later restore. Keep both, and keep
-  the drill's role read-only on the backup bucket. Guard: the drill scenario of
-  `brain/tests/e2e.sh` (the repository listing must not change).
+  into the live repository and breaks every later restore. Keep both. Guard:
+  the drill scenario of `brain/tests/e2e.sh` (the repository listing must not
+  change).
 - **The cutover's data copy** (`brain/postgres/copy.sh`, `brain_copy.tf`) is
   started by a person, never on a schedule, and never against a serving brain:
-  it stops unless `status.json` is fresh and says `serving` is false (read
-  before the dump and again before the restore), because a copy then replaces
-  live data with RDS's frozen copy. Keep both reads, keep certificate
+  it stops unless `status.json` is fresh, says `serving` is false and names no
+  running API (`api_sha` null; read before the dump and again before the
+  restore), because a copy then replaces live data with RDS's frozen copy. It
+  also stops on a source that is not read-only unless `COPY_ALLOW_LIVE_SOURCE=1`
+  (a rehearsal; the window's copy never sets it). Keep both reads, keep certificate
   verification on both ends, and keep its task role to `s3:GetObject` on
   `status.json`. Guards: `brain_copy_is_never_scheduled`,
   `brain_copy_task_reads_only_status_json`, and the copy scenario of
@@ -165,8 +167,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The brain's watchdog never reads a backup object.** Its role may `GetObject`
   only `status.json` and `drill.json` in the signals bucket and `ListBucket` the
   backup bucket under the WAL archive's prefix; it is the function an alarm and a
-  log line hang off, so it stays a step away from user data. Its log line and its
-  error carry only check codes. Guard: `brain_watchdog_role_reads_only_the_signals`;
+  log line hang off, so it stays a step away from user data. Its error
+  carries only check codes, its log line those and one HTTP status number. Guard: `brain_watchdog_role_reads_only_the_signals`;
   the prefix must match what the Postgres image writes
   (`brain_watchdog_lists_the_archive_pgbackrest_writes`).
 - **The restore drill's task role never writes to the backup bucket**: read and
