@@ -21,6 +21,7 @@
 #   host/lib.sh: bootstrap_allowed true for anything but the exact value 1 (`= 1` -> `!= 0`) [3]
 #   host/boot.sh: format a device that has a signature (`0) ;;` -> `0) mkfs.ext4 -F ...`) [3]
 #   host/boot.sh: the zeros clause back (`[ -n "$(wipefs -n "$dev")" ]` -> `[ -n "$(head -c 1048576 "$dev" | tr -d '\0' | head -c 1)" ] || [ -n "$(wipefs -n "$dev")" ]`) [3]
+#   host/lib.sh: s3_put back on the CLI (`s3_curl "$1" -X PUT --data-binary @-` -> `aws s3 cp - "s3://$BRAIN_SIGNALS_BUCKET/$1" --only-show-errors`) [7]
 #   host/release-agent.sh: not reading the switch (`if false` for `!= on`) [5]
 #   host/lib.sh: serving_state answering on for anything but exactly on [5]
 #   host/release-agent.sh: writing LOGJAM_RUNTIME=prod before the release env [6]
@@ -448,6 +449,10 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.headers.get("X-aws-ec2-metadata-token") != "tok": return self.reply(401)
         name = self.path.rsplit("/", 1)[1]
+        if self.path.startswith("/latest/meta-data/iam/security-credentials/"):
+            open(f"{tag}.creds-read", "w").close()
+            if not name: return self.reply(200, b"e2e-role\n")
+            return self.reply(200, b'{"Code": "Success", "AccessKeyId": "test", "SecretAccessKey": "test", "Token": "e2e-token"}')
         if self.path.startswith("/latest/meta-data/tags/instance/") and os.path.exists(f"{tag}.{name}"):
             return self.reply(200, open(f"{tag}.{name}", "rb").read())
         self.reply(404)
@@ -469,9 +474,16 @@ rm -f "$WORK/tag.brain-serving"; check "no tag reads off" [ "$(state)" = off ]
 tag brain-bootstrap 1; check "the bootstrap tag 1 allows a bootstrap" [ "$(can_bootstrap)" = yes ]
 for v in 0 true "" 2; do tag brain-bootstrap "$v"; check "the bootstrap tag '$v' does not" [ "$(can_bootstrap)" = no ]; done
 rm -f "$WORK/tag.brain-bootstrap"; check "no bootstrap tag does not" [ "$(can_bootstrap)" = no ]
+# The instance role's credentials, as the brain has no key in its environment. MiniStack accepts any
+# key, so this shows the metadata path is read and parsed, not that the signature is right.
+as_role() { r bash -c '. /opt/brain/host/lib.sh; unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; s3_get status.json'; }
+as_role > /dev/null; rc=$?
+check "an object is read with the instance role's credentials (exit $rc)" [ "$rc" = 0 ]
+check "...which came from the metadata service" [ -e "$WORK/tag.creds-read" ]
 tag brain-serving on; tag brain-bootstrap 1; brain_env BRAIN_IMDS_URL "http://127.0.0.1:1"
 check "an unreachable metadata service reads off" [ "$(state)" = off ]
 check "...and does not allow a bootstrap" [ "$(can_bootstrap)" = no ]
+check "...and no object is read without credentials" not as_role
 kill "$IMDS_PID"; IMDS_PID=
 brain_env BRAIN_IMDS_URL
 brain_env BRAIN_SERVING_FILE /run/brain-e2e-serving
@@ -514,6 +526,30 @@ check "...and the running API is untouched" [ "$(cid api)" = "$id" ]
 point release-a; agent
 check "the next run applies the release again" [ "$(api_tag)" = "$API_REPO:release-a" ]
 check "...and answers /ready" wait_for 90 ready
+id=$(cid api)
+aws s3 rm "s3://$SIGNALS/release.json" --only-show-errors
+agent; rc=$?
+check "serving with no release.json fails (exit $rc)" [ "$rc" != 0 ]
+check "...says it cannot be read" grep -q 'cannot be read' "$WORK/agent.log"
+check "...and the running API is untouched" [ "$(cid api)" = "$id" ]
+point release-a
+brain_env BRAIN_SIGNALS_BUCKET e2e-no-such-bucket
+agent; rc=$?
+check "an unreadable signals bucket fails (exit $rc)" [ "$rc" != 0 ]
+check "...and the running API is untouched" [ "$(cid api)" = "$id" ]
+brain_env BRAIN_SIGNALS_BUCKET "$SIGNALS"
+agent
+check "the next run reads it again and changes nothing" [ "$(cid api)" = "$id" ]
+
+# A tick never starts the aws CLI: it costs about 89 MB and a second of CPU a start on the brain, three
+# starts a minute. An `aws` first on PATH records any call and passes it on.
+mkdir "$WORK/nocli"
+printf '#!/bin/sh\necho "$@" >> "%s/cli-calls"\nexec "%s" "$@"\n' "$WORK" "$(command -v aws)" > "$WORK/nocli/aws"
+chmod +x "$WORK/nocli/aws"
+r env PATH="$WORK/nocli:$PATH" /opt/brain/host/release-agent.sh > "$WORK/tick.log" 2>&1 || bad "the release tick failed"
+r env PATH="$WORK/nocli:$PATH" /opt/brain/host/status.sh >> "$WORK/tick.log" 2>&1 || bad "the status tick failed"
+check "one release tick and one status tick never start the aws CLI" [ ! -e "$WORK/cli-calls" ]
+check "...and the status tick did write status.json" [ "$(status_field api_sha)" = release-a ]
 
 # --- 8. losing the disk ---------------------------------------------------------------------------------------------
 S="8 losing the disk"

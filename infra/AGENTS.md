@@ -54,6 +54,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
   app database, origin-verify and Resend, no write to `release.json`, and no
   AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.
+- **The brain's timers never start the `aws` CLI.** `release-agent.sh` and
+  `status.sh` make their S3 calls with `s3_get` and `s3_put` in `brain/host/lib.sh`
+  (`curl --aws-sigv4`): a CLI start costs 66 MB and 0.65 s of CPU on a `t4g.micro`, three times a
+  minute. Guard: the "never start the aws CLI" check in `brain/tests/e2e.sh`.
 - **The Postgres image** (`brain/postgres/`) is what local dev runs and what
   prod's database will run. Its `postgresql.conf` keeps row values and
   statement parameters out of logs; `brain/postgres/tests/test.sh` (CI job
@@ -66,17 +70,6 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   info` exits 0 for an unreachable one: read its JSON); keep both, and keep
   `create_host_path: false` on the data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
   on a loop device; each mutation it names turns it red.
-- **The brain's instance exists only while `brain_pg_image_tag` is set** (its
-  default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no instance, data volume, Elastic IP or alarm is planned
-  (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
-  containers use the instance role), has no key pair, and takes its two
-  switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
-  in-place update. It has no termination protection: the provider does not
-  clear it before replacing the instance, which would stop the host and leave
-  it down (the data and the address are held by `prevent_destroy` instead). Its credit mode is `unlimited` by default, and the surplus
-  alarm is what notices a charge. Guards: `brain_is_absent_by_default`,
-  `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`,
-  `brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus`.
 - **The brain's data volume and Elastic IP are never destroyed** (`prevent_destroy`:
   the disk holds the only copy of the database between backups, the address's
   DNS name is in the database certificate). Only the current entry of
@@ -104,6 +97,18 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   the newest backup on another timeline. Drop either and a second rewind, or a
   volume made current again, comes back as the wrong history with no error.
   Guards: `postgres/tests/test.sh`, scenario 13b of `brain/tests/e2e.sh`.
+- **The brain's instance exists only while `brain_pg_image_tag` is set** (its
+  default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no
+  instance, data volume, Elastic IP or alarm is planned
+  (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
+  containers use the instance role), has no key pair, and takes its two
+  switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
+  in-place update. It has no termination protection: the provider does not
+  clear it before replacing the instance, which would stop the host and leave
+  it down (the data and the address are held by `prevent_destroy` instead). Its credit mode is `unlimited` by default, and `brain_cpu_high`
+  (20% for an hour) is what notices a charge. Guards: `brain_is_absent_by_default`,
+  `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`,
+  `brain_credit_mode_defaults_to_unlimited`.
 - **The brain's host files travel inline in its user data**, so any change to
   `brain/` (outside `postgres/`, `tests/`, `api.env` and the committed
   `brain-ca.pem`, which a commit after first boot must not turn into a

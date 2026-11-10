@@ -73,28 +73,3 @@ resource "aws_cloudwatch_metric_alarm" "brain_cpu_credits_low" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
-
-# Unlimited mode (the default) never throttles but bills any credit spent
-# beyond what the instance earned: US$0.04 per vCPU-hour above the baseline,
-# at worst about US$47 a month on a t4g.small (US$53 on a t4g.micro) with both
-# cores pinned all month. This alarm is how any charge gets noticed.
-resource "aws_cloudwatch_metric_alarm" "brain_cpu_surplus_credits_charged" {
-  count = local.brain_enabled && var.brain_cpu_credits == "unlimited" ? 1 : 0
-
-  alarm_name        = "logjam-brain-cpu-surplus-credits-charged"
-  alarm_description = "The brain was charged for surplus CPU credits in the last hour (unlimited credit mode, the default). First: find what is using the CPU; the worst case is about US$47 a month on a t4g.small if both cores were pinned all month. ${local.alarms_doc}"
-
-  namespace   = "AWS/EC2"
-  metric_name = "CPUSurplusCreditsCharged"
-  dimensions  = { InstanceId = aws_instance.brain[0].id }
-
-  statistic           = "Maximum"
-  period              = 3600
-  evaluation_periods  = 1
-  comparison_operator = "GreaterThanThreshold"
-  threshold           = 0
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
-}

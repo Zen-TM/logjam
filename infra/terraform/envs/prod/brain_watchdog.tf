@@ -190,26 +190,34 @@ resource "aws_cloudwatch_metric_alarm" "brain_watchdog_dead" {
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
-# Measured on a scratch copy on 2026-11-10: the stack passed 60 requests a
-# second at 50% of the instance's two vCPUs and 80 at 64%, and failed at 100
-# because the API is one Node process on one core, so 50% for 15 minutes is
-# about three quarters of the limit. A daily full backup (about a minute) and a
-# boot do not hold 50% for 15 minutes.
+# One CPU alarm for both stories: a client or release eating the CPU, and
+# the bill. Idle is about 5% of the two vCPUs (measured on 2026-11-10 before
+# the timers stopped starting the AWS CLI, which should take it to about 3%:
+# calculated from their measured per-call CPU, not measured on a whole brain).
+# A scratch copy measured 21, 36, 50 and 64% at 20, 40, 60 and 80 requests a
+# second; the API is one Node process on one core and fails at 100. A
+# t4g.micro's free allowance is 10% (0.2 vCPU), so a month in which no hour
+# averages 20% costs at most US$5.84 in surplus credits (0.2 vCPU above the
+# baseline at US$0.04 a vCPU-hour). One reading of an hour, not four of 15
+# minutes: four readings must all be high, so a load that rests for one
+# quarter of every hour would never fire while costing several times that. A
+# daily full backup (about a minute) and a boot do not bring an hour to 20%.
+# Standard credit mode has its own alarm (brain_cpu_credits_low).
 resource "aws_cloudwatch_metric_alarm" "brain_cpu_high" {
   count = local.brain_enabled ? 1 : 0
 
   alarm_name        = "logjam-brain-cpu-high"
-  alarm_description = "The brain's CPU has averaged 50% or more for 15 minutes. First: find out whether this is growth or one client misbehaving (the API's request log). The API is one process and saturates near 80 requests a second; a bigger instance of the same family adds memory, not speed. ${local.alarms_doc}"
+  alarm_description = "The brain's CPU has averaged 20% or more for an hour. First: find out what is using the CPU (growth, one client misbehaving, or a runaway process). Above the free allowance it costs cents; at 50% the API is three quarters of the way to its limit of about 80 requests a second, and a bigger instance of the same family adds memory, not speed. ${local.alarms_doc}"
 
   namespace   = "AWS/EC2"
   metric_name = "CPUUtilization"
   dimensions  = { InstanceId = aws_instance.brain[0].id }
 
   statistic           = "Average"
-  period              = 300
-  evaluation_periods  = 3
+  period              = 3600
+  evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 50
+  threshold           = 20
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
