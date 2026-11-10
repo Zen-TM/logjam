@@ -51,9 +51,12 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   so publish a new tag and change the variable, never retag. Guard:
   `brain_postgres_image_is_immutable`.
 - **The brain's instance role** (`logjam-brain`) holds only the grants in
-  `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
-  app database, origin-verify and Resend, no write to `release.json`, and no
-  AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.
+  `brain_iam.tf`: no audit bucket, no secret beyond the app database,
+  origin-verify and Resend, no write to `release.json`, and no AWS-managed
+  broad policy. Its inline policies are managed exclusively; its managed
+  attachments are not, because AWS Budgets attaches the cost-ceiling deny to
+  it and an exclusive resource would detach that at the next apply. Guard:
+  `brain_role_has_only_its_grants`.
 - **The cost-ceiling deny never covers the brain's backup or signals bucket.**
   AWS Budgets attaches it to the brain's role, which pgBackRest shares with the
   API, so its S3 resources are exactly `logjam-media/*` and `logjam-topo-jobs/*`.

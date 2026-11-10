@@ -691,7 +691,7 @@ run "brain_role_has_only_its_grants" {
   plan_options {
     target = [
       aws_iam_role_policy.brain,
-      aws_iam_role_policy_attachments_exclusive.brain,
+      aws_iam_role_policy_attachment.brain_ssm,
       aws_iam_role_policies_exclusive.brain,
     ]
   }
@@ -737,15 +737,19 @@ run "brain_role_has_only_its_grants" {
     override_during = plan
   }
 
-  # Mutation: attaching a managed policy (CloudWatchFullAccess, a revived
-  # AmazonS3FullAccess) or a second inline policy by hand in Terraform, or
-  # dropping either exclusive resource, widens a role the whole API runs as.
+  # Mutation: a second inline policy by hand in Terraform, dropping the
+  # exclusive resource, or pointing the one managed attachment at a broader
+  # policy (CloudWatchFullAccess, a revived AmazonS3FullAccess), widens a role
+  # the whole API runs as. Managed attachments are not exclusive on purpose:
+  # AWS Budgets attaches the cost-ceiling deny to this role, and an exclusive
+  # resource would detach it at the next apply (brain_iam.tf).
   assert {
     condition = (
-      toset(aws_iam_role_policy_attachments_exclusive.brain.policy_arns) == toset(["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]) &&
-      toset(aws_iam_role_policies_exclusive.brain.policy_names) == toset([aws_iam_role_policy.brain.name])
+      aws_iam_role_policy_attachment.brain_ssm.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" &&
+      toset(aws_iam_role_policies_exclusive.brain.policy_names) == toset([aws_iam_role_policy.brain.name]) &&
+      !strcontains(file("brain_iam.tf"), "aws_iam_role_policy_attachments_exclusive")
     )
-    error_message = "The brain's role may hold only the Session Manager policy and its one inline policy, managed exclusively."
+    error_message = "The brain's role may hold only the Session Manager policy and its one inline policy; its managed attachments must not be exclusive, or an apply lifts the cost-ceiling deny."
   }
 
   # Mutation: adding any bucket (the audit bucket above all), or a wildcard

@@ -339,12 +339,6 @@ pass the ceiling before it acts.
 
    A reversed action is not evaluated again for the rest of the month; choose
    Reset in the console if it should re-arm.
-4. Until the action is reversed, the next plan of the prod root shows the deny
-   policy being detached from `logjam-brain` (its attachments are managed
-   exclusively, `brain_iam.tf`), and merging that plan lifts the deny on that
-   role only. Reverse the action first.
-   If an apply already detached the policy from `logjam-brain`, attach
-   `logjam-cost-ceiling-deny` to that role again by hand before reversing the
-   action, or the reversal's detach has nothing to remove. IAM would probably
-   refuse it and Budgets would keep showing the action as executed; that is
-   inferred from how IAM behaves, not tested.
+4. A Terraform apply does not lift the deny: Terraform does not manage which
+   managed policies are attached to `logjam-brain` or `logjam-eb-role`, so
+   the block stays until the action is reversed.
