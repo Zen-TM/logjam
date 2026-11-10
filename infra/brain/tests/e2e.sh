@@ -630,7 +630,8 @@ live_tables=$(sql logjam "select count(*) from pg_tables where schemaname = 'pub
 newest=$(r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
 import json, sys
 print([b["label"] for s in json.load(sys.stdin) for b in s["backup"]][-1])')
-listing=$(repo_list); since=$(date +%s)
+live_connections() { r docker logs "$(cid postgres)" 2>&1 | tail -n +$((log_lines + 1)) | grep -c 'connection authorized'; }
+listing=$(repo_list); log_lines=$(r docker logs "$(cid postgres)" 2>&1 | wc -l)
 drill "$BACKUPS" -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-creds/creds; rc=$?
 [ "$rc" = 0 ] || tail -20 "$WORK/drill.log"
 check "the drill exits 0 (got $rc)" [ "$rc" = 0 ]
@@ -643,8 +644,9 @@ check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
 check "the canary was seconds old, not minutes (lag $(drill_field canary_lag_seconds) s)" [ "$(drill_field canary_lag_seconds)" -lt 120 ]
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
-check "the live Postgres saw no connection while the drill ran" \
-  [ "$(r docker logs --since "$since" "$(cid postgres)" 2>&1 | grep -c 'connection authorized')" = 0 ]
+check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
+sql postgres "select 1" > /dev/null
+check "...and that check does see a connection when there is one" [ "$(live_connections)" = 1 ]
 check "the output has no value from the database" not grep -q 'e2e-secret-value-7731' "$WORK/drill.log"
 check "the output carries no credential" not grep -q 'e2e-token' "$WORK/drill.log"
 if command -v shellcheck > /dev/null; then
