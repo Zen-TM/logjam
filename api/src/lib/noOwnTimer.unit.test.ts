@@ -5,8 +5,10 @@ import { expect, it } from "vitest";
 // Guard for api/AGENTS.md: a background sweep never gets its own timer, or two
 // API processes would each run it. Mutation that turns it red: a setInterval
 // added to a new file under lib/. (setTimeout is not checked: the ones in
-// services/placeRegistry.ts and index.ts are one-shot.)
-const ALLOWED = join("lib", "topoJobReaper.ts");
+// services/placeRegistry.ts and index.ts are one-shot.) lib/shutdown.ts is
+// allowed: its interval closes this process's own idle connections while it
+// stops, which every process must do for itself.
+const ALLOWED = [join("lib", "topoJobReaper.ts"), join("lib", "shutdown.ts")];
 const SRC = join(__dirname, "..");
 
 function* sources(dir: string): Generator<string> {
@@ -21,6 +23,6 @@ it("has no setInterval outside the sweep reaper's tick", () => {
   const offenders = [...sources(SRC)]
     .filter((p) => readFileSync(p, "utf8").includes("setInterval("))
     .map((p) => p.slice(SRC.length + 1))
-    .filter((p) => p !== ALLOWED);
+    .filter((p) => !ALLOWED.includes(p));
   expect(offenders).toEqual([]);
 });
