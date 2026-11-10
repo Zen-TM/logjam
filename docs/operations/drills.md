@@ -59,9 +59,11 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       (with `brain_public` still off the run says it cannot see the brain:
       check `api_sha` and `localhost/ready` on the host instead,
       [brain.md](brain.md)). Times: ____ / ____
-- [ ] **A release the brain's agent refuses changes nothing** (brain mode): a
-      sha with no `infra/brain/api.env`, or an image without
-      `/app/brain-ca.pem`, fails the workflow before the pointer changes.
+- [ ] **A sha with no `infra/brain/api.env` changes nothing** (brain mode): the
+      workflow fails before the pointer changes. (It does not look inside the
+      image: one without `/app/brain-ca.pem` is rolled back to like any other
+      and fails when its container starts, with "DATABASE_SSL_CA points to a
+      missing file"; [rollback.md](rollback.md).)
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
       `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,

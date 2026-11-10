@@ -9,8 +9,9 @@ commands with a check after each.
 
 **Status of this page.** Nothing here has been run against prod. The copy task,
 the brain's boot, release, restore and rollback paths, and the timings quoted
-as "measured" were exercised on a scratch copy of the brain on real AWS
-(2026-11-10), with made-up data. Each command says which: **run on a scratch
+as "measured" were exercised on a scratch copy of the brain on real AWS (2026-11-10,
+and again on the finished stack on 2026-11-11, which also had a scratch RDS to
+copy from), with made-up data. Each command says which: **run on a scratch
 copy**, **estimate**, or **not yet run anywhere**. Use the maintainer's AWS
 credentials and `export AWS_REGION=ap-southeast-2`. `brain '<command>'` is the
 helper defined under "Getting a shell" in [brain.md](brain.md); `IID` is the
@@ -36,7 +37,10 @@ Each of these is its own merge or check, done in the days before.
    and its bootstrap flag turned off again, the drill started once by hand and
    passing, the certificate fetched and its pull request finished and deployed
    (**both** the API image and the topo worker image carry
-   `/app/brain-ca.pem`), `release.json` present, the watchdog green.
+   `/app/brain-ca.pem`), `release.json` present, the watchdog green. The API
+   shutdown fix (#875) should be merged too: without it a release under load
+   fails requests for about 13 seconds instead of about 4 (brain.md, "A release
+   and a rollback").
 2. **The audit trail is applied before real data reaches the brain.** Step 2 of
    bring-up. The next step is the first time real data does.
 3. **Rehearse the copy, at least once.** Against the brain while it is not
@@ -53,7 +57,8 @@ Each of these is its own merge or check, done in the days before.
    NET="awsvpcConfiguration={subnets=[subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231],securityGroups=[$SG],assignPublicIp=ENABLED}"
    ```
 
-   The first copy into an empty brain (run on a scratch copy):
+   The first copy into an empty brain (run on a scratch copy, against a scratch
+   RDS):
 
    ```sh
    TASK=$(aws ecs run-task --cluster $CLUSTER --launch-type FARGATE --count 1 \
@@ -82,12 +87,33 @@ Each of these is its own merge or check, done in the days before.
      --query 'tasks[0].taskArn' --output text)
    ```
 
-   Timing: **estimate** 5 to 15 minutes for about 2 GB (a 1 GB database took 51 s
-   on a laptop with both databases a network hop away; RDS to Fargate over the
-   VPC and index builds on two vCPUs will be slower; not measured on AWS).
-   Watch the brain's memory (`mem_available_mb` in the status file) while it
-   restores: a `t4g.micro` has about 330 MB free at idle. After a rehearsal the
-   brain holds a copy of real data, so it is **not** empty when the window comes.
+   Timing, **measured on a scratch copy (2026-11-11), made-up rows**: 1,764 MB in
+   197 seconds (537 MB a minute; 18 of the seconds are pulling the task's image),
+   three runs of the same size: dump 69 s, restore 38 s, counts verified 65 s
+   (counting 6 million rows twice is a third of it). Prod's database is about
+   1.7 GB, so plan about 4 minutes for it (derived from that rate). Also measured: a copy against a
+   **serving** brain exits 1 at once (`copy: status.json does not say serving is
+   false: stopping`) and touches nothing; with the source read-only and
+   `COPY_REPLACE=1` the counts verify exactly (a deleted row and an edited title
+   arrived), and the brain is **not** read-only afterwards. Watch the brain's
+   memory (`mem_available_mb` in the status file) while it restores: a
+   `t4g.micro` had 324 MiB free at its idle minimum. After a rehearsal the brain
+   holds a copy of real data, so it is **not** empty when the window comes, which
+   is why the window's copy always uses `COPY_REPLACE=1`.
+
+   To rehearse **again from empty** you cannot use a fresh volume: a blank disk
+   with a backup in the repository always restores, so it would restore the data
+   back. Empty the schema instead (everything in the brain's database is lost, so
+   never on a serving brain; run on a scratch copy, 2026-11-11). Dropping the
+   schema also drops the pgaudit extension, which lives in it, hence the third
+   statement:
+
+   ```sh
+   brain 'docker exec brain-postgres-1 psql -U postgres -d logjam -c "drop schema public cascade; create schema public authorization logjam_app; create extension pgaudit;"'
+   ```
+
+   On prod this only matters for a repeat from empty: the first copy lands in a
+   brain that was bootstrapped empty.
 4. **Compare what the dump does not carry.** Database-level settings do not
    travel in a dump. On RDS, as the master user (a recorded read; **not yet run
    anywhere**):
@@ -101,6 +127,7 @@ Each of these is its own merge or check, done in the days before.
 
    Anything beyond pgaudit and the application role's own pgaudit setting is a
    setting the brain does not have: decide whether it must, before the window.
+   (This query was written for this runbook and has not been run anywhere.)
    (`default_transaction_read_only` shows only after step 3 of the window, and is
    the one setting the copy checks the brain does not inherit.)
 5. **Check the images and the settings.** The API image and the topo worker image
@@ -123,9 +150,14 @@ estimate otherwise. The whole list is **not yet run anywhere** on prod.
 
 **`main` is frozen from step 1 to step 8**: every merge to `main` deploys the
 API, and a deploy in the middle of the window does the wrong thing for the
-step it lands in. No merges (except the two flips below), no hand workflow runs
-other than the one named in step 6, no hand `terraform apply`. Before each flip,
-check that nothing is running:
+step it lands in. For example, while RDS is read-only a deploy's migrate step
+passes if no migration is pending (`prisma migrate deploy` exits 0, "No pending
+migrations to apply") and the deploy goes on to swap Elastic Beanstalk; with a
+migration pending it exits 1 at its first insert ("cannot execute INSERT in a
+read-only transaction"), changes nothing, and the deploy stops before the swap
+(measured against a scratch RDS, 2026-11-11). No merges (except the two flips
+below), no hand workflow runs other than the one named in step 6, no hand
+`terraform apply`. Before each flip, check that nothing is running:
 `gh run list --workflow deploy-api.yml --limit 3` and
 `gh run list --workflow terraform-apply.yml --limit 3` show nothing in progress.
 
@@ -176,7 +208,8 @@ check that nothing is running:
    Wait for any topo-worker or topo-export-worker task to end, or accept that it
    will fail. (Scheduled tasks such as the place registry touch no database.)
    Then, in a master-user `psql` session on RDS (a recorded read; not yet run
-   anywhere), make it read-only and end the other sessions:
+   anywhere as written; the same statements ran on a scratch RDS), make it
+   read-only and end the other sessions:
 
    ```sql
    ALTER DATABASE logjam SET default_transaction_read_only = on;
@@ -185,7 +218,8 @@ check that nothing is running:
    ```
 
    Check: a write from the application now fails (Logjam Web's save shows its
-   error); `show default_transaction_read_only` in a new session says `on`. Then
+   error); `show default_transaction_read_only` in a new session says `on`. (That
+   session is itself read-only, which matters for undoing it: see "Rolling back".) Then
    take **the final snapshot**, the rollback copy (it holds real data and does not
    expire: the teardown deletes it, see the policy's limit 8; **not yet run
    anywhere**):
@@ -197,9 +231,10 @@ check that nothing is running:
    ```
 
 4. **The copy**, over the rehearsal's copy, with `COPY_REPLACE=1` (the command in
-   "Before the window"). Check: exit code `0` and `copy: ok: every check held`
-   as the last log line. Row counts and sequence values are exact because the
-   source is read-only; the log lists any difference. If it ends in
+   "Before the window"; measured 197 s for 1,764 MB on a scratch copy). Check: exit
+   code `0` and `copy: ok: every check held` as the last log line. Row counts and
+   sequence values are exact because the source is read-only; the log lists any
+   difference. If it ends in
    `NOT VERIFIED`, do not go on: re-run it, and if it still fails, roll back (below).
 5. **A full backup on the brain, and archiving green**, before any write reaches
    it. The nightly one is at 03:00; to take one now, on the host (run on a
@@ -219,16 +254,24 @@ check that nothing is running:
    30 seconds plus the image pull (49 s after the apply on a scratch copy). The
    deploy this merge triggers runs in "serving, not yet public" mode: it migrates
    the brain, writes `release.json`, and does not smoke-test (nothing public
-   reaches the brain yet). Check, in order:
+   reaches the brain yet). Check, in the order each becomes true:
    - the apply is green, and
      `aws ecs describe-task-definition --task-definition logjam-api-migrate --query 'taskDefinition.containerDefinitions[0].environment'`
      shows the brain's `ec2-...compute.amazonaws.com` as `DB_HOST` and
-     `DATABASE_SSL_CA=/app/brain-ca.pem`;
-   - the status file says `"serving": true` and `api_sha` is the merged head;
+     `DATABASE_SSL_CA=/app/brain-ca.pem` (on the RDS path that variable stays
+     unset: the RDS certificate bundle in it breaks `prisma migrate deploy`);
+   - the status file says `"serving": true` (the tag is on). At first its `api_sha`
+     is **not** the merged head: the release agent starts whatever sha the
+     existing `release.json` names, which is the previous release's;
+   - the deploy run this merge triggered finishes green with its notice: it
+     migrates the brain and writes `release.json` for the merged head;
+   - only then, within the agent's 30 seconds, `api_sha` in the status file is
+     the merged head. If it is not after two minutes, read
+     `brain 'journalctl -u brain-release --no-pager | tail -20'`;
    - on the host, `brain 'curl -s -o /dev/null -w "%{http_code}" localhost/ready'`
      prints `200` (`/ready` needs no credentials; this is the only check of the
-     brain before it is public, because CI cannot see it);
-   - the deploy run finished green with its notice.
+     brain before it is public, because CI cannot see it). It answered 22 to 49
+     seconds after serving went on in the two rehearsals.
 
    **6a. Re-pin the topo task families**, once the apply is green. The apply put
    them on `:latest`, and `deploy-topo-worker.yml` cannot be started by hand
@@ -257,7 +300,10 @@ check that nothing is running:
    log filters so they read the brain's log, and turns the Elastic Beanstalk
    health alarm's actions off. Its deploy runs in full and its smoke test waits
    up to 5 minutes for the public `/meta` to name the brain's sha (CloudFront can
-   keep returning the old one for a while; the retries absorb it). Check:
+   keep returning the old one for a while; the retries absorb it). The brain's
+   security group admits only CloudFront on port 80, so a request straight to its
+   address times out (rehearsed 2026-11-11, with `/ready` answering 200 through
+   CloudFront). Check:
    - `curl -s https://api.logjamnsw.com/meta` names the merged sha, and
      `curl -s -o /dev/null -w '%{http_code}' https://api.logjamnsw.com/ready` is `200`;
    - sign in on Logjam Web and sync Logjam GPS; save a change in each;
@@ -267,8 +313,9 @@ check that nothing is running:
 8. **Prove a worker reaches the brain**, run one topo job end to end (a worker
    connects over verified TLS), then unfreeze `main`. Elastic Beanstalk stays up
    and idle with its sweeps off, and RDS stays read-only, for the rollback
-   period. The deploy workflows no longer touch Elastic Beanstalk, so it can be
-   scaled to zero to save money; a rollback would then need it scaled back up.
+   period, about US$10 a month (its instance cost US$9.82 in October). Nobody has
+   checked a way to scale it down from this repository, so it is left running
+   until the teardown; a deploy no longer touches it.
 
 ## Rolling back
 
@@ -276,12 +323,25 @@ Until users write to the brain a rollback is clean; after that, going back means
 copying those writes into RDS, and once the smoke test has passed the honest
 answer is to fix forward.
 
+**The order is deliberate: RDS becomes writable only after the brain's API has
+stopped.** The brain's sweeps run for as long as its API does, and a writable RDS
+behind Elastic Beanstalk while the brain still sweeps is the two-sweepers hazard
+in the box at the top: the brain would delete media that RDS has just confirmed.
+So revert the pull requests first, check the brain's API is gone
+(`brain 'docker ps --format "{{.Names}}"'` lists no `brain-api-1`, and the status
+file says `"serving": false`), and only then make RDS writable, and only then turn
+Elastic Beanstalk's sweeps back on. The serving revert's own deploy runs against
+a still read-only RDS: its migrate step passes when no migration is pending and
+the deploy goes on to Elastic Beanstalk; with one pending it fails at its first
+insert, changes nothing, and Elastic Beanstalk keeps the release it has (measured
+2026-11-11). Either way the API there writes nothing until RDS is writable.
+
 | After step | What to undo, in this order | What is lost |
 |---|---|---|
 | 2 | `aws elasticbeanstalk update-environment --environment-name logjam-api-prod --options-to-remove Namespace=aws:elasticbeanstalk:application:environment,OptionName=TOPO_REAPER_INTERVAL_MS` (about 65 s) | nothing |
-| 3 | Make RDS writable again: `ALTER DATABASE logjam RESET default_transaction_read_only;` (and end sessions). Sweeps back on as above. The snapshot can stay | nothing: no write reached the brain |
+| 3 | Make RDS writable again. Only a session that is itself not read-only can: connect with `PGOPTIONS='-c default_transaction_read_only=off'` and run `ALTER DATABASE logjam RESET default_transaction_read_only;` (a plain session cannot, as it inherits the setting; run on a scratch copy). Sweeps back on as above. The snapshot can stay | nothing: no write reached the brain |
 | 4, 5 | Nothing changed that matters: the brain is not serving. Re-run the copy with `COPY_REPLACE=1` when ready; otherwise as step 3 | nothing |
-| 6 (and 6a) | Revert the serving pull request (instance tag `off`: the release agent removes the API container within its 30 s tick; the four task definitions go back to RDS; the workflows go back to Elastic Beanstalk; the revert's merge deploys `main`'s head to it). Then **repin the topo families** the same way as 6a (`rollback.yml`, `target=worker`, `sha=$TOPO_SHA`: the revert put them back on `:latest` with RDS's settings). Then by hand: RDS writable, Elastic Beanstalk's sweeps back on, in that order | anything a topo task or the brain's API wrote to the brain after the flip is not on RDS |
+| 6 (and 6a) | Revert the serving pull request (instance tag `off`: the release agent removes the API container within its 30 s tick; the four task definitions go back to RDS; the workflows go back to Elastic Beanstalk; the revert's merge deploys `main`'s head to it). Then **repin the topo families** the same way as 6a (`rollback.yml`, `target=worker`, `sha=$TOPO_SHA`: the revert put them back on `:latest` with RDS's settings). Then, once the brain's API is gone, by hand: RDS writable (as for step 3), then Elastic Beanstalk's sweeps back on, in that order. The re-registered task definitions carry no `DATABASE_SSL_CA`: do not set one by hand | anything a topo task or the brain's API wrote to the brain after the flip is not on RDS |
 | 7 | Revert the public pull request first (CloudFront's origin back to Elastic Beanstalk; the apply waits), then as for step 6. | everything written to the brain since the flip |
 
 A rollback to a release built before the certificate was bundled will not start
@@ -296,9 +356,9 @@ on the brain: only roll back to releases built after.
   stacks run; that is expected, estimated near US$60 a month, and the cost ceiling
   at US$100 is the backstop ([alarms.md](alarms.md#cost-ceiling)).
 - **Do not delete RDS or Elastic Beanstalk yet.** They are the rollback. The
-  design assumed a period of about 30 days with no rollback used and every
-  nightly drill green; it is the maintainer's call. Elastic Beanstalk can be
-  scaled to zero in the meantime (step 8).
+  cutover issue (#434) suggests, as an example, 30 days with no rollback used
+  and every nightly drill green; the period is the maintainer's call. Elastic
+  Beanstalk is left running meanwhile (step 8).
 - **The teardown is a separate pull request, or several, that stops at the
   `prevent_destroy` guards for the maintainer.** What it removes: the RDS
   instance (`rds.tf`: with `delete_automated_backups = true` and
