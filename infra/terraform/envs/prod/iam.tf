@@ -819,6 +819,18 @@ locals {
         Action   = ["ebs:GetSnapshotBlock", "ebs:ListSnapshotBlocks", "ebs:ListChangedBlocks"]
         Resource = "*"
       },
+      # A shell on an instance (Session Manager, Run Command) or inside a
+      # running task (ECS Exec): root on the brain's host, a route to the
+      # database that needs no output read, since a command can copy data
+      # anywhere. Only the maintainer's own identity operates the brain;
+      # Terraform never calls these. Ending a session (ssm:TerminateSession)
+      # stays allowed.
+      {
+        Sid      = "DenyShells"
+        Effect   = "Deny"
+        Action   = ["ssm:SendCommand", "ssm:StartSession", "ssm:ResumeSession", "ecs:ExecuteCommand"]
+        Resource = "*"
+      },
       # A Run Command's text and output, which SSM keeps for 30 days: the
       # maintainer operates the brain with it, and ReadOnlyAccess allows
       # ssm:Get* and ssm:List*. Nothing in CI reads one.
