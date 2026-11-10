@@ -150,9 +150,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The restore drill** (`brain/postgres/drill.sh`) restores with
   `--archive-mode=off` and refuses to start Postgres unless the restored
   `archive_mode` reads `off`: a restored copy that archives writes a timeline
-  into the live repository and breaks every later restore. Keep both, and keep
-  the drill's role read-only on the backup bucket. Guard: the drill scenario of
-  `brain/tests/e2e.sh` (the repository listing must not change).
+  into the live repository and breaks every later restore. Keep both. Guard:
+  the drill scenario of `brain/tests/e2e.sh` (the repository listing must not
+  change).
 - **The cutover's data copy** (`brain/postgres/copy.sh`, `brain_copy.tf`) is
   started by a person, never on a schedule, and never against a serving brain:
   it stops unless `status.json` is fresh and says `serving` is false (read

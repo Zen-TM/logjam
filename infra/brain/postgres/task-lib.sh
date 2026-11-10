@@ -28,10 +28,13 @@ s3_curl() {
     url=https://$bucket.s3.$AWS_REGION.amazonaws.com/$key
   fi
   if [ -n "$file" ]; then hash=$(sha256sum "$file" | cut -d' ' -f1); else hash=$(printf '' | sha256sum | cut -d' ' -f1); fi
-  local args=(-fsS -m 30 --aws-sigv4 "aws:amz:$AWS_REGION:s3" --user "${AWS_ACCESS_KEY_ID:-}:${AWS_SECRET_ACCESS_KEY:-}"
-    -H "x-amz-content-sha256: $hash")
-  [ -z "${AWS_SESSION_TOKEN:-}" ] || args+=(-H "x-amz-security-token: $AWS_SESSION_TOKEN")
+  # The credentials reach curl as a config on a pipe, never in an argument list where ps shows them, as in
+  # host/lib.sh's s3_curl; the image cannot source that file, as its build context is postgres/.
+  local cfg
+  cfg=$(printf 'user = "%s:%s"\n' "${AWS_ACCESS_KEY_ID:-}" "${AWS_SECRET_ACCESS_KEY:-}")
+  [ -z "${AWS_SESSION_TOKEN:-}" ] || cfg+=$(printf '\nheader = "x-amz-security-token: %s"' "$AWS_SESSION_TOKEN")
+  local args=(-fsS -m 30 --aws-sigv4 "aws:amz:$AWS_REGION:s3" -H "x-amz-content-sha256: $hash")
   [ "${BRAIN_BACKUP_VERIFY_TLS:-y}" != n ] || args+=(-k)
   if [ -n "$file" ]; then args+=(-H "content-type: application/json" -T "$file"); fi
-  curl "${args[@]}" "$url"
+  curl "${args[@]}" -K <(printf '%s\n' "$cfg") "$url"
 }

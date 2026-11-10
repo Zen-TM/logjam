@@ -242,7 +242,9 @@ the brain serves nobody until the cutover.
    Look for exit code `0` and `"ok": true`, a `backup_label`, `restore_seconds`
    (7 to 8 seconds for a 28 MB database, 33 for 1.7 GB; the whole task about
    30 seconds, 21 of them pulling the image), `tables_read` (35 there), and no
-   `error`. Anything else is a backup that does not restore: stop and read
+   `error`. Before step 9's copy the database has no tables, so `tables_read`
+   is `0` and that is a pass; after the copy it is the number of tables.
+   Anything else is a backup that does not restore: stop and read
    `/logjam/brain/drill` before going further.
 7. **Fetch the certificate and finish its pull request.** The brain's
    certificate is made at first boot and cannot exist before. The images that
