@@ -27,6 +27,8 @@ that goes wrong between deploys.
 | `logjam-fire-history-not-launched` | EventBridge Scheduler's call to start the monthly fire history build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-coverage-failed` | The monthly coverage build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-coverage` |
 | `logjam-coverage-not-launched` | EventBridge Scheduler's call to start the monthly coverage build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
+| `logjam-signup-cap-80-percent` | Sign-ups this month reached 80% of the monthly cap | Is it growth or a flood? Raise the cap or leave it ([Sign-up cap](#sign-up-cap)) |
+| `logjam-signup-trigger-errors` | The pre sign-up function returned an error: the cap is full, or the trigger is broken | Compare the month's count with the cap; if under it, read the function's log group ([Sign-up cap](#sign-up-cap)) |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -155,6 +157,53 @@ got past, since the next scheduled run is a month away.
 2. If none ran, find the `RunTask` call by the role
    `logjam-place-registry-scheduler` in CloudTrail and read its error: a role,
    subnet or task definition problem, fixed in Terraform.
+
+## Sign-up cap
+
+Cognito bills a user as active for the month they sign up, confirmed or not,
+and nothing in front of its endpoints limits how fast an account can be
+created. So a pre sign-up function (`infra/lambda/cognito-pre-signup`) counts
+self-service sign-ups in the DynamoDB table `logjam-signup-counter` (one item
+per UTC month, attribute `n`) and refuses them once `signup_cap_per_month`
+(`infra/terraform/envs/prod/cognito_signup_cap.tf`, 9000) is reached. People
+already signed up are untouched, and so are accounts an administrator creates.
+Both clients tell a refused person "Logjam isn't taking new accounts right now.
+Please try again next month." The count starts again on the 1st (UTC).
+
+If the counter cannot be reached, the sign-up goes through uncounted rather
+than fail, so a DynamoDB outage can let a few past the cap but never blocks
+anyone.
+
+### `logjam-signup-cap-80-percent`
+
+A metric filter on the function's log group reads each `signup_counted` line
+(`n` this month, `cap`) as `SignupsThisMonth` in namespace `Logjam/Signup`.
+The alarm fires when the day's highest count reaches 80% of the cap and stays
+up until the count restarts on the 1st.
+
+1. See the count: `aws dynamodb get-item --table-name logjam-signup-counter
+   --key '{"month":{"S":"2026-11"}}'` (use the current UTC month). The item
+   holds a number and nothing else.
+2. Real growth: raise `signup_cap_per_month` in `cognito_signup_cap.tf` (a
+   normal PR; the apply changes the function's environment only). Its ceiling
+   is 9000: Cognito's 10,000 free active users a month also have to cover
+   people who sign in, so check the user pool's active users before raising it.
+3. A flood: leave the cap. At the cap it stops the bill, at the price of
+   closing sign-ups until the 1st.
+
+### `logjam-signup-trigger-errors`
+
+The function's `Errors` metric above zero. A refusal is a thrown error, so this
+also fires when the cap is full; a broken trigger fails real sign-ups the same
+way, which is why it alarms.
+
+1. Read the count (above). At the cap, that is the cause: nothing to fix.
+2. Under the cap, read `/aws/lambda/logjam-cognito-pre-signup` (it logs
+   counts and error class names, never who signed up) for a crash or a
+   timeout. If a deploy just changed the function, revert that PR.
+3. A person who must get in while the cap is full: create their account as an
+   administrator (Cognito console, the user pool, Create user, or
+   `aws cognito-idp admin-create-user`). That path is never counted or refused.
 
 ## Testing an alarm
 

@@ -16,7 +16,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   role or its boundary (`terraform/envs/prod/iam_apply.tf`), which that role
   may not make: the maintainer applies it from their machine.
   A plan in `envs/prod` on a fresh checkout fails until the Lambda bundle it
-  zips is built: `cd infra/lambda/cognito-email-sender && npm ci && npm run build`.
+  zips is built: `cd infra/lambda/cognito-email-sender && npm ci && npm run build`,
+  and the same in `infra/lambda/cognito-pre-signup`.
 - **Change AWS and the repository's GitHub settings only through Terraform,**
   never the console, the CLI or GitHub's Settings pages: what is made by hand
   is drift the next plan undoes. Secret values, the two settings Apps and
@@ -35,3 +36,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   values. Objects in this account's buckets and log events are denied by
   default; a bucket CI must read objects from is added to the Deny's
   exceptions and to its guard.
+- **The pre sign-up function never sets `autoConfirmUser` or `autoVerifyEmail`,
+  and logs nothing from the event** (it carries each person's email). It also
+  fails open on any error but the cap. Guards:
+  `infra/lambda/cognito-pre-signup/src/index.test.ts`. Its role and the pool's
+  `custom_email_sender` are held by `guards.tftest.hcl`.
