@@ -820,3 +820,118 @@ run "brain_role_has_only_its_grants" {
     error_message = "The brain's role may read release.json, list the signals bucket and write status.json: nothing else."
   }
 }
+
+run "cost_ceiling_denies_only_workers_and_uploads" {
+  command = plan
+  plan_options {
+    target = [aws_iam_policy.cost_ceiling_deny]
+  }
+
+  # Mutation: `Resource = "*"` (or a brain bucket) on the S3 statement, a third
+  # statement, or another action. The brain's role is shared by the API and by
+  # pgBackRest: a deny on the backup or signals bucket stops WAL archiving, and
+  # a cost alarm becomes data loss.
+  assert {
+    condition = (
+      alltrue([for st in jsondecode(aws_iam_policy.cost_ceiling_deny.policy).Statement : st.Effect == "Deny"]) &&
+      [for st in jsondecode(aws_iam_policy.cost_ceiling_deny.policy).Statement : [st.Sid, flatten([st.Action]), flatten([st.Resource])]] == [
+        ["NoNewWorkers", ["ecs:RunTask"], ["arn:aws:ecs:ap-southeast-2:620853681701:task-definition/*"]],
+        ["NoUploads", ["s3:PutObject"], ["arn:aws:s3:::logjam-media/*", "arn:aws:s3:::logjam-topo-jobs/*"]],
+      ]
+    )
+    error_message = "The cost-ceiling deny may stop only ecs:RunTask and s3:PutObject on the media and topo-jobs buckets, never the brain's backup or signals bucket."
+  }
+}
+
+run "cost_ceiling_role_attaches_only_the_deny" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_role.budget_breaker,
+      aws_iam_role_policy.budget_breaker,
+    ]
+  }
+
+  override_resource {
+    target          = aws_iam_role.brain
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_policy.cost_ceiling_deny
+    values          = { arn = "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny" }
+    override_during = plan
+  }
+
+  # Mutation: dropping the `iam:PolicyARN` condition (Budgets' role could then
+  # attach any policy, AdministratorAccess included, to those roles), another
+  # action or resource, or a role in the resources list.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Effect == "Allow" &&
+      jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Action == ["iam:AttachRolePolicy", "iam:DetachRolePolicy"] &&
+      toset(jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Resource) == toset([
+        "arn:aws:iam::620853681701:role/logjam-eb-role",
+        "arn:aws:iam::620853681701:role/logjam-brain",
+      ]) &&
+      try(jsondecode(aws_iam_role_policy.budget_breaker.policy).Statement[0].Condition, null) == {
+        ArnEquals = { "iam:PolicyARN" = "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny" }
+      }
+    )
+    error_message = "The budget role may only attach or detach the cost-ceiling deny policy, on the EB role and the brain role."
+  }
+
+  # Mutation: removing either condition lets any budget (or, for the account,
+  # any account's budget) make Budgets assume the role.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role.budget_breaker.assume_role_policy).Statement) == 1 &&
+      jsondecode(aws_iam_role.budget_breaker.assume_role_policy).Statement[0].Principal == { Service = "budgets.amazonaws.com" } &&
+      jsondecode(aws_iam_role.budget_breaker.assume_role_policy).Statement[0].Condition == {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+        ArnLike      = { "aws:SourceArn" = "arn:aws:budgets::620853681701:budget/*" }
+      }
+    )
+    error_message = "Only AWS Budgets in this account may assume the budget role."
+  }
+}
+
+run "cost_ceiling_action_fires_on_actual_spend_and_is_pre_tax" {
+  command = plan
+  plan_options {
+    target = [
+      aws_budgets_budget.ceiling,
+      aws_budgets_budget_action.ceiling,
+    ]
+  }
+
+  override_resource {
+    target          = aws_iam_policy.cost_ceiling_deny
+    values          = { arn = "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny" }
+    override_during = plan
+  }
+
+  # Mutation: notification_type = "FORECASTED" (fires on a projection, before
+  # anything is spent), approval_model = "MANUAL" (nobody is awake to approve),
+  # a threshold below 100, a role other than the two, or a different policy.
+  assert {
+    condition = (
+      aws_budgets_budget_action.ceiling.notification_type == "ACTUAL" &&
+      aws_budgets_budget_action.ceiling.approval_model == "AUTOMATIC" &&
+      aws_budgets_budget_action.ceiling.action_type == "APPLY_IAM_POLICY" &&
+      aws_budgets_budget_action.ceiling.action_threshold[0].action_threshold_value == 100 &&
+      aws_budgets_budget_action.ceiling.action_threshold[0].action_threshold_type == "PERCENTAGE" &&
+      toset(aws_budgets_budget_action.ceiling.definition[0].iam_action_definition[0].roles) == toset(["logjam-eb-role", "logjam-brain"]) &&
+      aws_budgets_budget_action.ceiling.definition[0].iam_action_definition[0].policy_arn == "arn:aws:iam::620853681701:policy/logjam-cost-ceiling-deny"
+    )
+    error_message = "The ceiling action must attach the deny policy to the EB and brain roles automatically at 100% of actual spend."
+  }
+
+  # Mutation: include_tax = true counts GST towards a pre-tax ceiling, so the
+  # breaker fires about 10% early.
+  assert {
+    condition     = aws_budgets_budget.ceiling.cost_types[0].include_tax == false && aws_budgets_budget.ceiling.time_unit == "MONTHLY"
+    error_message = "The cost ceiling is a monthly pre-tax figure."
+  }
+}
