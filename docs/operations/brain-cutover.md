@@ -386,8 +386,8 @@ on the brain: only roll back to releases built after.
   final snapshot outlives it), its parameter group and alarms (`logjam-rds-*`),
   the RDS pgaudit subscription, and the RDS CA bundle in `api/Dockerfile`; the
   cutover snapshot and `logjam-db-enc-final`, deleted by hand with
-  `aws rds delete-db-snapshot`, and an alarm for any manual RDS snapshot that
-  remains; the Elastic Beanstalk environment (`eb.tf`, `api/.ebextensions`, the
+  `aws rds delete-db-snapshot`, then a check by hand that no manual snapshot
+  or retained backup remains; the Elastic Beanstalk environment (`eb.tf`, `api/.ebextensions`, the
   EB steps of `deploy-api.yml` and `rollback.yml`, the live-sha lookup's
   Elastic Beanstalk arm in `infra/scripts/brain-setting.sh`, the
   `api_environment_degraded` alarm and the Elastic Beanstalk arm of
