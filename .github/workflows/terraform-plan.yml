@@ -29,8 +29,10 @@ name: terraform-plan
 # branch" by a person lifts it.
 #
 # envs/prod's scope is the prod root and what it can pull in (modules,
-# templates, the Lambda). bootstrap and envs/local are separate roots that
-# nothing in envs/prod reads, so a change there cannot alter its plan.
+# templates, the Lambda, and the brain's host files its user data embeds:
+# infra/brain/ but postgres/, tests/ and api.env). bootstrap and envs/local
+# are separate roots that nothing in envs/prod reads, so a change there
+# cannot alter its plan.
 
 on:
   pull_request:

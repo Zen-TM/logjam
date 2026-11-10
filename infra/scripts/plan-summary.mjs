@@ -42,7 +42,12 @@ const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraf
 export const ROOTS = {
   prod: {
     // bootstrap and envs/local are separate roots envs/prod never reads.
-    scope: new RegExp(String.raw`^(infra/terraform/(envs/prod|modules|templates)/|infra/lambda/|${PIPELINE})`),
+    // infra/brain/ minus postgres/, tests/ and api.env is what the brain's
+    // user data embeds (envs/prod/brain_instance.tf): a change to it replaces
+    // the instance, so it is planned and applied like any other prod change.
+    scope: new RegExp(
+      String.raw`^(infra/terraform/(envs/prod|modules|templates)/|infra/lambda/|infra/brain/(?!postgres/|tests/|api\.env$)|${PIPELINE})`,
+    ),
     // The apply role's boundary denies it editing itself (envs/prod/iam_apply.tf),
     // so a plan touching these would fail mid-apply; the maintainer applies it.
     self: /\.github_actions_apply(_|\[|$)/,
