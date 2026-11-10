@@ -8,10 +8,8 @@ checks that on every migration PR, for the release live at the time.
 **When:** after any change to a `deploy-*.yml`, `deploy-guard.yml`,
 `smoke.yml` or `rollback.yml` (a changed mechanism is an untested one),
 quarterly, and at the first tagged mobile release for the OTA rollback. Pick
-a quiet hour: each API step is a cold Elastic Beanstalk restart, a minute or
-two of downtime. With `brain_serving` on ([brain.md](brain.md)) an API step is
-the brain's release pointer and a few seconds of failed requests instead, and
-the same boxes below apply with the brain's variants (marked).
+a quiet hour: an API step is the brain's release pointer and a few seconds of
+failed requests ([brain.md](brain.md)).
 
 Copy the checklist into a new record at the bottom, tick it as you go, and
 note times and surprises. [rollback.md](rollback.md) has the commands.
@@ -28,7 +26,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       frontend `release-sha` on `index.html`; worker image tag on
       `logjam-topo-worker`. Note the release before each.
 - [ ] Any Terraform the change needs has been applied.
-- [ ] Which mode applies: `grep -E '^brain_(serving|public)' infra/terraform/envs/prod/brain.auto.tfvars`.
+- [ ] Whether the brain serves: `grep -E '^brain_serving' infra/terraform/envs/prod/brain.auto.tfvars`. While it is `false` no smoke test can see a release, so skip the API boxes below.
 
 ### Deploy guards
 
@@ -47,23 +45,17 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 
 ### Rollback workflow, each target back one release and forward
 
-- [ ] **API back:** `rollback.yml` target `api`, the previous sha. EB swaps,
-      both task definitions carry the old image, the smoke test passes.
-      Time from dispatch to green: ____
-- [ ] **API forward:** the same with the newest sha. Time: ____
-- [ ] **API back and forward on the brain** (`brain_serving` on; skip while it
-      is off): the same two dispatches. The task definitions carry the sha, the
+- [ ] **API back and forward:** `rollback.yml` target `api`, the previous sha,
+      then the same with the newest. The task definitions carry the sha, the
       workflow rewrote `release.json` (it prints the sha), the status file's
       `api_sha` follows within about a minute (`aws s3 cp s3://logjam-brain-signals-620853681701/status.json -`),
-      and the smoke test of the public `/meta` passes within its 5 minutes
-      (with `brain_public` still off the run says it cannot see the brain:
-      check `api_sha` and `localhost/ready` on the host instead,
-      [brain.md](brain.md)). Times: ____ / ____
-- [ ] **A sha with no `infra/brain/api.env` changes nothing** (brain mode): the
-      workflow fails before the pointer changes. (It does not look inside the
-      image: one without `/app/brain-ca.pem` is rolled back to like any other
-      and fails when its container starts, with "DATABASE_SSL_CA points to a
-      missing file"; [rollback.md](rollback.md).)
+      and the smoke test of the public `/meta` passes within its 5 minutes.
+      Times: ____ / ____
+- [ ] **A sha with no `infra/brain/api.env` changes nothing:** the workflow
+      fails before the pointer changes. (It does not look inside the image: one
+      without `/app/brain-ca.pem` is rolled back to like any other and fails
+      when its container starts, with "DATABASE_SSL_CA points to a missing
+      file"; [rollback.md](rollback.md).)
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
       `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,

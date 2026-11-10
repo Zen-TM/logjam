@@ -19,7 +19,7 @@ or loss of personal information, **and** a reasonable person would conclude it i
 **likely to result in serious harm** to an affected individual.
 
 Examples for Logjam:
-- Database (RDS) or S3 contents accessed by an unauthorised party.
+- Database or S3 contents (or the database's backups) accessed by an unauthorised party.
 - Presigned URL or credential leak exposing another user's canyons/media.
 - Cognito account takeover exposing trip history.
 - Lost/leaked operational logs that (despite scrubbing) contain identifiable data.
