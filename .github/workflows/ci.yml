@@ -330,6 +330,8 @@ jobs:
         working-directory: topo
         env:
           RUN_DB_IT: "1"
+          # This Postgres is plain TCP; a worker otherwise verifies the brain's certificate.
+          DATABASE_SSL: disable
         run: |
           grep -iE '^psycopg2-binary' requirements.txt | xargs pip install
           python -m unittest tests.test_status_guard_db -v
