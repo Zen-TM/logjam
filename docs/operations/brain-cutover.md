@@ -366,12 +366,21 @@ on the brain: only roll back to releases built after.
   `drill.json`). The budget alert `logjam-monthly` (US$50) will fire while both
   stacks run; that is expected, estimated near US$60 a month, and the cost ceiling
   at US$100 is the backstop ([alarms.md](alarms.md#cost-ceiling)).
-- **Do not delete RDS or Elastic Beanstalk yet.** They are the rollback. The
-  cutover issue (#434) suggests, as an example, 30 days with no rollback used
-  and every nightly drill green; the period is the maintainer's call. Elastic
-  Beanstalk is left running meanwhile (step 8).
-- **The teardown is a separate pull request, or several, that stops at the
-  `prevent_destroy` guards for the maintainer.** What it removes: the RDS
+- **RDS and Elastic Beanstalk are the only way back, and they go once the
+  brain has proved itself.** The cutover issue (#434) suggested 30 days;
+  Logjam is in beta with no promise to its users, so the maintainer decided
+  against a waiting period (2026-11-11). Before removing them: a regression
+  and smoke sweep of prod on the brain, and, since it costs one night, the
+  first 03:00 full backup and one green 04:30 drill on the real data
+  (`last_full_time` and `drill.json`): that drill is the first proof that
+  prod's own data restores. Elastic Beanstalk is left running meanwhile
+  (step 8).
+- **The teardown is two pull requests, drafted ahead** (branches
+  `feat/brain-rds-deletable`, then `feat/brain-teardown`). The first only
+  lets the database be deleted: AWS refuses while deletion protection is on,
+  and Terraform deletes with the settings last applied, so those change in a
+  merge of their own. From that merge on, one click deletes the database. The
+  second removes: the RDS
   instance (`rds.tf`: with `delete_automated_backups = true` and
   `skip_final_snapshot = true` first, so neither its automated backups nor a new
   final snapshot outlives it), its parameter group and alarms (`logjam-rds-*`),
