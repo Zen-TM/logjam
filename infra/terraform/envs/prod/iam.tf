@@ -810,6 +810,36 @@ locals {
         Action   = ["sqs:ReceiveMessage", "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
         Resource = "*"
       },
+      # A disk snapshot read block by block through EBS's direct APIs: the
+      # brain's disk holds the database. ReadOnlyAccess does not allow these
+      # today; denied so that never depends on AWS's list.
+      {
+        Sid      = "DenySnapshotBlocks"
+        Effect   = "Deny"
+        Action   = ["ebs:GetSnapshotBlock", "ebs:ListSnapshotBlocks", "ebs:ListChangedBlocks"]
+        Resource = "*"
+      },
+      # A shell on an instance (Session Manager, Run Command) or inside a
+      # running task (ECS Exec): root on the brain's host, a route to the
+      # database that needs no output read, since a command can copy data
+      # anywhere. Only the maintainer's own identity operates the brain;
+      # Terraform never calls these. Ending a session (ssm:TerminateSession)
+      # stays allowed.
+      {
+        Sid      = "DenyShells"
+        Effect   = "Deny"
+        Action   = ["ssm:SendCommand", "ssm:StartSession", "ssm:ResumeSession", "ecs:ExecuteCommand"]
+        Resource = "*"
+      },
+      # A Run Command's text and output, which SSM keeps for 30 days: the
+      # maintainer operates the brain with it, and ReadOnlyAccess allows
+      # ssm:Get* and ssm:List*. Nothing in CI reads one.
+      {
+        Sid      = "DenyCommandOutput"
+        Effect   = "Deny"
+        Action   = ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands"]
+        Resource = "*"
+      },
     ]
   })
 }

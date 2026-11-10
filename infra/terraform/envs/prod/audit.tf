@@ -8,7 +8,9 @@
 #      restore/export. These are the snapshot-exfiltration teeth: data cannot be
 #      pulled out of the DB without leaving a record here.
 #   2. CloudTrail S3 DATA events     — object reads/writes on logjam-media +
-#      logjam-topo-jobs (NOT the audit bucket itself — no recursion).
+#      logjam-topo-jobs, object reads on the brain's backup bucket, and EBS
+#      direct API calls on disk snapshots (NOT the audit bucket itself — no
+#      recursion).
 #   3. pgaudit (direct SQL)          — shipped off the RDS instance to the same
 #      WORM bucket via CloudWatch Logs -> Kinesis Firehose (see rds.tf for the
 #      parameter group that turns pgaudit on). Operator/master sessions log
@@ -123,7 +125,58 @@ resource "aws_s3_bucket_policy" "audit" {
   })
 }
 
-# ── CloudTrail: management + S3 data events ─────────────────────────────────
+# ── CloudTrail: management, S3 object and EBS direct API events ─────────────
+
+locals {
+  # BEGIN audit-selectors (a scratch trail copies these lines between the
+  # markers verbatim to prove them on real AWS, so keep them self-contained)
+  audit_event_selectors = [
+    # Management events (read + write): RDS CreateDBSnapshot / CopyDBSnapshot /
+    # ModifyDBSnapshotAttribute / RestoreDBInstance* / StartExportTask, and the
+    # brain's: ec2:CreateSnapshot, ssm:StartSession, ssm:SendCommand and
+    # ecs:RunTask. The snapshot-exfiltration record.
+    {
+      name = "management events, read and write"
+      fields = [
+        { field = "eventCategory", equals = ["Management"] },
+      ]
+    },
+    # S3 object events on the user-data buckets. The audit bucket is
+    # deliberately excluded (a self-referential event loop + cost), and so is
+    # the brain's signals bucket (no user data).
+    {
+      name = "object reads and writes in the media and topo buckets"
+      fields = [
+        { field = "eventCategory", equals = ["Data"] },
+        { field = "resources.type", equals = ["AWS::S3::Object"] },
+        { field = "resources.ARN", starts_with = ["arn:aws:s3:::${local.media_bucket}/", "arn:aws:s3:::${local.topo_jobs_bucket}/"] },
+      ]
+    },
+    # Reads only of the brain's backups, which are the whole database as plain
+    # objects: without this, a GetObject of them leaves no record. Writes are
+    # left out: the brain writes a WAL object every minute and Object Lock
+    # already stops an overwrite or a delete.
+    {
+      name = "object reads in the brain's backup bucket"
+      fields = [
+        { field = "eventCategory", equals = ["Data"] },
+        { field = "resources.type", equals = ["AWS::S3::Object"] },
+        { field = "readOnly", equals = ["true"] },
+        { field = "resources.ARN", starts_with = ["arn:aws:s3:::${local.brain_backups_bucket}/"] },
+      ]
+    },
+    # EBS direct APIs read a disk snapshot block by block (the brain's disk
+    # holds the database); these are data events, not management events.
+    {
+      name = "EBS direct API calls on snapshots, read and write"
+      fields = [
+        { field = "eventCategory", equals = ["Data"] },
+        { field = "resources.type", equals = ["AWS::EC2::Snapshot"] },
+      ]
+    },
+  ]
+  # END audit-selectors
+}
 
 resource "aws_cloudtrail" "audit" {
   name                          = local.trail_name
@@ -132,28 +185,22 @@ resource "aws_cloudtrail" "audit" {
   is_multi_region_trail         = true
   enable_log_file_validation    = true # digest files: tamper-evidence on top of Object Lock
 
-  # Management events (read + write): includes RDS CreateDBSnapshot /
-  # CopyDBSnapshot / ModifyDBSnapshotAttribute / RestoreDBInstance* /
-  # StartExportTask — the snapshot-exfiltration record.
-  event_selector {
-    read_write_type           = "All"
-    include_management_events = true
-  }
-
-  # S3 object-level data events on the user-data buckets only. The audit bucket
-  # is deliberately excluded to avoid a self-referential event loop + cost.
-  event_selector {
-    read_write_type           = "All"
-    include_management_events = false
-
-    data_resource {
-      type = "AWS::S3::Object"
-      values = [
-        "arn:aws:s3:::${local.media_bucket}/",
-        "arn:aws:s3:::${local.topo_jobs_bucket}/",
-      ]
+  # BEGIN audit-trail-selector-blocks
+  dynamic "advanced_event_selector" {
+    for_each = local.audit_event_selectors
+    content {
+      name = advanced_event_selector.value.name
+      dynamic "field_selector" {
+        for_each = advanced_event_selector.value.fields
+        content {
+          field       = field_selector.value.field
+          equals      = try(field_selector.value.equals, null)
+          starts_with = try(field_selector.value.starts_with, null)
+        }
+      }
     }
   }
+  # END audit-trail-selector-blocks
 
   depends_on = [aws_s3_bucket_policy.audit]
 }

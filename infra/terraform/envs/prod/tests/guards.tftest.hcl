@@ -183,6 +183,123 @@ run "ci_reads_no_secret_or_user_data" {
     ])
     error_message = "The CI privacy Deny lost a statement that keeps user data and logs out of CI (local.ci_readonly_privacy_deny)."
   }
+
+  # Mutation: removing the DenySnapshotBlocks or the DenyCommandOutput
+  # statement (or one action in it) lets the read-only roles read a disk
+  # snapshot block by block, or the output of a command run on the brain.
+  assert {
+    condition = alltrue([
+      for a in [
+        "ebs:GetSnapshotBlock", "ebs:ListSnapshotBlocks", "ebs:ListChangedBlocks",
+        "ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands",
+        ] : anytrue([
+          for st in jsondecode(aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy).Statement :
+          st.Effect == "Deny" && st.Resource == "*" && contains(flatten([st.Action]), a)
+      ])
+    ])
+    error_message = "The CI privacy Deny must cover EBS direct snapshot reads and Run Command output (local.ci_readonly_privacy_deny)."
+  }
+
+  # Mutation: removing the DenyShells statement (or one action in it) lets a
+  # CI role, the apply role above all, open a shell on the brain or in a task.
+  assert {
+    condition = alltrue([
+      for p in [
+        aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
+        aws_iam_role_policy.gha_readonly_privacy_deny.policy,
+        aws_iam_policy.github_actions_apply_boundary.policy,
+        ] : alltrue([
+          for a in ["ssm:SendCommand", "ssm:StartSession", "ssm:ResumeSession", "ecs:ExecuteCommand"] : anytrue([
+            for st in jsondecode(p).Statement :
+            st.Effect == "Deny" && st.Resource == "*" && contains(flatten([st.Action]), a)
+          ])
+      ])
+    ])
+    error_message = "The CI privacy Deny, and the apply role's boundary, must deny shells on instances and in tasks (local.ci_readonly_privacy_deny)."
+  }
+}
+
+run "audit_trail_records_every_route_to_user_data" {
+  command = plan
+  plan_options {
+    target = [aws_cloudtrail.audit]
+  }
+
+  # Each selector as a map of its fields, by field name.
+  # Mutation: dropping the management selector, or giving it a readOnly
+  # field, leaves a snapshot export or a session start unrecorded.
+  assert {
+    condition = anytrue([
+      for sel in aws_cloudtrail.audit.advanced_event_selector :
+      toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Management"]) &&
+      length(sel.field_selector) == 1
+    ])
+    error_message = "The audit trail must record all management events."
+  }
+
+  # Mutation: dropping the media and topo selector, or narrowing it to writes
+  # only (a readOnly field), leaves reads of users' files unrecorded. Dropping
+  # the eventCategory = Data field from this or the next two selectors is also
+  # red here: CloudTrail rejects such a selector, and that would otherwise
+  # show only when the maintainer applies it.
+  assert {
+    condition = anytrue([
+      for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
+        toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::S3::Object"]) &&
+        !contains([for f in sel.field_selector : f.field], "readOnly") &&
+        toset({ for f in sel.field_selector : f.field => f }["resources.ARN"].starts_with) == toset(["arn:aws:s3:::logjam-media/", "arn:aws:s3:::logjam-topo-jobs/"])
+      )
+      if contains([for f in sel.field_selector : f.field], "resources.type") && contains([for f in sel.field_selector : f.field], "resources.ARN")
+    ])
+    error_message = "The audit trail must record object reads and writes in the media and topo buckets."
+  }
+
+  # Mutation: dropping the backup selector, or turning its readOnly value to
+  # "false", leaves a GetObject of the database's backups unrecorded.
+  assert {
+    condition = anytrue([
+      for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
+        toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::S3::Object"]) &&
+        toset({ for f in sel.field_selector : f.field => f }["readOnly"].equals) == toset(["true"]) &&
+        toset({ for f in sel.field_selector : f.field => f }["resources.ARN"].starts_with) == toset(["arn:aws:s3:::${local.brain_backups_bucket}/"])
+      )
+      if alltrue([for k in ["resources.type", "readOnly", "resources.ARN"] : contains([for f in sel.field_selector : f.field], k)])
+    ])
+    error_message = "The audit trail must record object reads in the brain's backup bucket."
+  }
+
+  # Mutation: dropping the EBS selector leaves a disk snapshot's block reads
+  # unrecorded; a readOnly field would drop its writes.
+  assert {
+    condition = anytrue([
+      for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        try(toset({ for f in sel.field_selector : f.field => f }["eventCategory"].equals) == toset(["Data"]), false) &&
+        toset({ for f in sel.field_selector : f.field => f }["resources.type"].equals) == toset(["AWS::EC2::Snapshot"]) &&
+        !contains([for f in sel.field_selector : f.field], "readOnly")
+      )
+      if contains([for f in sel.field_selector : f.field], "resources.type")
+    ])
+    error_message = "The audit trail must record EBS direct API calls on snapshots."
+  }
+
+  # Mutation: a selector on every S3 object (no resources.ARN field, or an
+  # ARN prefix such as "arn:aws:s3:::") makes the trail log its own bucket's
+  # deliveries, an endless loop of events.
+  assert {
+    condition = alltrue([
+      for sel in aws_cloudtrail.audit.advanced_event_selector : (
+        contains([for f in sel.field_selector : f.field], "resources.ARN") &&
+        !anytrue([
+          for v in try({ for f in sel.field_selector : f.field => f }["resources.ARN"].starts_with, []) :
+          startswith("arn:aws:s3:::logjam-audit-${local.account_id}/AWSLogs/x", v)
+        ])
+      )
+      if anytrue([for f in sel.field_selector : f.field == "resources.type" && try(contains(f.equals, "AWS::S3::Object"), false)])
+    ])
+    error_message = "The audit trail must never record the audit bucket's own objects."
+  }
 }
 
 run "contributor_is_read_only_and_mfa_gated" {
