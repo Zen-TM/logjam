@@ -29,13 +29,14 @@ const env = getEnv();
 
 const app = express();
 
-// Behind CloudFront -> EB nginx (2 hops). Trust exactly those so `req.ip` is the
+// Trust exactly TRUST_PROXY_HOPS proxies (2 on Elastic Beanstalk: CloudFront ->
+// EB nginx; 1 with CloudFront straight to the container) so `req.ip` is the
 // real client for the IP-fallback rate-limit key (middleware/rateLimit.ts) and
 // request logs — NOT `true`, which would let clients spoof X-Forwarded-For and
-// forge their rate-limit bucket. Hop count must match the live proxy chain; if
-// the topology changes (e.g. an ALB is added), bump this. express-rate-limit's
-// validator fails loud on a wrong count.
-app.set("trust proxy", 2);
+// forge their rate-limit bucket. The count must match the live proxy chain; if
+// the topology changes (e.g. an ALB is added), change it. express-rate-limit's
+// validator fails loud on a wrong count. Guard: src/trustProxy.unit.test.ts.
+app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
 let shuttingDown = false;
 

@@ -179,8 +179,18 @@ class TestComposeDatabaseUrl(unittest.TestCase):
     def setUp(self):
         self._saved = {
             k: os.environ.get(k)
-            for k in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
+            for k in (
+                "DB_HOST",
+                "DB_PORT",
+                "DB_NAME",
+                "DB_USER",
+                "DB_PASSWORD",
+                "DATABASE_SSL",
+                "DATABASE_SSL_CA",
+            )
         }
+        os.environ.pop("DATABASE_SSL", None)
+        os.environ.pop("DATABASE_SSL_CA", None)
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -198,7 +208,47 @@ class TestComposeDatabaseUrl(unittest.TestCase):
         url = compose_database_url()
         self.assertEqual(
             url,
-            "postgresql://logjam_admin:p%40ss%21w0rd%23@db.example.com:5432/logjam",
+            "postgresql://logjam_admin:p%40ss%21w0rd%23@db.example.com:5432/logjam"
+            f"?{self.HYGIENE}",
+        )
+
+    HYGIENE = (
+        "connect_timeout=10&keepalives=1&keepalives_idle=30"
+        "&keepalives_interval=10&keepalives_count=3"
+    )
+
+    def _basic_env(self):
+        os.environ["DB_HOST"] = "db"
+        os.environ["DB_PORT"] = "5432"
+        os.environ["DB_NAME"] = "logjam"
+        os.environ["DB_USER"] = "u"
+        os.environ["DB_PASSWORD"] = "p"
+
+    def test_unset_ca_adds_no_ssl_parameters(self):
+        self._basic_env()
+        self.assertEqual(
+            compose_database_url(),
+            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}",
+        )
+
+    # Mutation: drop the sslmode/sslrootcert parameters, or let
+    # DATABASE_SSL=disable fall through to them.
+    def test_ca_set_verifies_the_server_against_it(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL_CA"] = "/etc/logjam/brain ca.pem"
+        self.assertEqual(
+            compose_database_url(),
+            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}"
+            "&sslmode=verify-full&sslrootcert=/etc/logjam/brain%20ca.pem",
+        )
+
+    def test_ssl_disable_stays_plain_even_with_a_ca(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL_CA"] = "/etc/logjam/ca.pem"
+        os.environ["DATABASE_SSL"] = "disable"
+        self.assertEqual(
+            compose_database_url(),
+            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}",
         )
 
     def test_default_port(self):

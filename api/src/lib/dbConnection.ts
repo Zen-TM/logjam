@@ -35,9 +35,16 @@ export function dbConnectionConfig(): PoolConfig {
   // pool keeps working across RDS password rotations without a restart (see
   // lib/dbPassword.ts). The boot-time password in the URL is only a fallback
   // for pg internals that never invoke the callback.
+  //
+  // keepAlive and the connect timeout keep a replaced database host from leaving
+  // the pool (or the sweep lock's connection, idle for minutes at a time) on
+  // dead sockets, or a connect that never answers. No statement timeout: a slow
+  // query is not a dead host. Guard: services/prisma.unit.test.ts.
   return {
     connectionString: databaseUrlFromEnv(),
     password: () => currentDbPassword(),
     ssl,
+    keepAlive: true,
+    connectionTimeoutMillis: 10_000,
   };
 }
