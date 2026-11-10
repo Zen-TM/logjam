@@ -5,7 +5,7 @@
 #
 # It has no schedule and nothing may give it one: a scheduled copy after the
 # cutover would replace the live database with RDS's frozen copy. Guard:
-# tests/guards.tftest.hcl (brain_copy_is_dormant_and_never_scheduled).
+# tests/guards.tftest.hcl (brain_copy_is_never_scheduled).
 #
 # It runs on the worker security group in the worker subnets, as the migrate
 # task does (ecs.tf; deploy-api.yml names both): logjam-worker-sg is already
@@ -37,7 +37,7 @@ resource "aws_cloudwatch_log_group" "brain_copy" {
 
 # The task's own role: it reads status.json (to refuse a serving brain) and
 # nothing else. The execution role (ecs.tf's other tasks) injects the database
-# credentials and pulls the image. Guard: brain_copy_is_dormant_and_never_scheduled.
+# credentials and pulls the image. Guard: brain_copy_task_reads_only_status_json.
 resource "aws_iam_role" "brain_copy" {
   count = local.brain_enabled ? 1 : 0
 
