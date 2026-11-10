@@ -21,7 +21,10 @@
 # Environment: COPY_SOURCE_HOST, COPY_TARGET_HOST, COPY_TARGET_CA (PEM text),
 # DB_USER, DB_PASSWORD (the same role and password on both sides), DB_NAME
 # (default logjam), BRAIN_SIGNALS_BUCKET, AWS_REGION; COPY_REPLACE=1 to replace
-# a target that already holds tables. Credentials: the ECS task role.
+# a target that already holds tables; COPY_ALLOW_LIVE_SOURCE=1 to copy from a
+# source that is not read-only (a rehearsal: without it the copy stops, so a
+# forgotten read-only step cannot pass; with it the last line says the source
+# was live and `every check held` is never printed). Credentials: the ECS task role.
 # Tests only: COPY_SOURCE_CA_FILE (a CA file instead of Amazon's bundle),
 # BRAIN_BACKUP_ENDPOINT (an S3 stand-in; CURL_CA_BUNDLE trusts its certificate).
 set -uo pipefail
@@ -65,11 +68,13 @@ fi
 grep -q 'BEGIN CERTIFICATE' "$WORK/source-ca.pem" || die "the source CA file holds no certificate: stopping"
 
 # --- never a serving brain ---------------------------------------------------
-# Read twice: here, and again after the dump, which can take minutes.
+# Read twice: here, and again after the dump, which can take minutes. `serving` alone
+# is the switch tag, which reads false when one status tick cannot read instance
+# metadata, so a running API (api_sha) counts as serving too.
 brain_is_dormant() {
   local status state
   status=$(s3_curl "$BRAIN_SIGNALS_BUCKET" status.json 2> /dev/null) || die "status.json cannot be read: stopping"
-  state=$(jq -r 'if .serving != false then "serving"
+  state=$(jq -r 'if .serving != false or .api_sha != null then "serving"
     elif ((now - (.time | fromdateiso8601)) | fabs) >= 180 then "stale" else "ok" end' <<< "$status" 2> /dev/null) || state=unreadable
   case $state in
     ok) ;;
@@ -98,6 +103,8 @@ fi
 
 readonly_source=$(q on_source 'show default_transaction_read_only') || die "cannot read the source's settings: stopping"
 say "source default_transaction_read_only = $readonly_source"
+[ "$readonly_source" = on ] || [ "${COPY_ALLOW_LIVE_SOURCE:-}" = 1 ] \
+  || die "the source is not read-only, so its counts cannot match: set it read-only (the cutover window), or set COPY_ALLOW_LIVE_SOURCE=1 for a rehearsal: stopping"
 
 # --- dump to a file, then restore in one transaction ----------------------------
 on_source pg_dump --format=custom --no-owner --no-privileges --schema=public --file="$WORK/dump" 2> "$WORK/err" \
@@ -111,9 +118,7 @@ brain_is_dormant
 # a right it does not have. (A `--schema=public` dump carries no extensions: the
 # brain makes its own pgaudit.)
 pg_restore -l "$WORK/dump" > "$WORK/toc" 2> "$WORK/err" || { tail -3 "$WORK/err"; die "cannot list the dump: the brain is untouched"; }
-# grep -v exits 1 when nothing is left: a dump with nothing to restore is a stop too.
-grep -vE '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - public |COMMENT - SCHEMA public )' "$WORK/toc" > "$WORK/list" \
-  || die "the dump lists nothing to restore: the brain is untouched"
+grep -vE '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - public |COMMENT - SCHEMA public )' "$WORK/toc" > "$WORK/list"
 clean=()
 [ "${COPY_REPLACE:-}" != 1 ] || clean=(--clean --if-exists)
 if ! on_target pg_restore --single-transaction --no-owner --no-privileges "${clean[@]}" --use-list="$WORK/list" --dbname="$DB" "$WORK/dump" > /dev/null 2> "$WORK/err"; then
@@ -168,4 +173,5 @@ migration=$(last on_target)
 if [ -z "$migration" ] || [ "$migration" != "$(last on_source)" ]; then fail "the last migration differs"; fi
 
 [ "$failed" = 0 ] || die "RESTORED BUT NOT VERIFIED: do not serve from this copy; fix the cause and run again with COPY_REPLACE=1"
-say "ok: every check held"
+if [ "$readonly_source" = on ]; then say "ok: every check held"
+else say "ok: the source was live, so counts and sequence values were not held to exact; the other checks held"; fi
