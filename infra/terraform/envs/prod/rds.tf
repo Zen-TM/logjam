@@ -69,9 +69,11 @@ resource "aws_db_instance" "main" {
   # on burst credits), while gp3's 3000 IOPS baseline is included at no extra
   # cost below 400 GB. The switch is an online ModifyDBInstance with no
   # downtime, though the volume spends a while in `optimizing` afterwards.
-  storage_type           = "gp3"
-  username               = "logjam_admin"
-  vpc_security_group_ids = ["sg-06cc0aaa310968aa4"]
+  storage_type = "gp3"
+  username     = "logjam_admin"
+  # By reference, so that the state records the dependency and a later removal of
+  # both deletes the instance before the security group it sits in.
+  vpc_security_group_ids = [aws_security_group.rds.id]
 
   lifecycle {
     prevent_destroy = true
