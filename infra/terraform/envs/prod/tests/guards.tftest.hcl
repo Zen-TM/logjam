@@ -2069,6 +2069,19 @@ run "prod_runs_on_the_brain" {
     error_message = "Every task definition with a DB_HOST must name the brain and set DATABASE_SSL_CA, and CloudFront's API origin must be the brain's address."
   }
 
+  # No prod task definition opts out of TLS: the API refuses DATABASE_SSL=disable
+  # with NODE_ENV=production, the migrate URL and the Python workers refuse it too
+  # (the workers' definitions set no NODE_ENV, so this is what holds them).
+  # Mutation: a { name = "DATABASE_SSL", value = "disable" } entry in any of the
+  # four definitions.
+  assert {
+    condition = alltrue([
+      for td in [aws_ecs_task_definition.api_script, aws_ecs_task_definition.topo_worker, aws_ecs_task_definition.api_migrate, aws_ecs_task_definition.topo_export_worker] :
+      !contains([for e in jsondecode(td.container_definitions)[0].environment : e.name], "DATABASE_SSL")
+    ])
+    error_message = "No prod task definition may set DATABASE_SSL: production never connects to Postgres in the clear."
+  }
+
   # Mutation: dropping the custom_header block (the API would refuse every
   # request), another port or protocol, or an origin id that is not the one the
   # default behavior names.

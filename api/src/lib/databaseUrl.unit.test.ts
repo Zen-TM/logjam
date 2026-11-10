@@ -61,6 +61,27 @@ describe("migrateDatabaseUrl", () => {
     );
   });
 
+  // Mutation: `??` back in place of `||` for DATABASE_SSL_CA in migrateDatabaseUrl:
+  // an empty value is then a certificate named "", and production connects in the clear.
+  it("reads an empty DATABASE_SSL_CA as unset: production still verifies", () => {
+    expect(
+      migrateDatabaseUrl(url, { NODE_ENV: "production", DATABASE_SSL_CA: "" }),
+    ).toBe(
+      `${url}?sslmode=require&sslaccept=strict&sslcert=%2Fapp%2Fbrain-ca.pem`,
+    );
+  });
+
+  // Mutation: remove the production check for DATABASE_SSL=disable in
+  // migrateDatabaseUrl: a production migrate then returns the plain URL.
+  it("refuses DATABASE_SSL=disable in production", () => {
+    expect(() =>
+      migrateDatabaseUrl(url, {
+        NODE_ENV: "production",
+        DATABASE_SSL: "disable",
+      }),
+    ).toThrow(/forbidden in production/);
+  });
+
   it("leaves the URL as it is when DATABASE_SSL=disable", () => {
     expect(
       migrateDatabaseUrl(url, {

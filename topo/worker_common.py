@@ -41,7 +41,9 @@ def compose_database_url() -> str:
     also reads), or the brain's certificate the image carries when it is unset,
     so a worker never connects in the clear and a missing file stops it at
     connect ("root certificate file ... does not exist"). Only
-    DATABASE_SSL=disable (local workers, whose Postgres is plain TCP) drops it.
+    DATABASE_SSL=disable (local workers, whose Postgres is plain TCP) drops it,
+    and with NODE_ENV=production it is refused, as the API refuses it. The prod
+    task definitions set neither (guards.tftest.hcl, prod_runs_on_the_brain).
     Guard: tests/test_worker_helpers.py.
     """
     host = os.environ.get("DB_HOST")
@@ -72,7 +74,10 @@ def compose_database_url() -> str:
         "keepalives_interval=10",
         "keepalives_count=3",
     ]
-    if os.environ.get("DATABASE_SSL") != "disable":
+    if os.environ.get("DATABASE_SSL") == "disable":
+        if os.environ.get("NODE_ENV") == "production":
+            raise RuntimeError("DATABASE_SSL=disable is forbidden in production.")
+    else:
         ca = os.environ.get("DATABASE_SSL_CA") or BRAIN_CA_PATH
         params += ["sslmode=verify-full", f"sslrootcert={quote(ca, safe='/')}"]
 

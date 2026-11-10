@@ -187,10 +187,12 @@ class TestComposeDatabaseUrl(unittest.TestCase):
                 "DB_PASSWORD",
                 "DATABASE_SSL",
                 "DATABASE_SSL_CA",
+                "NODE_ENV",
             )
         }
         os.environ.pop("DATABASE_SSL", None)
         os.environ.pop("DATABASE_SSL_CA", None)
+        os.environ.pop("NODE_ENV", None)
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -255,6 +257,25 @@ class TestComposeDatabaseUrl(unittest.TestCase):
             compose_database_url(),
             f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}",
         )
+
+    # Mutation: `os.environ.get("DATABASE_SSL_CA", BRAIN_CA_PATH)` in place of
+    # the `or`: an empty value is then a certificate named "".
+    def test_an_empty_ca_is_unset(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL_CA"] = ""
+        self.assertIn(
+            "sslrootcert=/app/brain-ca.pem",
+            compose_database_url(),
+        )
+
+    # Mutation: drop the NODE_ENV check on DATABASE_SSL=disable in
+    # compose_database_url: a production worker then connects in the clear.
+    def test_ssl_disable_is_refused_in_production(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL"] = "disable"
+        os.environ["NODE_ENV"] = "production"
+        with self.assertRaisesRegex(RuntimeError, "forbidden in production"):
+            compose_database_url()
 
     def test_ssl_disable_stays_plain_without_a_ca(self):
         self._basic_env()
