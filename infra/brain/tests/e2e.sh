@@ -74,6 +74,10 @@ dump() {
   for s in postgres api; do [ -n "$(cid $s)" ] && { echo "--- $s logs"; r docker logs --tail 25 "$(cid $s)" 2>&1; }; done
 }
 
+lose_disk() { # the volume vanishes under a running Postgres: no clean shutdown to archive its last segment
+  r docker kill "$(cid postgres)" > /dev/null 2>&1
+  reboot; new_disk
+}
 new_disk() { # a blank "data volume" at the stable path, whatever was there
   detach_disk
   rm -f "$WORK/disk.img"; truncate -s 512M "$WORK/disk.img"
@@ -457,7 +461,7 @@ sql postgres "select pg_switch_wal()" > /dev/null
 check "the WAL with the rows is archived" wait_for 120 archived "$want"
 fulls2=$(fulls)
 # The bootstrap tag stays 1: a blank volume with a backup in the repository restores, whatever it says.
-reboot; new_disk
+lose_disk
 boot; rc=$?
 [ "$rc" = 0 ] || fatal "boot.sh did not restore onto the blank volume (exit $rc)"
 check "boot mode: restore, without being asked" [ "$(cat /run/brain/boot-mode)" = restore ]
@@ -486,7 +490,7 @@ lost_seconds() { # two minutes of writes, the disk lost, restored; sets LOST to 
   for i in 1 2 3; do r /opt/brain/host/status.sh || bad "status.sh failed"; [ "$i" = 3 ] || sleep 60; done
   wait "$writer"
   disaster=$(date +%s)
-  reboot; new_disk
+  lose_disk
   boot || fatal "boot.sh did not restore the volume"
   newest=$(sql logjam 'select extract(epoch from max(ts))::bigint from e2e_stream')
   LOST=$((disaster - newest))
