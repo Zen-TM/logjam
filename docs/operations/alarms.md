@@ -416,10 +416,12 @@ One alarm covers both the API running hot and the bill. The brain runs in
 unlimited credit mode (`brain_cpu_credits`, the default): it never throttles,
 and CPU beyond the free allowance is billed at US$0.04 per vCPU-hour. The
 allowance is 10% of the instance on a `t4g.micro` (0.2 vCPU of two) and 20% on
-a `t4g.small`. Idle is about 5% of the instance, and a daily full backup or a
-boot does not bring an hour to 20%, so the alarm fires when one hour averages
-20% or more. A month in which no hour reaches that costs a `t4g.micro` at most
-about US$5.84 in surplus credits. It is one reading of an hour on purpose:
+a `t4g.small`. Idle is about 3% of the instance (the whole host used 0.066 of
+two vCPUs over ten idle minutes, measured on a scratch copy, 2026-11-11), and a
+daily full backup or a boot does not bring an hour to 20% (the busiest hour of
+that rehearsal, with a boot, a data load and a load test in it, averaged
+17.5%), so the alarm fires when one hour averages 20% or more. A month in which no
+hour reaches that costs a `t4g.micro` at most about US$5.84 in surplus credits. It is one reading of an hour on purpose:
 several shorter readings that must all be high would miss a load that rests
 between bursts.
 

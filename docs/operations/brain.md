@@ -21,11 +21,13 @@ Why it is built this way, and the rules that hold it up:
 - **An outside check** (a Lambda every 5 minutes) and a few CloudWatch alarms
   email the maintainer; [alarms.md](alarms.md) says what each one means.
 
-Every command below is complete and says what to look for. Each is marked
-**run on a scratch copy** (a rehearsal on a throwaway copy of the brain on real
-AWS, 2026-11-10; its timings are quoted as measured there) or **not yet run
-anywhere**. Prod's numbers will differ with the size of the database. Use the
-maintainer's AWS credentials and `export AWS_REGION=ap-southeast-2`.
+Every command below is complete and says what to look for, and runs from the
+repository root. Each is marked **run on a scratch copy** (a rehearsal on a
+throwaway copy of the brain on real AWS: 2026-11-10, and again on the finished
+stack on 2026-11-11; timings are quoted as measured there, with made-up rows)
+or **not yet run anywhere**. Prod's numbers will differ with the size of the
+database. Use the maintainer's AWS credentials and
+`export AWS_REGION=ap-southeast-2`.
 
 **Never read user data to diagnose anything.** Look at counts, names, logs and
 sizes. A session or command is recorded with who started it, and a read through
@@ -57,7 +59,23 @@ Look for `"postgres_up": true`, a `time` within the last two minutes, a
 `existing` after an ordinary boot, `restore` after a restore, `bootstrap` after
 the first boot, `failed` or `refused` when something is wrong (then read
 `journalctl -b -u brain-boot` on the host). The thirteen keys are all there is;
-none holds user data.
+none holds user data. During a boot the first status report can say
+`"boot_mode": "failed"` for about a minute: the boot script writes `failed`
+first and overwrites it once it knows the mode (seen 2026-11-11). Do not chase
+it unless the next report still says it; the watchdog's alarm needs two failing
+runs out of three.
+
+Run the outside check now, rather than waiting for its 5 minutes (run on a
+scratch copy; decode the log with `base64 -d`):
+
+```sh
+aws lambda invoke --function-name logjam-brain-watchdog --payload '{}' \
+  --cli-binary-format raw-in-base64-out --log-type Tail --query LogResult --output text /dev/null | base64 -d
+```
+
+Green is `{"failed": []}`. A failure prints codes ([alarms.md](alarms.md#logjam-brain-checks-failing)
+says what each means). On the scratch copy `status_stale`, `wal_stale` and
+`api_unready` each fired alone, and the 5-minute schedule fired by itself.
 
 ## Getting a shell
 
@@ -127,30 +145,38 @@ the brain serves nobody until the cutover.
    `deploy-api.yml` write `release.json`: that workflow step writes into the
    signals bucket, so until the bucket exists every deploy fails at it. And
    merging the stack changes nothing running: with the settings dormant the plan
-   adds only dormant resources (nothing is created until step 3).
+   adds only dormant resources (nothing is created until step 4). The API
+   shutdown fix (#875) should also be merged before the cutover: without it a
+   release under load fails requests for about 13 seconds instead of about 4
+   (see "A release and a rollback").
 2. **Apply the audit-trail change by hand, before any real data reaches the
    brain.** It changes the apply role's boundary, so `terraform-apply.yml`
    refuses it ([infra/AGENTS.md](../../infra/AGENTS.md)). It is what makes
    every read of a backup, and every shell on the host, a recorded event
    ([the policy](../DATA-ACCESS-POLICY.md) is untrue without it). From a
-   checkout of `main`, with the maintainer's credentials (**not yet run
-   anywhere**):
+   checkout of `main`, from the repository root, with the maintainer's
+   credentials (**not yet run anywhere** as one sequence; `plan` and `apply`
+   with a saved plan ran on a scratch copy):
 
    ```sh
-   cd infra/terraform/envs/prod
-   (cd ../../../lambda/cognito-email-sender && npm ci && npm run build)
-   (cd ../../../lambda/cognito-pre-signup && npm ci && npm run build)
-   terraform init
-   terraform plan -out=/tmp/audit.plan
+   for l in cognito-email-sender cognito-pre-signup; do
+     npm --prefix infra/lambda/$l ci && npm --prefix infra/lambda/$l run build
+   done
+   terraform -chdir=infra/terraform/envs/prod init
+   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/audit.plan
    ```
 
    Read the plan. It must change the audit trail's selectors and the four
    policies that carry the privacy Deny (`gha_plan_readonly_privacy_deny`,
    `gha_readonly_privacy_deny`, the contributor group's policy, the apply
-   boundary), and nothing else; stop if it shows anything else. Then
-   `terraform apply /tmp/audit.plan`. A change to what the trail records takes
-   about three minutes to take effect (measured), so wait that long before the
-   next step.
+   boundary), and nothing else; stop if it shows anything else. Then:
+
+   ```sh
+   terraform -chdir=infra/terraform/envs/prod apply /tmp/audit.plan
+   ```
+
+   A change to what the trail records takes about three minutes to take effect
+   (measured), so wait that long before the next step.
 3. **Publish the Postgres image and note its tag.** Merging a change under
    `infra/brain/postgres/` publishes it (`publish-brain-postgres.yml`); to
    publish what is on `main` now: `gh workflow run publish-brain-postgres.yml --ref main`.
@@ -172,9 +198,10 @@ the brain serves nobody until the cutover.
    creates an empty database; without a backup in the repository, no flag
    means the boot refuses. Merge it; the plan comment shows the instance, the
    data volume, the Elastic IP and the alarms being added, and the apply takes
-   about a minute. Then watch (all run on a scratch copy):
-   - about 80 seconds for the host's first-boot script, then 12 seconds for the
-     bootstrap itself (disk, database, roles, the first full backup);
+   about a minute. Then watch (all run on a scratch copy, 2026-11-11):
+   - about 75 seconds for the host's first-boot script, then 12 seconds for the
+     bootstrap itself (disk, database, roles, the first full backup, 2 seconds
+     on a small database);
    - `brain 'cat /run/brain/boot-mode'` ends `bootstrap`;
    - `brain 'docker ps --format "{{.Names}} {{.Status}}"'` shows
      `brain-postgres-1` healthy;
@@ -191,9 +218,8 @@ the brain serves nobody until the cutover.
    this says, but a brain that can bootstrap is a brain that may one day make
    an empty database where it should have refused.
 6. **Start the restore drill once by hand**, so the first verdict exists
-   without waiting for 04:30 and the watchdog's `drill_missing` clears (not yet
-   run anywhere as written; the task and its settings were exercised on a scratch
-   copy):
+   without waiting for 04:30 and the watchdog's `drill_missing` clears (run on a
+   scratch copy, with scratch names):
 
    ```sh
    SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=logjam-brain-drill-sg \
@@ -209,7 +235,8 @@ the brain serves nobody until the cutover.
    ```
 
    Look for exit code `0` and `"ok": true`, a `backup_label`, `restore_seconds`
-   (8 seconds for a 28 MB database, 33 for 1.7 GB, measured), and no
+   (7 to 8 seconds for a 28 MB database, 33 for 1.7 GB; the whole task about
+   30 seconds, 21 of them pulling the image), `tables_read` (35 there), and no
    `error`. Anything else is a backup that does not restore: stop and read
    `/logjam/brain/drill` before going further.
 7. **Fetch the certificate and finish its pull request.** The brain's
@@ -229,7 +256,8 @@ the brain serves nobody until the cutover.
    ```
 
    Look for a subject and one `DNS:` name equal to `ec2-…ap-southeast-2.compute.amazonaws.com`
-   (`terraform output brain_public_dns` in `envs/prod` prints the same name), plus
+   (`terraform -chdir=infra/terraform/envs/prod output brain_public_dns` prints the
+   same name), plus
    `postgres` and `localhost`, and an end date ten years out. The file is
    public, so it is safe to commit. The rehearsal copy (step 9) then proves it is
    the brain's: a wrong file fails verification and the copy refuses. Commit it to
@@ -251,10 +279,12 @@ the brain serves nobody until the cutover.
    when serving is on and it cannot read it, and CI cannot read the bucket, so
    only you can look (run on a scratch copy):
    `aws s3 ls s3://logjam-brain-signals-620853681701/release.json`. The deploy of
-   step 7 writes it.
+   step 7 writes it. (It lists nothing, with no error, when the object is
+   missing.)
 9. **Rehearse the copy** against the brain while it is not serving, as
    [brain-cutover.md](brain-cutover.md#before-the-window) says. It is the first
-   time real data reaches the brain, which is why step 2 comes first.
+   time real data reaches the brain, which is why step 2 comes first. On prod
+   the first copy lands in a brain that was bootstrapped empty.
 10. **Check the watchdog is green.** Its log group's latest line is
     `{"failed": []}`. The first day can show `drill_missing` (cleared by step 6)
     and, in the first minutes, `status_missing`, `full_stale` and `wal_stale`.
@@ -264,10 +294,13 @@ the brain serves nobody until the cutover.
 Merging to `main` deploys. With `brain_serving` on, the deploy pins the task
 definitions, migrates the brain's database, writes `release.json`, and waits up
 to 5 minutes for the public `/meta` to name the new sha; the brain's timer
-(every 30 seconds) then pulls the image and recreates the API container: under
-load that is a few seconds of failed requests (3.2 s in one run and 13.2 s in
-another, where the new layer was pulled inside the swap; the host now pulls
-before it swaps, which has not been re-measured). A rollback rewrites the pointer
+(every 30 seconds) then pulls the image and recreates the API container. Measured
+on the finished stack at 40 requests a second (2026-11-11): the host pulls first,
+so the pull is not in the gap; with the API as it was, 462 requests failed over
+13.1 seconds, because the old API kept waiting for open connections until Docker
+killed it after its 10-second stop timeout; with the shutdown fix (#875) the same
+swap failed 151 requests over 3.8 seconds, and idle it takes under a second.
+Expect about 4 seconds under load once #875 is merged. A rollback rewrites the pointer
 to the older sha. Both are [rollback.md](rollback.md)'s workflow and by-hand
 steps, including what to check on the host when the brain does not follow
 (`journalctl -u brain-release` and the status file's `api_sha`). A rollback only
@@ -280,10 +313,12 @@ data. Any change under `infra/brain/` (apart from `postgres/`, `tests/`,
 `api.env` and the committed certificate), or to the settings written into
 `/etc/brain/brain.env`, **replaces the instance**: about 3 minutes with the API
 and database down, the data disk kept and reattached. The plan comment shows it
-as a changed `brain_user_data_sha256`. Measured on a scratch copy: 31 s to stop
-and detach, 46 s of Terraform, then the new host's boot, `/ready` 92 s after
-the apply finished. Do it in a quiet hour, announce it if users could notice,
-and do not merge anything else to `main` while it runs.
+as a changed `brain_user_data_sha256`. Measured on a scratch copy (2026-11-11),
+one apply with no help: 81 s of Terraform (31 s of it stopping and detaching),
+then the new host's boot; 165 s down in all, `/ready` 90 s after the apply
+finished, same certificate, every marker row present. Do it in a quiet hour,
+announce it if users could notice, and do not merge anything else to `main`
+while it runs.
 
 The user data is 13,839 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
@@ -330,10 +365,12 @@ brain_data_volume_current = "2"
 
 Use the next unused key, never edit a volume that has booted, and leave the old
 entry. Merge it and watch the plan: it must replace `aws_instance.brain` and
-create `aws_ebs_volume.brain_data["2"]`. Measured on a scratch copy, one apply:
-the API answered 109 seconds after it for a 28 MB database and 183 seconds for a
-1.7 GB one (the restore itself about 30 seconds, then a new full backup of
-66 seconds before the API starts). Nothing is lost beyond about a minute of
+create `aws_ebs_volume.brain_data["2"]`. Measured on a scratch copy, one apply
+(2026-11-11): the plan named the replacement, the apply took 105 seconds, and
+`/ready` answered 196 seconds after the apply began (97 after it ended) for a
+27 MB database; on the first rehearsal 109 seconds after the apply for 28 MB and
+183 for a 1.7 GB one (the restore itself about 30 seconds, then a new full backup
+of 66 seconds before the API starts). Nothing is lost beyond about a minute of
 writes: no acknowledged row was lost in four of five runs; the fifth, where the
 backup bucket was unreachable as the old host shut down, lost 42 seconds.
 
@@ -355,7 +392,8 @@ For bad data (a migration that mangled rows, a mass delete) that backups already
 contain, rewind to just before it: the same change as losing the disk, with one
 field on the new entry. Postgres restores to that time instead of the latest
 state. It needs the image from the point-in-time change (step 3 of bring-up). In
-`brain.auto.tfvars` (the same change ran on a scratch copy; not yet run on prod):
+`brain.auto.tfvars` (the same change ran on a scratch copy on 2026-11-11, one apply
+and about 3 minutes to `/ready` each time; not yet run on prod):
 
 ```hcl
 brain_data_volumes = {
@@ -406,18 +444,41 @@ safe: set `brain_data_volume_current` to the old key. It boots as it was, notice
 the newest backup is on another timeline, takes a full backup of itself (the API
 waits for it, a minute or so on a small database), and later restores follow it.
 Either way the data written on the volume you leave is not on the one you take.
-The rewind, a second rewind and a re-attach were all exercised on a scratch copy.
+The rewind, a second rewind to a later time, putting a volume back, and then a
+disk loss were all exercised on a scratch copy in one run (2026-11-11), every step
+one apply, with the rows exactly as this says: a rewind keeps every row at or
+before the target and none after it, and a later disk loss restores the volume
+that was live.
 
 ## Deleting an old volume
 
 A volume left by a recovery or a rewind holds a full copy of the database until
 it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 7), and costs a
 little. Delete it only when it is no longer the undo: after you are sure of the
-new database, and not before the next nightly full has run on it. It is a pull
-request that removes its entry from `brain_data_volumes` and adds a `removed`
-block for it; the plan must show exactly that one volume destroyed and nothing
-else. **Not yet run anywhere**, and deletion is final: the volume's data cannot
-be recovered (the backups are what remain).
+new database, and not before the next nightly full has run on it. Deleting it is
+final: its data cannot be recovered (the backups are what remain).
+
+Terraform will not do it from a pull request alone: the volume has
+`prevent_destroy` (removing its entry is refused), and a `removed` block cannot
+name one instance of a resource. So it is done by hand, from the maintainer's
+own machine, in this order. The volume must be detached: it is not the current
+one (`brain_data_volume_current`). Run on a scratch copy (2026-11-11), where
+`prevent_destroy` is off; the refusal itself was checked with a stand-in
+resource. `<key>` is the entry's key, such as `1`:
+
+```sh
+terraform -chdir=infra/terraform/envs/prod state show 'aws_ebs_volume.brain_data["<key>"]' | grep -E '^ +id '
+terraform -chdir=infra/terraform/envs/prod state rm 'aws_ebs_volume.brain_data["<key>"]'
+aws ec2 delete-volume --volume-id <the id state show printed>
+```
+
+Read the id **before** `state rm` (it is also in the volume's `Name` tag,
+`logjam-brain-data-<key>`). Check `aws ec2 describe-volumes --volume-ids <id>`
+says `available` first, never `in-use`. Then merge a pull request that removes
+the entry from `brain_data_volumes` in `brain.auto.tfvars`. Until it merges the
+entry is still wanted, and a plan would create a new, empty volume for it; once
+it is gone the plan says "No changes": the instance is not replaced and the user
+data does not change.
 
 ## The cost ceiling and the sign-up cap
 
@@ -440,7 +501,9 @@ scale itself.
   copy 20, 40, 60 and 80 requests a second used 21, 36, 50 and 64 % of the
   instance.
 - **Memory: the `memory_low` check** (under 100 MB free). On a `t4g.micro` the
-  lowest seen was 164 MiB (a release swap with a 1.7 GB database) and 331 idle.
+  lowest seen idle was 324 MiB (2026-11-11, with the timers as they are now; the
+  whole host used 0.066 of two vCPUs) and 164 MiB under a release swap with a
+  1.7 GB database (2026-11-10).
 
 **What the limit is.** The API is one Node process, which uses one core. On both
 sizes tested 80 requests a second passed (p95 269 ms on the micro, 313 ms on the
