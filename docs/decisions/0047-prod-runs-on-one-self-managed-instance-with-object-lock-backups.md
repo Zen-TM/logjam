@@ -220,9 +220,10 @@ fails when it is broken.
   - A reboot is back 25 seconds after the call. Failed hardware is EC2's
     automatic recovery, with the same disk and address.
   - A lost data disk or zone is not automatic: the maintainer merges one
-    change that adds a volume. The API answered 109 seconds after that apply
-    on a 28 MB database and 183 seconds on a 1.7 GB one, the restore itself
-    being about 30 seconds. If nobody is around, the API stays down.
+    change that adds a volume. The API answered 109 to 196 seconds after that
+    one apply on a 28 MB database (196 on the finished stack, 2026-11-11) and
+    183 seconds on a 1.7 GB one, the restore itself being about 30 seconds.
+    If nobody is around, the API stays down.
   - The loss is about a minute while archiving is healthy. No acknowledged
     row was lost in four of the five disk-loss runs, and 42 seconds (4 rows)
     were lost in the one where the repository was unreachable as the old
@@ -235,12 +236,17 @@ fails when it is broken.
     full closes the gap, and a restore reports how stale it came up
     (`last_restore_lag_seconds`). There is no automatic gap detection.
 - **Negative: deploys and host changes have a gap.** A release recreates the
-  API container: 3.2 seconds of failed requests under 40 requests a second
-  in one run, and 13.2 seconds in another where pulling a new layer fell
-  inside the swap. The host now pulls before it swaps, which was not
-  re-measured, so expect a few seconds. Every change to a host file
-  replaces the instance, about 3 minutes down with the data volume kept, and
-  a size change about 2 minutes.
+  API container. Measured on the finished stack under 40 requests a second
+  (2026-11-11): under a second when idle, and with traffic 462 failed
+  requests over 13.1 seconds, because the old API kept waiting for open
+  keep-alive connections that never went idle until Docker killed it after its
+  10-second stop timeout. With the shutdown fix in #875 (every response ends
+  its connection once shutdown has begun) the same swap failed 151 requests
+  over 3.8 seconds, which is the figure to expect once it is merged (it
+  should be before the cutover). The host pulls the new image before it
+  stops the old one, so the pull is no longer inside the gap (measured).
+  Every change to a host file replaces the instance: 165 seconds down in one
+  apply, with the data volume kept. A size change takes about 2 minutes.
 - **Negative: no horizontal scaling.** The API is one Node process on one
   core. 80 requests a second passed and 100 failed on both sizes, so a bigger
   `t4g` adds memory, not speed. Prod averages about 0.004 a second. Moving

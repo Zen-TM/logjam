@@ -66,10 +66,12 @@ variable "brain_bootstrap" {
 
 # One entry per data volume ever made (prod's are in brain.auto.tfvars). Losing
 # the disk is recovered by a change that adds the next key and makes it current
-# (boot restores into it); the old volume stays, detached, until a later change
-# drops its entry with a `removed` block. Losing the zone is the same change
-# with another `az`. Volumes are never replaced in place: prevent_destroy makes
-# a changed `az` an error.
+# (boot restores into it); the old volume stays, detached, until it is taken
+# out of Terraform's state by hand (`terraform state rm` of that one instance),
+# deleted, and its entry removed. Removing the entry alone is refused by
+# prevent_destroy, and a `removed` block cannot name one instance of a
+# resource. Losing the zone is the same change with another `az`. Volumes are
+# never replaced in place: prevent_destroy makes a changed `az` an error.
 #
 # Bad data is the same change with one more field on the new entry, restore_to:
 # the new volume restores to that time and not to the latest state. It lives on
