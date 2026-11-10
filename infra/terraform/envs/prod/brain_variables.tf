@@ -53,8 +53,9 @@ variable "brain_bootstrap" {
 # the new volume restores to that time and not to the latest state. It lives on
 # the entry so it can never apply to a later volume (the next loss adds a key
 # without it and gets the latest state), and a boot only restores into a blank
-# disk, so leaving it on the entry is harmless. The old volume stays, detached,
-# with the data as it was before the rewind.
+# disk. Leave it on the entry afterwards: removing it changes the user data and
+# replaces the host for nothing. The old volume stays, detached, with the data
+# as it was before the rewind.
 #
 # A restore follows the newest backup, and the newest backup is always of the
 # live database's timeline: every restore recovers along its backup's own
