@@ -1271,3 +1271,385 @@ run "brain_instance_sizes_set_postgres_and_api_memory" {
     error_message = "A t4g.micro must run Postgres with shared_buffers=128MB and effective_cache_size=256MB and the API with a 384m limit."
   }
 }
+
+# ── The brain's watchdog and restore drill (brain_watchdog.tf, brain_drill.tf) ──
+
+run "brain_watchdog_and_drill_are_absent_by_default" {
+  command = plan
+  plan_options {
+    target = [
+      aws_cloudwatch_log_group.brain_watchdog,
+      aws_iam_role.brain_watchdog,
+      aws_iam_role_policy.brain_watchdog,
+      aws_lambda_function.brain_watchdog,
+      aws_lambda_function_event_invoke_config.brain_watchdog,
+      aws_cloudwatch_event_rule.brain_watchdog,
+      aws_cloudwatch_event_target.brain_watchdog,
+      aws_lambda_permission.brain_watchdog,
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing,
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead,
+      aws_cloudwatch_log_group.brain_drill,
+      aws_security_group.brain_drill,
+      aws_iam_role.brain_drill,
+      aws_iam_role_policy.brain_drill,
+      aws_ecs_task_definition.brain_drill,
+      aws_iam_role.brain_drill_scheduler,
+      aws_iam_role_policy.brain_drill_scheduler,
+      aws_scheduler_schedule.brain_drill,
+    ]
+  }
+
+  # Mutation: `count = 1` on any of these (or a non-empty default for
+  # brain_pg_image_tag): merging would start a Lambda, a daily Fargate task and
+  # two alarms for a brain that does not exist, and the watchdog's missing
+  # status.json would page from the first run.
+  assert {
+    condition = alltrue([
+      length(aws_cloudwatch_log_group.brain_watchdog) == 0,
+      length(aws_iam_role.brain_watchdog) == 0,
+      length(aws_iam_role_policy.brain_watchdog) == 0,
+      length(aws_lambda_function.brain_watchdog) == 0,
+      length(aws_lambda_function_event_invoke_config.brain_watchdog) == 0,
+      length(aws_cloudwatch_event_rule.brain_watchdog) == 0,
+      length(aws_cloudwatch_event_target.brain_watchdog) == 0,
+      length(aws_lambda_permission.brain_watchdog) == 0,
+      length(aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing) == 0,
+      length(aws_cloudwatch_metric_alarm.brain_watchdog_dead) == 0,
+      length(aws_cloudwatch_log_group.brain_drill) == 0,
+      length(aws_security_group.brain_drill) == 0,
+      length(aws_iam_role.brain_drill) == 0,
+      length(aws_iam_role_policy.brain_drill) == 0,
+      length(aws_ecs_task_definition.brain_drill) == 0,
+      length(aws_iam_role.brain_drill_scheduler) == 0,
+      length(aws_iam_role_policy.brain_drill_scheduler) == 0,
+      length(aws_scheduler_schedule.brain_drill) == 0,
+    ])
+    error_message = "With the default variables the watchdog and the restore drill must not exist."
+  }
+}
+
+run "brain_watchdog_role_reads_only_the_signals" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_iam_role_policy.brain_watchdog]
+  }
+
+  override_resource {
+    target          = aws_s3_bucket.brain_backups
+    values          = { arn = "arn:aws:s3:::logjam-brain-backups-620853681701" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_s3_bucket.brain_signals
+    values          = { arn = "arn:aws:s3:::logjam-brain-signals-620853681701" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.brain_watchdog
+    values          = { arn = "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/lambda/logjam-brain-watchdog" }
+    override_during = plan
+  }
+
+  # Mutation: s3:GetObject (or s3:*, or an s3:GetObject* pattern) on the backup
+  # bucket or any bucket but signals, `status.json`/`drill.json` widened to
+  # `/*`, or any action beyond the four listed. The watchdog is handed an
+  # alarm and a log: reading a backup object would put it one step from user
+  # data (infra/AGENTS.md).
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_iam_role_policy.brain_watchdog[0].policy).Statement : st.Effect == "Allow" && alltrue([
+        for a in flatten([st.Action]) : (
+          (a == "s3:GetObject" && toset(flatten([st.Resource])) == toset([
+            "arn:aws:s3:::logjam-brain-signals-620853681701/status.json",
+            "arn:aws:s3:::logjam-brain-signals-620853681701/drill.json",
+          ])) ||
+          (a == "s3:ListBucket" && flatten([st.Resource]) == ["arn:aws:s3:::logjam-brain-backups-620853681701"]) ||
+          (contains(["logs:CreateLogStream", "logs:PutLogEvents"], a) && startswith(st.Resource, "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/lambda/logjam-brain-watchdog:"))
+        )
+      ])
+    ])
+    error_message = "The watchdog's role may only read status.json and drill.json, list the backup bucket, and write its own log group (infra/AGENTS.md)."
+  }
+
+  # Mutation: dropping the prefix condition (the function could list the
+  # whole bucket: every backup file's name), or a prefix other than the WAL
+  # archive.
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_iam_role_policy.brain_watchdog[0].policy).Statement :
+      !contains(flatten([st.Action]), "s3:ListBucket") || try(st.Condition.StringLike["s3:prefix"] == "logjam/archive/logjam/*", false)
+    ])
+    error_message = "The watchdog may list only the WAL archive's prefix in the backup bucket."
+  }
+}
+
+run "brain_watchdog_lists_the_archive_pgbackrest_writes" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_lambda_function.brain_watchdog]
+  }
+
+  override_resource {
+    target          = aws_iam_role.brain_watchdog
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-watchdog" }
+    override_during = plan
+  }
+
+  # Mutation: a different path or stanza in the image's pgBackRest
+  # configuration (pgbackrest-conf.sh, brain-entrypoint.sh) or in
+  # local.brain_wal_prefix. The function would list a prefix that holds
+  # nothing and every run would fail wal_stale: or, worse, after a change that
+  # also dropped the check, never notice a stalled archive.
+  assert {
+    condition = (
+      aws_lambda_function.brain_watchdog[0].environment[0].variables["WAL_PREFIX"] == "logjam/archive/logjam/" &&
+      strcontains(file("../../../brain/postgres/pgbackrest-conf.sh"), "repo1-path=/logjam\"") &&
+      strcontains(file("../../../brain/postgres/brain-entrypoint.sh"), "--stanza=logjam ")
+    )
+    error_message = "The watchdog must list <repo1-path>/archive/<stanza>/ as the Postgres image's pgBackRest configuration writes it."
+  }
+
+  # Mutation: the timeout under the function's own two API tries (2 x 10 s)
+  # plus its S3 calls, or the runtime moved off a version the unit tests run on.
+  assert {
+    condition     = aws_lambda_function.brain_watchdog[0].timeout == 60 && aws_lambda_function.brain_watchdog[0].handler == "handler.handler"
+    error_message = "The watchdog's timeout is 60 seconds and its handler is handler.handler."
+  }
+}
+
+run "brain_watchdog_runs_every_five_minutes_and_never_retries" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [
+      aws_cloudwatch_event_rule.brain_watchdog,
+      aws_cloudwatch_event_target.brain_watchdog,
+      aws_lambda_function_event_invoke_config.brain_watchdog,
+    ]
+  }
+
+  override_resource {
+    target          = aws_iam_role.brain_watchdog
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-watchdog" }
+    override_during = plan
+  }
+
+  # Mutation: a longer rate (the stale-WAL alarm window is 5 minutes), or
+  # removing the invoke config / `maximum_retry_attempts` above 0: a failed run
+  # raises on purpose, an asynchronous invoke retries twice by default, and one
+  # bad run would then count as three errors and trip the 2-of-3 alarm alone.
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.brain_watchdog[0].schedule_expression == "rate(5 minutes)" &&
+      length(aws_cloudwatch_event_target.brain_watchdog) == 1 &&
+      length(aws_lambda_function_event_invoke_config.brain_watchdog) == 1 &&
+      aws_lambda_function_event_invoke_config.brain_watchdog[0].maximum_retry_attempts == 0
+    )
+    error_message = "The watchdog must run every 5 minutes, and a failing run must not be retried."
+  }
+}
+
+run "brain_watchdog_alarms_page_the_topic_and_watch_the_watchdog" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing,
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead,
+    ]
+  }
+
+  override_resource {
+    target          = aws_iam_role.brain_watchdog
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-watchdog" }
+    override_during = plan
+  }
+
+  # Mutation: `datapoints_to_alarm = 1` (one blip pages) or 3 (a check that
+  # fails for 10 minutes does not), another metric or threshold, no topic, or
+  # an alarm description without its "First:" step.
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].metric_name == "Errors" &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].period == 300 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].evaluation_periods == 3 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].datapoints_to_alarm == 2 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].threshold == 1 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0].comparison_operator == "GreaterThanOrEqualToThreshold"
+    )
+    error_message = "The checks-failing alarm must fire on an error in 2 of the last 3 five-minute periods."
+  }
+
+  # Mutation: treating missing data as notBreaching (a watchdog that never runs
+  # then stays green), a longer period, a different comparison, or no topic.
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead[0].metric_name == "Invocations" &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead[0].period == 900 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead[0].comparison_operator == "LessThanThreshold" &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead[0].threshold == 1 &&
+      aws_cloudwatch_metric_alarm.brain_watchdog_dead[0].treat_missing_data == "breaching"
+    )
+    error_message = "The not-running alarm must fire on fewer than one invocation in 15 minutes, missing data included."
+  }
+
+  assert {
+    condition = alltrue([
+      for a in [aws_cloudwatch_metric_alarm.brain_watchdog_checks_failing[0], aws_cloudwatch_metric_alarm.brain_watchdog_dead[0]] :
+      contains(a.alarm_actions, aws_sns_topic.alerts.arn) && strcontains(a.alarm_description, "First: ") && a.dimensions["FunctionName"] == "logjam-brain-watchdog"
+    ])
+    error_message = "Both watchdog alarms must tell the alerts topic, name their function and start with a First: step."
+  }
+}
+
+run "brain_drill_role_cannot_write_the_backups" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_iam_role_policy.brain_drill]
+  }
+
+  override_resource {
+    target          = aws_s3_bucket.brain_backups
+    values          = { arn = "arn:aws:s3:::logjam-brain-backups-620853681701" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_s3_bucket.brain_signals
+    values          = { arn = "arn:aws:s3:::logjam-brain-signals-620853681701" }
+    override_during = plan
+  }
+
+  # Mutation: s3:PutObject (or DeleteObject, ListBucketVersions, s3:*) beside
+  # the backup bucket in any statement, or PutObject on the signals bucket
+  # beyond drill.json. The task holds a full copy of the database and the
+  # restored server must not be able to reach back into the repository it came
+  # from: a copy that archived into it would corrupt the one thing the drill
+  # proves (the spike broke its own repository that way).
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_iam_role_policy.brain_drill[0].policy).Statement : st.Effect == "Allow" && alltrue([
+        for a in flatten([st.Action]) : (
+          (a == "s3:GetObject" && flatten([st.Resource]) == ["arn:aws:s3:::logjam-brain-backups-620853681701/*"]) ||
+          (a == "s3:ListBucket" && flatten([st.Resource]) == ["arn:aws:s3:::logjam-brain-backups-620853681701"]) ||
+          (a == "s3:PutObject" && flatten([st.Resource]) == ["arn:aws:s3:::logjam-brain-signals-620853681701/drill.json"])
+        )
+      ])
+    ])
+    error_message = "The restore drill's task role may only read and list the backup bucket and write drill.json (infra/AGENTS.md)."
+  }
+}
+
+run "brain_drill_log_is_not_the_audit_trail" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [
+      aws_cloudwatch_log_group.brain_drill,
+      aws_cloudwatch_log_subscription_filter.brain_pgaudit_to_firehose,
+      aws_cloudwatch_log_subscription_filter.pgaudit_to_firehose,
+    ]
+  }
+
+  override_resource {
+    target          = aws_kinesis_firehose_delivery_stream.pgaudit
+    values          = { arn = "arn:aws:firehose:ap-southeast-2:620853681701:deliverystream/mock" }
+    override_during = plan
+  }
+
+  # Mutation: a subscription filter on /logjam/brain/drill (to the audit
+  # Firehose or any other): the drill's log would land in the WORM bucket as
+  # if it were prod's audit trail. The test covers the two filters that exist
+  # and every .tf file: a new filter resource anywhere must not name the group.
+  assert {
+    condition = alltrue(concat(
+      [
+        for f in [aws_cloudwatch_log_subscription_filter.brain_pgaudit_to_firehose, aws_cloudwatch_log_subscription_filter.pgaudit_to_firehose] :
+        f.log_group_name != aws_cloudwatch_log_group.brain_drill[0].name
+      ],
+      flatten([
+        for f in fileset(".", "*.tf") : [
+          for block in regexall("(?s)aws_cloudwatch_log_subscription_filter\" \"[a-z_]+\" \\{.*?\n\\}\n", file(f)) : !strcontains(block, "brain_drill")
+        ]
+      ]),
+    ))
+    error_message = "The restore drill's log group must have no subscription filter."
+  }
+}
+
+run "brain_drill_runs_daily_after_the_backup_on_arm" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [
+      aws_scheduler_schedule.brain_drill,
+      aws_ecs_task_definition.brain_drill,
+      aws_security_group.brain_drill,
+    ]
+  }
+
+  override_resource {
+    target          = aws_iam_role.brain_drill
+    values          = { arn = "arn:aws:iam::620853681701:role/logjam-brain-drill" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_iam_role.ecs_task_execution
+    values          = { arn = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole" }
+    override_during = plan
+  }
+  override_resource {
+    target          = aws_cloudwatch_log_group.brain_drill
+    values          = { name = "/logjam/brain/drill" }
+    override_during = plan
+  }
+
+  # Mutation: another time or zone (the 03:00 full backup would be an hour
+  # old at best, or the drill would restore yesterday's), a weekly or monthly
+  # cron (the first verdict would take a week and the watchdog fails at 50
+  # hours), or a day-of-week other than `?` .
+  assert {
+    condition = (
+      aws_scheduler_schedule.brain_drill[0].schedule_expression == "cron(30 4 * * ? *)" &&
+      aws_scheduler_schedule.brain_drill[0].schedule_expression_timezone == "Australia/Sydney"
+    )
+    error_message = "The restore drill must run daily at 04:30 Australia/Sydney, after the 03:00 full backup."
+  }
+
+  # Mutation: X86_64 (the brain and its image are arm64; the drill would pull
+  # an image that does not exist for it), a different command, a size under
+  # 2 GiB, or an ephemeral size below Fargate's minimum of 21 GiB.
+  assert {
+    condition = (
+      aws_ecs_task_definition.brain_drill[0].runtime_platform[0].cpu_architecture == "ARM64" &&
+      aws_ecs_task_definition.brain_drill[0].memory == "2048" &&
+      aws_ecs_task_definition.brain_drill[0].ephemeral_storage[0].size_in_gib >= 21 &&
+      jsondecode(aws_ecs_task_definition.brain_drill[0].container_definitions)[0].command == ["/usr/local/lib/brain/drill.sh"] &&
+      endswith(jsondecode(aws_ecs_task_definition.brain_drill[0].container_definitions)[0].image, ":test")
+    )
+    error_message = "The restore drill must run drill.sh from the brain's Postgres image, pinned by tag, on ARM64 with 2 GiB."
+  }
+
+  # Mutation: any ingress rule. The drill never connects to the brain, and
+  # nothing may connect to a task holding a copy of the database.
+  assert {
+    condition     = length(aws_security_group.brain_drill[0].ingress) == 0
+    error_message = "The restore drill's security group must have no ingress."
+  }
+}

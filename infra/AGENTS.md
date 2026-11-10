@@ -95,3 +95,16 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_user_data_stays_within_the_ec2_limit`,
   `brain_host_files_embed_cleanly_and_hold_no_secret`,
   `brain_env_is_plain_key_value_the_host_files_read`.
+- **The brain's watchdog never reads a backup object.** Its role may `GetObject`
+  only `status.json` and `drill.json` in the signals bucket and `ListBucket` the
+  backup bucket under the WAL archive's prefix; it is the function an alarm and a
+  log line hang off, so it stays a step away from user data. Its log line and its
+  error carry only check codes. Guard: `brain_watchdog_role_reads_only_the_signals`;
+  the prefix must match what the Postgres image writes
+  (`brain_watchdog_lists_the_archive_pgbackrest_writes`).
+- **The restore drill's task role never writes to the backup bucket**: read and
+  list only, and `PutObject` on `drill.json` alone. The drill restores a full
+  copy of the database, and a copy that reached into the repository it came from
+  (archiving, expiring) would break the thing the drill proves. Its log group has
+  no subscription filter, so it never reaches the audit bucket. Guards:
+  `brain_drill_role_cannot_write_the_backups`, `brain_drill_log_is_not_the_audit_trail`.

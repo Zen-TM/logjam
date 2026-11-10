@@ -75,3 +75,14 @@ variable "brain_root_volume_gb" {
   type        = number
   default     = 16
 }
+
+variable "brain_drill_storage_gb" {
+  description = "Scratch disk of the daily restore drill's Fargate task, in GiB (21 to 200). It must hold the whole restored database with room for WAL replay: at least twice the live database. Raise it before the database grows past half of it."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.brain_drill_storage_gb >= 21 && var.brain_drill_storage_gb <= 200
+    error_message = "Fargate's ephemeral storage is 21 to 200 GiB."
+  }
+}
