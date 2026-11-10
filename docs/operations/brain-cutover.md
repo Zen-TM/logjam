@@ -156,7 +156,7 @@ migrations to apply") and the deploy goes on to swap Elastic Beanstalk; with a
 migration pending it exits 1 at its first insert ("cannot execute INSERT in a
 read-only transaction"), changes nothing, and the deploy stops before the swap
 (measured against a scratch RDS, 2026-11-11). No merges (except the two flips
-below), no hand workflow runs other than the one named in step 6, no hand
+below), no hand workflow runs other than the one named in step 6a, no hand
 `terraform apply`. Before each flip, check that nothing is running:
 `gh run list --workflow deploy-api.yml --limit 3` and
 `gh run list --workflow terraform-apply.yml --limit 3` show nothing in progress.
