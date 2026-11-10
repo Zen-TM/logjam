@@ -20,6 +20,7 @@
 # Mutations, each applied once and seen red (scenario in brackets):
 #   host/lib.sh: bootstrap_allowed true for anything but the exact value 1 (`= 1` -> `!= 0`) [3]
 #   host/boot.sh: format a device that has a signature (`0) ;;` -> `0) mkfs.ext4 -F ...`) [3]
+#   host/boot.sh: the zeros clause back (`[ -n "$(wipefs -n "$dev")" ]` -> `[ -n "$(head -c 1048576 "$dev" | tr -d '\0' | head -c 1)" ] || [ -n "$(wipefs -n "$dev")" ]`) [3]
 #   host/release-agent.sh: not reading the switch (`if false` for `!= on`) [5]
 #   host/lib.sh: serving_state answering on for anything but exactly on [5]
 #   host/release-agent.sh: writing LOGJAM_RUNTIME=prod before the release env [6]
@@ -293,6 +294,13 @@ boot; rc=$?
 check "a volume with another signature stops boot (exit $rc)" [ "$rc" != 0 ]
 check "its signature is untouched" [ "$(r blkid -p "$LOOP")" = "$before" ]
 check "it is not mounted" not mountpoint -q /data
+# A new encrypted EBS volume reads back non-zero bytes with no signature: it is blank all the same.
+reboot; new_disk
+r dd if=/dev/urandom of="$LOOP" bs=1M count=2 status=none
+boot
+check "a device of random bytes with no signature is formatted" grep -q "is blank: formatting" "$WORK/boot.log"
+check "...with the brain's label" [ "$(r blkid -o value -s LABEL "$LOOP")" = brain-data ]
+check "...and mounted" mountpoint -q /data
 
 # --- 10. the volume is not mounted ----------------------------------------------------
 S="10 the volume is not mounted"
@@ -372,7 +380,8 @@ check "boot.sh on that container, restart count 1, still succeeds (exit $rc)" [ 
 S="9 status.json"
 r /opt/brain/host/status.sh || bad "status.sh failed"
 check "status.json has exactly the allowlisted keys" \
-  [ "$(status_keys)" = "api_sha archive_failures boot_mode disk_used_percent last_archive_time last_full_time last_restore_at last_restore_lag_seconds postgres_up schema serving time" ]
+  [ "$(status_keys)" = "api_sha archive_failures boot_mode disk_used_percent last_archive_time last_full_time last_restore_at last_restore_lag_seconds mem_available_mb postgres_up schema serving time" ]
+check "it carries the available memory as a whole number of MiB" [ "$(status_field mem_available_mb)" -gt 0 ]
 check "it says Postgres is up" [ "$(status_field postgres_up)" = True ]
 check "it carries the boot mode" [ "$(status_field boot_mode)" = existing ]
 check "it carries the last full backup" [ "$(status_field last_full_time)" != None ]

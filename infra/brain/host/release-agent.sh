@@ -47,8 +47,9 @@ if [ -z "$changed" ] && [ -n "$cid" ] \
 fi
 chmod 0600 "$new"
 mv "$new" /etc/brain/api.env
-# --no-deps: only boot.sh starts Postgres. The image is pulled if it is not here (tags are immutable).
-# A failed `up` takes the new file away again, or the next run would see nothing to change.
-compose up -d --no-deps --force-recreate api || { rm -f /etc/brain/api.env; die "the API did not start at $sha: the next run tries again"; }
+# --no-deps: only boot.sh starts Postgres. The pull comes first so the old container is not stopped
+# while a layer downloads (tags are immutable: an image that is here is not pulled again).
+# A failed pull or `up` takes the new file away again, or the next run would see nothing to change.
+{ compose pull -q --policy missing api && compose up -d --no-deps --force-recreate api; } || { rm -f /etc/brain/api.env; die "the API did not start at $sha: the next run tries again"; }
 # Old releases would fill the root disk. Images of containers are kept; a rollback pulls an old one again.
 docker image prune -af --filter until=72h > /dev/null || true

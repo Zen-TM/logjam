@@ -27,8 +27,9 @@ else
   rc=0; blkid -p "$dev" > /dev/null || rc=$?
   case $rc in
     0) ;; # a filesystem or some other signature: only ever mounted, below
-    2) # blkid sees nothing: still format only if the first MiB is zeros and wipefs sees nothing either
-      if [ -n "$(head -c 1048576 "$dev" | tr -d '\0' | head -c 1)" ] || [ -n "$(wipefs -n "$dev")" ]; then
+    2) # blkid sees nothing: still format only if wipefs sees nothing either. Not "the first MiB is
+      # zeros": the unwritten blocks of a new encrypted EBS volume read back as non-zero data.
+      if [ -n "$(wipefs -n "$dev")" ]; then
         die "$dev looks blank to blkid but is not: not formatting it"
       fi
       log "$dev is blank: formatting"

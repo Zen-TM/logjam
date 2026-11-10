@@ -60,8 +60,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain-postgres`) reads the live settings back. Never give `BRAIN_INIT` a
   default: an empty data directory must stop the container, not create a database.
 - **The brain host** (`brain/host/`, `brain/compose.yaml`) holds a database's
-  disk. `boot.sh` formats only a device blank to `blkid`, `wipefs` and a zeroed
-  first MiB, and starts Postgres with `BRAIN_INIT=bootstrap` only when the
+  disk. `boot.sh` formats only a device blank to `blkid` and `wipefs` (not "zeros": a new
+  encrypted EBS volume reads back non-zero bytes), and starts Postgres with `BRAIN_INIT=bootstrap` only when the
   tag is exactly `1` and the backup repository is positively empty (`pgbackrest
   info` exits 0 for an unreachable one: read its JSON); keep both, and keep
   `create_host_path: false` on the data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
@@ -71,7 +71,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
   containers use the instance role), has no key pair, and takes its two
   switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
-  in-place update. Its credit mode is `unlimited` by default, and the surplus
+  in-place update. It has no termination protection: the provider does not
+  clear it before replacing the instance, which would stop the host and leave
+  it down (the data and the address are held by `prevent_destroy` instead). Its credit mode is `unlimited` by default, and the surplus
   alarm is what notices a charge. Guards: `brain_is_absent_by_default`,
   `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`,
   `brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus`.
@@ -80,10 +82,15 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   DNS name is in the database certificate). Only the current entry of
   `var.brain_data_volumes` is attached; replacing a lost disk or zone adds an
   entry and makes it current, and a later change drops the old one with a
-  `removed` block. Guards: `brain_data_volume_and_address_keep_prevent_destroy`,
-  `brain_only_the_current_volume_is_attached_in_its_zone`.
+  `removed` block. Changing the current entry replaces the instance at plan
+  time (`terraform_data.brain_volume` and `replace_triggered_by`), so the
+  recovery applies in one run. Guards: `brain_data_volume_and_address_keep_prevent_destroy`,
+  `brain_only_the_current_volume_is_attached_in_its_zone`,
+  `brain_instance_is_replaced_when_the_current_volume_changes`.
 - **The brain's host files travel inline in its user data**, so any change to
-  `brain/` (outside `postgres/` and `tests/`) or to `brain.env` replaces the
+  `brain/` (outside `postgres/`, `tests/`, `api.env` and the committed
+  `brain-ca.pem`, which a commit after first boot must not turn into a
+  replacement) or to `brain.env` replaces the
   instance: minutes of downtime, data volume kept, and the signed plan shows it
   as a changed `brain_user_data_sha256`. So those files are in prod's plan
   scope and the apply workflow's paths (`infra/scripts/plan-summary.mjs`,
@@ -94,6 +101,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   writes to `brain.env` are the keys the host scripts require. Guards:
   `brain_user_data_stays_within_the_ec2_limit`,
   `brain_host_files_embed_cleanly_and_hold_no_secret`,
+  `brain_host_files_leave_out_the_committed_certificate`,
   `brain_env_is_plain_key_value_the_host_files_read`.
 - **The restore drill** (`brain/postgres/drill.sh`) restores with
   `--archive-mode=off` and refuses to start Postgres unless the restored
