@@ -8,7 +8,7 @@
 #   infra/brain/tests/e2e.sh        needs root or passwordless sudo, Docker with
 #                                   Compose, the aws CLI, python3, openssl
 #
-# It refuses to run where /opt/brain, /etc/brain or a mounted /data exist, and
+# It refuses to run where /opt/brain, /etc/brain, /data/postgres or a mounted /data exist, and
 # only ever formats, mounts or detaches the loop device it makes itself. Run it
 # on a CI runner or in a throwaway container, never on a real brain.
 # E2E_FAIL_FAST=1 stops at the first failure (for applying a mutation);
@@ -149,8 +149,8 @@ bootstrap_flag() { printf '%s' "$1" | r tee /run/brain-e2e-bootstrap > /dev/null
 trap cleanup EXIT
 
 # --- setup ---------------------------------------------------------------------
-if [ -e /opt/brain ] || [ -e /etc/brain ] || mountpoint -q /data; then
-  echo "refusing: this host already has a brain (/opt/brain, /etc/brain or a mounted /data)"; trap - EXIT; exit 1
+if [ -e /opt/brain ] || [ -e /etc/brain ] || [ -e /data/postgres ] || mountpoint -q /data; then
+  echo "refusing: this host already has a brain (/opt/brain, /etc/brain, /data/postgres or a mounted /data)"; trap - EXIT; exit 1
 fi
 if ss -ltn 'sport = :80' | grep -q LISTEN; then echo "port 80 is taken: the API needs it"; trap - EXIT; exit 1; fi
 r rm -rf /run/brain-e2e-serving /run/brain-e2e-bootstrap # a killed earlier run's switches
