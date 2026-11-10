@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The weekly restore drill, run as the container's command by a scheduled task:
+# The daily restore drill, run as the container's command by a scheduled task:
 # restore the newest backup into an empty scratch directory, start Postgres on
 # it, measure, stop, and write drill.json to the signals bucket. Exit 0 when
 # the backup is good, 1 when not (the verdict is written either way).
