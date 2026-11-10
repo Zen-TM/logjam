@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # The cutover's data copy, run by hand as the container's command of a one-off
 # task: dump `public` from the source (RDS) to a file, restore it into the
-# brain in one transaction, check the result. Exit 0 only when every check
-# held. It is also the dress rehearsal, run against the dormant brain.
+# brain in one transaction, check the result. Exit 0 only when the checks
+# held: every one for a read-only source, all but exact counts for a live one
+# (COPY_ALLOW_LIVE_SOURCE below). It is also the dress rehearsal, run against
+# the dormant brain.
 #
 # It never runs against a serving brain (a copy would replace live data with
 # the source's frozen one): status.json in the signals bucket must be fresh and
