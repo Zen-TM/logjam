@@ -3,6 +3,8 @@
 # Who may assume the CI roles, and what Terraform reads back. Each assert
 # names the mutation that turns it red. Each run plans only the resources it
 # asserts on: a mocked provider cannot import, or refresh every resource here.
+# A targeted plan validates only the variables its targets read, so a run with
+# expect_failures on a variable targets a resource that uses that variable.
 
 mock_provider "aws" {}
 mock_provider "aws" {
@@ -16,8 +18,8 @@ mock_provider "archive" {}
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
-# brain_settings_do_not_change_the_suite (it reads the file and fails if a
-# setting here is missing).
+# brain_settings_are_one_file_and_read_by_the_workflows (it reads the file
+# and fails if a setting here is missing).
 variables {
   brain_pg_image_tag        = ""
   brain_bootstrap           = false
