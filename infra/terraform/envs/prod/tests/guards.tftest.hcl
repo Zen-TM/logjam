@@ -881,6 +881,7 @@ run "brain_is_absent_by_default" {
   plan_options {
     target = [
       aws_instance.brain,
+      terraform_data.brain_volume,
       aws_ebs_volume.brain_data,
       aws_eip.brain,
       aws_eip_association.brain,
@@ -898,6 +899,7 @@ run "brain_is_absent_by_default" {
   assert {
     condition = (
       length(aws_instance.brain) == 0 &&
+      length(terraform_data.brain_volume) == 0 &&
       length(aws_ebs_volume.brain_data) == 0 &&
       length(aws_eip.brain) == 0 &&
       length(aws_eip_association.brain) == 0 &&
@@ -924,8 +926,9 @@ run "brain_instance_is_locked_down" {
   # container), a hop limit of 3 or more (a container behind another proxy
   # reaches the role credentials), instance_metadata_tags = "disabled" (the host
   # cannot read its switches and stays off), key_name set (a key pair is a
-  # login nobody audits), disable_api_termination = false, or an unencrypted
-  # root disk.
+  # login nobody audits), disable_api_termination = true (the provider cannot
+  # replace a protected instance: it stops the host, detaches the volume, then
+  # fails), or an unencrypted root disk.
   assert {
     condition = (
       aws_instance.brain[0].metadata_options[0].http_tokens == "required" &&
@@ -933,11 +936,11 @@ run "brain_instance_is_locked_down" {
       aws_instance.brain[0].metadata_options[0].http_put_response_hop_limit <= 2 &&
       aws_instance.brain[0].metadata_options[0].instance_metadata_tags == "enabled" &&
       aws_instance.brain[0].key_name == "" &&
-      aws_instance.brain[0].disable_api_termination == true &&
+      aws_instance.brain[0].disable_api_termination == false &&
       aws_instance.brain[0].root_block_device[0].encrypted == true &&
       aws_instance.brain[0].associate_public_ip_address == true
     )
-    error_message = "The brain must require IMDSv2 with a hop limit of at most 2, expose instance tags, have no key pair, and an encrypted root disk."
+    error_message = "The brain must require IMDSv2 with a hop limit of at most 2, expose instance tags, have no key pair, no termination protection, and an encrypted root disk."
   }
 
   # Mutation: removing user_data_replace_on_change, or setting it false, leaves
@@ -998,6 +1001,57 @@ run "brain_data_volume_and_address_keep_prevent_destroy" {
       strcontains(regex("(?s)resource \"${r}\" \\{.*?\n\\}\n", file("brain_instance.tf")), "prevent_destroy = true")
     ])
     error_message = "The brain's data volume and Elastic IP must keep prevent_destroy (brain_instance.tf)."
+  }
+}
+
+run "brain_host_files_leave_out_the_committed_certificate" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # brain-ca.pem is committed after the first boot. If it were embedded, that
+  # commit would change the user data and replace the instance. api.env is in
+  # the tree, so the second line shows the filter itself works.
+  # Mutation: taking "brain-ca.pem" out of local.brain_not_embedded, or the
+  # `!contains(local.brain_not_embedded, f)` clause out of brain_host_file_set.
+  assert {
+    condition = (
+      contains(local.brain_not_embedded, "brain-ca.pem") &&
+      alltrue([for f in local.brain_not_embedded : !contains(local.brain_host_file_set, f)])
+    )
+    error_message = "brain-ca.pem must not be embedded in the user data: committing it would replace the instance."
+  }
+}
+
+run "brain_instance_is_replaced_when_the_current_volume_changes" {
+  command = plan
+  variables {
+    brain_pg_image_tag        = "test"
+    brain_data_volumes        = { "1" = { az = "ap-southeast-2a", size_gb = 20 }, "2" = { az = "ap-southeast-2b", size_gb = 20 } }
+    brain_data_volume_current = "2"
+  }
+  plan_options {
+    target = [terraform_data.brain_volume]
+  }
+
+  # A mocked provider cannot show the replacement (a plan has no state to
+  # replace, and an assertion cannot read an action), so this reads the two
+  # halves from the source and the plan: the key follows the current volume,
+  # and the instance names it. Without them "add volume N, make it current"
+  # plans an in-place update (the new volume's id is unknown until it exists),
+  # fails halfway and leaves the host stopped; a scratch rehearsal showed it.
+  # Mutation: removing `replace_triggered_by` from the instance, or keying
+  # terraform_data.brain_volume on anything but brain_data_volume_current.
+  assert {
+    condition = (
+      terraform_data.brain_volume[0].triggers_replace == "2" &&
+      strcontains(regex("(?s)resource \"aws_instance\" \"brain\" \\{.*?\n\\}\n", file("brain_instance.tf")), "replace_triggered_by = [terraform_data.brain_volume]")
+    )
+    error_message = "Changing brain_data_volume_current must replace the instance at plan time: terraform_data.brain_volume keyed on it, named in the instance's replace_triggered_by."
   }
 }
 
