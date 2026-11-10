@@ -59,7 +59,7 @@ PG_ARGS=(-c config_file=/etc/postgresql/postgresql.conf -c listen_addresses= -c 
 q() { psql -h "$SOCK" -U postgres -d "$1" -v ON_ERROR_STOP=1 -tAXq -c "$2"; }
 
 drill() {
-  local info n code stop mode at t0
+  local info n code stop mode at t0 recovered
   info=$(pgbackrest --stanza=logjam info --output=json) || { ERROR=repo_unreadable; return; }
   # The newest backup of the stanza. Code 1 (no stanza) and 2 (no valid backup)
   # are an empty repository; anything else with no backup is one we cannot read.
@@ -86,14 +86,18 @@ drill() {
   fi
   until [ "$(q postgres 'select pg_is_in_recovery()' 2> /dev/null)" = f ]; do
     [ "$(left)" -gt 0 ] || { ERROR=timed_out; return; }
+    # A server that died in recovery must not look like a slow one.
+    pg_ctl -D "$PGDATA" status > /dev/null 2>&1 || { ERROR=start_failed; return; }
     sleep 2
   done
-  RESTORE_SECONDS=$(($(date +%s) - t0))
+  recovered=$(date +%s)
+  RESTORE_SECONDS=$((recovered - t0))
 
-  # The canary's age as of the start: what the disk dying then would have cost.
+  # The canary's age when recovery ended: what losing the disk at that moment would have cost.
+  # About a minute with healthy archiving, hours if archiving had stalled.
   at=$(q postgres 'select extract(epoch from at)::bigint from brain.canary' 2> /dev/null)
   [[ $at =~ ^[0-9]+$ ]] || { ERROR=canary_unreadable; return; }
-  LAG=$((START - at))
+  LAG=$((recovered - at))
   [ "$LAG" -ge 0 ] || LAG=0
 
   q logjam 'select count(*) from _prisma_migrations' > /dev/null 2>&1 || { ERROR=migrations_unreadable; return; }
@@ -109,6 +113,7 @@ drill
 stop_pg
 
 # The verdict: a fixed key set (tests/e2e.sh holds it). schema is the version of this shape.
+# canary_lag_seconds: how many seconds of writes losing the disk when recovery ended would have cost.
 verdict=$(jq -n --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg error "$ERROR" --arg label "$LABEL" --arg stop "$STOP" \
   --arg rs "$RESTORE_SECONDS" --arg lag "$LAG" --arg tables "$TABLES" '
   def s: if . == "" then null else . end;

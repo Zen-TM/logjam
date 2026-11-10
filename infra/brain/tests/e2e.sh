@@ -102,7 +102,7 @@ reboot() { # containers die, the mount goes, the volume stays attached
 cleanup() {
   [ -z "${E2E_KEEP:-}" ] || return 0 # leave everything up to debug a failure
   [ -x /opt/brain/host/lib.sh ] && lcompose --profile '*' down -v --remove-orphans > /dev/null 2>&1
-  r docker rm -f brain-e2e-ministack brain-e2e-tls > /dev/null 2>&1
+  r docker rm -f brain-e2e-ministack brain-e2e-tls brain-e2e-creds > /dev/null 2>&1
   r docker network rm brain-e2e > /dev/null 2>&1
   detach_disk
   r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-e2e-serving /run/brain-e2e-bootstrap /run/brain-release.lock
@@ -619,7 +619,9 @@ check "the marker is gone" [ ! -e /data/.setup-in-progress ]
 #   postgres/drill.sh: `--archive-mode=off` dropped from the restore: the guard refuses (exit non-zero);
 #   postgres/drill.sh: that and the `[ "$mode" = off ]` guard: the repository listing differs;
 #   postgres/drill.sh: one more key in the verdict;
-#   postgres/drill.sh: not reading the task role's credentials.
+#   postgres/drill.sh: not reading the task role's credentials;
+#   postgres/drill.sh: dropping the `pg_ctl status` liveness check in the recovery wait (error timed_out, not start_failed);
+#   postgres/drill.sh: `LAG=$((recovered - at))` -> `LAG=$((START - at))` (reads 0 when the canary is replayed).
 S="11 the restore drill"
 serving off; agent # the API's own connections would hide a drill that reached the live Postgres in its log
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
@@ -635,7 +637,6 @@ http { server { listen 80; location /creds {
   return 200 '{"AccessKeyId":"test","SecretAccessKey":"test","Token":"e2e-token","Expiration":"2099-01-01T00:00:00Z"}'; } } }
 EOF
 r docker run -d --name brain-e2e-creds --network brain-e2e -v "$WORK/creds.conf:/etc/nginx/nginx.conf:ro" nginx:1.27-alpine > /dev/null || fatal "the task-role stand-in does not start"
-trap 'cleanup; r docker rm -f brain-e2e-creds > /dev/null 2>&1' EXIT
 drill() { # <backup bucket> [docker args]: on the test network only, where the live Postgres is not
   r docker run --rm --network brain-e2e --name brain-e2e-drill -e AWS_REGION=ap-southeast-2 -e BRAIN_BACKUP_BUCKET="$1" \
     -e BRAIN_SIGNALS_BUCKET="$SIGNALS" -e BRAIN_BACKUP_ENDPOINT=brain-e2e-tls:4443 -e BRAIN_BACKUP_VERIFY_TLS=n "${@:2}" \
@@ -659,7 +660,11 @@ check "drill.json has exactly the allowlisted keys" \
 check "it says ok" [ "$(drill_field ok)" = True ]
 check "...with no error" [ "$(drill_field error)" = None ]
 check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
-check "the canary was seconds old, not minutes (lag $(drill_field canary_lag_seconds) s)" [ "$(drill_field canary_lag_seconds)" -lt 120 ]
+# canary_lag_seconds: the canary's age when recovery ended, i.e. what losing the disk then would have cost.
+# Healthy archiving: seconds here (status.sh ran just before), never 0, which is what measuring from the drill's start gives.
+lag=$(drill_field canary_lag_seconds)
+check "the canary was not 0 seconds old (lag $lag s)" [ "$lag" -ge 1 ]
+check "...and seconds old, not minutes" [ "$lag" -lt 120 ]
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
 check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
@@ -670,6 +675,27 @@ check "the output carries no credential" not grep -q 'e2e-token' "$WORK/drill.lo
 if command -v shellcheck > /dev/null; then
   check "the drill script passes shellcheck" shellcheck infra/brain/postgres/drill.sh
 elif [ -n "${CI:-}" ]; then bad "shellcheck is not installed"; fi
+
+# A canary the live Postgres writes while the drill runs is replayed by its recovery and is then newer than the
+# drill's start: the lag must still be measured at the end of recovery (from the start it would read 0).
+drill "$BACKUPS" -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test &
+drill_pid=$!
+sleep 1; r /opt/brain/host/status.sh || bad "status.sh failed"
+wait "$drill_pid"; rc=$?
+check "a drill running while the canary is written exits 0 (got $rc)" [ "$rc" = 0 ]
+check "...and its lag is not 0 (lag $(drill_field canary_lag_seconds) s)" [ "$(drill_field canary_lag_seconds)" -ge 1 ]
+
+# A server that dies while recovering is a failed drill at once, not a timeout an hour later: a stand-in
+# psql kills the postmaster when the drill first asks whether recovery has ended.
+cat > "$WORK/psql-stub" <<'EOF'
+#!/bin/sh
+case "$*" in *pg_is_in_recovery*) kill -9 "$(head -1 /var/lib/postgresql/drill/postmaster.pid)"; sleep 1; exit 1 ;; esac
+exec /usr/bin/psql "$@"
+EOF
+chmod 755 "$WORK/psql-stub"
+drill "$BACKUPS" -e BRAIN_DRILL_TIMEOUT=90 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -v "$WORK/psql-stub:/usr/local/bin/psql:ro"; rc=$?
+check "a server killed in recovery: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and says start_failed, not timed_out" [ "$(drill_field error)" = start_failed ]
 
 # An empty repository is a failed drill, said in a fixed code.
 drill e2e-empty -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
