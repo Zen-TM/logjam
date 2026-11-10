@@ -134,17 +134,16 @@ app_connects() {
 identity() { echo "$(sql postgres "select string_agg(rolname, ',' order by rolname) from pg_roles where rolname !~ '^pg_'")/$(sql postgres "select string_agg(datname, ',' order by datname) from pg_database")"; }
 api_tag() { r docker inspect -f '{{.Config.Image}}' "$(cid api)"; }
 
-# A release pointer built from the committed api.env, as CI will build it, with
-# the stand-in AWS endpoint added and any K=V overrides after it.
+# A release pointer built as CI builds it (infra/scripts/brain-release.sh, from
+# the committed api.env), with the stand-in AWS endpoint added and any K=V
+# overrides after it.
 release() { # <sha> [K=V]...
-  python3 - "$ROOT/infra/brain/api.env" "$MS_ENDPOINT_IN" "$@" <<'PY'
+  "$ROOT/infra/scripts/brain-release.sh" "$1" | python3 -c '
 import json, sys
-path, endpoint, sha, *overrides = sys.argv[1:]
-env = dict(l.rstrip("\n").split("=", 1) for l in open(path) if l.strip() and not l.startswith("#"))
-env.update(AWS_ENDPOINT_URL=endpoint, AWS_ACCESS_KEY_ID="test", AWS_SECRET_ACCESS_KEY="test", SMTP_HOST="127.0.0.1")
-env.update(o.split("=", 1) for o in overrides)
-print(json.dumps({"sha": sha, "env": env}))
-PY
+p = json.load(sys.stdin)
+p["env"].update(AWS_ENDPOINT_URL=sys.argv[1], AWS_ACCESS_KEY_ID="test", AWS_SECRET_ACCESS_KEY="test", SMTP_HOST="127.0.0.1")
+p["env"].update(o.split("=", 1) for o in sys.argv[2:])
+print(json.dumps(p))' "$MS_ENDPOINT_IN" "${@:2}"
 }
 point() { release "$@" | aws s3 cp - "s3://$SIGNALS/release.json" --only-show-errors; }
 serving() { printf '%s' "$1" | r tee /run/brain-e2e-serving > /dev/null; }

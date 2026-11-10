@@ -285,6 +285,23 @@ jobs:
           wait_for_environment_recovery: 180
           wait_for_deployment: true
 
+      # The brain's release pointer: the sha just deployed and infra/brain/api.env,
+      # which the brain's release agent makes its API match once it serves.
+      # After the EB step on purpose: until the cutover, EB is what serves, so
+      # a failure here must not hold back that release, but it still turns the
+      # run red. The role may only put this one key and not read the bucket
+      # (brain_ecr.tf), so there is no read-back; the file is made first because
+      # a failing script piped into `aws s3 cp -` would upload an empty pointer.
+      - name: Write the brain's release pointer
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          SIGNALS_BUCKET: logjam-brain-signals-${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          infra/scripts/brain-release.sh "$IMAGE_TAG" > "$RUNNER_TEMP/release.json"
+          aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
+            --content-type application/json
+
   smoke:
     needs: deploy
     if: ${{ !cancelled() && needs.deploy.outputs.swapped == 'true' }}

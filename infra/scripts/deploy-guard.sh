@@ -108,6 +108,7 @@ self_test() {
   check "fresh: lookup failed"             false decide_fresh "$A" 1 "HTTP 502"
   check "fresh: lookup gave garbage"       false decide_fresh "$A" 0 ""
   check "scope: api always deploys"        true  decide_scope api "" "$A" 1 ""
+  check "scope: api, the brain's env file alone"  true  decide_scope api "$B" "$A" 0 $'ahead\ninfra/brain/api.env'
   check "scope: live unknown"              unknown decide_scope frontend "" "$A" 0 ""
   check "scope: compare failed"            unknown decide_scope frontend "$B" "$A" 1 "HTTP 500"
   check "scope: identical"                 false decide_scope frontend "$A" "$A" 0 "identical"

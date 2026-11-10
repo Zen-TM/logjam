@@ -6,8 +6,9 @@ name: Rollback
 # GitHub Actions itself is down: docs/operations/rollback.md.
 #
 #   api:      EB back to the version labelled <sha> (every deployed sha is
-#             one) and the task defs that run the API image repinned
-#             (infra/scripts/pin-release.sh). No migration: the schema stays
+#             one), the task defs that run the API image repinned
+#             (infra/scripts/pin-release.sh) and the brain's release pointer
+#             rewritten for <sha>. No migration: the schema stays
 #             forward. rollback-compat.yml tests only the release that was live
 #             when a migration merged against it, so going back further than
 #             one release can cross a contract migration: check
@@ -161,6 +162,27 @@ jobs:
           if [ "$LIVE" != "$SHA" ]; then
             echo "::error::EB finished updating on $LIVE, not $SHA"; exit 1
           fi
+
+      # The brain's release pointer for the sha, with the env that sha shipped
+      # (see deploy-api.yml). A sha from before the brain has no
+      # infra/brain/api.env: nothing to point at, so skip. The pointer is
+      # written after EB is back, and only when it is.
+      - name: Point the brain at the rolled-back release
+        if: inputs.target == 'api'
+        env:
+          SIGNALS_BUCKET: logjam-brain-signals-${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # The checkout is shallow and may not hold the sha.
+          git fetch --depth=1 origin "$SHA"
+          if ! git cat-file -e "FETCH_HEAD:infra/brain/api.env" 2> /dev/null; then
+            echo "::notice::$SHA predates the brain (no infra/brain/api.env), so there is no release pointer to write"
+            exit 0
+          fi
+          git show "FETCH_HEAD:infra/brain/api.env" > "$RUNNER_TEMP/api.env"
+          infra/scripts/brain-release.sh "$SHA" "$RUNNER_TEMP/api.env" > "$RUNNER_TEMP/release.json"
+          aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
+            --content-type application/json
 
       - name: Roll back the frontend
         if: inputs.target == 'frontend'

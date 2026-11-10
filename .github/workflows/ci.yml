@@ -926,6 +926,10 @@ jobs:
         run: infra/scripts/pin-release.sh --self-test
       - name: Deploy guard decisions
         run: infra/scripts/deploy-guard.sh --self-test
+      # The release pointer the deploy and rollback write for the brain,
+      # held to the checks the brain's release agent applies.
+      - name: Brain release pointer
+        run: infra/scripts/brain-release.sh --self-test
       # What image-build.yml builds, checked against the Dockerfiles' COPY
       # lines and deploy-guard.sh's worker list.
       - name: Image build scope

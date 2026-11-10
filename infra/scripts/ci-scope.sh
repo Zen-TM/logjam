@@ -32,7 +32,8 @@
 # "topo_e2e: the start route"; dropping lockfiles from setup_smoke
 # fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
 # brain_postgres fails "brain_postgres: the Compose file that builds it"; dropping
-# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; a scoped job in any workflow whose
+# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
+# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; a scoped job in any workflow whose
 # `if:` is not the fail-open expression, or a `changes` output wired to another
 # area's value, fails that workflow's checks.
 set -uo pipefail
@@ -73,8 +74,9 @@ paths_for() {
     # builds it for local dev.
     brain_postgres) echo '^(infra/brain/postgres/|docker-compose\.yml$)' ;;
     # The host's scripts and Compose files, and what the test builds or reads
-    # from elsewhere: the API image's Dockerfile and migrations, and the role script.
-    brain_e2e) echo '^(infra/brain/|api/(Dockerfile|prisma/|prisma\.config\.ts)|scripts/bootstrap-app-db-role\.sql$)' ;;
+    # from elsewhere: the API image's Dockerfile and migrations, the role script and
+    # the script that builds the release pointers it feeds the agent.
+    brain_e2e) echo '^(infra/brain/|api/(Dockerfile|prisma/|prisma\.config\.ts)|scripts/bootstrap-app-db-role\.sql$|infra/scripts/brain-release\.sh$)' ;;
     *) return 1 ;;
   esac
 }
@@ -174,6 +176,7 @@ self_test() {
   check "brain_e2e: the API image's Dockerfile"           brain_e2e true  0 'api/Dockerfile'
   check "brain_e2e: a migration it runs"                  brain_e2e true  0 'api/prisma/migrations/2026/migration.sql'
   check "brain_e2e: the role script it reuses"            brain_e2e true  0 'scripts/bootstrap-app-db-role.sql'
+  check "brain_e2e: the script that builds its release pointers" brain_e2e true  0 'infra/scripts/brain-release.sh'
   check "brain_e2e: api source"                           brain_e2e false 0 'api/src/routes/places.ts'
   check "brain_e2e: other infra"                          brain_e2e false 0 'infra/scripts/deploy-guard.sh'
   check "empty diff"                                      api_integration false 0 ''
