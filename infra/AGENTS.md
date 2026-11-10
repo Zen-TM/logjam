@@ -74,8 +74,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   the disk holds the only copy of the database between backups, the address's
   DNS name is in the database certificate). Only the current entry of
   `brain_data_volumes` (in `brain.auto.tfvars`) is attached; replacing a lost disk or zone adds an
-  entry and makes it current, and a later change drops the old one with a
-  `removed` block. Changing the current entry replaces the instance at plan
+  entry and makes it current. An old volume goes only by hand: `terraform
+  state rm` of that one instance, delete the volume, then remove its entry
+  (removing the entry alone is refused by `prevent_destroy`, and a `removed`
+  block cannot name one instance). Changing the current entry replaces the instance at plan
   time (`terraform_data.brain_volume` and `replace_triggered_by`), so the
   recovery applies in one run. Guards: `brain_data_volume_and_address_keep_prevent_destroy`,
   `brain_only_the_current_volume_is_attached_in_its_zone`,
