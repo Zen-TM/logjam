@@ -603,7 +603,9 @@ let timer: NodeJS.Timeout | null = null;
  * Every background sweep runs from this one timer, and a tick runs only in the
  * process holding the database's sweep lock (lib/sweepLeader.ts), so several
  * API processes on one database sweep once, not once each. A new sweep joins
- * runOnce; it never gets a timer of its own. Guard: sweepLeader.test.ts.
+ * runOnce; it never gets a timer of its own. Guards:
+ * lib/topoJobReaper.leader.unit.test.ts (a tick goes through the leader) and
+ * src/__tests__/sweepLeader.test.ts (one holder per database).
  * Ticks that outlast the interval overlap, as they always have.
  */
 export function startTopoJobReaper(): () => void {
