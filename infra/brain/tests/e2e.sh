@@ -595,5 +595,68 @@ check "the next boot, with the cause removed, succeeds (exit $rc)" [ "$rc" = 0 ]
 check "the database is the restored one" [ "$(sql logjam 'select count(*) from e2e_rows')" = 1000 ]
 check "the marker is gone" [ ! -e /data/.restore-in-progress ]
 
+# --- 11. the restore drill -------------------------------------------------------------------------------------------
+# infra/brain/postgres/drill.sh, as a scheduled task runs it: its own container, no route to the live Postgres,
+# credentials from a task-role stand-in. Mutations (each applied once and seen red):
+#   postgres/drill.sh: `--archive-mode=off` dropped from the restore: the guard refuses (exit non-zero);
+#   postgres/drill.sh: that and the `[ "$mode" = off ]` guard: the repository listing differs;
+#   postgres/drill.sh: one more key in the verdict;
+#   postgres/drill.sh: not reading the task role's credentials.
+S="11 the restore drill"
+serving off; agent # the API's own connections would hide a drill that reached the live Postgres in its log
+sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
+r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
+want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
+sql postgres "select pg_switch_wal()" > /dev/null
+check "the WAL with the canary is archived" wait_for 120 archived "$want"
+aws s3 mb "s3://e2e-empty" > /dev/null
+cat > "$WORK/creds.conf" <<'EOF'
+events {}
+http { server { listen 80; location /creds {
+  default_type application/json;
+  return 200 '{"AccessKeyId":"test","SecretAccessKey":"test","Token":"e2e-token","Expiration":"2099-01-01T00:00:00Z"}'; } } }
+EOF
+r docker run -d --name brain-e2e-creds --network brain-e2e -v "$WORK/creds.conf:/etc/nginx/nginx.conf:ro" nginx:1.27-alpine > /dev/null || fatal "the task-role stand-in does not start"
+trap 'cleanup; r docker rm -f brain-e2e-creds > /dev/null 2>&1' EXIT
+drill() { # <backup bucket> [docker args]: on the test network only, where the live Postgres is not
+  r docker run --rm --network brain-e2e --name brain-e2e-drill -e AWS_REGION=ap-southeast-2 -e BRAIN_BACKUP_BUCKET="$1" \
+    -e BRAIN_SIGNALS_BUCKET="$SIGNALS" -e BRAIN_BACKUP_ENDPOINT=brain-e2e-tls:4443 -e BRAIN_BACKUP_VERIFY_TLS=n "${@:2}" \
+    "$PG_IMAGE" /usr/local/lib/brain/drill.sh > "$WORK/drill.log" 2>&1
+}
+drill_json() { aws s3 cp "s3://$SIGNALS/drill.json" -; }
+drill_field() { drill_json | python3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
+repo_list() { aws s3 ls "s3://$BACKUPS" --recursive; } # keys, sizes and times
+live_tables=$(sql logjam "select count(*) from pg_tables where schemaname = 'public'")
+newest=$(r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print([b["label"] for s in json.load(sys.stdin) for b in s["backup"]][-1])')
+listing=$(repo_list); since=$(date +%s)
+drill "$BACKUPS" -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-creds/creds; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/drill.log"
+check "the drill exits 0 (got $rc)" [ "$rc" = 0 ]
+check "it read the task role's credentials from the stand-in" bash -c "$SUDO docker logs brain-e2e-creds 2>&1 | grep -q 'GET /creds'"
+check "drill.json has exactly the allowlisted keys" \
+  [ "$(drill_json | python3 -c 'import json, sys; print(*sorted(json.load(sys.stdin)))')" = "backup_label backup_stop_time canary_lag_seconds error ok restore_seconds schema tables_read time" ]
+check "it says ok" [ "$(drill_field ok)" = True ]
+check "...with no error" [ "$(drill_field error)" = None ]
+check "it names the newest backup" [ "$(drill_field backup_label)" = "$newest" ]
+check "the canary was seconds old, not minutes (lag $(drill_field canary_lag_seconds) s)" [ "$(drill_field canary_lag_seconds)" -lt 120 ]
+check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
+check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
+check "the live Postgres saw no connection while the drill ran" \
+  [ "$(r docker logs --since "$since" "$(cid postgres)" 2>&1 | grep -c 'connection authorized')" = 0 ]
+check "the output has no value from the database" not grep -q 'e2e-secret-value-7731' "$WORK/drill.log"
+check "the output carries no credential" not grep -q 'e2e-token' "$WORK/drill.log"
+if command -v shellcheck > /dev/null; then
+  check "the drill script passes shellcheck" shellcheck infra/brain/postgres/drill.sh
+elif [ -n "${CI:-}" ]; then bad "shellcheck is not installed"; fi
+
+# An empty repository is a failed drill, said in a fixed code.
+drill e2e-empty -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test; rc=$?
+check "an empty repository: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
+check "...and drill.json says ok false" [ "$(drill_field ok)" = False ]
+check "...with the fixed code for no backup" [ "$(drill_field error)" = no_backup ]
+check "...and nothing measured" [ "$(drill_field restore_seconds)/$(drill_field tables_read)" = None/None ]
+
 [ "$fails" = 0 ] || dump
 exit "$fails"

@@ -8,7 +8,7 @@ FROM postgres:16.15-trixie
 
 # The base image already configures the PGDG apt repository.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates openssl pgbackrest postgresql-16-pgaudit \
+ && apt-get install -y --no-install-recommends ca-certificates curl jq openssl pgbackrest postgresql-16-pgaudit \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /etc/pgbackrest /etc/postgresql \
  && chown postgres:postgres /etc/pgbackrest
@@ -17,6 +17,7 @@ COPY postgresql.conf pg_hba.prod.conf pg_hba.dev.conf pg_ident.conf /etc/postgre
 COPY brain-lib.sh pgbackrest-conf.sh /usr/local/lib/brain/
 COPY brain-entrypoint.sh /usr/local/bin/
 COPY initdb/ /docker-entrypoint-initdb.d/
+COPY drill.sh /usr/local/lib/brain/
 
 ENTRYPOINT ["brain-entrypoint.sh"]
 CMD ["postgres"]

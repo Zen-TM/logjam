@@ -47,3 +47,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   info` exits 0 for an unreachable one: read its JSON); keep both, and keep
   `create_host_path: false` on the data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
   on a loop device; each mutation it names turns it red.
+- **The restore drill** (`brain/postgres/drill.sh`) restores with
+  `--archive-mode=off` and refuses to start Postgres unless the restored
+  `archive_mode` reads `off`: a restored copy that archives writes a timeline
+  into the live repository and breaks every later restore. Keep both, and keep
+  the drill's role read-only on the backup bucket. Guard: the drill scenario of
+  `brain/tests/e2e.sh` (the repository listing must not change).
