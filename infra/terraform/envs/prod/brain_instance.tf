@@ -51,10 +51,15 @@ locals {
   # same files would not fit). Terraform cannot keep them in S3: under the CI
   # privacy Deny it could not read them back. Scripts are executable, the rest
   # are not. Guards: brain_user_data_stays_within_the_ec2_limit and
-  # brain_host_files_embed_cleanly_and_hold_no_secret.
+  # brain_host_files_embed_cleanly_and_hold_no_secret. brain-ca.pem, the brain's
+  # public certificate, is committed after its first boot and is not embedded:
+  # it would change the user data and replace the instance. It stays under
+  # infra/brain/ so the prod plan's scope covers the commit. Guard:
+  # brain_host_files_leave_out_the_committed_certificate.
   brain_dir           = "${path.module}/../../../brain"
   brain_heredoc_end   = "BRAIN_HOST_FILE_EOF"
-  brain_host_file_set = sort([for f in fileset(local.brain_dir, "**") : f if !startswith(f, "postgres/") && !startswith(f, "tests/") && f != "api.env"])
+  brain_not_embedded  = ["api.env", "brain-ca.pem"]
+  brain_host_file_set = sort([for f in fileset(local.brain_dir, "**") : f if !startswith(f, "postgres/") && !startswith(f, "tests/") && !contains(local.brain_not_embedded, f)])
   brain_host_files = join("\n", [
     for f in local.brain_host_file_set :
     "install -D -m ${endswith(f, ".sh") ? "0755" : "0644"} /dev/stdin /opt/brain/${f} <<'${local.brain_heredoc_end}'\n${trimsuffix(file("${local.brain_dir}/${f}"), "\n")}\n${local.brain_heredoc_end}"
@@ -125,7 +130,12 @@ resource "aws_instance" "brain" {
   # The first boot needs egress before the Elastic IP attaches (the subnets do
   # not hand out public addresses by themselves).
   associate_public_ip_address = true
-  disable_api_termination     = true
+  # Not true: Terraform does not clear it before terminating, so replacing the
+  # instance (every host-file change) stops the host, detaches the data volume
+  # and then fails with OperationNotPermitted, leaving the brain down. Nothing
+  # is lost: the data volume and the address have prevent_destroy, and the
+  # instance is rebuilt from user data. Guard: brain_instance_is_locked_down.
+  disable_api_termination = false
 
   # Any change to a host file or to brain.env changes this, and replaces the
   # instance: a few minutes of downtime, data volume kept. Intended: the root
@@ -171,6 +181,12 @@ resource "aws_instance" "brain" {
   lifecycle {
     ignore_changes = [ami]
 
+    # The data volume's id is in brain.env, and so in the user data. A new
+    # volume's id is unknown at plan time, which hides the replacement the
+    # user data forces and makes the apply fail halfway: the key is known.
+    # Guard: brain_instance_is_replaced_when_the_current_volume_changes.
+    replace_triggered_by = [terraform_data.brain_volume]
+
     # The embedded files are checked here, against the one declaration that
     # embeds them, so a file added under infra/brain/ is covered the moment the
     # user data carries it. A file holding the delimiter would end its heredoc
@@ -198,6 +214,13 @@ resource "aws_instance" "brain" {
       error_message = "The brain's user data holds a secret-shaped value (an access key id, a private key or a secret access key)."
     }
   }
+}
+
+# Makes the instance's replacement, when the current volume changes, visible at
+# plan time (the new volume's id is not).
+resource "terraform_data" "brain_volume" {
+  count            = local.brain_enabled ? 1 : 0
+  triggers_replace = var.brain_data_volume_current
 }
 
 # Only the current volume is attached. stop_instance_before_detaching: when the
