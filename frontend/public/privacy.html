@@ -143,8 +143,8 @@
     <p>
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
-      RDS PostgreSQL. Authentication is handled by Amazon Cognito within the
-      same Australian region. Deleting a stored file is final: our storage
+      PostgreSQL, on a server we run in that region. Authentication is handled
+      by Amazon Cognito within the same Australian region. Deleting a stored file is final: our storage
       keeps no earlier versions to restore. Email, push notifications, app
       updates and crash reports go through providers outside Australia (see
       &ldquo;Overseas disclosure&rdquo; below).
