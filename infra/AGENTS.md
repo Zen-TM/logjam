@@ -95,3 +95,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_user_data_stays_within_the_ec2_limit`,
   `brain_host_files_embed_cleanly_and_hold_no_secret`,
   `brain_env_is_plain_key_value_the_host_files_read`.
+- **The restore drill** (`brain/postgres/drill.sh`) restores with
+  `--archive-mode=off` and refuses to start Postgres unless the restored
+  `archive_mode` reads `off`: a restored copy that archives writes a timeline
+  into the live repository and breaks every later restore. Keep both, and keep
+  the drill's role read-only on the backup bucket. Guard: the drill scenario of
+  `brain/tests/e2e.sh` (the repository listing must not change).
