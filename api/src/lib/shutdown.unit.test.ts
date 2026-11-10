@@ -13,6 +13,12 @@ import { createShutdown } from "./shutdown";
 //    fails (its connection idles until the keep-alive timeout).
 //  - drop `clearTimeout(force)` after `finish`: "a clean shutdown is not
 //    reported again as a forced one" fails (exit is called a second time).
+//  - drop `opts.stop()`: "forces an exit" and "exits 1 when finish rejects"
+//    fail (stop was never called).
+//  - drop the deadline's timer or its `opts.exit(1)`: "forces an exit" fails
+//    (nothing exits while the request hangs).
+//  - drop the `opts.exit(1)` after a failed `finish`: "exits 1 when finish
+//    rejects" fails.
 
 const agent = new http.Agent({ keepAlive: true, maxSockets: 8 });
 let server: Server;
@@ -92,14 +98,18 @@ describe("graceful shutdown", () => {
       exit: (code) => void exits.push(code),
     });
     // A request whose handler never answers, so the server never closes.
+    let entered = () => {};
+    const held = new Promise<void>((r) => {
+      entered = r;
+    });
     server = express()
-      .get("/hang", () => {})
+      .get("/hang", () => entered())
       .listen(0);
     const socket = net.connect((server.address() as AddressInfo).port, () =>
       socket.write("GET /hang HTTP/1.1\r\nHost: x\r\n\r\n"),
     );
     socket.on("error", () => {});
-    await new Promise((r) => setTimeout(r, 100));
+    await held;
     lifecycle.begin(server, "test");
     await new Promise((r) => setTimeout(r, 400)); // well past the deadline
     socket.destroy();

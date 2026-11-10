@@ -31,7 +31,8 @@ import {
 //    password callback lost, so the lock is never taken on RDS): "builds the
 //    lock client from dbConnectionConfig() plus a query timeout".
 //  - `query_timeout` dropped from newLockClient: the same test.
-//  - the `if (!outageLogged)` guard removed: "warns once per outage".
+//  - the `if (!outageLogged)` guard removed, or `outageLogged` never reset
+//    on a successful acquire: "warns once per outage".
 //  - the `client.on("end", ...)` listener removed: "drops leadership when the
 //    connection ends".
 
@@ -172,9 +173,11 @@ describe("sweep leader", () => {
   it("warns once per outage", async () => {
     FakeClient.taken = false;
     let fail = true;
+    const clients: FakeClient[] = [];
     const leader = createSweepLeader(() => {
       const c = new FakeClient();
       c.failConnect = fail;
+      clients.push(c);
       return c;
     });
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
@@ -182,9 +185,14 @@ describe("sweep leader", () => {
     await leader.runIfLeader(tick);
     await leader.runIfLeader(tick);
     expect(warn).toHaveBeenCalledTimes(1);
-    // Recovery re-arms the warning for the next outage.
+    // Recovery re-arms the warning: the next outage is reported once more.
     fail = false;
     expect(await leader.runIfLeader(tick)).toBe(true);
+    fail = true;
+    (clients.at(-1) as FakeClient).pingFails = true;
+    await leader.runIfLeader(tick);
+    await leader.runIfLeader(tick);
+    expect(warn).toHaveBeenCalledTimes(2);
     await leader.stop();
     warn.mockRestore();
   });
