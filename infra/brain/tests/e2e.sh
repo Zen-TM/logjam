@@ -344,8 +344,9 @@ check "the same certificate" [ "$(fingerprint)" = "$cert1" ]
 check "no extra full backup" [ "$(fulls)" = "$fulls1" ]
 check "no API container with serving off" [ -z "$(cid api)" ]
 # A container that restarted once under its policy is healthy: its restart count is not a crash loop.
-r docker kill "$(cid postgres)" > /dev/null
-check "Postgres restarts by itself after a kill" wait_for 60 pg_ready
+r docker exec "$(cid postgres)" kill -QUIT 1 # an immediate shutdown: the container exits and its policy restarts it
+check "Postgres restarts by itself" wait_for 60 pg_ready
+check "...and the container's restart count is 1" [ "$(r docker inspect -f '{{.RestartCount}}' "$(cid postgres)")" = 1 ]
 boot; rc=$?
 check "boot.sh on that container, restart count 1, still succeeds (exit $rc)" [ "$rc" = 0 ]
 
