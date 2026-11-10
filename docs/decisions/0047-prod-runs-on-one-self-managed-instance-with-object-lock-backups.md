@@ -126,18 +126,21 @@ fails when it is broken.
    (`infra/scripts/brain-release.sh` and `infra/brain/host/release-agent.sh`
    share one set of patterns). The deploy role may write that one object and
    push the one image; no CI role reads either brain bucket, a command's
-   output or a disk snapshot's blocks. There is no SSH: the security group
-   admits port 80 from CloudFront and 5432 from the workers only, and the
-   operator uses Session Manager. Guards:
+   output or a disk snapshot's blocks, and **no CI role can start a session,
+   send a command or open a shell on the host or in a task**: that is denied to
+   the plan role, the deploy role, the contributor group and the Terraform
+   apply role's boundary alike, and only the maintainer's own identity can.
+   There is no SSH: the security group admits port 80 from CloudFront and 5432
+   from the workers only, and the operator uses Session Manager. Guards:
    `brain_deploy_role_writes_only_release_json`,
    `ci_reads_no_secret_or_user_data`,
    `brain_security_group_has_two_ingress_rules`,
    `brain_instance_is_locked_down` (no key pair), scenario 6 of `e2e.sh`, and
    the `--self-test` of `brain-release.sh` in the `infra-scripts` CI job. The
-   Terraform apply role is broader, because it builds the host: its boundary
-   denies it the command output but not the command, and what limits it is
-   that only workflows on `main` can assume it and every apply is a plan the
-   PR showed ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
+   Terraform apply role is administrative, because it builds the host, but
+   inside a boundary that carries the same Deny; only workflows on `main` can
+   assume it, and every apply is a plan the PR showed
+   ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
 6. **Everything is dormant until its setting is flipped.** With the default
    variables there is no instance, volume, address, alarm, watchdog, drill or
    copy task. A built brain still does not serve: its API runs only while the
@@ -146,19 +149,66 @@ fails when it is broken.
    in-place update, not a replacement. The cutover's copy task is started by
    a person, never on a schedule, and refuses to run against a serving
    brain. Guards: `brain_is_absent_by_default`,
+   `brain_is_dormant_for_cloudfront_and_tasks`,
    `brain_watchdog_and_drill_are_absent_by_default`,
    `brain_copy_is_absent_by_default`, `brain_switches_are_in_place_tags`,
    `brain_copy_is_never_scheduled`, `brain_copy_task_reads_only_status_json`,
    and scenarios 5 and 12 of `e2e.sh`.
 7. **Clients verify the brain's certificate by name.** The server
    certificate is self-signed for ten years, made at first boot and kept in
-   the data directory, so the backups carry it. Its public half is committed
-   (as `brain-ca.pem`) and bundled into the API and worker images, and
-   clients connect by the Elastic IP's DNS name, never an address:
-   `verify-full` in the Python workers, and Prisma's strict mode, which the
-   migrate task needs because it ignores `sslrootcert`. Guards: scenario 4 of
-   `e2e.sh`, `api/src/lib/databaseUrl.unit.test.ts` and
-   `topo/tests/test_worker_helpers.py`.
+   the data directory, so the backups carry it. Clients connect by the
+   Elastic IP's DNS name, never an address, and verify it: `verify-full` in
+   the Python workers, and Prisma's strict mode, which the migrate task needs
+   because it ignores `sslrootcert`. Built now, with these guards: scenario 4
+   of `e2e.sh`, `api/src/lib/databaseUrl.unit.test.ts` and
+   `topo/tests/test_worker_helpers.py`. Not built until a later change: the
+   certificate's public half is committed as `brain-ca.pem` (it cannot exist
+   before the brain has booted) and bundled at `/app/brain-ca.pem` into the API
+   image and the topo worker image. Until then, with serving on, a task fails
+   at start and never falls back to an unverified connection. The committed
+   file is left out of the host files, so committing it does not replace the
+   instance (`brain_host_files_leave_out_the_committed_certificate`).
+8. **One settings file, flipped one line at a time.** The switches live in
+   `infra/terraform/envs/prod/brain.auto.tfvars`, which Terraform and the
+   deploy and rollback workflows both read (the workflows through
+   `infra/scripts/brain-setting.sh`, which fails rather than guess), so they
+   cannot disagree about the mode. In order: the image tag, the bootstrap
+   flag, `brain_serving` (the instance tag, the four task definitions that
+   have a database, and the workflows' mode), then `brain_public` (CloudFront's
+   API origin). `brain_public` needs `brain_serving`, and `brain_serving`
+   needs a tag; each refusal names the setting. In serving mode no deploy or
+   rollback step touches Elastic Beanstalk. Guards:
+   `brain_settings_are_one_file_and_read_by_the_workflows`,
+   `brain_variable_defaults_are_inert`,
+   `brain_public_without_brain_serving_is_refused`,
+   `brain_serving_without_an_image_tag_is_refused`,
+   `brain_serving_points_every_database_task_at_the_brain`,
+   `brain_public_points_cloudfront_at_the_brain`, and `brain-setting.sh
+   --self-test` (`infra-scripts`). Two parts have no guard: nothing in code
+   stops `brain_serving` being turned on before the final data copy (the copy
+   refuses a serving brain, but a serving flip first would sweep a stale
+   database), and Elastic Beanstalk's background sweeps, which Terraform does
+   not own, are turned off by a command the maintainer runs before that flip.
+9. **A restore follows the newest backup, and a rewind is a new volume.** A
+   restore target (`restore_to`, a time with a UTC offset) lives on a data
+   volume's entry in `var.brain_data_volumes`, never in a setting of its own:
+   only the current volume's reaches the host, only a blank disk restores to
+   it, and a target the archive cannot reach ends boot mode `failed` with
+   nothing serving, not a database promoted somewhere else. Every restore
+   passes `--target-timeline=current`, and an existing database whose
+   timeline is not the newest backup's takes a full backup at boot, so the
+   newest backup is always the live database's and a later restore follows
+   it, whichever of two volumes came back. The old volume is kept: it is the
+   undo. Guards: `brain_restore_target_comes_only_from_the_current_volume`,
+   `brain_restore_target_reaches_the_host_from_the_current_volume`,
+   `brain_restore_to_without_an_offset_is_refused`,
+   `brain_restore_to_must_be_a_real_time`, and scenarios 13 and 13b of
+   `e2e.sh`.
+10. **The host's timers never start the AWS CLI.** The release and status
+    timers sign their own S3 requests with `curl`: the CLI cost 66 MB and
+    0.67 s of CPU a call on a `t4g.micro`, against 17.9 MB and 0.10 s
+    (measured). Guard: the check "one release tick and one status tick never
+    start the aws CLI" in scenario 7 of `e2e.sh`.
 
 ## Consequences
 
@@ -195,7 +245,16 @@ fails when it is broken.
   core. 80 requests a second passed and 100 failed on both sizes, so a bigger
   `t4g` adds memory, not speed. Prod averages about 0.004 a second. Moving
   up a size is the one setting `var.brain_instance_type` and a couple of
-  minutes down.
+  minutes down. The first step towards more than one API process is done:
+  the background sweeps run in one process per database, held by a Postgres
+  advisory lock (`api/src/lib/sweepLeader.unit.test.ts` and
+  `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
+  each process's memory, are not.
+- **Negative: the host files are 85 % of what EC2 allows.** They travel in the
+  instance's user data, 13,839 bytes gzipped of EC2's 16,384, and a guard stops
+  at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
+  move them into the brain's Postgres image, which already carries the Compose
+  plugin.
 - **Negative: the operator now has root on the database host,** through
   Session Manager. [`DATA-ACCESS-POLICY.md`](../DATA-ACCESS-POLICY.md) says
   what is and is not recorded; root can read the data files or stop the
@@ -214,9 +273,10 @@ fails when it is broken.
 - **Negative: unlimited CPU credits have a worst-case bill.** About US$53 a
   month on a `t4g.micro` (US$47 on a small) with both cores pinned all month,
   at US$0.04 per vCPU-hour above the baseline. Measured, the whole load
-  ladder cost about US$0.005. Guard:
-  `brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus` (the alarm
-  is what notices a charge).
+  ladder cost about US$0.005. One CPU alarm notices it: an hour averaging
+  20 % or more, and a month with no such hour costs a micro at most about
+  US$5.84. Guards: `brain_credit_mode_defaults_to_unlimited` and
+  `brain_alarms_act_on_the_instance`.
 - **Negative: deleted data lives on in backups.** The weekly rewrite that
   would push a deleted row out of the data files (`pg_repack`) is not built,
   so a deleted row's bytes stay in the live files until overwritten and in
@@ -230,10 +290,10 @@ fails when it is broken.
   nothing with a new Elastic IP needs a new committed certificate and a new
   image; a restore brings the same certificate back inside the backup.
 - **Negative: both bills run until RDS and Elastic Beanstalk are removed.**
-  The brain was estimated at about US$22 a month on a `t4g.small`, about
-  US$8.50 less on the micro (the two on-demand rates' difference), so the
-  overlap runs near US$60 a month and `logjam-monthly`'s US$50 alert will
-  fire.
+  The brain was estimated at about US$22 a month on a `t4g.small`, US$7.74
+  less on the micro (Sydney on-demand, US$0.0212 against US$0.0106 an hour),
+  so about US$14, and the overlap runs near US$60 a month: `logjam-monthly`'s
+  US$50 alert will fire.
 - **Positive:** the two big lines go. The recovery point is about 60 seconds
   and is proved every day by a restore, not assumed. Nothing in the data
   path is AWS-only, so the host's Compose files, Postgres, pgBackRest and
@@ -244,11 +304,11 @@ fails when it is broken.
 - **Neutral:** [0001](0001-rds-tls-via-bundled-ca.md) stays true until RDS is
   removed, and removing RDS is when it is superseded. The work this leaves
   for later is the ladder in the runbook, and steps 3 and 4 of it are not
-  built. Running the API as more than one process needs two changes first:
-  the background sweeps in `api/src/lib/topoJobReaper.ts` must run in one
-  process only, because they delete media with no database row, and the rate
+  built. Running the API as more than one process still needs the rate
   limiter in `api/src/middleware/rateLimit.ts`, which keeps its counters in
-  each process's memory, must share them.
+  each process's memory, to share them; the sweeps in
+  `api/src/lib/topoJobReaper.ts`, which delete media with no database row,
+  already run in one process.
 
 ## Alternatives considered
 
@@ -272,7 +332,7 @@ fails when it is broken.
 - **Start on a `t4g.small`.** Weighed by running both on real AWS: the micro
   passed every step it was meant to, with no out-of-memory kill and no
   container restart even overloaded, its lowest free memory 164 MiB under a
-  release swap with a 1.7 GB database. The small adds about 700 MB of headroom for about US$8.50 a
+  release swap with a 1.7 GB database. The small adds about 700 MB of headroom for US$7.74 a
   month and no speed. Rejected on the maintainer's call; moving up is one
   setting.
 - **Standard CPU credit mode.** Throttles to the baseline (0.4 vCPU on a

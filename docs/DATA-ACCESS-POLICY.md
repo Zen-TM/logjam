@@ -56,7 +56,10 @@ A contributor I have invited has read-only access to the AWS account's
 infrastructure configuration, under the same restrictions as the automated
 roles in this repository: no user data, no secret values, no logs and no user
 directory. **(brain)** That includes no backup objects, no disk snapshot
-contents, and no text or output of a command I have run on the brain. Signing in
+contents, no text or output of a command I have run on the brain, and no way to
+start a session or send a command there: the automated roles, the account's
+Terraform apply role and any invited contributor are all denied that, and only
+my own identity can. Signing in
 requires multi-factor authentication, and every change goes through the
 Terraform in `infra/terraform/envs/prod/iam_contributor.tf`.
 
@@ -229,9 +232,10 @@ That is the real claim, stated plainly:
   `infra/terraform/envs/prod/audit.tf` (`audit_event_selectors`), held by the
   test `audit_trail_records_every_route_to_user_data` in
   `infra/terraform/envs/prod/tests/guards.tftest.hcl`.
-- **(brain)** That no CI role and no invited contributor can read a command's
-  output, a disk snapshot's blocks, a backup object or the database's log: the
-  shared privacy Deny in `infra/terraform/envs/prod/iam.tf`, held by
+- **(brain)** That no CI role (the apply role included) and no invited
+  contributor can open a shell on the brain, or read a command's output, a disk
+  snapshot's blocks, a backup object or the database's log: the shared privacy
+  Deny in `infra/terraform/envs/prod/iam.tf` (`DenyShells` and its neighbours), held by
   `ci_reads_no_secret_or_user_data` and `contributor_is_read_only_and_mfa_gated`.
 - **(brain)** The backup bucket (versioned, write-once for 7 days, no rule that
   expires current objects): `infra/terraform/envs/prod/brain_s3.tf`, held by

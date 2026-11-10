@@ -9,7 +9,9 @@ checks that on every migration PR, for the release live at the time.
 `smoke.yml` or `rollback.yml` (a changed mechanism is an untested one),
 quarterly, and at the first tagged mobile release for the OTA rollback. Pick
 a quiet hour: each API step is a cold Elastic Beanstalk restart, a minute or
-two of downtime.
+two of downtime. With `brain_serving` on ([brain.md](brain.md)) an API step is
+the brain's release pointer and a few seconds of failed requests instead, and
+the same boxes below apply with the brain's variants (marked).
 
 Copy the checklist into a new record at the bottom, tick it as you go, and
 note times and surprises. [rollback.md](rollback.md) has the commands.
@@ -26,6 +28,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       frontend `release-sha` on `index.html`; worker image tag on
       `logjam-topo-worker`. Note the release before each.
 - [ ] Any Terraform the change needs has been applied.
+- [ ] Which mode applies: `grep -E '^brain_(serving|public)' infra/terraform/envs/prod/brain.auto.tfvars`.
 
 ### Deploy guards
 
@@ -48,6 +51,17 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       both task definitions carry the old image, the smoke test passes.
       Time from dispatch to green: ____
 - [ ] **API forward:** the same with the newest sha. Time: ____
+- [ ] **API back and forward on the brain** (`brain_serving` on; skip while it
+      is off): the same two dispatches. The task definitions carry the sha, the
+      workflow rewrote `release.json` (it prints the sha), the status file's
+      `api_sha` follows within about a minute (`aws s3 cp s3://logjam-brain-signals-620853681701/status.json -`),
+      and the smoke test of the public `/meta` passes within its 5 minutes
+      (with `brain_public` still off the run says it cannot see the brain:
+      check `api_sha` and `localhost/ready` on the host instead,
+      [brain.md](brain.md)). Times: ____ / ____
+- [ ] **A release the brain's agent refuses changes nothing** (brain mode): a
+      sha with no `infra/brain/api.env`, or an image without
+      `/app/brain-ca.pem`, fails the workflow before the pointer changes.
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
       `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,

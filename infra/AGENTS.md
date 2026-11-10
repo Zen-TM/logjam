@@ -48,6 +48,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   records EBS direct API calls on snapshots; the audit bucket itself never
   does. The trail uses advanced selectors only, so a new bucket is a new
   selector there, not a basic one. Guard: `audit_trail_records_every_route_to_user_data`.
+- **The brain's rules** (the bullets from here down that name the brain, and the
+  two above this one about shells and the audit trail) are explained in
+  [0047](../docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md);
+  running it is `docs/operations/brain.md`.
 - **The brain's signals bucket holds no user data** (`release.json`,
   `status.json`, `drill.json`: a release pointer and health files). The brain and the watchdog read it; CI only writes
   `release.json` to it and never reads it, so it is not an exception of the CI
