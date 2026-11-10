@@ -1857,7 +1857,7 @@ run "brain_watchdog_lists_the_archive_pgbackrest_writes" {
   }
 
   # Mutation: the timeout under the function's own two API tries (2 x 10 s)
-  # plus its S3 calls, or the runtime moved off a version the unit tests run on.
+  # plus its S3 calls.
   assert {
     condition     = aws_lambda_function.brain_watchdog[0].timeout == 60 && aws_lambda_function.brain_watchdog[0].handler == "handler.handler"
     error_message = "The watchdog's timeout is 60 seconds and its handler is handler.handler."
@@ -2015,7 +2015,8 @@ run "brain_drill_log_is_not_the_audit_trail" {
   # Mutation: a subscription filter on /logjam/brain/drill (to the audit
   # Firehose or any other): the drill's log would land in the WORM bucket as
   # if it were prod's audit trail. The test covers the two filters that exist
-  # and every .tf file: a new filter resource anywhere must not name the group.
+  # and every .tf file: a new filter resource anywhere must not name the group,
+  # by its resource or by its literal name.
   assert {
     condition = alltrue(concat(
       [
@@ -2024,7 +2025,7 @@ run "brain_drill_log_is_not_the_audit_trail" {
       ],
       flatten([
         for f in fileset(".", "*.tf") : [
-          for block in regexall("(?s)aws_cloudwatch_log_subscription_filter\" \"[a-z_]+\" \\{.*?\n\\}\n", file(f)) : !strcontains(block, "brain_drill")
+          for block in regexall("(?s)aws_cloudwatch_log_subscription_filter\" \"[a-z_]+\" \\{.*?\n\\}\n", file(f)) : !strcontains(block, "brain_drill") && !strcontains(block, "logjam/brain/drill")
         ]
       ]),
     ))

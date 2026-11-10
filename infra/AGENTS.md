@@ -165,8 +165,8 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
 - **The brain's watchdog never reads a backup object.** Its role may `GetObject`
   only `status.json` and `drill.json` in the signals bucket and `ListBucket` the
   backup bucket under the WAL archive's prefix; it is the function an alarm and a
-  log line hang off, so it stays a step away from user data. Its log line and its
-  error carry only check codes. Guard: `brain_watchdog_role_reads_only_the_signals`;
+  log line hang off, so it stays a step away from user data. Its error
+  carries only check codes, its log line those and one HTTP status number. Guard: `brain_watchdog_role_reads_only_the_signals`;
   the prefix must match what the Postgres image writes
   (`brain_watchdog_lists_the_archive_pgbackrest_writes`).
 - **The restore drill's task role never writes to the backup bucket**: read and
