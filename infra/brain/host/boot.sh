@@ -82,7 +82,8 @@ compose up -d postgres
 # A restore replays WAL first, so allow it 30 minutes.
 for i in $(seq 900); do
   docker exec "$(pg_cid)" pg_isready -q -h 127.0.0.1 && break
-  [ "$(docker inspect -f '{{.State.Running}}' "$(pg_cid)")" = true ] || { compose logs --tail 20 postgres >&2; die "postgres stopped"; }
+  # Restart count: the restart policy would keep a crashing server looking alive.
+  [ "$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' "$(pg_cid)")" = "true 0" ] || { compose logs --tail 20 postgres >&2; die "postgres stopped"; }
   [ "$i" != 900 ] || die "postgres did not come up in 30 minutes"
   sleep 2
 done
