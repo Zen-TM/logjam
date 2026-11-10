@@ -33,9 +33,8 @@ that goes wrong between deploys.
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
 | `logjam-brain-system-status-failed` | AWS's system status check on the brain (the EC2 host) failed for 2 minutes; EC2 is recovering it onto new hardware | Wait for the OK email, then confirm the API answers and Postgres is up (the brain section below) |
 | `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
-| `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode, the default) | Find what is using the CPU; the worst case is about US$47 a month on a `t4g.small` |
 | `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
-| `logjam-brain-cpu-high` | The brain's CPU has averaged 50% or more for 15 minutes | Find out whether it is growth or one client misbehaving (the API's request log); the API is one process and saturates near 80 requests a second, and a bigger instance of the same family adds memory, not speed |
+| `logjam-brain-cpu-high` | The brain's CPU has averaged 20% or more for an hour | Find out what is using the CPU (growth, one client misbehaving, or a runaway process). Above the free allowance it costs cents; at 50% the API is three quarters of the way to its limit of about 80 requests a second, and a bigger instance of the same family adds memory, not speed |
 | `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
 | `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
 
@@ -336,21 +335,6 @@ starts it again.
 2. If it comes back failing, open a Session Manager shell and read
    `journalctl -b -u brain-boot` and `df -h /`.
 
-### `logjam-brain-cpu-surplus-credits-charged`
-
-The brain runs in unlimited credit mode (`brain_cpu_credits`, the default).
-It never throttles, and it is billed US$0.04 per vCPU-hour for the CPU it uses
-beyond its baseline (20% of each core on a `t4g.small`, 10% on a `t4g.micro`).
-The worst case, both cores pinned all month, is about US$47 a month on a
-`t4g.small` and US$53 on a `t4g.micro`. Any charge in an hour fires the alarm,
-which is how a charge gets noticed at all: it appears on the bill only.
-
-1. Find the cause: a runaway query (`docker exec` into Postgres and
-   `select * from pg_stat_activity`), a restore, or a backup running at the same
-   time as traffic.
-2. A one-off is fine. A steady charge means the instance is too small for the
-   load: compare the charge with the next size up before changing.
-
 ### `logjam-brain-cpu-credits-low`
 
 Only exists when `brain_cpu_credits` is `standard`. The instance earns CPU
@@ -358,21 +342,33 @@ credits and spends them above its baseline; at zero it is held to the
 baseline, which slows the API and Postgres together. The alarm fires when the
 balance averages under 30 for six readings in a row (30 minutes).
 
-1. Find the cause as above.
+1. Find the cause (the steps under `logjam-brain-cpu-high`).
 2. If the load is real, switch to `unlimited` credits or a bigger instance type.
 
 ### `logjam-brain-cpu-high`
 
-The API is one Node process, so it uses one of the instance's two vCPUs and
-saturates near 80 requests a second. On a scratch copy (2026-11-10) the stack
-passed 60 requests a second at 50% of the instance and 80 at 64%, and failed at
-100. So 50% for 15 minutes (three readings of five minutes) is about three
-quarters of the limit. A daily full backup and a boot do not hold it that long.
+One alarm covers both the API running hot and the bill. The brain runs in
+unlimited credit mode (`brain_cpu_credits`, the default): it never throttles,
+and CPU beyond the free allowance is billed at US$0.04 per vCPU-hour. The
+allowance is 10% of the instance on a `t4g.micro` (0.2 vCPU of two) and 20% on
+a `t4g.small`. Idle is about 5% of the instance, and a daily full backup or a
+boot does not hold 20% for an hour, so the alarm fires at 20% averaged over an
+hour (four readings of 15 minutes). Staying just under it all month costs a
+`t4g.micro` at most about US$5.84 in surplus credits; anything more trips it.
 
-1. Find out whether this is growth or one client misbehaving: the API's request
-   log in `/logjam/brain/api`, by client and path.
-2. If the load is real, a bigger instance of the same family adds memory, not
-   speed.
+How much traffic that is: on a scratch copy (2026-11-10), 20, 40, 60 and 80
+requests a second used 21, 36, 50 and 64% of the instance. The API is one Node
+process, so it uses one of the two vCPUs and saturates near 80 requests a
+second (it failed at 100). At 50% it is three quarters of the way there.
+
+1. Find out what is using the CPU, by `top` in a Session Manager shell and the
+   API's request log in `/logjam/brain/api` (by client and path): growth, one
+   client misbehaving, or a runaway process such as a stuck query (`docker exec`
+   into Postgres and `select * from pg_stat_activity`), a restore, or a backup
+   running at the same time as traffic.
+2. A one-off is fine. A steady load means the instance is near its limit. A
+   bigger instance of the same family adds memory, not speed; compare the cost
+   with the next size up before changing.
 
 ### `logjam-brain-checks-failing`
 

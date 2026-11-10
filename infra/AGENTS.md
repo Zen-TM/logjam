@@ -77,10 +77,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
   in-place update. It has no termination protection: the provider does not
   clear it before replacing the instance, which would stop the host and leave
-  it down (the data and the address are held by `prevent_destroy` instead). Its credit mode is `unlimited` by default, and the surplus
-  alarm is what notices a charge. Guards: `brain_is_absent_by_default`,
+  it down (the data and the address are held by `prevent_destroy` instead). Its credit mode is `unlimited` by default, and `brain_cpu_high`
+  (20% for an hour) is what notices a charge. Guards: `brain_is_absent_by_default`,
   `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`,
-  `brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus`.
+  `brain_credit_mode_defaults_to_unlimited`.
 - **The brain's data volume and Elastic IP are never destroyed** (`prevent_destroy`:
   the disk holds the only copy of the database between backups, the address's
   DNS name is in the database certificate). Only the current entry of

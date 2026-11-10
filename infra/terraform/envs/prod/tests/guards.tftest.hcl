@@ -889,7 +889,6 @@ run "brain_is_absent_by_default" {
       aws_cloudwatch_metric_alarm.brain_system_status_failed,
       aws_cloudwatch_metric_alarm.brain_instance_status_failed,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
-      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
       aws_cloudwatch_metric_alarm.brain_cpu_high,
     ]
   }
@@ -908,7 +907,6 @@ run "brain_is_absent_by_default" {
       length(aws_cloudwatch_metric_alarm.brain_system_status_failed) == 0 &&
       length(aws_cloudwatch_metric_alarm.brain_instance_status_failed) == 0 &&
       length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 &&
-      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0 &&
       length(aws_cloudwatch_metric_alarm.brain_cpu_high) == 0
     )
     error_message = "With the default variables the brain must have no instance, volume, address or alarm."
@@ -1335,7 +1333,6 @@ run "brain_alarms_act_on_the_instance" {
       aws_cloudwatch_metric_alarm.brain_system_status_failed,
       aws_cloudwatch_metric_alarm.brain_instance_status_failed,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
-      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
       aws_cloudwatch_metric_alarm.brain_cpu_high,
     ]
   }
@@ -1360,32 +1357,33 @@ run "brain_alarms_act_on_the_instance" {
   }
 
   # Mutation: another metric, statistic, period, evaluation count or threshold
-  # (50% of two vCPUs for 15 minutes is about three quarters of what one Node
-  # process can serve), missing data breaching, or no topic.
+  # (20% for an hour is the whole of one alarm: a lower one pages on idle, a
+  # higher one lets a month of surplus credits through unnoticed), missing
+  # data breaching, or no topic.
   assert {
     condition = (
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].namespace == "AWS/EC2" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].metric_name == "CPUUtilization" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].statistic == "Average" &&
-      aws_cloudwatch_metric_alarm.brain_cpu_high[0].period == 300 &&
-      aws_cloudwatch_metric_alarm.brain_cpu_high[0].evaluation_periods == 3 &&
-      aws_cloudwatch_metric_alarm.brain_cpu_high[0].threshold == 50 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].period == 900 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].evaluation_periods == 4 &&
+      aws_cloudwatch_metric_alarm.brain_cpu_high[0].threshold == 20 &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
       aws_cloudwatch_metric_alarm.brain_cpu_high[0].treat_missing_data == "notBreaching" &&
       contains(aws_cloudwatch_metric_alarm.brain_cpu_high[0].alarm_actions, aws_sns_topic.alerts.arn)
     )
-    error_message = "The CPU alarm must fire on an average of 50% or more for three five-minute periods and tell the alerts topic."
+    error_message = "The CPU alarm must fire on an average of 20% or more for four fifteen-minute periods and tell the alerts topic."
   }
 
-  # Mutation: dropping the credit-mode condition. Standard mode watches the
-  # balance; unlimited mode (the default, next run) watches the surplus charge.
+  # Mutation: dropping the credit-mode condition. Only standard mode can run
+  # out of credits (unlimited mode, the default, next run, has none to alarm on).
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 1 && length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0
-    error_message = "Standard credit mode must have the low-balance alarm and not the surplus alarm."
+    condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 1
+    error_message = "Standard credit mode must have the low-balance alarm."
   }
 }
 
-run "brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus" {
+run "brain_credit_mode_defaults_to_unlimited" {
   command = plan
   variables {
     brain_pg_image_tag = "test"
@@ -1394,21 +1392,18 @@ run "brain_credit_mode_defaults_to_unlimited_and_alarms_the_surplus" {
     target = [
       aws_instance.brain,
       aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
-      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
     ]
   }
 
   # Mutation: the variable's default going back to "standard" (unlimited is
-  # the maintainer's choice), or the surplus alarm not following the mode. A
-  # surplus charge shows on the bill only, so the alarm is how it is noticed.
+  # the maintainer's choice), or the low-balance alarm existing without the
+  # throttling it warns of.
   assert {
     condition = (
       aws_instance.brain[0].credit_specification[0].cpu_credits == "unlimited" &&
-      length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 &&
-      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 1 &&
-      strcontains(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged[0].alarm_description, "First: ")
+      length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0
     )
-    error_message = "The brain's credit mode must default to unlimited, with the surplus alarm and no low-balance alarm."
+    error_message = "The brain's credit mode must default to unlimited, with no low-balance alarm."
   }
 }
 
