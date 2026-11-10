@@ -127,10 +127,11 @@ compose up -d postgres
 # The throwaway server a bootstrap runs has no TCP listener, so pg_isready waits for the real one.
 cid=$(pg_cid)
 restarts=$(docker inspect -f '{{.RestartCount}}' "$cid")
-until docker exec "$cid" pg_isready -q -h 127.0.0.1 && { [ "$mode" = bootstrap ] || [ "$(psql_agent -c 'select pg_is_in_recovery()')" = f ]; }; do
+while :; do
   if [ "$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' "$cid")" != "true $restarts" ]; then
     compose logs --tail 20 postgres >&2; die "postgres stopped"
   fi
+  if docker exec "$cid" pg_isready -q -h 127.0.0.1 && { [ "$mode" = bootstrap ] || [ "$(psql_agent -c 'select pg_is_in_recovery()')" = f ]; }; then break; fi
   sleep 2
 done
 
