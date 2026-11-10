@@ -65,3 +65,26 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   flag is exactly `1`; keep both, and keep `create_host_path: false` on the
   data mount. `brain/tests/e2e.sh` (CI job `brain-e2e`) plays the host's life
   on a loop device; each mutation it names turns it red.
+- **The brain's instance exists only while `var.brain_pg_image_tag` is set**:
+  with the default, no instance, data volume, Elastic IP or alarm is planned
+  (`brain_instance.tf`, `brain_alarms.tf`). It requires IMDSv2 (hop limit 2:
+  containers use the instance role), has no key pair, and takes its two
+  switches as tags (`brain-serving`, `brain-bootstrap`), so flipping one is an
+  in-place update. Guards: `brain_is_absent_by_default`,
+  `brain_instance_is_locked_down`, `brain_switches_are_in_place_tags`.
+- **The brain's data volume and Elastic IP are never destroyed** (`prevent_destroy`:
+  the disk holds the only copy of the database between backups, the address's
+  DNS name is in the database certificate). Only the current entry of
+  `var.brain_data_volumes` is attached; replacing a lost disk or zone adds an
+  entry and makes it current, and a later change drops the old one with a
+  `removed` block. Guards: `brain_data_volume_and_address_keep_prevent_destroy`,
+  `brain_only_the_current_volume_is_attached_in_its_zone`.
+- **The brain's host files travel inline in its user data**, so any change to
+  `brain/` (outside `postgres/` and `tests/`) or to `brain.env` replaces the
+  instance: minutes of downtime, data volume kept, and the signed plan shows it
+  as a changed `brain_user_data_sha256`. The gzipped script stays under 15,000
+  bytes (EC2 refuses 16,384), holds no secret-shaped value, and the keys it
+  writes to `brain.env` are the keys the host scripts require. Guards:
+  `brain_user_data_stays_within_the_ec2_limit`,
+  `brain_host_files_embed_cleanly_and_hold_no_secret`,
+  `brain_env_is_plain_key_value_the_host_files_read`.

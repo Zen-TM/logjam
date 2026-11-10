@@ -30,6 +30,10 @@ that goes wrong between deploys.
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
+| `logjam-brain-system-status-failed` | AWS's system status check on the brain (the EC2 host) failed for 2 minutes; EC2 is recovering it onto new hardware | Wait for the OK email, then confirm the API answers and Postgres is up (the brain section below) |
+| `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
+| `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode) | Find what is using the CPU; at zero the brain is throttled to its baseline |
+| `logjam-brain-cpu-surplus-credits-charged` | The brain was charged for surplus CPU credits (unlimited credit mode) | Find what is using the CPU; the charge is about US$0.05 per vCPU-hour |
 
 ## API
 
@@ -293,3 +297,58 @@ since the next scheduled run is a month away.
 2. If none ran, find the `RunTask` call by the role `logjam-coverage-scheduler`
    in CloudTrail and read its error: a role, subnet or task definition
    problem, fixed in Terraform.
+
+## The brain
+
+These four alarms exist only while the brain's EC2 instance does
+(`infra/terraform/envs/prod/brain_alarms.tf`), and the two credit alarms only
+for the credit mode in use. Do not test the two status alarms with
+`set-alarm-state`: their actions recover or reboot the host.
+
+### `logjam-brain-system-status-failed`
+
+EC2's system status check covers what AWS runs under the instance: power,
+network and the physical host. When it fails for two minutes the alarm asks
+EC2 to recover the instance, which restarts it on other hardware with the same
+disks, address and tags (EC2 also does this by default). The API and Postgres
+are down until it is back, a few minutes.
+
+1. Wait for the OK email.
+2. Check the API answers (`/ready` through CloudFront) and, in a Session
+   Manager shell, that `docker ps` shows `brain-postgres-1` healthy. The boot
+   unit starts Postgres again by itself.
+3. If it does not come back, ask Terraform to replace the instance (taint
+   `aws_instance.brain[0]`). The data volume is separate and is reattached.
+
+### `logjam-brain-instance-status-failed`
+
+The instance status check covers the operating system: a hung kernel, a full
+disk, a broken network configuration. After ten minutes the alarm reboots the
+instance. Docker stops Postgres cleanly on the way down and the boot unit
+starts it again.
+
+1. Wait for the OK email.
+2. If it comes back failing, open a Session Manager shell and read
+   `journalctl -b -u brain-boot` and `df -h /`.
+
+### `logjam-brain-cpu-credits-low`
+
+The `t4g.small` earns CPU credits and spends them above its baseline. In
+standard credit mode, when the balance reaches zero the instance is held to the
+baseline, which slows the API and Postgres together. The alarm fires when the
+balance averages under 30 for six readings in a row (30 minutes).
+
+1. Find the cause: a runaway query (`docker exec` into Postgres and
+   `select * from pg_stat_activity`), a restore, or a backup running at the same
+   time as traffic.
+2. If the load is real, switch to `unlimited` credits (`brain_cpu_credits` in
+   Terraform) or a bigger instance type.
+
+### `logjam-brain-cpu-surplus-credits-charged`
+
+In unlimited credit mode the instance never throttles and is billed for credits
+it spends beyond what it earned. Any charge in an hour fires the alarm.
+
+1. Find the cause as for `logjam-brain-cpu-credits-low`.
+2. A steady charge means the instance is too small for the load: compare the
+   charge with the next size up before changing.

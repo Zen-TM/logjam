@@ -11,6 +11,16 @@ mock_provider "aws" {
 mock_provider "random" {}
 mock_provider "archive" {}
 
+# The brain runs choose a subnet by zone, which a mock would make up.
+override_data {
+  target = data.aws_subnet.worker_a
+  values = { availability_zone = "ap-southeast-2a" }
+}
+override_data {
+  target = data.aws_subnet.worker_b
+  values = { availability_zone = "ap-southeast-2b" }
+}
+
 run "plan_role_trusts_only_approved_runs_and_main" {
   command = plan
   plan_options {
@@ -818,5 +828,426 @@ run "brain_role_has_only_its_grants" {
       ["SignalsList", ["s3:ListBucket"], ["arn:aws:s3:::logjam-brain-signals-620853681701"]],
     ]
     error_message = "The brain's role may read release.json, list the signals bucket and write status.json: nothing else."
+  }
+}
+
+# ── The brain's instance (brain_instance.tf, brain_alarms.tf) ────────────────
+
+# A plan leaves a new resource's computed values unknown, and the user data is
+# built from some of them. These overrides stand in for what AWS would assign,
+# so the user data renders in full.
+override_resource {
+  target          = aws_ebs_volume.brain_data["1"]
+  values          = { id = "vol-0aaaaaaaaaaaaaaa1" }
+  override_during = plan
+}
+override_resource {
+  target          = aws_ebs_volume.brain_data["2"]
+  values          = { id = "vol-0bbbbbbbbbbbbbbb2" }
+  override_during = plan
+}
+override_resource {
+  target          = aws_eip.brain
+  values          = { public_dns = "ec2-203-0-113-7.ap-southeast-2.compute.amazonaws.com" }
+  override_during = plan
+}
+override_resource {
+  target          = aws_ecr_repository.brain_postgres
+  values          = { repository_url = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-brain-postgres" }
+  override_during = plan
+}
+override_resource {
+  target          = aws_ecr_repository.api
+  values          = { repository_url = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api" }
+  override_during = plan
+}
+# The topic is imported in monitoring.tf, which a mocked provider cannot do.
+override_resource {
+  target          = aws_sns_topic.alerts
+  values          = { arn = "arn:aws:sns:ap-southeast-2:620853681701:logjam-alerts" }
+  override_during = plan
+}
+# A computed attribute that is unset in the configuration is unknown in a plan;
+# the empty string stands for "no key pair", and a `key_name` in the
+# configuration replaces it.
+override_resource {
+  target          = aws_instance.brain
+  values          = { key_name = "", id = "i-0123456789abcdef0" }
+  override_during = plan
+}
+
+run "brain_is_absent_by_default" {
+  command = plan
+  plan_options {
+    target = [
+      aws_instance.brain,
+      aws_ebs_volume.brain_data,
+      aws_eip.brain,
+      aws_eip_association.brain,
+      aws_volume_attachment.brain_data,
+      aws_cloudwatch_metric_alarm.brain_system_status_failed,
+      aws_cloudwatch_metric_alarm.brain_instance_status_failed,
+      aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
+      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
+    ]
+  }
+
+  # Mutation: a non-empty default for brain_pg_image_tag, or taking the count
+  # off any of these resources, makes merging the change start paying for an
+  # instance, a volume or an address before anyone asked for one.
+  assert {
+    condition = (
+      length(aws_instance.brain) == 0 &&
+      length(aws_ebs_volume.brain_data) == 0 &&
+      length(aws_eip.brain) == 0 &&
+      length(aws_eip_association.brain) == 0 &&
+      length(aws_volume_attachment.brain_data) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_system_status_failed) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_instance_status_failed) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 &&
+      length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0
+    )
+    error_message = "With the default variables the brain must have no instance, volume, address or alarm."
+  }
+}
+
+run "brain_instance_is_locked_down" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: http_tokens = "optional" (IMDSv1 reachable from the API
+  # container), a hop limit of 3 or more (a container behind another proxy
+  # reaches the role credentials), instance_metadata_tags = "disabled" (the host
+  # cannot read its switches and stays off), key_name set (a key pair is a
+  # login nobody audits), disable_api_termination = false, or an unencrypted
+  # root disk.
+  assert {
+    condition = (
+      aws_instance.brain[0].metadata_options[0].http_tokens == "required" &&
+      aws_instance.brain[0].metadata_options[0].http_endpoint == "enabled" &&
+      aws_instance.brain[0].metadata_options[0].http_put_response_hop_limit <= 2 &&
+      aws_instance.brain[0].metadata_options[0].instance_metadata_tags == "enabled" &&
+      aws_instance.brain[0].key_name == "" &&
+      aws_instance.brain[0].disable_api_termination == true &&
+      aws_instance.brain[0].root_block_device[0].encrypted == true &&
+      aws_instance.brain[0].associate_public_ip_address == true
+    )
+    error_message = "The brain must require IMDSv2 with a hop limit of at most 2, expose instance tags, have no key pair, and an encrypted root disk."
+  }
+
+  # Mutation: removing user_data_replace_on_change, or setting it false, leaves
+  # a host-file change unapplied: the running instance keeps its old scripts
+  # and the plan shows nothing.
+  assert {
+    condition     = aws_instance.brain[0].user_data_replace_on_change == true
+    error_message = "A change to the user data must replace the brain's instance."
+  }
+}
+
+run "brain_only_the_current_volume_is_attached_in_its_zone" {
+  command = plan
+  variables {
+    brain_pg_image_tag        = "test"
+    brain_data_volumes        = { "1" = { az = "ap-southeast-2a", size_gb = 20 }, "2" = { az = "ap-southeast-2b", size_gb = 20 } }
+    brain_data_volume_current = "2"
+  }
+  plan_options {
+    target = [aws_volume_attachment.brain_data]
+  }
+
+  # Mutation: attaching `["1"]` (the old disk) or attaching every volume
+  # (a for_each, or a count of 2) mounts the wrong database or two; choosing the
+  # subnet by anything but the current volume's zone leaves the instance in a
+  # zone its disk cannot attach in; dropping stop_instance_before_detaching lets
+  # a replacement pull the disk from under a running Postgres.
+  assert {
+    condition = (
+      length(aws_ebs_volume.brain_data) == 2 &&
+      length(aws_volume_attachment.brain_data) == 1 &&
+      aws_volume_attachment.brain_data[0].volume_id == "vol-0bbbbbbbbbbbbbbb2" &&
+      aws_volume_attachment.brain_data[0].stop_instance_before_detaching == true &&
+      aws_instance.brain[0].subnet_id == data.aws_subnet.worker_b.id
+    )
+    error_message = "Only the current data volume may be attached, in its zone, and only after the OS has stopped."
+  }
+}
+
+run "brain_data_volume_and_address_keep_prevent_destroy" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_ebs_volume.brain_data, aws_eip.brain]
+  }
+
+  # A plan cannot show a lifecycle rule, and a mocked apply could not tear its
+  # resources down again, so this reads the source: each block must hold
+  # `prevent_destroy = true`. Mutation: removing it from either resource (the
+  # data volume holds the only copy of the database between backups; the
+  # address's DNS name is in the database certificate and every client's config).
+  assert {
+    condition = length(aws_eip.brain) == 1 && alltrue([
+      for r in ["aws_ebs_volume\" \"brain_data", "aws_eip\" \"brain"] :
+      can(regex("(?s)resource \"${r}\" \\{.*?\n\\}\n", file("brain_instance.tf"))) &&
+      strcontains(regex("(?s)resource \"${r}\" \\{.*?\n\\}\n", file("brain_instance.tf")), "prevent_destroy = true")
+    ])
+    error_message = "The brain's data volume and Elastic IP must keep prevent_destroy (brain_instance.tf)."
+  }
+}
+
+run "brain_user_data_stays_within_the_ec2_limit" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: padding any host file with incompressible text (for example 8 KB
+  # of `head -c 6000 /dev/urandom | base64` appended to host/lib.sh). EC2 refuses
+  # user data over 16,384 bytes at launch, which is too late and too far from
+  # the cause; this fails the plan at 15,000. If the files outgrow it, they move
+  # into the brain image.
+  assert {
+    # The gzip bytes are not text, so the size is read off the base64 (4 characters per 3 bytes).
+    condition     = length(aws_instance.brain[0].user_data_base64) * 3 / 4 < 15000
+    error_message = "The brain's gzipped user data is 15,000 bytes or more: EC2's limit is 16,384 (brain_instance.tf says what to do)."
+  }
+}
+
+run "brain_host_files_embed_cleanly_and_hold_no_secret" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: a line `BRAIN_HOST_FILE_EOF` (or a trailing text containing it)
+  # in a file under infra/brain/host or compose*.yaml ends its heredoc early
+  # and the rest of the file runs as shell on the instance as root.
+  assert {
+    condition = length(aws_instance.brain) == 1 && alltrue([
+      for f in setunion(fileset("../../../brain", "host/**"), fileset("../../../brain", "compose*.yaml")) :
+      !strcontains(file("../../../brain/${f}"), "BRAIN_HOST_FILE_EOF")
+    ])
+    error_message = "A host file contains the heredoc delimiter that embeds it in the user data."
+  }
+
+  # Mutation: pasting an access key id (AKIA...), a private key block or an
+  # `aws_secret_access_key=<value>` line into a host file, the user-data template or
+  # brain.env. The user data is readable by anyone who can describe the
+  # instance, including CI's read-only roles.
+  assert {
+    condition = length(aws_instance.brain) == 1 && alltrue([
+      for f in concat(
+        [for f in setunion(fileset("../../../brain", "host/**"), fileset("../../../brain", "compose*.yaml")) : "../../../brain/${f}"],
+        ["brain_user_data.sh.tftpl", "brain_instance.tf"],
+        ) : (
+        !can(regex("(AKIA|ASIA)[0-9A-Z]{16}", file(f))) &&
+        !can(regex("-----BEGIN [A-Z ]*PRIVATE KEY", file(f))) &&
+        !can(regex("(?i)aws_secret_access_key[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+]{20,}", file(f)))
+      )
+    ]) && !can(regex("(AKIA|ASIA)[0-9A-Z]{16}|PRIVATE KEY", jsonencode(output.brain_host_env)))
+    error_message = "A secret-shaped value is in the brain's user data sources (they are not secret: nothing in them may be)."
+  }
+}
+
+run "brain_names_the_image_by_the_immutable_tag" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "abc1234"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: a literal `:latest` (or a branch name) in BRAIN_PG_IMAGE, or a
+  # second `docker pull`, `create` or `run` in the user data that names another
+  # image. A moving tag lets a restart or a replacement run a different
+  # Postgres than the one reviewed.
+  assert {
+    condition = (
+      output.brain_host_env["BRAIN_PG_IMAGE"] == "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-brain-postgres:abc1234" &&
+      length(regexall("docker (pull|create|run) ", file("brain_user_data.sh.tftpl"))) == 1 &&
+      strcontains(file("brain_user_data.sh.tftpl"), "docker create '$${pg_image}'")
+    )
+    error_message = "The brain's user data must pull only the Postgres image named by brain_pg_image_tag."
+  }
+}
+
+run "brain_env_is_plain_key_value_the_host_files_read" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: renaming a key (BRAIN_SIGNALS_BUCKET to BRAIN_SIGNAL_BUCKET) or
+  # dropping one in brain_instance.tf, or the same in the host files: lib.sh
+  # and Compose (`${KEY:?}`) refuse to start without a key the host needs,
+  # and a key nothing reads is a typo. Two lists that must agree.
+  assert {
+    condition = (
+      toset(flatten([
+        for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) :
+        [for m in regexall("\\$\\{([A-Z][A-Z0-9_]*):\\?", file("../../../brain/${f}")) : m[0]]
+      ])) == setsubtract(toset(keys(output.brain_host_env)), ["BRAIN_PG_FLAGS"]) &&
+      alltrue([
+        for k in keys(output.brain_host_env) : anytrue([
+          for f in setunion(fileset("../../../brain", "host/*.sh"), fileset("../../../brain", "compose*.yaml")) : strcontains(file("../../../brain/${f}"), k)
+        ])
+      ])
+    )
+    error_message = "brain.env must hold exactly the keys the host scripts and Compose require, plus BRAIN_PG_FLAGS."
+  }
+
+  # Mutation: quoting a value or putting a newline in one. lib.sh reads
+  # the file line by line as KEY=value and does not unquote.
+  assert {
+    condition = alltrue([
+      for v in values(output.brain_host_env) : !can(regex("[\"'\\n]", v)) && v != ""
+    ])
+    error_message = "brain.env values must be unquoted, single-line and non-empty."
+  }
+
+  # Mutation: a memory setting for another size, or the flags not following
+  # brain_instance_type.
+  assert {
+    condition     = output.brain_host_env["BRAIN_PG_FLAGS"] == "-c shared_buffers=512MB -c effective_cache_size=1GB"
+    error_message = "A t4g.small must run Postgres with shared_buffers=512MB and effective_cache_size=1GB."
+  }
+
+  # Mutation: the by-id path built from anything but the current volume's id.
+  assert {
+    condition     = output.brain_host_env["BRAIN_DATA_DEVICE"] == "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol0aaaaaaaaaaaaaaa1"
+    error_message = "BRAIN_DATA_DEVICE must be the current data volume's by-id path (the id without its dash)."
+  }
+  assert {
+    condition     = output.brain_host_env["BRAIN_TLS_SANS"] == "ec2-203-0-113-7.ap-southeast-2.compute.amazonaws.com,postgres,localhost"
+    error_message = "BRAIN_TLS_SANS must be the Elastic IP's DNS name, postgres and localhost."
+  }
+}
+
+run "brain_switches_are_in_place_tags_first" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_serving      = false
+    brain_bootstrap    = false
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+  assert {
+    condition     = aws_instance.brain[0].tags["brain-serving"] == "off" && aws_instance.brain[0].tags["brain-bootstrap"] == "0"
+    error_message = "The switches are off by default."
+  }
+}
+
+run "brain_switches_are_in_place_tags" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_serving      = true
+    brain_bootstrap    = true
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: using var.brain_serving or var.brain_bootstrap anywhere in the
+  # user data or brain.env (for example a BRAIN_SERVING key). The instance is
+  # replaced when its user data changes, so flipping a switch would stop the
+  # database host instead of updating a tag. A tag changes in place.
+  assert {
+    condition = (
+      aws_instance.brain[0].tags["brain-serving"] == "on" &&
+      aws_instance.brain[0].tags["brain-bootstrap"] == "1" &&
+      output.brain_user_data_sha256 == run.brain_switches_are_in_place_tags_first.brain_user_data_sha256
+    )
+    error_message = "Flipping brain_serving or brain_bootstrap must change only the instance's tags, never its user data."
+  }
+}
+
+run "brain_instance_type_needs_memory_settings" {
+  command = plan
+  variables {
+    brain_instance_type = "t3.micro"
+  }
+  plan_options {
+    target = [aws_instance.brain]
+  }
+
+  # Mutation: removing the variable's validation. A type without memory
+  # settings would otherwise fail only once an instance is wanted, or run with
+  # Postgres's 128 MB defaults.
+  expect_failures = [var.brain_instance_type]
+}
+
+run "brain_alarms_act_on_the_instance" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+  }
+  plan_options {
+    target = [
+      aws_cloudwatch_metric_alarm.brain_system_status_failed,
+      aws_cloudwatch_metric_alarm.brain_instance_status_failed,
+      aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
+      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
+    ]
+  }
+
+  # Mutation: swapping the two actions (a failed system check would reboot a
+  # host that needs moving, a failed instance check would "recover" one that
+  # needs a reboot), dropping the topic from either, or another dimension.
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.brain_system_status_failed[0].metric_name == "StatusCheckFailed_System" &&
+      toset(aws_cloudwatch_metric_alarm.brain_system_status_failed[0].alarm_actions) == toset(["arn:aws:automate:ap-southeast-2:ec2:recover", aws_sns_topic.alerts.arn]) &&
+      aws_cloudwatch_metric_alarm.brain_instance_status_failed[0].metric_name == "StatusCheckFailed_Instance" &&
+      toset(aws_cloudwatch_metric_alarm.brain_instance_status_failed[0].alarm_actions) == toset(["arn:aws:automate:ap-southeast-2:ec2:reboot", aws_sns_topic.alerts.arn]) &&
+      alltrue([
+        for a in [aws_cloudwatch_metric_alarm.brain_system_status_failed[0], aws_cloudwatch_metric_alarm.brain_instance_status_failed[0], aws_cloudwatch_metric_alarm.brain_cpu_credits_low[0]] :
+        a.dimensions["InstanceId"] == aws_instance.brain[0].id && length(a.dimensions) == 1
+      ])
+    )
+    error_message = "The status-check alarms must recover (system) and reboot (instance) this instance and tell the topic."
+  }
+
+  # Mutation: dropping the credit-mode condition. Standard mode watches the
+  # balance; unlimited mode (next run) watches the surplus charge.
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 1 && length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 0
+    error_message = "Standard credit mode must have the low-balance alarm and not the surplus alarm."
+  }
+}
+
+run "brain_unlimited_credits_alarm_the_surplus" {
+  command = plan
+  variables {
+    brain_pg_image_tag = "test"
+    brain_cpu_credits  = "unlimited"
+  }
+  plan_options {
+    target = [
+      aws_cloudwatch_metric_alarm.brain_cpu_credits_low,
+      aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged,
+    ]
+  }
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.brain_cpu_credits_low) == 0 && length(aws_cloudwatch_metric_alarm.brain_cpu_surplus_credits_charged) == 1
+    error_message = "Unlimited credit mode must have the surplus alarm and not the low-balance alarm."
   }
 }
