@@ -7,13 +7,15 @@ from outside.
 
 Reads status.json and drill.json (signals bucket) and LISTs the backup bucket's
 WAL archive. It never reads an object from the backup bucket, and neither the
-log line nor the error carries anything but the codes below. Each code, what
+error carries anything but the codes below, and the log line only those and
+one HTTP status number (the /ready probe while the brain is not serving). Each code, what
 it means and what to do first: docs/operations/alarms.md. Tests: test_handler.py
 (run by ci.yml's infra-scripts job).
 """
 
 import json
 import os
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -78,6 +80,8 @@ def check_full(status, now):
 
 def check_restore_lag(status, now):
     at, lag = status.get("last_restore_at"), status.get("last_restore_lag_seconds")
+    if lag is None:
+        return []  # not recorded is not a high lag
     if at and age(parse_time(at), now) <= RESTORE_RECENT and lag > RESTORE_LAG_MAX:
         return ["restore_lag_high"]
     return []
@@ -152,9 +156,29 @@ def check_ready(url, opener):
     return ["api_unready"]
 
 
+def probe_ready(url, opener):
+    """One attempt at /ready, never a failure: the HTTP status, or None.
+
+    Before the cutover the URL is answered by the old API, so a 200 proves the
+    WAF lets this function through. A 4xx/5xx is a status too (a WAF block is
+    a 403, which is what the probe is there to show).
+    """
+    try:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "logjam-brain-watchdog"}
+        )
+        with opener(request, timeout=READY_TIMEOUT) as response:
+            return response.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return None
+
+
 def run(s3, opener, now, env):
-    """The codes of every failed check. One broken check never hides the others."""
-    failed = []
+    """(codes of every failed check, extra log fields). One broken check never
+    hides the others."""
+    failed, extra = [], {}
 
     def attempt(fallback, check, *args):
         try:
@@ -176,13 +200,15 @@ def run(s3, opener, now, env):
         attempt(["disk_high"], check_disk, status)
         attempt(["full_stale"], check_full, status, now)
         attempt(["restore_lag_high"], check_restore_lag, status, now)
-        if status.get("serving") is True:
-            attempt(["api_unready"], check_ready, env["READY_URL"], opener)
+    if status is not None and status.get("serving") is True:
+        attempt(["api_unready"], check_ready, env["READY_URL"], opener)
+    else:
+        extra["ready_probe"] = probe_ready(env["READY_URL"], opener)
     # Only a Postgres known to be down (or restoring) excuses a quiet archive.
     if status is None or status.get("postgres_up"):
         attempt(["wal_stale"], check_wal, s3, backups, env["WAL_PREFIX"], now)
     attempt(["drill_missing"], check_drill, s3, signals, now)
-    return failed
+    return failed, extra
 
 
 def handler(event, context):
@@ -192,10 +218,10 @@ def handler(event, context):
         k: os.environ[k]
         for k in ("SIGNALS_BUCKET", "BACKUP_BUCKET", "WAL_PREFIX", "READY_URL")
     }
-    failed = run(
+    failed, extra = run(
         boto3.client("s3"), urllib.request.urlopen, datetime.now(timezone.utc), env
     )
-    print(json.dumps({"failed": failed}))
+    print(json.dumps({"failed": failed, **extra}))
     if failed:
         raise RuntimeError(",".join(failed))
 

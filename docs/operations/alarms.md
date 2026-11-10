@@ -371,7 +371,11 @@ fires when two of the last three runs failed, so a single blip does not email.
 
 **Which checks failed:** open the log group `/aws/lambda/logjam-brain-watchdog`
 and read the latest line. It is `{"failed": ["wal_stale", ...]}`: codes only,
-never any data. Then find each code below. The same line also shows when the
+never any data. While the brain is not serving, the line also has
+`"ready_probe"`: the HTTP status the public `/ready` answered to one try, or
+`null` if it could not connect. Before the cutover the old API answers it, so a
+`200` shows the firewall lets the watchdog through; a `403` means it does not.
+The probe never fails a run. Then find each code below. The same line also shows when the
 alarm clears (`{"failed": []}`).
 
 The shell steps need a Session Manager shell on the brain

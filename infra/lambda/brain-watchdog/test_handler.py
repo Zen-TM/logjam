@@ -8,13 +8,18 @@ Mutations that turn this red (each applied once and seen to fail):
     test_status_missing;
   - choosing the lexicographically last archive id, or any directory but the
     last: the listing tests;
-  - dropping the `serving` condition on the API check: test_api_not_checked_when_not_serving.
+  - dropping the `serving` condition on the API check: test_api_not_checked_when_not_serving;
+  - a lag of None compared with the threshold (the pre-fix code, which reported
+    restore_lag_high): test_a_restore_with_no_recorded_lag_is_not_a_high_lag;
+  - the probe failing the run on a bad answer, or skipped when not serving:
+    the probe tests.
 """
 
 import io
 import json
 import sys
 import unittest
+import urllib.error
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -148,7 +153,8 @@ def fresh_wal():
 
 def run(s3=None, opener=None, **kw):
     s3 = s3 or FakeS3(signals(**kw), fresh_wal())
-    return handler.run(s3, opener or FakeOpener(200), NOW, ENV), s3
+    failed, s3.extra = handler.run(s3, opener or FakeOpener(200), NOW, ENV)
+    return failed, s3
 
 
 class Codes(unittest.TestCase):
@@ -251,6 +257,16 @@ class Codes(unittest.TestCase):
         )
         self.assertEqual(self.failed(status=good_status(**old)), [])
 
+    def test_a_restore_with_no_recorded_lag_is_not_a_high_lag(self):
+        unrecorded = {
+            "last_restore_at": iso(ago(3600)),
+            "last_restore_lag_seconds": None,
+        }
+        self.assertEqual(self.failed(status=good_status(**unrecorded)), [])
+        status = good_status(**unrecorded)
+        del status["last_restore_lag_seconds"]
+        self.assertEqual(self.failed(status=status), [])
+
     def test_drill_missing(self):
         self.assertEqual(self.failed(drill=False), ["drill_missing"])
 
@@ -281,8 +297,26 @@ class Codes(unittest.TestCase):
 
     def test_api_not_checked_when_not_serving(self):
         opener = FakeOpener(503)
-        self.assertEqual(run(opener=opener, status=good_status(serving=False))[0], [])
-        self.assertEqual(opener.calls, [])
+        failed, s3 = run(opener=opener, status=good_status(serving=False))
+        self.assertEqual(failed, [])
+        # One probe, never a failure, reported beside the codes.
+        self.assertEqual(len(opener.calls), 1)
+        self.assertEqual(s3.extra, {"ready_probe": 503})
+
+    def test_the_probe_reports_a_status_or_null_and_never_fails(self):
+        off = good_status(serving=False)
+        for answer, want in (
+            (200, 200),
+            (urllib.error.HTTPError("u", 403, "WAF", {}, None), 403),
+            (OSError("no route"), None),
+        ):
+            failed, s3 = run(opener=FakeOpener(answer), status=off)
+            self.assertEqual((failed, s3.extra), ([], {"ready_probe": want}))
+
+    def test_the_probe_runs_when_the_status_is_unusable_and_not_when_serving(self):
+        failed, s3 = run(opener=FakeOpener(200), status=False)
+        self.assertEqual((failed, s3.extra), (["status_missing"], {"ready_probe": 200}))
+        self.assertEqual(run()[1].extra, {})
 
     def test_one_check_throwing_does_not_hide_the_others(self):
         # A string where a number belongs breaks the disk check; the broken
@@ -411,6 +445,12 @@ class Entry(unittest.TestCase):
     def test_green_logs_an_empty_list_and_returns(self):
         out, error = self.call(fresh_wal())
         self.assertEqual((json.loads(out), error), ({"failed": []}, None))
+
+    def test_not_serving_logs_the_probe_status_beside_the_codes(self):
+        out, error = self.call(fresh_wal(), status=good_status(serving=False))
+        self.assertEqual(
+            (json.loads(out), error), ({"failed": [], "ready_probe": 200}, None)
+        )
 
     def test_a_miss_logs_one_line_and_raises_with_only_the_codes(self):
         out, error = self.call({}, drill=False)
