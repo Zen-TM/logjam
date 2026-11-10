@@ -54,6 +54,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `brain_iam.tf`, managed exclusively: no audit bucket, no secret beyond the
   app database, origin-verify and Resend, no write to `release.json`, and no
   AWS-managed broad policy. Guard: `brain_role_has_only_its_grants`.
+- **The brain's timers never start the `aws` CLI.** `release-agent.sh` and
+  `status.sh` make their S3 calls with `s3_get` and `s3_put` in `brain/host/lib.sh`
+  (`curl --aws-sigv4`): a CLI start costs 66 MB and 0.65 s of CPU on a `t4g.micro`, three times a
+  minute. Guard: the "never start the aws CLI" check in `brain/tests/e2e.sh`.
 - **The Postgres image** (`brain/postgres/`) is what local dev runs and what
   prod's database will run. Its `postgresql.conf` keeps row values and
   statement parameters out of logs; `brain/postgres/tests/test.sh` (CI job
