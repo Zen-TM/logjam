@@ -52,7 +52,9 @@
   and coordinates into its messages, which `redact.paths` cannot reach.
 - **Env is read through `getEnv()` (`lib/env.ts`).** A new variable goes in its
   schema and in `infra/terraform/templates/env.local.tftpl`, which renders
-  `.env.local`.
+  `.env.local`. What prod runs with is `infra/brain/api.env`, released as a
+  pointer: a variable prod needs goes there too, and
+  `src/brainEnvironment.unit.test.ts` holds its keys to the schema.
 - **A background sweep runs inside `startTopoJobReaper`'s tick, never on its
   own timer:** the tick runs only in the process holding the database's
   advisory lock (`lib/sweepLeader.ts`), so two API processes never sweep

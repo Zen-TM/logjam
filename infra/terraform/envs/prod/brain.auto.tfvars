@@ -27,7 +27,7 @@ brain_serving = false
 
 # True when CloudFront's API origin is the brain. Requires brain_serving; flip
 # it in a later merge, once the brain answers.
-brain_public = false
+brain_public = true
 
 # t4g.micro was chosen after the rehearsal. Moving up a size (t4g.small) is
 # this one line and about two minutes of downtime.
