@@ -87,6 +87,20 @@ export function createSweepLeader(
   return {
     async runIfLeader(tick) {
       if (stopped) return false;
+      // Prove the session is alive before every tick: the server may have
+      // ended it, and freed the lock for another process, before the client's
+      // 'error'/'end' event arrives. A dead holder is dropped and falls
+      // through to a fresh try; its old session is gone, so nothing stacks.
+      // On an otherwise idle connection the query also keeps a proxy or
+      // firewall from dropping it as idle.
+      if (holder) {
+        const client = holder;
+        try {
+          await client.query("SELECT 1", []);
+        } catch {
+          lose(client);
+        }
+      }
       if (!holder) {
         // One attempt at a time: two overlapping ticks must not take the lock
         // twice on separate sessions, nor stack it on one.

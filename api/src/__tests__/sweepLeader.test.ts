@@ -16,6 +16,8 @@ import { createSweepLeader, newLockClient } from "../lib/sweepLeader";
 //  - newLockClient returns a wrapper over one shared pooled connection:
 //    "exactly one of two sweepers runs".
 //  - runIfLeader ignores the lock's result: same test.
+//  - the `SELECT 1` ping in runIfLeader is removed: "a holder whose session
+//    was ended does not run its next tick".
 //  - `lose` does not clear `holder` in sweepLeader.ts: "a killed holder stops
 //    running ticks".
 //
@@ -99,6 +101,32 @@ describe("sweep leader on a real database", () => {
     await a.runIfLeader(ranA);
     expect(ranB).toHaveBeenCalledTimes(1);
     expect(ranA).toHaveBeenCalledTimes(1);
+    expect(await holderPids(k)).toHaveLength(1);
+  });
+
+  it("a holder whose session was ended does not run its next tick", async () => {
+    const k = sweeper();
+    // Events are swallowed, so only the per-tick ping can reveal the dead
+    // session: the test cannot race the client's 'error'/'end' event.
+    const a = createSweepLeader(() => {
+      const c = newLockClient();
+      const on = c.on.bind(c);
+      c.on = (event) => on(event, () => {}); // keeps pg from throwing, tells the leader nothing
+      return c;
+    }, k);
+    leaders.push(a);
+    const b = newLeader(k);
+    const ranA = vi.fn();
+    const ranB = vi.fn();
+    await a.runIfLeader(ranA);
+    const [pid] = await holderPids(k);
+    await admin.query("SELECT pg_terminate_backend($1)", [pid]);
+    await vi.waitFor(async () => expect(await holderPids(k)).toHaveLength(0));
+
+    await b.runIfLeader(ranB);
+    await a.runIfLeader(ranA);
+    expect(ranA).toHaveBeenCalledTimes(1);
+    expect(ranB).toHaveBeenCalledTimes(1);
     expect(await holderPids(k)).toHaveLength(1);
   });
 

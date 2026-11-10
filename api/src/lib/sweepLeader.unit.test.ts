@@ -4,6 +4,8 @@ import { createSweepLeader, type LockClient } from "./sweepLeader";
 // Mutations that turn this file red (each applied once, see the PR):
 //  - runIfLeader ignores `rows[0].locked`: "skips while the lock is taken".
 //  - `lose` does not clear `holder`: "drops leadership on a connection error".
+//  - the `SELECT 1` ping before a held tick is removed: "runs the tick when the
+//    ping succeeds and not when it fails".
 //  - acquire runs on every call rather than only when not holding: "does not
 //    stack".
 
@@ -17,7 +19,12 @@ class FakeClient implements LockClient {
   async connect() {
     if (this.failConnect) throw new Error("connect refused");
   }
-  async query() {
+  pingFails = false;
+  async query(sql: string) {
+    if (sql === "SELECT 1") {
+      if (this.pingFails) throw new Error("connection terminated");
+      return { rows: [] };
+    }
     this.queries++;
     const locked = !FakeClient.taken;
     if (locked) {
@@ -66,6 +73,27 @@ describe("sweep leader", () => {
     expect(tick).toHaveBeenCalledTimes(3);
     expect(clients).toHaveLength(1);
     expect(clients[0].queries).toBe(1);
+  });
+
+  it("runs the tick when the ping succeeds and not when it fails", async () => {
+    const { leader, clients } = setup();
+    const tick = vi.fn();
+    await leader.runIfLeader(tick);
+    await leader.runIfLeader(tick);
+    expect(tick).toHaveBeenCalledTimes(2);
+
+    // No 'error' event: only the ping can tell. The server's lock is gone and
+    // another process has it.
+    clients[0].pingFails = true;
+    clients[0].holds = false;
+    FakeClient.taken = true;
+    expect(await leader.runIfLeader(tick)).toBe(false);
+    expect(tick).toHaveBeenCalledTimes(2);
+    expect(clients[0].ended).toBe(1);
+    // Leadership was cleared, so the next tick tries to acquire afresh.
+    FakeClient.taken = false;
+    expect(await leader.runIfLeader(tick)).toBe(true);
+    expect(clients).toHaveLength(3);
   });
 
   it("does not stack when ticks overlap while acquiring", async () => {
