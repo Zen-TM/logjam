@@ -177,7 +177,7 @@ check "...and turns verification off with one" grep -q '^repo1-storage-verify-tl
 check "a non-root user can render the config" quiet docker run --rm --user postgres "${BUCKET_ENV[@]}" "$IMAGE" pgbackrest version
 check "the image verifies the regional S3 certificate (ca-certificates)" \
   docker run --rm --entrypoint sh "$IMAGE" -c "echo | openssl s_client -connect s3.ap-southeast-2.amazonaws.com:443 -servername s3.ap-southeast-2.amazonaws.com -verify_return_error 2>&1 | grep -q 'Verify return code: 0'"
-# The weekly restore drill's command; tests/e2e.sh runs it. Mutation: dropping its COPY from the Dockerfile.
+# The daily restore drill's command; tests/e2e.sh runs it. Mutation: dropping its COPY from the Dockerfile.
 check "the restore drill script is in the image and executable" quiet docker run --rm --entrypoint test "$IMAGE" -x /usr/local/lib/brain/drill.sh
 # The cutover's data copy and the library both task scripts source; tests/e2e.sh runs the copy. Mutation: dropping either from the Dockerfile's COPY.
 check "the data copy script is in the image and executable" quiet docker run --rm --entrypoint test "$IMAGE" -x /usr/local/lib/brain/copy.sh
