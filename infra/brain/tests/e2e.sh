@@ -966,6 +966,7 @@ check "...and no value in any line" bash -c "! $SUDO docker logs '$(cid postgres
 #     existing-database boots log a restore and refuse a malformed value;
 #   postgres/brain-entrypoint.sh: `--target-action=promote` dropped (recovery pauses at the target, the database never opens
 #     for writes and boot.sh waits for ever: boot_limited ends at 300 s with exit 124).
+# Scenario 13b (restores follow the backup's own timeline) has its own list at its head.
 S="13 point in time"
 serving off; agent
 pitr_rows() { sql logjam "select coalesce(string_agg(v, ',' order by v), '') from e2e_pitr"; }
@@ -985,12 +986,17 @@ r /opt/brain/host/status.sh || bad "status.sh failed" # a canary just before T, 
 T=$(sql logjam "select to_char(now() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') || 'Z'")
 sleep 2
 sql logjam "insert into e2e_pitr values ('B')" > /dev/null
+T2=$(sql logjam "select to_char(now() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') || 'Z'") # after B, before the rewind
+sleep 2
+r /opt/brain/host/status.sh || bad "status.sh failed" # a commit after T2: recovery to T2 must see time pass it
 force_wal
 tl0=$(timeline)
 
 brain_env BRAIN_RESTORE_TARGET "$T"
 started=$(date +%s)
-lose_disk
+# The first device, with A and B, is kept: scenario 13b puts it back.
+r docker kill "$(cid postgres)" > /dev/null 2>&1
+reboot; cp --sparse=always "$WORK/disk.img" "$WORK/first.img"; new_disk
 boot_limited; rc=$?
 check "a blank disk with a target restores (exit $rc)" [ "$rc" = 0 ]
 [ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not restore to $T"; }
@@ -1064,6 +1070,72 @@ check "...no API container" [ -z "$(cid api)" ]
 check "...pgBackRest found no backup to start from" bash -c "$SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'unable to find backup set'"
 serving off
 brain_env BRAIN_RESTORE_TARGET
+reboot
+
+# --- 13b. restores follow the backup's own timeline ---------------------------------------------------------------------------
+# After a rewind the archive holds a second timeline, and Postgres follows the newest one unless told otherwise. The first
+# device (A and B) was lost to the rewind to T; C was written after it, on the new timeline. Mutations (each applied once and seen red):
+#   postgres/brain-entrypoint.sh: `--target-timeline=current` dropped (the second rewind follows the rewound timeline from its
+#     fork, so B is lost; the plain restore of the re-attached device's backup fails: pgBackRest error 058);
+#   host/boot.sh: the "newest backup is not on this database's timeline" full backup dropped (the re-attached device takes none, so
+#     the next disk loss restores the rewound database: C is back and D is gone);
+#   postgres/drill.sh: `--target-timeline=current` dropped (the drill restores the re-attached device's backup and fails).
+S="13b timelines"
+serving off
+backup_labels() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print(*[b["label"] for s in json.load(sys.stdin) for b in s["backup"]])'; }
+newest_label() { backup_labels | awk '{print $NF}'; }
+newest_timeline() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print([b["archive"]["stop"] for s in json.load(sys.stdin) for b in s["backup"]][-1][:8])'; }
+attach_disk() { # <image>: a device made earlier comes back
+  detach_disk
+  LOOP=$(r losetup --find --show "$1") || fatal "no loop device"
+  r ln -sfn "$LOOP" /run/brain-e2e-data
+}
+
+# A second rewind, to a time after B and before the first rewind: the first database's reality, not the rewound one.
+brain_env BRAIN_RESTORE_TARGET "$T2"
+reboot; new_disk
+boot_limited; rc=$?
+check "a second rewind, to a later time than the first, restores (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not restore to $T2"; }
+check "A and B are there and C is not: it followed the backup's timeline, not the rewound one (got $(pitr_rows))" [ "$(pitr_rows)" = A,B ]
+
+# The first device put back (the rewind was a mistake after all): it boots as it was and takes a full backup of its own timeline.
+brain_env BRAIN_RESTORE_TARGET
+before=$(newest_label)
+reboot; attach_disk "$WORK/first.img"
+boot_limited; rc=$?
+check "the first device boots as an existing database (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not start the first device"; }
+check "...boot mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+check "...holding A and B, as before the rewind" [ "$(pitr_rows)" = A,B ]
+check "...and says why it takes a full backup" grep -q "the newest backup is on timeline" "$WORK/boot.log"
+check "...a backup newer than every other now exists" [ "$(newest_label)" != "$before" ]
+check "...on its own timeline" [ "$(newest_timeline)" = "$(printf '%08X' "$(timeline)")" ]
+# The restore drill restores that newest backup, whose timeline is no longer the archive's newest: it must still pass.
+drill "$BACKUPS" -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-creds/creds; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/drill.log"
+check "the restore drill restores the re-attached device's backup (exit $rc)" [ "$rc" = 0 ]
+check "...and says ok" [ "$(drill_field ok)" = True ]
+sql logjam "insert into e2e_pitr values ('D')" > /dev/null
+force_wal
+
+# Then the next disk loss, with no target: the newest backup is this database's, so D comes back and the rewound C does not.
+lose_disk
+boot_limited; rc=$?
+check "a blank disk after that restores (exit $rc)" [ "$rc" = 0 ]
+check "A, B and D are there, C is not (got $(pitr_rows))" [ "$(pitr_rows)" = A,B,D ]
+
+# An ordinary reboot is on the same timeline as its newest backup: no extra backup.
+before=$(newest_label)
+reboot
+boot; rc=$?
+check "a reboot of an existing database starts it (exit $rc)" [ "$rc" = 0 ]
+check "...takes no backup" [ "$(newest_label)" = "$before" ]
+check "...and says nothing about one" not grep -q "taking a full backup" "$WORK/boot.log"
 reboot
 
 [ "$fails" = 0 ] || dump

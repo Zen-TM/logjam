@@ -185,5 +185,29 @@ pgb stanza-create
 repo=$(repo_state)
 if [ "$mode" = restore ] || [ "$repo" != backup ]; then pgb --type=full backup; fi
 
+# A restore follows the newest backup, so the newest backup must be of this database's
+# timeline. A volume put back after a rewind is on an older one while the repository's newest
+# backup belongs to the rewound database: without a full backup now, the next disk loss would
+# come back as that other history. An ordinary reboot is on the same timeline and takes none.
+# Never a reason to refuse to start: an unreadable answer skips the check.
+if [ "$mode" = existing ]; then
+  db_tl=$(psql_agent -c "select substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8)" || true)
+  repo_tl=$(pgb info --output=json 2> /dev/null | python3 -c '
+import json, sys
+try:
+    stanza = next(s for s in json.load(sys.stdin) if s["name"] == "logjam")
+    print(stanza["backup"][-1]["archive"]["stop"][:8])
+except (ValueError, KeyError, IndexError, StopIteration, TypeError):
+    pass' || true)
+  if [[ $db_tl =~ ^[0-9A-F]{8}$ && $repo_tl =~ ^[0-9A-F]{8}$ ]]; then
+    if [ "$db_tl" != "$repo_tl" ]; then
+      log "the newest backup is on timeline $repo_tl and this database is on $db_tl: taking a full backup"
+      pgb --type=full backup || log "that backup failed: the nightly one takes it again"
+    fi
+  else
+    log "could not read the timelines of the database and the newest backup: not checking that the newest backup is its own"
+  fi
+fi
+
 # The API is the release agent's: on only if the switch is on.
 "$(dirname "$0")/release-agent.sh" || log "the release agent failed; its timer retries"

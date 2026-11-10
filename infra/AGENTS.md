@@ -93,8 +93,13 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `BRAIN_RESTORE_TARGET` and only a boot onto a blank disk uses it. A variable
   of its own would outlive the disk it was meant for and rewind the next
   restore as well. The old volume stays detached with the data as it was before
-  the rewind: making it current again is the undo, after which a disk loss
-  needs `--target-timeline=current` on its restore (see `brain_variables.tf`). Guards:
+  the rewind. A restore follows the newest backup, and the newest backup is
+  always of the live database's timeline: every restore passes
+  `--target-timeline=current` (the entrypoint and `drill.sh`), and `boot.sh`
+  takes a full backup when an existing database finds the newest backup on
+  another timeline. So a second rewind, earlier or later, works as written, and
+  making the old volume current again is safe: that is how a rewind is undone.
+  Guards: `postgres/tests/test.sh`, scenario 13b of `brain/tests/e2e.sh`,
   `brain_restore_target_comes_only_from_the_current_volume`,
   `brain_restore_to_without_an_offset_is_refused`, and the point-in-time
   scenario of `brain/tests/e2e.sh`.

@@ -14,6 +14,7 @@
 #   brain-entrypoint.sh: dropping the leading-dash normalisation (the server
 #     the prod container starts with only -c flags);
 #   brain-entrypoint.sh: dropping ${BRAIN_RESTORE_OPTS} (restore keeps archiving);
+#   brain-entrypoint.sh: dropping --target-timeline=current (the restore follows the archive's newest timeline);
 #   pg_ident.conf: dropping the brain_agent line;
 #   Dockerfile: dropping ca-certificates (the S3 handshake);
 #   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin);
@@ -206,6 +207,7 @@ if wait_up $C; then
     check "BRAIN_INIT=restore brings back the backup and the archived WAL" \
       [ "$(sql -c "select string_agg(v, ',' order by v) from t")" = after,before ]
     check "BRAIN_RESTORE_OPTS reaches the restore (archive_mode off)" [ "$(sql -c 'show archive_mode')" = off ]
+    check "the restore follows its backup's timeline, not the archive's newest" [ "$(sql -c 'show recovery_target_timeline')" = current ]
     check "the restored server uses postgresql.conf" [ "$(sql -c 'show log_error_verbosity')" = terse ]
   else
     bad "a restore starts"

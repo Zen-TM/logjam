@@ -67,7 +67,7 @@ drill() {
   [ -z "$stop" ] || STOP=$(date -u -d "@$stop" +%Y-%m-%dT%H:%M:%SZ)
 
   t0=$(date +%s)
-  timeout "$(budget)" pgbackrest --stanza=logjam --set="$LABEL" --archive-mode=off restore
+  timeout "$(budget)" pgbackrest --stanza=logjam --set="$LABEL" --target-timeline=current --archive-mode=off restore
   case $? in 0) ;; 124) ERROR=timed_out; return ;; *) ERROR=restore_failed; return ;; esac
 
   # What the server will run with, read before it exists as a process.
