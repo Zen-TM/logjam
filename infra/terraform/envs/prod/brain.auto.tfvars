@@ -19,7 +19,7 @@ brain_bootstrap = false
 # the release to be live. The API's background sweeps delete media that has no
 # row in their own database: never turn it on for a brain rebuilt from backups
 # until its data is checked.
-brain_serving = false
+brain_serving = true
 
 # t4g.micro was chosen after the rehearsal. Moving up a size (t4g.small) is
 # this one line and about two minutes of downtime.

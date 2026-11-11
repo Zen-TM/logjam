@@ -24,9 +24,9 @@ Why it is built this way, and the rules that hold it up:
 Every command below is complete and says what to look for, and runs from the
 repository root. Each is marked **run on a scratch copy** (a rehearsal on a
 throwaway copy of the brain on real AWS: 2026-11-10, and again on the finished
-stack on 2026-11-11; timings are quoted as measured there, with made-up rows)
-or **not yet run anywhere**. Prod's numbers will differ with the size of the
-database. Use the maintainer's AWS credentials and
+stack on 2026-11-11; timings are quoted as measured there, with made-up rows),
+**run on prod** (the bring-up of 2026-11-11) or **not yet run anywhere**.
+Prod's numbers will differ with the size of the database. Use the maintainer's AWS credentials and
 `export AWS_REGION=ap-southeast-2`.
 
 **Never read user data to diagnose anything.** Look at counts, names, logs and
@@ -247,8 +247,7 @@ step says why.
 6. **Check `release.json` names the live release.** The release agent refuses
    to start the API when serving is on and it cannot read the file, and it runs
    whatever commit the file names. CI cannot read the bucket, so only you can
-   look (the read ran on a scratch copy; the comparison is **not yet run
-   anywhere**):
+   look (**run on prod**, 2026-11-11: the same commit):
 
    ```sh
    aws s3 cp s3://logjam-brain-signals-620853681701/release.json - | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
