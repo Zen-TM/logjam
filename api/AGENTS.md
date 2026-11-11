@@ -53,7 +53,9 @@
 - **Env is read through `getEnv()` (`lib/env.ts`).** A new variable goes in its
   schema; one with no default also goes in
   `infra/terraform/templates/env.local.tftpl`, which renders `.env.local`
-  (`lib/env.unit.test.ts`).
+  (`lib/env.unit.test.ts`). What prod runs with is `infra/brain/api.env`,
+  released as a pointer: a variable prod needs goes there too, and
+  `src/brainEnvironment.unit.test.ts` holds its keys to the schema.
 - **A background sweep runs inside `startTopoJobReaper`'s tick, never on its
   own timer:** the tick runs only in the process holding the database's
   advisory lock (`lib/sweepLeader.ts`), so two API processes never sweep

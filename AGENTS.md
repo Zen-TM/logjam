@@ -26,8 +26,10 @@ platform: privacy constrains every feature. Each package has its own
 - **Local dev** is `make dev` with `.env.local`: fake auth as the seeded user
   alice, Postgres in docker, MiniStack for S3 and ECS. `AUTH_MODE=fake` refuses
   to start in a prod runtime (`api/src/middleware/auth.ts`); keep it that way.
-- **Prod** is real AWS (`ap-southeast-2`) with Cognito; `api/.env` is
-  prod-style. Never run a command that reaches prod without the maintainer's
+- **Prod** is real AWS (`ap-southeast-2`) with Cognito, its API and Postgres on
+  one self-managed instance, the brain
+  ([0047](docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md));
+  `api/.env` is prod-style. Never run a command that reaches prod without the maintainer's
   explicit confirmation.
 
 ## How we work
