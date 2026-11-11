@@ -40,7 +40,9 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   -- The accounting must never block a status write (the worker's, the reaper's,
-  -- a cancel). No row value in the text: the Postgres log leaves the box.
+  -- a cancel). Guard: "a stamp that fails never blocks a status write" in
+  -- computeUsageCarryover.test.ts. No row value in the text: the Postgres log
+  -- leaves the box.
   RAISE WARNING 'wallSeconds stamp skipped on update of %', TG_TABLE_NAME;
   RETURN NEW;
 END

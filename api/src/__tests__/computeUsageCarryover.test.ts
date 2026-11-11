@@ -7,6 +7,7 @@ import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 import prisma from "../services/prisma";
 import { getSiteCreditUsage } from "../lib/computeCredits";
 import { reapStuckTopoJobs } from "../lib/topoJobReaper";
+import { IN_FLIGHT_STATUSES } from "../lib/fargateCapacity";
 
 // Requires the API (AUTH_MODE=fake). Usage of rows that exist is derived from
 // the job tables; what a delete would erase is carried over by a trigger
@@ -320,6 +321,65 @@ describe("a finished job's charge stops growing", () => {
     await prisma.topoJob.deleteMany({
       where: { id: { in: [never, running.id] } },
     });
+  });
+
+  // Mutation that turns this red: remove the EXCEPTION handler from
+  // stamp_topo_job_wall_seconds. An infinite started_at makes the stamp's
+  // subtraction raise; it is set while the job is still in flight, so that write
+  // makes no stamp attempt. Raw SQL throughout: pricing or reading the row
+  // through Prisma may itself fail on an infinite started_at.
+  it("a stamp that fails never blocks a status write", async () => {
+    const job = await prisma.topoJob.create({
+      data: {
+        userId: BOB_ID,
+        status: "processing",
+        startedAt: new Date(Date.now() - HOUR),
+      },
+    });
+    try {
+      await prisma.$executeRaw`UPDATE topo_jobs SET started_at = 'infinity' WHERE id = ${job.id}`;
+      await prisma.$executeRaw`UPDATE topo_jobs SET status = 'failed' WHERE id = ${job.id}`;
+      const [row] = await prisma.$queryRaw<
+        { status: string; pipeline_metrics: unknown }[]
+      >`SELECT status, pipeline_metrics FROM topo_jobs WHERE id = ${job.id}`;
+      expect(row).toEqual({ status: "failed", pipeline_metrics: null });
+    } finally {
+      await prisma.$executeRaw`DELETE FROM topo_jobs WHERE id = ${job.id}`;
+    }
+  });
+
+  // Mutations that turn this red: add a status to IN_FLIGHT_STATUSES.topo
+  // (fargateCapacity.ts) without the SQL lists, or remove one from the trigger's
+  // list (or from topo_job_credits's). A job is "in flight" for the vCPU cap, the
+  // stamp and the charge's NOW() alike.
+  it("the SQL's in-flight statuses are IN_FLIGHT_STATUSES.topo", async () => {
+    const startedAt = new Date(Date.now() - HOUR);
+    const stampedOnLeaving = async (from: string) => {
+      const job = await prisma.topoJob.create({
+        data: { userId: BOB_ID, status: from, startedAt },
+      });
+      await prisma.topoJob.update({
+        where: { id: job.id },
+        data: { status: "failed" },
+      });
+      const wallSeconds = (await metricsOf(job.id))?.wallSeconds;
+      await prisma.topoJob.delete({ where: { id: job.id } });
+      return typeof wallSeconds === "number";
+    };
+    // Credits of a job whose updated_at is its started_at: 0 unless priced
+    // against NOW().
+    const pricedAgainstNow = async (status: string) => {
+      const [{ credits }] = await prisma.$queryRaw<{ credits: bigint }[]>`
+        SELECT topo_job_credits(${status}, NULL, ${startedAt}::timestamp, ${startedAt}::timestamp)::bigint AS credits`;
+      return Number(credits) > 0;
+    };
+
+    for (const status of IN_FLIGHT_STATUSES.topo) {
+      expect(await stampedOnLeaving(status), status).toBe(true);
+      expect(await pricedAgainstNow(status), status).toBe(true);
+    }
+    expect(await stampedOnLeaving("complete")).toBe(false);
+    expect(await pricedAgainstNow("complete")).toBe(false);
   });
 });
 

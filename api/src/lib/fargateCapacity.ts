@@ -27,8 +27,9 @@ import type { DbClient } from "./storageQuota";
 
 /** Counted from the DB, not from ECS: the job rows are the source of truth the
  * reaper already keeps honest, and ListTasks would need a DescribeTasks per
- * task to recover each one's size. */
-const IN_FLIGHT_STATUSES = {
+ * task to recover each one's size. The SQL in the compute-credit migrations
+ * repeats the topo list; `computeUsageCarryover.test.ts` holds them together. */
+export const IN_FLIGHT_STATUSES = {
   topo: ["pending", "processing"],
   topoExport: ["queued", "running"],
 } as const;
