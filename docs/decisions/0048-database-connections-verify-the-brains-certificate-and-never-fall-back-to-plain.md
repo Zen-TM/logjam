@@ -33,15 +33,20 @@ certificate by name.
   (`topo/worker_common.py`) use `sslmode=verify-full` against it.
 - `DATABASE_SSL=disable` is the only way to a plain connection: for local
   dev, whose Postgres is plain TCP (`infra/terraform/envs/local/ecs.tf`, the
-  CI worker env `topo/tests/e2e/worker.env`). The API refuses it in
-  production (`validateEnv`).
+  CI worker env `topo/tests/e2e/worker.env`). With `NODE_ENV=production` the
+  API refuses it (`validateEnv`), and so do the migrate URL and the Python
+  workers. The workers' task definitions set no `NODE_ENV`, so what holds
+  them is that no prod task definition names `DATABASE_SSL`.
 
 Guards: `api/src/lib/dbConnection.unit.test.ts` (the default, the production
 refusal, the missing override, plain in development),
-`api/src/lib/databaseUrl.unit.test.ts` (the migrate URL),
-`api/src/lib/env.unit.test.ts` (`DATABASE_SSL=disable` refused in production)
-and `topo/tests/test_worker_helpers.py` (the workers' URL). Each test file
-names its mutation.
+`api/src/lib/databaseUrl.unit.test.ts` (the migrate URL, an empty
+`DATABASE_SSL_CA` read as unset, its production refusal),
+`api/src/lib/env.unit.test.ts` (`DATABASE_SSL=disable` refused in production),
+`topo/tests/test_worker_helpers.py` (the workers' URL and their production
+refusal) and the run `prod_runs_on_the_brain` in
+`infra/terraform/envs/prod/tests/guards.tftest.hcl` (no prod task definition
+sets `DATABASE_SSL`). Each names its mutation.
 
 ## Consequences
 
