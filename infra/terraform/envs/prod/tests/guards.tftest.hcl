@@ -201,14 +201,15 @@ run "ci_reads_no_secret_or_user_data" {
     error_message = "The CI privacy Deny must cover EBS direct snapshot reads and Run Command output (local.ci_readonly_privacy_deny)."
   }
 
-  # Mutation: removing the DenyShells statement (or one action in it) lets a
-  # CI role open a shell on the brain or in a task. The apply role's boundary
-  # joins this list in the change that gives it the statement (iam_apply.tf).
+  # Mutation: removing the DenyShells statement (or one action in it), or
+  # filtering it out of the boundary in iam_apply.tf, lets a CI role, the
+  # apply role above all, open a shell on the brain or in a task.
   assert {
     condition = alltrue([
       for p in [
         aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
         aws_iam_role_policy.gha_readonly_privacy_deny.policy,
+        aws_iam_policy.github_actions_apply_boundary.policy,
         ] : alltrue([
           for a in ["ssm:SendCommand", "ssm:StartSession", "ssm:ResumeSession", "ecs:ExecuteCommand"] : anytrue([
             for st in jsondecode(p).Statement :
@@ -216,7 +217,7 @@ run "ci_reads_no_secret_or_user_data" {
           ])
       ])
     ])
-    error_message = "The CI privacy Deny must deny shells on instances and in tasks (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny, and the apply role's boundary, must deny shells on instances and in tasks (local.ci_readonly_privacy_deny)."
   }
 }
 
