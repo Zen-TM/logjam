@@ -23,7 +23,10 @@ export function composeDatabaseUrl(parts: DatabaseUrlParts): string {
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }
 
-export function databaseUrlFromEnv(): string {
+// The one reader of the DB_* variables: the URL below (migrate, seed) and the
+// pool's discrete fields (lib/dbConnection.ts) both take it, so they cannot
+// drift apart.
+export function dbPartsFromEnv(): DatabaseUrlParts {
   const host = process.env.DB_HOST;
   const port = process.env.DB_PORT;
   const name = process.env.DB_NAME;
@@ -42,11 +45,15 @@ export function databaseUrlFromEnv(): string {
     );
   }
 
-  return composeDatabaseUrl({
+  return {
     host: host as string,
     port: port ?? 5432,
     name: name as string,
     user: user as string,
     password: password as string,
-  });
+  };
+}
+
+export function databaseUrlFromEnv(): string {
+  return composeDatabaseUrl(dbPartsFromEnv());
 }

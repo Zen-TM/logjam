@@ -17,6 +17,15 @@ const isLocal = baseURL.startsWith("http://localhost");
  */
 const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 
+/**
+ * In CI the dev server's /master proxy points at MiniStack. Unset it falls
+ * back to the prod CDN, and each run's map tiles count against that
+ * distribution's monthly CloudFront request allowance.
+ */
+const CI_MASTER = process.env.CI
+  ? { DEV_MASTER_URL: "http://127.0.0.1:4566/logjam-topo-local" }
+  : {};
+
 export default defineConfig({
   testDir: "./e2e",
   // Timeout: An axe walk is not a user interaction, and 30s (Playwright's default) is a
@@ -69,7 +78,7 @@ export default defineConfig({
           command: `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
           url: baseURL,
           reuseExistingServer: !process.env.CI,
-          env: { VITE_AUTH_MODE: "fake" },
+          env: { VITE_AUTH_MODE: "fake", ...CI_MASTER },
           timeout: 60_000,
         },
         {
@@ -80,6 +89,7 @@ export default defineConfig({
           // not exist: nothing here is submitted.
           env: {
             VITE_AUTH_MODE: "oidc",
+            ...CI_MASTER,
             VITE_OIDC_ISSUER:
               "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_e2e",
           },
