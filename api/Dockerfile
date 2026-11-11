@@ -66,6 +66,12 @@ COPY --from=builder /app/dist ./dist
 # verified TLS whenever this file exists. Covers all AWS regions.
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
 
+# The brain's Postgres certificate: with brain_serving on, DATABASE_SSL_CA
+# points here (infra/brain/api.env) and the connection is verified by name. The
+# build fails when the file is missing, so an image that cannot reach the brain
+# is never published.
+COPY infra/brain/brain-ca.pem /app/brain-ca.pem
+
 EXPOSE 8080
 
 # The commit this image was built from, reported by GET /meta. Baked into the

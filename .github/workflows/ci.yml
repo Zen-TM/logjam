@@ -931,6 +931,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ECS task-definition pin filter
         run: infra/scripts/pin-ecs-task-image.sh --self-test
+      # The topo image's build context is topo/, so it carries its own copy of
+      # the brain's certificate (topo/Dockerfile). A copy that drifts from the
+      # one Terraform and the API image read would have the workers trust a
+      # certificate the brain no longer serves, and fail at their first query.
+      - name: The brain's certificate is the same file in both build contexts
+        run: cmp infra/brain/brain-ca.pem topo/brain-ca.pem
       # The deploy and rollback workflows' decisions, each with fixtures and
       # no AWS: which task defs run which image (checked against ecs.tf),
       # whether a deploy runs (deploy-guard.yml) and what the frontend prune

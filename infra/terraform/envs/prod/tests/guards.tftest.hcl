@@ -1690,12 +1690,18 @@ run "brain_copy_task_reads_only_status_json" {
     error_message = "copy.sh and the data copy's task definition must name the same environment variables."
   }
 
-  # Without infra/brain/brain-ca.pem (committed once the brain has booted) the
-  # task still plans, with an empty CA, and the script refuses. Mutation:
-  # reading the file without the fileexists guard (the plan errors).
+  # The task verifies the brain against infra/brain/brain-ca.pem, the
+  # certificate the brain made at its first boot. Without the file (a new
+  # environment, before its brain has booted) the task still plans, with an
+  # empty CA, and the script refuses. Mutation: any other value for
+  # COPY_TARGET_CA in brain_copy.tf; with the file absent, reading it without
+  # the fileexists guard (the plan errors).
   assert {
-    condition     = [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_CA"][0] == ""
-    error_message = "Until brain-ca.pem exists the data copy's CA must be empty."
+    condition = (
+      [for e in jsondecode(aws_ecs_task_definition.brain_copy[0].container_definitions)[0].environment : e.value if e.name == "COPY_TARGET_CA"][0] ==
+      (fileexists("../../../brain/brain-ca.pem") ? file("../../../brain/brain-ca.pem") : "")
+    )
+    error_message = "The data copy's CA must be the text of infra/brain/brain-ca.pem, or empty until that file exists."
   }
 }
 
