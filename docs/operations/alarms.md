@@ -17,7 +17,6 @@ that goes wrong between deploys.
 | Alarm | Fires when | First response |
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
-| `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
 | `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges, fire history, coverage) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
@@ -30,29 +29,22 @@ that goes wrong between deploys.
 | `logjam-coverage-not-launched` | EventBridge Scheduler's call to start the monthly coverage build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-signup-cap-80-percent` | Sign-ups this month reached 80% of the monthly cap | Is it growth or a flood? Raise the cap or leave it ([Sign-up cap](#sign-up-cap)) |
 | `logjam-signup-trigger-errors` | The pre sign-up function returned an error: the cap is full, or the trigger is broken | Compare the month's count with the cap; if under it, read the function's log group ([Sign-up cap](#sign-up-cap)) |
-| `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
-| `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
-| `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
+| `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the brain's Postgres log group (`/logjam/brain/postgres`) and its subscription filter in `infra/terraform/envs/prod/brain_logs.tf`, then the delivery stream in `audit.tf` |
 | `logjam-brain-system-status-failed` | AWS's system status check on the brain (the EC2 host) failed for 2 minutes; EC2 is recovering it onto new hardware | Wait for the OK email, then confirm the API answers and Postgres is up (the brain section below) |
 | `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
 | `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
 | `logjam-brain-cpu-high` | The brain's CPU has averaged 20% or more for an hour | Find out what is using the CPU (growth, one client misbehaving, or a runaway process). Above the free allowance it costs cents; at 50% the API is three quarters of the way to its limit of about 80 requests a second, and a bigger instance of the same family adds memory, not speed |
 | `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
 | `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
-| `logjam-ceiling` (an AWS Budget, not a CloudWatch alarm) | Actual spend this month reached US$100 before tax, and AWS attached a deny policy to the API's roles | New worker jobs fail and uploads are refused. Find what ran the bill up, then undo the deny ([Cost ceiling](#cost-ceiling)) |
+| `logjam-ceiling` (an AWS Budget, not a CloudWatch alarm) | Actual spend this month reached US$100 before tax, and AWS attached a deny policy to the brain's role | New worker jobs fail and uploads are refused. Find what ran the bill up, then undo the deny ([Cost ceiling](#cost-ceiling)) |
 
 ## API
 
 ### `logjam-api-5xx`
 
 A metric filter counts every line of the API's request log (pino-http, in the
-Elastic Beanstalk group
-`/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log`)
-whose `res.statusCode` is 500 or more, as metric `Responses5xx` in namespace
-`Logjam/Api`. Once `brain_public` is set in `brain.auto.tfvars` and CloudFront
-sends users to the brain, the filter reads the brain's group
-`/logjam/brain/api` instead (the same JSON lines); moving it replaces the
-filter, a few seconds without a datapoint.
+brain's group `/logjam/brain/api`) whose `res.statusCode` is 500 or more, as
+metric `Responses5xx` in namespace `Logjam/Api`.
 
 Why these numbers: one phone whose sync keeps failing retries on a backoff
 from 1 second to 5 minutes, so it sends about ten requests in its first few
@@ -68,25 +60,8 @@ Logjam Web, and fills every window while anyone uses it.
 3. If one release is to blame, roll it back ([rollback.md](rollback.md)).
 
 It cannot see an API that is not running at all, because a dead container
-writes no log line. The next alarm covers that.
-
-### `logjam-api-environment-degraded`
-
-Elastic Beanstalk's enhanced health rolls the instance, the container and
-the share of failing requests into one status. The alarm fires when it has
-been Degraded or Severe for ten minutes. A deploy restarts the API cold and
-shows Severe for a minute or two, which is why the window is ten. Once
-`brain_public` moves CloudFront to the brain, this environment idles until its
-teardown: the alarm stays but its actions are disabled, so it does not page,
-and reverting `brain_public` (a rollback to Elastic Beanstalk) enables them
-again. A crash loop or dead host of the brain's API is the watchdog's
-(`api_unready`) and the EC2 status-check alarms.
-
-1. Read why: Elastic Beanstalk console → `logjam-api-prod` → Health, or
-   `aws elasticbeanstalk describe-environment-health --environment-name logjam-api-prod --attribute-names All`.
-2. If a deploy just ran, roll it back ([rollback.md](rollback.md)).
-3. Otherwise read the end of the API log group above for a crash repeating
-   on every start.
+writes no log line. The watchdog's `api_unready` and the EC2 status-check alarms
+cover that ([The brain](#the-brain)).
 
 ## Workers
 
@@ -452,8 +427,8 @@ fires when two of the last three runs failed, so a single blip does not email.
 and read the latest line. It is `{"failed": ["wal_stale", ...]}`: codes only,
 never any data. While the brain is not serving, the line also has
 `"ready_probe"`: the HTTP status the public `/ready` answered to one try, or
-`null` if it could not connect. Before the cutover the old API answers it, so a
-`200` shows the firewall lets the watchdog through; a `403` means it does not.
+`null` if it could not connect. A `200` shows the firewall lets the watchdog
+through; a `403` means it does not.
 The probe never fails a run. Then find each code below. The same line also shows when the
 alarm clears (`{"failed": []}`).
 
@@ -475,7 +450,7 @@ The shell steps need a Session Manager shell on the brain
 | `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
 | `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
 | `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` (its default in `brain_variables.tf`). `replay_short` means the restore replayed none of the recent WAL: if the brain was down or restoring around the drill's time, that outage is the cause and the next drill (or one run by hand) clears it; otherwise the archive has a hole after the last full backup, or the drill cannot read it, so read `/logjam/brain/drill` and take a full backup now, so a restore no longer depends on the missing WAL |
-| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row. Between the cutover's two flips the probe still reaches the old API, so the brain's own API is checked by hand then ([brain-cutover.md](brain-cutover.md), the host check) | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
+| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
 
 `wal_stale`, `status_*` and `postgres_down` can all fire together when the
 host goes down: start with the status-check alarms.
@@ -507,7 +482,7 @@ means the schedule or the function is gone, not that the brain is unhealthy.
 `logjam-ceiling`: US$100 a month, before tax (`var.cost_ceiling_usd`). It
 emails `logjam-budget-alerts` at 80% of actual spend and at 100% forecast. At
 100% of actual spend, AWS Budgets itself attaches the managed policy
-`logjam-cost-ceiling-deny` to the roles `logjam-eb-role` and `logjam-brain`,
+`logjam-cost-ceiling-deny` to the role `logjam-brain`,
 with no approval step and no code of ours running. It is the backstop under the
 compute pool's polite refusals and should never fire in a normal month. The
 earlier warning is `logjam-monthly` in `budgets.tf`, which includes tax and is
@@ -546,5 +521,5 @@ pass the ceiling before it acts.
    A reversed action is not evaluated again for the rest of the month; choose
    Reset in the console if it should re-arm.
 4. A Terraform apply does not lift the deny: Terraform does not manage which
-   managed policies are attached to `logjam-brain` or `logjam-eb-role`, so
+   managed policies are attached to `logjam-brain`, so
    the block stays until the action is reversed.

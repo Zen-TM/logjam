@@ -5,21 +5,18 @@ Logjam has one rollback path: the **Rollback** workflow
 when GitHub Actions or its sign-in to AWS is itself down, gives the same
 steps as plain AWS CLI commands.
 
-**Which API path applies is decided by `brain_serving` in
+The API runs on the brain, the self-managed host. **`brain_serving` in
 `infra/terraform/envs/prod/brain.auto.tfvars`** (the same file the deploy and
-rollback workflows read). While it is `false`, the API runs on Elastic
-Beanstalk and everything below that mentions Elastic Beanstalk is how it goes
-back. Once it is `true` (after the cutover to the self-managed host called the
-brain), the API runs on the brain, Elastic Beanstalk idles and is **not**
-touched by a rollback, and the brain's path applies instead. Read the file on
-`main` before you start: `grep brain_serving infra/terraform/envs/prod/brain.auto.tfvars`.
+rollback workflows read) says whether its API is running: while it is `false`
+nothing serves, so no smoke test can see a release and the workflows say so.
+Read the file on `main` before you start:
+`grep brain_serving infra/terraform/envs/prod/brain.auto.tfvars`.
 
 ## What can be rolled back, and how
 
 | Target | What changes | What does not |
 |---|---|---|
-| `api`, `brain_serving` off | Elastic Beanstalk goes back to the application version labelled with the commit sha, and the ECS task definitions that run the API image (listed in `infra/scripts/pin-release.sh`) are repinned to that sha's image |
-| `api`, `brain_serving` on | The same task definitions are repinned, and the brain's release pointer (`release.json` in its signals bucket: the sha and the API's environment as that sha shipped it) is rewritten for the sha; the brain's release agent then makes its API match, within about a minute. Elastic Beanstalk is not touched | The database. There are no down-migrations: the schema stays at the newer version, which is why every migration must be expand/contract ([ADR 0003](../decisions/0003-pre-deploy-migrations-expand-contract.md)) and why CI runs `rollback-compat` on migration PRs |
+| `api` | The ECS task definitions that run the API image (listed in `infra/scripts/pin-release.sh`) are repinned to that sha's image, and the brain's release pointer (`release.json` in its signals bucket: the sha and the API's environment as that sha shipped it) is rewritten for the sha; the brain's release agent then makes its API match, within about a minute | The database. There are no down-migrations: the schema stays at the newer version, which is why every migration must be expand/contract ([ADR 0003](../decisions/0003-pre-deploy-migrations-expand-contract.md)) and why CI runs `rollback-compat` on migration PRs |
 | `frontend` | `index.html` is replaced by the copy kept at `releases/<sha>/index.html` in the frontend bucket | Hashed assets: every release's assets stay in the bucket for at least 30 days, so the old `index.html` finds its files. Unhashed files from `frontend/public/` (`privacy.html`, `tos.html`, `manifest.webmanifest`, `templates/`) are not restored: they keep the newer release's content |
 | `worker` | The topo task definitions (listed in `infra/scripts/pin-release.sh`) are repinned to the `logjam-topo-worker:<sha>` image | Anything already running: a rollback affects the next task launched |
 
@@ -27,14 +24,14 @@ Limits:
 
 - **API and worker:** ECR keeps the newest 15 releases per repository. A sha
   whose image has been expired cannot be rolled back to.
-- **API on the brain:** the sha must have an `infra/brain/api.env` (a release
+- **API:** the sha must have an `infra/brain/api.env` (a release
   from before the brain has none, and the workflow stops with an error) and its
   image must carry the brain's certificate at `/app/brain-ca.pem` (an older one
   fails at start with "DATABASE_SSL_CA points to a missing file"). Go back only
   to a release built after the certificate was bundled.
 - **API, architecture:** the API image is built for amd64 and arm64
   (`deploy-api.yml`). A release built before that is amd64 only: it still runs
-  on Elastic Beanstalk and Fargate, but not on an arm64 host.
+  on Fargate, but not on the arm64 brain.
 - **API, schema:** `rollback-compat` tests a migration only against the
   release that was live when the migration PR ran. Going back more than one
   release can cross a contract migration that dropped something the older
@@ -43,8 +40,7 @@ Limits:
   (`git diff --stat <sha> <live sha> -- api/prisma/migrations`).
 - **API, releases built before `/meta` reported a sha** return `"sha": null`.
   Rolling back to one works, but its smoke test fails: check `/health` by
-  hand, and (with `brain_serving` off) read the live sha from the Elastic
-  Beanstalk version label instead.
+  hand.
 - **Frontend, unhashed files:** see the table. If a rolled-back release
   changed `privacy.html` or `tos.html`, users see the newer text while the API
   (rolled back separately) may still name the older consent version; fix
@@ -67,14 +63,10 @@ Limits:
 ## Finding the sha to roll back to
 
 - **API:** the live sha is `curl -s https://api.logjamnsw.com/meta | jq -r .sha`
-  (`null` for a release built before `/meta` reported one). With
-  `brain_serving` off the Elastic Beanstalk version label is the same sha, and
-  the previous one is in the Elastic Beanstalk console (Application versions)
-  or: `aws elasticbeanstalk describe-events --environment-name logjam-api-prod --max-items 50`.
-  With `brain_serving` on the Elastic Beanstalk label is stale (nothing deploys
-  there any more): the previous release is the one named in the last green
-  **Deploy API** run's log (its guard job's "What is live?" step), or the
-  commit before the bad one on `main` that has an `infra/brain/api.env`.
+  (`null` for a release built before `/meta` reported one). The previous
+  release is the one named in the last green **Deploy API** run's log (its
+  guard job's "What is live?" step), or the commit before the bad one on `main`
+  that has an `infra/brain/api.env`.
 - **Frontend:** the live sha is the `release-sha` metadata on `index.html`:
   `aws s3api head-object --bucket <frontend bucket> --key index.html --query Metadata`.
   Kept releases are listed by `aws s3 ls s3://<frontend bucket>/releases/`.
@@ -90,11 +82,10 @@ environment accepts only `main`), with the target and the full 40-character
 sha. Or: `gh workflow run rollback.yml --ref main -f target=api -f sha=<sha>`.
 
 It checks the release still exists before changing anything, waits for the
-change to finish, then runs the same smoke test a deploy runs. For the brain
-the smoke test gives the host's release agent 5 minutes (not 3) to show the sha
-on `/meta`; while `brain_public` is still `false` the public URL is Elastic
-Beanstalk's, so no smoke test can see the brain and the run says so: check it
-through the host instead.
+change to finish, then runs the same smoke test a deploy runs. The smoke test
+gives the host's release agent 5 minutes to show the sha on `/meta`; while
+`brain_serving` is `false` the brain's API is stopped, so no smoke test can see
+it and the run says so: check it through the host instead.
 
 It refuses to start while a deploy of the same target is queued or running:
 run it again once that deploy has finished. (GitHub keeps only one waiting run
@@ -109,7 +100,7 @@ cancelled run is grey, not red.
 `deploy-api.yml` and `deploy-frontend.yml` run a smoke test after deploying:
 
 - API: `https://api.logjamnsw.com/health` answers and `/meta` reports the
-  deployed sha (for up to 5 minutes when the brain serves, 3 otherwise).
+  deployed sha (for up to 5 minutes).
 - Frontend: `https://logjamnsw.com/` serves the deployed release's
   `index.html`, and the entry script it names loads.
 
@@ -141,8 +132,6 @@ export AWS_REGION=ap-southeast-2
 SHA=<full 40-character sha>
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 REGISTRY=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
-EB_APP=logjam
-EB_ENV=logjam-api-prod
 BUCKET=<terraform output s3_bucket_frontend>
 DISTRIBUTION=<terraform output web_cloudfront_distribution_id>
 ```
@@ -152,34 +141,9 @@ Repinning uses the repo's own script, which needs `jq`:
 that image's repository. For each, it copies the live task definition,
 changes only the image and registers it as a new revision.
 
-### API, with `brain_serving` off (Elastic Beanstalk)
+### API
 
-```sh
-# 1. The release must still exist.
-aws elasticbeanstalk describe-application-versions --application-name "$EB_APP" \
-  --version-labels "$SHA" --query 'ApplicationVersions[0].VersionLabel' --output text
-aws ecr describe-images --repository-name logjam-api --image-ids imageTag="$SHA"
-
-# 2. Repin the task definitions that run the API image.
-infra/scripts/pin-release.sh "$REGISTRY/logjam-api:$SHA"
-
-# 3. Swap Elastic Beanstalk back once it is Ready (it refuses an update while
-#    another is under way). Single instance: the API is down during the swap
-#    and comes back cold, usually within two minutes.
-aws elasticbeanstalk wait environment-updated --environment-names "$EB_ENV"
-aws elasticbeanstalk update-environment --environment-name "$EB_ENV" --version-label "$SHA"
-aws elasticbeanstalk wait environment-updated --environment-names "$EB_ENV"
-
-# 4. Check.
-curl -s https://api.logjamnsw.com/health
-curl -s https://api.logjamnsw.com/meta | jq -r .sha   # $SHA, or null for a release built before /meta reported one
-```
-
-Never run a migration as part of an API rollback.
-
-### API, with `brain_serving` on (the brain)
-
-Elastic Beanstalk plays no part. The brain runs whatever its release pointer
+The brain runs whatever its release pointer
 names, so the rollback is the pointer plus the task definitions. Run from a
 checkout of the repository (for the two scripts and the sha's `api.env`),
 with credentials that can write the signals bucket.
@@ -214,8 +178,8 @@ curl -s https://api.logjamnsw.com/meta | jq -r .sha   # $SHA
 If `/meta` still shows another sha after five minutes, read the brain's
 `status.json` (`aws s3 cp "s3://$SIGNALS/status.json" -`): its `api_sha` is what
 the host runs, and the host's release agent log is on the brain (Session
-Manager, `journalctl -u brain-release`). While `brain_public` is `false`,
-`/meta` on the public URL is still Elastic Beanstalk's: check `status.json`
+Manager, `journalctl -u brain-release`). While `brain_serving` is `false`,
+the brain's API is stopped and `/meta` answers nothing: check `status.json`
 instead.
 
 ### Frontend
@@ -251,18 +215,15 @@ infra/scripts/pin-release.sh "$REGISTRY/logjam-topo-worker:$SHA"
 
 ## What is not rolled back here
 
-- **The database.** Fix forward. For a disaster, restore RDS to a new
-  instance from a point in time (hours; data since that point is lost).
+- **The database.** Fix forward. For a disaster, restore the brain from its
+  backups to a chosen time ([brain.md](brain.md), "Rewinding to a point in
+  time"); data since that point is lost.
 - **Mobile.** An over-the-air update is rolled back by republishing the
   previous update group on its channel (`eas update:republish`). An installed
   binary cannot be rolled back; ship a fix.
-- **The cutover itself.** Going back from the brain to Elastic Beanstalk is
-  reverting the `brain_public` and `brain_serving` lines of `brain.auto.tfvars`
-  (in that order) and some hand steps; writes made on the brain are not on
-  RDS. That is the cutover runbook's, not this page's.
 - **Terraform.** Revert the PR, merge, apply. A destroyed stateful resource is
-  not revertible; `prevent_destroy` and snapshots are the net (RDS's deletion
-  protection is off from the teardown's first pull request on).
+  not revertible; `prevent_destroy` on the brain's data volume and address, and
+  the backups, are the net.
 
 ## After a rollback
 

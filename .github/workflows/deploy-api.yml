@@ -36,8 +36,6 @@ concurrency:
 
 env:
   ECR_REPOSITORY: logjam-api
-  EB_APPLICATION: ${{ secrets.EB_APPLICATION_NAME }}
-  EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
 
 jobs:
   # Skips a commit that is no longer main's head (or when that cannot be
@@ -140,10 +138,7 @@ jobs:
       id-token: write
       contents: read
     outputs:
-      swapped: ${{ steps.swap.outputs.swapped || steps.swap_brain.outputs.swapped }}
-      # How many 10-second tries the smoke job gives (the brain's release
-      # agent needs longer than Elastic Beanstalk's swap), from the mode table.
-      attempts: ${{ steps.mode.outputs.attempts }}
+      swapped: ${{ steps.swap.outputs.swapped }}
 
     steps:
       - name: Checkout code
@@ -153,13 +148,15 @@ jobs:
           # (github.sha under workflow_run can be a newer, unvalidated commit).
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # Where this release goes, from the same file Terraform reads: one table
-      # in infra/scripts/brain-setting.sh (--mode) decides every output below
-      # and is tested there; nothing here decides. It fails rather than guess:
-      # a file it cannot read stops the run here, with prod untouched.
-      - name: Where does this release go?
-        id: mode
-        run: infra/scripts/brain-setting.sh --mode | tee -a "$GITHUB_OUTPUT"
+      # Whether the brain's API runs, from the same file Terraform reads (a
+      # file the script cannot read stops the run here, with prod untouched).
+      # It decides whether a smoke test can see this release.
+      - name: Is the brain serving?
+        id: serving
+        run: |
+          set -euo pipefail
+          serving=$(infra/scripts/brain-setting.sh brain_serving)
+          echo "serving=$serving" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
@@ -173,8 +170,8 @@ jobs:
 
       # Join the two per-architecture images into one manifest list under the
       # <sha> and latest tags. Everything below sees the same reference as
-      # before: <registry>/logjam-api:<sha>, which now pulls the right
-      # architecture on x86 (EB, Fargate) and on arm64.
+      # before: <registry>/logjam-api:<sha>, which pulls the right
+      # architecture on x86 (Fargate) and on arm64 (the brain).
       - name: Publish the multi-architecture image
         id: build-image
         env:
@@ -197,26 +194,10 @@ jobs:
         # Every family that runs this image: infra/scripts/pin-release.sh.
         run: infra/scripts/pin-release.sh "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      # The migration runs on the revision just pinned, against the database
-      # that revision names. Terraform's apply for a change to
-      # brain.auto.tfvars is a separate workflow that starts at the same merge:
-      # if it has not landed, the revision still names the other database and
-      # this stops before the migration reaches it.
-      - name: The migrate task definition names the database this mode uses
-        env:
-          SERVING: ${{ steps.mode.outputs.serving }}
-        run: |
-          set -euo pipefail
-          MODE=off
-          [ "$SERVING" = true ] && MODE=on
-          aws ecs describe-task-definition --task-definition logjam-api-migrate \
-            --query taskDefinition --output json \
-            | infra/scripts/brain-setting.sh --check-taskdef "$MODE"
-
       # Gated pre-deploy migration. Run `prisma migrate deploy`
       # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
-      # the EB swap on its exit code. A failing migration aborts the deploy here
-      # (EB untouched, old version keeps serving) instead of crash-looping the
+      # the release pointer on its exit code. A failing migration aborts the
+      # deploy here (the old release keeps serving) instead of crash-looping the
       # new container at boot. boot.ts does not migrate.
       #
       # SUBNETS mirrors network.tf's `data "aws_subnet" "worker_a"/"worker_b"`,
@@ -226,8 +207,8 @@ jobs:
       # hardcoded id here silently pointing at nothing while Terraform is
       # perfectly happy. Look it up by the name Terraform sets (network.tf
       # `aws_security_group.worker`, name = logjam-worker-sg) — the one identity
-      # that survives replacement. This is the SG that RDS ingress admits, so a
-      # wrong or empty value must abort, never fall back.
+      # that survives replacement. This is the SG the brain's Postgres port admits,
+      # so a wrong or empty value must abort, never fall back.
       - name: Run DB migrations (gated pre-deploy)
         env:
           CLUSTER: logjam-cluster
@@ -263,68 +244,17 @@ jobs:
             --query 'tasks[0].stoppedReason' --output text)
           echo "Migrate task exit code: $EXIT_CODE (stoppedReason: $STOP_REASON)"
           if [ "$EXIT_CODE" != "0" ]; then
-            echo "::error::DB migration failed (exit $EXIT_CODE) — aborting deploy; EB unchanged. See /ecs/logjam-api-migrate logs."
+            echo "::error::DB migration failed (exit $EXIT_CODE) — aborting deploy; the release pointer is unchanged. See /ecs/logjam-api-migrate logs."
             exit 1
           fi
-          echo "Migrations applied cleanly; proceeding to EB deploy."
-
-      - name: Update Dockerrun.aws.json with new image
-        if: steps.mode.outputs.serving != 'true'
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          sed -i "s|logjam-api:latest|logjam-api:$IMAGE_TAG|g" api/Dockerrun.aws.json
-
-      # Bundle .ebextensions with the Dockerrun so env-var option_settings
-      # (e.g. the DB_* connection parts) apply atomically with the version
-      # that requires them.
-      - name: Create deployment bundle
-        if: steps.mode.outputs.serving != 'true'
-        run: |
-          cd api && zip -r deploy.zip Dockerrun.aws.json .ebextensions
-
-      # From here EB may be serving the new version, or be half way to it, so
-      # a failure below still gets the smoke test (and its rollback). A
-      # failure above left the old version serving untouched.
-      - name: Mark the swap
-        id: swap
-        if: steps.mode.outputs.serving != 'true'
-        run: echo "swapped=true" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy to Elastic Beanstalk
-        if: steps.mode.outputs.serving != 'true'
-        uses: einaregilsson/beanstalk-deploy@a67044fa332b06e68985b06d361934c28ab09007 # v23
-        with:
-          aws_access_key: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ env.AWS_SESSION_TOKEN }}
-          application_name: ${{ env.EB_APPLICATION }}
-          environment_name: ${{ env.EB_ENVIRONMENT }}
-          version_label: ${{ github.event.workflow_run.head_sha }}
-          region: ${{ secrets.AWS_REGION }}
-          deployment_package: api/deploy.zip
-          # Re-running a failed deploy on the same commit must reuse the already
-          # uploaded version instead of erroring on the duplicate label.
-          use_existing_version_if_available: true
-          # The action's default post-update health wait is 30s, and this
-          # environment does not reliably recover that fast: single-instance
-          # environments take the whole service down during the swap and come
-          # back cold. A deploy reported red while it is actually green is worse
-          # than a slow one: it trains everyone to disbelieve red, so give it real
-          # headroom rather than shaving it.
-          wait_for_environment_recovery: 180
-          wait_for_deployment: true
+          echo "Migrations applied cleanly; proceeding to the release pointer."
 
       # The brain's release pointer: the sha just deployed and infra/brain/api.env,
-      # which the brain's release agent makes its API match once it serves.
-      # With brain_serving off it comes after the EB step on purpose: EB is
-      # what serves, so a failure here must not hold back that release, but it
-      # still turns the run red. With it on, the pointer IS the release: the
-      # EB steps are skipped, and the swap is marked once the pointer is
-      # written. The role may only put this one key and not read the bucket
-      # (brain_ecr.tf), so there is no read-back; the file is made first because
-      # a failing script piped into `aws s3 cp -` would upload an empty pointer.
+      # which the brain's release agent makes its API match once it serves. The
+      # pointer IS the release, and the swap is marked once it is written. The
+      # role may only put this one key and not read the bucket (brain_ecr.tf),
+      # so there is no read-back; the file is made first because a failing
+      # script piped into `aws s3 cp -` would upload an empty pointer.
       - name: Write the brain's release pointer
         env:
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
@@ -335,25 +265,24 @@ jobs:
           aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
             --content-type application/json
 
-      # The brain's swap happens on its own clock: the release agent makes the
+      # The swap happens on the brain's own clock: the release agent makes the
       # API match the pointer within its poll (30 s) plus an image pull. The
       # smoke test below waits for the public /meta to name this sha, which
-      # only means something once brain_public has moved CloudFront: in
-      # between, the public URL is still Elastic Beanstalk's, no smoke test
-      # can see the brain, and a failing one would roll back a healthy release.
-      - name: Mark the swap (the brain)
-        id: swap_brain
-        if: steps.mode.outputs.swap_brain == 'true'
+      # only means something while the brain's API runs: with brain_serving off
+      # no smoke test can see the release, and a failing one would roll back a
+      # healthy pointer.
+      - name: Mark the swap
+        id: swap
+        if: steps.serving.outputs.serving == 'true'
         run: echo "swapped=true" >> "$GITHUB_OUTPUT"
 
-      - name: The brain is released but not public
-        if: steps.mode.outputs.serving == 'true' && steps.mode.outputs.verify != 'true'
-        run: echo "::notice::brain_public is off, so the public URL is still Elastic Beanstalk's and no smoke test can see this release. The pointer is written; check the brain through the host."
+      - name: The brain is released but not serving
+        if: steps.serving.outputs.serving != 'true'
+        run: echo "::notice::brain_serving is off, so the brain's API is stopped and no smoke test can see this release. The pointer is written; check the brain through the host."
 
   # The smoke test is also the wait for the brain: CI may not read the brain's
   # signals bucket (infra/AGENTS.md), so "the brain runs this sha" is what the
-  # public /meta says, polled for 5 minutes (the rehearsal took 49 seconds;
-  # Elastic Beanstalk's swap gets the usual 3).
+  # public /meta says, polled for 5 minutes (the rehearsal took 49 seconds).
   smoke:
     needs: deploy
     if: ${{ !cancelled() && needs.deploy.outputs.swapped == 'true' }}
@@ -361,9 +290,9 @@ jobs:
     with:
       target: api
       sha: ${{ github.event.workflow_run.head_sha }}
-      attempts: ${{ fromJSON(needs.deploy.outputs.attempts || '18') }}
+      attempts: 30
 
-  # Single-instance EB: a bad release is total downtime until someone acts, so
+  # One host: a bad release is total downtime until someone acts, so
   # a failed smoke test returns to the release that was live before this run.
   # If that rollback's own smoke test fails, it stops there (rollback.yml never
   # calls anything back).

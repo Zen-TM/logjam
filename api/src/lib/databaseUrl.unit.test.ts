@@ -47,8 +47,39 @@ describe("composeDatabaseUrl", () => {
 describe("migrateDatabaseUrl", () => {
   const url = "postgresql://u:p@db:5432/n";
 
-  it("leaves the URL as it is without an explicit DATABASE_SSL_CA (the RDS path)", () => {
+  it("leaves the URL as it is outside production without an explicit DATABASE_SSL_CA", () => {
     expect(migrateDatabaseUrl(url, {})).toBe(url);
+    expect(migrateDatabaseUrl(url, { NODE_ENV: "development" })).toBe(url);
+  });
+
+  // Mutation: dropping the NODE_ENV default in migrateDatabaseUrl
+  // (prisma.config.ts): a production migrate with no certificate configured
+  // would connect in the clear.
+  it("verifies against the brain's certificate in production by default", () => {
+    expect(migrateDatabaseUrl(url, { NODE_ENV: "production" })).toBe(
+      `${url}?sslmode=require&sslaccept=strict&sslcert=%2Fapp%2Fbrain-ca.pem`,
+    );
+  });
+
+  // Mutation: `??` back in place of `||` for DATABASE_SSL_CA in migrateDatabaseUrl:
+  // an empty value is then a certificate named "", and production connects in the clear.
+  it("reads an empty DATABASE_SSL_CA as unset: production still verifies", () => {
+    expect(
+      migrateDatabaseUrl(url, { NODE_ENV: "production", DATABASE_SSL_CA: "" }),
+    ).toBe(
+      `${url}?sslmode=require&sslaccept=strict&sslcert=%2Fapp%2Fbrain-ca.pem`,
+    );
+  });
+
+  // Mutation: remove the production check for DATABASE_SSL=disable in
+  // migrateDatabaseUrl: a production migrate then returns the plain URL.
+  it("refuses DATABASE_SSL=disable in production", () => {
+    expect(() =>
+      migrateDatabaseUrl(url, {
+        NODE_ENV: "production",
+        DATABASE_SSL: "disable",
+      }),
+    ).toThrow(/forbidden in production/);
   });
 
   it("leaves the URL as it is when DATABASE_SSL=disable", () => {

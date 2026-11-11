@@ -26,10 +26,11 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   Terraform; its value is set by hand and tasks read the resource's `.arn`. A
   literal ARN is only for a secret made outside Terraform.
 - **CI owns deploy-time fields:** image revisions (`infra/scripts/pin-ecs-task-image.sh`),
-  the EB environment's `setting`s and the frontend bucket's contents. Terraform
+  the brain's release pointer and the frontend bucket's contents. Terraform
   ignores them; never make it manage them.
-- **A plan that destroys or replaces a stateful resource** (RDS, S3, Cognito,
-  CloudFront, EB) is a stop: ask. Never remove `prevent_destroy` to get past one.
+- **A plan that destroys or replaces a stateful resource** (the brain's data
+  volume, S3, Cognito, CloudFront) is a stop: ask. Never remove `prevent_destroy`
+  to get past one.
 - **The CI roles' privacy Deny** (`local.ci_readonly_privacy_deny` in
   `terraform/envs/prod/iam.tf`) stays on every read-only role and in the apply
   role's boundary: CI never reads user data, audit objects, logs or secret
@@ -153,17 +154,6 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   into the live repository and breaks every later restore. Keep both. Guard:
   the drill scenario of `brain/tests/e2e.sh` (the repository listing must not
   change).
-- **The cutover's data copy** (`brain/postgres/copy.sh`, `brain_copy.tf`) is
-  started by a person, never on a schedule, and never against a serving brain:
-  it stops unless `status.json` is fresh, says `serving` is false and names no
-  running API (`api_sha` null; read before the dump and again before the
-  restore), because a copy then replaces live data with RDS's frozen copy. It
-  also stops on a source that is not read-only unless `COPY_ALLOW_LIVE_SOURCE=1`
-  (a rehearsal; the window's copy never sets it). Keep both reads, keep certificate
-  verification on both ends, and keep its task role to `s3:GetObject` on
-  `status.json`. Guards: `brain_copy_is_never_scheduled`,
-  `brain_copy_task_reads_only_status_json`, and the copy scenario of
-  `brain/tests/e2e.sh`.
 - **The brain's watchdog never reads a backup object.** Its role may `GetObject`
   only `status.json` and `drill.json` in the signals bucket and `ListBucket` the
   backup bucket under the WAL archive's prefix; it is the function an alarm and a
@@ -182,22 +172,19 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   (`scripts/brain-setting.sh`). Flip a setting by changing its line there:
   never a variable default, `-var` or another tfvars file, which the
   workflows would not see (and `terraform test` loads this file, so the suite
-  pins every setting it carries at the top of `guards.tftest.hcl`). The order
-  is image tag, bootstrap, `brain_serving`, `brain_public`; `brain_public`
-  needs `brain_serving`, which needs a tag. Guards:
+  pins every setting it carries at the top of `guards.tftest.hcl`).
+  `brain_serving` needs a tag. Guards:
   `brain_settings_are_one_file_and_read_by_the_workflows`,
-  `brain_variable_defaults_are_inert`, `brain_public_without_brain_serving_is_refused`,
+  `brain_variable_defaults_are_inert`,
   `brain_serving_without_an_image_tag_is_refused`, and `brain-setting.sh --self-test`.
-- **What `brain_serving` and `brain_public` move.** `brain_serving` points every
-  task definition with a `DB_HOST` at the brain (`local.db_environment` in
-  `ecs.tf`: a new definition takes it, never a literal host) and makes the
-  deploy and rollback workflows release to the brain, so every Elastic
-  Beanstalk step carries `if: steps.mode.outputs.serving != 'true'`.
-  `brain_public` alone moves CloudFront's API origin and the API request-log
-  filters (`local.api_log_group`): between the two the brain's API runs and
-  serves nobody. Guards: `brain_serving_points_every_database_task_at_the_brain`,
-  `brain_public_points_cloudfront_at_the_brain`,
-  `brain_is_dormant_for_cloudfront_and_tasks`, and the workflow check in
+- **Prod's database and API origin are the brain, whatever the settings say.**
+  Every task definition with a `DB_HOST` takes it from `local.db_environment` in
+  `ecs.tf` (a new definition takes it, never a literal host), and CloudFront's
+  API origin is the brain's Elastic IP name. Neither follows a setting, so a root
+  with no brain (empty `brain_pg_image_tag`) does not plan: that is by design.
+  `brain_serving` only decides whether the API runs on the host (the instance tag)
+  and whether the deploy and rollback workflows wait for the release to be live.
+  Guard: `prod_runs_on_the_brain`, and the workflow checks in
   `brain-setting.sh --self-test`.
 - **The cost-ceiling deny never covers the brain's backup or signals bucket.**
   AWS Budgets attaches it to the brain's role, which pgBackRest shares with the

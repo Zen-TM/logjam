@@ -1,8 +1,7 @@
 # The brain: running it
 
-The brain is Logjam's API and its Postgres on one EC2 instance. It replaces
-Elastic Beanstalk and RDS; until the cutover
-([brain-cutover.md](brain-cutover.md)) it runs beside them, serving nobody.
+The brain is Logjam's API and its Postgres on one EC2 instance. It replaced
+Elastic Beanstalk and RDS, which are gone ([what to delete by hand](#the-retired-stack-what-to-delete-by-hand)).
 Why it is built this way, and the rules that hold it up:
 [ADR 0047](../decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md).
 
@@ -15,9 +14,10 @@ Why it is built this way, and the rules that hold it up:
 - **Releases** are a file: CI writes `release.json` to a bucket, a timer on the
   host makes the running API match it. CI never has a shell on the host, and
   neither does anyone but the maintainer, through Session Manager (no SSH).
-- **Everything is a setting** in `infra/terraform/envs/prod/brain.auto.tfvars`,
-  flipped one line at a time by a merge. Until its line is flipped a thing does
-  not exist, and a built brain does not serve.
+- **Its settings** are in `infra/terraform/envs/prod/brain.auto.tfvars`,
+  changed one line at a time by a merge: the image tag, the data volumes, the
+  instance size, `brain_serving` (whether its API runs) and the one-time
+  `brain_bootstrap`.
 - **An outside check** (a Lambda every 5 minutes) and a few CloudWatch alarms
   email the maintainer; [alarms.md](alarms.md) says what each one means.
 
@@ -134,58 +134,39 @@ Limits, all met on the scratch copy:
 - AWS keeps a command's text and output for 30 days, and records only that a
   command was sent and by whom, not what it said.
 
-## Bringing it up from nothing
+## Rebuilding it when there is none
 
-Do these in this order; each step says why. Nothing here changes what users see:
-the brain serves nobody until the cutover.
+When the instance and its data disk are both gone, the data comes back from
+the backups bucket, never from a copy: nothing else holds it. The bucket is
+versioned and Object Lock keeps every version for 7 days, so a deleted host
+does not take it with it. Restoring into a blank disk ran on a scratch copy
+([Losing the disk or the zone](#losing-the-disk-or-the-zone) has the timings);
+this whole sequence is **not yet run anywhere**. Do these in this order; each
+step says why.
 
-1. **Land the stack: one merge.** It arrives as a single squash, and the merge
-   applies it (`terraform-apply.yml`): the buckets, roles and log groups, the
-   audit trail's wider selectors, the cost ceiling, and the one change to
-   something live, the user pool's pre sign-up function (the monthly cap on new
-   accounts). With the settings dormant nothing that runs is created; that is
-   step 4. The audit trail's change is what makes every read of a backup, and
-   every shell on the host, a recorded event
-   ([the policy](../DATA-ACCESS-POLICY.md) is untrue without it), and it takes
-   about three minutes to take effect (measured).
-
-   The same merge starts a deploy, whose last step writes `release.json` into
-   the signals bucket that the apply has just created; the apply finishes well
-   before the deploy reaches that step. If the step did fail because the bucket
-   was not there yet, the release itself is live and smoke-tested: re-run the
-   failed job, or let the next deploy write the file (**not yet run anywhere**).
-2. **Merge the boundary change and apply it by hand, before any real data
-   reaches the brain.** The stack keeps three Deny statements (a shell on an
-   instance or in a task, a command's output, a disk snapshot's blocks) out of
-   one place, the apply role's own boundary, because `terraform-apply.yml`
-   refuses a whole plan that edits that boundary
-   ([infra/AGENTS.md](../../infra/AGENTS.md)). They arrive in a pull request of
-   their own. Until it is applied, the role CI applies with could open a shell
-   on the brain; no other CI role can. Merge it: its apply run says
-   `refused, nothing applied`, as it should. Then, from a checkout of `main`,
-   from the repository root, with the maintainer's credentials (**run on
-   prod**, 2026-11-11):
+1. **Check the foundations are still there.** Terraform made the buckets,
+   roles, log groups and the audit trail (`terraform-apply.yml`), and the
+   apply role's boundary was applied by hand once (`DenySnapshotBlocks`,
+   `DenyShells` and `DenyCommandOutput`, kept out of CI's reach because
+   `terraform-apply.yml` refuses a plan that edits that boundary;
+   [infra/AGENTS.md](../../infra/AGENTS.md)). A plan of `main` must show the
+   brain and nothing else to create: stop if it shows the bucket, the roles or
+   the boundary. Read it, from a checkout of `main`, from the repository root,
+   with the maintainer's credentials (the commands ran on a scratch copy; that
+   the plan shows the brain and nothing else is not yet run anywhere):
 
    ```sh
    for l in cognito-email-sender cognito-pre-signup; do
      npm --prefix infra/lambda/$l ci && npm --prefix infra/lambda/$l run build
    done
    terraform -chdir=infra/terraform/envs/prod init
-   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/boundary.plan
+   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/rebuild.plan
    ```
-
-   Read the plan. It must change `aws_iam_policy.github_actions_apply_boundary`
-   and nothing else, adding `DenySnapshotBlocks`, `DenyShells` and
-   `DenyCommandOutput`; stop if it shows anything else. Then:
-
-   ```sh
-   terraform -chdir=infra/terraform/envs/prod apply /tmp/boundary.plan
-   ```
-3. **Publish the Postgres image and note its tag.** Merging a change under
-   `infra/brain/postgres/` publishes it (`publish-brain-postgres.yml`); to
-   publish what is on `main` now: `gh workflow run publish-brain-postgres.yml --ref main`.
-   The tag is the commit's sha, and tags cannot be overwritten, so Terraform
-   pins one. Find the newest (**run on prod**, 2026-11-11):
+2. **Pick the Postgres image tag.** `brain_pg_image_tag` in `brain.auto.tfvars`
+   already names one; tags cannot be overwritten, so it still exists unless
+   someone deleted it. To publish what is on `main` now:
+   `gh workflow run publish-brain-postgres.yml --ref main`. The newest tag
+   (not yet run anywhere):
 
    ```sh
    aws ecr describe-images --repository-name logjam-brain-postgres \
@@ -193,39 +174,34 @@ the brain serves nobody until the cutover.
    ```
 
    It must be a commit that contains every change to `infra/brain/postgres/`
-   you want the brain to run: a rewind, for one, needs an image from after the
+   the brain needs: a rewind, for one, needs an image from after the
    point-in-time change.
-4. **The settings pull request: create the brain.** In
-   `infra/terraform/envs/prod/brain.auto.tfvars` set `brain_pg_image_tag` to the
-   tag and `brain_bootstrap = true`, and nothing else (the instance type is
-   already `t4g.micro`). The bootstrap flag is permission for the one boot that
-   creates an empty database; without a backup in the repository, no flag
-   means the boot refuses. Merge it; the plan comment shows the instance, the
-   data volume, the Elastic IP and the alarms being added, and the apply takes
-   about a minute. Then watch (all run on a scratch copy, then on prod,
-   2026-11-11):
-   - about 75 seconds for the host's first-boot script, then 12 seconds for the
-     bootstrap itself (disk, database, roles, the first full backup, 2 seconds
-     on a small database); on prod the boot script started 100 seconds after
-     the instance launched and the first full backup was in the bucket 13
-     seconds later;
-   - `brain 'cat /run/brain/boot-mode'` ends `bootstrap`;
+3. **Create the host: one pull request.** A deleted instance comes back with
+   any apply while the tag is set; a deleted data volume needs the next key in
+   `brain_data_volumes`, made current, as in [Losing the disk or the
+   zone](#losing-the-disk-or-the-zone). **Leave `brain_bootstrap` false.** It is
+   permission to make an empty database where no backup exists, which a rebuild
+   is not: with a backup in the repository a blank disk restores whatever it
+   says, and without one the boot refuses, which is the right answer to a
+   repository that cannot be read. Merge it; the plan comment shows the
+   instance, the volume and the alarms being added, and the apply takes about
+   a minute. Then watch (all run on a scratch copy, 2026-11-11):
+   - about 75 seconds for the host's first-boot script, then the restore
+     (about 30 seconds for a 1.7 GB database, then a new full backup of about a
+     minute before the API starts);
+   - `brain 'cat /run/brain/boot-mode'` ends `restore`;
    - `brain 'docker ps --format "{{.Names}} {{.Status}}"'` shows
      `brain-postgres-1` healthy;
-   - the status file (above) appears within a minute and names `bootstrap`;
+   - the status file (above) appears within a minute and names `restore`, with
+     `last_restore_lag_seconds`, the outage plus the loss;
    - a new object lands in the backup bucket about every 60 seconds:
      `aws s3 ls s3://logjam-brain-backups-620853681701/logjam/archive/logjam/ --recursive | tail -3`.
 
    If the boot ends `failed` or `refused`, read `brain 'journalctl -b -u brain-boot --no-pager | tail -40'`
-   and fix the cause. Do not set `brain_bootstrap` to silence a refusal: it
-   refuses precisely when a backup exists or the repository cannot be read.
-5. **Turn the bootstrap flag off again**: a second pull request setting
-   `brain_bootstrap = false`. It is an in-place tag change (2 seconds,
-   measured), not a replacement. A blank disk with a backup restores whatever
-   this says, but a brain that can bootstrap is a brain that may one day make
-   an empty database where it should have refused.
-6. **Start the restore drill once by hand**, so the first verdict exists
-   without waiting for 04:30 and the watchdog's `drill_missing` clears (run on a
+   and fix the cause. A failed restore leaves the new volume half made: add a
+   further key and make that current rather than retry on it.
+4. **Start the restore drill once by hand**, so a verdict exists without
+   waiting for 04:30 and the watchdog's `drill_missing` clears (run on a
    scratch copy, with scratch names):
 
    ```sh
@@ -242,56 +218,33 @@ the brain serves nobody until the cutover.
    ```
 
    Look for exit code `0` and `"ok": true`, a `backup_label`, `restore_seconds`
-   (7 to 8 seconds for a 28 MB database, 33 for 1.7 GB; the whole task about
-   30 seconds, 21 of them pulling the image), `tables_read` (35 there), and no
-   `error`. Before step 9's copy the database has no tables, so `tables_read`
-   is `0` and that is a pass; after the copy it is the number of tables.
-   Anything else is a backup that does not restore: stop and read
-   `/logjam/brain/drill` before going further.
-7. **Fetch the certificate and finish its pull request.** The brain's
-   certificate is made at first boot and cannot exist before. The images that
-   run against the brain have to carry its public half, at `/app/brain-ca.pem`,
-   or with serving on a task fails at start (never silently unverified). A draft
-   pull request already carries the image changes; it is red until the file is
-   in it. Fetch the file from the host (run on a scratch copy):
+   (33 for 1.7 GB; the whole task about 30 seconds, 21 of them pulling the
+   image), `tables_read` (the number of tables) and no `error`. Anything else
+   is a backup that does not restore: stop and read `/logjam/brain/drill`.
+5. **Check the certificate is the one the images carry.** The restore brings
+   the same certificate back inside the backup, so the committed public half
+   (`brain-ca.pem` in `infra/brain/` and `topo/`) still fits. It does not fit
+   if the Elastic IP changed (its DNS name is in the certificate): then the
+   API and the workers fail at start, never silently unverified. Compare the
+   host's with the committed one (the host's file was fetched on a scratch copy;
+   the comparison is not yet run anywhere):
 
    ```sh
    CID=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript \
      --parameters 'commands=["cat /data/postgres/server.crt"]' --query Command.CommandId --output text)
    aws ssm wait command-executed --command-id "$CID" --instance-id "$IID"
    aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" \
-     --query StandardOutputContent --output text > infra/brain/brain-ca.pem
-   cp infra/brain/brain-ca.pem topo/brain-ca.pem
+     --query StandardOutputContent --output text | cmp - infra/brain/brain-ca.pem && echo same
    openssl x509 -in infra/brain/brain-ca.pem -noout -subject -enddate -ext subjectAltName
    ```
 
-   The second copy is for the topo worker image, whose build cannot reach
-   outside `topo/`; CI fails if the two files differ.
-
-   Look for a subject and one `DNS:` name equal to `ec2-…ap-southeast-2.compute.amazonaws.com`
-   (`terraform -chdir=infra/terraform/envs/prod output brain_public_dns` prints the
-   same name), plus
-   `postgres` and `localhost`, and an end date ten years out. The file is
-   public, so it is safe to commit. The rehearsal copy (step 9) then proves it is
-   the brain's: a wrong file fails verification and the copy refuses. Commit both copies to
-   the draft branch, take it out of draft, merge. That deploys the API image and,
-   because the change touches `topo/`, the topo worker image. The deploys start
-   when CI on `main` has finished, about 20 minutes after the merge (seen on
-   prod, 2026-11-11). Check both deploys went green, and that the images carry
-   it (not yet run anywhere; on prod the same was read from each image's build
-   history instead):
-
-   ```sh
-   REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-2.amazonaws.com
-   aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
-   for r in logjam-api logjam-topo-worker; do
-     docker run --rm --platform linux/amd64 --entrypoint ls "$REGISTRY/$r:latest" /app/brain-ca.pem
-   done
-   ```
-
-   Each prints `/app/brain-ca.pem`. The file is not part of the host files, so
-   committing it does not replace the instance.
-8. **Check `release.json` names the live release.** The release agent refuses
+   `same`, and a `DNS:` name equal to `terraform -chdir=infra/terraform/envs/prod output brain_public_dns`.
+   If it differs, commit the host's file as both copies and merge, which
+   deploys the API image and the topo worker image
+   ([0048](../decisions/0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md)).
+   The file is not part of the host files, so committing it does not replace
+   the instance.
+6. **Check `release.json` names the live release.** The release agent refuses
    to start the API when serving is on and it cannot read the file, and it runs
    whatever commit the file names. CI cannot read the bucket, so only you can
    look (**run on prod**, 2026-11-11: the same commit):
@@ -301,26 +254,26 @@ the brain serves nobody until the cutover.
    curl -s https://api.logjamnsw.com/meta | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
    ```
 
-   The two lines must be the same commit. The deploy of step 7 writes the
-   file. They differ after a deploy that was rolled back: a rollback to a
+   The two lines must be the same commit (the second answers once the API is
+   up). They differ after a deploy that was rolled back: a rollback to a
    release from before the brain cannot rewrite the file, which then still
    names the release that failed. Deploy once more (merge anything, or run
    `deploy-api.yml` on `main`) and look again.
-9. **Rehearse the copy** against the brain while it is not serving, as
-   [brain-cutover.md](brain-cutover.md#before-the-window) says. It is the first
-   time real data reaches the brain, which is why step 2 comes first. On prod
-   the first copy lands in a brain that was bootstrapped empty.
-10. **Check the watchdog is green.** Its log group's latest line is
-    `{"failed": []}`. The first day can show `drill_missing` (cleared by step 6)
-    and, in the first minutes, `status_missing`, `full_stale` and `wal_stale`.
-    `logjam-brain-watchdog-not-running` may also email once in its first
-    fifteen minutes, before the check's first run has been counted, and clear by
-    itself.
+7. **Turn serving on only once the data is checked.** `brain_serving` stays
+   `false` until the restore's `last_restore_lag_seconds` and the drill say the
+   data is the data you expect: the API's background sweeps delete media that
+   has no row in *their own* database, and the media bucket has no versioning
+   to get a photo back. Then set `brain_serving = true` in a pull request.
+8. **Check the watchdog is green.** Its log group's latest line is
+   `{"failed": []}`. The first minutes can show `status_missing`, `full_stale`
+   and `wal_stale`, and `logjam-brain-watchdog-not-running` may email once in
+   its first fifteen minutes, before the check's first run has been counted,
+   and clear by itself.
 
 ## A release and a rollback
 
-Merging to `main` deploys. With `brain_serving` on, the deploy pins the task
-definitions, migrates the brain's database, writes `release.json`, and waits up
+Merging to `main` deploys. The deploy pins the task definitions, migrates the
+brain's database, writes `release.json`, and (with `brain_serving` on) waits up
 to 5 minutes for the public `/meta` to name the new sha; the brain's timer
 (every 30 seconds) then pulls the image and recreates the API container. Measured
 on the finished stack at 40 requests a second (2026-11-11): the host pulls first,
@@ -481,7 +434,7 @@ that was live.
 ## Deleting an old volume
 
 A volume left by a recovery or a rewind holds a full copy of the database until
-it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 7), and costs a
+it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 6), and costs a
 little. Delete it only when it is no longer the undo: after you are sure of the
 new database, and not before the next nightly full has run on it. Deleting it is
 final: its data cannot be recovered (the backups are what remain).
@@ -561,3 +514,91 @@ number to approach soon.
 
 Steps 3 and 4 are not built; the first two are the whole plan until the alarms
 say otherwise.
+
+## The retired stack: what to delete by hand
+
+Elastic Beanstalk and RDS were removed by Terraform (the teardown's two pull
+requests). [infra/AGENTS.md](../../infra/AGENTS.md) says AWS changes only
+through Terraform; the steps below are the exception, each for the reason
+beside it: Terraform never owned the thing (the Elastic Beanstalk service, the
+RDS console or an old hand step made it), it is deleted once, and importing it
+into Terraform only to remove it would add a resource to the code for a single
+deletion. One set of leftovers holds user data, so it goes first and **before
+the second pull request is merged**: [the policy](../DATA-ACCESS-POLICY.md)
+says the old stack and its snapshots are gone when that merge has applied, and
+that what remains is deleted by hand the same day.
+
+The maintainer's credentials; every command here is **not yet run anywhere**.
+The reads were run on 2026-11-11 (before the removal) and showed the first list
+below not empty.
+
+**Before the second pull request is merged**
+
+1. **Manual snapshots of the old database.** Nothing needs them once the
+   removal is decided, and `skip_final_snapshot` and `delete_automated_backups`
+   take only the instance's own; a snapshot was never in Terraform (it is made
+   by a console or CLI call), so no apply deletes one. List them, delete the
+   cutover snapshot (`logjam-cutover-final`) and any other the list shows (on
+   2026-11-11 there was also `logjam-db-final-2026-06-23-enc`, from the
+   encryption migration), then list again until it is empty:
+
+   ```sh
+   aws rds describe-db-snapshots --snapshot-type manual \
+     --query 'DBSnapshots[].[DBSnapshotIdentifier,DBInstanceIdentifier]' --output text
+   aws rds delete-db-snapshot --db-snapshot-identifier logjam-cutover-final
+   ```
+
+   The list must print nothing. A snapshot copied to another region or shared
+   with another account is listed there, not here: check
+   `aws rds describe-db-snapshot-attributes --db-snapshot-identifier <id>` for
+   a snapshot you delete.
+
+**After the apply of the second pull request, the same day**
+
+2. **The old database's leftovers.** Both lists must print nothing (the
+   instance's automated backups went with it); the log group, which the
+   instance was still publishing to while Terraform deleted it, must not exist,
+   and is deleted if RDS made it again:
+
+   ```sh
+   aws rds describe-db-instance-automated-backups \
+     --query 'DBInstanceAutomatedBackups[].[DBInstanceIdentifier,Status]' --output text
+   aws rds describe-db-snapshots --snapshot-type manual --query 'DBSnapshots[].DBSnapshotIdentifier' --output text
+   aws logs describe-log-groups --log-group-name-prefix /aws/rds/instance/logjam-db-enc
+   # if it is listed: aws logs delete-log-group --log-group-name /aws/rds/instance/logjam-db-enc/postgresql
+   ```
+3. **The Elastic Beanstalk log groups** keep the old API's request log (IPs
+   and paths) until their retention ends (14 days; the health log 7), because
+   the environment was set not to delete them. The Elastic Beanstalk service
+   made them, not Terraform, and there are ten, deleted once. To drop them now,
+   list (`aws logs describe-log-groups --log-group-name-prefix /aws/elasticbeanstalk`)
+   and `aws logs delete-log-group --log-group-name <name>` each.
+4. **The old instance role.** The apply took off it everything Terraform put
+   there, including `DatabasePasswordAccess`, whose by-hand attachment the
+   first pull request imported so that the apply detaches it before it deletes
+   the policy. What is left was made outside Terraform (the Elastic Beanstalk
+   service made the role and its instance profile, and an old hand step made
+   `logjam-api-ecs-runtask`) and is deleted once: its inline policies, its
+   managed attachments (`aws iam list-attached-role-policies --role-name logjam-eb-role`),
+   then the instance profile and the role, and the Elastic Beanstalk service
+   role `logjam-eb-service-role`:
+
+   ```sh
+   aws iam remove-role-from-instance-profile --instance-profile-name logjam-eb-role --role-name logjam-eb-role
+   aws iam delete-instance-profile --instance-profile-name logjam-eb-role
+   # detach each managed policy listed, delete each inline one, then:
+   aws iam delete-role --role-name logjam-eb-role
+   ```
+5. **The database subnet group and the old deploy bucket.** The subnet group
+   `logjam-db-subnet-group` was made with the instance in the RDS console, not
+   by Terraform, and is free and unused once the instance is gone
+   (`aws rds delete-db-subnet-group --db-subnet-group-name logjam-db-subnet-group`).
+   The bucket `elasticbeanstalk-ap-southeast-2-620853681701` was made by the
+   Elastic Beanstalk service and holds 556 application versions and rotated
+   logs: emptying it is a one-off that would need `force_destroy` in Terraform
+   for a bucket that is never recreated, so it is emptied and deleted by hand.
+   The CI privacy Deny still names it, so deleting it does not widen anything.
+6. **The two repository secrets** `EB_APPLICATION_NAME` and
+   `EB_ENVIRONMENT_NAME`: no workflow reads them. Secret values are set by hand, outside
+   Terraform ([0025](../decisions/0025-github-settings-in-terraform.md)), so they
+   are deleted by hand too. Delete them in the repository's settings (`gh secret delete <name>`).

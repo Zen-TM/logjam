@@ -147,8 +147,8 @@ resource "aws_instance" "brain" {
   user_data_base64            = base64gzip(local.brain_user_data)
   user_data_replace_on_change = true
 
-  # Hop limit 2: containers use the instance role through the metadata service,
-  # as the API does on Elastic Beanstalk today. Tags are readable there because
+  # Hop limit 2: containers use the instance role through the metadata service.
+  # Tags are readable there because
   # the host reads its two switches from them (infra/brain/host/lib.sh).
   metadata_options {
     http_endpoint               = "enabled"

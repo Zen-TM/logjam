@@ -465,22 +465,10 @@ resource "aws_iam_role" "github_actions_plan" {
 
 # ── Customer-managed policies ──────────────────────────────────────────────────
 
-resource "aws_iam_policy" "database_password_access" {
-  name = "DatabasePasswordAccess"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds!db-6fa40c95-2bbc-4ee1-8f4e-de15c5abe3c4-4f8qWr"
-    }]
-  })
-}
-
 # Lets the ECS execution role inject the Resend API key as SMTP_PASSWORD into the
-# worker task defs at launch, and the EB API resolve it at boot (Resend's SMTP
-# relay takes the key as its password; secret value lives in Secrets Manager,
-# never in Terraform/git).
+# worker task defs at launch, and the brain's role read it (Resend's SMTP relay
+# takes the key as its password; secret value lives in Secrets Manager, never in
+# Terraform/git).
 resource "aws_iam_policy" "resend_api_key_access" {
   name = "ResendApiKeyAccess"
   policy = jsonencode({
@@ -533,29 +521,6 @@ resource "aws_iam_policy" "topo_worker" {
 resource "aws_iam_role_policy_attachment" "ecs_exec_aws_managed" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
-  role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = aws_iam_policy.database_password_access.arn
-}
-
-# Attached to the Elastic Beanstalk instance role by hand. Imported so that the merge that
-# deletes the policy (the old stack's removal) detaches it first: IAM refuses to delete a
-# policy that is still attached.
-import {
-  to = aws_iam_role_policy_attachment.eb_instance_database_password
-  id = "logjam-eb-role/arn:aws:iam::620853681701:policy/DatabasePasswordAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "eb_instance_database_password" {
-  role       = "logjam-eb-role"
-  policy_arn = aws_iam_policy.database_password_access.arn
-}
-
-resource "aws_iam_role_policy_attachment" "eb_instance_resend_api_key" {
-  role       = "logjam-eb-role"
-  policy_arn = aws_iam_policy.resend_api_key_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_exec_resend_api_key" {
@@ -624,39 +589,13 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 }
 
 # NOTE: the broad AmazonS3FullAccess attachment was REMOVED (least-privilege).
-# The two S3 surfaces CI actually touches are scoped explicitly instead:
-#   - frontend SPA bucket   -> aws_iam_role_policy.gha_frontend_deploy (below)
-#   - EB app-version bucket -> aws_iam_role_policy.gha_eb_appversions (below); the
-#     beanstalk-deploy action uploads the deploy.zip there. NOTE this grant is
-#     not the only thing authorising that upload: the EB managed policy covers
-#     elasticbeanstalk-* buckets as a side effect and is still attached (the
-#     narrowing was tried and reverted — see gha_eb below). It is kept explicit
-#     so the dependency on that breadth is stated rather than assumed.
+# The one S3 surface CI touches is scoped explicitly instead: the frontend SPA
+# bucket (aws_iam_role_policy.gha_frontend_deploy, below), plus the brain's
+# release pointer (brain_ecr.tf). The Elastic Beanstalk deploy attachment
+# (AdministratorAccess-AWSElasticBeanstalk) went with the environment.
 # VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role S3 call
-# outside these two buckets; if found, widen the scoped grant, never re-add
-# the managed full-access policy.
-
-# The managed policy stays attached because Elastic Beanstalk performs actions
-# under the caller's identity while updating an environment. In addition to
-# beanstalk-deploy's direct API calls, Elastic Beanstalk itself invokes actions
-# such as:
-#   s3:PutObjectAcl, s3:DeleteObject  on the elasticbeanstalk-* bucket, under
-#                                     resources/environments/.../_runtime/...
-#   sns:CreateTopic, sns:Unsubscribe  on ElasticBeanstalkNotifications-Environment-*
-#   autoscaling:SuspendProcesses / ResumeProcesses
-#   cloudformation:Describe*, ListStackResources, ec2:DescribeLaunchTemplate*
-# ...and additional actions required during create, rebuild, or scale paths.
-#
-# An over-broad grant that is documented beats a broken deploy role.
-#
-# TO NARROW: enumerate a full successful deploy from CloudTrail under this
-# role, build the policy from that observed set, and verify it against a
-# throwaway EB environment rather than prod. Do not derive it from the
-# action's source alone.
-resource "aws_iam_role_policy_attachment" "gha_eb" {
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
-}
+# outside these buckets; if found, widen the scoped grant, never re-add the
+# managed full-access policy.
 
 # Plan-on-PR (terraform-plan.yml): terraform plan against envs/prod needs
 # broad Describe/Get/List across every managed service plus GetObject on the
@@ -743,14 +682,15 @@ locals {
       # names/coords), the access logs (viewers' IPs and request paths) and
       # any bucket added later. The exceptions: init reads the state file
       # (plans run -lock=false, so no write is needed), the frontend deploy
-      # and rollback read release files, and the deploy role's app versions
-      # live in the EB bucket.
+      # and rollback read release files, and the third, the old Elastic
+      # Beanstalk deploy bucket, is read by nothing now. It stays listed
+      # because this document is also the apply role's permission boundary,
+      # which only the maintainer applies (docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md): dropping
+      # it is a hand apply, for no gain while the bucket's logs are denied below.
       #
-      # Only buckets in this account: an EB configuration change is a
-      # CloudFormation update, and under an unscoped Deny it fails at "S3
-      # error: Access Denied", most likely reading an object in an AWS-owned
-      # bucket with the deploy role's credentials (which bucket is
-      # unconfirmed). User data lives only in this account.
+      # Only buckets in this account: AWS-owned buckets that a service reads
+      # with the caller's credentials stay readable. User data lives only in
+      # this account.
       {
         Sid    = "DenyObjectsByDefault"
         Effect = "Deny"
@@ -762,8 +702,8 @@ locals {
         ]
         Condition = { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
       },
-      # The API instance's rotated logs, which EB uploads into the bucket
-      # excepted above.
+      # The old API instance's rotated logs, which Elastic Beanstalk uploaded
+      # into the bucket excepted above.
       {
         Sid      = "DenyInstanceLogObjects"
         Effect   = "Deny"
@@ -795,9 +735,9 @@ locals {
         Action   = ["cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup", "cognito-idp:AdminGet*", "cognito-idp:AdminList*"]
         Resource = "*"
       },
-      # Every log group: the Postgres export carries pgaudit query text (same
-      # sensitivity as the audit bucket), and the API's request log, which EB
-      # streams to CloudWatch, carries viewers' IPs and request paths. Deny
+      # Every log group: the Postgres log carries pgaudit query text (same
+      # sensitivity as the audit bucket), and the API's request log, which the
+      # brain streams to CloudWatch, carries viewers' IPs and request paths. Deny
       # reading log *events*; DescribeLogGroups stays allowed so terraform can
       # refresh log-group resources. Nothing in CI reads an event.
       {
@@ -806,9 +746,12 @@ locals {
         Action   = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
         Resource = "*"
       },
-      # The same logs by other routes: RDS's own log files, a single record
-      # by pointer (no resource-level permission, hence "*"), and the EB
-      # instance's log tail. Nothing in CI reads any of them.
+      # The same logs by other routes: a database service's own log files, a
+      # single record by pointer (no resource-level permission, hence "*"), and
+      # an instance's log tail. The RDS and Elastic Beanstalk actions stay
+      # denied though both services are gone from here: they cost nothing, and
+      # a database or environment made later would be closed without an edit.
+      # Nothing in CI reads any of them.
       {
         Sid      = "DenyLogsByOtherRoutes"
         Effect   = "Deny"
@@ -857,141 +800,9 @@ locals {
   })
 }
 
-# ── EB instance role (logjam-eb-role) least-privilege replacements ─────────────
-# The EB API instance role is EB-managed (created with the environment), so —
-# like the other eb-role grants (db_app_role.tf, origin_verify.tf) — it is
-# referenced by literal name, not managed as a resource. Live, it carries three
-# over-broad AWS-managed policies. A compromised API (single public origin)
-# would otherwise inherit s3:* account-wide (incl. the WORM audit bucket +
-# tfstate). This block adds SCOPED replacements mirroring the CI-role treatment
-# above (gha_eb_appversions / gha_frontend_deploy):
-#   AmazonS3FullAccess     -> aws_iam_role_policy.eb_instance_s3_scoped (below)
-#   AmazonCognitoPowerUser -> aws_iam_role_policy.eb_cognito_admin_getuser (below)
-#   AmazonSESFullAccess    -> DEAD grant (SES replaced by Resend); no replacement.
-# Terraform cannot detach a policy attached OUTSIDE its state, so the three
-# `aws iam detach-role-policy` calls are operator-gated. Apply THIS block BEFORE
-# the operator detaches the broad managed policies so the instance never loses
-# the S3/Cognito access it legitimately needs (presigned media/topo URLs;
-# Cognito AdminGetUser).
-# VERIFY BEFORE DETACH: scan CloudTrail for any logjam-eb-role S3 call outside
-# logjam-media / logjam-topo-jobs; if found, widen this scoped grant, never
-# re-add AmazonS3FullAccess.
-resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
-  name = "logjam-eb-s3-scoped"
-  role = "logjam-eb-role"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "MediaAndTopoObjects"
-        Effect = "Allow"
-        # DeleteObjects (batch) and HeadObject are covered by DeleteObject /
-        # GetObject respectively — the API's full S3 verb set on these buckets.
-        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = [
-          "arn:aws:s3:::logjam-media/*",
-          "arn:aws:s3:::logjam-topo-jobs/*",
-        ]
-      },
-      {
-        Sid    = "MediaAndTopoList"
-        Effect = "Allow"
-        Action = "s3:ListBucket"
-        Resource = [
-          "arn:aws:s3:::logjam-media",
-          "arn:aws:s3:::logjam-topo-jobs",
-        ]
-      },
-      {
-        # The LiDAR ZIP's multipart upload (routes/topoJobs.ts). Creating it,
-        # signing its parts and completing it ride on s3:PutObject above;
-        # completing lists the parts, and a delete aborts what is open.
-        Sid      = "TopoInputMultipart"
-        Effect   = "Allow"
-        Action   = ["s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"]
-        Resource = "arn:aws:s3:::logjam-topo-jobs/inputs/*"
-      },
-      {
-        Sid      = "TopoInputMultipartList"
-        Effect   = "Allow"
-        Action   = "s3:ListBucketMultipartUploads"
-        Resource = "arn:aws:s3:::logjam-topo-jobs"
-      },
-      {
-        # READ-ONLY, and deliberately so: the egress sweeper (lib/egressMeter.ts)
-        # only ever lists and reads access-log objects to sum bytes_sent. It has
-        # no reason to write or delete here, and the lifecycle rule —
-        # not the API — is what reclaims the space.
-        Sid    = "AccessLogsRead"
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:ListBucket"]
-        Resource = [
-          "arn:aws:s3:::logjam-access-logs-620853681701",
-          "arn:aws:s3:::logjam-access-logs-620853681701/*",
-        ]
-      },
-      {
-        # PLATFORM, not app data. logjam-eb-role has NO AWSElasticBeanstalkWebTier
-        # policy attached — AmazonS3FullAccess is currently the ONLY grant that
-        # covers the EB platform bucket. EB uses the instance role to download the
-        # application-version bundle on deploy/instance-replacement and to upload
-        # rotated/bundle logs; without this, detaching AmazonS3FullAccess would
-        # break the next deploy (delayed outage). Mirrors the S3 grant in the
-        # AWS-managed AWSElasticBeanstalkWebTier policy, pinned to this one bucket.
-        Sid    = "ElasticBeanstalkPlatformBucket"
-        Effect = "Allow"
-        Action = ["s3:Get*", "s3:List*", "s3:PutObject"]
-        Resource = [
-          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701",
-          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-        ]
-      },
-    ]
-  })
-}
-
-# Scoped Cognito grant, inline policy `LogjamCognitoAdminUser` (the name is
-# historic: it also holds AdminDeleteUser now). Codified here so it is
-# repo-visible and survives the AmazonCognitoPowerUser detach. AdminGetUser is
-# live already; AdminDeleteUser is added for account deletion (#437), where
-# the API deletes the identity at Cognito after the user's Logjam data. Exactly
-# these two actions, on the one pool: guards.tftest.hcl
-# (cognito_client_scopes_and_api_grant).
-resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
-  name = "LogjamCognitoAdminUser"
-  role = "logjam-eb-role"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]
-      Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
-    }]
-  })
-}
-
-# EB app-version uploads (beanstalk-deploy pushes deploy.zip here). Explicit
-# replacement for the removed AmazonS3FullAccess. If the live bucket name
-# differs, fix it here — do NOT re-add the managed full-access policy.
-resource "aws_iam_role_policy" "gha_eb_appversions" {
-  name = "logjam-eb-appversions-deploy"
-  role = aws_iam_role.github_actions.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket"]
-      Resource = [
-        "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701",
-        "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
-      ]
-    }]
-  })
-}
-
 # Let the deploy workflow launch the pre-deploy migrate one-shot
-# (aws_ecs_task_definition.api_migrate) and poll its result before the EB
-# version swap. Scoped to that task def + the one cluster; PassRole limited
+# (aws_ecs_task_definition.api_migrate) and poll its result before the new
+# release is written to the brain. Scoped to that task def + the one cluster; PassRole limited
 # to the exact execution role the task uses (no task role is passed), gated to
 # ECS tasks so the deploy identity can't repurpose it elsewhere.
 # Also let the deploy workflows register a task-definition revision pinned to

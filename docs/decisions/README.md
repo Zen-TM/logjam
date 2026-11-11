@@ -97,7 +97,7 @@ supersede instead.
 
 | # | Decision | Date | Status |
 |---|---|---|---|
-| [0001](0001-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Accepted |
+| [0001](0001-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Superseded by [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) |
 | [0002](0002-place-share-visibility.md) | Place share visibility | 2026-07-04 | Accepted |
 | [0003](0003-pre-deploy-migrations-expand-contract.md) | Prod migrations run in a gated pre-deploy task; migrations are expand/contract | 2026-07-17 | Accepted |
 | [0004](0004-mobile-sentry-and-scrubber.md) | Mobile crash reporting: Sentry behind a scrubber and a consent gate | 2026-07-23 | Accepted |
@@ -144,3 +144,4 @@ supersede instead.
 | [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
 | [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
 | [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
+| [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) | Database connections verify the brain's certificate and never fall back to plain | 2026-11-11 | Accepted |

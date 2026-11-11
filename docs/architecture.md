@@ -136,9 +136,9 @@ workers' security group (and the API beside it). The API, the workers and the
 migrate task connect as a least-privilege role over TLS, verifying the brain's
 own certificate by name (bundled into the images). pgBackRest ships WAL every
 minute and a full backup every night to a bucket nobody can empty for 7 days,
-and a scheduled task restores the newest backup daily to prove it works. Until
-the teardown, Elastic Beanstalk and RDS still exist, idle and read-only, as the
-rollback. Logjam's S3 buckets are private. Clients read and write them only through short-lived presigned URLs,
+and a scheduled task restores the newest backup daily to prove it works.
+
+Logjam's S3 buckets are private. Clients read and write them only through short-lived presigned URLs,
 and CloudFront reads them through origin access control:
 
 | Bucket | Holds | `terraform output` |
@@ -408,10 +408,8 @@ access (`terraform init` first). The output always beats any copy of a value.
 | CloudFront distributions | `terraform output web_cloudfront_distribution_id`, `api_cloudfront_distribution_id` |
 | Topo CDN base URL | `terraform output topo_cdn_base_url` |
 | The brain's stable name (the database's host name) | `terraform output brain_public_dns`; its instance id changes on every replacement, so find it by its `Name` tag (`operations/brain.md`) |
-| Elastic Beanstalk environment (idle until the teardown) | `terraform output eb_environment_name`, `eb_environment_cname` |
 | ECS cluster, worker subnets and security group | `terraform output ecs_cluster`, `ecs_subnets`, `ecs_security_groups` |
 | ECR repositories | `terraform output ecr_api_repository_url`, `ecr_topo_worker_repository_url` |
-| RDS endpoint, name, master secret (idle until the teardown) | `terraform output rds_endpoint`, `rds_db_name`, `db_secret_arn` |
 | Cognito pool and app client | `terraform output cognito_user_pool_id`, `cognito_client_id`, `cognito_region` |
 | Cognito email sender Lambda | `terraform output cognito_email_sender_function_name` |
 | Alarm topic | `terraform output alerts_topic_arn` |

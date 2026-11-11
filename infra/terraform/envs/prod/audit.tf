@@ -4,20 +4,20 @@
 # Three signals land in ONE S3 bucket with Object Lock in COMPLIANCE mode —
 # write-once, undeletable (even by the root account) until retention expires:
 #
-#   1. CloudTrail MANAGEMENT events  — incl. RDS snapshot create/copy/share/
-#      restore/export. These are the snapshot-exfiltration teeth: data cannot be
-#      pulled out of the DB without leaving a record here.
+#   1. CloudTrail MANAGEMENT events  — incl. disk snapshot create/copy/share and
+#      the account's other snapshot routes. These are the snapshot-exfiltration
+#      teeth: data cannot be pulled out of the DB without leaving a record here.
 #   2. CloudTrail S3 DATA events     — object reads/writes on logjam-media +
 #      logjam-topo-jobs, object reads on the brain's backup bucket, and EBS
 #      direct API calls on disk snapshots (NOT the audit bucket itself — no
 #      recursion).
-#   3. pgaudit (direct SQL)          — shipped off the RDS instance to the same
-#      WORM bucket via CloudWatch Logs -> Kinesis Firehose (see rds.tf for the
-#      parameter group that turns pgaudit on). Operator/master sessions log
-#      reads+writes+ddl; the app role (logjam_app) drops read logging per-role
-#      for cost (its reads carry no operator-access signal), with
-#      log_connections capturing every connect so an operator using the app role
-#      to dodge read-logging is still recorded. See rds.tf + bootstrap SQL.
+#   3. pgaudit (direct SQL)          — shipped off the brain's Postgres to the
+#      same WORM bucket via CloudWatch Logs -> Kinesis Firehose (brain_logs.tf;
+#      infra/brain/postgres/postgresql.conf turns pgaudit on). Operator
+#      sessions log reads+writes+ddl; the app role (logjam_app) drops read
+#      logging per-role for cost (its reads carry no operator-access signal),
+#      with log_connections capturing every connect so an operator using the app
+#      role to dodge read-logging is still recorded. See the bootstrap SQL.
 #
 # Single-account caveat (documented in docs/DATA-ACCESS-POLICY.md): Object Lock
 # stops deletion of written entries even by root, but production root can still
@@ -32,12 +32,7 @@ locals {
   # ARN built as a literal (not aws_cloudtrail.audit.arn) to break the
   # bucket-policy <-> trail dependency cycle: the trail depends_on the bucket
   # policy, so the policy cannot reference the trail resource.
-  trail_arn = "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"
-  # Derived from the instance, never a literal: RDS names this group after the
-  # identifier, so a hardcoded name would desync on instance rename and break
-  # pgaudit delivery. Interpolating makes a rename impossible to desync; the
-  # IncomingBytes alarm in monitoring.tf catches it if it ever does.
-  rds_log_group    = "/aws/rds/instance/${aws_db_instance.main.identifier}/postgresql"
+  trail_arn        = "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"
   media_bucket     = "logjam-media"
   topo_jobs_bucket = "logjam-topo-jobs"
 }
@@ -131,10 +126,11 @@ locals {
   # BEGIN audit-selectors (a scratch trail copies these lines between the
   # markers verbatim to prove them on real AWS, so keep them self-contained)
   audit_event_selectors = [
-    # Management events (read + write): RDS CreateDBSnapshot / CopyDBSnapshot /
-    # ModifyDBSnapshotAttribute / RestoreDBInstance* / StartExportTask, and the
-    # brain's: ec2:CreateSnapshot, ssm:StartSession, ssm:SendCommand and
-    # ecs:RunTask. The snapshot-exfiltration record.
+    # Management events (read + write): ec2:CreateSnapshot, ssm:StartSession,
+    # ssm:SendCommand and ecs:RunTask, and any database service's snapshot
+    # calls (RDS CreateDBSnapshot / CopyDBSnapshot / ModifyDBSnapshotAttribute /
+    # StartExportTask) should one be made again. The snapshot-exfiltration
+    # record.
     {
       name = "management events, read and write"
       fields = [
@@ -207,11 +203,11 @@ resource "aws_cloudtrail" "audit" {
 
 # ── pgaudit (CloudWatch Logs) -> Firehose -> WORM bucket ────────────────────
 #
-# pgaudit writes to the RDS postgresql CloudWatch log group, which has no Object
-# Lock and is operator-deletable. To make direct-SQL audit tamper-evident it
-# must reach the WORM bucket: a subscription filter streams the log group to
-# Firehose, which lands it in the Object-Lock bucket (objects inherit the
-# bucket's default COMPLIANCE retention).
+# pgaudit writes to the brain's postgres CloudWatch log group, which has no
+# Object Lock and is operator-deletable. To make direct-SQL audit tamper-evident
+# it must reach the WORM bucket: a subscription filter (brain_logs.tf) streams
+# the log group to Firehose, which lands it in the Object-Lock bucket (objects
+# inherit the bucket's default COMPLIANCE retention).
 
 # Firehose -> S3 delivery role.
 resource "aws_iam_role" "firehose_pgaudit" {
@@ -288,21 +284,6 @@ resource "aws_iam_role_policy" "cwl_to_firehose" {
       Resource = aws_kinesis_firehose_delivery_stream.pgaudit.arn
     }]
   })
-}
-
-# The RDS postgresql log group is created by RDS itself once
-# enabled_cloudwatch_logs_exports = ["postgresql"] is applied (see rds.tf) — it
-# is intentionally NOT a Terraform-managed resource (same convention as the EB /
-# Container Insights groups in logging.tf). This filter therefore depends on the
-# instance modify having happened; on a clean apply the group must already exist.
-resource "aws_cloudwatch_log_subscription_filter" "pgaudit_to_firehose" {
-  name            = "logjam-pgaudit-to-worm"
-  log_group_name  = local.rds_log_group
-  filter_pattern  = "" # all events
-  destination_arn = aws_kinesis_firehose_delivery_stream.pgaudit.arn
-  role_arn        = aws_iam_role.cwl_to_firehose.arn
-
-  depends_on = [aws_db_instance.main]
 }
 
 # ── Outputs ─────────────────────────────────────────────────────────────────

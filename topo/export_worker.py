@@ -18,7 +18,7 @@ Required env:
     DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
                         Postgres connection parts (DB_PORT optional, default
                         5432). DB_USER/DB_PASSWORD are ECS-secrets-injected
-                        from the RDS-managed Secrets Manager secret; the
+                        from the Secrets Manager secret; the
                         connection string is composed at import time (see
                         compose_database_url below).
 Optional env:

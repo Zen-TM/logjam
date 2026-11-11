@@ -1,8 +1,8 @@
 # Canonical prod values. These are the single source of truth to cross-check
-# against what CI/EB inject at runtime (api/.ebextensions/db-env.config and the
-# ECS task-def environment blocks). No secret VALUES are exposed — only the
-# Secrets Manager ARN. `terraform output` here is the authoritative reference
-# when reconciling env drift.
+# against what CI injects at runtime (infra/brain/api.env and the ECS task-def
+# environment blocks). No secret VALUES are exposed — only the Secrets Manager
+# ARN. `terraform output` here is the authoritative reference when reconciling
+# env drift.
 
 output "s3_bucket_media" {
   value = module.media.bucket_id
@@ -55,19 +55,6 @@ output "api_cloudfront_distribution_id" {
   value = aws_cloudfront_distribution.api.id
 }
 
-output "rds_endpoint" {
-  value = aws_db_instance.main.endpoint
-}
-
-output "rds_db_name" {
-  value = aws_db_instance.main.db_name
-}
-
-output "db_secret_arn" {
-  description = "RDS-managed master credentials secret ARN (DB_SECRET_ID). Value never exposed."
-  value       = aws_db_instance.main.master_user_secret[0].secret_arn
-}
-
 output "ecr_api_repository_url" {
   value = aws_ecr_repository.api.repository_url
 }
@@ -76,17 +63,9 @@ output "ecr_topo_worker_repository_url" {
   value = aws_ecr_repository.topo_worker.repository_url
 }
 
-output "eb_environment_cname" {
-  value = aws_elastic_beanstalk_environment.api.cname
-}
-
 output "s3_bucket_access_logs" {
   description = "S3 server access logs for the media and topo-jobs buckets (read by the egress meter)."
   value       = module.access_logs.bucket_id
-}
-
-output "eb_environment_name" {
-  value = aws_elastic_beanstalk_environment.api.name
 }
 
 output "cognito_email_sender_function_name" {

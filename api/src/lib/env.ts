@@ -55,7 +55,7 @@ const baseSchema = z.object({
 
   // CloudFront origin-verify (WAF-bypass guard). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
-  // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
+  // matching value reached the origin directly, bypassing the edge WAF.
   // The app compares that header to ORIGIN_VERIFY_SECRET, which is resolved at
   // boot from Secrets Manager (ORIGIN_VERIFY_SECRET_ID) like the DB creds. Both
   // optional: a deployment with neither configured disables the check (no-op).
@@ -317,7 +317,7 @@ export function validateEnv(): Env {
   }
 
   // services/prisma.ts reads DATABASE_SSL at module load, before this runs;
-  // refusing here still stops a prod process that would talk plain to RDS.
+  // refusing here still stops a prod process that would talk plain to Postgres.
   if (env.DATABASE_SSL === "disable" && env.NODE_ENV === "production") {
     console.error("DATABASE_SSL=disable is forbidden in production.");
     process.exit(1);

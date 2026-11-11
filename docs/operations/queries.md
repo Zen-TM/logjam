@@ -26,28 +26,18 @@ rule.
 
 ### Log group
 
-The API's stdout (pino JSON) streams to the Elastic Beanstalk group:
-
-```
-/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log
-```
-
-EB names it, not Terraform (`infra/terraform/envs/prod/logging.tf`), so list
-`/aws/elasticbeanstalk/logjam-api-prod/` in the console if it is not there. If
-Logs Insights shows no `msg` field, the lines carry a prefix: each query
-needs `parse @message` before the `filter`, and the `SyncRequests` metric
-below counts nothing, because its filter reads each line as JSON.
-
-Once `brain_public` is on (the API runs on the brain, [brain.md](brain.md)),
-the API's stdout is in the group `/logjam/brain/api` instead, one event per
-line as the API writes it, so the queries should work there without
-`parse @message` (not yet run against it: try one first).
-The Elastic Beanstalk group then stops growing and expires after 14 days; to
-look back across the move, run each query on both groups.
+The API's stdout (pino JSON) streams to the log group `/logjam/brain/api`
+(`infra/terraform/envs/prod/brain_logs.tf`, [brain.md](brain.md)), one event per
+line as the API writes it, so the queries below should work there as they are
+(not yet run against it: try one first). If Logs Insights shows no `msg` field,
+the lines carry a prefix: each query needs `parse @message` before the
+`filter`, and the `SyncRequests` metric below counts nothing, because its
+filter reads each line as JSON.
 
 ### 14 days: Logs Insights
 
-The group keeps 14 days (`api/.ebextensions/cloudwatch-logs.config`, the figure
+The group keeps 14 days (`local.operational_log_retention_days` in
+`infra/terraform/envs/prod/logging.tf`, the figure
 `frontend/public/privacy.html` promises), so 14 days is the longest window
 these queries can see. Set the time range to the last 14 days.
 

@@ -142,25 +142,24 @@ fails when it is broken.
    assume it, and every apply is a plan the PR showed
    ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
 6. **Everything is dormant until its setting is flipped.** With the default
-   variables there is no instance, volume, address, alarm, watchdog, drill or
-   copy task. A built brain still does not serve: its API runs only while the
+   variables there is no instance, volume, address, alarm, watchdog or drill.
+   A built brain still does not serve: its API runs only while the
    instance tag `brain-serving` is exactly `on`, a missing or unreadable tag
    counts as off, and both switches are tags so that flipping one is an
-   in-place update, not a replacement. The cutover's copy task is started by
-   a person, never on a schedule, and refuses to run against a serving
-   brain. Guards: `brain_is_absent_by_default`,
-   `brain_is_dormant_for_cloudfront_and_tasks`,
+   in-place update, not a replacement. Guards: `brain_is_absent_by_default`,
    `brain_watchdog_and_drill_are_absent_by_default`,
-   `brain_copy_is_absent_by_default`, `brain_switches_are_in_place_tags`,
-   `brain_copy_is_never_scheduled`, `brain_copy_task_reads_only_status_json`,
-   and scenarios 5 and 12 of `e2e.sh`.
+   `brain_switches_are_in_place_tags`, and scenario 5 of `e2e.sh`. (Updated
+   2026-11-11: the cutover's copy task, its guards and its scenario 12 are
+   removed with the cutover, and `brain_is_dormant_for_cloudfront_and_tasks`
+   went with the settings it read; see the Update below.)
 7. **Clients verify the brain's certificate by name.** The server
    certificate is self-signed for ten years, made at first boot and kept in
    the data directory, so the backups carry it. Clients connect by the
    Elastic IP's DNS name, never an address, and verify it: `verify-full` in
    the Python workers, and Prisma's strict mode, which the migrate task needs
    because it ignores `sslrootcert`. Built now, with these guards: scenario 4
-   of `e2e.sh`, `api/src/lib/databaseUrl.unit.test.ts` and
+   of `e2e.sh`, `api/src/lib/databaseUrl.unit.test.ts`,
+   `api/src/lib/dbConnection.unit.test.ts` and
    `topo/tests/test_worker_helpers.py`. Not built until a later change: the
    certificate's public half is committed as `brain-ca.pem` (it cannot exist
    before the brain has booted) and bundled at `/app/brain-ca.pem` into the API
@@ -173,22 +172,15 @@ fails when it is broken.
    deploy and rollback workflows both read (the workflows through
    `infra/scripts/brain-setting.sh`, which fails rather than guess), so they
    cannot disagree about the mode. In order: the image tag, the bootstrap
-   flag, `brain_serving` (the instance tag, the four task definitions that
-   have a database, and the workflows' mode), then `brain_public` (CloudFront's
-   API origin). `brain_public` needs `brain_serving`, and `brain_serving`
-   needs a tag; each refusal names the setting. In serving mode no deploy or
-   rollback step touches Elastic Beanstalk. Guards:
-   `brain_settings_are_one_file_and_read_by_the_workflows`,
+   flag, `brain_serving` (the instance tag, and the workflows' wait for the
+   release to be live). `brain_serving` needs a tag, and the refusal names the
+   setting. (Updated 2026-11-11: a further `brain_public` setting, which
+   CloudFront's API origin followed, is gone; the origin and the task
+   definitions' database name the brain unconditionally. See the Update
+   below.) Guards: `brain_settings_are_one_file_and_read_by_the_workflows`,
    `brain_variable_defaults_are_inert`,
-   `brain_public_without_brain_serving_is_refused`,
-   `brain_serving_without_an_image_tag_is_refused`,
-   `brain_serving_points_every_database_task_at_the_brain`,
-   `brain_public_points_cloudfront_at_the_brain`, and `brain-setting.sh
-   --self-test` (`infra-scripts`). Two parts have no guard: nothing in code
-   stops `brain_serving` being turned on before the final data copy (the copy
-   refuses a serving brain, but a serving flip first would sweep a stale
-   database), and Elastic Beanstalk's background sweeps, which Terraform does
-   not own, are turned off by a command the maintainer runs before that flip.
+   `brain_serving_without_an_image_tag_is_refused`, and `brain-setting.sh
+   --self-test` (`infra-scripts`).
 9. **A restore follows the newest backup, and a rewind is a new volume.** A
    restore target (`restore_to`, a time with a UTC offset) lives on a data
    volume's entry in `var.brain_data_volumes`, never in a setting of its own:
@@ -209,6 +201,30 @@ fails when it is broken.
     0.67 s of CPU a call on a `t4g.micro`, against 17.9 MB and 0.10 s
     (measured). Guard: the check "one release tick and one status tick never
     start the aws CLI" in scenario 7 of `e2e.sh`.
+
+- **Update 2026-11-11: Elastic Beanstalk and RDS are removed, and the brain is
+  the only API and database.** The cutover happened and the maintainer chose
+  against the 30-day waiting period the cutover issue (#434) suggested:
+  Logjam is in beta with no promise to its users, so the old stack went once a
+  regression and smoke sweep of prod on the brain had passed. What changes
+  above: the `brain_public` setting is gone, so CloudFront's API origin and
+  every task definition's database (`local.db_environment`) name the brain
+  unconditionally, whatever `brain_serving` says (guard
+  `prod_runs_on_the_brain`); `brain_serving` stays as the switch for the API on
+  the host (the instance tag, and the workflows' wait for the release to be
+  live); the deploy and rollback workflows have no Elastic Beanstalk step; the
+  copy task (`brain_copy.tf`, `copy.sh`) is deleted, so rule 6's "refuses a
+  serving brain" is no longer a rule, and the sweeps' two-database hazard it
+  guarded against cannot recur; and TLS is
+  [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md),
+  which supersedes 0001. A brain rebuilt when there is none gets its data from
+  the backups, never a copy (`docs/operations/brain.md`). RDS's automated
+  backups and its final snapshot are not kept, so no copy of a deleted
+  account's data outlives the instance. What still holds this decision up: one
+  instance on a volume Terraform cannot destroy, backups in an Object Lock
+  bucket and the daily restore, no control plane, the certificate checked by
+  name, and the CI privacy Deny, whose `rds:` and `elasticbeanstalk:` actions
+  stay denied though both services are gone. Everything else above stands.
 
 ## Consequences
 
@@ -287,15 +303,17 @@ fails when it is broken.
   would push a deleted row out of the data files (`pg_repack`) is not built,
   so a deleted row's bytes stay in the live files until overwritten and in
   every kept full backup: eight nightly fulls, then one more day before a
-  version is removed. RDS has the same property today: automated backups for
-  seven days, and manual snapshots until someone deletes them.
+  version is removed. RDS had the same property: automated backups for
+  seven days, and manual snapshots until someone deleted them (updated
+  2026-11-11: it is deleted, with both).
 - **Negative: the backups share the host's account and region.** Object Lock
   means no one can delete them early, but a regional failure takes the host
   and its backups' availability together.
 - **Negative: the certificate belongs to one brain.** A brain rebuilt from
   nothing with a new Elastic IP needs a new committed certificate and a new
   image; a restore brings the same certificate back inside the backup.
-- **Negative: both bills run until RDS and Elastic Beanstalk are removed.**
+- **Negative: both bills ran until RDS and Elastic Beanstalk were removed
+  (updated 2026-11-11: they are).**
   The brain was estimated at about US$22 a month on a `t4g.small`, US$7.74
   less on the micro (Sydney on-demand, US$0.0212 against US$0.0106 an hour),
   so about US$14, and the overlap runs near US$60 a month: `logjam-monthly`'s
@@ -307,8 +325,9 @@ fails when it is broken.
   name (the certificate names it), the instance metadata tags that carry the
   switches, Budgets, the credit mode, Object Lock's semantics, Session
   Manager, and the CloudWatch to Firehose path to the audit bucket.
-- **Neutral:** [0001](0001-rds-tls-via-bundled-ca.md) stays true until RDS is
-  removed, and removing RDS is when it is superseded. The work this leaves
+- **Neutral:** [0001](0001-rds-tls-via-bundled-ca.md) stayed true until RDS was
+  removed; [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md)
+  superseded it (updated 2026-11-11). The work this leaves
   for later is the ladder in the runbook, and steps 3 and 4 of it are not
   built. Running the API as more than one process still needs the rate
   limiter in `api/src/middleware/rateLimit.ts`, which keeps its counters in

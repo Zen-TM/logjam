@@ -74,10 +74,9 @@ jobs:
             *) echo "::error::no smoke test for '$TARGET'"; exit 1 ;;
           esac
 
-          # A single-instance EB swap comes back cold, and CloudFront may
-          # still hold the old index.html for a moment: retry for ~3 minutes
-          # (the brain's release agent polls every 30 s and then pulls the
-          # image, so its callers ask for more).
+          # CloudFront may still hold the old index.html for a moment, and the
+          # brain's release agent polls every 30 s and then pulls the image:
+          # retry for ~3 minutes, or as long as the caller asks.
           for attempt in $(seq 1 "$ATTEMPTS"); do
             if "probe_$TARGET"; then
               echo "smoke passed: $TARGET serves $SHA (attempt $attempt)"

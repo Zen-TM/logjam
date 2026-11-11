@@ -6,7 +6,7 @@ import {
 // Populate ORIGIN_VERIFY_SECRET in process.env from Secrets Manager
 // (ORIGIN_VERIFY_SECRET_ID) when not already set, mirroring resolveDbCredentials.
 //
-// Why this exists: the Elastic Beanstalk API container can't use ECS secrets
+// Why this exists: the brain's API container can't use ECS secrets
 // injection, so the CloudFront origin-verify token (compared per request in
 // src/index.ts) must be fetched into the env BEFORE getEnv() parses it. The
 // stored secret is the raw token string (no JSON wrapper) — it is the exact

@@ -109,8 +109,8 @@ RUN python -c "from osgeo import gdal_array"
 # 4. Application
 # ------------------------------------------------------------
 WORKDIR /app
-# The brain's Postgres certificate, which DATABASE_SSL_CA points at when
-# brain_serving is on (ecs.tf). A build cannot reach outside its context, and
+# The brain's Postgres certificate: the default for DATABASE_SSL_CA
+# (worker_common.py), and what ecs.tf points it at. A build cannot reach outside its context, and
 # this image's is topo/, so the certificate is committed twice: at
 # infra/brain/brain-ca.pem (what Terraform and the API image read) and here.
 # CI fails when the two differ (ci.yml, infra-scripts). The build fails without it.
@@ -153,7 +153,7 @@ COPY icons/ /app/icons/
 # Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected
-#  from the RDS-managed Secrets Manager secret)
+#  from the Secrets Manager secret)
 # Optional: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM,
 #  FRONTEND_URL, AWS_REGION (email is a no-op if any SMTP setting is unset —
 #  see email_send.py)
