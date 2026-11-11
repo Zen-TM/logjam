@@ -115,6 +115,9 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     await field.blur();
   }
 
+  // The SIX tiles are the ones stubbed above; the default OSM Vector base layer
+  // reads the basemap archive, which holds nothing out west.
+  await dialog.getByRole("radio", { name: "SIX Maps Base Map" }).click();
   await dialog.getByRole("textbox", { name: "File name" }).fill("Far west.pdf");
 
   const download = page.waitForEvent("download", { timeout: 90_000 });

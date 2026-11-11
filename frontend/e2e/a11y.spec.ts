@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { stubMaster } from "./__fixtures__/stubMaster";
 
 // Automated accessibility checks for the redesigned surfaces of Logjam Web: the
 // shell (rail, map chrome), Places with its filter sheet, the Layers popover and
@@ -17,6 +18,10 @@ test.skip(
 
 /** The second local server (playwright.config.ts), with NO fake auth. */
 const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
+
+test.beforeEach(async ({ page }) => {
+  await stubMaster(page);
+});
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
