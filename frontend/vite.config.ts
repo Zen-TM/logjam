@@ -139,14 +139,17 @@ export function buildInputs(mode: string): Record<string, string> {
     : { main: page("index.html") };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // DEV_MASTER_URL (frontend/.env) points the /master proxy at MiniStack's
   // topo bucket, so dev maps read local archives. Unset, it stays the prod CDN:
   // a fresh MiniStack has no archives to serve.
-  const master = new URL(
-    loadEnv(mode, import.meta.dirname, "").DEV_MASTER_URL ||
-      "https://logjamnsw.com",
-  );
+  const devMaster = loadEnv(mode, import.meta.dirname, "").DEV_MASTER_URL;
+  // CI's e2e runs must not read the prod CDN: their requests used up its
+  // CloudFront allowance. Dropping DEV_MASTER_URL from a webServer in
+  // playwright.config.ts stops the server starting, which turns the job red.
+  if (command === "serve" && process.env.CI && !devMaster)
+    throw new Error("CI must set DEV_MASTER_URL: unset, /master reads prod");
+  const master = new URL(devMaster || "https://logjamnsw.com");
   const masterPrefix = master.pathname.replace(/\/$/, "");
   return {
     // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
