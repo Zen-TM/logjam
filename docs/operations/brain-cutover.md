@@ -62,7 +62,8 @@ Each of these is its own merge or check, done in the days before.
    may differ, and the last line says the source was live instead of
    `every check held`. The window's copy (step 4 below) is the same command
    **without** that entry, so a forgotten read-only step stops the copy. The flag
-   itself has **not yet been run on AWS**; the copy's other behaviour is as marked.
+   ran on prod on 2026-11-11 (the first rehearsal, into the empty brain: exit
+   code `0` and the live-source last line); the copy's other behaviour is as marked.
 
    The first copy into an empty brain (the same command, before the flag existed,
    run on a scratch copy against a scratch RDS):
@@ -99,8 +100,11 @@ Each of these is its own merge or check, done in the days before.
    Timing, **measured on a scratch copy (2026-11-11), made-up rows**: 1,764 MB in
    197 seconds (537 MB a minute; 18 of the seconds are pulling the task's image),
    three runs of the same size: dump 69 s, restore 38 s, counts verified 65 s
-   (counting 6 million rows twice is a third of it). Prod's database is about
-   1.7 GB, so plan about 4 minutes for it (derived from that rate). Also measured: a copy against a
+   (counting 6 million rows twice is a third of it). Prod is far smaller than
+   those made-up rows: its first rehearsal (**run on prod**, 2026-11-11) dumped
+   1 MB, 34 tables, and took 47 seconds from `run-task` to a stopped task, most
+   of it starting the task, with 523 MiB of the brain's memory free at the
+   lowest. Plan about a minute for the window's copy. Also measured: a copy against a
    **serving** brain exits 1 at once (`copy: status.json does not say serving is
    false: stopping`) and touches nothing; with the source read-only and
    `COPY_REPLACE=1` the counts verify exactly (a deleted row and an edited title
