@@ -203,6 +203,18 @@ test("bypass_actors the plan App cannot read do not split the plan from the appl
   assert.match(header(asPlanApp(), "github"), /Counted as no change \(1\)[^]*`bypass_actors`[^]*github_repository_ruleset\.tags/);
 });
 
+test("a bypass list reads the same in GitHub's order and with the provider's zero for an unset id", () => {
+  // Mutation: hashing the list as each plan holds it (in order, null apart
+  // from 0): red. That refused every envs/github apply once one ruleset had
+  // two bypass actors, since GitHub returns the DeployKey first with id 0.
+  const key = { actor_type: "DeployKey", bypass_mode: "always" };
+  const coded = { ...live, bypass_actors: [...ADMIN, { ...key, actor_id: null }] };
+  const stored = { ...live, bypass_actors: [{ ...key, actor_id: 0 }, ...ADMIN] };
+  assert.equal(fingerprint(asPlanApp(coded), "github"), fingerprint(asApplyApp(stored), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(coded), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(stored), read, SHA).ok, true);
+});
+
 test("a configured bypass_actors change still changes the fingerprint", () => {
   // Mutation: leaving the configured values out of the fingerprint lets an
   // apply add a bypass actor the PR's plan never had: red.
