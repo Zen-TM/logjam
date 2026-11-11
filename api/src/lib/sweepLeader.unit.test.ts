@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 const { clientConfigs, connConfig } = vi.hoisted(() => ({
   clientConfigs: [] as unknown[],
-  connConfig: { connectionString: "x", keepAlive: true, password: () => "p" },
+  connConfig: { host: "x", keepAlive: true, password: () => "p" },
 }));
 vi.mock("pg", () => ({
   Client: class {
@@ -27,7 +27,7 @@ import {
 //    ping succeeds and not when it fails".
 //  - acquire runs on every call rather than only when not holding: "does not
 //    stack".
-//  - newLockClient builds `new Client({ connectionString })` (prod's TLS and
+//  - newLockClient builds `new Client({ host })` (prod's TLS and
 //    password callback lost, so the lock is never taken on RDS): "builds the
 //    lock client from dbConnectionConfig() plus a query timeout".
 //  - `query_timeout` dropped from newLockClient: the same test.
