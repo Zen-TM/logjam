@@ -1,6 +1,6 @@
 # Data-Access Policy (Operator Commitment)
 
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-12_
 
 Logjam is privacy-by-design **for users**. This document is about the one party
 that design does not, by itself, constrain: **the operator** — me, the person who
