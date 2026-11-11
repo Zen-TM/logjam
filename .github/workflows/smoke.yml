@@ -19,6 +19,10 @@ on:
         description: The commit that should now be live
         type: string
         required: true
+      attempts:
+        description: How many 10-second tries to give it (18 is about 3 minutes; the brain's release agent is given 30)
+        type: number
+        default: 18
 
 permissions: {}
 
@@ -34,6 +38,7 @@ jobs:
           # Repository variables, declared in infra/terraform/envs/github.
           API_URL: ${{ vars.PROD_API_URL }}
           WEB_URL: ${{ vars.PROD_WEB_URL }}
+          ATTEMPTS: ${{ inputs.attempts }}
         run: |
           set -uo pipefail
           if [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; then
@@ -70,8 +75,10 @@ jobs:
           esac
 
           # A single-instance EB swap comes back cold, and CloudFront may
-          # still hold the old index.html for a moment: retry for ~3 minutes.
-          for attempt in $(seq 1 18); do
+          # still hold the old index.html for a moment: retry for ~3 minutes
+          # (the brain's release agent polls every 30 s and then pulls the
+          # image, so its callers ask for more).
+          for attempt in $(seq 1 "$ATTEMPTS"); do
             if "probe_$TARGET"; then
               echo "smoke passed: $TARGET serves $SHA (attempt $attempt)"
               exit 0

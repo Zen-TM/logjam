@@ -40,6 +40,10 @@ const NOT_SEEDED: Record<string, string> = {
     "written only by an import that merges into an existing row; the seed makes no import batch",
   EgressLogCursor:
     "written by the egress sweeper as it reads S3 access logs, which MiniStack does not deliver; the seed only clears it",
+  ComputeUsageCarryover:
+    "written by a trigger when a started job row is deleted; the seed deletes none",
+  SiteComputeCarryover:
+    "written by the same trigger, for every account together",
 };
 
 describe("the dev seed covers every table", () => {

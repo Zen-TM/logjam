@@ -26,8 +26,10 @@ platform: privacy constrains every feature. Each package has its own
 - **Local dev** is `make dev` with `.env.local`: fake auth as the seeded user
   alice, Postgres in docker, MiniStack for S3 and ECS. `AUTH_MODE=fake` refuses
   to start in a prod runtime (`api/src/middleware/auth.ts`); keep it that way.
-- **Prod** is real AWS (`ap-southeast-2`) with Cognito; `api/.env` is
-  prod-style. Never run a command that reaches prod without the maintainer's
+- **Prod** is real AWS (`ap-southeast-2`) with Cognito, its API and Postgres on
+  one self-managed instance, the brain
+  ([0047](docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md));
+  `api/.env` is prod-style. Never run a command that reaches prod without the maintainer's
   explicit confirmation.
 
 ## How we work
@@ -43,8 +45,8 @@ platform: privacy constrains every feature. Each package has its own
 - Logic both clients need lives in `shared/`, with a parity test; look for it
   there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
 - Format with `make format` (Biome and Ruff), never Prettier: it also
-  rewrites Markdown and YAML, which nothing formats back. The pre-commit hook
-  formats what you stage.
+  rewrites YAML, and Markdown outside the packages, which nothing formats
+  back. The pre-commit hook formats what you stage.
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
   app" or "the web app" where either could be meant.
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`

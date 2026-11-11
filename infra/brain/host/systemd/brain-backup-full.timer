@@ -1,0 +1,15 @@
+[Unit]
+Description=Nightly full backup, on a timer
+After=brain-boot.service
+
+# ponytail: after a long archiving stall pgBackRest drops WAL to protect the
+# disk, and the gap lasts until the next full backup. Upgrade: compare
+# pg_stat_archiver.last_archived_wal with the repository and run a full when
+# they differ.
+[Timer]
+OnCalendar=*-*-* 03:00:00 Australia/Sydney
+# A host that was down at 03:00 backs up when it is back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

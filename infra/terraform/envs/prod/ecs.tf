@@ -21,13 +21,48 @@
 # after any apply that touches a task definition.
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
+#
+# WHICH DATABASE. The four definitions with a DB_HOST (api-script, topo-worker,
+# topo-export-worker, api-migrate) take it from local.db_environment: RDS, or
+# once var.brain_serving is set (brain.auto.tfvars) the brain's Elastic IP name
+# with DATABASE_SSL_CA, the path the image carries the brain's certificate at
+# (infra/brain/brain-ca.pem; the API image and the topo worker image both keep
+# it at /app/brain-ca.pem). The certificate is bundled into the images by a
+# change of its own, before the flip: until it is, a task fails at start (the
+# API: "DATABASE_SSL_CA points to a missing file"; the migrate task: Prisma's
+# "cert file not found"; the workers: libpq's "root certificate file ... does
+# not exist"), never on an unverified connection. A new definition with a
+# DB_HOST takes local.db_environment too. Guard: tests/guards.tftest.hcl
+# (brain_serving_points_every_database_task_at_the_brain).
+#
+# The deploy's image pin and a change here do not undo each other: the pin
+# copies the latest revision whole and swaps the image (so a brain environment
+# survives it), and an apply after a pin registers a revision with the :latest
+# floor and this environment. The next API deploy re-pins the two API families
+# (every merge to main deploys the API), but the two topo families stay on
+# :latest until deploy-topo-worker next runs, which it does only for a change
+# under topo/ or when the family's tag is not a sha (deploy-guard.yml treats
+# that as "live unknown" and deploys): so the topo image at :latest has to carry
+# the brain's certificate before brain_serving is set, and after the apply the
+# topo families are repinned by hand (rollback.yml, target worker, the sha they
+# carried before: the deploy workflow has no manual trigger).
+locals {
+  rds_db_host = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+
+  db_environment = var.brain_serving ? [
+    { name = "DATABASE_SSL_CA", value = "/app/brain-ca.pem" },
+    { name = "DB_HOST", value = aws_eip.brain[0].public_dns },
+    ] : [
+    { name = "DB_HOST", value = local.rds_db_host },
+  ]
+}
 
 resource "aws_ecs_task_definition" "api_script" {
   container_definitions = jsonencode([{
     # Always overridden by the RunTask caller; this refuses a bare start rather
     # than booting the API server with the production database credentials.
     command = ["node", "-e", "console.error('api-script needs a command override'); process.exit(1)"]
-    environment = [{
+    environment = concat([{
       name  = "AUTH_MODE"
       value = "oidc"
       }, {
@@ -36,10 +71,7 @@ resource "aws_ecs_task_definition" "api_script" {
       }, {
       name  = "CORS_ORIGIN"
       value = "https://logjamnsw.com,https://www.logjamnsw.com"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -88,7 +120,7 @@ resource "aws_ecs_task_definition" "api_script" {
       }, {
       name  = "TOPO_CDN_BASE_URL"
       value = "https://logjamnsw.com"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
@@ -129,13 +161,10 @@ resource "aws_ecs_task_definition" "api_script" {
 
 resource "aws_ecs_task_definition" "topo_worker" {
   container_definitions = jsonencode([{
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -165,7 +194,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       }, {
       name  = "SVTM_FORMATION_S3_PATH"
       value = "s3://logjam-topo-jobs/svtm/svtm_formation.tif"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
@@ -220,13 +249,10 @@ resource "aws_ecs_task_definition" "topo_worker" {
 resource "aws_ecs_task_definition" "api_migrate" {
   container_definitions = jsonencode([{
     command = ["npx", "prisma", "migrate", "deploy"]
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -235,7 +261,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       }, {
       name  = "NODE_ENV"
       value = "production"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
@@ -276,13 +302,10 @@ resource "aws_ecs_task_definition" "api_migrate" {
 resource "aws_ecs_task_definition" "topo_export_worker" {
   container_definitions = jsonencode([{
     entryPoint = ["python3", "/app/export_worker.py"]
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -306,7 +329,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"

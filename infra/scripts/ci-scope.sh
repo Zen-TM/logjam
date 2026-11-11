@@ -30,12 +30,17 @@
 # fails "a rename out of an area"; dropping the worker image's paths from
 # topo_e2e fails "topo_e2e: worker source" and dropping the RunTask files fails
 # "topo_e2e: the start route"; dropping lockfiles from setup_smoke
-# fails "setup_smoke: a nested lockfile"; a scoped job in any workflow whose
+# fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
+# brain_postgres fails "brain_postgres: the Compose file that builds it"; dropping
+# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
+# infra/brain/ from terraform fails "terraform: a brain host file its guards read"; dropping infra/lambda/brain-watchdog/ from terraform fails "terraform: the watchdog source the plan zips"; a scoped job in any workflow whose
+# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
+# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; narrowing terraform to .tf files fails "terraform: the brain's settings file"; a scoped job in any workflow whose
 # `if:` is not the fail-open expression, or a `changes` output wired to another
 # area's value, fails that workflow's checks.
 set -uo pipefail
 
-AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke"
+AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke brain_postgres brain_e2e"
 
 # A change to the gate itself runs the whole gate.
 ALWAYS='^(\.github/workflows/ci\.yml|infra/scripts/ci-scope\.sh)$'
@@ -64,9 +69,20 @@ paths_for() {
     # A migration, run under the live release (rollback-compat.yml).
     rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
     # Static Terraform checks and the plan-comment tests (terraform-ci.yml).
-    terraform) echo '^(infra/terraform/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
+    # infra/brain/ because envs/prod/tests reads the host files the brain's
+    # user data embeds (its size and secret guards); postgres/ and tests/ there
+    # run it needlessly, which costs seconds.
+    # infra/lambda/brain-watchdog/ because the plan zips it (source_code_hash).
+    terraform) echo '^(infra/terraform/|infra/brain/|infra/lambda/brain-watchdog/|infra/scripts/plan-summary|infra/scripts/__fixtures__/|\.github/workflows/terraform-ci\.yml$)' ;;
     # What `make setup` reads on a fresh machine (setup-smoke.yml).
     setup_smoke) echo '^(mise\.toml|Makefile|docs/dev-setup\.md|\.github/workflows/setup-smoke\.yml)$|(^|/)package-lock\.json$|^topo/requirements[^/]*\.txt$' ;;
+    # The Postgres image's build context and tests, and the Compose file that
+    # builds it for local dev.
+    brain_postgres) echo '^(infra/brain/postgres/|docker-compose\.yml$)' ;;
+    # The host's scripts and Compose files, and what the test builds or reads
+    # from elsewhere: the API image's Dockerfile and migrations, the role script and
+    # the script that builds the release pointers it feeds the agent.
+    brain_e2e) echo '^(infra/brain/|api/(Dockerfile|prisma/|prisma\.config\.ts)|scripts/bootstrap-app-db-role\.sql$|infra/scripts/brain-release\.sh$)' ;;
     *) return 1 ;;
   esac
 }
@@ -148,15 +164,30 @@ self_test() {
   check "rollback_compat: its workflow"                   rollback_compat true  0 '.github/workflows/rollback-compat.yml'
   check "rollback_compat: the schema alone"               rollback_compat false 0 'api/prisma/schema.prisma'
   check "terraform: a root"                               terraform true  0 'infra/terraform/envs/prod/ecs.tf'
+  check "terraform: the brain's settings file"            terraform true  0 'infra/terraform/envs/prod/brain.auto.tfvars'
   check "terraform: the plan-summary script"              terraform true  0 'infra/scripts/plan-summary.mjs'
   check "terraform: its workflow"                         terraform true  0 '.github/workflows/terraform-ci.yml'
   check "terraform: another infra script"                 terraform false 0 'infra/scripts/deploy-guard.sh'
+  check "terraform: a brain host file its guards read"    terraform true  0 'infra/brain/host/lib.sh'
+  check "terraform: the watchdog source the plan zips"    terraform true  0 'infra/lambda/brain-watchdog/handler.py'
   check "setup_smoke: a nested lockfile"                  setup_smoke true  0 'frontend/package-lock.json'
   check "setup_smoke: the root lockfile"                  setup_smoke true  0 'package-lock.json'
   check "setup_smoke: mise.toml"                          setup_smoke true  0 'mise.toml'
   check "setup_smoke: topo requirements"                  setup_smoke true  0 'topo/requirements-test.txt'
   check "setup_smoke: the guide"                          setup_smoke true  0 'docs/dev-setup.md'
   check "setup_smoke: a package.json alone"               setup_smoke false 0 'api/package.json'
+  check "brain_postgres: the image's config"             brain_postgres true  0 'infra/brain/postgres/postgresql.conf'
+  check "brain_postgres: its tests"                       brain_postgres true  0 'infra/brain/postgres/tests/test.sh'
+  check "brain_postgres: the Compose file that builds it" brain_postgres true  0 'docker-compose.yml'
+  check "brain_postgres: other infra"                     brain_postgres false 0 'infra/scripts/deploy-guard.sh'
+  check "brain_e2e: a host script"                        brain_e2e true  0 'infra/brain/host/boot.sh'
+  check "brain_e2e: the Postgres image it builds"         brain_e2e true  0 'infra/brain/postgres/Dockerfile'
+  check "brain_e2e: the API image's Dockerfile"           brain_e2e true  0 'api/Dockerfile'
+  check "brain_e2e: a migration it runs"                  brain_e2e true  0 'api/prisma/migrations/2026/migration.sql'
+  check "brain_e2e: the role script it reuses"            brain_e2e true  0 'scripts/bootstrap-app-db-role.sql'
+  check "brain_e2e: the script that builds its release pointers" brain_e2e true  0 'infra/scripts/brain-release.sh'
+  check "brain_e2e: api source"                           brain_e2e false 0 'api/src/routes/places.ts'
+  check "brain_e2e: other infra"                          brain_e2e false 0 'infra/scripts/deploy-guard.sh'
   check "empty diff"                                      api_integration false 0 ''
   check "diff unreadable"                                 mobile true  128 'fatal: bad revision'
 

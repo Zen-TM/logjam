@@ -1,0 +1,12 @@
+[Unit]
+Description=Write the canary and status.json, on a timer
+# Not ordered after brain-boot.service: status.json goes out while a restore
+# runs, and when boot.sh refuses, saying so.
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

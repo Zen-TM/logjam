@@ -29,6 +29,8 @@ jobs:
       mobile: ${{ steps.scope.outputs.mobile }}
       migrations: ${{ steps.scope.outputs.migrations }}
       topo_e2e: ${{ steps.scope.outputs.topo_e2e }}
+      brain_postgres: ${{ steps.scope.outputs.brain_postgres }}
+      brain_e2e: ${{ steps.scope.outputs.brain_e2e }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -550,6 +552,70 @@ jobs:
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
 
+  brain-postgres-image:
+    # The Postgres image local dev runs (docker-compose.yml) and prod's will.
+    # The tests read the live server's logging settings, so a mistake in
+    # postgresql.conf fails here; the mutation each guard names is in test.sh.
+    # Each architecture builds and runs natively: prod is arm64, dev is either.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.brain_postgres != 'false' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the image and test it
+        run: infra/brain/postgres/tests/test.sh
+
+  brain-e2e:
+    # The brain host's whole life on the runner, no AWS: bootstrap, reboot,
+    # refusing an empty database, releases, losing the disk and restoring. The
+    # mutation each scenario names is in tests/e2e.sh. Both architectures: the
+    # brain is arm64, and this is the only place it runs before a real machine.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.brain_e2e != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Play the brain's life
+        run: infra/brain/tests/e2e.sh
+
+  # One stable name for the required-check rule (envs/github/rulesets.tf): the
+  # matrix's own names carry the runner. A scoped-out run skips the matrix and
+  # passes.
+  brain-e2e-gate:
+    needs: brain-e2e
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every architecture passed or was scoped out
+        env:
+          RESULT: ${{ needs.brain-e2e.result }}
+        run: test "$RESULT" = success -o "$RESULT" = skipped
+
+  # One stable name for a required-check rule: the matrix's own names carry
+  # the architecture. A scoped-out run skips the matrix and passes.
+  brain-postgres:
+    needs: brain-postgres-image
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every architecture passed or was scoped out
+        env:
+          RESULT: ${{ needs.brain-postgres-image.result }}
+        run: test "$RESULT" = success -o "$RESULT" = skipped
+
   topo:
     runs-on: ubuntu-latest
     steps:
@@ -865,6 +931,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ECS task-definition pin filter
         run: infra/scripts/pin-ecs-task-image.sh --self-test
+      # The topo image's build context is topo/, so it carries its own copy of
+      # the brain's certificate (topo/Dockerfile). A copy that drifts from the
+      # one Terraform and the API image read would have the workers trust a
+      # certificate the brain no longer serves, and fail at their first query.
+      - name: The brain's certificate is the same file in both build contexts
+        run: cmp infra/brain/brain-ca.pem topo/brain-ca.pem
       # The deploy and rollback workflows' decisions, each with fixtures and
       # no AWS: which task defs run which image (checked against ecs.tf),
       # whether a deploy runs (deploy-guard.yml) and what the frontend prune
@@ -873,6 +945,16 @@ jobs:
         run: infra/scripts/pin-release.sh --self-test
       - name: Deploy guard decisions
         run: infra/scripts/deploy-guard.sh --self-test
+      # The release pointer the deploy and rollback write for the brain,
+      # held to the checks the brain's release agent applies.
+      - name: Brain release pointer
+        run: infra/scripts/brain-release.sh --self-test
+      # The one settings file the deploy workflows and Terraform both read
+      # (brain.auto.tfvars): how it is parsed, what a deploy asks of the
+      # migrate task definition, and that no Elastic Beanstalk step runs when
+      # the brain serves.
+      - name: Brain settings
+        run: infra/scripts/brain-setting.sh --self-test
       # What image-build.yml builds, checked against the Dockerfiles' COPY
       # lines and deploy-guard.sh's worker list.
       - name: Image build scope
@@ -886,6 +968,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      # The brain watchdog (infra/lambda/brain-watchdog): standard library
+      # only, a fake S3 client and a fake URL opener.
+      - name: Brain watchdog
+        run: python3 -m unittest discover -s infra/lambda/brain-watchdog
       - name: rollback-compat mirrors api-integration
         run: |
           pip install pyyaml==6.0.3

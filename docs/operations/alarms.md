@@ -1,7 +1,8 @@
 # Alarms
 
 Prod's CloudWatch alarms, what fires each one, and what to do first. They
-are defined in `infra/terraform/envs/prod/monitoring.tf` and all send to the
+are defined in `infra/terraform/envs/prod/monitoring.tf` (the brain's, in
+`brain_alarms.tf` and `brain_watchdog.tf`) and all send to the
 `logjam-alerts` SNS topic (`ap-southeast-2`), which emails the maintainer
 when an alarm fires and again when it clears. Every alarm's email repeats
 its first step and links here.
@@ -27,9 +28,18 @@ that goes wrong between deploys.
 | `logjam-fire-history-not-launched` | EventBridge Scheduler's call to start the monthly fire history build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-coverage-failed` | The monthly coverage build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-coverage` |
 | `logjam-coverage-not-launched` | EventBridge Scheduler's call to start the monthly coverage build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
+| `logjam-signup-cap-80-percent` | Sign-ups this month reached 80% of the monthly cap | Is it growth or a flood? Raise the cap or leave it ([Sign-up cap](#sign-up-cap)) |
+| `logjam-signup-trigger-errors` | The pre sign-up function returned an error: the cap is full, or the trigger is broken | Compare the month's count with the cap; if under it, read the function's log group ([Sign-up cap](#sign-up-cap)) |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
+| `logjam-brain-system-status-failed` | AWS's system status check on the brain (the EC2 host) failed for 2 minutes; EC2 is recovering it onto new hardware | Wait for the OK email, then confirm the API answers and Postgres is up (the brain section below) |
+| `logjam-brain-instance-status-failed` | The brain's own status check failed for 10 minutes; it is being rebooted | Wait for the OK email. If it comes back failing, open a Session Manager shell and read why |
+| `logjam-brain-cpu-credits-low` | The brain's CPU credit balance has been under 30 for 30 minutes (standard credit mode only) | Find what is using the CPU; at zero the brain is throttled to its baseline |
+| `logjam-brain-cpu-high` | The brain's CPU has averaged 20% or more for an hour | Find out what is using the CPU (growth, one client misbehaving, or a runaway process). Above the free allowance it costs cents; at 50% the API is three quarters of the way to its limit of about 80 requests a second, and a bigger instance of the same family adds memory, not speed |
+| `logjam-brain-checks-failing` | The brain's outside check (a Lambda every 5 minutes) failed in two of the last three runs | Read the function's latest log line for the codes that failed, then the table under it in the brain section below |
+| `logjam-brain-watchdog-not-running` | The outside check has not run for 15 minutes, so nothing is watching the brain | Check the EventBridge rule `logjam-brain-watchdog` is enabled and the function exists, then read its log group |
+| `logjam-ceiling` (an AWS Budget, not a CloudWatch alarm) | Actual spend this month reached US$100 before tax, and AWS attached a deny policy to the API's roles | New worker jobs fail and uploads are refused. Find what ran the bill up, then undo the deny ([Cost ceiling](#cost-ceiling)) |
 
 ## API
 
@@ -39,7 +49,10 @@ A metric filter counts every line of the API's request log (pino-http, in the
 Elastic Beanstalk group
 `/aws/elasticbeanstalk/logjam-api-prod/var/log/eb-docker/containers/eb-current-app/stdouterr.log`)
 whose `res.statusCode` is 500 or more, as metric `Responses5xx` in namespace
-`Logjam/Api`.
+`Logjam/Api`. Once `brain_public` is set in `brain.auto.tfvars` and CloudFront
+sends users to the brain, the filter reads the brain's group
+`/logjam/brain/api` instead (the same JSON lines); moving it replaces the
+filter, a few seconds without a datapoint.
 
 Why these numbers: one phone whose sync keeps failing retries on a backoff
 from 1 second to 5 minutes, so it sends about ten requests in its first few
@@ -62,7 +75,12 @@ writes no log line. The next alarm covers that.
 Elastic Beanstalk's enhanced health rolls the instance, the container and
 the share of failing requests into one status. The alarm fires when it has
 been Degraded or Severe for ten minutes. A deploy restarts the API cold and
-shows Severe for a minute or two, which is why the window is ten.
+shows Severe for a minute or two, which is why the window is ten. Once
+`brain_public` moves CloudFront to the brain, this environment idles until its
+teardown: the alarm stays but its actions are disabled, so it does not page,
+and reverting `brain_public` (a rollback to Elastic Beanstalk) enables them
+again. A crash loop or dead host of the brain's API is the watchdog's
+(`api_unready`) and the EC2 status-check alarms.
 
 1. Read why: Elastic Beanstalk console → `logjam-api-prod` → Health, or
    `aws elasticbeanstalk describe-environment-health --environment-name logjam-api-prod --attribute-names All`.
@@ -155,6 +173,60 @@ got past, since the next scheduled run is a month away.
 2. If none ran, find the `RunTask` call by the role
    `logjam-place-registry-scheduler` in CloudTrail and read its error: a role,
    subnet or task definition problem, fixed in Terraform.
+
+## Sign-up cap
+
+Cognito bills a user as active for the month they sign up, confirmed or not,
+and nothing in front of its endpoints limits how fast an account can be
+created. So a pre sign-up function (`infra/lambda/cognito-pre-signup`) counts
+self-service sign-ups in the DynamoDB table `logjam-signup-counter` (one item
+per UTC month, attribute `n`) and refuses them once `signup_cap_per_month`
+(`infra/terraform/envs/prod/cognito_signup_cap.tf`, 9000) is reached. People
+already signed up are untouched, and so are accounts an administrator creates.
+Both clients tell a refused person "Logjam isn't taking new accounts right now.
+Try again next month." The count starts again on the 1st (UTC).
+
+If the counter cannot be reached, the sign-up goes through uncounted rather
+than fail, so a DynamoDB outage can let a few past the cap but never blocks
+anyone.
+
+### `logjam-signup-cap-80-percent`
+
+A metric filter on the function's log group reads each `signup_counted` line
+(`n` this month, `cap`) as `SignupsThisMonth` in namespace `Logjam/Signup`.
+The alarm fires when the day's highest count reaches 80% of the cap. The metric
+only has a point when a sign-up is counted, and once the cap is full none are,
+so the alarm holds its state through quiet days instead of clearing. After the
+1st it clears at the first counted sign-up of the new month, not at midnight; if
+nobody signs up, it stays up.
+
+1. See the count: `aws dynamodb get-item --table-name logjam-signup-counter
+   --key '{"month":{"S":"2026-11"}}'` (use the current UTC month). The item
+   holds a number and nothing else.
+2. Real growth: the cap is already 9000, the ceiling of the free tier:
+   Cognito's 10,000 free active users a month also have to cover people who
+   sign in. Going higher is a billing decision, not a quick fix: it takes a PR
+   that changes `signup_cap_per_month` and the variable's validation in
+   `cognito_signup_cap.tf` together with its guard in `guards.tftest.hcl`
+   (`signup_cap_variable_stays_inside_the_free_tier`). Check the user pool's
+   active users first. (If someone lowered the cap, raising it back up to 9000
+   is an ordinary PR whose apply changes the function's environment only.)
+3. A flood: leave the cap. At the cap it stops the bill, at the price of
+   closing sign-ups until the 1st.
+
+### `logjam-signup-trigger-errors`
+
+The function's `Errors` metric above zero. A refusal is a thrown error, so this
+also fires when the cap is full; a broken trigger fails real sign-ups the same
+way, which is why it alarms.
+
+1. Read the count (above). At the cap, that is the cause: nothing to fix.
+2. Under the cap, read `/aws/lambda/logjam-cognito-pre-signup` (it logs
+   counts and error class names, never who signed up) for a crash or a
+   timeout. If a deploy just changed the function, revert that PR.
+3. A person who must get in while the cap is full: create their account as an
+   administrator (Cognito console, the user pool, Create user, or
+   `aws cognito-idp admin-create-user`). That path is never counted or refused.
 
 ## Testing an alarm
 
@@ -293,3 +365,186 @@ since the next scheduled run is a month away.
 2. If none ran, find the `RunTask` call by the role `logjam-coverage-scheduler`
    in CloudTrail and read its error: a role, subnet or task definition
    problem, fixed in Terraform.
+
+## The brain
+
+These alarms exist only while the brain's EC2 instance does
+(`infra/terraform/envs/prod/brain_alarms.tf` and `brain_watchdog.tf`), and the
+credits-low alarm only in standard credit mode. Do not test the two status
+alarms with `set-alarm-state`: their actions recover or reboot the host.
+
+### `logjam-brain-system-status-failed`
+
+EC2's system status check covers what AWS runs under the instance: power,
+network and the physical host. When it fails for two minutes the alarm asks
+EC2 to recover the instance, which restarts it on other hardware with the same
+disks, address and tags (EC2 also does this by default). The API and Postgres
+are down until it is back, a few minutes.
+
+1. Wait for the OK email.
+2. Check the API answers (`/ready` through CloudFront) and, in a Session
+   Manager shell, that `docker ps` shows `brain-postgres-1` healthy. The boot
+   unit starts Postgres again by itself.
+3. If it does not come back, the instance has to be replaced, which any change
+   to its user data does (a PR touching `infra/brain/`). The data volume is
+   separate and is reattached.
+
+### `logjam-brain-instance-status-failed`
+
+The instance status check covers the operating system: a hung kernel, a full
+disk, a broken network configuration. After ten minutes the alarm reboots the
+instance. Docker stops Postgres cleanly on the way down and the boot unit
+starts it again.
+
+1. Wait for the OK email.
+2. If it comes back failing, open a Session Manager shell and read
+   `journalctl -b -u brain-boot` and `df -h /`.
+
+### `logjam-brain-cpu-credits-low`
+
+Only exists when `brain_cpu_credits` is `standard`. The instance earns CPU
+credits and spends them above its baseline; at zero it is held to the
+baseline, which slows the API and Postgres together. The alarm fires when the
+balance averages under 30 for six readings in a row (30 minutes).
+
+1. Find the cause (the steps under `logjam-brain-cpu-high`).
+2. If the load is real, switch to `unlimited` credits or a bigger instance type.
+
+### `logjam-brain-cpu-high`
+
+One alarm covers both the API running hot and the bill. The brain runs in
+unlimited credit mode (`brain_cpu_credits`, the default): it never throttles,
+and CPU beyond the free allowance is billed at US$0.04 per vCPU-hour. The
+allowance is 10% of the instance on a `t4g.micro` (0.2 vCPU of two) and 20% on
+a `t4g.small`. Idle is about 3% of the instance (the whole host used 0.066 of
+two vCPUs over ten idle minutes, measured on a scratch copy, 2026-11-11), and a
+daily full backup or a boot does not bring an hour to 20% (the busiest hour of
+that rehearsal, with a boot, a data load and a load test in it, averaged
+17.5%), so the alarm fires when one hour averages 20% or more. A month in which no
+hour reaches that costs a `t4g.micro` at most about US$5.84 in surplus credits. It is one reading of an hour on purpose:
+several shorter readings that must all be high would miss a load that rests
+between bursts.
+
+How much traffic that is: on a scratch copy (2026-11-10), 20, 40, 60 and 80
+requests a second used 21, 36, 50 and 64% of the instance. The API is one Node
+process, so it uses one of the two vCPUs and saturates near 80 requests a
+second (it failed at 100). At 50% it is three quarters of the way there.
+
+1. Find out what is using the CPU, by `top` in a Session Manager shell and the
+   API's request log in `/logjam/brain/api` (by client and path): growth, one
+   client misbehaving, or a runaway process such as a stuck query (`docker exec`
+   into Postgres and `select * from pg_stat_activity`), a restore, or a backup
+   running at the same time as traffic.
+2. A one-off is fine. A steady load means the instance is near its limit. A
+   bigger instance of the same family adds memory, not speed; compare the cost
+   with the next size up before changing.
+
+### `logjam-brain-checks-failing`
+
+The brain tells the world how it is doing by writing `status.json` every
+minute, but a machine that is down cannot say so. So a small function, the
+watchdog (`infra/lambda/brain-watchdog`), looks from outside every 5 minutes:
+at that report, at the backup bucket, at the restore drill's report and at the
+public API. A run that finds anything wrong fails on purpose, and the alarm
+fires when two of the last three runs failed, so a single blip does not email.
+
+**Which checks failed:** open the log group `/aws/lambda/logjam-brain-watchdog`
+and read the latest line. It is `{"failed": ["wal_stale", ...]}`: codes only,
+never any data. While the brain is not serving, the line also has
+`"ready_probe"`: the HTTP status the public `/ready` answered to one try, or
+`null` if it could not connect. Before the cutover the old API answers it, so a
+`200` shows the firewall lets the watchdog through; a `403` means it does not.
+The probe never fails a run. Then find each code below. The same line also shows when the
+alarm clears (`{"failed": []}`).
+
+The shell steps need a Session Manager shell on the brain
+(`aws ssm start-session --target <instance id>`). Containers are
+`brain-postgres-1` and `brain-api-1`.
+
+| Code | What it means | First thing to do |
+|---|---|---|
+| `status_missing` | The function could not read `status.json` from the signals bucket: the brain has not written one yet, or cannot | Is the instance running (EC2 console)? In a shell, `journalctl -u brain-status -n 50` shows why the status timer fails |
+| `status_stale` | `status.json` was last written more than 3 minutes ago: the host is down or its status timer stopped | As `status_missing`. If the instance is stopped or unreachable, see the two status-check alarms above |
+| `status_invalid` | `status.json` is not valid JSON or its `schema` is not 1 | Someone changed `infra/brain/host/status.sh` without the watchdog. Read the file (`aws s3 cp s3://<signals bucket>/status.json -`) and fix whichever side is wrong |
+| `boot_failed` | The boot unit's mode is `failed` or `refused`: Postgres was not started on purpose or by mistake | `journalctl -b -u brain-boot`. `refused` means a blank data disk with no backup and no permission to create a database; never set `brain_bootstrap` just to silence it |
+| `postgres_down` | Postgres is not answering, and no restore is running | `docker ps` and `docker logs --tail 50 brain-postgres-1`. The boot unit restarts it; `systemctl restart brain-boot` if it does not |
+| `disk_high` | The data disk is 80% full (or its usage could not be read) | `df -h /data`, then what is big: `du -sh /data/postgres/pg_wal` is the usual suspect when archiving is stuck (see `wal_stale`). A full disk stops Postgres; grow the volume (`brain_data_volumes`) before it fills |
+| `wal_stale` | Postgres is up, but no new WAL has reached the backup bucket for 5 minutes. A restore from now would lose everything since. This is the one check that can catch a backup that has silently stopped, and it does not trust the brain's own report | `docker logs --tail 50 brain-postgres-1` and look for `archive-push` errors (an expired role, S3 unreachable, bucket policy). Once fixed, run `systemctl start brain-backup-full`: if archiving was stuck for hours, the safety limit may have dropped WAL, and until a new full backup exists a restore would stop at the gap while every other check looks green |
+| `full_stale` | The newest full backup is more than 26 hours old (or there is none) | `journalctl -u brain-backup-full -n 100`, then `systemctl start brain-backup-full` |
+| `memory_low` | Postgres is up and the host has under 100 MiB available (or `status.json` does not say). On a `t4g.micro` the lowest seen in a rehearsal was 164 under a release swap with a 1.7 GB database, 331 idle | The host is close to running out of memory: move `brain_instance_type` in `brain.auto.tfvars` up one size (about two minutes of downtime) |
+| `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
+| `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
+| `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` (its default in `brain_variables.tf`). `replay_short` means the restore replayed none of the recent WAL: if the brain was down or restoring around the drill's time, that outage is the cause and the next drill (or one run by hand) clears it; otherwise the archive has a hole after the last full backup, or the drill cannot read it, so read `/logjam/brain/drill` and take a full backup now, so a restore no longer depends on the missing WAL |
+| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row. Between the cutover's two flips the probe still reaches the old API, so the brain's own API is checked by hand then ([brain-cutover.md](brain-cutover.md), the host check) | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
+
+`wal_stale`, `status_*` and `postgres_down` can all fire together when the
+host goes down: start with the status-check alarms.
+
+There is no code for how stale a restore came up. That number is the age of the
+newest restored data when recovery ends, so it is the outage plus the loss: any
+real recovery takes more than five minutes, and a check would stay red for a day
+after every one, hiding other failures. For a rewind to a chosen time it is
+measured from that time instead, so it says how stale the data was at the
+target. `last_restore_lag_seconds` stays in `status.json` for the recovery
+runbook ([brain.md](brain.md)).
+
+### `logjam-brain-watchdog-not-running`
+
+The check that watches the brain must itself be watched. This alarm fires when
+the function was not invoked at all in 15 minutes (missing data counts), which
+means the schedule or the function is gone, not that the brain is unhealthy.
+
+1. In the EventBridge console check the rule `logjam-brain-watchdog` is
+   enabled and has the function as its target.
+2. Check the function `logjam-brain-watchdog` exists and read its log group for
+   the last run.
+3. If both look right, run the function once from the Lambda console and see
+   what it logs.
+
+## Cost ceiling
+
+`infra/terraform/envs/prod/budget_breaker.tf` holds a second AWS Budget,
+`logjam-ceiling`: US$100 a month, before tax (`var.cost_ceiling_usd`). It
+emails `logjam-budget-alerts` at 80% of actual spend and at 100% forecast. At
+100% of actual spend, AWS Budgets itself attaches the managed policy
+`logjam-cost-ceiling-deny` to the roles `logjam-eb-role` and `logjam-brain`,
+with no approval step and no code of ours running. It is the backstop under the
+compute pool's polite refusals and should never fire in a normal month. The
+earlier warning is `logjam-monthly` in `budgets.tf`, which includes tax and is
+US$50.
+
+The policy denies `ecs:RunTask` on every task definition and `s3:PutObject` on
+`logjam-media` and `logjam-topo-jobs`, nothing else. So:
+
+- Starting a LiDAR job, an export or any other worker from the API fails, and
+  so does creating or finishing an upload, including a presigned URL already
+  handed out, because S3 checks the signer when the URL is used. The user
+  sees an error where they would otherwise have seen a polite refusal.
+- Everything already stored is untouched. Downloads and reads work, jobs
+  already running finish, and the brain's backups and signals bucket are never
+  denied.
+
+The budget's figures lag by hours, so the breaker is late by design: spend can
+pass the ceiling before it acts.
+
+1. Find what spent the money: Cost Explorer grouped by service, then by usage
+   type, for this month.
+2. Stop it at the source. Raising the ceiling alone does not lift the deny.
+3. Undo the deny with AWS Budgets, not by detaching the policy by hand, so it
+   knows the action was reversed. In the console: Budgets → `logjam-ceiling` →
+   Action history → Reverse. Or with the CLI (`<id>` is `ActionId` in the first
+   command's output):
+
+   ```sh
+   aws budgets describe-budget-actions-for-budget \
+     --account-id 620853681701 --budget-name logjam-ceiling
+   aws budgets execute-budget-action --account-id 620853681701 \
+     --budget-name logjam-ceiling --action-id <id> \
+     --execution-type REVERSE_BUDGET_ACTION
+   ```
+
+   A reversed action is not evaluated again for the rest of the month; choose
+   Reset in the console if it should re-arm.
+4. A Terraform apply does not lift the deny: Terraform does not manage which
+   managed policies are attached to `logjam-brain` or `logjam-eb-role`, so
+   the block stays until the action is reversed.

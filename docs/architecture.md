@@ -31,8 +31,7 @@ flowchart LR
   end
 
   subgraph vpc[VPC]
-    eb["API<br/>(Elastic Beanstalk)"]
-    rds[("RDS Postgres")]
+    brain["The brain<br/>(one EC2 instance:<br/>the API and Postgres)"]
   end
 
   frontend[("frontend<br/>bucket")]
@@ -45,10 +44,9 @@ flowchart LR
   cfweb -- "/master/* basemap tiles" --> data
   web -- "JWT" --> cfapi
   gps -- "JWT" --> cfapi
-  cfapi --> eb
-  eb -- "verify JWT" --> cognito
-  eb --> rds
-  eb -- "mint presigned URLs" --> data
+  cfapi --> brain
+  brain -- "verify JWT" --> cognito
+  brain -- "mint presigned URLs" --> data
   web -. "presigned GET/PUT" .-> data
   gps -. "presigned GET/PUT" .-> data
 ```
@@ -57,22 +55,22 @@ Work that outlives a request runs outside it:
 
 ```mermaid
 flowchart LR
-  eb["API<br/>(Elastic Beanstalk)"]
+  brain["The brain<br/>(the API)"]
   workers["Workers<br/>(ECS Fargate, one task per job)"]
-  rds[("RDS Postgres")]
+  pg[("Postgres<br/>(on the brain)")]
   data[("topo-jobs<br/>bucket")]
   cognito["Cognito"]
   lambda["Custom email<br/>sender Lambda"]
   resend["Resend<br/>(email)"]
   expo["Expo<br/>(push)"]
 
-  eb -- "RunTask / StopTask" --> workers
-  workers -- "claim job, write result" --> rds
+  brain -- "RunTask / StopTask" --> workers
+  workers -- "claim job, write result" --> pg
   workers -- "read input, write output" --> data
   workers -- "job done or failed" --> resend
   workers --> expo
-  eb -- "sweep results" --> resend
-  eb --> expo
+  brain -- "sweep results" --> resend
+  brain --> expo
   cognito -- "verification codes" --> lambda --> resend
 ```
 
@@ -87,22 +85,29 @@ UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
   SPA from the frontend bucket; `/master/*` serves the shared basemap tiles
   from the topo-jobs bucket. That is why the apps' topo CDN base URL
   (`terraform output topo_cdn_base_url`) is the site itself.
-- *api* serves `api.logjamnsw.com` and forwards everything, uncached, to
-  Elastic Beanstalk.
+- *api* serves `api.logjamnsw.com` and forwards everything, uncached, to the
+  brain.
 
 The API accepts only traffic that came through the *api* distribution. Two
-guards enforce this: the instance's security group admits port 80 only from
-CloudFront's address ranges (`envs/prod/eb.tf`), and CloudFront adds a secret
+guards enforce this: the brain's security group admits port 80 only from
+CloudFront's address ranges (`envs/prod/brain_network.tf`), and CloudFront adds a secret
 `X-Origin-Verify` header that the API checks (`envs/prod/origin_verify.tf`,
 `api/src/index.ts`).
 
-**API.** Node/Express in `api/`, one Docker container on a single-instance
-Elastic Beanstalk environment (no load balancer). The container also runs the
-periodic sweeps (`api/src/lib/topoJobReaper.ts`): it fails stuck jobs, expires
-old exports, removes orphaned media uploads and expired
-"Send a copy" files, and meters egress. A deploy briefly takes the API down.
-That is why deploys smoke-test and roll back on their own
-([below](#how-a-change-reaches-prod)).
+**The brain.** One EC2 instance (`envs/prod/brain_instance.tf`) running Docker
+Compose (`infra/brain/`): the API and Postgres, with the database on its own
+encrypted disk. It has no load balancer, no autoscaling and no SSH; the
+maintainer reaches it only through Session Manager
+([0047](decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md),
+[`operations/brain.md`](operations/brain.md)). A timer on the host makes the
+running API match a release pointer in a bucket.
+
+**API.** Node/Express in `api/`, one Docker container on the brain. The
+container also runs the periodic sweeps (`api/src/lib/topoJobReaper.ts`), in
+one process per database: it fails stuck jobs, expires old exports, removes
+orphaned media uploads and expired "Send a copy" files, and meters egress. A
+release recreates the container, a few seconds' gap. That is why deploys
+smoke-test and roll back on their own ([below](#how-a-change-reaches-prod)).
 
 **Workers.** On-demand ECS Fargate tasks, one per job, with no long-running
 service. The API launches them with `RunTask` through
@@ -126,10 +131,14 @@ notify the user in Logjam Web and Logjam GPS, by push and by email.
 [`infra/scripts/pin-release.sh`](../infra/scripts/pin-release.sh) declares
 which family runs which image.
 
-**Data.** RDS Postgres is private to the VPC (not publicly accessible). The
-API and the migrate task connect as a least-privilege role over verified TLS
-([0001](decisions/0001-rds-tls-via-bundled-ca.md)). Logjam's S3 buckets are
-private. Clients read and write them only through short-lived presigned URLs,
+**Data.** Postgres runs on the brain and takes connections only from the
+workers' security group (and the API beside it). The API, the workers and the
+migrate task connect as a least-privilege role over TLS, verifying the brain's
+own certificate by name (bundled into the images). pgBackRest ships WAL every
+minute and a full backup every night to a bucket nobody can empty for 7 days,
+and a scheduled task restores the newest backup daily to prove it works. Until
+the teardown, Elastic Beanstalk and RDS still exist, idle and read-only, as the
+rollback. Logjam's S3 buckets are private. Clients read and write them only through short-lived presigned URLs,
 and CloudFront reads them through origin access control:
 
 | Bucket | Holds | `terraform output` |
@@ -139,6 +148,8 @@ and CloudFront reads them through origin access control:
 | frontend | the Logjam Web build | `s3_bucket_frontend` |
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
+| brain backups | the database's WAL and full backups, object-locked for 7 days (`envs/prod/brain_s3.tf`) | none: `logjam-brain-backups-` plus the account id |
+| brain signals | the release pointer, the brain's status and the restore drill's verdict; no user data | none: `logjam-brain-signals-` plus the account id |
 
 **Auth.** One Cognito user pool, with a hosted-pages domain and Logjam's
 branding (Managed Login, `envs/prod/cognito.tf`), which is the fallback when
@@ -156,7 +167,8 @@ the provider is config; pushes go through Expo's push service
 in-app notification row is the record.
 
 **Monitoring.** CloudWatch alarms in `envs/prod/monitoring.tf` all publish to
-one SNS topic, which emails the maintainer.
+one SNS topic, which emails the maintainer. The brain also has an outside
+check, a Lambda every 5 minutes (`infra/lambda/brain-watchdog`).
 [`operations/alarms.md`](operations/alarms.md) lists each alarm and what to do
 first. A budget alarm (`envs/prod/budgets.tf`) and a nightly drift check
 (`terraform-drift.yml`, which plans `envs/prod` and `envs/github` and opens an
@@ -321,7 +333,7 @@ releases Logjam GPS.
 
 | What changed | Workflow | What happens |
 |---|---|---|
-| `api/` | `deploy-api.yml`, after CI passes on `main` | Build and push the API image. Pin the API-image task definitions to it. Run the migrate task and stop if it fails. Swap Elastic Beanstalk to the new version. Smoke-test it, and roll back automatically if the smoke test fails. |
+| `api/` | `deploy-api.yml`, after CI passes on `main` | Build and push the API image. Pin the API-image task definitions to it. Run the migrate task and stop if it fails. Write the release pointer, which the brain's timer follows. Smoke-test it, and roll back automatically if the smoke test fails. |
 | `frontend/` | `deploy-frontend.yml`, after CI passes on `main` | Build, upload to the frontend bucket, switch `index.html`, invalidate the CloudFront cache. Smoke-test, and roll back automatically if it fails. |
 | `topo/` | `deploy-topo-worker.yml`, after CI passes on `main` | Build and push the worker image, then pin the topo task definitions to it. The next job runs it. |
 | `infra/terraform/envs/prod/` (and `modules/`), `infra/lambda/` | `terraform-plan.yml` (`plan-prod`) on the PR, `terraform-apply.yml` (`apply-prod`) on merge | The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0026](decisions/0026-plan-fingerprint-covers-planned-values.md)). |
@@ -375,6 +387,9 @@ repeat it.
   builds: [0022](decisions/0022-mobile-builds-supported-three-months.md), with
   [0017](decisions/0017-inbox-edits-are-outbox-ops.md) and
   [0018](decisions/0018-foreign-fields.md).
+- **The brain's rules** (one instance, data on a disk Terraform cannot destroy,
+  backups nobody can empty, CI never has a shell on it):
+  [0047](decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md).
 - **Prod, and this repository's GitHub settings, change only through a
   merged PR**:
   [0026](decisions/0026-plan-fingerprint-covers-planned-values.md),
@@ -392,10 +407,11 @@ access (`terraform init` first). The output always beats any copy of a value.
 | Audit bucket | `terraform output audit_bucket` |
 | CloudFront distributions | `terraform output web_cloudfront_distribution_id`, `api_cloudfront_distribution_id` |
 | Topo CDN base URL | `terraform output topo_cdn_base_url` |
-| Elastic Beanstalk environment | `terraform output eb_environment_name`, `eb_environment_cname` |
+| The brain's stable name (the database's host name) | `terraform output brain_public_dns`; its instance id changes on every replacement, so find it by its `Name` tag (`operations/brain.md`) |
+| Elastic Beanstalk environment (idle until the teardown) | `terraform output eb_environment_name`, `eb_environment_cname` |
 | ECS cluster, worker subnets and security group | `terraform output ecs_cluster`, `ecs_subnets`, `ecs_security_groups` |
 | ECR repositories | `terraform output ecr_api_repository_url`, `ecr_topo_worker_repository_url` |
-| Database endpoint, name, master secret | `terraform output rds_endpoint`, `rds_db_name`, `db_secret_arn` |
+| RDS endpoint, name, master secret (idle until the teardown) | `terraform output rds_endpoint`, `rds_db_name`, `db_secret_arn` |
 | Cognito pool and app client | `terraform output cognito_user_pool_id`, `cognito_client_id`, `cognito_region` |
 | Cognito email sender Lambda | `terraform output cognito_email_sender_function_name` |
 | Alarm topic | `terraform output alerts_topic_arn` |
@@ -407,7 +423,7 @@ access (`terraform init` first). The output always beats any copy of a value.
 
 You need neither AWS nor these ids to work on Logjam. `make setup`, then
 `make dev`, runs the whole stack locally. Postgres runs in Docker; MiniStack
-stands in for S3 and ECS, so jobs run as local containers; and auth is faked
+stands in for S3 and ECS, so jobs run as local containers; Postgres is the same image the brain runs; and auth is faked
 as the seeded user alice. `envs/local` provisions it with the same storage
 module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
 

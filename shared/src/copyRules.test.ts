@@ -4,9 +4,15 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { ApiError, AUTH_ERROR_CODES, messageFromError } from "./apiErrors.js";
+import {
+  ApiError,
+  AUTH_ERROR_CODES,
+  messageFromError,
+  SIGNUP_CAP_MESSAGE,
+} from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
 import { copySay, copyViolations } from "./copyRules.js";
+import { NSW_REGION } from "./regions.js";
 
 // Every string a screen contract declares keeps the copy rules of
 // shared/DESIGN.md §12: no "Retry", no "the app", no "basemap", "tiles" or "the
@@ -57,6 +63,16 @@ describe("contract copy", () => {
     if (typeof value !== "function") strings(value, name, all);
   }
   fromFunctions(all);
+  // Functions of a region, which `fromFunctions` can't call. Mutation: put
+  // "Retry" in `ROPEWIKI_OFFER.confirmBody`.
+  const { ROPEWIKI_OFFER } = contracts;
+  for (const key of ["title", "hint", "confirmBody"] as const)
+    all.push([`ROPEWIKI_OFFER.${key}`, ROPEWIKI_OFFER[key](NSW_REGION)]);
+  for (const offers of [1, 2])
+    all.push([
+      `ROPEWIKI_OFFER.menu(${offers})`,
+      ROPEWIKI_OFFER.menu(NSW_REGION, offers),
+    ]);
 
   it("reads strings at all — a silent zero would pass forever", () => {
     expect(all.length).toBeGreaterThan(500);
@@ -269,6 +285,7 @@ describe("shared copy outside contracts/", () => {
   it("keeps every sign-in and failure message to the register", () => {
     const messages = [
       ...Object.values(AUTH_ERROR_CODES),
+      SIGNUP_CAP_MESSAGE,
       ...Array.from({ length: 200 }, (_, i) =>
         messageFromError(
           new ApiError(400 + i, "/x", "GET"),

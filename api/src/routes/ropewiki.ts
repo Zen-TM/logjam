@@ -13,7 +13,9 @@ import {
   ROPE_WIKI_FIELD_KEYS,
   ROPE_WIKI_OWNABLE_FIELDS,
   ropeWikiFieldValues,
+  withExtraLinks,
   type RopeWikiCanyon,
+  type RopeWikiSource,
   type RopeWikiSnapshot,
   type RopeWikiOwnableField,
 } from "../services/ropewiki";
@@ -27,7 +29,8 @@ import {
 import {
   asFieldValues,
   fieldValue,
-  matchOzUltimateUrl,
+  NSW_REGION,
+  REGIONS,
   SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
 } from "@logjam/shared";
@@ -37,22 +40,15 @@ const router = Router();
 
 const UPDATE_CHUNK_SIZE = 200;
 
-// Returns a copy of rw with OzUltimate source unioned into attributes.sources.
-function withOzUltimate(
-  rw: RopeWikiCanyon,
-  altNames: string[] = [],
-): RopeWikiCanyon {
-  const ozUrl = matchOzUltimateUrl(rw.name, altNames);
-  if (!ozUrl) return rw;
-  const existing = rw.attributes?.sources ?? [];
-  if (existing.some(([, u]) => u === ozUrl)) return rw;
-  return {
-    ...rw,
-    attributes: {
-      ...rw.attributes,
-      sources: [...existing, ["OzUltimate", ozUrl] as [string, string]],
-    },
-  };
+/**
+ * The canyon source of the region a request names in `?region=`, or NSW's
+ * when it names none: every build before regions sends none.
+ */
+function canyonSource(req: AuthenticatedRequest): RopeWikiSource {
+  const id = req.query.region ?? NSW_REGION.id;
+  const source = REGIONS.find((region) => region.id === id)?.canyons;
+  if (!source) throw malformed("region has no canyon source");
+  return source;
 }
 
 type ReviewCandidatePayload = {
@@ -69,6 +65,7 @@ type ReviewCandidatePayload = {
 };
 
 async function applyAutoLinkAndCreate(
+  source: RopeWikiSource,
   ownerId: string,
   parsed: RopeWikiCanyon[],
   proposals: DedupeProposal[],
@@ -87,7 +84,7 @@ async function applyAutoLinkAndCreate(
   if (toCreate.length > 0) {
     await prisma.place.createMany({
       data: toCreate.map((p) => {
-        const c = withOzUltimate(parsedByRwId.get(p.ropeWikiId)!);
+        const c = withExtraLinks(source, parsedByRwId.get(p.ropeWikiId)!);
         return {
           ownerId,
           // RopeWiki is a CANYON source, hardwired to the system Canyon type:
@@ -117,7 +114,7 @@ async function applyAutoLinkAndCreate(
       const existing = existingByPlaceId.get(p.bestPlaceId);
       if (!existing)
         throw fault(`Missing existing place for id ${p.bestPlaceId}`);
-      const fresh = withOzUltimate(rawFresh, existing.altNames);
+      const fresh = withExtraLinks(source, rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
       const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
       return prisma.place.update({
@@ -174,13 +171,14 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
+    const source = canyonSource(req);
 
     const fresh = req.query.fresh === "true";
     const {
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(fresh);
+    } = await getRopeWikiCanyons(source, fresh);
 
     const allUserPlaces = await prisma.place.findMany({
       where: { ownerId: user.id },
@@ -207,6 +205,7 @@ router.post(
 
     const proposals = buildProposals(toProcess, candidatePool);
     const result = await applyAutoLinkAndCreate(
+      source,
       user.id,
       toProcess,
       proposals,
@@ -245,6 +244,7 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
+    const source = canyonSource(req);
 
     const decisions = req.body?.decisions;
     if (!Array.isArray(decisions) || decisions.length === 0) {
@@ -277,7 +277,7 @@ router.post(
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(false);
+    } = await getRopeWikiCanyons(source, false);
     const parsedByRwId = new Map(parsed.map((c) => [c.ropeWikiId, c]));
 
     const targetIds = normalized
@@ -326,7 +326,7 @@ router.post(
         );
         continue;
       }
-      const freshWithOz = withOzUltimate(fresh, target.altNames);
+      const freshWithOz = withExtraLinks(source, fresh, target.altNames);
       const merged = mergeFillNulls(target, freshWithOz);
       const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
       updates.push(
@@ -348,7 +348,7 @@ router.post(
     if (toCreateRows.length > 0) {
       await prisma.place.createMany({
         data: toCreateRows.map((rawC) => {
-          const c = withOzUltimate(rawC);
+          const c = withExtraLinks(source, rawC);
           return {
             ownerId: user.id,
             // RopeWiki is a CANYON source, hardwired to the system Canyon type:
@@ -382,13 +382,14 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
+    const source = canyonSource(req);
 
     const fresh = req.query.fresh === "true";
     const {
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(fresh);
+    } = await getRopeWikiCanyons(source, fresh);
 
     // Load all existing RopeWiki-sourced places for this user
     const existingPlaces = await prisma.place.findMany({
@@ -431,7 +432,7 @@ router.post(
       }
 
       const rawSnapshot = existing.ropeWikiSnapshot as RopeWikiSnapshot | null;
-      const freshWithOz = withOzUltimate(freshC, existing.altNames);
+      const freshWithOz = withExtraLinks(source, freshC, existing.altNames);
       const freshSnapshot = {
         name: freshWithOz.name,
         latitude: freshWithOz.latitude,
@@ -580,6 +581,7 @@ router.post(
       const existingByPlaceId = new Map(candidatePool.map((c) => [c.id, c]));
       const proposals = buildProposals(toCreate, candidatePool);
       const result = await applyAutoLinkAndCreate(
+        source,
         user.id,
         toCreate,
         proposals,

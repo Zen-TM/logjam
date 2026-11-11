@@ -830,6 +830,9 @@ router.delete(
       prisma.friendInvite.deleteMany({ where: { inviterId: user.id } }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
+      // After the jobs: deleting them writes the carry-over. The site-wide
+      // row has no owner and stays, so the month's pool still counts them.
+      prisma.computeUsageCarryover.deleteMany({ where: { userId: user.id } }),
       prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       // Explicit even though TripLogPlace.tripLogId cascades on TripLog

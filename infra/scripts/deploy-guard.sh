@@ -43,7 +43,7 @@ decide_fresh() {
 paths_for() {
   case "$1" in
     frontend) echo '^(frontend/|shared/|\.github/workflows/(deploy-frontend|deploy-guard|smoke|rollback)\.yml$|infra/scripts/(deploy-guard|frontend-prune)\.sh$)' ;;
-    worker) echo '^(topo/|\.github/workflows/(deploy-topo-worker|deploy-guard|rollback)\.yml$|infra/scripts/(deploy-guard|pin-release|pin-ecs-task-image)\.sh$)' ;;
+    worker) echo '^(topo/|infra/brain/brain-ca\.pem$|\.github/workflows/(deploy-topo-worker|deploy-guard|rollback)\.yml$|infra/scripts/(deploy-guard|pin-release|pin-ecs-task-image)\.sh$)' ;;
     *) return 1 ;;
   esac
 }
@@ -108,6 +108,7 @@ self_test() {
   check "fresh: lookup failed"             false decide_fresh "$A" 1 "HTTP 502"
   check "fresh: lookup gave garbage"       false decide_fresh "$A" 0 ""
   check "scope: api always deploys"        true  decide_scope api "" "$A" 1 ""
+  check "scope: api, the brain's env file alone"  true  decide_scope api "$B" "$A" 0 $'ahead\ninfra/brain/api.env'
   check "scope: live unknown"              unknown decide_scope frontend "" "$A" 0 ""
   check "scope: compare failed"            unknown decide_scope frontend "$B" "$A" 1 "HTTP 500"
   check "scope: identical"                 false decide_scope frontend "$A" "$A" 0 "identical"
@@ -120,6 +121,7 @@ self_test() {
   check "scope: docs only, frontend"       false decide_scope frontend "$B" "$A" 0 $'ahead\ndocs/x.md\napi/src/a.ts'
   check "scope: deploy machinery"          true  decide_scope frontend "$B" "$A" 0 $'ahead\n.github/workflows/smoke.yml'
   check "scope: topo file, worker"         true  decide_scope worker "$B" "$A" 0 $'ahead\ntopo/worker.py'
+  check "scope: brain certificate, worker" true  decide_scope worker "$B" "$A" 0 $'ahead\ninfra/brain/brain-ca.pem'
   check "scope: frontend file, worker"     false decide_scope worker "$B" "$A" 0 $'ahead\nfrontend/src/a.ts'
   check "scope: unknown target"            unknown decide_scope mobile "$B" "$A" 0 $'ahead\nmobile/a.ts'
   rm -f "$tmp"

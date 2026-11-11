@@ -1,0 +1,102 @@
+name: Publish brain Postgres image
+
+# Builds infra/brain/postgres for amd64 and arm64 and pushes one multi-
+# architecture image, logjam-brain-postgres:<git sha>, to ECR. Terraform pins
+# the brain's instance to a tag (var.brain_pg_image_tag), so publishing does
+# not change what runs. The repository's tags are immutable (brain_ecr.tf): a
+# step whose tag already exists is skipped, so a re-run after a half-finished
+# one completes it instead of failing on the tags it already pushed.
+#
+# Runs on main only: the deploy role trusts the `prod` Environment, which only
+# main may use. One native build per architecture, no QEMU.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/brain/postgres/**"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-brain-postgres
+  cancel-in-progress: false
+
+env:
+  ECR_REPOSITORY: logjam-brain-postgres
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Build and push the per-architecture image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          TAG=${GITHUB_SHA}-${PLATFORM#linux/}
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already published"
+            exit 0
+          fi
+          # No attestations: a release must be exactly three ECR images, which
+          # the lifecycle count in brain_ecr.tf relies on.
+          docker build --provenance=false --sbom=false --platform "$PLATFORM" -t "$ECR_REGISTRY/$ECR_REPOSITORY:$TAG" infra/brain/postgres
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$TAG"
+
+  publish:
+    name: Publish the multi-architecture image
+    needs: build
+    environment: prod
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Join the two images under the git sha
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "$GITHUB_SHA is already published"
+            exit 0
+          fi
+          docker buildx imagetools create -t "$IMAGE:$GITHUB_SHA" "$IMAGE:$GITHUB_SHA-amd64" "$IMAGE:$GITHUB_SHA-arm64"
+          docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA"

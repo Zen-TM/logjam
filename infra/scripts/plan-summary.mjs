@@ -42,7 +42,12 @@ const PIPELINE = String.raw`infra/scripts/plan-summary|\.github/workflows/terraf
 export const ROOTS = {
   prod: {
     // bootstrap and envs/local are separate roots envs/prod never reads.
-    scope: new RegExp(String.raw`^(infra/terraform/(envs/prod|modules|templates)/|infra/lambda/|${PIPELINE})`),
+    // infra/brain/ minus postgres/, tests/ and api.env is what the brain's
+    // user data embeds (envs/prod/brain_instance.tf): a change to it replaces
+    // the instance, so it is planned and applied like any other prod change.
+    scope: new RegExp(
+      String.raw`^(infra/terraform/(envs/prod|modules|templates)/|infra/lambda/|infra/brain/(?!postgres/|tests/|api\.env$)|${PIPELINE})`,
+    ),
     // The apply role's boundary denies it editing itself (envs/prod/iam_apply.tf),
     // so a plan touching these would fail mid-apply; the maintainer applies it.
     self: /\.github_actions_apply(_|\[|$)/,
@@ -153,12 +158,26 @@ export function fingerprint(plan, name) {
   if (!unreadable) return createHash("sha256").update(JSON.stringify({ list, artifacts })).digest("hex");
   // What the code sets an unreadable attribute to is the same in both plans,
   // so a change to it still changes the fingerprint. A hash, never the value.
+  // The PR's plan holds the list as the code writes it; the apply's holds it
+  // as GitHub returned it, in GitHub's order, with the provider's zero where
+  // the code sets nothing (a DeployKey bypass has no actor_id). Neither is a
+  // change, so the list is hashed as a set, an unset value as that zero.
+  const settled = (v) => {
+    if (Array.isArray(v)) return `[${v.map(settled).sort().join(",")}]`;
+    if (v && typeof v === "object") {
+      return `{${Object.keys(v)
+        .sort()
+        .map((k) => `${JSON.stringify(k)}:${settled(v[k])}`)
+        .join(",")}}`;
+    }
+    return JSON.stringify(v ?? 0);
+  };
   const configured = (plan.resource_changes ?? [])
     .filter((rc) => unreadable[rc.type] && rc.change.after)
     .flatMap((rc) =>
       unreadable[rc.type].map((attr) => [
         `${rc.address}.${attr}`,
-        createHash("sha256").update(canonical(rc.change.after[attr])).digest("hex"),
+        createHash("sha256").update(settled(rc.change.after[attr])).digest("hex"),
       ]),
     )
     .sort(byAddress);

@@ -1494,6 +1494,9 @@ async function main() {
     prisma.announcement.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.topoExportJob.deleteMany(),
+    // After the jobs: deleting them writes the carry-over.
+    prisma.computeUsageCarryover.deleteMany(),
+    prisma.siteComputeCarryover.deleteMany(),
     prisma.topoTemplate.deleteMany(),
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
