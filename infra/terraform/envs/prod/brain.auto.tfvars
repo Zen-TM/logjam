@@ -23,7 +23,7 @@ brain_bootstrap = false
 # delete media that has no row in their own database: turned on before the
 # final data copy, or with Elastic Beanstalk's sweeps still on, two APIs would
 # sweep two different databases.
-brain_serving = false
+brain_serving = true
 
 # True when CloudFront's API origin is the brain. Requires brain_serving; flip
 # it in a later merge, once the brain answers.

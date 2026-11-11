@@ -24,9 +24,9 @@ Why it is built this way, and the rules that hold it up:
 Every command below is complete and says what to look for, and runs from the
 repository root. Each is marked **run on a scratch copy** (a rehearsal on a
 throwaway copy of the brain on real AWS: 2026-11-10, and again on the finished
-stack on 2026-11-11; timings are quoted as measured there, with made-up rows)
-or **not yet run anywhere**. Prod's numbers will differ with the size of the
-database. Use the maintainer's AWS credentials and
+stack on 2026-11-11; timings are quoted as measured there, with made-up rows),
+**run on prod** (the bring-up of 2026-11-11) or **not yet run anywhere**.
+Prod's numbers will differ with the size of the database. Use the maintainer's AWS credentials and
 `export AWS_REGION=ap-southeast-2`.
 
 **Never read user data to diagnose anything.** Look at counts, names, logs and
@@ -163,9 +163,8 @@ the brain serves nobody until the cutover.
    their own. Until it is applied, the role CI applies with could open a shell
    on the brain; no other CI role can. Merge it: its apply run says
    `refused, nothing applied`, as it should. Then, from a checkout of `main`,
-   from the repository root, with the maintainer's credentials (**not yet run
-   anywhere** as one sequence; `plan` and `apply` with a saved plan ran on a
-   scratch copy):
+   from the repository root, with the maintainer's credentials (**run on
+   prod**, 2026-11-11):
 
    ```sh
    for l in cognito-email-sender cognito-pre-signup; do
@@ -186,7 +185,7 @@ the brain serves nobody until the cutover.
    `infra/brain/postgres/` publishes it (`publish-brain-postgres.yml`); to
    publish what is on `main` now: `gh workflow run publish-brain-postgres.yml --ref main`.
    The tag is the commit's sha, and tags cannot be overwritten, so Terraform
-   pins one. Find the newest (not yet run anywhere):
+   pins one. Find the newest (**run on prod**, 2026-11-11):
 
    ```sh
    aws ecr describe-images --repository-name logjam-brain-postgres \
@@ -203,10 +202,13 @@ the brain serves nobody until the cutover.
    creates an empty database; without a backup in the repository, no flag
    means the boot refuses. Merge it; the plan comment shows the instance, the
    data volume, the Elastic IP and the alarms being added, and the apply takes
-   about a minute. Then watch (all run on a scratch copy, 2026-11-11):
+   about a minute. Then watch (all run on a scratch copy, then on prod,
+   2026-11-11):
    - about 75 seconds for the host's first-boot script, then 12 seconds for the
      bootstrap itself (disk, database, roles, the first full backup, 2 seconds
-     on a small database);
+     on a small database); on prod the boot script started 100 seconds after
+     the instance launched and the first full backup was in the bucket 13
+     seconds later;
    - `brain 'cat /run/brain/boot-mode'` ends `bootstrap`;
    - `brain 'docker ps --format "{{.Names}} {{.Status}}"'` shows
      `brain-postgres-1` healthy;
@@ -273,8 +275,11 @@ the brain serves nobody until the cutover.
    public, so it is safe to commit. The rehearsal copy (step 9) then proves it is
    the brain's: a wrong file fails verification and the copy refuses. Commit both copies to
    the draft branch, take it out of draft, merge. That deploys the API image and,
-   because the change touches `topo/`, the topo worker image: check both
-   deploys went green, and that the images carry it (not yet run anywhere):
+   because the change touches `topo/`, the topo worker image. The deploys start
+   when CI on `main` has finished, about 20 minutes after the merge (seen on
+   prod, 2026-11-11). Check both deploys went green, and that the images carry
+   it (not yet run anywhere; on prod the same was read from each image's build
+   history instead):
 
    ```sh
    REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-2.amazonaws.com
@@ -289,8 +294,7 @@ the brain serves nobody until the cutover.
 8. **Check `release.json` names the live release.** The release agent refuses
    to start the API when serving is on and it cannot read the file, and it runs
    whatever commit the file names. CI cannot read the bucket, so only you can
-   look (the read ran on a scratch copy; the comparison is **not yet run
-   anywhere**):
+   look (**run on prod**, 2026-11-11: the same commit):
 
    ```sh
    aws s3 cp s3://logjam-brain-signals-620853681701/release.json - | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
