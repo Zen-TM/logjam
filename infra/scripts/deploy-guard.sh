@@ -43,7 +43,7 @@ decide_fresh() {
 paths_for() {
   case "$1" in
     frontend) echo '^(frontend/|shared/|\.github/workflows/(deploy-frontend|deploy-guard|smoke|rollback)\.yml$|infra/scripts/(deploy-guard|frontend-prune)\.sh$)' ;;
-    worker) echo '^(topo/|\.github/workflows/(deploy-topo-worker|deploy-guard|rollback)\.yml$|infra/scripts/(deploy-guard|pin-release|pin-ecs-task-image)\.sh$)' ;;
+    worker) echo '^(topo/|infra/brain/brain-ca\.pem$|\.github/workflows/(deploy-topo-worker|deploy-guard|rollback)\.yml$|infra/scripts/(deploy-guard|pin-release|pin-ecs-task-image)\.sh$)' ;;
     *) return 1 ;;
   esac
 }
@@ -121,6 +121,7 @@ self_test() {
   check "scope: docs only, frontend"       false decide_scope frontend "$B" "$A" 0 $'ahead\ndocs/x.md\napi/src/a.ts'
   check "scope: deploy machinery"          true  decide_scope frontend "$B" "$A" 0 $'ahead\n.github/workflows/smoke.yml'
   check "scope: topo file, worker"         true  decide_scope worker "$B" "$A" 0 $'ahead\ntopo/worker.py'
+  check "scope: brain certificate, worker" true  decide_scope worker "$B" "$A" 0 $'ahead\ninfra/brain/brain-ca.pem'
   check "scope: frontend file, worker"     false decide_scope worker "$B" "$A" 0 $'ahead\nfrontend/src/a.ts'
   check "scope: unknown target"            unknown decide_scope mobile "$B" "$A" 0 $'ahead\nmobile/a.ts'
   rm -f "$tmp"
