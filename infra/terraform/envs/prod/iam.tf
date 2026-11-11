@@ -540,6 +540,19 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
   policy_arn = aws_iam_policy.database_password_access.arn
 }
 
+# Attached to the Elastic Beanstalk instance role by hand. Imported so that the merge that
+# deletes the policy (the old stack's removal) detaches it first: IAM refuses to delete a
+# policy that is still attached.
+import {
+  to = aws_iam_role_policy_attachment.eb_instance_database_password
+  id = "logjam-eb-role/arn:aws:iam::620853681701:policy/DatabasePasswordAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "eb_instance_database_password" {
+  role       = "logjam-eb-role"
+  policy_arn = aws_iam_policy.database_password_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "eb_instance_resend_api_key" {
   role       = "logjam-eb-role"
   policy_arn = aws_iam_policy.resend_api_key_access.arn
