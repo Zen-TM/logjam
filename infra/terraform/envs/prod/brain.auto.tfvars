@@ -14,7 +14,7 @@ brain_pg_image_tag = "6c5e4cc1cdbf975b264ad12762b705b803b48af8"
 # True for the one apply that creates the database from nothing, on a blank
 # volume with no backup in the repository; false again right after. A blank
 # volume with a backup restores whatever this says.
-brain_bootstrap = true
+brain_bootstrap = false
 
 # True when the brain's API runs. Also: every task definition with a database
 # (the workers and the migrate task) points at the brain, and the deploy and
