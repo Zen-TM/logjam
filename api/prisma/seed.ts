@@ -17,7 +17,6 @@ import {
 } from "../src/lib/failureCopy";
 import {
   NOTIFICATION_TYPES,
-  FILE_SEND_TTL_DAYS,
   FRIEND_INVITE_TTL_DAYS,
   RASTER_TEMPLATE_DEFAULTS,
   VECTOR_STYLE_DEFAULTS,
@@ -43,7 +42,13 @@ import {
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
   trackPointsToGpx,
+  PLACE_NAME_MAX_LENGTH,
+  ROUTE_NAME_MAX_LENGTH,
+  TRIP_NAME_MAX_LENGTH,
+  parseTripPlanFormCreate,
+  parseTripPlanAnswers,
 } from "@logjam/shared";
+import { placeImportKey } from "../src/lib/importKeys";
 import { s3 } from "../src/services/awsClients";
 import { SEED_NAMES } from "./seedNames";
 import {
@@ -57,6 +62,7 @@ import {
   CAROL_PLAN_ID,
   PLAN_PLACE_ID,
   PLAN_ROUTE_ID,
+  SEED_EDGE_USERS,
   SEED_PLAN_ID,
   SHARED_PLACE_ID,
   seedId,
@@ -1552,6 +1558,72 @@ async function main() {
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
       },
+      // The accounts below each hold one state the three above cannot: what
+      // each holds is listed in seedStates.ts, with the check that it is here.
+      {
+        id: SEED_EDGE_USERS.empty,
+        subject: "fake-dave-sub",
+        username: "dave",
+        email: "dave@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      // Has never agreed to the terms: the consent gate.
+      {
+        id: SEED_EDGE_USERS.unconsented,
+        subject: "fake-erin-sub",
+        username: "erin",
+        email: "erin@local",
+      },
+      // Agreed to an earlier text than the current one.
+      {
+        id: SEED_EDGE_USERS.staleConsent,
+        subject: "fake-finn-sub",
+        username: "finn",
+        email: "finn@local",
+        consentedAt: new Date("2025-06-01T00:00:00.000Z"),
+        consentVersion: "2025-06-01",
+      },
+      {
+        id: SEED_EDGE_USERS.atQuota,
+        subject: "fake-gwen-sub",
+        username: "gwen",
+        email: "gwen@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      {
+        id: SEED_EDGE_USERS.awkwardText,
+        subject: "fake-hank-sub",
+        username: "hank",
+        email: "hank@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      {
+        id: SEED_EDGE_USERS.topoInFlight,
+        subject: "fake-ivy-sub",
+        username: "ivy",
+        email: "ivy@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      {
+        id: SEED_EDGE_USERS.planLeader,
+        subject: "fake-jack-sub",
+        username: "jack",
+        email: "jack@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      {
+        id: SEED_EDGE_USERS.planEditor,
+        subject: "fake-kate-sub",
+        username: "kate",
+        email: "kate@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
     ],
   });
 
@@ -2319,9 +2391,9 @@ async function main() {
   // row's own key, so a change there strands only the seeded object).
   const bobSend = fid(14);
   const aliceSend = fid(15);
-  const sendExpires = new Date(
-    Date.now() + FILE_SEND_TTL_DAYS * 24 * 60 * 60_000,
-  );
+  // Years out, not the week a real send lasts: the sweep deletes an expired one
+  // and the baseline check refuses a database that lost a row.
+  const sendExpires = new Date(Date.now() + 3650 * 24 * 60 * 60_000);
   await prisma.fileSend.createMany({
     data: [
       {
@@ -2759,12 +2831,627 @@ async function main() {
     ],
   });
 
+  // ── The states the three accounts above cannot show ────────────────────────
+  //
+  // One account per state, none a friend of anyone, so nothing the suites
+  // assert about the friend graph or sharing sees them. seedStates.ts lists what is held here, and
+  // src/__tests__/seedStates.test.ts fails, naming the state, when a row goes.
+  const gwen = SEED_EDGE_USERS.atQuota;
+  const hank = SEED_EDGE_USERS.awkwardText;
+  const ivy = SEED_EDGE_USERS.topoInFlight;
+  const jack = SEED_EDGE_USERS.planLeader;
+  const kate = SEED_EDGE_USERS.planEditor;
+
+  // The reaper fails an in-flight row it finds idle, and the baseline check
+  // refuses a database the seed has not left. So every time it reads on these
+  // rows sits years ahead, and the two it would otherwise fall back to are left
+  // null: a `processing` job and a running export with no start time are read
+  // from `updatedAt` and `createdAt` (topoJobReaper.ts), and cost nothing, as the
+  // credit sum skips a row with none (computeCredits.ts).
+  const held = inDays(3650);
+
+  // Hank's words, in the shapes that break a layout: as long as a name may be,
+  // right to left, combining marks, an emoji with a joiner, markup, quotes, a
+  // run of spaces. The API trims a name, so a padded one cannot exist.
+  const stem = (text: string, max: number) =>
+    text
+      .repeat(Math.ceil(max / text.length))
+      .slice(0, max)
+      .trimEnd();
+  const hankLong = stem(
+    "The long way round to the pool below the third waterfall, ",
+    PLACE_NAME_MAX_LENGTH,
+  );
+  const hankPlaces = [
+    {
+      name: hankLong,
+      latitude: -33.5201,
+      longitude: 150.2102,
+      altNames: Array.from(
+        { length: 8 },
+        (_, i) => `Another name, number ${i + 1}, for the long one`,
+      ),
+      // Far past what a card shows.
+      notes: "Fabricated. ".repeat(180).trimEnd(),
+    },
+    {
+      name: "وادي الصمت · קניון השקט",
+      latitude: -33.5212,
+      longitude: 150.2111,
+    },
+    {
+      name: "Canón de Nĩo, ä ö ü",
+      latitude: -33.5223,
+      longitude: 150.2124,
+    },
+    { name: "🏞️ Slot 🧗‍♀️ 💦", latitude: -33.5231, longitude: 150.2133 },
+    {
+      name: `<b>Bold</b> & "quoted" 'Slot' \\ back`,
+      latitude: -33.5242,
+      longitude: 150.2147,
+    },
+    { name: "Two  spaces   inside", latitude: -33.5253, longitude: 150.2152 },
+    // A river gauge and a height, and the key and batch an import leaves.
+    {
+      name: "Fabricated gauge pool",
+      latitude: -33.5264,
+      longitude: 150.2166,
+      gaugeId: "900001",
+      elevation: 812.5,
+      importKey: placeImportKey("Fabricated gauge pool", -33.5264, 150.2166),
+      importBatchId: "seed-import-batch",
+    },
+    // Outside every region Logjam serves, and beside the date line.
+    {
+      name: "Fabricated far south lookout",
+      latitude: -45.0312,
+      longitude: 168.6626,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+    },
+    {
+      name: "Fabricated date line lookout",
+      latitude: -16.8,
+      longitude: 179.95,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+    },
+  ];
+  for (const [i, place] of hankPlaces.entries()) {
+    await prisma.place.create({
+      data: {
+        id: cid(201 + i),
+        ownerId: hank,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+        notes: "Fabricated.",
+        ...place,
+      },
+    });
+  }
+  // Two places on one trip, and the other things a trip can be: not canyoning
+  // (so the places are markers),
+  // no notes, and dated at an instant that is the next day in Sydney.
+  const hankTripName = stem("A weekend that ran long, ", TRIP_NAME_MAX_LENGTH);
+  await prisma.tripLog.create({
+    data: {
+      id: seedId("c", 1001),
+      userId: hank,
+      date: new Date("2026-03-14T14:30:00.000Z"),
+      displayName: hankTripName,
+      notes: null,
+      types: ["bushwalking", "packrafting", 'a "free text" tag'],
+      places: {
+        create: [
+          { placeId: cid(208), position: 0 },
+          { placeId: cid(209), position: 1 },
+        ],
+      },
+    },
+  });
+  await prisma.tripLog.create({
+    data: {
+      id: seedId("c", 1002),
+      userId: hank,
+      date: new Date("2026-04-04T00:00:00.000Z"),
+      displayName: "رحلة الصمت 🏞️",
+      notes: "Canón دقيق 💦\n\nA second line.",
+      types: enforceCanyoningTag([], true),
+      places: { create: [{ placeId: cid(203), position: 0 }] },
+    },
+  });
+  await prisma.route.createMany({
+    data: [
+      {
+        id: rtid(201),
+        ownerId: hank,
+        placeId: null,
+        name: stem(
+          "The walk out, longer than any name should be, ",
+          ROUTE_NAME_MAX_LENGTH,
+        ),
+        color: TRACK_COLORS[6],
+        points: DU_FAUR_LINE,
+      },
+      {
+        id: rtid(202),
+        ownerId: hank,
+        placeId: cid(204),
+        name: "مسار الخروج",
+        color: TRACK_COLORS[7],
+        points: COIN_SLOT_LINE,
+      },
+    ],
+  });
+  // Photos with no object behind them, as the seeded photo has: a PNG and a
+  // WebP on a trip and a place, a recording whose colour was never set, and the
+  // copy of it that "Log a trip" puts on the trip it made.
+  await prisma.media.createMany({
+    data: [
+      {
+        id: seedId("4", 201),
+        ownerId: hank,
+        linkedType: "tripLog",
+        linkedId: seedId("c", 1001),
+        s3KeyDisplay: "media/seed/hank-trip.png",
+        mediaType: "image/png",
+        filename: "the-long-weekend.png",
+        fileSizeBytes: 640_000n,
+      },
+      {
+        id: seedId("4", 202),
+        ownerId: hank,
+        linkedType: "place",
+        linkedId: cid(205),
+        s3KeyDisplay: "media/seed/hank-pool.webp",
+        mediaType: "image/webp",
+        filename: "pool.webp",
+        fileSizeBytes: 310_000n,
+      },
+      {
+        id: seedId("4", 203),
+        ownerId: hank,
+        linkedType: "none",
+        linkedId: null,
+        s3KeyDisplay: bellCreekFile.key,
+        mediaType: bellCreekFile.contentType,
+        filename: "Fabricated recording.gpx",
+        displayName: "Fabricated recording",
+        fileSizeBytes: BigInt(bellCreekFile.fileSizeBytes),
+        color: null,
+        origin: "track",
+        metadata: {
+          bbox: bellCreekFile.bbox,
+          distanceM: bellCreekFile.distanceM,
+          durationMs: 1_500_000,
+          elevationSource: "nsw-5m",
+          pointCount: bellCreekFile.positionCount,
+          ...BELL_CREEK_RECORDED,
+        },
+      },
+      {
+        id: seedId("4", 204),
+        ownerId: hank,
+        linkedType: "tripLog",
+        linkedId: seedId("c", 1002),
+        sourceMediaId: seedId("4", 203),
+        s3KeyDisplay: bellCreekFile.key,
+        mediaType: bellCreekFile.contentType,
+        filename: "Fabricated recording.gpx",
+        fileSizeBytes: BigInt(bellCreekFile.fileSizeBytes),
+      },
+    ],
+  });
+
+  // Gwen: nearly out of room, and past this month's downloads. The one large
+  // file is a video, which nothing else here is.
+  const videoBytes = 5_200_000_000n;
+  await prisma.place.create({
+    data: {
+      id: cid(210),
+      ownerId: gwen,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+      name: "Fabricated camp",
+      latitude: -33.61,
+      longitude: 150.25,
+      notes: "Fabricated.",
+    },
+  });
+  await prisma.media.create({
+    data: {
+      id: seedId("4", 210),
+      ownerId: gwen,
+      linkedType: "place",
+      linkedId: cid(210),
+      s3KeyDisplay: "media/seed/gwen-descent.mp4",
+      mediaType: "video/mp4",
+      filename: "descent.mp4",
+      fileSizeBytes: videoBytes,
+    },
+  });
+  await prisma.user.update({
+    where: { id: gwen },
+    data: {
+      storageUsedBytes: videoBytes,
+      monthlyEgressUsedBytes: egressQuota,
+    },
+  });
+
+  // Ivy: work in flight, and the finished kinds the others have none of. Four
+  // vCPUs per export and eight per job count against the site's 24
+  // (lib/fargateCapacity.ts); the 16 in flight here leave the suites room to launch
+  // one of their own, which is why no job sits in `pending`.
+  const ivyJob = (n: number) => fid(200 + n);
+  const tileBox = {
+    west: TOPO_BOUNDS[0],
+    south: TOPO_BOUNDS[1],
+    east: TOPO_BOUNDS[2],
+    north: TOPO_BOUNDS[3],
+  };
+  await prisma.topoJob.createMany({
+    data: [
+      {
+        id: ivyJob(1),
+        userId: ivy,
+        status: "uploading",
+        name: "Waiting for the upload",
+        createdAt: held,
+      },
+      {
+        id: ivyJob(2),
+        userId: ivy,
+        status: "processing",
+        name: "Rendering the plateau",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 8,
+        estimatedSeconds: 2400,
+        renderTilesDone: 3,
+        renderTilesTotal: 8,
+        attemptCount: 1,
+        createdAt: ago(8),
+        updatedAt: held,
+        lastProgressAt: held,
+      },
+      // The layers a job without a sharpen result lists.
+      {
+        id: ivyJob(3),
+        userId: ivy,
+        status: "complete",
+        name: "Classic layers",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 1,
+        estimatedSeconds: 600,
+        outputTileCount: 1,
+        s3OutputKeys: [
+          {
+            name: "hillshade",
+            cogKey: `topo-jobs/${ivyJob(3)}/hillshade.tif`,
+            pmtilesKey: `topo-jobs/${ivyJob(3)}/hillshade.pmtiles`,
+          },
+          {
+            name: "contours",
+            cogKey: null,
+            pmtilesKey: `topo-jobs/${ivyJob(3)}/contours.pmtiles`,
+          },
+        ],
+        outputBytes: 1_200_000n,
+        createdAt: ago(500),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(485, 300),
+      },
+    ],
+  });
+  await prisma.topoExportJob.createMany({
+    data: [
+      // An export of an area has a box and no job.
+      {
+        id: ivyJob(11),
+        userId: ivy,
+        sourceJobIds: [],
+        layers: ["heights", "slope"],
+        format: "geotiff",
+        bundling: "per-layer",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        bbox: tileBox,
+        estimatedSeconds: 300,
+        status: "queued",
+        createdAt: held,
+      },
+      {
+        id: ivyJob(12),
+        userId: ivy,
+        sourceJobIds: [ivyJob(3)],
+        layers: ["hillshade"],
+        format: "mbtiles",
+        bundling: "composite",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 600,
+        status: "running",
+        createdAt: held,
+      },
+      {
+        id: ivyJob(13),
+        userId: ivy,
+        sourceJobIds: [ivyJob(3)],
+        layers: ["contours"],
+        format: "gpkg",
+        bundling: "composite",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 60,
+        status: "failed",
+        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        createdAt: ago(65),
+        startedAt: ago(60),
+        completedAt: ago(58),
+      },
+    ],
+  });
+
+  // Jack leads a plan with no dates that is put away, and Kate edits it. It has
+  // a form only leaders read that asks one of every kind of question, a file on
+  // the plan, a link that has lapsed, and a member who has answered. It is the
+  // third plan and must stay the last: with a fourth, the planner reads the
+  // whole of trip_plans for GET /plans and queryPlans.test.ts fails.
+  const jackPlan = fid(300);
+  const jackForm = parseTripPlanFormCreate({
+    title: "Gear and diet",
+    preset: null,
+    visibleTo: "leaders",
+    questions: [
+      {
+        id: "nick",
+        kind: "text",
+        label: "What do we call you?",
+        required: false,
+      },
+      {
+        id: "more",
+        kind: "longText",
+        label: "Anything else we should know?",
+        required: false,
+      },
+      { id: "phone", kind: "phone", label: "Your phone", required: false },
+      {
+        id: "water",
+        kind: "number",
+        label: "Litres of water you carry",
+        required: false,
+      },
+      {
+        id: "suit",
+        kind: "choice",
+        label: "Wetsuit size",
+        required: true,
+        options: [
+          { id: "s", label: "Small" },
+          { id: "m", label: "Medium" },
+          { id: "l", label: "Large" },
+        ],
+      },
+      {
+        id: "diet",
+        kind: "multiChoice",
+        label: "Diet",
+        required: false,
+        options: [
+          { id: "veg", label: "Vegetarian" },
+          { id: "gf", label: "Gluten free" },
+        ],
+      },
+      { id: "drive", kind: "yesNo", label: "Can you drive?", required: false },
+      {
+        id: "read",
+        kind: "agree",
+        label: "I have read the plan",
+        required: true,
+      },
+    ],
+  });
+  if (!("value" in jackForm))
+    throw new Error(
+      `seed: the leaders' form is invalid: ${JSON.stringify(jackForm)}`,
+    );
+  const kateAnswers = parseTripPlanAnswers(jackForm.value.questions, {
+    nick: "Kit",
+    suit: "m",
+    diet: ["veg"],
+    drive: true,
+    read: true,
+  });
+  if (!("value" in kateAnswers))
+    throw new Error(
+      `seed: Kate's answers are invalid: ${JSON.stringify(kateAnswers)}`,
+    );
+  await prisma.tripPlan.create({
+    data: {
+      id: jackPlan,
+      createdById: jack,
+      name: "Fabricated plateau trip",
+      tripTypes: ["bushwalking"],
+      archivedAt: ago(60 * 24 * 100),
+    },
+  });
+  await prisma.tripPlanMember.createMany({
+    data: [
+      {
+        id: fid(310),
+        planId: jackPlan,
+        userId: jack,
+        role: "leader",
+        status: "active",
+      },
+      {
+        id: fid(311),
+        planId: jackPlan,
+        userId: kate,
+        role: "editor",
+        status: "active",
+        invitedById: jack,
+      },
+    ],
+  });
+  await prisma.tripPlanSection.create({
+    data: {
+      id: fid(313),
+      planId: jackPlan,
+      title: "Overview",
+      body: "Dates to be fixed.",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanForm.create({
+    data: {
+      id: fid(314),
+      planId: jackPlan,
+      title: jackForm.value.title,
+      preset: null,
+      questions: jackForm.value.questions as object[],
+      visibleTo: jackForm.value.visibleTo,
+      position: 0,
+    },
+  });
+  await prisma.tripPlanAnswer.create({
+    data: {
+      id: fid(315),
+      formId: fid(314),
+      userId: kate,
+      answers: kateAnswers.value,
+    },
+  });
+  await prisma.tripPlanInvite.create({
+    data: {
+      id: fid(316),
+      planId: jackPlan,
+      createdById: jack,
+      tokenHash: hashFriendInviteToken(mintFriendInviteToken()),
+      expiresAt: ago(60 * 24),
+    },
+  });
+  // A file on the plan: the plan's, charged to the one who added it.
+  await prisma.media.create({
+    data: {
+      id: seedId("4", 220),
+      planId: jackPlan,
+      addedById: kate,
+      chargedToId: kate,
+      linkedType: "none",
+      s3KeyDisplay: duFaurFile.key,
+      mediaType: duFaurFile.contentType,
+      filename: "plateau-walk.kml",
+      displayName: "Plateau walk",
+      fileSizeBytes: BigInt(duFaurFile.fileSizeBytes),
+      color: TRACK_COLORS[1],
+      origin: "import",
+      metadata: {
+        bbox: duFaurFile.bbox,
+        featureCount: 1,
+        positionCount: duFaurFile.positionCount,
+      },
+    },
+  });
+
+  // What each of them has used, as the rows above add up.
+  const hankBytes =
+    (
+      await prisma.media.aggregate({
+        where: { ownerId: hank },
+        _sum: { fileSizeBytes: true },
+      })
+    )._sum.fileSizeBytes ?? 0n;
+  await prisma.user.update({
+    where: { id: hank },
+    data: {
+      storageUsedBytes: hankBytes,
+    },
+  });
+  await prisma.user.update({
+    where: { id: kate },
+    data: { storageUsedBytes: BigInt(duFaurFile.fileSizeBytes) },
+  });
+
+  // One send to two people: Kate turned it down and Ivy has yet to answer.
+  const jackSend = fid(320);
+  await prisma.fileSend.create({
+    data: {
+      id: jackSend,
+      senderId: jack,
+      sourceKind: "import",
+      filename: "plateau-walk.kml",
+      s3Key: `file-sends/${jack}/${jackSend}/copy.kml`,
+      sizeBytes: BigInt(duFaurFile.fileSizeBytes),
+      expiresAt: sendExpires,
+    },
+  });
+  await prisma.fileSendRecipient.createMany({
+    data: [
+      {
+        id: fid(321),
+        fileSendId: jackSend,
+        userId: kate,
+        status: "declined",
+        respondedAt: ago(20),
+      },
+      { id: fid(322), fileSendId: jackSend, userId: ivy, status: "pending" },
+    ],
+  });
+  await uploadObjects("S3_BUCKET_MEDIA", [
+    {
+      key: `file-sends/${jack}/${jackSend}/copy.kml`,
+      body: duFaurFile.body,
+      contentType: duFaurFile.contentType,
+    },
+  ]);
+
+  // Their inboxes: the variants alice's has no row of. `topo_complete` with no
+  // name, an export that failed, a plan that ended with no reason given, and
+  // Gwen's allowance used up. Dave's is empty.
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: ivy,
+        type: "topo_complete",
+        payload: { jobId: ivyJob(3), footprint: TOPO_FOOTPRINT },
+        read: false,
+        createdAt: ago(485),
+      },
+      {
+        userId: ivy,
+        type: "topo_export_complete",
+        payload: {
+          exportJobId: ivyJob(13),
+          format: "gpkg",
+          jobName: "Classic layers",
+          status: "failed",
+          errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        },
+        read: false,
+        createdAt: ago(58),
+      },
+      {
+        userId: kate,
+        type: "plan_access_ended",
+        payload: { planId: fid(302), planName: "Fabricated winter trip" },
+        read: false,
+        createdAt: ago(500),
+      },
+      {
+        userId: gwen,
+        type: "egress_quota_exceeded",
+        payload: {
+          usedBytes: egressQuota.toString(),
+          quotaBytes: egressQuota.toString(),
+        },
+        read: false,
+        createdAt: ago(30),
+      },
+    ],
+  });
+
   // Last: the integration suite refuses to run on a database that differs
   // from this (src/__tests__/_seedBaseline.ts).
   await saveSeedSnapshot(prisma);
 
   console.log(
-    `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
+    `Seed complete: 3 users and ${Object.keys(SEED_EDGE_USERS).length} more, one per state in seedStates.ts; for the three: ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
       `(1 incoming to alice), 3 direct shares (2 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
       `6 media, 3 topo jobs, 2 topo exports, 2 topo templates, ` +
