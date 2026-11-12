@@ -11,6 +11,7 @@ import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
 import { clearRecentSearches } from "./recentSearches";
 import { friendInvite, planInvite } from "./pendingInvite";
+import { clearKeptStores } from "./signOutStores";
 import {
   completeSignInFromUrl,
   issuerUrl,
@@ -39,6 +40,7 @@ async function endSession() {
   // can't strand it.
   clearTripDraft();
   clearRecentSearches();
+  clearKeptStores();
   // An invite waiting in this tab was for whoever opened its link; the next
   // account to sign in here must not be handed it.
   friendInvite.clear();

@@ -19,8 +19,34 @@ test.skip(
 /** The second local server (playwright.config.ts), with NO fake auth. */
 const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 
-test.beforeEach(async ({ page }) => {
+// A case never writes to the account (frontend/AGENTS.md, Testing): the run
+// shares a seeded account with the suites after it, and a write leaves a
+// tombstone behind. Any request that is not a read fails the case that made it,
+// naming it, so a click that confirms a delete or a save cannot pass quietly.
+//
+// Mutation that turns it red: have a case click a confirming button (Delete
+// account, Save a copy), or `fetch(url, { method: "POST" })` from the page.
+const writes: string[] = [];
+// POSTs that only read: a batch of presigned GET urls, asked for on every boot.
+const READ_ONLY_POSTS = ["/media/download-urls"];
+
+test.beforeEach(async ({ page, context }) => {
+  writes.length = 0;
+  context.on("request", (request) => {
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(request.method()) &&
+      !READ_ONLY_POSTS.includes(new URL(request.url()).pathname)
+    )
+      writes.push(`${request.method()} ${request.url()}`);
+  });
   await stubMaster(page);
+});
+
+test.afterEach(() => {
+  expect(
+    writes,
+    "an accessibility case wrote to the account: stop before the confirming click, or answer the request with a page.route stub (frontend/AGENTS.md, Testing)",
+  ).toEqual([]);
 });
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
