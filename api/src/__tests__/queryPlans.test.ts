@@ -213,6 +213,9 @@ describe("key read paths use an index", () => {
 
     const problems: string[] = [];
     for (const q of queries) {
+      // The site-wide download cap sums every user's month on purpose, a scan
+      // per check (lib/egressQuota.ts, its `ponytail:` comment).
+      if (q.text.includes('SUM("monthly_egress_used_bytes")')) continue;
       for (const scan of await explain(q)) {
         problems.push(`${scan}\n  ${q.text.slice(0, 300)}`);
       }
