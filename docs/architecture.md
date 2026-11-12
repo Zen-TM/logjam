@@ -143,7 +143,7 @@ and CloudFront reads them through origin access control:
 
 | Bucket | Holds | `terraform output` |
 |---|---|---|
-| media | photos and other trip media; "Send a copy" files (expire after 8 days); versioned, so a deleted file can be brought back for 10 days ([how](operations/brain.md#bringing-back-deleted-media)) | `s3_bucket_media` |
+| media | photos and other trip media; "Send a copy" files (expire after 8 days); versioned, so a deleted file can be brought back for about 10 days ([how](operations/brain.md#bringing-back-deleted-media)) | `s3_bucket_media` |
 | topo-jobs | LiDAR ZIP uploads, job outputs, exports, the `/master/*` basemap | `s3_bucket_topo` |
 | frontend | the Logjam Web build | `s3_bucket_frontend` |
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |

@@ -262,7 +262,7 @@ step says why.
    `false` until the restore's `last_restore_lag_seconds` and the drill say the
    data is the data you expect: the API's background sweeps delete media that
    has no row in *their own* database, and a photo it deletes can be brought
-   back only within 10 days ([below](#bringing-back-deleted-media)). Then set `brain_serving = true` in a pull request.
+   back only within about 10 days ([below](#bringing-back-deleted-media)). Then set `brain_serving = true` in a pull request.
 8. **Check the watchdog is green.** Its log group's latest line is
    `{"failed": []}`. The first minutes can show `status_missing`, `full_stale`
    and `wal_stale`, and `logjam-brain-watchdog-not-running` may email once in
@@ -420,7 +420,7 @@ not in the new database.
 **Media deleted since T.** The database goes back to T, so its rows come back,
 but the photos and files users deleted after T are gone from the media bucket.
 Bring them back as described in
-[Bringing back deleted media](#bringing-back-deleted-media), within 10 days of
+[Bringing back deleted media](#bringing-back-deleted-media), within about 10 days of
 each deletion.
 
 **Undoing it, or rewinding again.** A restore follows the newest backup, and the
@@ -440,11 +440,13 @@ that was live.
 
 The media bucket (`logjam-media`) keeps every version of every object. Deleting
 a photo or file does not remove its bytes: S3 puts a *delete marker* on top, and
-the bytes stay underneath as a noncurrent version for 10 days, then are removed
-for good (`end-the-undo-window` in `infra/terraform/envs/prod/s3.tf`). Nothing in
-the bucket is kept longer than that, so this is an undo, not a backup. The
-database has its own, longer history (above). A user's deleted file therefore stays in
-the bucket, readable by the operator, for those 10 days.
+the bytes stay underneath as a noncurrent version for about 10 days (S3 removes
+it at the next midnight UTC after the tenth), then are removed for good
+(`end-the-undo-window` in `infra/terraform/envs/prod/s3.tf`). This is an undo,
+not a backup; the database has its own, longer history (above). A user's deleted
+file therefore stays in the bucket, readable by the operator, for about those 10
+days. A sent file (`file-sends/`) is the exception: its bytes go a day after its
+day-8 expiry, and it is not meant to be brought back.
 
 Keys are `media/<ownerId>/<mediaId>/<filename>`. Not yet run anywhere:
 
@@ -477,20 +479,22 @@ nothing more.
 **After a database restore to an earlier time T,** every file deleted since T is
 a marker you can list, and the same two steps bring each back. List the latest
 markers under `media/` with their times, keep the ones at or after T, and remove
-each (do this within 10 days of the first deletion, or the oldest are gone):
+each (do this within about 10 days of the first deletion, or the oldest are gone):
 
 ```sh
 aws s3api list-object-versions --bucket logjam-media --prefix media/ \
   --query 'DeleteMarkers[?IsLatest].[LastModified,Key,VersionId]' --output text \
-  | awk '$1 >= "2026-11-20T03:15"' > /tmp/markers.txt
+  | awk '$1 ~ /^20/ && $1 >= "2026-11-20T03:15"' > /tmp/markers.txt
 cat /tmp/markers.txt   # read it, then:
 while IFS=$'\t' read -r _ key vid; do
   aws s3api delete-object --bucket logjam-media --key "$key" --version-id "$vid"
 done < /tmp/markers.txt
 ```
 
-The times are UTC, so write T in UTC. Files from `file-sends/` are not under
-`media/` and are meant to disappear.
+The times are UTC, so write T in UTC. The loop also brings back uploads that were
+never confirmed and that the orphan sweeper removed, and files both uploaded and
+deleted after T; they have no row, and the sweeper removes them again. Sent files
+(`file-sends/`) are not under `media/`.
 
 ## Deleting an old volume
 

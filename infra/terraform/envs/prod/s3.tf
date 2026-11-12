@@ -36,18 +36,17 @@ module "access_logs" {
 # User media uploads. Fully private (presigned URLs only); browser-direct
 # uploads need the CORS rule.
 #
-# Versioned, so a delete or an overwrite is a 10-day undo window rather than
+# Versioned, so a delete or an overwrite is a window of about 10 days rather than
 # final (docs/operations/brain.md, "Bringing back deleted media"). The window
 # is a lifecycle rule on NONCURRENT versions only. NEVER give that rule, or any
 # other rule here outside file-sends/, an `expiration_days`: it would delete
 # every current photo when it ran. Guard: tests/guards.tftest.hcl
 # (media_is_versioned_and_never_expires_current_objects).
 #
-# Noncurrent versions cost the operator, not the user, for at most 10 days:
+# Noncurrent versions cost the operator, not the user, for about 10 days:
 # storage accounting counts current objects only, so no quota changes.
 #
-# The two settings are locals because a Terraform test reads locals but not a
-# module's inner resources.
+# The two settings are locals so the guard can read them.
 locals {
   media_versioned = true
   media_lifecycle_rules = [
@@ -70,9 +69,16 @@ locals {
       prefix          = "file-sends/"
       expiration_days = 8
     },
-    # The undo window, on the whole bucket. It also collects a send's bytes: the
-    # day-8 expiry leaves a delete marker and a noncurrent version, gone 10 days
-    # after that.
+    # A send's bytes go sooner than the rest: privacy.html promises a sent file
+    # is gone after 7 days, so its noncurrent version goes a day after the
+    # day-8 expiry rather than ten.
+    {
+      id                         = "end-the-undo-window-for-sends"
+      prefix                     = "file-sends/"
+      noncurrent_expiration_days = 1
+    },
+    # The undo window for everything else: about 10 days (S3 removes a version
+    # at the next midnight UTC after the tenth day). No `expiration_days` here.
     {
       id                         = "end-the-undo-window"
       prefix                     = ""
