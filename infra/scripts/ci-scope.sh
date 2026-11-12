@@ -60,8 +60,11 @@ paths_for() {
     # through RunTask: the helper, the route and the ECS client. lib/env.ts is
     # left out: its ECS_SUBNETS parsing has a unit test, and most env changes
     # are for other variables. The schema and migrations, because the worker
-    # reads and writes the job, user and notification tables with raw SQL.
-    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/prisma/(schema\\.prisma|migrations/)|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
+    # reads and writes the job, user and notification tables with raw SQL. And
+    # the topo tests that skip without GDAL, which this job runs in the image
+    # (check-required-checks.py requires each to be named here), with the
+    # shared sources they read.
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|topo/tests/(_native_stub|test_area_export|test_coverage|test_footprint_coverage|test_reprojection|test_tile_compose)\\.py$|shared/src/(areaExport|sharpen|nswCoverage|regions)\\.ts$|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/prisma/(schema\\.prisma|migrations/)|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
     # A migration, run under the live release (rollback-compat.yml).
     rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
     # Static Terraform checks and the plan-comment tests (terraform-ci.yml).
@@ -184,6 +187,9 @@ self_test() {
   check "topo_e2e: the settings it sends"                 topo_e2e true  0 'shared/src/topoSettings.ts'
   check "topo_e2e: another shared source"                 topo_e2e false 0 'shared/src/sync.ts'
   check "topo_e2e: a topo unit test"                      topo_e2e false 0 'topo/tests/test_labels.py'
+  check "topo_e2e: a topo test that needs real GDAL"      topo_e2e true  0 'topo/tests/test_reprojection.py'
+  check "topo_e2e: the stub those tests import"          topo_e2e true  0 'topo/tests/_native_stub.py'
+  check "topo_e2e: a shared source those tests read"     topo_e2e true  0 'shared/src/areaExport.ts'
   check "topo_e2e: the RunTask helper"                    topo_e2e true  0 'api/src/lib/ecsRunTask.ts'
   check "topo_e2e: the start route"                       topo_e2e true  0 'api/src/routes/topoJobs.ts'
   check "topo_e2e: the ECS client"                       topo_e2e true  0 'api/src/services/awsClients.ts'

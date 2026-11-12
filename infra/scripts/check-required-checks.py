@@ -33,7 +33,10 @@ no test file commits a focused `.only`.
 
 Mutations that turn this red: add a job to dco.yml, or remove "brain-postgres"
 from required_checks or from the second copy of the list in guards.tftest.hcl; delete `ci-scope.sh --self-test`, a `terraform ... test`
-or a Lambda's `npm test` step from the workflows; add `it.only(` to a test file;
+or a Lambda's `npm test` step from the workflows; add frontend/e2e/foo.spec.ts, remove
+`e2e/discard.spec.ts` from ci.yml, or list a spec in NOT_RUN_SPECS that ci.yml runs;
+add a topo test that skips on `is_stubbed("osgeo")` and is not in the topo-e2e
+step, or take `tests/test_reprojection.py` out of that step or out of ci-scope.sh; add `it.only(` to a test file;
 delete one job's `timeout-minutes`; remove
 `--retry` or the `-f` from one download in any workflow; change the gitleaks
 version in ci.yml or mise.toml but not the other; rename a required job (or its
@@ -76,6 +79,20 @@ NOT_REQUIRED = {
     "ota-plan.yml:ota-plan": "the OTA plan's summary, as above",
     "expo-doctor.yml:nightly-issue": "runs on the nightly schedule only, to open an issue",
 }
+
+
+# frontend/e2e specs no workflow runs, each with why.
+NOT_RUN_SPECS = {
+    "auth-lifecycle.spec.ts": "signs in for real: needs a staging Cognito pool and "
+    "E2E_AUTH_* credentials (it skips without them), which CI's fake-auth stack lacks",
+}
+
+# A topo test that skips when GDAL is the host stub, and the step that must run it.
+GDAL_SKIP = re.compile(
+    r"""\bskip(?:If|Unless)\(.{0,120}?(?:\bis_stubbed\(\s*["']osgeo["']\s*\)|\b_REAL_GDAL\b)""",
+    re.S,
+)
+GDAL_JOB = ("ci.yml", "topo-e2e")
 
 
 def required_checks():
@@ -240,6 +257,73 @@ def check_inventory(failures):
                 f"{pkg} has a test script but no workflow step runs `npm test` in it. Add "
                 "one to infra-scripts in ci.yml (no AWS is needed)."
             )
+
+    specs = sorted(p.name for p in (ROOT / "frontend" / "e2e").glob("*.spec.ts"))
+    if len(specs) < 10:
+        failures.append(
+            f"found only {len(specs)} Playwright specs, expected 10 or more: did the scan stop matching?"
+        )
+    for spec in specs:
+        ran = re.search(rf"\be2e/{re.escape(spec)}(?![\w.-])", runs) is not None
+        if not ran and spec not in NOT_RUN_SPECS:
+            failures.append(
+                f"frontend/e2e/{spec} is run by no workflow step. Add `e2e/{spec}` to a "
+                "`npx playwright test` step of ci.yml (read-only specs with the a11y ones, "
+                "specs that write to the account in the api-integration job after "
+                "the integration suite), or add it to NOT_RUN_SPECS in "
+                "infra/scripts/check-required-checks.py with the reason."
+            )
+        if ran and spec in NOT_RUN_SPECS:
+            failures.append(
+                f"{spec} is in NOT_RUN_SPECS but a workflow step runs it: remove the entry."
+            )
+    for spec in sorted(set(NOT_RUN_SPECS) - set(specs)):
+        failures.append(
+            f"NOT_RUN_SPECS names {spec}, which does not exist: remove the entry."
+        )
+
+    gdal_job = yaml.safe_load((WORKFLOWS / GDAL_JOB[0]).read_text())["jobs"][
+        GDAL_JOB[1]
+    ]
+    gdal_runs = "\n".join(
+        s["run"].replace("\\\n", " ") for s in gdal_job["steps"] if "run" in s
+    )
+    # The topo_e2e case of paths_for, not the file: its self-test names them too.
+    scope = next(
+        line
+        for line in (ROOT / "infra" / "scripts" / "ci-scope.sh").read_text().split("\n")
+        if line.strip().startswith("topo_e2e)")
+    )
+    gdal_tests = [
+        f
+        for f in files
+        if re.fullmatch(r"topo/tests/test_[^/]+\.py", f)
+        and GDAL_SKIP.search((ROOT / f).read_text())
+    ]
+    if len(gdal_tests) < 5:
+        failures.append(
+            f"found only {len(gdal_tests)} topo tests that skip without GDAL, expected 5 or more: did the scan stop matching?"
+        )
+    for f in gdal_tests:
+        name = Path(f).name
+        if not re.search(rf"\btests/{re.escape(name)}(?![\w.-])", gdal_runs):
+            failures.append(
+                f"{f} skips when GDAL is absent, which the `topo` job lacks, and no step of "
+                f"the {GDAL_JOB[1]} job runs it in the worker image. Add `tests/{name}` to its "
+                "`Unit tests that need real GDAL` step in ci.yml."
+            )
+        module = name.removesuffix(".py")
+        if not re.search(rf"(?<!\w){re.escape(module)}(?!\w)", scope):
+            failures.append(
+                f"{f} runs in the {GDAL_JOB[1]} job, but ci-scope.sh's topo_e2e area does not "
+                f"name it, so a change to it would not start that job. Add `{module}` "
+                "to the topo_e2e pattern there, and a self-test line."
+            )
+    if "skipped=" not in gdal_runs:
+        failures.append(
+            f"the {GDAL_JOB[1]} job's GDAL test step does not fail on a skip (it must "
+            "grep the unittest summary for `skipped=`): a test that skips there is not run anywhere."
+        )
 
     # A committed `.only` runs one test and skips the rest of its run. Vitest
     # and Playwright refuse it when CI is set; this refuses it everywhere.

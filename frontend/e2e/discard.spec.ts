@@ -110,10 +110,15 @@ test("a track attached in the edit form goes again on Discard", async ({
   });
   await page.getByRole("button", { name: "Places", exact: true }).click();
   const aside = page.locator("aside");
-  await aside
-    .getByRole("button", { name: /^Actions for / })
-    .first()
-    .click();
+  // The seed's one place with no route (place-route.spec.ts uses it too), by
+  // name: the first row is not a place the spec can rely on to be empty.
+  const openActions = () =>
+    aside
+      .locator("[data-place-id]")
+      .filter({ hasText: "Hidden Slot" })
+      .getByRole("button", { name: /^Actions for / })
+      .click();
+  await openActions();
   const editPlace = async () => {
     await page.getByRole("menuitem", { name: "Edit place" }).click();
     return page.getByRole("dialog", { name: "Edit place" });
@@ -142,10 +147,9 @@ test("a track attached in the edit form goes again on Discard", async ({
     .click();
   await expect(form).toBeHidden();
 
-  await aside
-    .getByRole("button", { name: /^Actions for / })
-    .first()
-    .click();
+  // Edit from a row opens the place's page underneath the form.
+  await aside.getByRole("button", { name: "Back to Places" }).click();
+  await openActions();
   form = await editPlace();
   await expect(form.getByText("No route yet.")).toBeVisible();
 });
