@@ -38,9 +38,13 @@ function topoJob(userId: string, startedAt: Date | null = new Date()) {
   });
 }
 
-/** An export that ran 10 minutes: 4 vCPU x 10 = 40 credits. */
+/** An export that ran 10 minutes: 4 vCPU x 10 = 40 credits. It starts no
+ * earlier than this month, or in the month's first 10 minutes it would count
+ * toward the last one and the tests' arithmetic would not move. */
 function exportJob(userId: string) {
-  const startedAt = new Date(Date.now() - MINUTES * 60_000);
+  const startedAt = new Date(
+    Math.max(Date.now() - MINUTES * 60_000, currentMonthStart().getTime()),
+  );
   return prisma.topoExportJob.create({
     data: {
       userId,

@@ -235,9 +235,15 @@ const COPY_PROPS = new Set([
   "caption",
 ]);
 
+/** Calls whose first argument is the words of a toast (Logjam Web's `toast`,
+ *  Logjam GPS's `notify`, `emitToast` and `toast`); `Alert.alert` also reads
+ *  its second, the message under the title. */
+const COPY_CALLS = /^(?:notify|emitToast|toast(?:\.\w+)?|Alert\.alert)$/;
+
 /**
  * The strings in a source file that a user reads: JSX text, a JSX attribute
- * named in `COPY_PROPS`, and an object property named in it. A template's
+ * named in `COPY_PROPS`, an object property named in it, and the sentence
+ * passed to a toast or alert (`COPY_CALLS`). A template's
  * `${}` holes' own strings are read, their code is not. Not every user-facing string is one of these (a
  * `throw new Error("…")` reaches the user through a screen that may reword it),
  * which is why the net is words, not files: a miss is a gap in the net, never a
@@ -298,6 +304,13 @@ export function userFacingStrings(
       COPY_PROPS.has(node.name.getText().replace(/["']/g, ""))
     )
       texts = stringsOf(node.initializer);
+    else if (ts.isCallExpression(node)) {
+      const callee = node.expression.getText();
+      if (COPY_CALLS.test(callee))
+        texts = node.arguments
+          .slice(0, callee === "Alert.alert" ? 2 : 1)
+          .flatMap(stringsOf);
+    }
     for (const text of texts)
       if (text)
         found.push({

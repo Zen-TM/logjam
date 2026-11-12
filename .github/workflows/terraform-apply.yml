@@ -56,6 +56,7 @@ concurrency:
 jobs:
   merged-pr:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
@@ -99,6 +100,7 @@ jobs:
     needs: merged-pr
     if: needs.merged-pr.outputs.prod == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: prod
     env:
       GH_TOKEN: ${{ github.token }}
@@ -198,6 +200,7 @@ jobs:
     needs: merged-pr
     if: needs.merged-pr.outputs.github == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: prod
     env:
       GH_TOKEN: ${{ github.token }}

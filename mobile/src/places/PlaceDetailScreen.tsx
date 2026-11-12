@@ -537,7 +537,7 @@ export function PlaceDetailScreen({
                 source.linkable
                   ? () => {
                       Linking.openURL(source.url).catch(() =>
-                        notify("Couldn’t open that link.", "error"),
+                        notify("Couldn't open that link.", "error"),
                       );
                     }
                   : undefined

@@ -1,4 +1,4 @@
-# The brain: one EC2 host that runs prod's Postgres and API (#565). The
+# The brain: one EC2 host that runs prod's Postgres and API. The
 # defaults below keep a root without settings inert: with an empty
 # brain_pg_image_tag there is no instance, no data volume and no Elastic IP
 # (brain_instance.tf), so none of it costs anything. Prod's root does not plan

@@ -214,7 +214,6 @@ describe("computeLogbookStats", () => {
         label: "Pitches",
         type: "integer",
         min: 0,
-        max: null,
         placeTypeIds: [CANYON],
       }),
       def({

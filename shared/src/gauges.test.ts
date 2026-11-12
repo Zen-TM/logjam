@@ -389,7 +389,7 @@ describe("the gauge panel's words", () => {
     );
   });
 
-  // Readings, never advice (#682). Mutation: put "safe" in the copy → red.
+  // Readings, never advice. Mutation: put "safe" in the copy → red.
   it("has no word of advice and no colour scale", () => {
     const words = JSON.stringify([
       GAUGES.copy,

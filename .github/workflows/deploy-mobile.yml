@@ -36,6 +36,7 @@ jobs:
     # runs in infra/terraform/envs/github/tests/guards.tftest.hcl.
     environment: mobile-release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:

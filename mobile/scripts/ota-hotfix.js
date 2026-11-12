@@ -81,9 +81,10 @@ function actorRefusal({ actor, triggeringActor, owner }) {
 }
 
 // The ota-plan job GitHub Actions ran last on the PR's head. Only its result
-// counts: another label's event leaves a skipped run, a re-run still in
-// progress has no conclusion yet, and any App with checks: write could post
-// a check run of the same name. A PR that edits ota-plan.yml decides what
+// counts: an event with the label off leaves a skipped run, a plan still
+// running has no conclusion yet (the job lasts as long as its run), a
+// superseded or stopped one is cancelled, and any App with checks: write
+// could post a check run of the same name. A PR that edits ota-plan.yml decides what
 // that job runs; the refusals that matter run again at publish.
 const GITHUB_ACTIONS_APP_ID = 15368;
 function planCheckRefusal(checkRuns, head) {
@@ -94,9 +95,10 @@ function planCheckRefusal(checkRuns, head) {
         r.app?.id === GITHUB_ACTIONS_APP_ID &&
         r.conclusion !== "skipped",
     )
-    // ISO dates order as strings; a run not yet started sorts last, so it
-    // blocks.
-    .sort((a, b) => ((a.started_at ?? "~") < (b.started_at ?? "~") ? -1 : 1))
+    // By id, which is the order GitHub made them in, and the newest is the
+    // one the main ruleset reads too. Start times do not order them: a run
+    // cancelled before it started can carry the time it was cancelled.
+    .sort((a, b) => a.id - b.id)
     .at(-1);
   if (last?.conclusion === "success") return null;
   const state = last ? (last.conclusion ?? "still running") : "missing";

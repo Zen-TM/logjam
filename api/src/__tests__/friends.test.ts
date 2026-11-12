@@ -2,7 +2,14 @@ import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { ALICE_ID, BOB_ID, CAROL_ID, NONEXISTENT_ID } from "./_actors";
+import {
+  ALICE_ID,
+  BOB_ID,
+  CAROL_ID,
+  NONEXISTENT_ID,
+  OTHER_USER_KEYS,
+  keysOf,
+} from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Baseline seed (api/prisma/seed.ts):
@@ -22,9 +29,12 @@ describe("friends routes (fake auth = alice)", () => {
     expect(bob).toBeTruthy();
     expect(bob.username).toBe("bob");
     expect(bob.friendshipId).toBeTruthy();
-    // Privacy rule: friend lists are username-only.
+    // Privacy rule: friend lists are username-only. An allow-list, so a new
+    // column in the select (email, subject) is red until someone decides.
+    // Mutation that turns it red: add `subject: true` to the select in
+    // GET /friends (routes/friends.ts).
     for (const friend of res.body) {
-      expect(friend.email).toBeUndefined();
+      expect(keysOf(friend)).toEqual(["friendshipId", "id", "username"]);
     }
   });
 
@@ -36,7 +46,9 @@ describe("friends routes (fake auth = alice)", () => {
     );
     expect(fromCarol).toBeTruthy();
     expect(fromCarol.status).toBe("pending");
-    expect(fromCarol.requester.email).toBeUndefined();
+    // Mutation that turns it red: add `subject: true` to the requester select
+    // in GET /friends/requests.
+    expect(keysOf(fromCarol.requester)).toEqual(OTHER_USER_KEYS);
   });
 
   it("POST /friends/request rejects self-requests", async () => {
@@ -117,7 +129,8 @@ describe("friends routes (fake auth = alice)", () => {
     expect(Array.isArray(res.body)).toBe(true);
     for (const match of res.body) {
       expect(match.id).not.toBe(ALICE_ID);
-      expect(match.email).toBeUndefined();
+      // Mutation that turns it red: add `subject: true` to the search select.
+      expect(keysOf(match)).toEqual(OTHER_USER_KEYS);
     }
     // The count is of the same matches, self excluded. Mutation: drop the
     // where from the count and it includes alice / non-matches.
