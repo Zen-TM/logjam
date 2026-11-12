@@ -782,8 +782,8 @@ run "brain_security_group_has_two_ingress_rules" {
   }
 
   override_resource {
-    target          = aws_security_group.worker
-    values          = { id = "sg-mockworker" }
+    target          = aws_security_group.workers
+    values          = { id = "sg-mockworkers" }
     override_during = plan
   }
 
@@ -795,7 +795,7 @@ run "brain_security_group_has_two_ingress_rules" {
       for i in aws_security_group.brain.ingress : jsonencode([i.from_port, i.to_port, i.protocol, i.prefix_list_ids == null ? [] : sort(tolist(i.prefix_list_ids)), i.security_groups == null ? [] : sort(tolist(i.security_groups)), i.cidr_blocks == null ? 0 : length(i.cidr_blocks), i.ipv6_cidr_blocks == null ? 0 : length(i.ipv6_cidr_blocks), i.self == true])
       ]) == toset([
       jsonencode([80, 80, "tcp", ["pl-b8a742d1"], [], 0, 0, false]),
-      jsonencode([5432, 5432, "tcp", [], ["sg-mockworker"], 0, 0, false]),
+      jsonencode([5432, 5432, "tcp", [], ["sg-mockworkers"], 0, 0, false]),
     ]) && length(aws_security_group.brain.ingress) == 2
     error_message = "The brain's security group may take only port 80 from CloudFront and 5432 from the workers."
   }
@@ -2046,8 +2046,8 @@ run "prod_runs_on_the_brain" {
     brain_serving      = false
   }
   override_resource {
-    target          = aws_security_group.worker
-    values          = { id = "sg-mockworker" }
+    target          = aws_security_group.workers
+    values          = { id = "sg-mockworkers" }
     override_during = plan
   }
   # The alarm is imported (monitoring.tf), which a mocked provider cannot do.

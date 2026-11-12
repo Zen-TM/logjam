@@ -17,12 +17,16 @@ resource "aws_security_group" "brain" {
     prefix_list_ids = ["pl-b8a742d1"]
   }
 
+  # Replacing the group this rule names takes two applies, the rule before
+  # the group. Terraform deletes a removed group before it updates this rule,
+  # AWS refuses to delete a group a rule still names, and the apply waits 15
+  # minutes and fails with nothing changed.
   ingress {
-    description     = "Postgres from the Fargate workers (logjam-worker-sg)"
+    description     = "Postgres from the Fargate workers (logjam-workers)"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.worker.id]
+    security_groups = [aws_security_group.workers.id]
   }
 
   egress {

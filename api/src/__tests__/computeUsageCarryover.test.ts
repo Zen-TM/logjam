@@ -344,7 +344,7 @@ describe("a finished job's charge stops growing", () => {
     });
     try {
       await prisma.$executeRawUnsafe(`
-        CREATE FUNCTION public.jsonb_typeof(j jsonb) RETURNS text LANGUAGE plpgsql AS $$
+        CREATE OR REPLACE FUNCTION public.jsonb_typeof(j jsonb) RETURNS text LANGUAGE plpgsql AS $$
         BEGIN
           IF j ? 'failTheStamp' THEN RAISE EXCEPTION 'injected'; END IF;
           RETURN pg_catalog.jsonb_typeof(j);
@@ -361,13 +361,13 @@ describe("a finished job's charge stops growing", () => {
         pipeline_metrics: { failTheStamp: true },
       });
     } finally {
+      await prisma.$executeRaw`DELETE FROM topo_jobs WHERE id = ${job.id}`;
       await prisma.$executeRawUnsafe(
         "ALTER FUNCTION stamp_topo_job_wall_seconds() RESET search_path",
       );
       await prisma.$executeRawUnsafe(
         "DROP FUNCTION IF EXISTS public.jsonb_typeof(jsonb)",
       );
-      await prisma.$executeRaw`DELETE FROM topo_jobs WHERE id = ${job.id}`;
     }
   });
 
