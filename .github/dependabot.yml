@@ -27,6 +27,50 @@ updates:
           - "minor"
           - "patch"
 
+  # `/` covers .github/workflows only; a composite action sits in its own directory.
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/build-dev-apk"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 20
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The image prod's database runs and local dev builds. A new minor must reach
+  # ci.yml's Postgres services in the same change: rollback-compat-mirrors-ci.py
+  # fails until they match.
+  - package-ecosystem: "docker"
+    directory: "/infra/brain/postgres"
+    schedule:
+      interval: "monthly"
+    groups:
+      docker:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # docker-compose.yml holds the one MiniStack pin (and Mailpit). Dependabot does
+  # not read a workflow's `services:`, so a MiniStack bump must be copied to
+  # every copy; rollback-compat-mirrors-ci.py fails until it is.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      docker-compose:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "npm"
     directory: "/"
     schedule:

@@ -30,6 +30,7 @@ jobs:
   smoke:
     name: Smoke ${{ inputs.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Probe the public URL
         env:

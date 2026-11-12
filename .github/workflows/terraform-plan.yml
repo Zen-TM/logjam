@@ -54,6 +54,7 @@ jobs:
   # and fail, so a required check never passes on a skipped plan.
   scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       prod: ${{ steps.scope.outputs.prod }}
       github: ${{ steps.scope.outputs.github }}
@@ -100,6 +101,7 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.prod == 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: terraform-plan
     steps:
       - name: Stop if the scope job failed
@@ -213,6 +215,7 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.github == 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: terraform-plan
     steps:
       - name: Stop if the scope job failed

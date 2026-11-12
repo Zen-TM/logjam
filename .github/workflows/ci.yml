@@ -1,10 +1,10 @@
 name: CI
 
 # Test/lint/typecheck gate. Runs on every PR, on pushes to main and nightly.
-# This is the workflow branch protection should require (jobs: shared, api,
-# api-integration, frontend, mobile, topo). The api-integration job stands up
-# the live API + Postgres + MiniStack the integration suite needs, so
-# api/src/__tests__ gates PRs too; see api/AGENTS.md "Testing".
+# The main ruleset requires its jobs (infra/terraform/envs/github/rulesets.tf).
+# The api-integration job stands up the live API + Postgres + MiniStack the
+# integration suite needs, so api/src/__tests__ gates PRs too; see
+# api/AGENTS.md "Testing".
 #
 # On a pull request the heavy jobs run only when the diff touches what they
 # depend on (the `changes` job; infra/scripts/ci-scope.sh holds the paths).
@@ -21,9 +21,17 @@ on:
     - cron: "17 16 * * *"
   workflow_dispatch:
 
+# A newer push to a PR cancels that PR's older run. Anything else (a push to
+# main, which the deploys wait on, the nightly, a hand run) gets a group of its
+# own, since a shared one would also cancel a queued run.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       api_integration: ${{ steps.scope.outputs.api_integration }}
       mobile: ${{ steps.scope.outputs.mobile }}
@@ -52,28 +60,34 @@ jobs:
     # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install gitleaks
         run: |
-          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
       - name: Scan for secrets
         # A PR or push scans HEAD's history only: checkout fetches every branch
         # and gitleaks's default is `git log --all`, so a finding on any other
         # branch would fail every PR. The nightly run keeps `--all`, since the
         # repo is public and a branch that never gets a PR is scanned nowhere else.
-        run: ./gitleaks detect --source . --no-banner --redact --exit-code 1 --log-opts="${{ github.event_name == 'schedule' && '--all' || 'HEAD' }}"
+        # -v prints each finding's file, rule and commit (--redact keeps the
+        # secret out of it): without it the log says only "leaks found: N".
+        run: ./gitleaks detect --source . --no-banner --redact -v --exit-code 1 --log-opts="${{ github.event_name == 'schedule' && '--all' || 'HEAD' }}"
 
   actionlint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install actionlint
         run: |
-          curl -sSL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
       # ShellCheck warnings and errors fail the job; its info and style notes
       # (quoting a value that never holds a space) do not.
@@ -86,6 +100,7 @@ jobs:
   # topo job.
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -100,6 +115,7 @@ jobs:
 
   shared:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -139,6 +155,7 @@ jobs:
 
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -167,10 +184,10 @@ jobs:
         run: npm run test:unit
 
   api-integration:
-    # api/src/__tests__ (31 files / ~250 tests) hits a LIVE API over HTTP — it
-    # is the only coverage of the multi-actor privacy boundaries
-    # (shareBoundary / syncBoundary / directShare / shareRevocation), which the
-    # mocked-Prisma unit tests structurally cannot reach.
+    # api/src/__tests__ hits a LIVE API over HTTP — it is the only coverage of
+    # the multi-actor privacy boundaries (shareBoundary / syncBoundary /
+    # directShare / shareRevocation), which the mocked-Prisma unit tests
+    # structurally cannot reach.
     #
     # This job is `make dev` reduced to what the suite actually needs:
     # Postgres + MiniStack (S3 only — no test drives POST /topo-jobs/:id/start
@@ -184,10 +201,11 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     services:
       # Mirrors the `migrations` job's config exactly.
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -200,13 +218,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       # Same emulator image as docker-compose.yml, so presign/PUT/confirm
-      # behaves as it does locally. media/canyonTracks/clientIds/fileSends and
+      # behaves as it does locally. That file holds the one pin (Dependabot
+      # updates it there, not here); rollback-compat-mirrors-ci.py fails on a
+      # copy that differs, and likewise on a Postgres that is not the version
+      # infra/brain/postgres/Dockerfile builds FROM. media/canyonTracks/clientIds/fileSends and
       # topoJobs' HeadObject check all do real S3 round-trips against it.
       # No /var/run/docker.sock mount (that is only for ECS RunTask) and no
       # healthcheck options — the image has no curl, so the wait step below
       # polls the health endpoint from the runner instead.
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3
           DEFAULT_REGION: ap-southeast-2
@@ -388,6 +409,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -424,6 +446,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -469,9 +492,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -516,9 +540,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -562,6 +587,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.brain_postgres != 'false' }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -600,6 +626,7 @@ jobs:
     needs: brain-e2e
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Every architecture passed or was scoped out
         env:
@@ -612,6 +639,7 @@ jobs:
     needs: brain-postgres-image
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Every architecture passed or was scoped out
         env:
@@ -620,6 +648,7 @@ jobs:
 
   topo:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -653,9 +682,8 @@ jobs:
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
   # image is built from and the two API files that launch it (ci-scope.sh)
-  # rather than to the whole API, and its six minutes (ten with
-  # a cold image cache) run beside that suite instead of after it. The setup it
-  # repeats is about a minute.
+  # rather than to the whole API, and it runs beside that suite instead of
+  # after it.
   topo-e2e:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.topo_e2e != 'false' }}
@@ -663,7 +691,7 @@ jobs:
     timeout-minutes: 60
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -679,7 +707,7 @@ jobs:
       # ECS and the Docker socket, as docker-compose.yml's does.
       # rollback-compat-mirrors-ci.py allows exactly these two differences.
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3,ecs
           DEFAULT_REGION: ap-southeast-2
@@ -929,6 +957,7 @@ jobs:
   # than half way through a prod deploy.
   infra-scripts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ECS task-definition pin filter

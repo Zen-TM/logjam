@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Which heavy CI jobs a pull request needs, so a docs change does not stand up
-# Postgres, MiniStack and the API. ci.yml, rollback-compat.yml, terraform-ci.yml
-# and setup-smoke.yml each run it in a `changes` job. Writes `<area>=true|false` for
-# every area to $GITHUB_OUTPUT (stdout when unset); ci.yml's `changes` job
-# passes them on, and each scoped job runs unless its area is `false`.
+# Postgres, MiniStack and the API. ci.yml, rollback-compat.yml, terraform-ci.yml,
+# setup-smoke.yml and mobile-emulator.yml each run it in a `changes` job. Writes
+# `<area>=true|false` for every area to $GITHUB_OUTPUT (stdout when unset);
+# ci.yml's `changes` job passes them on, and each scoped job runs unless its
+# area is `false`.
 #
 #   ci-scope.sh scope <base> <head>
 #   ci-scope.sh all              # every area true: pushes, schedule, dispatch
@@ -20,24 +21,14 @@
 # paths_for is the one declaration of what each area depends on: its own
 # package, everything it imports, and every file its tests read.
 #
-# Mutations that turn the self-test red: dropping shared/ from mobile fails
-# "mobile: shared source"; dropping frontend/public/ from mobile fails "mobile:
-# the legal documents it links to"; dropping frontend/ from api_integration
-# fails "api_integration: Logjam Web (Playwright smoke)"; dropping the stub
-# from api_integration fails "api_integration: the Expo push stub it starts";
-# dropping mobile-emulator.yml from mobile fails "mobile: the emulator smoke
-# workflow"; removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
-# fails "a rename out of an area"; dropping the worker image's paths from
-# topo_e2e fails "topo_e2e: worker source" and dropping the RunTask files fails
-# "topo_e2e: the start route"; dropping lockfiles from setup_smoke
-# fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
-# brain_postgres fails "brain_postgres: the Compose file that builds it"; dropping
-# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/brain/ from terraform fails "terraform: a brain host file its guards read"; dropping infra/lambda/brain-watchdog/ from terraform fails "terraform: the watchdog source the plan zips"; a scoped job in any workflow whose
-# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; narrowing terraform to .tf files fails "terraform: the brain's settings file"; a scoped job in any workflow whose
-# `if:` is not the fail-open expression, or a `changes` output wired to another
-# area's value, fails that workflow's checks.
+# Mutations that turn the self-test red: dropping a path from an area's
+# paths_for fails the case that names it (each case says which file it reads:
+# "mobile: shared source", "api_integration: the Expo push stub it starts",
+# "brain_e2e: the role script it reuses", ...); removing the ci.yml rule fails
+# "any area: ci.yml"; dropping --no-renames fails "a rename out of an area".
+# A scoped job in any workflow whose `if:` is not the fail-open expression, or
+# a `changes` output wired to another area's value, fails that workflow's
+# checks.
 set -uo pipefail
 
 AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke brain_postgres brain_e2e"
