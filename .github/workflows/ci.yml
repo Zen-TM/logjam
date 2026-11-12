@@ -379,10 +379,10 @@ jobs:
       - name: Build Logjam Web
         working-directory: frontend
         run: npm run build:e2e
-      # Smoke, then a11y, then the Make a map and confirm specs, in one run so
-      # the browser and the two servers start once. Playwright starts the
-      # second server on 5199 itself. None of them writes. Serial: see the
-      # worker count below.
+      # Smoke, a11y, and the Make a map and confirm specs, in one run so the
+      # browser and the two servers start once. Playwright starts the second
+      # server on 5199 itself. None of them writes, so two workers can share the
+      # account; the list reporter puts each case's duration in the log.
       - name: Playwright read-only specs
         working-directory: frontend
         env:
