@@ -14,7 +14,7 @@ mock_provider "random" {}
 mock_provider "archive" {}
 
 # terraform test loads *.auto.tfvars from the root, so brain.auto.tfvars (prod's
-# switches, edited at the cutover) would otherwise decide what every run
+# switches) would otherwise decide what every run
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
@@ -138,7 +138,7 @@ run "ci_reads_no_secret_or_user_data" {
   # leaves the next bucket or log group readable until someone remembers to
   # add it. Changing the object Deny's condition (another account, a
   # negated operator, a second key) leaves buckets of ours readable; dropping
-  # it denies the AWS-owned objects an EB configuration change reads again.
+  # it denies the AWS-owned objects a service reads with the caller's credentials.
   assert {
     condition = alltrue([
       for p in [
@@ -2096,8 +2096,7 @@ run "prod_runs_on_the_brain" {
     error_message = "The API origin must keep its id, send X-Origin-Verify, and stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
   }
 
-  # Mutation: a filter pointed at another group (the old Elastic Beanstalk one),
-  # or the 5xx alarm's actions dropped.
+  # Mutation: a filter pointed at another group, or the 5xx alarm's actions dropped.
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/logjam/brain/api" &&

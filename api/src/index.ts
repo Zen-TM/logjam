@@ -3,8 +3,8 @@ import dotenv from "dotenv";
 import path from "path";
 // Local dev (run from api/ via `npm run dev`) loads the Terraform-generated root
 // .env.local — the single source of dev env (infra/terraform/envs/local). In
-// production NODE_ENV is already set by the EB/ECS container, so env comes from
-// there and we skip the file (dotenv.config() is a harmless no-op if absent).
+// production NODE_ENV is already set by the container's environment, so env comes
+// from there and we skip the file (dotenv.config() is a harmless no-op if absent).
 if (process.env.NODE_ENV === "production") {
   dotenv.config();
 } else {
@@ -30,8 +30,8 @@ const env = getEnv();
 
 const app = express();
 
-// Trust exactly TRUST_PROXY_HOPS proxies (2 on Elastic Beanstalk: CloudFront ->
-// EB nginx; 1 with CloudFront straight to the container) so `req.ip` is the
+// Trust exactly TRUST_PROXY_HOPS proxies (1 in prod: CloudFront straight to
+// the brain's container) so `req.ip` is the
 // real client for the IP-fallback rate-limit key (middleware/rateLimit.ts) and
 // request logs — NOT `true`, which would let clients spoof X-Forwarded-For and
 // forge their rate-limit bucket. The count must match the live proxy chain; if
@@ -143,16 +143,19 @@ app.get("/ready", async (_req, res) => {
   }
 });
 
-// CloudFront origin-verify (WAF-bypass guard). The EB environment CNAME is
-// reachable on the public internet, so a client that knows it can hit the API
-// while skipping the CloudFront edge WAF. CloudFront injects a secret
-// X-Origin-Verify header on every origin fetch (infra/.../origin_verify.tf); a
-// request whose header doesn't match reached EB directly. /health + /ready are
-// exempt — EB health checks hit the instance directly and carry no header.
+// CloudFront origin-verify (WAF-bypass guard). The brain's security group
+// admits CloudFront's origin-facing addresses, which every CloudFront
+// customer's distribution shares, so one that is not ours and points at the
+// brain would reach the API while skipping our edge WAF. CloudFront injects a
+// secret X-Origin-Verify header on every origin fetch
+// (infra/.../origin_verify.tf); a request whose header doesn't match did not
+// come through our distribution. /health + /ready are exempt — Compose's
+// healthcheck calls the container directly and carries no header.
 // Inert unless a secret is configured. ORIGIN_VERIFY_ENFORCE=false (default)
 // LOGS the anomaly without blocking so the CloudFront header rollout is
 // confirmable before enforcement; =true returns 403. Mounted before the rate
-// limiter so direct-to-EB floods are rejected without consuming a limiter slot.
+// limiter so floods that skip our distribution are rejected without consuming a
+// limiter slot.
 if (env.ORIGIN_VERIFY_SECRET) {
   const originVerifySecret = Buffer.from(env.ORIGIN_VERIFY_SECRET);
   app.use((req, _res, next) => {
