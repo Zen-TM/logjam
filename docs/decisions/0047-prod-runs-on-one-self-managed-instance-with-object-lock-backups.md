@@ -232,7 +232,7 @@ fails when it is broken.
   it is started.** Moving the image from 16 to 18 meets a rule above: a server
   refuses another major's data directory, so "a data directory with a database
   is started" (rule 2) gains a step. When `/data/postgres/PG_VERSION` is older
-  than the pinned image's `PG_MAJOR`, `host/boot.sh` stops Postgres and runs
+  than the pinned image's `PG_MAJOR`, `infra/brain/host/boot.sh` stops Postgres and runs
   `infra/brain/postgres/major-upgrade.sh` in a one-off container (`upgrade` in
   `compose.yaml`, which is why that container mounts all of `/data`).
   `pg_upgrade` runs in copy mode into `/data/postgres.new`; one atomic
@@ -246,7 +246,7 @@ fails when it is broken.
   The image carries the old major's binaries only for this, and they go once
   prod is on the new one; restoring from before an upgrade needs the image tag
   of that time. Guards: scenarios 14 and 14b of `e2e.sh`, and the major-version
-  guard and upgrade checks in `postgres/tests/test.sh`. What still holds the
+  guard and upgrade checks in `infra/brain/postgres/tests/test.sh`. What still holds the
   decision up: boot.sh is the only thing that starts Postgres, and it never
   deletes a cluster. Everything else above stands.
 
@@ -298,7 +298,7 @@ fails when it is broken.
   each process's memory, are not.
 - **Negative: the host files are 89 % of what EC2 allows.** They travel in the
   instance's user data, 14,511 bytes gzipped of EC2's 16,384 (updated
-  2026-11-12: 13,839 before the major upgrade step in `host/boot.sh`), and a guard
+  2026-11-12: 13,839 before the major upgrade step in `infra/brain/host/boot.sh`), and a guard
   stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose
   plugin.
