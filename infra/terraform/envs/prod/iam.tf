@@ -676,16 +676,12 @@ locals {
   ci_readonly_privacy_deny = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Every bucket of ours but the three CI reads objects from: media, topo
+      # Every bucket of ours but the two CI reads objects from: media, topo
       # outputs, the WORM audit sink (pgaudit query text can embed canyon
       # names/coords), the access logs (viewers' IPs and request paths) and
       # any bucket added later. The exceptions: init reads the state file
-      # (plans run -lock=false, so no write is needed), the frontend deploy
-      # and rollback read release files, and the third, the old Elastic
-      # Beanstalk deploy bucket, is read by nothing now. It stays listed
-      # because this document is also the apply role's permission boundary,
-      # which only the maintainer applies (docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md): dropping
-      # it is a hand apply, for no gain while the bucket's logs are denied below.
+      # (plans run -lock=false, so no write is needed), and the frontend deploy
+      # and rollback read release files.
       #
       # Only buckets in this account: AWS-owned buckets that a service reads
       # with the caller's credentials stay readable. User data lives only in
@@ -697,17 +693,8 @@ locals {
         NotResource = [
           "arn:aws:s3:::logjam-tfstate-620853681701/*",
           "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
-          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
         ]
         Condition = { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
-      },
-      # The old API instance's rotated logs, which Elastic Beanstalk uploaded
-      # into the bucket excepted above.
-      {
-        Sid      = "DenyInstanceLogObjects"
-        Effect   = "Deny"
-        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
-        Resource = "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/resources/environments/logs/*"
       },
       # No exception: the origin-verify secret version is write-only
       # (origin_verify.tf), so no plan or apply reads a secret value.
@@ -745,16 +732,15 @@ locals {
         Action   = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
         Resource = "*"
       },
-      # The same logs by other routes: a database service's own log files, a
-      # single record by pointer (no resource-level permission, hence "*"), and
-      # an instance's log tail. The RDS and Elastic Beanstalk actions stay
-      # denied though both services are gone from here: they cost nothing, and
-      # a database or environment made later would be closed without an edit.
-      # Nothing in CI reads any of them.
+      # The same logs by another route: a single record by pointer (no
+      # resource-level permission, hence "*"). Nothing in CI reads one.
+      # ReadOnlyAccess allows a new service's own log reads (a managed
+      # database's log files, say), so a service added later stays open
+      # until its read actions are listed here.
       {
         Sid      = "DenyLogsByOtherRoutes"
         Effect   = "Deny"
-        Action   = ["rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile", "logs:GetLogRecord", "elasticbeanstalk:RequestEnvironmentInfo", "elasticbeanstalk:RetrieveEnvironmentInfo"]
+        Action   = ["logs:GetLogRecord"]
         Resource = "*"
       },
       # Message bodies and parameter values: ReadOnlyAccess allows both, and
