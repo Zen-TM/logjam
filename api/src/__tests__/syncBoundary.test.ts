@@ -23,6 +23,7 @@ import {
   as,
   CANYON_TYPE_ID,
 } from "./_actors";
+import { uploadPhoto } from "./_tombstones";
 
 // Mandatory privacy-boundary suite for GET /sync/delta.
 // Requires `make dev`. Seed baseline: alice owns SHARED_PLACE_ID, shared
@@ -222,33 +223,63 @@ describe("sync delta — revocation signals", () => {
       ),
     ).toBe(false);
 
-    // Re-share, then DELETE the place → the sharee-visible signal must be
-    // indistinguishable from the unshare (a bare place tombstone).
-    const reshare = await request(API_URL)
-      .post(`/places/${placeId}/share`)
+    // DELETE a second place that was never unshared → the sharee-visible
+    // signal must be the same bare place tombstone. A place the test unshared
+    // first would not do: the unshare's older tombstone is re-delivered inside
+    // the delta's overlap window and would satisfy the assertion by itself.
+    // Mutation that turns it red: skip the writeTombstones call in
+    // deletePlacesCascade (lib/bulkDelete.ts), or drop its mediaIds.
+    const second = await request(API_URL)
+      .post("/places")
+      .set(as(ALICE_SUB))
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: "Deleted place",
+        latitude: -33.7,
+        longitude: 150.3,
+      });
+    expect(second.status).toBe(201);
+    const deletedId = second.body.id as string;
+    const shareDeleted = await request(API_URL)
+      .post(`/places/${deletedId}/share`)
       .set(as(ALICE_SUB))
       .send({ sharedWithUserId: BOB_ID });
-    expect(reshare.status).toBe(201);
+    expect(shareDeleted.status).toBe(201);
+    const photoId = await uploadPhoto(ALICE_SUB, "place", deletedId);
     const bobMid = await fullPull(BOB_SUB, afterUnshare.cursor);
+    const aliceMid = await fullPull(ALICE_SUB, afterUnshare.cursor);
 
     const del = await request(API_URL)
-      .delete(`/places/${placeId}`)
+      .delete(`/places/${deletedId}`)
       .set(as(ALICE_SUB));
     expect(del.status).toBe(204);
 
     const afterDelete = await fullPull(BOB_SUB, bobMid.cursor);
-    expect(
-      afterDelete.tombstones.some(
-        (t) => t.type === "place" && t.id === placeId,
-      ),
-    ).toBe(true);
-    // Signal shape parity: same tombstone type, no extra sharee-visible rows
-    // that would distinguish delete from unshare.
+    expect(afterDelete.tombstones).toContainEqual({
+      type: "place",
+      id: deletedId,
+    });
     expect(
       (afterDelete.changes.places as { id: string }[]).some(
-        (c) => c.id === placeId,
+        (c) => c.id === deletedId,
       ),
     ).toBe(false);
+    expect(afterDelete.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
+    });
+    // The owner forgets it too, and its photo.
+    const aliceAfter = await fullPull(ALICE_SUB, aliceMid.cursor);
+    expect(aliceAfter.tombstones).toContainEqual({
+      type: "place",
+      id: deletedId,
+    });
+    expect(aliceAfter.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
+    });
+
+    await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
   });
 });
 

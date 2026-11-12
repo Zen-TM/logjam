@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
+import { ALICE_SUB, BOB_SUB, SHARED_PLACE_ID } from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
+
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (requests authenticate as the seeded alice user).
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
@@ -95,6 +98,47 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(
       afterRes.body.media.some((m: { id: string }) => m.id === mediaId),
     ).toBe(false);
+  });
+
+  // Place-level media of a shared place is visible to its sharees, so the
+  // delete is told to the owner and to each of them.
+  // Mutation that turns it red: skip the writeTombstones call in DELETE
+  // /media/:id (routes/media.ts).
+  it("tombstones a deleted place photo for the owner and the sharee", async () => {
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        filename: "tombstone.png",
+        mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(presign.status).toBe(201);
+    const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presign.body;
+    await putToPresignedUrl(displayUploadUrl, PNG_BYTES, "image/png");
+    await putToPresignedUrl(thumbnailUploadUrl, PNG_BYTES, "image/jpeg");
+    const confirm = await request(API_URL)
+      .post(`/media/${mediaId}/confirm`)
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        filename: "tombstone.png",
+        mediaType: "image/png",
+      });
+    expect(confirm.status).toBe(201);
+
+    const aliceCursor = await deltaCursor(ALICE_SUB);
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const del = await request(API_URL).delete(`/media/${mediaId}`).set(AUTH);
+    expect(del.status).toBe(204);
+
+    const gone = { type: "media", id: mediaId };
+    expect(await tombstonesSince(ALICE_SUB, aliceCursor)).toContainEqual(gone);
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
   });
 
   it("rejects an unsupported media type", async () => {
