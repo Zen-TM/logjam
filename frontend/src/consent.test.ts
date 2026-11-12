@@ -83,3 +83,54 @@ describe("the region step after Logjam Web's own sign-up form", () => {
     expect(app).toContain("auth.finishNewAccount()");
   });
 });
+
+// A hook that takes `authenticated` instead of the gate's `settled` fetches
+// the user's data behind the consent gate, and nothing renders differently, so
+// no render test would notice. App is too heavy to mount; this reads its
+// source. Every code line that names `authenticated` is listed below: a new
+// one is a new decision about whether it may run before consent settles.
+//
+// Mutation that turns it red: change `usePlaces(loadsUserData)` (or any hook
+// beside it) to take `authenticated`, or `loadsUserData = authenticated &&
+// consentSettled` to drop `consentSettled`.
+describe("App hands user-data hooks the gate's settled, not authenticated", () => {
+  const code = readFileSync(join(__dirname, "components/App.tsx"), "utf8")
+    .split("\n")
+    .map((line) => line.replace(/\s\/\/.*$/, "").trim())
+    .filter((line) => !/^(\/\/|\/?\*)/.test(line) && line !== "");
+
+  const ALLOWED = [
+    // The definition, and what the whole of App waits on.
+    'const authenticated = auth.state === "authenticated";',
+    "const loadsUserData = authenticated && consentSettled;",
+    // The consent decision itself is read from /users/me, so it cannot wait.
+    "} = useCurrentUser(authenticated);",
+    // The second argument is the job-poll's own sign-in check; the first is the gate.
+    "} = useCompletedTopoJobs(loadsUserData, authenticated);",
+    // Hydrating preferences from the user row, and the export snapshot: both
+    // read what useCurrentUser already fetched.
+    "if (!authenticated) return;",
+    "}, [authenticated, hydrateFromUser, toast]);",
+    "if (!authenticated) {",
+    "}, [authenticated, topoExports, topoExportsLoading]);",
+    // The signed-out screen.
+    "if (!authenticated) {",
+  ];
+
+  it("names `authenticated` only where listed", () => {
+    const used = code.filter((line) => /\bauthenticated\b/.test(line));
+    expect(
+      used.sort(),
+      "src/components/App.tsx names `authenticated` on lines that differ from ALLOWED: a hook that takes it loads user data before consent settles. Pass `loadsUserData` instead; if the line truly must run before consent, add it to ALLOWED in src/consent.test.ts with the reason (and remove an entry whose line is gone).",
+    ).toEqual([...ALLOWED].sort());
+  });
+
+  it("derives loadsUserData from settled, and hands it to the data hooks", () => {
+    expect(code).toContain(
+      "const { blocked: consentBlocked, settled: consentSettled } =",
+    );
+    expect(
+      code.filter((l) => /\bloadsUserData\b/.test(l)).length,
+    ).toBeGreaterThanOrEqual(15);
+  });
+});

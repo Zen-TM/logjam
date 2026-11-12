@@ -112,7 +112,7 @@ model CustomFieldDef {
   ///
   /// A boolean rather than a join row per type that exists today: join rows
   /// would silently fail to apply to tomorrow's types, which is exactly the
-  /// parallel-list drift the root CLAUDE.md rule targets. Guard:
+  /// parallel-list drift the root AGENTS.md rule on two lists that must agree targets. Guard:
   /// `appliesToAllTypes` in customFieldScope.unit.test.ts.
   appliesToAllTypes Boolean @default(false) @map("applies_to_all_types")
   /// The TRIP TYPES (tags — "canyoning", "packrafting") a `tripLog` definition
@@ -674,7 +674,7 @@ model TopoTemplate {
 // CONTRACT PENDING: `placeId` below is DEAD to this code — every link now
 // lives in PlaceWaypoint — but the column still exists so the previously
 // deployed image keeps working through the deploy swap window (expand/contract,
-// api/CLAUDE.md). Once a release carrying this comment is live, delete the
+// ADR 0003). Once a release carrying this comment is live, delete the
 // field, the `place` relation, and Place.legacyWaypoints in a follow-up
 // migration that drops the column.
 // Waypoint ↔ place, many-to-many. Cascade both ways deletes the LINK only:
@@ -830,7 +830,7 @@ model DeviceToken {
 // THE ACCESS DECISION FOR A ROW HERE IS MADE ONLY IN
 // api/src/lib/shareAccess.ts, which unions these rows with the visibility a
 // waypoint or route already inherits from a shared place. Two sources of
-// visibility read in two places is exactly how SEC-001 happened.
+// visibility read in two places is how a recipient gets an ID oracle (shareBoundary.test.ts).
 //
 // NO FOREIGN KEY to the shared entity — entityType is polymorphic, so Postgres
 // cannot cascade. Every hard-delete of a sharable entity must delete its Share
@@ -1029,7 +1029,7 @@ model TripPlanForm {
   title          String
   questions      Json             @default("[]")
   // Which preset the form was built from, if any. Not validated yet: the
-  // preset list lands with the form routes (#439).
+  // preset list lands with the form routes.
   preset         String?
   visibleTo      String           @map("visible_to")
   position       Int

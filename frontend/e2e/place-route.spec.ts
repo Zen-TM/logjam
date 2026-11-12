@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // A place's route is added from its own page, the way photos are, with no edit
 // dialog: from a way already in the account, or from a GPX/KML file. The seed
@@ -19,7 +20,7 @@ async function openHiddenSlot(page: Page) {
   const aside = page.locator("aside");
   await aside
     .locator("[data-place-id]")
-    .filter({ hasText: "Hidden Slot" })
+    .filter({ hasText: SEED_NAMES.hiddenSlot })
     .first()
     .click();
   await expect(aside.getByText("No route yet.")).toBeVisible({
@@ -42,12 +43,12 @@ test("an owner adds a route from a way already in the app", async ({
   // A sub-view is the same dialog, retitled for the step.
   await page
     .getByRole("dialog", { name: "Choose a route you drew" })
-    .getByRole("button", { name: /^Du Faur Head approach/ })
+    .getByRole("button", { name: new RegExp(`^${SEED_NAMES.duFaurApproach}`) })
     .click();
 
   try {
     await expect(page.getByText("Route linked to this place.")).toBeVisible();
-    await expect(aside.getByText("Du Faur Head approach")).toBeVisible();
+    await expect(aside.getByText(SEED_NAMES.duFaurApproach)).toBeVisible();
     await expect(
       aside.getByRole("button", { name: "Replace this place's route" }),
     ).toBeVisible();
