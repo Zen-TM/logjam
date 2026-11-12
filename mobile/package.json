@@ -87,7 +87,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/react": "~19.3.0",
-    "babel-preset-expo": "~58.0.22",
+    "babel-preset-expo": "~58.0.24",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~58.0.4",
     "patch-package": "^8.0.1",

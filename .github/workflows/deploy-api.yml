@@ -211,6 +211,9 @@ jobs:
       # `aws_security_group.workers`, name = logjam-workers) — the one identity
       # that survives replacement. This is the SG the brain's Postgres port admits,
       # so a wrong or empty value must abort, never fall back.
+      # The API launches workers into the group its own settings name, which is
+      # a literal id in infra/brain/api.env. This step refuses a release whose
+      # literal is not the group resolved here, before the migration runs.
       - name: Run DB migrations (gated pre-deploy)
         env:
           CLUSTER: logjam-cluster
@@ -227,6 +230,10 @@ jobs:
           guess. Check network.tf's aws_security_group.workers."; exit 1
           fi
           echo "Resolved $WORKER_SG_NAME -> $SECURITY_GROUP"
+          API_SG=$(sed -n 's/^ECS_SECURITY_GROUPS=//p' infra/brain/api.env)
+          if [ "$API_SG" != "$SECURITY_GROUP" ]; then
+            echo "::error::infra/brain/api.env sets ECS_SECURITY_GROUPS=$API_SG, but $WORKER_SG_NAME is $SECURITY_GROUP. The API would launch workers into a group the brain's Postgres port may not admit. Set it to $SECURITY_GROUP."; exit 1
+          fi
           echo "Launching migrate task ($TASK_DEF) on the newly pushed image..."
           TASK_ARN=$(aws ecs run-task \
             --cluster "$CLUSTER" \

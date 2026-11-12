@@ -51,7 +51,14 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
       const db = await SQLite.openDatabaseAsync("logjam.db");
       // ORDER MATTERS, and it is not the obvious one.
       //
-      // Local tables first: they are never dropped, and `sync_state` has to
+      // Columns before indexes: `ensureLocalColumns` runs ahead of the local
+      // CREATEs because `CREATE TABLE IF NOT EXISTS` leaves an old table as it
+      // was, so an index on a column added since would fail with "no such
+      // column" and abort the open. It reads no `sync_state` and skips a table
+      // that does not exist yet, so it is safe first. It also covers the
+      // `keepOnReset` mirror tables before the mirror CREATEs below.
+      //
+      // Then local tables: they are never dropped, and `sync_state` has to
       // exist before anything can read the schema version out of it. Then the
       // version lever, which DROPS a stale mirror. Only then are the mirror
       // tables created, against a database that no longer holds last version's
@@ -61,10 +68,9 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
       // ON media(origin)` runs against the previous version's media table,
       // fails with "no such column", and aborts the exec before the drop-and-
       // rebuild that adds the column.
-      await db.execAsync(
-        `PRAGMA journal_mode = WAL;\n${createSchemaSql("local")}`,
-      );
+      await db.execAsync("PRAGMA journal_mode = WAL;");
       await ensureLocalColumns(db);
+      await db.execAsync(createSchemaSql("local"));
       if (await dropStaleMirror(db)) await purgeDeadVocabularyOps(db);
       await db.execAsync(createSchemaSql("mirror"));
       await stampMirrorSchemaVersion(db);
@@ -97,7 +103,8 @@ async function ensureLocalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
     const existing = await db.getAllAsync<{ name: string }>(
       `PRAGMA table_info(${table.name})`,
     );
-    // Not created yet (a mirror table is created after this runs).
+    // Not created yet: a fresh install, or a mirror table, which is created
+    // after this runs.
     if (existing.length === 0) continue;
     const present = new Set(existing.map((column) => column.name));
     for (const [name, decl] of Object.entries(table.columns)) {
