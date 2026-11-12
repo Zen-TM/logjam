@@ -1,10 +1,15 @@
-import { describe, it, expect, afterAll, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
+import request from "supertest";
 import { currentMonthStart } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { assertHasStorageQuota } from "../lib/storageQuota";
-import { assertHasEgressQuota } from "../lib/egressQuota";
+import {
+  assertHasEgressQuota,
+  exhaustedEgressOwnerIds,
+} from "../lib/egressQuota";
+import { API_URL, as } from "./_actors";
 import { AppError } from "../middleware/errorHandler";
 
 // Requires the database, not the API: the checks run in this process against
@@ -17,7 +22,8 @@ import { AppError } from "../middleware/errorHandler";
 // `+ pendingBytes` from the site check ("refuses an upload that would pass the
 // cap"); remove the `siteCap === 0` line in either file ("0 turns the cap
 // off"); remove `where: { egressPeriodStart … }` in lib/egressQuota.ts ("counts
-// a stale period as zero").
+// a stale period as zero"); remove the `siteEgressSpent` line in
+// `exhaustedEgressOwnerIds` ("the bulk download also stops").
 
 const env = getEnv();
 const original = {
@@ -47,8 +53,10 @@ async function newUser(data: {
   created.push(user.id);
   return user;
 }
-afterAll(async () => {
-  await prisma.user.deleteMany({ where: { id: { in: created } } });
+// After each test, not at the end: a row left over would count in the next
+// test's site sum.
+afterEach(async () => {
+  await prisma.user.deleteMany({ where: { id: { in: created.splice(0) } } });
 });
 
 const refusal = (promise: Promise<unknown>) =>
@@ -88,6 +96,11 @@ describe("the site-wide storage cap", () => {
 
   it("refuses at the cap even for an upload of no declared size", async () => {
     const user = await newUser({});
+    // Stored bytes of its own, so the cap below is not 0 (off) on a seed with none.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { storageUsedBytes: 1000n },
+    });
     env.SITE_STORAGE_BYTES = await allStored();
     expect((await refusal(assertHasStorageQuota(user.id)))?.statusCode).toBe(
       429,
@@ -163,5 +176,52 @@ describe("the site-wide download cap", () => {
     expect((await refusal(assertHasEgressQuota(checker.id)))?.statusCode).toBe(
       429,
     );
+  });
+});
+
+describe("the bulk photo and file pull", () => {
+  // POST /media/download-urls has no per-request download check, only
+  // exhaustedEgressOwnerIds, so the site cap has to reach it there. The API
+  // under test keeps SITE_MONTHLY_EGRESS_BYTES at its 300 GiB default.
+  const TIB = 1024n ** 4n;
+
+  async function pull(owner: { id: string; subject: string }) {
+    const media = await prisma.media.create({
+      data: {
+        ownerId: owner.id,
+        linkedType: "none",
+        s3KeyDisplay: `site-caps/${randomUUID()}.gpx`,
+        mediaType: "application/gpx+xml",
+        filename: "walk.gpx",
+        fileSizeBytes: 100n,
+      },
+    });
+    const res = await request(API_URL)
+      .post("/media/download-urls")
+      .set(as(owner.subject))
+      .send({ ids: [media.id] });
+    expect(res.status).toBe(200);
+    return { items: res.body.items as unknown[] };
+  }
+
+  it("returns no items once everyone together has passed the cap", async () => {
+    const owner = await newUser({});
+    expect((await pull(owner)).items).toHaveLength(1);
+
+    const heavy = await newUser({ egressUsed: TIB });
+    expect((await pull(owner)).items).toEqual([]);
+
+    await prisma.user.delete({ where: { id: heavy.id } });
+    expect((await pull(owner)).items).toHaveLength(1);
+  });
+
+  it("returns them with the cap at 0", async () => {
+    const owner = await newUser({});
+    await newUser({ egressUsed: TIB });
+    expect([...(await exhaustedEgressOwnerIds([owner.id]))]).toEqual([
+      owner.id,
+    ]);
+    env.SITE_MONTHLY_EGRESS_BYTES = 0;
+    expect([...(await exhaustedEgressOwnerIds([owner.id]))]).toEqual([]);
   });
 });

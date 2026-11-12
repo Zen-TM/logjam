@@ -62,6 +62,29 @@ export async function getEgressUsage(userId: string, db: DbClient = prisma) {
 }
 
 /**
+ * Whether everyone's downloads this month together have passed
+ * SITE_MONTHLY_EGRESS_BYTES (0 = no cap).
+ *
+ * ponytail: a SUM over users per check, a scan per download. Keep a running
+ * total when users number in the tens of thousands. The meter lags by hours
+ * (S3 access logs), so downloads admitted before the logs arrive overshoot the
+ * cap by that much; there is no reservation.
+ */
+async function siteEgressSpent(db: DbClient): Promise<boolean> {
+  const siteCap = getEnv().SITE_MONTHLY_EGRESS_BYTES;
+  if (siteCap === 0) return false;
+  // A stale period counts as zero, as in getEgressUsage.
+  const { _sum } = await db.user.aggregate({
+    _sum: { monthlyEgressUsedBytes: true },
+    where: { egressPeriodStart: { gte: currentMonthStart() } },
+  });
+  if ((_sum.monthlyEgressUsedBytes ?? 0n) < BigInt(siteCap)) return false;
+  // No user data in the line; no alarm watches it yet.
+  logger.warn({ siteCap }, "site_egress_cap_reached");
+  return true;
+}
+
+/**
  * Which of `userIds` are out of download allowance, in one query.
  *
  * For list responses that mint many presigned URLs across several owners
@@ -75,6 +98,9 @@ export async function exhaustedEgressOwnerIds(
   db: DbClient = prisma,
 ): Promise<Set<string>> {
   if (userIds.length === 0) return new Set();
+  // The site-wide cap is spent: every owner's rows are omitted, as for one
+  // out of their own allowance.
+  if (await siteEgressSpent(db)) return new Set(userIds);
   const monthStart = currentMonthStart();
   const rows = await db.user.findMany({
     where: {
@@ -130,21 +156,7 @@ export async function assertHasEgressQuota(
   // The site-wide cap, after the user's own so a user over theirs is told that.
   // Only the reset date goes back: the pool's size and use are not the user's
   // to see.
-  //
-  // ponytail: a SUM over users per check, a scan per download. Keep a running
-  // total when users number in the tens of thousands. The meter lags by hours
-  // (S3 access logs), so downloads admitted before the logs arrive overshoot
-  // the cap by that much; there is no reservation.
-  const siteCap = getEnv().SITE_MONTHLY_EGRESS_BYTES;
-  if (siteCap === 0) return;
-  // A stale period counts as zero, as in getEgressUsage.
-  const { _sum } = await db.user.aggregate({
-    _sum: { monthlyEgressUsedBytes: true },
-    where: { egressPeriodStart: { gte: currentMonthStart() } },
-  });
-  if ((_sum.monthlyEgressUsedBytes ?? 0n) >= BigInt(siteCap)) {
-    // No user data in the line; no alarm watches it yet.
-    logger.warn({ siteCap }, "site_egress_cap_reached");
+  if (await siteEgressSpent(db)) {
     throw new AppError(429, SITE_EGRESS_SPENT_SENTENCE, { resetAt });
   }
 }
