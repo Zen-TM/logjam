@@ -59,6 +59,8 @@ jobs:
   gitleaks:
     # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
+    # gitleaks-nightly-issue.yml reads this job's result by its name, to open an
+    # issue when the nightly scan is red.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
