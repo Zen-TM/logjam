@@ -24,7 +24,17 @@ carries `-f` (an error page is not saved as the download) and `--retry`
 (a download outage of a few seconds is not a red PR); the gitleaks and
 actionlint versions downloaded in ci.yml are the ones mise.toml pins.
 
-Mutations that turn this red: delete one job's `timeout-minutes`; remove
+Also, so that two lists agree by construction: every job a pull request starts
+is a required check or is in NOT_REQUIRED below with its reason (a new job is a
+decision, not an accident), and a matrix job is needed by a required gate; every
+script with a `--self-test` flag, every directory of `*.tftest.hcl` and every
+package under infra/lambda with a `test` script is run by a workflow step; and
+no test file commits a focused `.only`.
+
+Mutations that turn this red: add a job to dco.yml, or remove "brain-postgres"
+from required_checks or from the second copy of the list in guards.tftest.hcl; delete `ci-scope.sh --self-test`, a `terraform ... test`
+or a Lambda's `npm test` step from the workflows; add `it.only(` to a test file;
+delete one job's `timeout-minutes`; remove
 `--retry` or the `-f` from one download in any workflow; change the gitleaks
 version in ci.yml or mise.toml but not the other; rename a required job (or its
 `name:`); add a `paths:` filter to rollback-compat.yml's pull_request trigger;
@@ -34,6 +44,7 @@ Usage: check-required-checks.py   (from anywhere in the repo; needs PyYAML)
 """
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -44,7 +55,27 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 ACTIONS = ROOT / ".github" / "actions"
 MISE = ROOT / "mise.toml"
 RULESETS = ROOT / "infra" / "terraform" / "envs" / "github" / "rulesets.tf"
+GUARDS = (
+    ROOT / "infra" / "terraform" / "envs" / "github" / "tests" / "guards.tftest.hcl"
+)
 FILTERS = {"paths", "paths-ignore", "branches-ignore"}
+
+# Jobs a pull request starts that are not required checks, keyed
+# "<workflow>:<job id>", each with why. Matrix jobs are not listed: they are
+# reached through the gate job that needs them.
+NOT_REQUIRED = {
+    "ci.yml:changes": "scope job: decides which heavy jobs run (ci-scope.sh)",
+    "mobile-emulator.yml:changes": "scope job",
+    "rollback-compat.yml:changes": "scope job",
+    "setup-smoke.yml:changes": "scope job",
+    "terraform-ci.yml:changes": "scope job",
+    "terraform-plan.yml:scope": "scope job",
+    "mobile-emulator.yml:emulator": "not required until #723 promotes it, after 14 green nightlies",
+    "ota-plan.yml:plan": "ota-hotfix.yml reads the plan's result itself before it publishes",
+    "ota-plan.yml:smoke": "part of the OTA plan, as above",
+    "ota-plan.yml:ota-plan": "the OTA plan's summary, as above",
+    "expo-doctor.yml:nightly-issue": "runs on the nightly schedule only, to open an issue",
+}
 
 
 def required_checks():
@@ -76,12 +107,20 @@ def downloads(script):
             yield match.group(0).strip()
 
 
-def run_scripts(doc):
-    """Every `run:` of every job step, and of a composite action's steps."""
+def steps_of(doc):
+    """Every step of every job, and of a composite action."""
     jobs = (doc.get("jobs") or {}).values()
     steps = [s for j in jobs for s in j.get("steps") or []]
-    steps += (doc.get("runs") or {}).get("steps") or []
-    return [s["run"] for s in steps if "run" in s]
+    return steps + ((doc.get("runs") or {}).get("steps") or [])
+
+
+def run_scripts(doc):
+    return [s["run"] for s in steps_of(doc) if "run" in s]
+
+
+def pr_triggered(doc):
+    on = doc.get("on", doc.get(True)) or {}
+    return "pull_request" in on if isinstance(on, (str, list, dict)) else False
 
 
 def mise_version(tool):
@@ -133,9 +172,146 @@ def check_hygiene(failures):
             )
 
 
+def git_files():
+    return subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split("\n")
+
+
+def check_inventory(failures):
+    """Everything that looks like a test is run by some workflow step."""
+    steps = []
+    for path in sorted(WORKFLOWS.glob("*.yml")) + sorted(
+        ACTIONS.glob("**/action.y*ml")
+    ):
+        steps += steps_of(yaml.safe_load(path.read_text()) or {})
+    runs = "\n".join(s["run"].replace("\\\n", " ") for s in steps if "run" in s)
+    files = git_files()
+
+    # A script that takes the flag, as a shell case or a quoted string.
+    flag = re.compile(r"""--self-test\)|(["'])--self-test\1|=\s*--self-test\b""")
+    scripts = [
+        f
+        for f in files
+        if re.search(r"\.(sh|py|mjs|js)$", f) and flag.search((ROOT / f).read_text())
+    ]
+    if len(scripts) < 10:
+        failures.append(
+            f"found only {len(scripts)} scripts with --self-test, expected 10 or more: did the scan stop matching?"
+        )
+    for f in scripts:
+        if not re.search(rf"(?<![\w/]){re.escape(f)} --self-test\b", runs):
+            failures.append(
+                f"{f} has a --self-test but no workflow step runs `{f} --self-test`. Add "
+                "the step (infra-scripts in ci.yml is where the infra and script self-tests run)."
+            )
+
+    roots = sorted(
+        {str(Path(f).parent.parent) for f in files if f.endswith(".tftest.hcl")}
+    )
+    if len(roots) < 2:
+        failures.append(
+            f"found only {len(roots)} directories with *.tftest.hcl, expected 2 or more"
+        )
+    for root in roots:
+        if not re.search(rf"terraform -chdir={re.escape(root)} test\b", runs):
+            failures.append(
+                f"{root} has *.tftest.hcl files but no workflow step runs "
+                f"`terraform -chdir={root} test`. Add one to terraform-ci.yml."
+            )
+
+    packages = [
+        str(Path(f).parent)
+        for f in files
+        if re.fullmatch(r"infra/lambda/[^/]+/package\.json", f)
+        and '"test"' in (ROOT / f).read_text()
+    ]
+    if len(packages) < 2:
+        failures.append(
+            f"found only {len(packages)} Lambda packages with a test script, expected 2 or more"
+        )
+    for pkg in packages:
+        if not any(
+            re.search(r"\bnpm (run )?test\b", s.get("run", ""))
+            and (s.get("working-directory") == pkg or pkg in s.get("run", ""))
+            for s in steps
+        ):
+            failures.append(
+                f"{pkg} has a test script but no workflow step runs `npm test` in it. Add "
+                "one to infra-scripts in ci.yml (no AWS is needed)."
+            )
+
+    # A committed `.only` runs one test and skips the rest of its run. Vitest
+    # and Playwright refuse it when CI is set; this refuses it everywhere.
+    only = re.compile(r"\b(it|test|describe)\.only\(")
+    tests = [f for f in files if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", f)]
+    if len(tests) < 100:
+        failures.append(
+            f"found only {len(tests)} test files, expected 100 or more: did the scan stop matching?"
+        )
+    for f in tests:
+        if only.search((ROOT / f).read_text()):
+            failures.append(
+                f"{f} commits a focused test (.only), which skips every other test in the run. Remove it."
+            )
+
+
+def check_required(failures, docs):
+    """Every job a PR starts is required, or named in NOT_REQUIRED with a reason."""
+    required = set(required_checks())
+    seen = set()
+    for name, doc in docs.items():
+        if not pr_triggered(doc):
+            continue
+        jobs = doc.get("jobs") or {}
+        for job_id, job in jobs.items():
+            key = f"{name}:{job_id}"
+            if (job.get("strategy") or {}).get("matrix"):
+                # Its own names carry the matrix values: a gate that needs it
+                # must be required, or its failure merges.
+                if not any(
+                    job_id
+                    in (
+                        [g.get("needs")]
+                        if isinstance(g.get("needs"), str)
+                        else g.get("needs") or []
+                    )
+                    and g.get("name", gid) in required
+                    for gid, g in jobs.items()
+                ):
+                    failures.append(
+                        f"matrix job {key} is needed by no required check: add a gate job "
+                        "that needs it (see brain-e2e-gate in ci.yml) and require the gate."
+                    )
+                continue
+            seen.add(key)
+            if job.get("name", job_id) in required and key in NOT_REQUIRED:
+                failures.append(f"{key} is required now: remove it from NOT_REQUIRED.")
+            elif job.get("name", job_id) not in required and key not in NOT_REQUIRED:
+                failures.append(
+                    f"{key} starts on pull requests and is not a required check. If a red "
+                    "run must block a merge, add its name to required_checks in "
+                    "infra/terraform/envs/github/rulesets.tf and to the list in "
+                    "tests/guards.tftest.hcl; if not, add it to NOT_REQUIRED in "
+                    "infra/scripts/check-required-checks.py with the reason."
+                )
+    for key in sorted(set(NOT_REQUIRED) - seen):
+        failures.append(
+            f"NOT_REQUIRED names {key}, which is not a job a pull request starts: remove the entry."
+        )
+
+
 def main():
     failures, reported = [], set()
     check_hygiene(failures)
+    check_inventory(failures)
+    check_required(
+        failures,
+        {
+            p.name: yaml.safe_load(p.read_text()) or {}
+            for p in sorted(WORKFLOWS.glob("*.yml"))
+        },
+    )
     for path in sorted(WORKFLOWS.glob("*.yml")):
         text = path.read_text()
         doc = yaml.safe_load(text) or {}
@@ -152,6 +328,13 @@ def main():
             reported.add(job.get("name", job_id))
 
     required = required_checks()
+    block = re.search(r"for c in \[(.*?)\]", GUARDS.read_text(), re.S)
+    guarded = re.findall(r'"([^"]+)"', block.group(1)) if block else []
+    if set(guarded) != set(required):
+        failures.append(
+            f"the list in {GUARDS.relative_to(ROOT)} differs from required_checks in rulesets.tf "
+            f"(only in one: {sorted(set(guarded) ^ set(required))}): change both together."
+        )
     if not required:
         failures.append(
             f"no required_checks list found in {RULESETS.relative_to(ROOT)}"
@@ -169,7 +352,8 @@ def main():
         return 1
     print(
         f"ok   — all {len(required)} required checks are reported on every pull request; "
-        "every job has a timeout and every download retries"
+        "every job has a timeout, every download retries, every job is required or named, "
+        "and every test is run"
     )
     return 0
 
