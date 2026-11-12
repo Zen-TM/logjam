@@ -304,25 +304,12 @@ describe("shared copy outside contracts/", () => {
 // system shows in its permission prompts. A legal text keeps its own
 // vocabulary ("tiles", "cannot", "logs"), so the pages are held only to the
 // rule that needs no legal reading: name the surface, never "the app". The
-// prompts are held to every rule. A hit is fixed, or listed with the reason.
+// prompts are held to every rule. A hit is fixed: there is no allow-list.
 //
 // Mutation that turns it red: put "in the app" back into `savePhotosPermission`
 // in `mobile/app.json`, or write "the app" into `frontend/public/tos.html`.
 describe("static pages and permission prompts", () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const ALLOWED_PAGE_TEXT: { file: string; text: string; reason: string }[] = [
-    {
-      file: "frontend/public/privacy.html",
-      text: "recent app activity leading up to it",
-      reason: "privacy policy wording is the maintainer's to change",
-    },
-    {
-      file: "frontend/public/privacy.html",
-      text: "only while the layer is on and the app is open",
-      reason: "privacy policy wording is the maintainer's to change",
-    },
-  ];
-
   const pages = readdirSync(join(ROOT, "frontend/public"))
     .filter((name) => name.endsWith(".html"))
     .map((name) => `frontend/public/${name}`);
@@ -358,20 +345,9 @@ describe("static pages and permission prompts", () => {
     const offenders = pages.flatMap((file) =>
       visibleSentences(file)
         .filter((text) => copyViolations(text).includes("the-app"))
-        .filter(
-          (text) =>
-            !ALLOWED_PAGE_TEXT.some(
-              (a) => a.file === file && text.includes(a.text),
-            ),
-        )
         .map((text) => `${file}: "${text}" — ${copySay("the-app")}`),
     );
     expect(offenders).toEqual([]);
-  });
-
-  it("allows only page text that is still on its page", () => {
-    for (const { file, text } of ALLOWED_PAGE_TEXT)
-      expect(visibleSentences(file).some((s) => s.includes(text))).toBe(true);
   });
 
   it("keeps every permission prompt to the copy rules", () => {
