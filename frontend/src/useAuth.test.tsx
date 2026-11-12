@@ -36,6 +36,13 @@ vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
 vi.mock("./tripDraft", () => ({ clearTripDraft }));
 const clearRecentSearches = vi.hoisted(() => vi.fn());
 vi.mock("./recentSearches", () => ({ clearRecentSearches }));
+// The real clear, watched: which path ran it, and what it left in storage.
+const clearKeptStores = vi.hoisted(() => vi.fn());
+vi.mock("./signOutStores", async (orig) => {
+  const real = await orig<typeof import("./signOutStores")>();
+  clearKeptStores.mockImplementation(real.clearKeptStores);
+  return { ...real, clearKeptStores };
+});
 
 import { useAuth, signOut, signOutEverywhere } from "./useAuth";
 
@@ -154,6 +161,9 @@ describe("the session check", () => {
     // Mutation: drop clearRecentSearches() beside clearTileCache() in the
     // mount session check.
     expect(clearRecentSearches).toHaveBeenCalled();
+    // Mutation: drop clearKeptStores() from the mount session check and from
+    // the signIn effect below: the next account inherits the map view.
+    expect(clearKeptStores).toHaveBeenCalled();
   });
 
   // Mutation: restore `void clearTileCache()` in the mount `.catch`, or drop
@@ -182,6 +192,9 @@ describe("the session check", () => {
     expect(clearTileCache.mock.calls.length).toBeGreaterThanOrEqual(2);
     // Mutation: drop clearRecentSearches() from the signIn effect.
     expect(clearRecentSearches.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Mutation: drop clearKeptStores() from the signIn effect or the mount
+    // session check (one call each).
+    expect(clearKeptStores.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("empties it when the session expires mid-use", async () => {
@@ -190,10 +203,44 @@ describe("the session check", () => {
       .map(([handler]) => handler)
       .find((handler) => typeof handler === "function");
     expect(expire).toBeTypeOf("function");
-    act(() => expire());
+    // Counted inside act, before the signIn effect (which also clears) runs.
+    let keptByHandler = 0;
+    act(() => {
+      expire();
+      keptByHandler = clearKeptStores.mock.calls.length;
+    });
     expect(clearTileCache).toHaveBeenCalled();
     // Mutation: drop clearRecentSearches() from the session-expired handler.
     expect(clearRecentSearches).toHaveBeenCalled();
+    // Mutation: drop clearKeptStores() from the session-expired handler.
+    expect(keptByHandler).toBe(1);
+  });
+
+  // The stores themselves, not the call: the real list runs over real storage.
+  it("removes the last user's map view whenever the sign-in screen shows", async () => {
+    localStorage.setItem("logjam.mapView", "{}");
+    sessionStorage.setItem("logjam.placeSearch", '"a place"');
+    oidc.loadSession.mockResolvedValue(null);
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(localStorage.getItem("logjam.mapView")).toBeNull();
+    expect(sessionStorage.getItem("logjam.placeSearch")).toBeNull();
+  });
+
+  // Mutation: have the mount, sign-in or expiry path clear the pending deep
+  // links (clearKeptStores(true)): a completion-email link opened while signed
+  // out is gone by the time the sign-in finishes.
+  it("keeps a pending deep link from the page opening until the sign-in finishes", async () => {
+    sessionStorage.setItem("pendingTopoJobId", "job-1");
+    oidc.loadSession.mockResolvedValue(null);
+    oidc.signInWithPassword.mockResolvedValue(true);
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(sessionStorage.getItem("pendingTopoJobId")).toBe("job-1");
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(result.current.state).toBe("authenticated");
+    expect(sessionStorage.getItem("pendingTopoJobId")).toBe("job-1");
+    sessionStorage.clear();
   });
 });
 
@@ -204,6 +251,8 @@ describe("signOut", () => {
     await signedIn();
     const calls: string[] = [];
     clearTripDraft.mockImplementation(() => calls.push("draft"));
+    clearKeptStores.mockImplementationOnce(() => calls.push("kept"));
+    clearKeptStores.mockImplementationOnce(() => calls.push("kept"));
     clearTileCache.mockImplementation(async () => {
       calls.push("tiles");
     });
@@ -214,8 +263,17 @@ describe("signOut", () => {
     assign.mockImplementation(() => calls.push("navigate"));
     await act(() => signOut());
     // Mutation: navigate before the second clear (the old order) and the
-    // clear can be aborted by the page leaving.
-    expect(calls).toEqual(["draft", "tiles", "redirect", "tiles", "navigate"]);
+    // clear can be aborted by the page leaving; drop the second clearKeptStores
+    // and a pan settling during the sign-out writes the map view back.
+    expect(calls).toEqual([
+      "draft",
+      "kept",
+      "tiles",
+      "redirect",
+      "kept",
+      "tiles",
+      "navigate",
+    ]);
     expect(assign).toHaveBeenCalledWith("https://auth.example.com/logout?x=1");
     expect(globalSignOut).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
@@ -309,10 +367,13 @@ describe("useAuth password sign-in", () => {
     const { result } = await signedOut();
     clearTileCache.mockClear();
     clearRecentSearches.mockClear();
+    clearKeptStores.mockClear();
     await act(() => result.current.signInWithPassword("a@b.co", "pw"));
     expect(clearTileCache).toHaveBeenCalled();
     // Mutation: drop clearRecentSearches() from enterSession.
     expect(clearRecentSearches).toHaveBeenCalled();
+    // Mutation: drop clearKeptStores() from enterSession.
+    expect(clearKeptStores).toHaveBeenCalled();
     expect(apiFetch).toHaveBeenCalledWith("/users/me");
     expect(oidc.signInRedirect).not.toHaveBeenCalled();
     expect(result.current.state).toBe("authenticated");
