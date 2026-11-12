@@ -17,6 +17,12 @@
 // `keepOnReset` tables in `ensureLocalColumns`, stop clearing the cursor in
 // `dropStaleMirror`, or raise `MIRROR_SCHEMA_VERSION` without raising
 // `REVIEWED_THROUGH` below.
+//
+// The last test here covers a column AND an index on it added to an existing
+// table. No declared table has that yet, so it adds one to the declaration at
+// run time. Mutation that turns it red: in `getSyncDb`, run `ensureLocalColumns`
+// after the local `createSchemaSql("local")` exec instead of before it (the
+// index is then created on a column the old table lacks, and the open throws).
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -192,4 +198,63 @@ describe("the mirror database upgrade", () => {
       ).toEqual({ value: String(MIRROR_SCHEMA_VERSION) });
     },
   );
+
+  // A later column with an index on it, on one never-dropped table of each
+  // kind: `local` (indexed by the local exec) and `keepOnReset` (by the mirror
+  // exec). Both must gain the column before their index is created.
+  it("opens an old never-dropped table that gains an indexed column", async () => {
+    sqlite.exec(`
+      CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE conflict_shelf (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        field TEXT NOT NULL,
+        at TEXT NOT NULL
+      );
+      CREATE TABLE plans_cache (
+        plan_id TEXT PRIMARY KEY,
+        fetched_at TEXT NOT NULL,
+        plan_updated_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+      );
+      INSERT INTO conflict_shelf (entity, entity_id, field, at)
+        VALUES ('place', 'place-1', 'notes', '2026-01-01T00:00:00.000Z');
+    `);
+
+    vi.resetModules();
+    const { tableSchema } = await import("./mirrorSchema");
+    const shelf = tableSchema("conflict_shelf");
+    const plans = tableSchema("plans_cache");
+    if (!shelf || !plans) throw new Error("declaration changed");
+    shelf.columns.late_col = "TEXT";
+    shelf.indexes = [
+      { name: "conflict_shelf_late", on: "conflict_shelf(late_col)" },
+    ];
+    plans.columns.late_col = "TEXT";
+    plans.indexes = [{ name: "plans_cache_late", on: "plans_cache(late_col)" }];
+
+    const { getSyncDb } = await import("./syncDb");
+    await getSyncDb();
+
+    for (const [table, index] of [
+      ["conflict_shelf", "conflict_shelf_late"],
+      ["plans_cache", "plans_cache_late"],
+    ]) {
+      const columns = sqlite.prepare(`PRAGMA table_info(${table})`).all() as {
+        name: string;
+      }[];
+      expect(columns.map((c) => c.name)).toContain("late_col");
+      expect(
+        sqlite
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+          )
+          .get(index),
+      ).toEqual({ name: index });
+    }
+    expect(
+      sqlite.prepare("SELECT entity_id FROM conflict_shelf").all(),
+    ).toEqual([{ entity_id: "place-1" }]);
+  });
 });
