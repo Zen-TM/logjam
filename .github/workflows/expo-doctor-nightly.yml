@@ -5,7 +5,8 @@ name: expo-doctor nightly
 # publishes would be found on release day. A red run opens one issue (or
 # rewrites the open one), and a green run closes it. Its own workflow, on a
 # schedule only: a job that can never run on a pull request should not show
-# on every one as a skipped check.
+# on every one as a skipped check (infra/scripts/check-required-checks.py
+# fails on a job a pull request starts that is neither required nor named).
 on:
   schedule:
     - cron: "47 16 * * *" # 02:47 AEST, after the nightly CI run

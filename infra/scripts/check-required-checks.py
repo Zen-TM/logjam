@@ -42,8 +42,8 @@ delete one job's `timeout-minutes`; remove
 `--retry` or the `-f` from one download in any workflow; change the gitleaks
 version in ci.yml or mise.toml but not the other; rename a required job (or its
 `name:`); add a `paths:` filter to rollback-compat.yml's pull_request trigger;
-drop `opened` from the `types:` of ota-plan.yml's; add `pull_request:` to
-expo-doctor-nightly.yml;
+drop `opened` from the `types:` of ota-plan.yml's or pr-closes.yml's; add
+`pull_request:` to expo-doctor-nightly.yml;
 turn terraform-ci.yml's `validate` back into a matrix.
 
 Usage: check-required-checks.py   (from anywhere in the repo; needs PyYAML)

@@ -159,8 +159,7 @@ stays X.Y.Z: the update must match the build.
    (`.github/workflows/ota-plan.yml`, `mobile/scripts/ota-hotfix.js`). It
    runs again on each push, and each change of labels, while the label is on,
    and it is a required check: a red, running or cancelled plan stops the
-   merge. Re-run a cancelled or timed-out one from its run's page (all its
-   jobs, not the failed one alone). To merge without publishing, take the
+   merge. Re-run a cancelled or timed-out one from its run's page. To merge without publishing, take the
    label off. The plan must finish on the head that merges, so every update
    from `main` restarts it: land a hotfix when `main` is quiet for the hour
    it takes, and wait a few seconds after adding the label before merging,
