@@ -762,13 +762,13 @@ run "media_is_versioned_and_never_expires_current_objects" {
       can(regex("(?m)^[ \\t]*versioning_enabled[ \\t]*=[ \\t]*local\\.media_versioned[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf")))) &&
       can(regex("(?m)^[ \\t]*lifecycle_rules[ \\t]*=[ \\t]*local\\.media_lifecycle_rules[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf"))))
     )
-    error_message = "module \"media\" must take versioning_enabled and lifecycle_rules from local.media_versioned and local.media_lifecycle_rules (s3.tf): the other asserts in this run read the locals."
+    error_message = "module \"media\" in s3.tf must set versioning_enabled = local.media_versioned and lifecycle_rules = local.media_lifecycle_rules, each on its own uncommented line: the other asserts in this run read those locals, so an inline value would slip past them. Change the locals, not the module call."
   }
 
   # Mutation: `media_versioned = false` (a delete is final again).
   assert {
     condition     = local.media_versioned == true
-    error_message = "The media bucket must stay versioned: it is the undo window for a deleted photo."
+    error_message = "The media bucket must stay versioned: versioning is the undo window for a deleted photo, and without it a delete is final. Set local.media_versioned back to true in s3.tf."
   }
 
   # Mutation: an `expiration_days` on the undo rule (prefix "") or on any new
@@ -780,7 +780,7 @@ run "media_is_versioned_and_never_expires_current_objects" {
       for r in local.media_lifecycle_rules :
       r.prefix == "file-sends/" || try(r.expiration_days, null) == null
     ])
-    error_message = "No lifecycle rule on the media bucket may expire current objects in days, bar file-sends/ (infra/terraform/envs/prod/s3.tf)."
+    error_message = "No lifecycle rule on the media bucket may expire current objects in days, bar file-sends/: it would delete every user's photos after that many days. Remove the expiration_days; a rule that ends the undo window uses noncurrent_expiration_days (local.media_lifecycle_rules in infra/terraform/envs/prod/s3.tf)."
   }
 
   # Mutation: removing the whole-bucket noncurrent rule, or changing its 10
@@ -790,7 +790,7 @@ run "media_is_versioned_and_never_expires_current_objects" {
       for r in local.media_lifecycle_rules :
       r.prefix == "" && try(r.noncurrent_expiration_days, null) == 10
     ])
-    error_message = "The media bucket must expire noncurrent versions after 10 days, for the whole bucket."
+    error_message = "The media bucket needs a whole-bucket (prefix \"\") rule with noncurrent_expiration_days = 10: without it deleted versions pile up and cost for ever, and a different number changes the undo window the runbook (docs/operations/brain.md) and privacy page state. Restore it in local.media_lifecycle_rules."
   }
 
   # Mutation: removing the file-sends/ noncurrent rule, or lengthening it. A
@@ -801,7 +801,7 @@ run "media_is_versioned_and_never_expires_current_objects" {
       for r in local.media_lifecycle_rules :
       r.prefix == "file-sends/" && try(r.noncurrent_expiration_days, null) == 1
     ])
-    error_message = "A sent file's noncurrent version must expire after 1 day."
+    error_message = "A sent file's noncurrent version must expire after 1 day (a file-sends/ rule with noncurrent_expiration_days = 1 in local.media_lifecycle_rules): privacy.html promises a sent file is gone after 7 days, and the 10-day rule alone would keep it about 17."
   }
 }
 
