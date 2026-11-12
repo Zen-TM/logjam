@@ -46,6 +46,7 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       mobile: ${{ steps.scope.outputs.mobile }}
     steps:
@@ -76,7 +77,7 @@ jobs:
       # The same two services as ci.yml's api-integration job, which holds the
       # reasons for their shape.
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -89,7 +90,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3
           DEFAULT_REGION: ap-southeast-2
@@ -224,7 +225,7 @@ jobs:
 
       - name: Install Maestro
         run: |
-          curl -sSLfo "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
           echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"

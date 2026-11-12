@@ -29,6 +29,8 @@ ENV PYTHONUNBUFFERED=1
 #    The base image cannot move to a newer Ubuntu until the PPA publishes that
 #    release's suite: on 26.04 (`resolute`) `apt-get update` fails with a 404 for
 #    the PPA's Release file (2026-09-30).
+#    add-apt-repository fetches the PPA's signing key from Launchpad's API, which
+#    answers 500/503 when Launchpad is down, so that one step retries with a backoff.
 #    Residual reproducibility risk accepted: apt has no digest pin, so a PPA
 #    package bump still changes a rebuild even with the pins below. Snapshot the
 #    PPA or vendor .debs if a bad upstream build ever needs bisecting.
@@ -37,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common \
         gpg-agent \
         ca-certificates \
-    && add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable \
+    && for i in 1 2 3 4; do add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable && break; [ "$i" -lt 4 ] || exit 1; sleep $((i * 15)); done \
     && apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
