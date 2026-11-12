@@ -242,7 +242,7 @@ fails when it is broken.
   full backup of the new major is taken before the API starts, because until
   then the newest backup is one the image cannot restore: a marker on the data
   volume, `/data/brain/backup-pending`, written before the upgrade and removed
-  after that backup, keeps `host/release-agent.sh` from starting the API,
+  after that backup, keeps `infra/brain/host/release-agent.sh` from starting the API,
   whatever the boot did. Any failure fails the boot and
   starts nothing; data of a newer major than the image is refused; and a server
   start on another major's directory, including a restored old backup, stops
