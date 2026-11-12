@@ -17,7 +17,6 @@ import {
 } from "../src/lib/failureCopy";
 import {
   NOTIFICATION_TYPES,
-  FILE_SEND_TTL_DAYS,
   FRIEND_INVITE_TTL_DAYS,
   RASTER_TEMPLATE_DEFAULTS,
   VECTOR_STYLE_DEFAULTS,
@@ -2392,9 +2391,9 @@ async function main() {
   // row's own key, so a change there strands only the seeded object).
   const bobSend = fid(14);
   const aliceSend = fid(15);
-  const sendExpires = new Date(
-    Date.now() + FILE_SEND_TTL_DAYS * 24 * 60 * 60_000,
-  );
+  // Years out, not the week a real send lasts: the sweep deletes an expired one
+  // and the baseline check refuses a database that lost a row.
+  const sendExpires = new Date(Date.now() + 3650 * 24 * 60 * 60_000);
   await prisma.fileSend.createMany({
     data: [
       {
@@ -2843,12 +2842,13 @@ async function main() {
   const jack = SEED_EDGE_USERS.planLeader;
   const kate = SEED_EDGE_USERS.planEditor;
 
-  // The reaper fails an in-flight row it finds idle. A seed older than a week
-  // is refused anyway (the file sends lapse), so the anchors it reads sit a
-  // week ahead; a start time cannot, because it prices the run. The two that
-  // stay real, a `processing` job (six hours) and a running export (three), are
-  // what a stack left up that long finds failed: `make seed`.
-  const held = inDays(7);
+  // The reaper fails an in-flight row it finds idle, and the baseline check
+  // refuses a database the seed has not left. So every time it reads on these
+  // rows sits years ahead, and the two it would otherwise fall back to are left
+  // null: a `processing` job and a running export with no start time are read
+  // from `updatedAt` and `createdAt` (topoJobReaper.ts), and cost nothing, as the
+  // credit sum skips a row with none (computeCredits.ts).
+  const held = inDays(3650);
 
   // Hank's words, in the shapes that break a layout: as long as a name may be,
   // right to left, combining marks, an emoji with a joiner, markup, quotes, a
@@ -3076,7 +3076,7 @@ async function main() {
 
   // Ivy: work in flight, and the finished kinds the others have none of. Four
   // vCPUs per export and eight per job count against the site's 24
-  // (lib/fargateCapacity.ts); the 16 held here leave the suites room to launch
+  // (lib/fargateCapacity.ts); the 16 in flight here leave the suites room to launch
   // one of their own, which is why no job sits in `pending`.
   const ivyJob = (n: number) => fid(200 + n);
   const tileBox = {
@@ -3106,7 +3106,7 @@ async function main() {
         renderTilesTotal: 8,
         attemptCount: 1,
         createdAt: ago(8),
-        startedAt: ago(5),
+        updatedAt: held,
         lastProgressAt: held,
       },
       // The layers a job without a sharpen result lists.
@@ -3165,8 +3165,7 @@ async function main() {
         sourceTileCount: 1,
         estimatedSeconds: 600,
         status: "running",
-        createdAt: ago(2),
-        startedAt: ago(1),
+        createdAt: held,
       },
       {
         id: ivyJob(13),
