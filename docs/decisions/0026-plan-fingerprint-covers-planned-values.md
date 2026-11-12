@@ -112,9 +112,10 @@ as below. In full:
   runs as `logjam-github-actions-apply-role`
   (`infra/terraform/envs/prod/iam_apply.tf`), which trusts only the `prod`
   Environment, with `AdministratorAccess` under the permission boundary
-  `logjam-github-actions-apply-boundary` that denies `rds-db:connect`, edits to
+  `logjam-github-actions-apply-boundary` that denies edits to
   the role or the boundary, `sts:AssumeRole`, minting IAM user credentials and
-  every Deny in `local.ci_readonly_privacy_deny`. Only the maintainer applies
+  every Deny in `local.ci_readonly_privacy_deny` (updated 2026-11-12: it also
+  denied `rds-db:connect` while there was an RDS database to connect to). Only the maintainer applies
   that role's own changes, from their machine; `plan-summary.mjs` flags any
   address matching `.github_actions_apply` and the workflow refuses it.
   `.github/workflows/terraform-drift.yml` plans `main` nightly with

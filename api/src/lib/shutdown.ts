@@ -20,7 +20,7 @@ interface ShutdownOptions {
 // `timeoutMs` bounds one that never is. A response of several megabytes to a
 // slow reader can still be cut: Node counts a socket idle once the response
 // has ended, before its bytes are flushed, and `server.close()` alone does the
-// same. Accepted here: the peer is always a buffering proxy (nginx, CloudFront)
+// same. Accepted here: the peer is always a buffering proxy (CloudFront)
 // that reads at full speed. A request pipelined behind another on the same
 // connection loses its response; nothing in front of the API pipelines.
 // Guard: src/lib/shutdown.unit.test.ts.

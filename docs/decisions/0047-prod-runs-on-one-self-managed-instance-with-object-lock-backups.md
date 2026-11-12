@@ -223,8 +223,10 @@ fails when it is broken.
   account's data outlives the instance. What still holds this decision up: one
   instance on a volume Terraform cannot destroy, backups in an Object Lock
   bucket and the daily restore, no control plane, the certificate checked by
-  name, and the CI privacy Deny, whose `rds:` and `elasticbeanstalk:` actions
-  stay denied though both services are gone. Everything else above stands.
+  name, and the CI privacy Deny (updated 2026-11-12: its `rds:` and
+  `elasticbeanstalk:` actions, kept at first though both services were gone,
+  are removed with the last of the old stack; a database service added later
+  brings its own Deny). Everything else above stands.
 
 ## Consequences
 

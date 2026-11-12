@@ -40,7 +40,7 @@ describe("infra/brain/api.env", () => {
 
   // The download meter charges only S3 reads signed by the API's own role,
   // which it finds by this substring of the access log's requester. The
-  // schema's default names the role the API had on Elastic Beanstalk.
+  // schema's default is empty, which matches nothing.
   // Mutation: deleting the line from api.env, or renaming the brain's role in
   // brain_iam.tf: the meter then matches nothing and no download is counted.
   it("tells the download meter the role the brain's API signs with", () => {
