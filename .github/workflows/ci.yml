@@ -1073,6 +1073,16 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # The root AGENTS.md's comment and guard rules: no citation a reader
+      # cannot open (audit codes, private files, a home path), no comment on a
+      # closed issue (GitHub is asked; unreachable only warns), and every test
+      # an AGENTS.md names exists and carries its mutation note.
+      - name: Comments cite what a reader can open, named guards name their mutation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          infra/scripts/check-repo-hygiene.py --self-test
+          infra/scripts/check-repo-hygiene.py
       # One Node for every toolchain: the workflows, the api image and the
       # @types/node pins must all equal mise.toml's. The Lambda's types are
       # checked against its own runtime instead.

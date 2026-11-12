@@ -154,7 +154,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a presign without sizeBytes (SEC-003)", async () => {
+  it("rejects a presign without sizeBytes", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL).post("/media/presign").set(AUTH).send({
@@ -166,7 +166,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a presign whose sizeBytes exceeds the category cap (SEC-003)", async () => {
+  it("rejects a presign whose sizeBytes exceeds the category cap", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
@@ -183,7 +183,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(413);
   });
 
-  it("S3 rejects an upload larger than the signed Content-Length (SEC-003)", async () => {
+  it("S3 rejects an upload larger than the signed Content-Length", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const presignRes = await request(API_URL)

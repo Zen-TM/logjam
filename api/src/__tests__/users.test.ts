@@ -72,7 +72,7 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body.error).toBe("That username is taken. Choose another.");
   });
 
-  // Two usernames that differ only in case are one username (issue #360):
+  // Two usernames that differ only in case are one username:
   // `users_username_as_read_key` holds the lower-case form. Mutation: drop the
   // index and this rename succeeds, taking alice's username off the seed.
   it("PATCH /users/me refuses a username that differs only in case", async () => {

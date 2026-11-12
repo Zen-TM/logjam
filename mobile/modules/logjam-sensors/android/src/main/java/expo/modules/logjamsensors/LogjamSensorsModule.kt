@@ -155,8 +155,7 @@ private object SensorLog {
     }
 
     // Deliberately empty: accuracy changes are not filtered by sensor on this
-    // callback (the same trap documented for the compass in mobile/CLAUDE.md),
-    // so the value would say nothing reliable about which sensor it describes.
+    // callback, so the value would say nothing reliable about which sensor it describes.
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
   }
 
