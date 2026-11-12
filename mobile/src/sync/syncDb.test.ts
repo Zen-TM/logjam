@@ -227,17 +227,22 @@ describe("local-table migration", () => {
   // The mirror would stay at the old shape and delta apply would fail on launch.
   it("creates mirror tables only AFTER the stale ones are dropped", async () => {
     await getSyncDb();
-    // The first statement of the open must carry LOCAL tables and nothing else.
+    // The first CREATE of the open must carry LOCAL tables and nothing else.
     // That is what leaves the drop reachable: a mirror CREATE (or, fatally, an
     // index on a column the old table lacks) issued here runs against last
     // version's schema.
-    expect(execCalls[0]).toContain("CREATE TABLE IF NOT EXISTS sync_state");
-    expect(execCalls[0]).not.toContain("CREATE TABLE IF NOT EXISTS media");
-    expect(execCalls[0]).not.toContain("media(origin)");
+    const localDdl = execCalls.findIndex((sql) => sql.includes("CREATE TABLE"));
+    expect(execCalls[localDdl]).toContain(
+      "CREATE TABLE IF NOT EXISTS sync_state",
+    );
+    expect(execCalls[localDdl]).not.toContain(
+      "CREATE TABLE IF NOT EXISTS media",
+    );
+    expect(execCalls[localDdl]).not.toContain("media(origin)");
 
     // ...and the mirror DDL is issued, later, in its own statement.
     const mirrorDdl = execCalls
-      .slice(1)
+      .slice(localDdl + 1)
       .find((sql) => sql.includes("media(origin)"));
     expect(mirrorDdl).toBeDefined();
     expect(mirrorDdl).toContain("CREATE TABLE IF NOT EXISTS media");
