@@ -87,8 +87,8 @@ jobs:
       github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # EXPO_TOKEN, the OTA signing key and the release-branch deploy key live
-    # only here; the Environment admits main alone
+    # EXPO_TOKEN, the Sentry token, the OTA signing key and the
+    # release-branch deploy key live only here; the Environment admits main alone
     # (infra/terraform/envs/github/environments.tf).
     environment: mobile-ota
     # One publish at a time: each builds on the release branch the one before
@@ -164,11 +164,16 @@ jobs:
       # carry Debug IDs (metro.config.js), which is how Sentry matches a crash
       # to them: no release name. Before the promotion, so a failure here
       # leaves the update on `preview` only. A missing token fails the step.
+      # Guard for the order: mobile/src/sentryUpload.test.ts.
       - name: Upload the sourcemaps to Sentry
         working-directory: ${{ env.TREE }}/mobile
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        run: npx sentry-expo-upload-sourcemaps dist
+        run: |
+          set -euo pipefail
+          # The upload exits 0 when dist/ holds bundles and no maps.
+          find dist -name '*.map' | grep -q . || { echo "::error::eas update left no sourcemaps in dist/"; exit 1; }
+          npx sentry-expo-upload-sourcemaps dist
 
       # promote:production runs mobile/scripts/check-production-update.js:
       # the branch, the tag, and a production build with the group's runtime.

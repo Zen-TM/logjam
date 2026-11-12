@@ -52,8 +52,9 @@ somewhere a workflow can read: that is what changes from 0009.
    started last on the PR's head, skipped runs aside, finished and passed:
    one still running refuses. It re-runs the plan's refusals on
    the release branch as it is then, cherry-picks the squash commit,
-   publishes it to `preview`, promotes that group to `production` (rule 3 of
-   0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
+   publishes it to `preview`, uploads its sourcemaps to Sentry (updated
+   2026-11-13; a failure leaves the update on `preview`), promotes that group
+   to `production` (rule 3 of 0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
    update with the same key, for the owner alone. Guard: the gate tests in
    `mobile/src/otaHotfix.test.ts`, which also check both workflows call
    `ota-hotfix.js gate` first.
@@ -81,7 +82,8 @@ somewhere a workflow can read: that is what changes from 0009.
   `ota-plan`) happen before the merge. Undoing an update no longer depends on
   which machine holds the key.
 - **Negative:** code that runs in `mobile-ota` can sign JavaScript every
-  phone of a release runs. That is the trust a merge to `main` already has
+  phone of a release runs, and holds the Sentry upload token (updated
+  2026-11-13). That is the trust a merge to `main` already has
   for prod, whose AWS deploy roles trust the `prod` Environment, but a leaked
   GitHub secret now reaches phones, not only servers. The key now has two
   copies to replace on rotation, and rotating still needs a new build and

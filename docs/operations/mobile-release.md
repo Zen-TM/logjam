@@ -270,7 +270,8 @@ maintainer's machine, after the fix has merged to `main`:
 5. **Promote the same update to `production`:**
    `npm run promote:production -- --group <update group id>`.
    With no candidate to check it on, publish directly instead:
-   `npm run update:production -- --message "<what it fixes>"`.
+   `npm run update:production -- --message "<what it fixes>"`, then upload its
+   sourcemaps: `SENTRY_AUTH_TOKEN=<token> npx sentry-expo-upload-sourcemaps dist`.
 6. **Undo** with `eas update:rollback <group id> --private-key-path keys/private-key.pem`.
 
 ## Backports

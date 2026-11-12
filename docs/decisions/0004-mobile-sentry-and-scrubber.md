@@ -44,10 +44,12 @@ As shipped (`src/sentry/`):
   yes. Every install is now asked once by the sheet above (guard:
   `sentry/crashReportPreference.test.ts`). Everything else above stands.
 - **Sentry sourcemap upload is OFF** (`SENTRY_DISABLE_AUTO_UPLOAD=true` in the
-  build profiles). The Sentry Gradle plugin fails the build outright when it has
+  build profiles; updated 2026-11-13: only in the `development` profile now). The Sentry Gradle plugin fails the build outright when it has
   no org/project/auth token, and those need operator setup.
 - **A LOCAL release build must pass `SENTRY_DISABLE_AUTO_UPLOAD=true` itself.**
-  The flag lives in `eas.json`'s build profiles, so a cloud build inherits it and
+  The flag lives in `eas.json`'s build profiles (updated 2026-11-13: in
+  `development` only; `preview` and `production` upload), so a cloud build
+  inherits it and
   `./gradlew :app:assembleRelease` on a dev box does not: the Sentry gradle task
   runs, `sentry-cli` fails, and the build dies at
   `createBundleReleaseJsAndAssets_SentryUpload` — long after the slow tasks, for
@@ -71,7 +73,10 @@ As shipped (`src/sentry/`):
   The two bullets above still hold for every other build, which passes
   `SENTRY_DISABLE_AUTO_UPLOAD=true` itself: `scripts/build-local-apk.sh`,
   `scripts/dev-android.sh`, `.github/actions/build-dev-apk`, and the EAS
-  `development` profile. Setup, and how to check an upload:
+  `development` profile (for a debug build that is belt and braces: it
+  uploads nothing either way). Guard: `src/sentryUpload.test.ts` (the flag in each,
+  none in `preview` or `production`, Debug IDs without the dev-server
+  source-context route, and the OTA order). Setup, and how to check an upload:
   `docs/operations/mobile-release.md`. Everything else above stands.
 
 ## Consequences

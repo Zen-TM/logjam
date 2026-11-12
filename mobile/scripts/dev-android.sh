@@ -220,6 +220,7 @@ installed="$(adb -s "$SERIAL" shell pm list packages "$PACKAGE" | tr -d '\r')"
 if [ "$DO_BUILD" = true ]; then
   say "Rebuilding the debug dev client (this takes a few minutes)…"
   [ -d android ] || npx expo prebuild -p android
+  # Belt and braces: a debug build uploads nothing to Sentry either way (ADR 0004).
   (cd android && SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew :app:assembleDebug)
   installed=""
 fi

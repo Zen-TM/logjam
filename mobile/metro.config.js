@@ -10,8 +10,13 @@ const monorepoRoot = path.resolve(projectRoot, "..");
 
 // Stamps a Debug ID into every bundle and its sourcemap: how Sentry matches an
 // OTA update's crash to the map ota-hotfix.yml uploaded, with no release name
-// (ADR 0004). Otherwise Expo's default config.
-const config = getSentryExpoConfig(projectRoot);
+// (ADR 0004). Otherwise Expo's default config. The source-context option stays
+// off: it adds an unauthenticated /__sentry/context route to the dev server,
+// which returns lines of any file under the project (.env, keys/) to anyone
+// who can reach Metro. Guard: src/sentryUpload.test.ts.
+const config = getSentryExpoConfig(projectRoot, {
+  enableSourceContextInDevelopment: false,
+});
 
 config.watchFolders = [monorepoRoot];
 config.resolver.nodeModulesPaths = [
