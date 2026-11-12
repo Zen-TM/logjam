@@ -129,6 +129,11 @@ jobs:
       - name: Build
         working-directory: shared
         run: npm run build
+      # The build leaves the colocated tests out; this checks them too, so a
+      # test cannot keep asserting a shape the types no longer allow.
+      - name: Typecheck
+        working-directory: shared
+        run: npm run typecheck
       - name: Lint
         working-directory: shared
         run: npm run lint
@@ -201,9 +206,11 @@ jobs:
     # with AUTH_MODE=fake.
     #
     # The DB is a fresh service container every run, deliberately NOT cached:
-    # the suite is not idempotent against a reused database (sync_tombstones
-    # accumulate until syncBoundary's paged-pull assertions stop finding the
-    # tombstone they just wrote). Never cache the Postgres volume here.
+    # the suite snapshots the database `prisma db seed` leaves and refuses to
+    # run against one that differs (_globalSetup.ts), so it must be built from
+    # this commit's migrations and seed. A rerun on the same database is fine:
+    # each file sweeps it back to that snapshot. Never cache the Postgres
+    # volume here.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
@@ -584,6 +591,13 @@ jobs:
         run: npm ci
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
+      # The upgraded, seeded database is thrown away after this: the canary
+      # rewrites every row. Plants a marker in each column the prod-snapshot
+      # scrub covers, runs the scrub, and fails if a marker is still in a dump.
+      - name: Snapshot scrub canary
+        env:
+          CANARY_TARGET_IS_THROWAWAY: "yes"
+        run: scripts/snapshot-scrub-canary.sh
 
   brain-postgres-image:
     # The Postgres image local dev runs (docker-compose.yml) and prod's will.

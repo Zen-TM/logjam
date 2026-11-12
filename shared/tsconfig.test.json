@@ -1,0 +1,17 @@
+{
+  // Typechecks the colocated tests too, with Node's types and the Bundler
+  // resolution vitest uses (the tests import without extensions). The build
+  // tsconfig keeps `types: []` so source cannot reach a Node API.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "rootDir": ".",
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["node"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
