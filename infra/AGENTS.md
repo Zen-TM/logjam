@@ -121,16 +121,6 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   either and a second rewind, or a volume made current again, comes back as the
   wrong history with no error. Guards: `postgres/tests/test.sh`, scenarios 13b
   and 14 of `brain/tests/e2e.sh`.
-- **A Postgres major upgrade copies and never deletes, and the API waits for
-  the new major's full backup.** `postgres/major-upgrade.sh` runs `pg_upgrade`
-  in copy mode, never `--link`, and leaves the old cluster at
-  `/data/postgres-<N>` for a human to delete; `boot.sh` calls `stanza-upgrade`
-  only when the stanza's major differs from the image's (`stanza-create`'s
-  refusal of another cluster's stanza stays), and keeps `/data/brain/backup-pending`
-  until that full backup succeeds, which `release-agent.sh` honours.
-  [0047](../docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md)
-  (the Update on the upgrade). Guards: `postgres/tests/test.sh` (the old cluster
-  is not linked and survives), scenarios 14 to 14e of `brain/tests/e2e.sh`.
 - **The brain's instance exists only while `brain_pg_image_tag` is set** (its
   default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no
   instance, data volume, Elastic IP or alarm is planned
