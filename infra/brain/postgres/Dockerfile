@@ -3,7 +3,7 @@
 # the Debian release stock `postgres:16` uses, so a dev volume made by the stock
 # image has the same glibc (a different one changes the collation version).
 # No arch-specific steps: it builds for linux/amd64 and linux/arm64 as is.
-FROM postgres:16.15-trixie
+FROM postgres:18.6-trixie
 
 # The base image already configures the PGDG apt repository.
 RUN apt-get update \
