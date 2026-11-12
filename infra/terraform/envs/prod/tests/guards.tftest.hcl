@@ -1131,13 +1131,21 @@ run "brain_data_volume_and_address_keep_prevent_destroy" {
   # the user pool is every account and sign-in (a replacement loses them all),
   # and its client and domain are the sign-in URLs the apps ship with; the two
   # distributions are the public domains and their certificate bindings; the
-  # storage module's bucket is media, topo tiles, the frontend and access logs.
+  # storage module's bucket is media, topo tiles, the frontend and access logs;
+  # deploys write the signals bucket and the watchdog reads it; the audit
+  # bucket and its trail are the record of every route to user data, and a
+  # replaced trail leaves a gap in it. The sign-up counter table is not here:
+  # DynamoDB's own deletion protection holds it
+  # (signup_cap_counter_table_cannot_be_deleted).
   assert {
     condition = length(aws_eip.brain) == 1 && alltrue([
       for r in [
         { file = "brain_instance.tf", type = "aws_ebs_volume", name = "brain_data" },
         { file = "brain_instance.tf", type = "aws_eip", name = "brain" },
         { file = "brain_s3.tf", type = "aws_s3_bucket", name = "brain_backups" },
+        { file = "brain_s3.tf", type = "aws_s3_bucket", name = "brain_signals" },
+        { file = "audit.tf", type = "aws_s3_bucket", name = "audit" },
+        { file = "audit.tf", type = "aws_cloudtrail", name = "audit" },
         { file = "cognito.tf", type = "aws_cognito_user_pool", name = "main" },
         { file = "cognito.tf", type = "aws_cognito_user_pool_client", name = "main" },
         { file = "cognito.tf", type = "aws_cognito_user_pool_domain", name = "main" },
