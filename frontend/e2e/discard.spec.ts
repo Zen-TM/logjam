@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // A form with typing in it asks before any way out loses it: Escape, the close
 // button, Cancel and a press on the backdrop (`Dialog`'s `discard`). Red when
@@ -115,7 +116,7 @@ test("a track attached in the edit form goes again on Discard", async ({
   const openActions = () =>
     aside
       .locator("[data-place-id]")
-      .filter({ hasText: "Hidden Slot" })
+      .filter({ hasText: SEED_NAMES.hiddenSlot })
       .getByRole("button", { name: /^Actions for / })
       .click();
   await openActions();
