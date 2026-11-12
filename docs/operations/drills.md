@@ -174,10 +174,17 @@ out of the value check (`movesAlone` in `infra/scripts/plan-summary.mjs`,
   update of the same address) and different value hashes.
 - **Not re-run:** the no-key case (deleting the key destroys its value; the
   unit test in `plan-summary.test.mjs` covers the refusal).
-- **Not exercised:** an apply that goes ahead although one of #930's three
-  values moved between the plans. Nothing moved one during the drill; the unit
-  test "a value AWS moves by itself leaves the value fingerprint alone" covers
-  it.
+- **Not exercised, and accepted:** an apply that goes ahead although one of
+  #930's three values moved between the plans. Two plans of a tag change to
+  the web distribution, taken by hand afterwards, showed the values where
+  #930 expects them: `status` and `in_progress_validation_batches` are in both
+  `before` and `after` of the update. But the count did not move. It read 0
+  while an invalidation was in progress, and a one-path invalidation ends in
+  about 15 s, so an invalidation cannot exercise the check. `status` moves
+  only while a changed configuration rolls out. The maintainer accepted the
+  gap: a value that moves in a way the list misses gets a good apply refused,
+  never a wrong one applied. The unit test "a value AWS moves by itself
+  leaves the value fingerprint alone" covers the comparison.
 
 Time: 77 s / 98 s / 79 s / 97 s. **Surprise:** none in the drill. Beside it,
 on the same day: a PR that was brought up to date while the previous merge's
