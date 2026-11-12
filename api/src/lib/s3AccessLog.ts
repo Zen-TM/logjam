@@ -132,7 +132,7 @@ export function parseAccessLog(contents: string): AccessLogRecord[] {
  * their first topo job.
  *
  * `requester` is the IAM principal, which separates them cleanly:
- *   - the API's EB instance role  → it signed a presigned URL for a browser or
+ *   - the API's role (the brain's) → it signed a presigned URL for a browser or
  *     phone. This is the one we charge.
  *   - the topo worker role        → same-region task read. Free.
  *   - a CloudFront service principal → the shared basemap under master/*, not

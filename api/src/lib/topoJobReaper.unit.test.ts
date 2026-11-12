@@ -575,9 +575,8 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
   });
 
   // The dedup rule (root AGENTS.md): the status-guarded claim is per row, and
-  // only `count === 1` means THIS pass won it. Prod runs the API on Elastic
-  // Beanstalk, so two instances can sweep the same overdue ids at once — the
-  // loser's updateMany reports 0 and it must stay silent, or the user gets two
+  // only `count === 1` means THIS pass won it. Two instances can sweep the
+  // same overdue ids at once — the loser's updateMany reports 0 and it must stay silent, or the user gets two
   // notifications and two pushes for one dead job.
   it("stays silent for a row another instance claimed first", async () => {
     stageByStatus(jobFindMany, {
@@ -698,7 +697,7 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
   });
 
   // The house dedup rule: mailing the READ set would double-send from two
-  // Elastic Beanstalk instances sweeping the same overdue ids.
+  // instances sweeping the same overdue ids.
   it("sends NO email for a row another instance claimed first", async () => {
     stageByStatus(jobFindMany, {
       pending: [{ id: "p1", userId: "u1", name: null }],

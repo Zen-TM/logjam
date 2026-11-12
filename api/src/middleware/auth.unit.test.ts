@@ -356,7 +356,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "test";
-    process.env.DB_HOST = "prod.abc.ap-southeast-2.rds.amazonaws.com";
+    process.env.DB_HOST = "db.prod.example.com";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 

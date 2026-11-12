@@ -147,9 +147,8 @@ module "frontend" {
 
 # Account-level S3 Block Public Access backstop. Per-bucket PAB above
 # only covers buckets Terraform manages; this catches every bucket in the
-# account — including the AWS-managed Elastic Beanstalk deploy bucket
-# (elasticbeanstalk-ap-southeast-2-620853681701, created without PAB by default)
-# and any future/orphan bucket. All logjam buckets are already private (OAC
+# account — including one an AWS service makes for itself (created without
+# PAB by default) and any future/orphan bucket. All logjam buckets are already private (OAC
 # service-principal policies, not Principal:"*"), so this adds no access
 # regression — it is a defence-in-depth floor against an accidental public ACL
 # or policy.

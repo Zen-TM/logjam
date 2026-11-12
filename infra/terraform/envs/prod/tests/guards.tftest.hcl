@@ -14,7 +14,7 @@ mock_provider "random" {}
 mock_provider "archive" {}
 
 # terraform test loads *.auto.tfvars from the root, so brain.auto.tfvars (prod's
-# switches, edited at the cutover) would otherwise decide what every run
+# switches) would otherwise decide what every run
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
