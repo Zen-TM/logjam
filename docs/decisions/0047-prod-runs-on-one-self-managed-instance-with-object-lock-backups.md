@@ -237,9 +237,13 @@ fails when it is broken.
   `compose.yaml`, which is why that container mounts all of `/data`).
   `pg_upgrade` runs in copy mode into `/data/postgres.new`; one atomic
   exchange and a rename leave the old cluster at `/data/postgres-<N>`, which no
-  script deletes. Then the stanza is moved (`stanza-upgrade`) and a full backup
-  of the new major is taken before the API starts, because until then the
-  newest backup is one the image cannot restore. Any failure fails the boot and
+  script deletes. Then the stanza is moved (`stanza-upgrade`, only when its
+  major differs: `stanza-create` still refuses another cluster's stanza) and a
+  full backup of the new major is taken before the API starts, because until
+  then the newest backup is one the image cannot restore: a marker on the data
+  volume, `/data/brain/backup-pending`, written before the upgrade and removed
+  after that backup, keeps `host/release-agent.sh` from starting the API,
+  whatever the boot did. Any failure fails the boot and
   starts nothing; data of a newer major than the image is refused; and a server
   start on another major's directory, including a restored old backup, stops
   with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
@@ -296,8 +300,8 @@ fails when it is broken.
   advisory lock (`api/src/lib/sweepLeader.unit.test.ts` and
   `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
   each process's memory, are not.
-- **Negative: the host files are 89 % of what EC2 allows.** They travel in the
-  instance's user data, 14,511 bytes gzipped of EC2's 16,384 (updated
+- **Negative: the host files are 90 % of what EC2 allows.** They travel in the
+  instance's user data, 14,718 bytes gzipped of EC2's 16,384 (updated
   2026-11-12: 13,839 before the major upgrade step in `infra/brain/host/boot.sh`), and a guard
   stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose

@@ -64,7 +64,10 @@ def check_boot_and_postgres(status):
     codes = []
     if status.get("boot_mode") in ("failed", "refused"):
         codes.append("boot_failed")
-    if not status.get("postgres_up") and status.get("boot_mode") != "restoring":
+    if not status.get("postgres_up") and status.get("boot_mode") not in (
+        "restoring",
+        "upgrading",
+    ):
         codes.append("postgres_down")
     return codes
 

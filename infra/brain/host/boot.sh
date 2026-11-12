@@ -123,6 +123,9 @@ export BRAIN_RESTORE_TARGET=$target
 # Data of an older Postgres major than the pinned image is upgraded first (postgres/major-upgrade.sh, a
 # container of its own); newer is refused. An upgrade that stopped before its last rename is finished.
 # Equal majors start no container. A failure starts nothing and leaves the old cluster intact.
+# $gate (on the volume, so a reboot keeps it) stops release-agent.sh starting the API from before the
+# upgrade until a full backup of the new major succeeds.
+gate=/data/brain/backup-pending
 want=
 upgraded=
 if [ "$mode" = existing ]; then
@@ -130,9 +133,10 @@ if [ "$mode" = existing ]; then
   want=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$BRAIN_PG_IMAGE" | sed -n 's/^PG_MAJOR=//p')
   have=$(cat /data/postgres/PG_VERSION)
   aside=$(cat /data/postgres.new/PG_VERSION 2> /dev/null || echo 99)
-  [ "$have" -le "$want" ] || die "/data/postgres is PostgreSQL $have and the image runs '$want': pin the image of $have again"
+  [ "$have" -le "$want" ] || die "/data/postgres is PostgreSQL $have and the image runs '$want': pin the image of $have again (docs/operations/brain.md, going back)"
   if [ "$have" -lt "$want" ] || [ "$aside" -lt "$have" ]; then
     echo upgrading > "$mode_file"
+    touch "$gate"
     compose rm -sf postgres
     out=$(compose --profile tools run --rm --no-deps -T upgrade) || die "the major upgrade failed: the old cluster is intact; pin the old image tag"
     [ -z "$out" ] || { log "$out"; upgraded=upgraded; }
@@ -200,8 +204,9 @@ if [ "$mode" != existing ]; then
   rm -f "$marker" # only now: a boot that died before this is finished by the next one
 fi
 
-# stanza-create refuses a stanza of another major; stanza-upgrade moves it, and is a no-op on a current one.
-pgb stanza-create || pgb stanza-upgrade
+# stanza-create stops a database that is not the stanza's (another system id); stanza-upgrade only for a real major change.
+sv=$(pgb info --output=json 2> /dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["db"][-1]["version"])' 2> /dev/null || true)
+if [ -n "$want" ] && [[ $sv =~ ^[0-9]+$ ]] && [ "$sv" != "$want" ]; then pgb stanza-upgrade; else pgb stanza-create; fi
 repo=$(repo_state)
 if [ "$mode" = restore ] || [ "$repo" != backup ]; then pgb --type=full backup; fi
 
@@ -222,7 +227,9 @@ except (ValueError, KeyError, IndexError, StopIteration, TypeError):
     pass') || true
   if [[ $repo_major =~ ^[0-9]+$ ]] && [ "$repo_major" != "$want" ]; then
     log "the newest backup is of PostgreSQL $repo_major, not $want: taking a full backup"
+    touch "$gate"
     pgb --type=full backup
+    rm -f "$gate"
   elif [[ $db_tl =~ ^[0-9A-F]{8}$ && $repo_tl =~ ^[0-9A-F]{8}$ ]]; then
     if [ "$db_tl" != "$repo_tl" ]; then
       log "the newest backup is on timeline $repo_tl and this database is on $db_tl: taking a full backup"
@@ -231,6 +238,7 @@ except (ValueError, KeyError, IndexError, StopIteration, TypeError):
   else
     log "could not read the timelines of the database and the newest backup: not checking that the newest backup is its own"
   fi
+  [ "$repo_major" != "$want" ] || rm -f "$gate"
 fi
 
 # The API is the release agent's: on only if the switch is on.

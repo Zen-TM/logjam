@@ -9,6 +9,8 @@ Mutations that turn this red (each applied once and seen to fail):
   - choosing the lexicographically last archive id, or any directory but the
     last: the listing tests; ordering archive ids by major before history
     (`return (history, major)` -> `(major, history)`): test_the_newest_archive_id_is_the_highest_history_not_the_highest_major;
+  - excusing only `restoring` in check_boot_and_postgres (`"upgrading"` dropped from the tuple):
+    test_upgrading_is_not_postgres_down_either;
   - dropping the `serving` condition on the API check: test_api_not_checked_when_not_serving;
   - `< MEMORY_MIN_MB` to `<=`, or checking memory while Postgres is down:
     test_memory_low;
@@ -205,6 +207,17 @@ class Codes(unittest.TestCase):
             signals(status=good_status(postgres_up=False, boot_mode="restoring")), {}
         )
         self.assertEqual(run(s3=s3)[0], [])
+
+    def test_upgrading_is_not_postgres_down_either(self):
+        # boot.sh stops Postgres while the Postgres major upgrade runs.
+        s3 = FakeS3(
+            signals(status=good_status(postgres_up=False, boot_mode="upgrading")), {}
+        )
+        self.assertEqual(run(s3=s3)[0], [])
+        s3 = FakeS3(
+            signals(status=good_status(postgres_up=False, boot_mode="existing")), {}
+        )
+        self.assertEqual(run(s3=s3)[0], ["postgres_down"])
 
     def test_disk_high(self):
         self.assertEqual(

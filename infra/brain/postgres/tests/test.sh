@@ -27,9 +27,10 @@
 #   major-upgrade.sh: dropping `-c archive_mode=off` from the old server's start or from
 #     --old-options (an old cluster archives into the repository);
 #   major-upgrade.sh: dropping the server.crt/server.key copy (a new certificate);
-#   major-upgrade.sh: the checksum setting fixed instead of read from the old cluster;
+#   major-upgrade.sh: the checksum setting fixed to `--data-checksums` (an old cluster without them);
 #   major-upgrade.sh: the refusals for a newer cluster, missing binaries, too little space, an
-#     existing postgres-<N> and a foreign postgres.new, each deleted in turn;
+#     existing postgres-<N> and a foreign postgres.new (one with a PG_VERSION of another major, one with
+#     files and none), each deleted in turn;
 #   major-upgrade.sh: dropping the finish-the-rename branch (the rerun after a crash does nothing);
 #   major-upgrade.sh: pg_upgrade's output sent to stdout; dropping the ALTER SYSTEM carry-over, or
 #     carrying a restore's recovery settings too.
@@ -318,6 +319,10 @@ vol_sh $V 'mkdir /data/postgres.new && echo 15 > /data/postgres.new/PG_VERSION &
 upgrade $V; refuses "a postgres.new holding a 15 cluster" "not deleting it"
 check "...which is still there" [ "$(vol_sh $V 'cat /data/postgres.new/mine')" = keep ]
 vol_sh $V 'rm -rf /data/postgres.new'
+vol_sh $V 'mkdir /data/postgres.new && echo keep > /data/postgres.new/mine'
+upgrade $V; refuses "a postgres.new with files and no PG_VERSION" "not deleting it"
+check "...which is still there" [ "$(vol_sh $V 'cat /data/postgres.new/mine')" = keep ]
+vol_sh $V 'rm -rf /data/postgres.new'
 vol_sh brain-pg-test-up-newer 'mkdir -p /data/postgres && echo 19 > /data/postgres/PG_VERSION'
 upgrade brain-pg-test-up-newer; refuses "a cluster newer than the image" "this image runs 18"
 check "...and it is untouched" [ "$(vol_sh brain-pg-test-up-newer 'cat /data/postgres/PG_VERSION; ls /data')" = "$(printf '19\npostgres')" ]
@@ -392,6 +397,23 @@ check "...so the old cluster is /data/postgres-16 again and no postgres.new is l
 check "...and the new cluster was not touched (same directory)" [ "$(vol_sh $V 'stat -c %i /data/postgres')" = "$inode" ]
 upgrade $V
 check "...and a rerun after that does nothing" silent
+
+# A cluster made without data checksums comes out without them (the setting is read, not assumed).
+V=brain-pg-test-up-nosum
+# 16's initdb has no --no-data-checksums, and the entrypoint always asks for them: initdb by hand, the superuser postgres as prod's.
+docker volume create $V > /dev/null
+vol_sh $V 'mkdir -p /data/postgres && chown postgres:postgres /data/postgres && chmod 0700 /data/postgres && gosu postgres /usr/lib/postgresql/16/bin/initdb -D /data/postgres --username=postgres > /dev/null'
+check "the old cluster has no checksums" [ "$(vol_sh $V 'gosu postgres /usr/lib/postgresql/16/bin/pg_controldata /data/postgres | sed -n "s/^Data page checksum version: *//p"')" = 0 ]
+upgrade $V
+check "a cluster without checksums upgrades (exit $rc)" [ "$rc" = 0 ]
+C=brain-pg-test-upgraded-nosum
+docker run -d --name $C --mount "$(SUB $V)" "${PROD_ENV[@]}" -e BRAIN_DEV=1 -e BRAIN_INIT=none "$IMAGE" > /dev/null
+if wait_up $C; then
+  check "...and the upgraded one has none either" [ "$(sql -c 'show data_checksums')" = off ]
+else
+  bad "the 18 server starts on the upgraded cluster without checksums"
+fi
+docker rm -f -v $C > /dev/null
 
 # Not shut down cleanly: the server was killed with a segment waiting for the archiver.
 V=brain-pg-test-up-kill

@@ -304,10 +304,15 @@ file says `upgraded`. The upgrade itself:
   free space than the cluster's size plus 1 GiB (copy mode doubles it).
 
 **Before the cutover**, look at the status file's `disk_used_percent`: under
-about 45 so the copy fits. Have a recent green drill. Merge the tag change like
-any host change: the plan replaces the instance, so allow the 3 minutes of
-"Changing a host file" plus the upgrade and a full backup (seconds to minutes
-for a small database; not measured on prod).
+35, because the old cluster stays beside the new one and the doubled disk must
+stay under the watchdog's `disk_high` at 80. (The upgrade itself refuses with
+less free space than the cluster's size plus 1 GiB.) Delete `/data/postgres-16`
+to get the space back afterwards, or grow the volume first if the disk is
+fuller than that. Have a recent green drill, and keep the cutover away from
+the drill's 04:30 Sydney run (`brain_drill.tf`): see the last paragraph. Merge
+the tag change like any host change: the plan replaces the instance, so allow
+the 3 minutes of "Changing a host file" plus the upgrade and a full backup
+(seconds to minutes for a small database; not measured on prod).
 
 **Afterwards:** `brain 'cat /run/brain/boot-mode'` says `upgraded`;
 `brain 'ls /data'` shows `postgres` and `postgres-16`;
@@ -324,27 +329,40 @@ Dockerfile in a later change.
 is as it was, so pin the old tag in `brain.auto.tfvars` again and the instance
 boots the old image on it. A `/data/postgres.new` left behind is removed by the
 next attempt. If the boot dies *after* the upgrade (the repository unreachable,
-say), the next boot finishes the stanza and the backup by itself.
+say), the API stays down: `boot.sh` keeps a marker, `/data/brain/backup-pending`,
+from before the upgrade until a full backup of the new major has succeeded, and
+`release-agent.sh` (whose timer runs whatever the boot did) starts no API while
+it exists and logs why. The marker is on the data volume, not in `/run`, so a
+reboot in that window keeps it; a boot that dies before it could write one again
+would otherwise lose it. The `boot_failed` alarm fires; once the cause is gone,
+`systemctl restart brain-boot` (or a reboot) finishes the stanza and the backup,
+removes the marker and starts the API.
 
 **Going back after the upgrade ran.** Only to the moment it ran: whatever the
 new database took since is lost. On the host, stop Postgres, move `/data/postgres`
-aside, move `/data/postgres-16` to `/data/postgres`, and pin the old tag. The next
-boot starts the old server on it, moves the stanza back to 16 and takes a full
-backup of it. Nothing alarms on the way; read `status.json` afterwards.
+aside to `/data/postgres-18` (not `/data/postgres.new`, the one name the upgrade
+script removes), move `/data/postgres-16` to `/data/postgres`, and pin the old
+tag. The next boot starts the old server on it, moves the stanza back to 16 and
+takes a full backup of it. Nothing alarms on the way; read `status.json`
+afterwards. No test exercises this procedure.
 
 **Restoring from before the upgrade needs the old image tag.** The 18 image
 refuses a restored 16 directory with `holds a PostgreSQL 16 database and this
-image runs PostgreSQL 18` (it never crash-loops on it), so a rewind to a time
+image runs PostgreSQL 18`. The Postgres service is `restart: unless-stopped`, so
+Docker keeps restarting the refusing container and the message repeats, while
+`boot.sh` sees the restart and fails the boot (`boot_failed`, API down). A rewind to a time
 before the upgrade ("Rewinding" below) pins the tag of that time first, and
 the database then comes back as 16: upgrade it again by pinning the new tag.
 This path is not run anywhere; the tests restore backups taken after the
 upgrade (scenario 14) and refuse a 16 backup under 18 (the image's tests).
 
 **The drill and the watchdog after an upgrade.** The daily drill restores the
-newest backup, so for the minutes between the upgrade and its first full
-backup of 18 it would try a 16 backup under the 18 image and fail with
-`restore_failed`; the full backup is the first thing the boot takes, so that
-only matters if the drill's 04:30 run lands in the window. The watchdog lists
+newest backup, so for the minutes between the cutover's apply and the first full
+backup of 18 it restores a 16 backup, which succeeds, and then reads an empty
+`archive_mode` because the 18 binary refuses the 16 directory
+(`drill.sh`), so it reports `archive_mode_not_off`. The full backup is the first
+thing the boot takes, so that only matters if the drill's 04:30 Sydney run
+(`brain_drill.tf`) lands in the window: keep the cutover away from it. The watchdog lists
 the WAL archive under `logjam/archive/logjam/` and takes the highest archive id
 (`16-1`, then `18-2`), so it follows the move; with `18-2` current, a stanza
 upgraded back to 16 is `16-3`, which it also takes (it compares the history
@@ -381,7 +399,7 @@ finished, same certificate, every marker row present. Do it in a quiet hour,
 announce it if users could notice, and do not merge anything else to `main`
 while it runs.
 
-The user data is 14,511 bytes gzipped of EC2's 16,384-byte limit, and a guard
+The user data is 14,718 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
 would cross it, move the host files into the brain's Postgres image instead,
 which already carries the Compose plugin: the host would then fetch them from

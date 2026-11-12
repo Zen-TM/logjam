@@ -53,7 +53,11 @@ oldbin=/usr/lib/postgresql/$old/bin
 # What an unfinished run of this script left, and only that: a new cluster of this image's
 # major, or an empty directory. Anything else under the name is not ours to delete.
 if [ -e "$tmp" ]; then
-  { [ -z "$aside" ] || [ "$aside" = "$new" ]; } || fail "$tmp holds a PostgreSQL ${aside} cluster that is not an unfinished upgrade: not deleting it"
+  if [ -z "$aside" ]; then
+    [ -z "$(ls -A "$tmp")" ] || fail "$tmp has files and no PG_VERSION, so it is not an unfinished upgrade: not deleting it"
+  else
+    [ "$aside" = "$new" ] || fail "$tmp holds a PostgreSQL ${aside} cluster that is not an unfinished upgrade: not deleting it"
+  fi
   say "removing the unfinished $tmp of an earlier run"
   rm -rf "$tmp"
 fi
