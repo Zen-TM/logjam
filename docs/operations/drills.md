@@ -146,6 +146,45 @@ Time: ____ Surprises: ____
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
 
+### 2026-11-12: maintainer and Claude, the apply refusal after the value check changed
+
+**Change under test:** #930, which leaves three values AWS moves by itself
+out of the value check (`movesAlone` in `infra/scripts/plan-summary.mjs`,
+[0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
+`PLAN_VALUE_CHECK` is `enforce`.
+
+- **Drift on a resource the PR does not touch: refused.** #939 added `drill =
+  "apply-refusal"` to `aws_sns_topic.alerts`. After its plan posted, a `hand =
+  "drill"` tag was added by hand to `aws_sns_topic.budget_alerts`, then the PR
+  merged. The apply refused 77 s after the merge: "The plan at merge … is not
+  the plan on the PR … Nothing applied", and it listed both topics as the plan
+  it would have applied. The alerts topic had no tag.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run; it
+  applied #939's tag 98 s later.
+- **Drift on the resource the PR updates: refused.** #940 removed the drill's
+  tag. After its plan posted, a `hand = "drill"` tag was added by hand to
+  `aws_sns_topic.alerts`, then the PR merged. The apply refused 79 s after the
+  merge: "different values on 1 resource(s) … `aws_sns_topic.alerts` … The
+  values are not shown. Nothing applied." The topic kept both tags.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run; it
+  applied the removal 97 s later. Neither topic has a tag now, and a plan of
+  `main` shows no changes.
+- Both plan comments carried a `plan-values` line of `address → 16 hex` and
+  nothing else about values. The two PRs had the same plan fingerprint (one
+  update of the same address) and different value hashes.
+- **Not re-run:** the no-key case (deleting the key destroys its value; the
+  unit test in `plan-summary.test.mjs` covers the refusal).
+- **Not exercised:** an apply that goes ahead although one of #930's three
+  values moved between the plans. Nothing moved one during the drill; the unit
+  test "a value AWS moves by itself leaves the value fingerprint alone" covers
+  it.
+
+Time: 77 s / 98 s / 79 s / 97 s. **Surprise:** none in the drill. Beside it,
+on the same day: a PR that was brought up to date while the previous merge's
+apply was still running was planned with that apply's changes still pending,
+so its own apply was refused as "not the plan on the PR". Wait for an apply to
+finish before updating the next PR.
+
 ### 2026-10-17: maintainer and Claude, the apply refusal under enforce
 
 **Change under test:** `PLAN_VALUE_CHECK` = `enforce`, and the value check
