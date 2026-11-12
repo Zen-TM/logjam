@@ -752,14 +752,15 @@ run "media_is_versioned_and_never_expires_current_objects" {
   # modules/storage renders a rule (an `expiration_days` of null must render no
   # `expiration { days }`) is held by review.
 
-  # Mutation: `versioning_enabled = false`, or an inline `lifecycle_rules = [...]`,
-  # in module "media" (a delete is final again, or a rule the next asserts do
-  # not see).
+  # Mutation: `versioning_enabled = false`, an inline `lifecycle_rules = [...]`,
+  # either line commented out, or a local renamed with a suffix, in module
+  # "media" (a delete is final again, or a rule the next asserts do not see).
+  # The lines are matched whole, so `fmt`'s padding of `=` is fine.
   assert {
     condition = (
       local.media_versioned != null &&
-      strcontains(regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf")), "versioning_enabled = local.media_versioned") &&
-      strcontains(regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf")), "lifecycle_rules = local.media_lifecycle_rules")
+      can(regex("(?m)^[ \\t]*versioning_enabled[ \\t]*=[ \\t]*local\\.media_versioned[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf")))) &&
+      can(regex("(?m)^[ \\t]*lifecycle_rules[ \\t]*=[ \\t]*local\\.media_lifecycle_rules[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf"))))
     )
     error_message = "module \"media\" must take versioning_enabled and lifecycle_rules from local.media_versioned and local.media_lifecycle_rules (s3.tf): the other asserts in this run read the locals."
   }

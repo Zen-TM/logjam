@@ -70,8 +70,9 @@ locals {
       expiration_days = 8
     },
     # A send's bytes go sooner than the rest: privacy.html promises a sent file
-    # is gone after 7 days, so its noncurrent version goes a day after the
-    # day-8 expiry rather than ten.
+    # is gone after 7 days, so its noncurrent version goes a day after its
+    # bytes are deleted (the reaper's day 7, or the day-8 rule if the reaper
+    # missed it) rather than ten.
     {
       id                         = "end-the-undo-window-for-sends"
       prefix                     = "file-sends/"

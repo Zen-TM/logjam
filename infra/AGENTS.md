@@ -64,6 +64,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   versions.** pgBackRest expires backups by count; an age rule would delete the
   only backup after a run of failed nights. Its Object Lock stays COMPLIANCE,
   7 days. Guard: `brain_backups_are_locked_and_never_expire`.
+- **The media bucket is versioned, and no lifecycle rule outside `file-sends/`
+  expires current objects.** Its undo window is a rule on noncurrent versions
+  only; an `expiration_days` on any other rule would delete every user's photos
+  when it ran. Guard: `media_is_versioned_and_never_expires_current_objects`.
 - **The brain's Postgres image tag is immutable and pinned** in Terraform
   (`brain_pg_image_tag` in `brain.auto.tfvars`); the repository refuses a push
   to an existing tag, so publish a new tag and change the setting, never

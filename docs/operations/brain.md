@@ -445,8 +445,9 @@ it at the next midnight UTC after the tenth), then are removed for good
 (`end-the-undo-window` in `infra/terraform/envs/prod/s3.tf`). This is an undo,
 not a backup; the database has its own, longer history (above). A user's deleted
 file therefore stays in the bucket, readable by the operator, for about those 10
-days. A sent file (`file-sends/`) is the exception: its bytes go a day after its
-day-8 expiry, and it is not meant to be brought back.
+days. A sent file (`file-sends/`) is the exception: its bytes go a day after they
+are deleted (the reaper's day 7, or the day-8 rule if the reaper missed it), and
+it is not meant to be brought back.
 
 Keys are `media/<ownerId>/<mediaId>/<filename>`. Not yet run anywhere:
 
