@@ -18,7 +18,16 @@ UPDATE users
 SET
   email      = 'user-' || id || '@local',
   subject    = 'sanitized-' || id,
-  username   = 'user-' || id;
+  username   = 'user-' || id,
+  -- The rest is settings. These three keys are the custom-field LABELS that
+  -- `custom_field_defs` was backfilled from, left in place by that migration
+  -- (20260905100000_custom_field_defs_table); `custom_field_defs.label` is
+  -- scrubbed below.
+  ui_preferences = ui_preferences - 'tripLogCustomFields' - 'canyonCustomFields' - 'placeCustomFields';
+
+-- A push token identifies one person's phone. The `'token-' || id` stand-in is
+-- no valid Expo token, so a dev API sends nothing to it.
+UPDATE device_tokens SET token = 'token-' || id;
 
 -- Everything a user typed. A place NAME is as sensitive as its notes under the
 -- NPWS guidance in AGENTS.md — "Claustral" and "the one below the third
@@ -28,10 +37,10 @@ SET
 -- same thing copied from someone else, labels included. Both are as sensitive
 -- as notes and neither is optional to scrub.
 --
--- The coverage test runs in both directions: it fails if a listed column does
--- not exist or if a user-authored String/Json column is missing from this file.
--- Note that arm reads String/Json columns only — a numeric that needs scrubbing
--- would have to be added here by hand.
+-- The coverage test runs in both directions: it fails if a column named here
+-- does not exist, or if a String/Json column of any model is neither assigned
+-- here nor declared safe. It reads String/Json columns only — a numeric that
+-- needs scrubbing would have to be added here by hand.
 UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
     "altNames" = '{}',
@@ -87,6 +96,18 @@ UPDATE import_snapshots SET before = '{}', after = '{}';
 
 UPDATE routes SET name = 'route-' || substring(id::text, 1, 8);
 UPDATE media SET display_name = NULL, filename = 'file-' || substring(id::text, 1, 8);
+
+-- User-owned place types are named by their owner ("Slot with a sting"); the
+-- shared system types (owner_id NULL: Canyon, Waypoint ...) are app copy and
+-- keep their names. The full id, as for usernames, keeps the unique
+-- (owner_id, name) when ids share a prefix.
+UPDATE place_types SET name = 'type-' || id WHERE owner_id IS NOT NULL;
+
+-- A LiDAR job's and a template's name say where ("Claustral LiDAR"); a sent
+-- file's name is the file ("Claustral.gpx").
+UPDATE topo_jobs SET name = 'job-' || substring(id::text, 1, 8);
+UPDATE topo_templates SET name = 'template-' || substring(id::text, 1, 8);
+UPDATE file_sends SET filename = 'file-' || substring(id::text, 1, 8);
 
 -- Plans: the write-up, the forms and every answer. Safety contacts are names
 -- and phone numbers of people who are not Logjam users.

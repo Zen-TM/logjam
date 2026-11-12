@@ -584,6 +584,11 @@ jobs:
         run: npm ci
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
+      # The upgraded, seeded database is thrown away after this: the canary
+      # rewrites every row. Plants a marker in each column the prod-snapshot
+      # scrub covers, runs the scrub, and fails if a marker is still in a dump.
+      - name: Snapshot scrub canary
+        run: scripts/snapshot-scrub-canary.sh
 
   brain-postgres-image:
     # The Postgres image local dev runs (docker-compose.yml) and prod's will.
