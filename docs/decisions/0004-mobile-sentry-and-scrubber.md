@@ -89,7 +89,7 @@ As shipped (`src/sentry/`):
 - **Neutral:** to turn sourcemaps on: add `organization` + `project` to the
   `@sentry/react-native` plugin config in `app.json`, put the Sentry auth token
   in an EAS secret (`SENTRY_AUTH_TOKEN`, secret-visibility — it IS a real
-  credential, unlike the DSN), and drop the disable flag (done 2026-11-13).
+  credential, unlike the DSN), and drop the disable flag (updated 2026-11-13).
 
 ## Alternatives considered
 

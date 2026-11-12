@@ -171,8 +171,14 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
-          # The upload exits 0 when dist/ holds bundles and no maps.
-          find dist -name '*.map' | grep -q . || { echo "::error::eas update left no sourcemaps in dist/"; exit 1; }
+          # The upload skips a bundle with no <bundle>.map beside it, and exits 0.
+          bundles=$(find dist -name '*.hbc')
+          [ -n "$bundles" ] || { echo "::error::eas update left no bundle in dist/"; exit 1; }
+          missing=0
+          while IFS= read -r bundle; do
+            [ -f "$bundle.map" ] || { echo "::error::no sourcemap for $bundle"; missing=1; }
+          done <<< "$bundles"
+          [ "$missing" = 0 ] || exit 1
           npx sentry-expo-upload-sourcemaps dist
 
       # promote:production runs mobile/scripts/check-production-update.js:

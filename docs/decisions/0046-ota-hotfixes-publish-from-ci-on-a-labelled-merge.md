@@ -57,7 +57,8 @@ somewhere a workflow can read: that is what changes from 0009.
    to `production` (rule 3 of 0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
    update with the same key, for the owner alone. Guard: the gate tests in
    `mobile/src/otaHotfix.test.ts`, which also check both workflows call
-   `ota-hotfix.js gate` first.
+   `ota-hotfix.js gate` first; `mobile/src/sentryUpload.test.ts` holds the
+   upload's place between the publish and the promotion.
 4. **Only admins and the deploy key in `mobile-ota` may push
    `release/mobile-v*`.** Guard: the `releases_stay_the_maintainers` run in
    `guards.tftest.hcl`.
