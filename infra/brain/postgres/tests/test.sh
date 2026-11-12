@@ -241,11 +241,10 @@ cleanup
 # upgrade adds them for its transition: docs/operations/brain.md). UPIMG is that and nothing else: it runs
 # major-upgrade.sh and the 16 tools. IMG16 is the previous image as far as these tests need it: the same with the
 # 16 server first on PATH and PG_MAJOR=16, so the real entrypoints make a real 16 database the way prod's was made.
-# The next major's upgrade changes the 16 here (and the 18 in the Dockerfile). The 16 is pinned to the minor prod's
-# data was made by: 16.16's server writes a column option, pg_attver, that 18.6's pg_upgrade cannot restore.
+# The next major's upgrade changes the 16 here (and the 18 in the Dockerfile).
 UPIMG=$IMAGE-with-16
 IMG16=$IMAGE-as-16
-printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends postgresql-16=16.15-1.pgdg13+2 postgresql-client-16=16.15-1.pgdg13+2 postgresql-16-pgaudit=16.1-2.pgdg13+1 && rm -rf /var/lib/apt/lists/*\n' "$IMAGE" |
+printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgaudit && rm -rf /var/lib/apt/lists/*\n' "$IMAGE" |
   docker build -q -t "$UPIMG" - > /dev/null || { bad "the test layer with the 16 packages builds"; exit 1; }
 printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$UPIMG" "$(docker run --rm --entrypoint printenv "$IMAGE" PATH)" |
   docker build -q -t "$IMG16" - > /dev/null || { bad "the 16 image builds"; exit 1; }

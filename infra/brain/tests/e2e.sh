@@ -195,10 +195,9 @@ fi
 # upgrade, since boot.sh runs major-upgrade.sh in it and that needs the 16 binaries. PG16_IMAGE is the previous image
 # as far as the scenario needs it: the same with the 16 server first on PATH and PG_MAJOR=16, so the real
 # entrypoints and boot.sh make a real 16 database the way prod's was made. The next major's upgrade changes the 16 here.
-# It is pinned to the minor prod's data was made by: 16.16's server writes a column option, pg_attver, that 18.6's pg_upgrade cannot restore.
 UP_IMAGE=brain-e2e-postgres:with-16
 PG16_IMAGE=brain-e2e-postgres:16
-printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends postgresql-16=16.15-1.pgdg13+2 postgresql-client-16=16.15-1.pgdg13+2 postgresql-16-pgaudit=16.1-2.pgdg13+1 && rm -rf /var/lib/apt/lists/*\n' "$PG_IMAGE" |
+printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgaudit && rm -rf /var/lib/apt/lists/*\n' "$PG_IMAGE" |
   docker build -q -t "$UP_IMAGE" - > /dev/null || fatal "the test layer with the 16 packages does not build"
 printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$UP_IMAGE" "$(docker run --rm --entrypoint printenv "$PG_IMAGE" PATH)" |
   docker build -q -t "$PG16_IMAGE" - > /dev/null || fatal "the 16 stand-in image does not build"
