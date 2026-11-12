@@ -279,7 +279,7 @@ upgrade is `infra/brain/postgres/major-upgrade.sh`, which `host/boot.sh` runs
 when `/data/postgres/PG_VERSION` is older than the pinned image's major. So
 prod moves by the same one-line change as any other image: `brain_pg_image_tag`
 in `brain.auto.tfvars`. Not yet run on prod; the whole path runs in CI
-(`infra/brain/tests/e2e.sh` scenarios 14 and 14b, and the image's own tests).
+(`infra/brain/tests/e2e.sh` scenarios 14 to 14e, and the image's own tests).
 
 **What the boot does**, before Postgres starts: stops the Postgres container,
 runs the upgrade in a container of its own with all of `/data` mounted,
@@ -342,9 +342,12 @@ removes the marker and starts the API.
 new database took since is lost. On the host, stop Postgres, move `/data/postgres`
 aside to `/data/postgres-18` (not `/data/postgres.new`, the one name the upgrade
 script removes), move `/data/postgres-16` to `/data/postgres`, and pin the old
-tag. The next boot starts the old server on it, moves the stanza back to 16 and
-takes a full backup of it. Nothing alarms on the way; read `status.json`
-afterwards. No test exercises this procedure.
+tag. Do the moves just before merging the pin (the apply replaces the instance):
+while Postgres is stopped by hand in mode `existing`, the watchdog reports
+`postgres_down`. The next boot starts the old server on it, moves the stanza back
+to 16 (a new history entry, WAL archive id `16-3`) and takes a full backup of it
+before the API starts. Scenario 14e of `e2e.sh` runs these moves, with that
+backup failing once; read `status.json` afterwards.
 
 **Restoring from before the upgrade needs the old image tag.** The 18 image
 refuses a restored 16 directory with `holds a PostgreSQL 16 database and this
@@ -352,15 +355,18 @@ image runs PostgreSQL 18`. The Postgres service is `restart: unless-stopped`, so
 Docker keeps restarting the refusing container and the message repeats, while
 `boot.sh` sees the restart and fails the boot (`boot_failed`, API down). A rewind to a time
 before the upgrade ("Rewinding" below) pins the tag of that time first, and
-the database then comes back as 16: upgrade it again by pinning the new tag.
-This path is not run anywhere; the tests restore backups taken after the
-upgrade (scenario 14) and refuse a 16 backup under 18 (the image's tests).
+the database then comes back as 16: the boot moves the stanza back down to 16
+(`stanza-upgrade`, a third history entry) and takes a full backup of it, and you
+upgrade it again by pinning the new tag. Scenario 14d of `e2e.sh` runs this
+restore; scenario 14 restores a backup taken after the upgrade, and the image's
+tests refuse a 16 backup under 18.
 
 **The drill and the watchdog after an upgrade.** The daily drill restores the
 newest backup, so for the minutes between the cutover's apply and the first full
-backup of 18 it restores a 16 backup, which succeeds, and then reads an empty
-`archive_mode` because the 18 binary refuses the 16 directory
-(`drill.sh`), so it reports `archive_mode_not_off`. The full backup is the first
+backup of 18 it restores a 16 backup, which succeeds, and then cannot start the
+18 server on it (`database files are incompatible with server`: `postgres -C
+archive_mode` still prints `off`, so `drill.sh`'s guard passes and `pg_ctl start`
+is what fails), so it reports `start_failed`. The full backup is the first
 thing the boot takes, so that only matters if the drill's 04:30 Sydney run
 (`brain_drill.tf`) lands in the window: keep the cutover away from it. The watchdog lists
 the WAL archive under `logjam/archive/logjam/` and takes the highest archive id
@@ -399,7 +405,7 @@ finished, same certificate, every marker row present. Do it in a quiet hour,
 announce it if users could notice, and do not merge anything else to `main`
 while it runs.
 
-The user data is 14,718 bytes gzipped of EC2's 16,384-byte limit, and a guard
+The user data is 14,766 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
 would cross it, move the host files into the brain's Postgres image instead,
 which already carries the Compose plugin: the host would then fetch them from

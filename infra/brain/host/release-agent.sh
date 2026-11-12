@@ -14,7 +14,7 @@ if [ "$(serving_state)" != on ]; then
 fi
 
 # boot.sh's marker: no full backup of the database's Postgres major yet.
-[ ! -e /data/brain/backup-pending ] || { log "not starting the API: no full backup of this Postgres major yet"; exit 0; }
+[ ! -e "$gate" ] || { log "not starting the API: no full backup of this Postgres major yet"; exit 0; }
 
 release=$(s3_get release.json) || die "serving is on but release.json cannot be read: changing nothing"
 

@@ -249,7 +249,7 @@ fails when it is broken.
   with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
   The image carries the old major's binaries only for this, and they go once
   prod is on the new one; restoring from before an upgrade needs the image tag
-  of that time. Guards: scenarios 14 and 14b of `e2e.sh`, and the major-version
+  of that time. Guards: scenarios 14 to 14e of `e2e.sh`, and the major-version
   guard and upgrade checks in `infra/brain/postgres/tests/test.sh`. What still holds the
   decision up: boot.sh is the only thing that starts Postgres, and it never
   deletes a cluster. Everything else above stands.
@@ -301,7 +301,7 @@ fails when it is broken.
   `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
   each process's memory, are not.
 - **Negative: the host files are 90 % of what EC2 allows.** They travel in the
-  instance's user data, 14,718 bytes gzipped of EC2's 16,384 (updated
+  instance's user data, 14,766 bytes gzipped of EC2's 16,384 (updated
   2026-11-12: 13,839 before the major upgrade step in `infra/brain/host/boot.sh`), and a guard
   stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose

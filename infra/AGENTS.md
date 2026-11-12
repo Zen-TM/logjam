@@ -130,7 +130,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   until that full backup succeeds, which `release-agent.sh` honours.
   [0047](../docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md)
   (the Update on the upgrade). Guards: `postgres/tests/test.sh` (the old cluster
-  is not linked and survives), scenarios 14, 14b and 14c of `brain/tests/e2e.sh`.
+  is not linked and survives), scenarios 14 to 14e of `brain/tests/e2e.sh`.
 - **The brain's instance exists only while `brain_pg_image_tag` is set** (its
   default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no
   instance, data volume, Elastic IP or alarm is planned
