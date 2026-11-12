@@ -18,18 +18,6 @@ resource "aws_security_group" "brain" {
   }
 
   ingress {
-    description     = "Postgres from the Fargate workers (logjam-worker-sg)"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.worker.id]
-  }
-
-  # A rule of its own, not a second group on the rule above: adding to that
-  # rule would have AWS revoke it and authorize a new one, and a worker
-  # connecting in between would be refused. The descriptions differ so the
-  # two stay two rules when Terraform reads them back.
-  ingress {
     description     = "Postgres from the Fargate workers (logjam-workers)"
     from_port       = 5432
     to_port         = 5432
