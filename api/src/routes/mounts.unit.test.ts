@@ -10,7 +10,8 @@ import { expect, it } from "vitest";
 // by routeAuth.unit.test.ts.
 //
 // Mutation that turns it red: import a router from ./routes/<name> in index.ts;
-// an inline `Router()` mounted with app.use("/x", r); a router imported from
+// an inline `Router()` mounted with app.use("/x", r); an inline
+// `app.use((req, res, next) => next())`; a router imported from
 // outside routes/; app.use("/x", ...) or app.route("/x") anywhere in index.ts;
 // import("./routes/<name>").then(...).
 const MIDDLEWARE = new Set([
@@ -20,6 +21,7 @@ const MIDDLEWARE = new Set([
   "helmet",
   "express.json",
   "globalLimiter",
+  "originVerify",
   "errorHandler",
 ]);
 
@@ -71,7 +73,6 @@ const visit = (node: ts.Node): void => {
           `${at(node)}: app.use(path, …) outside the ROUTER_MOUNTS loop`,
         );
     } else if (
-      !ts.isArrowFunction(first) &&
       !MIDDLEWARE.has(
         ts.isCallExpression(first)
           ? first.expression.getText()

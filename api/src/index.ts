@@ -11,7 +11,7 @@ if (process.env.NODE_ENV === "production") {
   dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
 }
 
-import express from "express";
+import express, { type RequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -155,7 +155,7 @@ app.get("/ready", async (_req, res) => {
 // limiter so direct-to-EB floods are rejected without consuming a limiter slot.
 if (env.ORIGIN_VERIFY_SECRET) {
   const originVerifySecret = Buffer.from(env.ORIGIN_VERIFY_SECRET);
-  app.use((req, _res, next) => {
+  const originVerify: RequestHandler = (req, _res, next) => {
     if (req.path === "/health" || req.path === "/ready") return next();
     const header = req.get("X-Origin-Verify");
     // Constant-time compare; length-mismatch short-circuits (timingSafeEqual
@@ -174,7 +174,8 @@ if (env.ORIGIN_VERIFY_SECRET) {
       "origin_verify_mismatch",
     );
     next();
-  });
+  };
+  app.use(originVerify);
 }
 
 // Global rate limit applied to API routes (not /health, /ready). Keyed by
