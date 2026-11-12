@@ -3,6 +3,9 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useGauges } from "./gauges/useGauges";
+import { useNow } from "./ui/useNow";
+
 // Guards for mobile/AGENTS.md "Nothing automatic wakes the radio or the CPU
 // behind a dark screen: a timer arms only in the foreground, and a sensor runs
 // only while the screen that shows it is focused" (ADR 0013, ADR 0010).
@@ -74,9 +77,6 @@ vi.mock("./gauges/gaugeFeed", () => ({
 vi.mock("./gauges/gaugeStorage", () => ({
   readCachedGauges: () => Promise.resolve(null),
 }));
-
-import { useGauges } from "./gauges/useGauges";
-import { useNow } from "./ui/useNow";
 
 /** Run a hook once and its effects; returns the setter of the n-th useState. */
 function mount(hook: () => unknown, stateIndex: number) {

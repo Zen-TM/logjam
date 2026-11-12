@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { registerForPushNotifications } from "./pushRegistration";
+
 // A guest has no account to register a push token against: registering would
 // POST /devices with no session (ADR 0007).
 //
@@ -36,8 +38,6 @@ vi.mock("expo-constants", () => ({
 }));
 vi.mock("../api/apiFetch", () => ({ apiFetch }));
 vi.mock("./pushAvailable", () => ({ pushAvailable: () => true }));
-
-import { registerForPushNotifications } from "./pushRegistration";
 
 describe("registering this phone for pushes", () => {
   beforeEach(() => {
