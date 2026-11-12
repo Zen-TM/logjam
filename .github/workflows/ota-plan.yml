@@ -28,6 +28,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'ota-hotfix') &&
       (github.event.action != 'labeled' || github.event.label.name == 'ota-hotfix')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.plan.outputs.version }}
       base: ${{ steps.plan.outputs.base }}
@@ -110,6 +111,7 @@ jobs:
     needs: [plan, smoke]
     if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: write
