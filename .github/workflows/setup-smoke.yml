@@ -33,6 +33,8 @@ permissions:
 
 jobs:
   changes:
+    # A required check under this name: `changes` is five workflows' job id.
+    name: setup-smoke-scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

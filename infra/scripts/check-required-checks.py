@@ -67,17 +67,13 @@ FILTERS = {"paths", "paths-ignore", "branches-ignore"}
 # "<workflow>:<job id>", each with why. Matrix jobs are not listed: they are
 # reached through the gate job that needs them.
 NOT_REQUIRED = {
-    "ci.yml:changes": "scope job: decides which heavy jobs run (ci-scope.sh)",
-    "mobile-emulator.yml:changes": "scope job",
-    "rollback-compat.yml:changes": "scope job",
-    "setup-smoke.yml:changes": "scope job",
-    "terraform-ci.yml:changes": "scope job",
-    "terraform-plan.yml:scope": "scope job",
     "mobile-emulator.yml:emulator": "not required until #723 promotes it, after 14 green nightlies",
+    # Requiring `ota-plan` would not hold: any other label's event leaves a
+    # skipped run, the newest run of that name is what a ruleset reads, and
+    # skipped passes. The publish gate reads past skipped runs (ADR 0046).
     "ota-plan.yml:plan": "ota-hotfix.yml reads the plan's result itself before it publishes",
     "ota-plan.yml:smoke": "part of the OTA plan, as above",
     "ota-plan.yml:ota-plan": "the OTA plan's summary, as above",
-    "expo-doctor.yml:nightly-issue": "runs on the nightly schedule only, to open an issue",
 }
 
 
