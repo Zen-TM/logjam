@@ -45,7 +45,7 @@ if [ "$old" = "$new" ]; then
   exit 0
 fi
 
-[ "$old" -lt "$new" ] || fail "the data is PostgreSQL $old and this image runs $new: refusing. Restoring from before an upgrade needs the image of that time."
+[ "$old" -lt "$new" ] || fail "the data is PostgreSQL $old and this image runs $new: refusing."
 oldbin=/usr/lib/postgresql/$old/bin
 [ -x "$oldbin/pg_ctl" ] || fail "this image has no PostgreSQL $old binaries, so it cannot read the data"
 [ ! -e "$DATA/postgres-$old" ] || fail "$DATA/postgres-$old exists already: not making it a second time"

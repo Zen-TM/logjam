@@ -15,12 +15,15 @@ FROM postgres:18.6-trixie
 # a database at the old path. brain-entrypoint.sh reads the same variable.
 ENV PGDATA=/var/lib/postgresql/data
 
-# The base image already configures the PGDG apt repository. The previous
-# major's packages are not here: a major upgrade adds them for its transition
-# (docs/operations/brain.md, "Upgrading Postgres to a new major"), and the tests
-# add them in a layer of their own.
+# The base image already configures the PGDG apt repository. OLD_MAJOR is empty:
+# the image carries one major. A major upgrade sets its default to the old major
+# for the transition, which adds that major's two packages for major-upgrade.sh to
+# read the old data with (docs/operations/brain.md, "Upgrading Postgres to a new
+# major"); the tests pass it as a build argument.
+ARG OLD_MAJOR=
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl jq openssl pgbackrest postgresql-18-pgaudit \
+    ${OLD_MAJOR:+postgresql-$OLD_MAJOR postgresql-$OLD_MAJOR-pgaudit} \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /etc/pgbackrest /etc/postgresql \
  && chown postgres:postgres /etc/pgbackrest

@@ -47,6 +47,7 @@
 #   host/boot.sh: `[ "$repo_major" != "$want" ] || rm -f "$gate"` deleted (the old tag put back keeps the marker) [14]
 #   host/boot.sh: `[ ! -e "$gate" ] || die ...` deleted (a boot that cannot confirm a backup exits 0) [14b]
 #   host/release-agent.sh: not honouring the marker (its `[ ! -e "$gate" ] ||` line deleted) [14b]
+#   the test layer (setup): the UP_IMAGE build without `--build-arg OLD_MAJOR=16` (no 16 packages: the 16 database is not made) [14]
 #   compose.yaml: the upgrade service's /data mount narrowed to /data/postgres (the swap cannot rename) [14]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
@@ -190,15 +191,14 @@ if [ -z "${E2E_PREBUILT:-}" ]; then
   docker build -q -t "$PG_IMAGE" infra/brain/postgres > /dev/null || fatal "the Postgres image does not build"
   docker build -q -f api/Dockerfile --build-arg GIT_SHA=e2e -t "$API_IMAGE" . > /dev/null || fatal "the API image does not build"
 fi
-# The test layer scenario 14 needs: this image plus the previous major's packages, which prod's image does not
-# carry (a major upgrade adds them for its transition: docs/operations/brain.md). UP_IMAGE is the pinned image of an
+# The test layer scenario 14 needs: the Dockerfile built with OLD_MAJOR=16, which adds the previous major's packages
+# that prod's image does not carry (a major upgrade adds them for its transition: docs/operations/brain.md). UP_IMAGE is the pinned image of an
 # upgrade, since boot.sh runs major-upgrade.sh in it and that needs the 16 binaries. PG16_IMAGE is the previous image
 # as far as the scenario needs it: the same with the 16 server first on PATH and PG_MAJOR=16, so the real
 # entrypoints and boot.sh make a real 16 database the way prod's was made. The next major's upgrade changes the 16 here.
 UP_IMAGE=brain-e2e-postgres:with-16
 PG16_IMAGE=brain-e2e-postgres:16
-printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends postgresql-16 postgresql-16-pgaudit && rm -rf /var/lib/apt/lists/*\n' "$PG_IMAGE" |
-  docker build -q -t "$UP_IMAGE" - > /dev/null || fatal "the test layer with the 16 packages does not build"
+docker build -q --build-arg OLD_MAJOR=16 -t "$UP_IMAGE" infra/brain/postgres > /dev/null || fatal "the test layer with the 16 packages does not build"
 printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$UP_IMAGE" "$(docker run --rm --entrypoint printenv "$PG_IMAGE" PATH)" |
   docker build -q -t "$PG16_IMAGE" - > /dev/null || fatal "the 16 stand-in image does not build"
 docker tag "$API_IMAGE" "$API_REPO:release-a"

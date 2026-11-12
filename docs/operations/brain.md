@@ -285,17 +285,20 @@ The last one, 16 to 18, is the example below; CI runs the path
 sends you here):
 
 - `infra/brain/postgres/Dockerfile`: the new `FROM`, the new major's
-  `postgresql-<new>-pgaudit`, and, for the transition, the old major's
-  `postgresql-<old>` and `postgresql-<old>-pgaudit`, which `major-upgrade.sh`
-  needs to read the old data. The old packages come out of the Dockerfile again
-  once prod has run on the new major for a while (see "Afterwards"). The image
-  carries one major in between upgrades.
+  `postgresql-<new>-pgaudit`, and `ARG OLD_MAJOR=` set to the old major for the
+  transition, which installs `postgresql-<old>` and `postgresql-<old>-pgaudit`
+  for `major-upgrade.sh` to read the old data with. Put the default back to
+  empty once prod has run on the new major for a while (see "Afterwards"): the
+  image carries one major in between upgrades. A transition Dockerfile whose
+  default was forgotten passes the tests (they pass the argument themselves) and
+  fails safely at prod's boot, with `no PostgreSQL <old> binaries` and the old
+  cluster untouched.
 - The workflows' Postgres service pins, which the same script keeps equal to the
   `FROM`.
 - The tests' layer: `postgres/tests/test.sh` (`UPIMG`, `IMG16`) and `tests/e2e.sh`
-  (`UP_IMAGE`, `PG16_IMAGE`) build the brain image plus the previous major's
-  packages and use it where old binaries are needed (to make old data and to
-  run the upgrade). Their `16` becomes the new previous major.
+  (`UP_IMAGE`, `PG16_IMAGE`) build the Dockerfile with `--build-arg OLD_MAJOR=16`
+  and use that image where old binaries are needed (to make old data and to
+  run the upgrade). Their `16` becomes the old major.
 - `docs/dev-setup.md`: a developer's old volume meets the entrypoint's refusal
   and runs `make reset`.
 
@@ -341,8 +344,8 @@ backup of the new major; `last_full_time` is now. The stats the planner keeps ar
 carried over except extended statistics: if a query plan looks wrong, run
 `vacuumdb --all --analyze-in-stages --missing-stats-only` in the container. When
 the new database has run well for a while, delete `/data/postgres-<old>` by hand
-(it is the one deletion no script makes), and in a later change drop the old
-major's two packages from the Dockerfile and the tests' layer's old major.
+(it is the one deletion no script makes), and in a later change set the Dockerfile's
+`OLD_MAJOR` default back to empty.
 
 **If the upgrade fails,** the boot fails and starts nothing; `/data/postgres`
 is as it was, so pin the old tag in `brain.auto.tfvars` again and the instance
@@ -364,8 +367,11 @@ the cost was not worth it. A restore of an old-major backup under the new image
 stops with `holds a PostgreSQL <old> database and this image runs PostgreSQL
 <new>`; the Postgres service is `restart: unless-stopped`, so Docker keeps
 restarting it and the message repeats while `boot.sh` fails the boot
-(`boot_failed`, API down). A *failed* upgrade is different: it leaves the old
-cluster intact, as above.
+(`boot_failed`, API down). So does a boot that finds data *newer* than the pinned
+image, which is what pinning the old tag after a successful upgrade does: its
+message says `pin the image of <data's major> again`, and that is the fix, the
+new tag. A *failed* upgrade is different: it leaves the old cluster intact, as
+above.
 
 **The drill and the watchdog after an upgrade.** The daily drill restores the
 newest backup, so for the minutes between the cutover's apply and the first full

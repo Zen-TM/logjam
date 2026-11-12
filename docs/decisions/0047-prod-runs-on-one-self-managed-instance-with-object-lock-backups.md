@@ -248,8 +248,9 @@ fails when it is broken.
   start on another major's directory, including a restored old backup, stops
   with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
   The image carries the old major's binaries only for the transition, and they
-  go once prod is on the new one (updated 2026-11-13: the prod image carries 18
-  only, and the tests' layer holds the previous major's packages). Going back
+  go once prod is on the new one (updated 2026-11-13: the Dockerfile carries 18
+  only, the old major's packages come in through its `OLD_MAJOR` argument, which
+  the tests pass, and prod's pinned image keeps both until its tag next moves). Going back
   to the old major after a successful upgrade is not supported, and neither is a
   rewind to a time before one (updated 2026-11-13: the maintainer's call, the app
   is not released); a failed upgrade still leaves the old cluster intact for the
