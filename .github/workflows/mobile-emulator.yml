@@ -141,6 +141,20 @@ jobs:
       - id: apk
         uses: ./.github/actions/build-dev-apk
 
+      # What Android and Play list for the app is the merged manifest, and a
+      # library can add a permission no config plugin sees. The APK is here on
+      # a cache hit too, so this reads whichever one the run will install.
+      - name: Check the APK's permissions
+        run: |
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt2" dump permissions "$APK" | sed 1d | LC_ALL=C sort > "$RUNNER_TEMP/permissions.actual"
+          { grep -v '^#' mobile/android-permissions.expected || true; } > "$RUNNER_TEMP/permissions.expected"
+          echo "Permissions in the APK:"; cat "$RUNNER_TEMP/permissions.actual"
+          if ! diff -u "$RUNNER_TEMP/permissions.expected" "$RUNNER_TEMP/permissions.actual"; then
+            echo "::error file=mobile/android-permissions.expected::The APK's permissions changed (diff above; - is expected, + is built). A dependency added one: block it with tools:node=\"remove\" in a config plugin (mobile/plugins/) or app.json android.blockedPermissions. If the app needs it, add it to mobile/android-permissions.expected, and a new permission needs the maintainer's eye."
+            exit 1
+          fi
+
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

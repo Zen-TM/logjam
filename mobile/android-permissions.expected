@@ -1,0 +1,4 @@
+# What `aapt2 dump permissions` prints for the dev APK, sorted, without its package line.
+# .github/workflows/mobile-emulator.yml diffs the built APK against this file.
+# Add a line only for a permission the app needs, with the maintainer's agreement;
+# otherwise block it with tools:node="remove" (mobile/AGENTS.md).
