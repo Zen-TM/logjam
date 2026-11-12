@@ -2,13 +2,16 @@
 // (file:../shared) by watching the monorepo root and both node_modules trees.
 // Shared-rebuild rule still applies: `cd shared && npm run build` before Metro
 // picks up changes, since imports resolve to shared/dist.
-const { getDefaultConfig } = require("expo/metro-config");
+const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 const path = require("path");
 
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, "..");
 
-const config = getDefaultConfig(projectRoot);
+// Stamps a Debug ID into every bundle and its sourcemap: how Sentry matches an
+// OTA update's crash to the map ota-hotfix.yml uploaded, with no release name
+// (ADR 0004). Otherwise Expo's default config.
+const config = getSentryExpoConfig(projectRoot);
 
 config.watchFolders = [monorepoRoot];
 config.resolver.nodeModulesPaths = [

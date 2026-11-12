@@ -152,17 +152,34 @@ jobs:
           mkdir -p keys
           printf '%s\n' "$OTA_PRIVATE_KEY" > keys/private-key.pem
 
-      # promote:production runs mobile/scripts/check-production-update.js:
-      # the branch, the tag, and a production build with the group's runtime.
-      - name: Publish to preview, then promote to production
+      - name: Publish to preview
         id: publish
         working-directory: ${{ env.TREE }}/mobile
         run: |
           set -euo pipefail
-          message="$TITLE (#$PR)"
-          preview=$(npm run --silent update:preview -- --message "$message" --non-interactive --json | jq -r '.[0].group')
+          preview=$(npm run --silent update:preview -- --message "$TITLE (#$PR)" --non-interactive --json | jq -r '.[0].group')
           echo "preview=$preview" >> "$GITHUB_OUTPUT"
-          production=$(npm run --silent promote:production -- --group "$preview" --message "$message" --non-interactive --json | jq -r '.[0].group')
+
+      # `eas update` leaves the bundle and its sourcemaps in dist/. The maps
+      # carry Debug IDs (metro.config.js), which is how Sentry matches a crash
+      # to them: no release name. Before the promotion, so a failure here
+      # leaves the update on `preview` only. A missing token fails the step.
+      - name: Upload the sourcemaps to Sentry
+        working-directory: ${{ env.TREE }}/mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: npx sentry-expo-upload-sourcemaps dist
+
+      # promote:production runs mobile/scripts/check-production-update.js:
+      # the branch, the tag, and a production build with the group's runtime.
+      - name: Promote to production
+        id: promote
+        working-directory: ${{ env.TREE }}/mobile
+        env:
+          PREVIEW: ${{ steps.publish.outputs.preview }}
+        run: |
+          set -euo pipefail
+          production=$(npm run --silent promote:production -- --group "$PREVIEW" --message "$TITLE (#$PR)" --non-interactive --json | jq -r '.[0].group')
           echo "production=$production" >> "$GITHUB_OUTPUT"
 
       - name: Push the release branch
@@ -176,7 +193,7 @@ jobs:
           OUTCOME: ${{ job.status }}
           VERSION: ${{ steps.plan.outputs.version }}
           PREVIEW: ${{ steps.publish.outputs.preview }}
-          PRODUCTION: ${{ steps.publish.outputs.production }}
+          PRODUCTION: ${{ steps.promote.outputs.production }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -186,7 +203,7 @@ jobs:
           elif [ -n "$PRODUCTION" ]; then
             body="**Published to $VERSION** (\`production\` group \`$PRODUCTION\`), **but release/mobile-v$VERSION was not pushed:** push it by hand before another hotfix ($RUN_URL). To undo the update, $rollback."
           elif [ -n "$PREVIEW" ]; then
-            body="**OTA hotfix published to \`preview\` only** (group \`$PREVIEW\`): the promotion failed ($RUN_URL). Nothing reached \`production\`."
+            body="**OTA hotfix published to \`preview\` only** (group \`$PREVIEW\`): the sourcemap upload or the promotion failed ($RUN_URL). Nothing reached \`production\`."
           else
             body="**OTA hotfix not published:** $RUN_URL"
           fi

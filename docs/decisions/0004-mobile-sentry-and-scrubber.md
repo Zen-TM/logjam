@@ -54,17 +54,37 @@ As shipped (`src/sentry/`):
   a step nothing needs. Prefix the command with the flag (this is also what the
   EAS profiles do, so the artifact is identical). `scripts/build-local-apk.sh`
   sets it.
+- **Update 2026-11-13: `preview` and `production` builds upload sourcemaps and
+  native symbols.** Logjam GPS is going to people whose crashes cannot be
+  reproduced, and a minified report is no use. Those two EAS profiles no
+  longer set `SENTRY_DISABLE_AUTO_UPLOAD`. The `@sentry/react-native` plugin in
+  `app.json` names organisation `logjam-qb` and project `react-native`, and
+  turns on the Sentry Android Gradle plugin
+  (`experimental_android.enableAndroidGradlePlugin`) for native symbols.
+  `SENTRY_AUTH_TOKEN`, an EAS secret in both environments, is the only
+  credential. A build without it fails, which is the Gradle plugin's default,
+  so a release never ships unreadable. `metro.config.js` stamps a Debug ID
+  into each bundle and its map, so an OTA update's crash finds the map
+  `ota-hotfix.yml` uploads from `dist/`, with no release name to keep in
+  step. What is uploaded is code from this public repo, never user data; what
+  the app sends at run time, the scrubber and the consent gate are unchanged.
+  The two bullets above still hold for every other build, which passes
+  `SENTRY_DISABLE_AUTO_UPLOAD=true` itself: `scripts/build-local-apk.sh`,
+  `scripts/dev-android.sh`, `.github/actions/build-dev-apk`, and the EAS
+  `development` profile. Setup, and how to check an upload:
+  `docs/operations/mobile-release.md`. Everything else above stands.
 
 ## Consequences
 
 - **Positive:** no place coordinates or names leave the device in a crash
   report; nothing is sent without consent.
 - **Negative:** crash reports from a release build arrive with minified Hermes
-  frames — the reporter works, the stack traces are close to unreadable.
+  frames — the reporter works, the stack traces are close to unreadable
+  (updated 2026-11-13: no longer, see the Update under Decision).
 - **Neutral:** to turn sourcemaps on: add `organization` + `project` to the
   `@sentry/react-native` plugin config in `app.json`, put the Sentry auth token
   in an EAS secret (`SENTRY_AUTH_TOKEN`, secret-visibility — it IS a real
-  credential, unlike the DSN), and drop the disable flag.
+  credential, unlike the DSN), and drop the disable flag (done 2026-11-13).
 
 ## Alternatives considered
 
