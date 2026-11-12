@@ -134,7 +134,12 @@ jobs:
         run: npm run lint
       # ~27 MB of public NSW files (ELVIS tile, DEM, topo sheet) from the
       # hash-pinned sample-data-v1 release; the corpus tests in shared skip
-      # without SAMPLE_DATA_DIR.
+      # without SAMPLE_DATA_DIR, and fail instead under REQUIRE_SAMPLES below.
+      # Cached by the manifest, since sample-data.sh checks every file's hash.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/sample-data
+          key: sample-data-${{ hashFiles('scripts/sample-data.sha256') }}
       - name: Fetch public sample inputs
         run: |
           echo "SAMPLE_DATA_DIR=$GITHUB_WORKSPACE/.cache/sample-data" >> "$GITHUB_ENV"
@@ -147,6 +152,7 @@ jobs:
         env:
           RUN_GEOPDF_SAMPLES: "1"
           GEOPDF_SAMPLE_DIR: ${{ env.SAMPLE_DATA_DIR }}
+          REQUIRE_SAMPLES: "1"
         run: npm test
       # Every foreground/background pair both clients render, under all four
       # theme schemes. Bare node: it parses the token sources, no build.
@@ -1002,6 +1008,18 @@ jobs:
       # only, a fake S3 client and a fake URL opener.
       - name: Brain watchdog
         run: python3 -m unittest discover -s infra/lambda/brain-watchdog
+      # The Cognito Lambdas' tests (decrypt, and the pre sign-up guard that
+      # never auto-confirms): no AWS, so they also run on a Dependabot or fork
+      # PR, where terraform-plan.yml stops before it builds them.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Cognito email sender Lambda
+        working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm test
+      - name: Cognito pre sign-up Lambda
+        working-directory: infra/lambda/cognito-pre-signup
+        run: npm ci && npm test
       - name: rollback-compat mirrors api-integration
         run: |
           pip install pyyaml==6.0.3
