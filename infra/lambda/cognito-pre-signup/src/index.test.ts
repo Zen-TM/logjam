@@ -20,6 +20,15 @@ function event(triggerSource = "PreSignUp_SignUp"): PreSignUpTriggerEvent {
   } as unknown as PreSignUpTriggerEvent;
 }
 
+// Every path that returns the event must leave Cognito's three decisions as it
+// found them: auto-confirming a sign-up skips the email code, and the fail-open
+// paths are where an edit is most likely and does most harm.
+const FLAGS_OFF = { autoConfirmUser: false, autoVerifyEmail: false, autoVerifyPhone: false };
+function untouched(out: PreSignUpTriggerEvent): PreSignUpTriggerEvent {
+  assert.deepEqual(out.response, FLAGS_OFF);
+  return out;
+}
+
 type Cmd = { constructor: { name: string }; input: Record<string, unknown> };
 
 function fake(behave: (n: number) => unknown) {
@@ -57,16 +66,18 @@ beforeEach(() => {
 });
 afterEach(() => Object.assign(console, real));
 
-// Mutation: set autoConfirmUser or autoVerifyEmail to true, or change the
-// signup_counted payload (the metric filter in cognito_signup_cap.tf reads
+// Mutation: set autoConfirmUser or autoVerifyEmail (or autoVerifyPhone) to true
+// on any returning path: the counted one, the uncounted-source branch, the
+// fail-open catch, the misconfigured guard or the deadline. Each test below
+// that returns the event reads the flags through `untouched`.
+//
+// Mutation: change the signup_counted payload (the metric filter in cognito_signup_cap.tf reads
 // message.msg and message.n).
 test("under the cap: returns the event unchanged and logs only the count and cap", async () => {
   const f = fake(() => counted(2));
   const e = event();
-  const out = await make(f.client)(e);
+  const out = untouched(await make(f.client)(e));
   assert.equal(out, e);
-  assert.equal(out.response.autoConfirmUser, false);
-  assert.equal(out.response.autoVerifyEmail, false);
   assert.deepEqual(logged, [JSON.stringify([{ msg: "signup_counted", n: 2, cap: 3 }])]);
 });
 
@@ -126,13 +137,13 @@ test("a new month ignores last month's remembered refusal", async () => {
 test("an administrator's AdminCreateUser passes uncounted", async () => {
   const f = fake(capReached);
   const e = event("PreSignUp_AdminCreateUser");
-  assert.equal(await make(f.client)(e), e);
+  assert.equal(untouched(await make(f.client)(e)), e);
   assert.equal(f.sent.length, 0);
 });
 
 test("an external-provider sign-up is counted", async () => {
   const f = fake(() => counted(1));
-  await make(f.client)(event("PreSignUp_ExternalProvider"));
+  untouched(await make(f.client)(event("PreSignUp_ExternalProvider")));
   assert.equal(f.sent.length, 1);
 });
 
@@ -144,7 +155,7 @@ test("fails open on any error that is not the cap, logging only its class", asyn
     });
   });
   const e = event();
-  assert.equal(await make(f.client)(e), e);
+  assert.equal(untouched(await make(f.client)(e)), e);
   assert.deepEqual(logged, [
     JSON.stringify([
       { msg: "signup_counter_unavailable", error: "ProvisionedThroughputExceededException" },
@@ -154,11 +165,17 @@ test("fails open on any error that is not the cap, logging only its class", asyn
 
 test("fails open when its configuration is missing", async () => {
   const f = fake(() => counted(1));
-  const e = event();
-  assert.equal(await makeHandler({ client: f.client, table: undefined, cap: 3, now })(e), e);
-  assert.equal(await makeHandler({ client: f.client, table: "t", cap: NaN, now })(e), e);
-  // A cap of 0 would refuse everyone after the first: misconfigured, not closed.
-  assert.equal(await makeHandler({ client: f.client, table: "t", cap: 0, now })(e), e);
+  const bad = [
+    { table: undefined, cap: 3 },
+    { table: "t", cap: NaN },
+    // A cap of 0 would refuse everyone after the first: misconfigured, not closed.
+    { table: "t", cap: 0 },
+  ];
+  for (const { table, cap } of bad) {
+    const e = event();
+    const out = await makeHandler({ client: f.client, table, cap, now })(e);
+    assert.equal(untouched(out), e);
+  }
   assert.equal(f.sent.length, 0);
 });
 
@@ -168,7 +185,7 @@ test("fails open when DynamoDB never answers", { timeout: 2000 }, async () => {
   const hung = { send: () => new Promise(() => undefined) } as never;
   const e = event();
   const h = makeHandler({ client: hung, table: "tbl", cap: 3, now, deadlineMs: 20 });
-  assert.equal(await h(e), e);
+  assert.equal(untouched(await h(e)), e);
   assert.deepEqual(logged, [
     JSON.stringify([{ msg: "signup_counter_unavailable", error: "DeadlineExceeded" }]),
   ]);
