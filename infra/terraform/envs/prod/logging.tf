@@ -6,8 +6,8 @@
 # than debugging (var.audit_log_retention_days, audit.tf).
 #
 # Everything that must agree with this local: every retention_in_days in this
-# directory, the access-logs lifecycle rule (s3.tf) and privacy.html's
-# Retention section. Guard:
+# directory, the access-logs lifecycle rule (s3.tf), privacy.html's Retention
+# section and delete-account.html's list of what is kept. Guard:
 # api/src/logRetention.unit.test.ts.
 #
 # Container Insights groups remain unmanaged (AWS default, 1 day).
