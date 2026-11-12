@@ -13,7 +13,7 @@
 // NOTHING IS FETCHED AND NOTHING IS GEOCODED. The caller already holds the
 // places; this never reaches the network, which is what keeps it clear of the
 // rule that a place name is not sent to a third party without being asked
-// (root CLAUDE.md, and MapSearchBox's own "Search locations for…" gate).
+// (ADR 0034, and MapSearchBox's own "Search locations for…" gate).
 import { useId, useMemo, useRef, useState } from "react";
 import { placeMatchesSearch, type TPlace } from "../../placeUtils";
 import { SearchField, Icon } from "../../ui";

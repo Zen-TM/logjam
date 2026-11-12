@@ -64,7 +64,7 @@ export type MakingItem = {
   createdAt: string;
 };
 
-/** "8 Sept 2026". A true timestamp, so local time is right (frontend/CLAUDE.md). */
+/** "8 Sept 2026". A true timestamp, so local time is right; only a date-only value is UTC (frontend/AGENTS.md). */
 export function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
     day: "numeric",

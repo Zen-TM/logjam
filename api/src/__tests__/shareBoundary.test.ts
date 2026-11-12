@@ -121,7 +121,7 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.body).toEqual([]);
   });
 
-  it("recipient cannot read an individual trip log via the global GET /trips/:id — 404, not 403 (SEC-001: no ID oracle)", async () => {
+  it("recipient cannot read an individual trip log via the global GET /trips/:id — 404, not 403 (no ID oracle)", async () => {
     // Single trip fetch lives on GET /trips/:id (owner-only). Resolve a
     // real trip ID from the owner's side first.
     const ownerTrips = await request(API_URL)
