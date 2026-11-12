@@ -36,6 +36,20 @@
 #   host/release-agent.sh: keeping the new api.env after a failed `compose up` (no `rm -f`) [7]
 #   host/boot.sh: ignoring the setup marker (`if [ -e "$marker" ]` -> `if false`) [8c]
 #   host/boot.sh: not writing the marker for a bootstrap (`echo "$mode" > "$marker"` -> `true`) [1]
+#   host/boot.sh: the upgrade run on every boot (`if [ "$have" -lt "$want" ] ||` -> `if true ||`) [14]
+#   host/boot.sh: no upgrade for an older data directory (the same line -> `if false ||`; 14b reds too) [14]
+#   host/boot.sh: the refusal of data newer than the image deleted (`[ "$have" -le "$want" ] || die` -> `true`) [14]
+#   host/boot.sh: stanza-create always (the `if [ -n "$want" ] && ... ; then pgb stanza-upgrade; else` -> `if false; then ...`) [14, 14b]
+#   host/boot.sh: stanza-upgrade always in an existing boot (the same condition -> `if [ "$mode" = existing ] && [[ $sv =~ ^[0-9]*$ ]]`) [14c]
+#   host/boot.sh: the newest backup's major no longer compared (`[ "$repo_major" != "$want" ]` -> `false` in the `if`) [14, 14b]
+#   host/boot.sh: the failed upgrade not failing the boot (`|| die "the major upgrade failed ...` -> `|| true`) [14]
+#   host/boot.sh: the first `touch "$gate"` (before the upgrade container) -> `true` [14b]
+#   host/boot.sh: the second `touch "$gate"` (before the full backup of a repository behind) -> `true` [14e]
+#   host/boot.sh: `[ "$repo_major" != "$want" ] || rm -f "$gate"` deleted (the old tag put back keeps the marker) [14]
+#   host/boot.sh: `[ ! -e "$gate" ] || die ...` deleted (a boot that cannot confirm a backup exits 0) [14b]
+#   host/boot.sh: the image's major read only in an existing boot (`want=$(docker image inspect ...)` followed by `; [ "$mode" = existing ] || want=`) [14d]
+#   host/release-agent.sh: not honouring the marker (its `[ ! -e "$gate" ] ||` line deleted) [14b, 14e]
+#   compose.yaml: the upgrade service's /data mount narrowed to /data/postgres (the swap cannot rename) [14]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit
@@ -178,6 +192,11 @@ if [ -z "${E2E_PREBUILT:-}" ]; then
   docker build -q -t "$PG_IMAGE" infra/brain/postgres > /dev/null || fatal "the Postgres image does not build"
   docker build -q -f api/Dockerfile --build-arg GIT_SHA=e2e -t "$API_IMAGE" . > /dev/null || fatal "the API image does not build"
 fi
+# The previous image, as far as scenario 14 needs it: this image with the 16 server first on PATH and
+# PG_MAJOR=16, so the real entrypoints and boot.sh make a real 16 database the way prod's was made.
+PG16_IMAGE=brain-e2e-postgres:16
+printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$PG_IMAGE" "$(docker run --rm --entrypoint printenv "$PG_IMAGE" PATH)" |
+  docker build -q -t "$PG16_IMAGE" - > /dev/null || fatal "the 16 stand-in image does not build"
 docker tag "$API_IMAGE" "$API_REPO:release-a"
 docker tag "$API_IMAGE" "$API_REPO:release-b"
 
@@ -683,6 +702,9 @@ serving off; agent # the API's own connections would hide a drill that reached t
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
 canary_segment=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
+# status.sh switched the segment with the canary; this row puts WAL in the next one, so that the switch below has
+# something to close (a switch of an empty segment does nothing, and on 18 nothing else writes into it for minutes).
+sql logjam "insert into e2e_secret values ('e2e-tick')" > /dev/null
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
 check "the WAL with the canary is archived" wait_for 120 archived "$want"
@@ -726,6 +748,7 @@ check "...and seconds old, not minutes" [ "$lag" -lt 120 ]
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
 check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
+[ "$(live_connections)" = 0 ] || r docker logs "$(cid postgres)" 2>&1 | tail -n +$((log_lines + 1)) | grep -v AUDIT | tail -20
 sql postgres "select 1" > /dev/null
 check "...and that check does see a connection when there is one" [ "$(live_connections)" = 1 ]
 check "the output has no value from the database" not grep -q 'e2e-secret-value-7731' "$WORK/drill.log"
@@ -984,6 +1007,257 @@ boot; rc=$?
 check "a reboot of an existing database starts it (exit $rc)" [ "$rc" = 0 ]
 check "...takes no backup" [ "$(newest_label)" = "$before" ]
 check "...and says nothing about one" not grep -q "taking a full backup" "$WORK/boot.log"
+reboot
+
+# --- 14. a major upgrade --------------------------------------------------------------------------------------------------
+# Prod's database is 16 and the pinned image becomes 18: boot.sh upgrades it before anything starts, in a container of its
+# own, keeps the old cluster, moves the stanza and takes a full backup before the API can start. Each part has a bucket of
+# its own, so the stanzas of the scenarios above do not mix in. The mutations are in the header.
+S="14 major upgrade"
+serving off; agent
+shim="$WORK/shim"; mkdir "$shim"
+# shellcheck disable=SC2016 # the shim's $@ and $DOCKER_CALLS are meant literal
+# The shim records every docker call and, on request, fails one: FAIL_INFO=n the nth `pgbackrest info`, FAIL_BACKUP=1 a full backup.
+cat > "$shim/docker" <<'SHIM'
+#!/bin/sh
+echo "$@" >> "$DOCKER_CALLS"
+case "$*" in
+  *"pgbackrest --stanza=logjam info"*)
+    n=$(($(cat "$DOCKER_CALLS.info" 2> /dev/null || echo 0) + 1)); echo "$n" > "$DOCKER_CALLS.info"
+    [ "$n" != "$FAIL_INFO" ] || exit 1 ;;
+  *"--type=full backup"*) [ "$FAIL_BACKUP" != 1 ] || exit 1 ;;
+esac
+exec __DOCKER__ "$@"
+SHIM
+sed -i "s#__DOCKER__#$(command -v docker)#" "$shim/docker"; chmod +x "$shim/docker"
+boot_logged() {
+  : > "$WORK/docker-calls"; rm -f "$WORK/docker-calls.info"
+  r env PATH="$shim:$PATH" DOCKER_CALLS="$WORK/docker-calls" FAIL_INFO="${FAIL_INFO:-0}" FAIL_BACKUP="${FAIL_BACKUP:-0}" /opt/brain/host/boot.sh > "$WORK/boot.log" 2>&1
+}
+ran_upgrade() { has -E ' run .* upgrade( |$)' "$WORK/docker-calls"; }
+pg_major() { sql postgres 'show server_version_num' | cut -c1-2; }
+stanza_majors() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print(*sorted(d["version"] for s in json.load(sys.stdin) for d in s["db"]))'; }
+newest_major() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+s = json.load(sys.stdin)[0]
+b = s["backup"][-1]
+print(next(d["version"] for d in s["db"] if d["id"] == b["database"]["id"]))'; }
+api_created() { date -d "$(r docker inspect -f '{{.Created}}' "$(cid api)")" +%s; }
+make_16_database() { # <bucket>: bootstraps a 16 database on the 16 image in a new repository, then shuts the host down
+  aws s3 mb "s3://$1" > /dev/null
+  brain_env BRAIN_BACKUP_BUCKET "$1"
+  brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+  reboot; new_disk
+  boot_limited; rc=$?
+  [ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not bootstrap a 16 database (exit $rc)"; }
+  check "the 16 image bootstraps a 16 database" [ "$(pg_major)" = 16 ]
+  sql logjam "create table e2e_upg as select g as n from generate_series(1, 500) g; create table _prisma_migrations (id int)" > /dev/null
+  force_wal
+  sleep 2 # whole seconds: the target must be later than the backup's stop time
+  T16=$(date -u +%Y-%m-%dT%H:%M:%SZ) # a time before the upgrade, with WAL archived after it so that a restore to it can end
+  sleep 2
+  sql logjam "create table e2e_late as select 1 as n" > /dev/null
+  force_wal
+  cert16=$(fingerprint); fulls16=$(fulls)
+  reboot
+}
+bootstrap_flag 1
+make_16_database e2e-backups-16a
+
+# The same major: nothing is upgraded and no container is started for it.
+boot_logged; rc=$?
+check "a 16 database on the 16 image starts as an existing one (exit $rc)" [ "$rc" = 0 ]
+check "...in mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+check "...with no upgrade container started" not ran_upgrade
+check "...and no word of an upgrade" not grep -qi upgrad "$WORK/boot.log"
+reboot
+
+# An upgrade that cannot run fails the boot and starts nothing: here a directory in its way (it never replaces the old cluster).
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+r mount "$LOOP" "$WORK/m" && r mkdir "$WORK/m/postgres-16" && r umount "$WORK/m"
+point release-a; serving on
+boot_logged; rc=$?
+check "an upgrade that fails fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...saying so" grep -q "the major upgrade failed" "$WORK/boot.log"
+check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+check "...no Postgres and no API container" [ -z "$(cid postgres)$(cid api)" ]
+check "...and the 16 cluster is where it was" [ "$(r cat /data/postgres/PG_VERSION)" = 16 ]
+r rmdir /data/postgres-16
+# The failed upgrade left the marker. The old tag put back finds the repository's newest backup of its own
+# major, clears the marker and lets the API start.
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+reboot
+boot_logged; rc=$?
+check "the old tag put back after the failed upgrade boots (exit $rc)" [ "$rc" = 0 ]
+check "...clears the marker" [ ! -e /data/brain/backup-pending ]
+check "...and the API starts" [ "$(api_tag)" = "$API_REPO:release-a" ]
+serving off; agent; serving on
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+reboot
+
+# The upgrade, with serving on so that the API's start is the last thing boot.sh does.
+boot_logged; rc=$?
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; dump; }
+check "boot.sh upgrades a 16 database under the 18 image (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || fatal "boot.sh did not upgrade"
+check "...in an upgrade container" ran_upgrade
+check "...and says so" grep -q "upgraded 16 -> 18" "$WORK/boot.log"
+check "boot mode: upgraded" [ "$(cat /run/brain/boot-mode)" = upgraded ]
+check "the server is PostgreSQL 18" [ "$(pg_major)" = 18 ]
+check "the rows came across" [ "$(sql logjam 'select count(*) from e2e_upg')" = 500 ]
+check "the old cluster is kept at /data/postgres-16" [ "$(r cat /data/postgres-16/PG_VERSION)" = 16 ]
+check "...and no postgres.new is left" [ ! -e /data/postgres.new ]
+check "the same certificate" [ "$(fingerprint)" = "$cert16" ]
+check "logjam_app still connects with the secret's password, verifying the name" app_connects
+check "the agent works" as_agent postgres -c 'update brain.canary set at = now()'
+check "the stanza knows both majors" [ "$(stanza_majors)" = "16 18" ]
+check "the API's marker is gone once the backup is taken" [ ! -e /data/brain/backup-pending ]
+check "the WAL archive has the new id" bash -c "aws s3 ls s3://e2e-backups-16a/logjam/archive/logjam/ | grep -q 18-2/"
+check "a full backup was taken" [ "$(fulls)" = "$((fulls16 + 1))" ]
+check "...of the 18 database" [ "$(newest_major)" = 18 ]
+check "serving was on: the API is at the pointer's release" [ "$(api_tag)" = "$API_REPO:release-a" ]
+check "...and started after the backup finished, not before" [ "$(newest_full_stop)" -le "$(api_created)" ]
+r /opt/brain/host/status.sh || bad "status.sh failed"
+check "status.json says upgraded" [ "$(status_field boot_mode)" = upgraded ]
+
+# The restore drill on the new repository: its archive id is 18-2 and its newest backup is the 18 one.
+serving off; agent
+r /opt/brain/host/status.sh || bad "status.sh failed"
+force_wal
+drill e2e-backups-16a -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-creds/creds; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/drill.log"
+check "the restore drill passes on the upgraded repository (exit $rc)" [ "$rc" = 0 ]
+check "...and says ok" [ "$(drill_field ok)" = True ]
+
+# The 18 data under the 16 image again (the tag put back after the upgrade): refused before anything starts.
+fulls_after=$(fulls)
+reboot
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+boot_logged; rc=$?
+check "18 data under the 16 image fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...saying to pin the image of 18 again" grep -q "pin the image of 18 again" "$WORK/boot.log"
+check "...with no Postgres container started" [ -z "$(cid postgres)" ]
+check "...and no upgrade container run" not ran_upgrade
+check "...and the cluster untouched" [ "$(r cat /data/postgres/PG_VERSION)" = 18 ]
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+reboot
+
+# A later ordinary reboot does nothing special.
+boot_logged; rc=$?
+check "an ordinary reboot after the upgrade succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...in mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+check "...with no upgrade container" not ran_upgrade
+check "...no extra full backup" [ "$(fulls)" = "$fulls_after" ]
+check "...and no word of an upgrade or a backup" not grep -qi 'upgrad\|full backup' "$WORK/boot.log"
+
+# The disk lost after the upgrade restores from the 18 backup, not the 16 one.
+force_wal
+lose_disk
+boot_limited; rc=$?
+check "a blank disk after the upgrade restores (exit $rc)" [ "$rc" = 0 ]
+check "...boot mode restore, PostgreSQL 18" [ "$(cat /run/brain/boot-mode)/$(pg_major)" = restore/18 ]
+check "...with the rows" [ "$(sql logjam 'select count(*) from e2e_upg')" = 500 ]
+check "...and the same certificate" [ "$(fingerprint)" = "$cert16" ]
+fulls_restored=$(fulls)
+reboot
+
+# A database of the stanza's own major but another system id (a wrong disk or bucket) is not adopted: stanza-create stops it.
+# The repository is 16a's, whose stanza is at 18 at this point.
+S="14c a foreign cluster of the same major"
+aws s3 mb "s3://e2e-backups-18c" > /dev/null
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-18c
+new_disk
+boot_limited; rc=$?
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not bootstrap an 18 database (exit $rc)"; }
+reboot
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-16a
+listing=$(aws s3 ls "s3://e2e-backups-16a" --recursive | sort)
+boot_logged; rc=$?
+check "an 18 cluster against another cluster's 18 stanza fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...at the stanza step, which says the database does not match" grep -q "do not match the database" "$WORK/boot.log"
+check "...not upgrading" not ran_upgrade
+check "...and the repository is untouched: no backup, no WAL, no changed stanza" [ "$(aws s3 ls "s3://e2e-backups-16a" --recursive | sort)" = "$listing" ]
+reboot
+
+# Restoring from before the upgrade (docs/operations/brain.md): the 16 image, a target before the upgrade. The restore
+# finishes, the stanza moves back down to 16 (a third history entry) and the full backup is of the 16 database.
+S="14d restoring from before the upgrade"
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+brain_env BRAIN_RESTORE_TARGET "$T16"
+reboot; new_disk
+boot_limited; rc=$?
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; dump; }
+check "a restore to a time before the upgrade, under the 16 image, succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...as a 16 database in mode restore" [ "$(cat /run/brain/boot-mode)/$(pg_major)" = restore/16 ]
+check "...with the rows from before the upgrade and not the one written after the target" \
+  [ "$(sql logjam 'select count(*) from e2e_upg')/$(sql logjam "select to_regclass('e2e_late') is null")" = 500/t ]
+check "...the stanza moved back to 16 (a third history entry)" [ "$(stanza_majors)" = "16 16 18" ]
+check "...with the WAL archive id 16-3" bash -c "aws s3 ls s3://e2e-backups-16a/logjam/archive/logjam/ | grep -q 16-3/"
+check "...and a full backup was taken" [ "$(fulls)" = "$((fulls_restored + 1))" ]
+check "...of the 16 database" [ "$(newest_major)" = 16 ]
+brain_env BRAIN_RESTORE_TARGET
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+reboot
+
+# An upgrade whose boot dies after it (the repository unreachable): the next boot finishes the stanza and the backup.
+S="14b a boot that dies after the upgrade"
+make_16_database e2e-backups-16b
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+brain_env BRAIN_BACKUP_BUCKET e2e-no-such-bucket
+serving on
+boot_logged; rc=$?
+check "an upgrade whose repository is unreachable fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...after upgrading: the server is PostgreSQL 18" [ "$(pg_major)" = 18 ]
+check "...with no API" [ -z "$(cid api)" ]
+# The release timer runs whatever the boot did (it is only ordered after it): the marker keeps the API down.
+agent
+check "the release agent starts no API while the repository has no backup of this major" [ -z "$(cid api)" ]
+check "...and says why" grep -q "not starting the API" "$WORK/agent.log"
+# A repository that answers the stanza step but not the question after it (the shim fails the second `pgbackrest info`):
+# no backup of this major is confirmed, so the boot fails and the marker still keeps the API down.
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-16b
+FAIL_INFO=2 boot_logged; rc=$?
+check "a boot that cannot confirm the newest backup's major fails (exit $rc)" [ "$rc" != 0 ]
+check "...saying no full backup is confirmed" grep -q "no full backup of PostgreSQL 18 is confirmed" "$WORK/boot.log"
+agent
+check "...and the release agent still starts no API" [ -z "$(cid api)" ]
+boot_logged; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/boot.log"
+check "the next boot succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...without upgrading again" not ran_upgrade
+check "...the stanza follows the new major" [ "$(stanza_majors)" = "16 18" ]
+check "...it says the newest backup is the old major's" grep -q "newest backup is of PostgreSQL 16" "$WORK/boot.log"
+check "...a full backup was taken" [ "$(fulls)" = "$((fulls16 + 1))" ]
+check "...of the 18 database" [ "$(newest_major)" = 18 ]
+check "...and the API is up after it" [ "$(newest_full_stop)" -le "$(api_created)" ]
+check "...and the marker is gone" [ ! -e /data/brain/backup-pending ]
+serving off; agent
+reboot
+
+# Going back (docs/operations/brain.md, "Going back after the upgrade ran"): the old cluster put back by hand and the old tag
+# pinned. The newest backup is of 18, so the boot takes a full backup of 16 before the API; here that backup fails once.
+S="14e going back to 16 after the upgrade ran"
+r mount "$LOOP" "$WORK/m" && r mv "$WORK/m/postgres" "$WORK/m/postgres-18" && r mv "$WORK/m/postgres-16" "$WORK/m/postgres" && r umount "$WORK/m"
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+serving on
+FAIL_BACKUP=1 boot_logged; rc=$?
+check "the way back, with its full backup failing, fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...after moving the stanza to 16" [ "$(stanza_majors)" = "16 16 18" ]
+agent
+check "...and the release agent starts no API" [ -z "$(cid api)" ]
+boot_logged; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/boot.log"
+check "the next boot succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...as the 16 database it was, with its rows" [ "$(pg_major)/$(sql logjam 'select count(*) from e2e_upg')" = 16/500 ]
+check "...the WAL archive has the id 16-3" bash -c "aws s3 ls s3://e2e-backups-16b/logjam/archive/logjam/ | grep -q 16-3/"
+check "...a full backup of 16 is the newest" [ "$(newest_major)" = 16 ]
+check "...the marker is gone" [ ! -e /data/brain/backup-pending ]
+check "...and the API is up" [ "$(api_tag)" = "$API_REPO:release-a" ]
+serving off; agent
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+brain_env BRAIN_BACKUP_BUCKET "$BACKUPS"
 reboot
 
 [ "$fails" = 0 ] || dump

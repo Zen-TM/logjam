@@ -228,6 +228,32 @@ fails when it is broken.
   are removed with the last of the old stack; a database service added later
   brings its own Deny). Everything else above stands.
 
+- **Update 2026-11-12: a database of an older Postgres major is upgraded before
+  it is started.** Moving the image from 16 to 18 meets a rule above: a server
+  refuses another major's data directory, so "a data directory with a database
+  is started" (rule 2) gains a step. When `/data/postgres/PG_VERSION` is older
+  than the pinned image's `PG_MAJOR`, `infra/brain/host/boot.sh` stops Postgres and runs
+  `infra/brain/postgres/major-upgrade.sh` in a one-off container (`upgrade` in
+  `compose.yaml`, which is why that container mounts all of `/data`).
+  `pg_upgrade` runs in copy mode into `/data/postgres.new`; one atomic
+  exchange and a rename leave the old cluster at `/data/postgres-<N>`, which no
+  script deletes. Then the stanza is moved (`stanza-upgrade`, only when its
+  major differs: `stanza-create` still refuses another cluster's stanza) and a
+  full backup of the new major is taken before the API starts, because until
+  then the newest backup is one the image cannot restore: a marker on the data
+  volume, `/data/brain/backup-pending`, written before the upgrade and removed
+  after that backup, keeps `infra/brain/host/release-agent.sh` from starting the API,
+  whatever the boot did. Any failure fails the boot and
+  starts nothing; data of a newer major than the image is refused; and a server
+  start on another major's directory, including a restored old backup, stops
+  with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
+  The image carries the old major's binaries only for this, and they go once
+  prod is on the new one; restoring from before an upgrade needs the image tag
+  of that time. Guards: scenarios 14 to 14e of `e2e.sh`, and the major-version
+  guard and upgrade checks in `infra/brain/postgres/tests/test.sh`. What still holds the
+  decision up: boot.sh is the only thing that starts Postgres, and it never
+  deletes a cluster. Everything else above stands.
+
 ## Consequences
 
 - **Negative: one host is one point of failure,** and some recoveries need
@@ -274,9 +300,10 @@ fails when it is broken.
   advisory lock (`api/src/lib/sweepLeader.unit.test.ts` and
   `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
   each process's memory, are not.
-- **Negative: the host files are 85 % of what EC2 allows.** They travel in the
-  instance's user data, 13,839 bytes gzipped of EC2's 16,384, and a guard stops
-  at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
+- **Negative: the host files are 90 % of what EC2 allows.** They travel in the
+  instance's user data, 14,766 bytes gzipped of EC2's 16,384 (updated
+  2026-11-12: 13,839 before the major upgrade step in `infra/brain/host/boot.sh`), and a guard
+  stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose
   plugin.
 - **Negative: the operator now has root on the database host,** through
@@ -365,6 +392,15 @@ fails when it is broken.
 - **Standard CPU credit mode.** Throttles to the baseline (0.4 vCPU on a
   small): measured with the quota emulated, p95 crossed 500 ms at about 17
   requests a second (15 held) against 80 with burst. Rejected for `unlimited`, accepting the worst case above.
+- **For the major upgrade: `pg_upgrade --link`, or a dump and restore.** Link
+  mode is faster and needs no free space, and the official 18 image's layout
+  (`/var/lib/postgresql/18/docker`) is made for it, but it leaves the old
+  cluster unusable once the new server has run, so it is no rollback; a
+  `pg_dump`/restore keeps the old cluster but takes a long outage on a large
+  database, and a restore of the repository's newest backup under the new
+  server is impossible. Rejected for copy mode between two directories of the
+  data volume, which is why the image sets `PGDATA` to the path every mount
+  here uses instead of 18's default.
 - **WAL-G instead of pgBackRest.** Compared on paper only. pgBackRest passed
   every requirement in a spike on real S3 with Object Lock (archiving, full
   backups, expiry by delete marker, restore after expiry, a restore as of a

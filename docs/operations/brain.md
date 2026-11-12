@@ -56,7 +56,8 @@ Look for `"postgres_up": true`, a `time` within the last two minutes, a
 `last_archive_time` within the last minute or two, a `last_full_time` within
 26 hours, `mem_available_mb` well above 100, and `"boot_mode"`:
 `existing` after an ordinary boot, `restore` after a restore, `bootstrap` after
-the first boot, `failed` or `refused` when something is wrong (then read
+the first boot, `upgraded` after a boot that upgraded Postgres to a new major
+(`upgrading` while it runs), `failed` or `refused` when something is wrong (then read
 `journalctl -b -u brain-boot` on the host). The thirteen keys are all there is;
 none holds user data. During a boot the first status report can say
 `"boot_mode": "failed"` for about a minute: the boot script writes `failed`
@@ -269,6 +270,110 @@ step says why.
    its first fifteen minutes, before the check's first run has been counted,
    and clear by itself.
 
+## Upgrading Postgres to a new major
+
+The brain's image carries two Postgres majors while one is being replaced by
+the next (`infra/brain/postgres/Dockerfile`: today 18, with 16's binaries only
+for the upgrade), because a server refuses another major's data directory. The
+upgrade is `infra/brain/postgres/major-upgrade.sh`, which `host/boot.sh` runs
+when `/data/postgres/PG_VERSION` is older than the pinned image's major. So
+prod moves by the same one-line change as any other image: `brain_pg_image_tag`
+in `brain.auto.tfvars`. Not yet run on prod; the whole path runs in CI
+(`infra/brain/tests/e2e.sh` scenarios 14 to 14e, and the image's own tests).
+
+**What the boot does**, before Postgres starts: stops the Postgres container,
+runs the upgrade in a container of its own with all of `/data` mounted,
+starts the 18 server on the result, moves pgBackRest's stanza to the new major
+(`stanza-upgrade`) and takes a full backup before the API starts, because until
+then the newest backup is a 16 one that the 18 image cannot restore. The status
+file says `upgraded`. The upgrade itself:
+
+- starts the old server once on its own, with archiving off and no listener, to
+  recover it if its last shutdown was not clean and to read its settings
+  (encoding, locale, checksums, WAL segment size, the superuser);
+- makes `/data/postgres.new` with the same settings, checks with
+  `pg_upgrade --check`, and upgrades in **copy** mode, so the old cluster is
+  never touched by the new server;
+- carries over what is in the data directory but not in the cluster: the
+  certificate and key (the API pins that certificate) and any `ALTER SYSTEM`
+  settings, but not the recovery settings a restore left behind;
+- swaps the two directories with one atomic rename and renames the old one
+  `/data/postgres-16`. It deletes nothing except an unfinished
+  `/data/postgres.new` of its own, and it refuses when the data is newer than
+  the image, when `/data/postgres-16` already exists, or when `/data` has less
+  free space than the cluster's size plus 1 GiB (copy mode doubles it).
+
+**Before the cutover**, look at the status file's `disk_used_percent`: under
+35, because the old cluster stays beside the new one and the doubled disk must
+stay under the watchdog's `disk_high` at 80. (The upgrade itself refuses with
+less free space than the cluster's size plus 1 GiB.) Delete `/data/postgres-16`
+to get the space back afterwards, or grow the volume first if the disk is
+fuller than that. Have a recent green drill, and keep the cutover away from
+the drill's 04:30 Sydney run (`brain_drill.tf`): see the last paragraph. Merge
+the tag change like any host change: the plan replaces the instance, so allow
+the 3 minutes of "Changing a host file" plus the upgrade and a full backup
+(seconds to minutes for a small database; not measured on prod).
+
+**Afterwards:** `brain 'cat /run/brain/boot-mode'` says `upgraded`;
+`brain 'ls /data'` shows `postgres` and `postgres-16`;
+`brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
+lists both majors, the WAL archive `18-2`, and a new full backup of 18;
+`last_full_time` is now. The stats the planner keeps are carried over except
+extended statistics: if a query plan looks wrong, run
+`vacuumdb --all --analyze-in-stages --missing-stats-only` in the container. When
+the new database has run well for a while, delete `/data/postgres-16` by hand
+(it is the one deletion no script makes) and drop the 16 packages from the
+Dockerfile in a later change.
+
+**If the upgrade fails,** the boot fails and starts nothing; `/data/postgres`
+is as it was, so pin the old tag in `brain.auto.tfvars` again and the instance
+boots the old image on it. A `/data/postgres.new` left behind is removed by the
+next attempt. If the boot dies *after* the upgrade (the repository unreachable,
+say), the API stays down: `boot.sh` keeps a marker, `/data/brain/backup-pending`,
+from before the upgrade until a full backup of the new major has succeeded, and
+`release-agent.sh` (whose timer runs whatever the boot did) starts no API while
+it exists and logs why. The marker is on the data volume, not in `/run`, so a
+reboot in that window keeps it; a boot that dies before it could write one again
+would otherwise lose it. The `boot_failed` alarm fires; once the cause is gone,
+`systemctl restart brain-boot` (or a reboot) finishes the stanza and the backup,
+removes the marker and starts the API.
+
+**Going back after the upgrade ran.** Only to the moment it ran: whatever the
+new database took since is lost. On the host, stop Postgres, move `/data/postgres`
+aside to `/data/postgres-18` (not `/data/postgres.new`, the one name the upgrade
+script removes), move `/data/postgres-16` to `/data/postgres`, and pin the old
+tag. Do the moves just before merging the pin (the apply replaces the instance):
+while Postgres is stopped by hand in mode `existing`, the watchdog reports
+`postgres_down`. The next boot starts the old server on it, moves the stanza back
+to 16 (a new history entry, WAL archive id `16-3`) and takes a full backup of it
+before the API starts. Scenario 14e of `e2e.sh` runs these moves, with that
+backup failing once; read `status.json` afterwards.
+
+**Restoring from before the upgrade needs the old image tag.** The 18 image
+refuses a restored 16 directory with `holds a PostgreSQL 16 database and this
+image runs PostgreSQL 18`. The Postgres service is `restart: unless-stopped`, so
+Docker keeps restarting the refusing container and the message repeats, while
+`boot.sh` sees the restart and fails the boot (`boot_failed`, API down). A rewind to a time
+before the upgrade ("Rewinding" below) pins the tag of that time first, and
+the database then comes back as 16: the boot moves the stanza back down to 16
+(`stanza-upgrade`, a third history entry) and takes a full backup of it, and you
+upgrade it again by pinning the new tag. Scenario 14d of `e2e.sh` runs this
+restore; scenario 14 restores a backup taken after the upgrade, and the image's
+tests refuse a 16 backup under 18.
+
+**The drill and the watchdog after an upgrade.** The daily drill restores the
+newest backup, so for the minutes between the cutover's apply and the first full
+backup of 18 it restores a 16 backup, which succeeds, and then cannot start the
+18 server on it (`database files are incompatible with server`: `postgres -C
+archive_mode` still prints `off`, so `drill.sh`'s guard passes and `pg_ctl start`
+is what fails), so it reports `start_failed`. The full backup is the first
+thing the boot takes, so that only matters if the drill's 04:30 Sydney run
+(`brain_drill.tf`) lands in the window: keep the cutover away from it. The watchdog lists
+the WAL archive under `logjam/archive/logjam/` and takes the highest archive id
+(`16-1`, then `18-2`), so it follows the move; with `18-2` current, a stanza
+upgraded back to 16 is `16-3`, which it also takes (it compares the history
+number first: `infra/lambda/brain-watchdog/test_handler.py`).
+
 ## A release and a rollback
 
 Merging to `main` deploys. The deploy pins the task definitions, migrates the
@@ -300,7 +405,7 @@ finished, same certificate, every marker row present. Do it in a quiet hour,
 announce it if users could notice, and do not merge anything else to `main`
 while it runs.
 
-The user data is 13,839 bytes gzipped of EC2's 16,384-byte limit, and a guard
+The user data is 14,766 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
 would cross it, move the host files into the brain's Postgres image instead,
 which already carries the Compose plugin: the host would then fetch them from

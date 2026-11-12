@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The only thing that starts Postgres. Mounts the data volume (formatting it
 # only if it is completely blank), then decides what the data directory needs:
-#   has a database    -> start it
+#   has a database    -> start it, upgrading it first if the image is a newer Postgres major
 #   has none          -> restore if the backup repository holds a backup,
 #                        else bootstrap if the brain-bootstrap tag is exactly 1,
 #                        else refuse.
@@ -120,6 +120,25 @@ if [ "$mode" = restore ] && [ -z "$resume" ] && [ -n "${BRAIN_RESTORE_TARGET:-}"
 fi
 export BRAIN_RESTORE_TARGET=$target
 
+# Data of an older Postgres major than the image is upgraded first (postgres/major-upgrade.sh, in a container
+# of its own), newer is refused, and equal starts no container. A failure leaves the old cluster intact.
+# $gate (lib.sh) keeps the API down from before the upgrade until a full backup of the new major succeeds.
+docker image inspect "$BRAIN_PG_IMAGE" > /dev/null 2>&1 || docker pull -q "$BRAIN_PG_IMAGE" > /dev/null
+want=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$BRAIN_PG_IMAGE" | sed -n 's/^PG_MAJOR=//p')
+upgraded=
+if [ "$mode" = existing ]; then
+  have=$(cat /data/postgres/PG_VERSION)
+  aside=$(cat /data/postgres.new/PG_VERSION 2> /dev/null || echo 99)
+  [ "$have" -le "$want" ] || die "/data/postgres is PostgreSQL $have and the image runs '$want': pin the image of $have again (docs/operations/brain.md, going back)"
+  if [ "$have" -lt "$want" ] || [ "$aside" -lt "$have" ]; then
+    echo upgrading > "$mode_file"
+    touch "$gate"
+    compose rm -sf postgres
+    out=$(compose --profile tools run --rm --no-deps -T upgrade) || die "the major upgrade failed: the old cluster is intact; pin the old image tag"
+    [ -z "$out" ] || { log "$out"; upgraded=upgraded; }
+  fi
+fi
+
 case $mode in
   existing) export BRAIN_INIT=none ;;
   *)
@@ -134,7 +153,7 @@ case $mode in
     fi ;;
 esac
 # A restore is the one long wait, and status.json says so while it runs.
-if [ "$mode" = restore ]; then echo restoring > "$mode_file"; else echo "$mode" > "$mode_file"; fi
+if [ "$mode" = restore ]; then echo restoring > "$mode_file"; else echo "${upgraded:-$mode}" > "$mode_file"; fi
 compose up -d postgres
 
 # No time limit while the container runs: a restore replays WAL for as long as it takes.
@@ -181,25 +200,38 @@ if [ "$mode" != existing ]; then
   rm -f "$marker" # only now: a boot that died before this is finished by the next one
 fi
 
-pgb stanza-create
+# The stanza's current major, then the newest backup's timeline and major (fewer fields when unreadable).
+stanza_state() { pgb info --output=json 2> /dev/null | python3 -c '
+import json, sys
+r = []
+try:
+    s = json.load(sys.stdin)[0]
+    r = [s["db"][-1]["version"]]
+    b = s["backup"][-1]
+    r += [b["archive"]["stop"][:8], next(d["version"] for d in s["db"] if d["id"] == b["database"]["id"])]
+except Exception:
+    pass
+print(*r)' || true; }
+# stanza-create refuses another cluster's stanza; stanza-upgrade is only for a changed major.
+read -r sv _ < <(stanza_state) || true
+if [ -n "$want" ] && [[ $sv =~ ^[0-9]+$ ]] && [ "$sv" != "$want" ]; then pgb stanza-upgrade; else pgb stanza-create; fi
 repo=$(repo_state)
 if [ "$mode" = restore ] || [ "$repo" != backup ]; then pgb --type=full backup; fi
 
-# A restore follows the newest backup, so the newest backup must be of this database's
-# timeline. A volume put back after a rewind is on an older one while the repository's newest
-# backup belongs to the rewound database: without a full backup now, the next disk loss would
-# come back as that other history. An ordinary reboot is on the same timeline and takes none.
-# Never a reason to refuse to start: an unreadable answer skips the check.
+# A restore follows the newest backup, so it must be of this database's timeline and major. A volume
+# put back after a rewind is on an older timeline while the newest backup belongs to the rewound database:
+# without a full backup now, the next disk loss would come back as that other history. After a major upgrade the
+# newest backup is of the old major, which the image cannot restore: that backup is taken before the API starts
+# and its failure fails the boot. An ordinary reboot takes none. A timeline mismatch never stops the boot.
 if [ "$mode" = existing ]; then
   db_tl=$(psql_agent -c "select substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8)" || true)
-  repo_tl=$(pgb info --output=json 2> /dev/null | python3 -c '
-import json, sys
-try:
-    stanza = next(s for s in json.load(sys.stdin) if s["name"] == "logjam")
-    print(stanza["backup"][-1]["archive"]["stop"][:8])
-except (ValueError, KeyError, IndexError, StopIteration, TypeError):
-    pass' || true)
-  if [[ $db_tl =~ ^[0-9A-F]{8}$ && $repo_tl =~ ^[0-9A-F]{8}$ ]]; then
+  read -r _ repo_tl repo_major < <(stanza_state) || true
+  if [[ $repo_major =~ ^[0-9]+$ ]] && [ "$repo_major" != "$want" ]; then
+    log "the newest backup is of PostgreSQL $repo_major, not $want: taking a full backup"
+    touch "$gate"
+    pgb --type=full backup
+    rm -f "$gate"
+  elif [[ $db_tl =~ ^[0-9A-F]{8}$ && $repo_tl =~ ^[0-9A-F]{8}$ ]]; then
     if [ "$db_tl" != "$repo_tl" ]; then
       log "the newest backup is on timeline $repo_tl and this database is on $db_tl: taking a full backup"
       pgb --type=full backup || log "that backup failed: the nightly one takes it again"
@@ -207,6 +239,8 @@ except (ValueError, KeyError, IndexError, StopIteration, TypeError):
   else
     log "could not read the timelines of the database and the newest backup: not checking that the newest backup is its own"
   fi
+  [ "$repo_major" != "$want" ] || rm -f "$gate"
+  [ ! -e "$gate" ] || die "no full backup of PostgreSQL $want is confirmed: the API stays down until one is"
 fi
 
 # The API is the release agent's: on only if the switch is on.

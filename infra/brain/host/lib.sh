@@ -26,6 +26,9 @@ unset files line
 log() { echo "brain: $*" >&2; }
 die() { log "$*"; exit 1; }
 compose() { docker compose "$@"; }
+# boot.sh's marker, kept on the data volume from before a Postgres major upgrade until a full backup of the
+# new major succeeds: release-agent.sh starts no API while it exists.
+export gate=/data/brain/backup-pending
 
 # s3_get <key>: the object on stdout, from the signals bucket. s3_put <key>: stdin to the object.
 # curl, not the aws CLI: the timers call these three times a minute, and a CLI start costs 66 MB
