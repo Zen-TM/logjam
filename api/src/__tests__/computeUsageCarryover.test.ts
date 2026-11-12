@@ -328,27 +328,46 @@ describe("a finished job's charge stops growing", () => {
   });
 
   // Mutation that turns this red: remove the EXCEPTION handler from
-  // stamp_topo_job_wall_seconds. An infinite started_at makes the stamp's
-  // subtraction raise; it is set while the job is still in flight, so that write
-  // makes no stamp attempt. Raw SQL throughout: pricing or reading the row
-  // through Prisma may itself fail on an infinite started_at.
+  // stamp_topo_job_wall_seconds. The stamp is made to fail for one marked row by
+  // putting a public.jsonb_typeof ahead of pg_catalog's in the function's search
+  // path: no data fails the stamp on every Postgres version (an infinite
+  // started_at raised on 16 and, since 17, stamps 0). The shim delegates for
+  // every other row, so a stamp running at the same time is unaffected.
   it("a stamp that fails never blocks a status write", async () => {
     const job = await prisma.topoJob.create({
       data: {
         userId: BOB_ID,
         status: "processing",
         startedAt: new Date(Date.now() - HOUR),
+        pipelineMetrics: { failTheStamp: true },
       },
     });
     try {
-      await prisma.$executeRaw`UPDATE topo_jobs SET started_at = 'infinity' WHERE id = ${job.id}`;
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION public.jsonb_typeof(j jsonb) RETURNS text LANGUAGE plpgsql AS $$
+        BEGIN
+          IF j ? 'failTheStamp' THEN RAISE EXCEPTION 'injected'; END IF;
+          RETURN pg_catalog.jsonb_typeof(j);
+        END $$`);
+      await prisma.$executeRawUnsafe(
+        "ALTER FUNCTION stamp_topo_job_wall_seconds() SET search_path = public, pg_catalog",
+      );
       await prisma.$executeRaw`UPDATE topo_jobs SET status = 'failed' WHERE id = ${job.id}`;
       const [row] = await prisma.$queryRaw<
         { status: string; pipeline_metrics: unknown }[]
       >`SELECT status, pipeline_metrics FROM topo_jobs WHERE id = ${job.id}`;
-      expect(row).toEqual({ status: "failed", pipeline_metrics: null });
+      expect(row).toEqual({
+        status: "failed",
+        pipeline_metrics: { failTheStamp: true },
+      });
     } finally {
       await prisma.$executeRaw`DELETE FROM topo_jobs WHERE id = ${job.id}`;
+      await prisma.$executeRawUnsafe(
+        "ALTER FUNCTION stamp_topo_job_wall_seconds() RESET search_path",
+      );
+      await prisma.$executeRawUnsafe(
+        "DROP FUNCTION IF EXISTS public.jsonb_typeof(jsonb)",
+      );
     }
   });
 
