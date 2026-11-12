@@ -129,6 +129,11 @@ jobs:
       - name: Build
         working-directory: shared
         run: npm run build
+      # The build leaves the colocated tests out; this checks them too, so a
+      # test cannot keep asserting a shape the types no longer allow.
+      - name: Typecheck
+        working-directory: shared
+        run: npm run typecheck
       - name: Lint
         working-directory: shared
         run: npm run lint
@@ -201,9 +206,11 @@ jobs:
     # with AUTH_MODE=fake.
     #
     # The DB is a fresh service container every run, deliberately NOT cached:
-    # the suite is not idempotent against a reused database (sync_tombstones
-    # accumulate until syncBoundary's paged-pull assertions stop finding the
-    # tombstone they just wrote). Never cache the Postgres volume here.
+    # the suite snapshots the database `prisma db seed` leaves and refuses to
+    # run against one that differs (_globalSetup.ts), so it must be built from
+    # this commit's migrations and seed. A rerun on the same database is fine:
+    # each file sweeps it back to that snapshot. Never cache the Postgres
+    # volume here.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
@@ -385,17 +392,17 @@ jobs:
         working-directory: frontend
         env:
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts --workers=1
+        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts --workers=1
       # Writes to the seeded account and Undoes it, which leaves sync
-      # tombstones (frontend/AGENTS.md): after the integration suite, never
-      # before it.
+      # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
+      # later integration run): after the integration suite, never before it.
       - name: Playwright CSV import
         working-directory: frontend
         env:
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/csv-import.spec.ts --workers=1
+        run: npx playwright test e2e/csv-import.spec.ts e2e/ways-import.spec.ts e2e/discard.spec.ts e2e/place-verbs.spec.ts --workers=1
       # Links and unlinks a way on a seeded place and takes it back, leaving
-      # sync tombstones (frontend/AGENTS.md): after the integration suite too.
+      # sync tombstones (see above): after the integration suite too.
       - name: Playwright place route
         working-directory: frontend
         env:
@@ -584,6 +591,13 @@ jobs:
         run: npm ci
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
+      # The upgraded, seeded database is thrown away after this: the canary
+      # rewrites every row. Plants a marker in each column the prod-snapshot
+      # scrub covers, runs the scrub, and fails if a marker is still in a dump.
+      - name: Snapshot scrub canary
+        env:
+          CANARY_TARGET_IS_THROWAWAY: "yes"
+        run: scripts/snapshot-scrub-canary.sh
 
   brain-postgres-image:
     # The Postgres image local dev runs (docker-compose.yml) and prod's will.
@@ -779,6 +793,28 @@ jobs:
           tags: ${{ env.IMAGE }}
           cache-from: type=gha,scope=topo-worker
           cache-to: type=gha,scope=topo-worker,mode=max
+      # The unit tests that skip in the `topo` job for want of GDAL (their
+      # skip reason says so), run for real in the image GDAL comes from. The
+      # image holds no tests: they are mounted, with the two shared/src files
+      # two of them read at their repo-relative path. A skip fails the step
+      # (infra/scripts/check-required-checks.py names every such test file and
+      # requires it here).
+      # Mutation that turns it red: break reproject_raster_to_web_mercator's
+      # output SRS in topo/pipeline.py (its dstSRS).
+      - name: Unit tests that need real GDAL
+        run: |
+          set -o pipefail
+          docker run --rm \
+            -v "$PWD/topo/tests:/app/tests:ro" \
+            -v "$PWD/shared/src:/shared/src:ro" \
+            -w /app --entrypoint python3 "$IMAGE" -m unittest \
+            tests/test_area_export.py tests/test_coverage.py \
+            tests/test_footprint_coverage.py tests/test_reprojection.py \
+            tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
+          if grep -q 'skipped=' "$RUNNER_TEMP/gdal-tests.log"; then
+            echo "::error::a test that needs GDAL skipped inside the worker image: it has nothing to skip for here"
+            exit 1
+          fi
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -1037,6 +1073,16 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # The root AGENTS.md's comment and guard rules: no citation a reader
+      # cannot open (audit codes, private files, a home path), no comment on a
+      # closed issue (GitHub is asked; unreachable only warns), and every test
+      # an AGENTS.md names exists and carries its mutation note.
+      - name: Comments cite what a reader can open, named guards name their mutation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          infra/scripts/check-repo-hygiene.py --self-test
+          infra/scripts/check-repo-hygiene.py
       # One Node for every toolchain: the workflows, the api image and the
       # @types/node pins must all equal mise.toml's. The Lambda's types are
       # checked against its own runtime instead.

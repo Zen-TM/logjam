@@ -196,7 +196,7 @@ export const savePlanItem = (
   // The copy, as the kind's own copy route answers.
   apiFetch<{ id: string; mediaSkipped?: number; mediaOutOfSpace?: true }>(
     `${item(planId, kind, itemId)}/save`,
-    // A plan's copy always brings the photos (decision on #439).
+    // A plan's copy always brings the photos.
     { method: "POST", body: { copyMedia: true } },
   );
 export const patchPlanItem = (

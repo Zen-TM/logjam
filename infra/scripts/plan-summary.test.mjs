@@ -235,7 +235,7 @@ test("a real rule change beside the hidden bypass stays an update", () => {
 test("a ruleset the PR updates has the same value fingerprint read by either App", () => {
   // GitHub's ETag hashes the response, which differs by viewer, and only the
   // apply App sees bypass_actors. Mutation: dropping github's `perViewer`, or
-  // hashing unreadable attributes, refuses every ruleset update (#453): red.
+  // hashing unreadable attributes, refuses every ruleset update: red.
   const rules = [{ creation: false }];
   const pr = {
     resource_changes: [

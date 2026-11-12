@@ -290,7 +290,6 @@ import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
   Button,
-  Chip,
   confirm,
   Icon,
   MapBanner,
@@ -4896,7 +4895,7 @@ export function MapScreen({
         activeTrack?.state === "done" ? null : (activeTrack?.state ?? null)
       }
       // The same gate the sensors run behind: no frames for a screen
-      // nobody is looking at (mobile/CLAUDE.md, Battery).
+      // nobody is looking at (ADR 0010).
       animate={sensorsActive}
       onPress={() => {
         if (activeTrack) {
@@ -5983,7 +5982,7 @@ export function MapScreen({
             "how far" through "which way" to "how fast and how high", and the
             two that were here first must not move when this one is switched
             on. It subscribes to its own value — a fix must not re-render this
-            screen (mobile/CLAUDE.md, Battery). */}
+            screen (ADR 0010). */}
         {speedElevationEnabled ? (
           <SpeedElevationChip
             active={sensorsActive}

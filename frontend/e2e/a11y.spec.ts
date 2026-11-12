@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { stubMaster } from "./__fixtures__/stubMaster";
+import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // Automated accessibility checks for the redesigned surfaces of Logjam Web: the
 // shell (rail, map chrome), Places with its filter sheet, the Layers popover and
@@ -118,7 +119,7 @@ async function openApp(page: Page) {
 
 /** The seed's announcement (api/prisma/seed.ts), marked read here so opening it
  *  writes nothing to the account. */
-const SEEDED_ANNOUNCEMENT = "Logjam is moving to a new server";
+const SEEDED_ANNOUNCEMENT = SEED_NAMES.announcement;
 
 async function withAnnouncementRead(page: Page) {
   await page.route("**/notifications", async (route) => {
@@ -312,7 +313,7 @@ test.describe("desktop", () => {
 
     // The seeded plan alice leads: hero verbs by role, then four views.
     await aside
-      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planWollangambe, exact: true })
       .click();
     await expect(aside.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
     await expectNoViolations(page, "aside");
@@ -367,7 +368,7 @@ test.describe("desktop", () => {
     // Join joins at once, so the test stops at the preview.
     await aside.getByRole("button", { name: "Back to plans" }).click();
     await aside
-      .getByRole("button", { name: "Kanangra Walls loop", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planKanangra, exact: true })
       .click();
     await expect(aside.getByRole("button", { name: "Decline" })).toBeVisible();
     await expectNoViolations(page, "aside");
@@ -380,12 +381,12 @@ test.describe("desktop", () => {
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
     await aside
-      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planWollangambe, exact: true })
       .click();
     await aside.getByRole("radio", { name: /^Forms/ }).click();
     // The seeded Safety contacts form: who sees answers first, then the table.
     await aside
-      .getByRole("button", { name: "Safety contacts", exact: true })
+      .getByRole("button", { name: SEED_NAMES.formSafetyContacts, exact: true })
       .click();
     await expect(
       aside.getByRole("region", { name: "Answers" }).getByRole("table"),
@@ -429,10 +430,10 @@ test.describe("desktop", () => {
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
     await aside
-      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planWollangambe, exact: true })
       .click();
     await aside.getByRole("radio", { name: /^Map/ }).click();
-    const place = "Wollangambe meeting point";
+    const place = SEED_NAMES.planMeetingPoint;
     await expect(
       aside.getByRole("button", { name: place, exact: true }),
     ).toBeVisible({
@@ -489,14 +490,14 @@ test.describe("desktop", () => {
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
     await aside
-      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planWollangambe, exact: true })
       .click();
 
     // While a plan is open the map shows it, and says so.
     const backToMap = page.getByRole("button", { name: "Back to my map" });
     await expect(backToMap).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("main")).toContainText(
-      "Plan: Wollangambe weekend",
+      `Plan: ${SEED_NAMES.planWollangambe}`,
     );
     await expectNoViolations(page, "main");
 
@@ -682,12 +683,15 @@ test.describe("desktop", () => {
     });
 
     // NARROW THE LIST BEFORE WALKING IT. axe is per-element, and this account
-    // holds 311 places whose rows are one component repeated — so the walk
-    // answers the same question 311 times and charges 7.4s for it against 0.17s
-    // for two rows, with an identical result. Three walks of that put the case
-    // at 51.7s alone and over the 60s cap under any parallel load. Everything
-    // the case is about survives the search: the hero, the type rail, the
-    // sort-and-filter button, a row and its menu.
+    // holds dozens of places whose rows are one component repeated — so the
+    // walk answers the same question once per row, against once or twice for
+    // a narrowed list, with an identical result. Everything the case is about
+    // survives the search: the hero, the type rail, the sort-and-filter
+    // button, a row and its menu. The premise is asserted, so a seed that
+    // shrinks to a handful of places fails here instead of narrowing nothing.
+    await expect
+      .poll(() => aside.locator("[data-place-id]").count())
+      .toBeGreaterThanOrEqual(10);
     await aside.getByRole("searchbox").first().fill("claustral");
     await expect(aside.getByRole("radio", { name: /^All/ })).toBeVisible();
     await expect
@@ -724,14 +728,14 @@ test.describe("desktop", () => {
       timeout: 15_000,
     });
     await list
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
 
     // The page leads with the place's name, and every attribute is stated once
     // — canyon scalars are not printed again by the loop over the type's
     // definitions.
     await expect(
-      list.getByRole("heading", { level: 2, name: "Claustral Canyon" }),
+      list.getByRole("heading", { level: 2, name: SEED_NAMES.claustral }),
     ).toBeVisible();
     await expect(list.getByText("Longest pitch", { exact: true })).toHaveCount(
       1,
@@ -764,7 +768,7 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Places", exact: true }).click();
     const list = page.locator("aside");
     await list
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     await list
       .getByRole("button", { name: /^(Add a way|Replace this place's route)$/ })
@@ -1615,7 +1619,7 @@ test.describe("fits", () => {
       timeout: 15_000,
     });
     await aside
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     await aside.getByRole("button", { name: /^Actions for / }).click();
     await page.getByRole("menuitem", { name: "Edit place" }).click();
@@ -1888,10 +1892,10 @@ test.describe("ghost gum", () => {
     await expectNoViolations(page, "aside");
 
     await aside
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     await expect(
-      aside.getByRole("heading", { level: 2, name: "Claustral Canyon" }),
+      aside.getByRole("heading", { level: 2, name: SEED_NAMES.claustral }),
     ).toBeVisible();
     await expectNoViolations(page, "aside");
 
@@ -1919,7 +1923,7 @@ test.describe("narrow web", () => {
       timeout: 15_000,
     });
     await page
-      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planWollangambe, exact: true })
       .click();
     await expect(page.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
     await expectNoViolations(page);
@@ -1927,7 +1931,7 @@ test.describe("narrow web", () => {
     // A form's page: its answers table scrolls sideways on its own.
     await page.getByRole("radio", { name: /^Forms/ }).click();
     await page
-      .getByRole("button", { name: "Safety contacts", exact: true })
+      .getByRole("button", { name: SEED_NAMES.formSafetyContacts, exact: true })
       .click();
     await expect(
       page.getByRole("region", { name: "Answers" }).getByRole("table"),
@@ -1947,7 +1951,7 @@ test.describe("narrow web", () => {
     await page.getByRole("button", { name: "Back to people" }).click();
     await page.getByRole("button", { name: "Back to plans" }).click();
     await page
-      .getByRole("button", { name: "Kanangra Walls loop", exact: true })
+      .getByRole("button", { name: SEED_NAMES.planKanangra, exact: true })
       .click();
     await expect(page.getByRole("button", { name: "Decline" })).toBeVisible();
     await expectNoViolations(page);
@@ -2087,13 +2091,13 @@ test.describe("narrow web", () => {
     // `size="large"` fills a narrow screen from the kit's own CSS — a different
     // rule from the centred desktop dialog.
     await sheet
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     // The sheet is named after the page it holds, so opening a place RENAMES the
     // landmark — hold it by role from here, not by the name it used to have.
     const page_ = page.locator("aside");
     await expect(
-      page.getByRole("complementary", { name: "Claustral Canyon" }),
+      page.getByRole("complementary", { name: SEED_NAMES.claustral }),
     ).toBeVisible();
     await page_.getByRole("button", { name: /^Actions for / }).click();
     await page.getByRole("menuitem", { name: "Edit place" }).click();
@@ -2114,7 +2118,7 @@ test.describe("narrow web", () => {
     await page.getByRole("button", { name: "Places", exact: true }).click();
     const sheet = page.getByRole("complementary", { name: "Places" });
     await sheet
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     const place = page.locator("aside");
     await place
@@ -2312,7 +2316,7 @@ test.describe("narrow web", () => {
     // A page opened from a row.
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await aside
-      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
       .click();
     const close = aside.getByRole("button", { name: "Close", exact: true });
     await expect(close).toBeVisible();
@@ -2374,8 +2378,9 @@ test.describe("narrow web", () => {
 
 // Three surfaces fake auth boots STRAIGHT PAST, and each for its own reason:
 // `useAuth` sets "authenticated" on mount (so SignIn never renders), the seeded
-// account's recorded consent is current (so the gate never shows), and it holds
-// 311 places (so the first-login offer never fires). None of them is a viewport
+// account's recorded consent is current (so the gate never shows), and it owns
+// places (so the first-login offer, which needs a load that came back empty,
+// never fires). None of them is a viewport
 // variant of something above — they are screens the dev stack cannot reach by
 // navigation.
 //

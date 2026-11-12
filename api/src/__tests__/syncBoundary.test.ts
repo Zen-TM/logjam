@@ -22,6 +22,9 @@ import {
   SHARED_PLACE_ID,
   as,
   CANYON_TYPE_ID,
+  OTHER_USER_KEYS,
+  SHAREE_PLACE_KEYS,
+  keysOf,
 } from "./_actors";
 import { uploadPhoto } from "./_tombstones";
 
@@ -152,6 +155,23 @@ describe("sync delta — sharee view (bob)", () => {
     }
   });
 
+  // An allow-list of keys: a column the serializer lets through, or a delta
+  // that spreads the raw row, is an extra key. `fieldDefsSnapshot` is the one
+  // optional extra (present only when the owner has definitions for the type).
+  // Mutation that turns it red: spread the raw place instead of
+  // serializeSharedPlace(place) in serializePlace (routes/sync.ts).
+  it("a shared place row carries exactly the sharee-visible keys", async () => {
+    const { changes } = await fullPull(BOB_SUB);
+    const shared = (changes.places as Record<string, unknown>[]).filter(
+      (c) => c.syncRole === "shared",
+    );
+    expect(shared.some((c) => c.id === SHARED_PLACE_ID)).toBe(true);
+    for (const place of shared) {
+      const { fieldDefsSnapshot: _snapshot, ...row } = place;
+      expect(keysOf(row)).toEqual([...SHAREE_PLACE_KEYS, "syncRole"].sort());
+    }
+  });
+
   it("cannot enumerate co-sharees and never sees an email anywhere", async () => {
     const { changes } = await fullPull(BOB_SUB);
     const shares = changes.placeShares as {
@@ -162,6 +182,22 @@ describe("sync delta — sharee view (bob)", () => {
     expect(
       shares.every((s) => s.sharedById === BOB_ID || s.sharedWithId === BOB_ID),
     ).toBe(true);
+    // Another user is named by id and username and nothing else, wherever the
+    // delta joins one. Mutation that turns it red: add `subject: true` to the
+    // sharedBy/sharedWith or friendship user selects in routes/sync.ts.
+    expect(shares.length).toBeGreaterThan(0);
+    for (const share of changes.placeShares as {
+      sharedBy: unknown;
+      sharedWith: unknown;
+    }[]) {
+      expect(keysOf(share.sharedBy)).toEqual(OTHER_USER_KEYS);
+      expect(keysOf(share.sharedWith)).toEqual(OTHER_USER_KEYS);
+    }
+    const friendships = changes.friendships as { counterpart: unknown }[];
+    expect(friendships.length).toBeGreaterThan(0);
+    for (const friendship of friendships) {
+      expect(keysOf(friendship.counterpart)).toEqual(OTHER_USER_KEYS);
+    }
     // No email key anywhere in the whole response.
     expect(JSON.stringify(changes)).not.toContain('"email"');
   });

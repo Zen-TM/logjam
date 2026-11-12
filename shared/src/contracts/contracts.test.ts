@@ -133,6 +133,13 @@ import {
   stepAfterPlaceTypeSave,
 } from "./index.js";
 
+// A verb declares `reason` (only this client has it, on purpose) or `gap` (not
+// built yet); each declaration in the const tuples carries one, so the union
+// has neither as a common key.
+const whyOneClient = (verb: object) =>
+  (verb as { reason?: string; gap?: string }).reason ??
+  (verb as { reason?: string; gap?: string }).gap;
+
 describe("every screen contract", () => {
   it("has an id of its own", () => {
     const ids = SCREEN_CONTRACTS.map((contract) => contract.id);
@@ -244,8 +251,16 @@ describe("the places filter sheet", () => {
       expect(copy[section.key], section.key).toBeTruthy();
   });
 
-  const system = (key: string) =>
-    SYSTEM_FIELD_DEFS.find((def) => def.key === key)!;
+  // A system def holds null for "unbounded"; a user's own definition leaves the
+  // bound out, which is the shape the filter functions take.
+  const system = (key: string) => {
+    const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key)!;
+    return {
+      type: def.type,
+      min: def.min ?? undefined,
+      max: def.max ?? undefined,
+    };
+  };
 
   // Red when a shape is chosen by key: a canyon's grades must get exactly what
   // a user's own definition of the same shape gets.
@@ -256,24 +271,16 @@ describe("the places filter sheet", () => {
     );
     expect(attributeFilterShape(system("quality"))).toBe("pills");
     expect(attributeFilterShape(system("hours"))).toBe("threshold");
-    expect(attributeFilterShape({ type: "float", min: 0, max: null })).toBe(
-      "threshold",
-    );
+    expect(attributeFilterShape({ type: "float", min: 0 })).toBe("threshold");
     expect(attributeFilterShape({ type: "integer", min: 0, max: 100 })).toBe(
       "minMax",
     );
     expect(attributeFilterShape({ type: "float", min: 0.5, max: 3 })).toBe(
       "minMax",
     );
-    expect(
-      attributeFilterShape({ type: "boolean", min: null, max: null }),
-    ).toBe("boolean");
-    expect(attributeFilterShape({ type: "string", min: null, max: null })).toBe(
-      "text",
-    );
-    expect(attributeFilterShape({ type: "date", min: null, max: null })).toBe(
-      "date",
-    );
+    expect(attributeFilterShape({ type: "boolean" })).toBe("boolean");
+    expect(attributeFilterShape({ type: "string" })).toBe("text");
+    expect(attributeFilterShape({ type: "date" })).toBe("date");
   });
 });
 
@@ -408,7 +415,7 @@ describe("a place's verbs", () => {
 
   it("gives a reason for each verb only one client has", () => {
     for (const verb of PLACE_VERBS)
-      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
+      if ("on" in verb) expect(whyOneClient(verb)).toBeTruthy();
     expect(placeVerbIds("gps")).not.toContain("makeTopo");
     expect(placeVerbIds("web")).toContain("makeTopo");
   });
@@ -735,7 +742,7 @@ describe("friends", () => {
 
   it("gives a reason for each share verb only one client has", () => {
     for (const verb of FRIEND_SHARE_VERBS)
-      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
+      if ("on" in verb) expect(whyOneClient(verb)).toBeTruthy();
   });
 
   it("names the direction a friend's list runs", () => {
@@ -1139,8 +1146,7 @@ describe("the map point panel", () => {
       "weather",
     ]);
     for (const verb of MAP_POINT_VERBS)
-      if ("on" in verb)
-        expect((verb.reason ?? verb.gap).length).toBeGreaterThan(0);
+      if ("on" in verb) expect(whyOneClient(verb)?.length).toBeGreaterThan(0);
     expect(mapPointVerbs("gps")[0]).toEqual({
       id: "navigate",
       icon: "navigateTo",

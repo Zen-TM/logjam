@@ -1,6 +1,12 @@
 {
+  // Source runs in the browser, on a phone and in Node, so it sees the globals
+  // all three have (fetch, URL, AbortController: the WebWorker lib) and none of
+  // the DOM's or Node's. `types: []` keeps @types/node out of the build even
+  // though it is installed for the tests (tsconfig.test.json adds it back).
   "compilerOptions": {
     "target": "ES2020",
+    "lib": ["ES2020", "WebWorker"],
+    "types": [],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "declaration": true,

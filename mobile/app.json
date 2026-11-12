@@ -114,7 +114,7 @@
       [
         "expo-media-library",
         {
-          "savePhotosPermission": "Logjam saves photos and videos you take in the app to your device's gallery.",
+          "savePhotosPermission": "Logjam saves photos and videos you take in Logjam GPS to your device's gallery.",
           "isAccessMediaLocationEnabled": false
         }
       ],
