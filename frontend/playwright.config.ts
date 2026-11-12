@@ -26,6 +26,20 @@ const CI_MASTER = process.env.CI
   ? { DEV_MASTER_URL: "http://127.0.0.1:4566/logjam-topo-local" }
   : {};
 
+/**
+ * `E2E_PREVIEW=1` serves the builds `npm run build:e2e` makes (`vite preview`)
+ * instead of the dev servers. Serving 500-odd modules one by one made every
+ * page load seconds long; a build is a handful of files. CI uses it for the
+ * suites that need no dev-only page. Locally the dev servers stay the default:
+ * they reload on a save, and `geopdf-render.spec.ts` needs the bench page,
+ * which only they serve.
+ */
+const PREVIEW = !!process.env.E2E_PREVIEW;
+const serve = (url: string, build: "fake" | "oidc", dev: string) =>
+  PREVIEW
+    ? `npx vite preview --outDir dist-e2e/${build} --port ${new URL(url).port} --strictPort`
+    : dev;
+
 export default defineConfig({
   testDir: "./e2e",
   // Timeout: An axe walk is not a user interaction, and 30s (Playwright's default) is a
@@ -63,6 +77,8 @@ export default defineConfig({
     {
       name: "chromium-light",
       testMatch: /a11y\.spec\.ts/,
+      // Cases that cannot differ by scheme (SCHEME_FREE in a11y.spec.ts).
+      grepInvert: /@scheme-free/,
       use: {
         ...devices["Desktop Chrome"],
         channel: "chrome",
@@ -75,18 +91,27 @@ export default defineConfig({
   webServer: isLocal
     ? [
         {
-          command: `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
+          command: serve(
+            baseURL,
+            "fake",
+            `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
+          ),
           url: baseURL,
           reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "fake", ...CI_MASTER },
           timeout: 60_000,
         },
         {
-          command: `npm run dev -- --port ${new URL(SIGN_IN_URL).port} --strictPort`,
+          command: serve(
+            SIGN_IN_URL,
+            "oidc",
+            `npm run dev -- --port ${new URL(SIGN_IN_URL).port} --strictPort`,
+          ),
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
           // A Cognito-shaped issuer draws Logjam Web's own forms. The pool does
-          // not exist: nothing here is submitted.
+          // not exist: nothing here is submitted. `build:e2e` in package.json
+          // bakes the same issuer into the build this server replaces.
           env: {
             VITE_AUTH_MODE: "oidc",
             ...CI_MASTER,

@@ -16,6 +16,15 @@ test.skip(
   "needs the local fake-auth stack",
 );
 
+/**
+ * A case whose result cannot depend on the colour scheme: it asserts behaviour
+ * or layout with no axe call, or sets its own scheme. `chromium-light` skips
+ * these (playwright.config.ts): that project exists for contrast, and
+ * running a case there again only repeats it. A case that runs axe under the
+ * project's own scheme must not carry it.
+ */
+const SCHEME_FREE = "@scheme-free";
+
 /** The second local server (playwright.config.ts), with NO fake auth. */
 const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 
@@ -128,9 +137,9 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "#map");
   });
 
-  test("Tab shows a ring on each stop, forced colours keep it, and reduced motion stills transitions", async ({
-    page,
-  }) => {
+  test("Tab shows a ring on each stop, forced colours keep it, and reduced motion stills transitions", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await page.emulateMedia({
       forcedColors: "active",
       reducedMotion: "reduce",
@@ -849,7 +858,9 @@ test.describe("desktop", () => {
     await expect(rowMenu).toBeFocused();
   });
 
-  test("a discard confirm over a form dialog", async ({ page }) => {
+  test("a discard confirm over a form dialog", { tag: SCHEME_FREE }, async ({
+    page,
+  }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
@@ -1429,9 +1440,9 @@ test.describe("desktop", () => {
     ).toBeVisible();
   });
 
-  test("What is here?: a press on the map closes the panel and asks nothing new", async ({
-    page,
-  }) => {
+  test("What is here?: a press on the map closes the panel and asks nothing new", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const canvas = page.locator("canvas.maplibregl-canvas");
@@ -1572,9 +1583,9 @@ test.describe("desktop", () => {
 test.describe("fits", () => {
   // Mutation: put the rail's `scrollIntoView` back in Chip.tsx and the form
   // opens scrolled to its rail.
-  test("a long form opens at its title, not scrolled to its rail", async ({
-    page,
-  }) => {
+  test("a long form opens at its title, not scrolled to its rail", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 700 });
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
@@ -1596,7 +1607,9 @@ test.describe("fits", () => {
 
   // Mutation: remove the `max-height` block from NavRail.module.css and the
   // last item is cut off at 600px.
-  test("the nav rail's last item fits a 150% zoom window", async ({ page }) => {
+  test("the nav rail's last item fits a 150% zoom window", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 600 });
     await openApp(page);
     const rail = page.getByRole("navigation", { name: "Pages" });
@@ -1607,7 +1620,9 @@ test.describe("fits", () => {
 
   // Mutation: remove the short-window branch of BottomSheet.tsx and the
   // sheet shows its hero, rail and about one row at 200% zoom.
-  test("the phone sheet shows several rows at 200% zoom", async ({ page }) => {
+  test("the phone sheet shows several rows at 200% zoom", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await page.setViewportSize({ width: 720, height: 450 });
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
@@ -1618,7 +1633,9 @@ test.describe("fits", () => {
   });
 
   // Mutation: drop `wrap` from the Scale rail and "Other" runs off the dialog.
-  test("Make a map's Scale chips all show at phone width", async ({ page }) => {
+  test("Make a map's Scale chips all show at phone width", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
     await page.getByRole("button", { name: "Tools", exact: true }).click();
@@ -1653,7 +1670,9 @@ test.describe("keyboard", () => {
 
   // Mutation: drop `useListKeys` from `PanelBody` and every row is three tab
   // stops again.
-  test("a list is one tab stop, moved by the arrow keys", async ({ page }) => {
+  test("a list is one tab stop, moved by the arrow keys", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     const aside = await openPlaces(page);
     const rows = aside.locator("[data-place-id]");
     expect(await rows.count()).toBeGreaterThan(10);
@@ -1712,9 +1731,9 @@ test.describe("keyboard", () => {
     "Friends",
     "Inbox",
   ]) {
-    test(`${panel}: its rows are a list with one tab stop`, async ({
-      page,
-    }) => {
+    test(`${panel}: its rows are a list with one tab stop`, {
+      tag: SCHEME_FREE,
+    }, async ({ page }) => {
       await openApp(page);
       await page.getByRole("button", { name: new RegExp(`^${panel}`) }).click();
       const aside = page.locator("aside");
@@ -1740,9 +1759,9 @@ test.describe("keyboard", () => {
 
   // Mutation: drop `usePanelFocus` and focus is the page's body after Enter,
   // and Escape does nothing.
-  test("a place: Enter lands on the back arrow, Escape returns to its row", async ({
-    page,
-  }) => {
+  test("a place: Enter lands on the back arrow, Escape returns to its row", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     const aside = await openPlaces(page);
     const row = aside.locator("[data-place-id]").nth(2);
     const open = row.locator("[data-row-open]");
@@ -1759,9 +1778,9 @@ test.describe("keyboard", () => {
     ).toBeFocused();
   });
 
-  test("Settings: Escape leaves a sub-page for the row that opened it", async ({
-    page,
-  }) => {
+  test("Settings: Escape leaves a sub-page for the row that opened it", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const aside = page.locator("aside");
@@ -1776,7 +1795,9 @@ test.describe("keyboard", () => {
     ).toBeFocused();
   });
 
-  test("Skip to panel moves focus into the open panel", async ({ page }) => {
+  test("Skip to panel moves focus into the open panel", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openPlaces(page);
     await page.getByRole("link", { name: "Skip to panel" }).focus();
     await page.keyboard.press("Enter");
@@ -1784,9 +1805,9 @@ test.describe("keyboard", () => {
   });
 
   // Mutation: drop the document listener in App.tsx and Measure stays armed.
-  test("Escape lifts an armed Measure tool, and the Draw tool asks first", async ({
-    page,
-  }) => {
+  test("Escape lifts an armed Measure tool, and the Draw tool asks first", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const aside = page.locator("aside");
@@ -1825,7 +1846,8 @@ test.describe("keyboard", () => {
  * Its text pairs are held to 7:1 by `scripts/wcag-contrast.mjs`; this is what
  * catches a surface drawing a pair that script never heard of.
  */
-test.describe("ghost gum", () => {
+// It sets its own scheme, so the light project would run the same page again.
+test.describe("ghost gum", { tag: SCHEME_FREE }, () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/users/me", async (route) => {
       if (route.request().method() !== "GET") return route.continue();
@@ -2138,9 +2160,9 @@ test.describe("narrow web", () => {
   // Narrow web has no Map tab: a panel is a sheet over the map, and closing it
   // is how a user gets back. Mutation that turns it red: put the Map button back
   // in NavRail, or drop Plans from the narrow tabs in NAV.
-  test("the tab bar is Places, Trips, Ways, Plans and More, with no Map", async ({
-    page,
-  }) => {
+  test("the tab bar is Places, Trips, Ways, Plans and More, with no Map", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     const tabs = page.getByRole("navigation", { name: "Pages" });
     await expect(tabs.getByRole("button")).toHaveText([
@@ -2154,9 +2176,9 @@ test.describe("narrow web", () => {
   });
 
   // Mutation that turns it red: stop the grab bar's release from closing.
-  test("swiping a panel down closes it and leaves the map to use", async ({
-    page,
-  }) => {
+  test("swiping a panel down closes it and leaves the map to use", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     await page.getByRole("button", { name: "Places", exact: true }).click();
@@ -2190,9 +2212,9 @@ test.describe("narrow web", () => {
 
   // The pull is a touch on the list, not the grab bar. Mutation that turns it
   // red: remove the content's touch listeners from BottomSheet.tsx.
-  test("pulling down on a list scrolled to its top closes the panel", async ({
-    page,
-  }) => {
+  test("pulling down on a list scrolled to its top closes the panel", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     const sheet = page.getByRole("complementary", { name: "Places" });
@@ -2217,9 +2239,9 @@ test.describe("narrow web", () => {
   // A finger-sized hit area on the grab bar, whatever the pointer, grown upward
   // so it never covers the page. Mutation that turns it red: shrink `::after`
   // back to `--control-lg` (36px for a mouse), or grow it down into the hero.
-  test("the grab bar is 44px to hit, and never covers the page's first button", async ({
-    page,
-  }) => {
+  test("the grab bar is 44px to hit, and never covers the page's first button", {
+    tag: SCHEME_FREE,
+  }, async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     const grip = (await page
@@ -2247,7 +2269,9 @@ test.describe("narrow web", () => {
 
   // Every narrow page has a ✕ that closes it. Mutation that turns it red: draw a
   // `Hero` with `onClose={null}` on any of them.
-  test("every panel closes by its Close button", async ({ page }) => {
+  test("every panel closes by its Close button", { tag: SCHEME_FREE }, async ({
+    page,
+  }) => {
     await openApp(page);
     const aside = page.locator("aside");
     const pages: [string, boolean][] = [
@@ -2296,9 +2320,9 @@ test.describe("narrow web", () => {
     { name: "Measure distance", title: "Measure distance", closes: true },
     { name: "Draw a route", title: "Draw a route", closes: false },
   ]) {
-    test(`${tool.name}: a swipe down ${tool.closes ? "closes" : "stops at the peek"}`, async ({
-      page,
-    }) => {
+    test(`${tool.name}: a swipe down ${tool.closes ? "closes" : "stops at the peek"}`, {
+      tag: SCHEME_FREE,
+    }, async ({ page }) => {
       await openApp(page);
       await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
       await page.getByRole("button", { name: "Tools", exact: true }).click();

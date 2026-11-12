@@ -14,7 +14,7 @@ const MUI_PATTERNS = [
 ];
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", "dist-e2e"] },
   {
     // Logjam Web builds on its own kit: this rule prevents importing MUI
     // packages and names what to reach for instead (frontend/DESIGN.md).
