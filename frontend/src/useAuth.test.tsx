@@ -48,6 +48,7 @@ beforeEach(() => {
   clearTileCache.mockImplementation(async () => {});
   oidc.completeSignInFromUrl.mockResolvedValue(null);
   oidc.loadSession.mockResolvedValue(session);
+  oidc.signInRedirect.mockResolvedValue(undefined);
   oidc.endProviderSession.mockResolvedValue(
     "https://auth.example.com/logout?x=1",
   );
