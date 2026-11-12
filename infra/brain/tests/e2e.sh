@@ -696,6 +696,9 @@ serving off; agent # the API's own connections would hide a drill that reached t
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
 canary_segment=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
+# status.sh switched the segment with the canary; this row puts WAL in the next one, so that the switch below has
+# something to close (a switch of an empty segment does nothing, and on 18 nothing else writes into it for minutes).
+sql logjam "insert into e2e_secret values ('e2e-tick')" > /dev/null
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
 check "the WAL with the canary is archived" wait_for 120 archived "$want"
@@ -736,10 +739,10 @@ check "restore_seconds is a whole number of seconds, 0 or more" whole_number "$(
 lag=$(drill_field canary_lag_seconds)
 check "the canary was not 0 seconds old (lag $lag s)" [ "$lag" -ge 1 ]
 check "...and seconds old, not minutes" [ "$lag" -lt 120 ]
-[ "$lag" -lt 120 ] || { echo "canary now: $(sql postgres "select extract(epoch from now() - at) from brain.canary") s old; wal now: $(sql postgres 'select pg_walfile_name(pg_current_wal_lsn())')"; grep -v 'connection\|AUDIT' "$WORK/drill.log" | tail -40; }
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
 check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
+[ "$(live_connections)" = 0 ] || r docker logs "$(cid postgres)" 2>&1 | tail -n +$((log_lines + 1)) | grep -v AUDIT | tail -20
 sql postgres "select 1" > /dev/null
 check "...and that check does see a connection when there is one" [ "$(live_connections)" = 1 ]
 check "the output has no value from the database" not grep -q 'e2e-secret-value-7731' "$WORK/drill.log"
