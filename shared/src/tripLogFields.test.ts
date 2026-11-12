@@ -548,6 +548,7 @@ describe("isSystemFieldDef", () => {
     label: "Water level",
     type: "string",
     placeTypeIds: [],
+    tripTypes: [],
     appliesToAllTypes: true,
     ...over,
   });
