@@ -95,9 +95,10 @@ function planCheckRefusal(checkRuns, head) {
         r.app?.id === GITHUB_ACTIONS_APP_ID &&
         r.conclusion !== "skipped",
     )
-    // ISO dates order as strings; a run not yet started sorts last, so it
-    // blocks.
-    .sort((a, b) => ((a.started_at ?? "~") < (b.started_at ?? "~") ? -1 : 1))
+    // By id, which is the order GitHub made them in, and the newest is the
+    // one the main ruleset reads too. Start times do not order them: a run
+    // cancelled before it started can carry the time it was cancelled.
+    .sort((a, b) => a.id - b.id)
     .at(-1);
   if (last?.conclusion === "success") return null;
   const state = last ? (last.conclusion ?? "still running") : "missing";

@@ -91,7 +91,9 @@ somewhere a workflow can read: that is what changes from 0009.
   the manual lane's check of the update on a release candidate; the emulator
   smoke runs the dev client against a local stack, not the store build. Every
   push to a labelled PR, and every change to its labels, runs the emulator,
-  up to an hour, with a second runner waiting on it (updated 2026-11-12). `EXPO_TOKEN`, which
+  up to an hour, with a second runner waiting on it, and with branches
+  required to be up to date the plan must finish before `main` moves again
+  for the PR to merge (updated 2026-11-12). `EXPO_TOKEN`, which
   only `mobile-v*` tags could read, is now also readable on `main`. The
   `ota-plan` result is advisory against a PR that edits `ota-plan.yml`, since
   the check runs the PR's own workflow: its lint, tests and smoke can be made

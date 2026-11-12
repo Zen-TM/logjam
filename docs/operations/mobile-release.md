@@ -159,8 +159,12 @@ stays X.Y.Z: the update must match the build.
    (`.github/workflows/ota-plan.yml`, `mobile/scripts/ota-hotfix.js`). It
    runs again on each push, and each change of labels, while the label is on,
    and it is a required check: a red, running or cancelled plan stops the
-   merge (re-run a cancelled one). To merge without publishing, take the
-   label off. The comment says which
+   merge. Re-run a cancelled or timed-out one from its run's page (all its
+   jobs, not the failed one alone). To merge without publishing, take the
+   label off. The plan must finish on the head that merges, so every update
+   from `main` restarts it: land a hotfix when `main` is quiet for the hour
+   it takes, and wait a few seconds after adding the label before merging,
+   until the new run shows on the PR. The comment says which
    version and runtime the merge would publish to, or why it can't. The smoke
    runs the release's own `mobile/scripts/emulator-smoke.sh` and
    `.github/actions/build-dev-apk` under today's `mobile-emulator.yml`: if

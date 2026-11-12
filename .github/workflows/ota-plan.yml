@@ -16,6 +16,8 @@ name: ota-plan
 # there would pass the ruleset on a red plan. The labels are the event's: two
 # events queued out of order (rare) can leave the older one's answer, which a
 # push or a re-run corrects. No secrets: it runs the PR's own code.
+# Guard: mobile/src/otaHotfix.test.ts, and infra/scripts/check-required-checks.py
+# for the trigger.
 
 on:
   pull_request:
@@ -175,10 +177,17 @@ jobs:
           RUN: ${{ github.run_id }}
         run: |
           set -uo pipefail
-          # A failed request reads as "not yet": the timeout is the bound.
-          until verdict=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name == "verdict" and .status == "completed") | .conclusion] | last // empty') \
-            && [ -n "$verdict" ]; do
+          failed=0
+          while :; do
+            if verdict=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "verdict" and .status == "completed") | .conclusion] | last // empty'); then
+              failed=0
+              [ -z "$verdict" ] || break
+            elif [ $((failed += 1)) -ge 10 ]; then
+              # Five minutes of refusals is not a blip: say so now, not at the timeout.
+              echo "::error::GitHub would not list this run's jobs, ten times running. Re-run this job."
+              exit 1
+            fi
             sleep 30
           done
           echo "verdict: $verdict"

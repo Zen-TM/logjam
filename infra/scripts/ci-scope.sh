@@ -45,7 +45,7 @@ paths_for() {
     # push stub the job starts.
     api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
     # legalLinks.test.ts checks the documents the consent screen links to, and
-    # otaHotfix.test.ts reads the two OTA workflows. The emulator smoke check
+    # otaHotfix.test.ts reads the three OTA workflows. The emulator smoke check
     # (mobile-emulator.yml) and the action that builds its APK are part of the
     # area they gate.
     mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/(mobile-emulator|ota-hotfix|ota-plan|ota-rollback)\.yml$)' ;;
