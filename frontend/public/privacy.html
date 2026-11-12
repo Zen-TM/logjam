@@ -144,8 +144,8 @@
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
       PostgreSQL, on a server we run in that region. Authentication is handled
-      by Amazon Cognito within the same Australian region. Deleting a stored file is final: our storage
-      keeps no earlier versions to restore. Email, push notifications, app
+      by Amazon Cognito within the same Australian region. A file you delete is kept for up to 10 days,
+      then gone (see &ldquo;Retention&rdquo;). Email, push notifications, app
       updates and crash reports go through providers outside Australia (see
       &ldquo;Overseas disclosure&rdquo; below).
     </p>
@@ -380,7 +380,10 @@
           you made keep working until they expire or a leader turns them off.
           Log records
           are not removed by account deletion; they expire as described under
-          &ldquo;Retention&rdquo;.</li>
+          &ldquo;Retention&rdquo;. Backups and copies of deleted files last up
+          to 10 days. The steps are on the
+          <a href="/delete-account.html">Delete your account</a> page, which
+          also covers what to do if you cannot sign in.</li>
       <li><strong>Correct:</strong> you can edit your username, email, place
           records, and trip logs at any time, and can ask us to correct any
           other personal information that is inaccurate.</li>
@@ -411,6 +414,8 @@
       <li>Files sent to friends as a copy: 7 days.</li>
       <li>Exports of an area: 7 days after they are produced, record
           included.</li>
+      <li>Backups of our database, and copies of files you delete (or that
+          are deleted with your account): up to 10 days after the deletion.</li>
     </ul>
     <p>
       Logs are kept after the record they relate to is removed, including after

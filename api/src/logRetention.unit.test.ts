@@ -36,11 +36,11 @@ const auditDays = captureNumber(
   "var.audit_log_retention_days default",
 );
 
-/** The day count inside privacy.html's <li id="…">. */
-function publishedDays(id: string): number {
-  const html = read("frontend", "public", "privacy.html");
+/** The day count inside a page's <li id="…">. */
+function publishedDays(id: string, page = "privacy.html"): number {
+  const html = read("frontend", "public", page);
   const item = new RegExp(`<li id="${id}">([\\s\\S]*?)</li>`).exec(html)?.[1];
-  if (!item) throw new Error(`privacy.html has no <li id="${id}">`);
+  if (!item) throw new Error(`${page} has no <li id="${id}">`);
   return captureNumber(item, /(\d+) days/, `the day count in #${id}`);
 }
 
@@ -72,5 +72,11 @@ describe("log retention", () => {
   it("publishes the figures Terraform enforces", () => {
     expect(publishedDays("retention-operational")).toBe(operationalDays);
     expect(publishedDays("retention-audit")).toBe(auditDays);
+  });
+
+  it("states the same figures on the delete-account page", () => {
+    const page = "delete-account.html";
+    expect(publishedDays("retention-operational", page)).toBe(operationalDays);
+    expect(publishedDays("retention-audit", page)).toBe(auditDays);
   });
 });
