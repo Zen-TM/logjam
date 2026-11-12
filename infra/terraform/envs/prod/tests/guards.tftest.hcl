@@ -172,9 +172,7 @@ run "ci_reads_no_secret_or_user_data" {
     condition = alltrue([
       for a in [
         "cognito-idp:ListUsers", "cognito-idp:AdminGet*", "cognito-idp:AdminList*",
-        "rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile",
         "logs:StartLiveTail", "logs:GetLogRecord", "logs:GetLogEvents",
-        "elasticbeanstalk:RetrieveEnvironmentInfo",
         "sqs:ReceiveMessage", "ssm:GetParameter",
         ] : anytrue([
           for st in jsondecode(aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy).Statement :

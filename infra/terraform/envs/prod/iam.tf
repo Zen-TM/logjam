@@ -733,16 +733,14 @@ locals {
         Action   = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
         Resource = "*"
       },
-      # The same logs by other routes: a database service's own log files, a
-      # single record by pointer (no resource-level permission, hence "*"), and
-      # an instance's log tail. The RDS and Elastic Beanstalk actions stay
-      # denied though both services are gone from here: they cost nothing, and
-      # a database or environment made later would be closed without an edit.
-      # Nothing in CI reads any of them.
+      # The same logs by another route: a single record by pointer (no
+      # resource-level permission, hence "*"). Nothing in CI reads one. A
+      # service added later that keeps logs of its own (a managed database's
+      # log files, say) needs its read actions denied here in the same change.
       {
         Sid      = "DenyLogsByOtherRoutes"
         Effect   = "Deny"
-        Action   = ["rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile", "logs:GetLogRecord", "elasticbeanstalk:RequestEnvironmentInfo", "elasticbeanstalk:RetrieveEnvironmentInfo"]
+        Action   = ["logs:GetLogRecord"]
         Resource = "*"
       },
       # Message bodies and parameter values: ReadOnlyAccess allows both, and
