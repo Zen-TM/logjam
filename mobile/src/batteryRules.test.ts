@@ -188,7 +188,7 @@ function effectIsGatedBy(node: ts.Node, ident: string): boolean {
     if (!ts.isArrowFunction(n) && !ts.isFunctionExpression(n)) {
       continue;
     }
-    const call = n.parent;
+    const call: ts.Node = n.parent;
     if (
       !ts.isCallExpression(call) ||
       call.arguments[0] !== n ||

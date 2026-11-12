@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ExpoConfig } from "expo/config";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // "A new dependency can add Android permissions: block each with
@@ -42,14 +43,14 @@ const MUST_BE_REMOVED = [
 type Entry = { $: Record<string, string> };
 
 async function manifestPermissions(): Promise<Entry[]> {
-  let config = {
+  let config: ExpoConfig = {
     name: "x",
     slug: "x",
     android: {
       package: "a.b",
       blockedPermissions: appJson.expo.android.blockedPermissions,
     },
-  } as never;
+  };
   config = AndroidConfig.Permissions.withInternalBlockedPermissions(config);
   config = withSensorLogging(config);
   config = withCameraCapture(config);
