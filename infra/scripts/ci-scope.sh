@@ -50,8 +50,9 @@ paths_for() {
     # area they gate.
     mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/(mobile-emulator|ota-hotfix|ota-rollback)\.yml$)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
-    # upgraded to this commit (the head's seed never runs there).
-    migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/migration-upgrade-test\.sh)' ;;
+    # upgraded to this commit (the head's seed never runs there), where the
+    # snapshot scrub is then run over it (snapshot-scrub.sql and its canary).
+    migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/(migration-upgrade-test\.sh|snapshot-scrub))' ;;
     # The worker image (image-build-scope.sh holds what it is built from), the
     # job's stubs and checks, its sample input, the task definition whose env
     # worker.env mirrors, and the settings the job submits (the worker
@@ -172,6 +173,8 @@ self_test() {
   check "migrations: upgrade checks"                      migrations true  0 'api/prisma/upgrade-check/verify.sql'
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'
   check "migrations: the upgrade script"                  migrations true  0 'scripts/migration-upgrade-test.sh'
+  check "migrations: the snapshot scrub"                  migrations true  0 'scripts/snapshot-scrub.sql'
+  check "migrations: the snapshot scrub canary"           migrations true  0 'scripts/snapshot-scrub-canary.sh'
   check "migrations: api route"                           migrations false 0 'api/src/routes/a.ts'
   check "topo_e2e: worker source"                         topo_e2e true  0 'topo/pipeline.py'
   check "topo_e2e: worker image Dockerfile"               topo_e2e true  0 'topo/Dockerfile'
