@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import pino from "pino";
+import ts from "typescript";
 import {
   redactPaths,
   redactTilePathPatterns,
@@ -497,16 +498,78 @@ describe("no raw err reaches a log site", () => {
     });
   }
 
-  it("every logger.* call scrubs its error argument", () => {
-    // An `err` key in a logger call's object argument whose value is not a
-    // safeErrorForLog(...) call (shorthand `{ err }` included).
-    const rawErrLogSite =
-      /logger\.\w+\(\s*\{[^}]*?[{,]\s*err\s*(?::(?!\s*safeErrorForLog\()|[,}])/g;
-    const offenders = sourceFiles(join(__dirname, "..")).flatMap((file) =>
-      (readFileSync(file, "utf8").match(rawErrLogSite) ?? []).map(
-        (hit) => `${file}: ${hit.replace(/\s+/g, " ")}`,
-      ),
-    );
-    expect(offenders).toEqual([]);
+  // Mutation that turns it red: logger.warn({ err }, "x"), { err: err },
+  // { error: err }, { ctx: { a: 1 }, err } or logger.error(err, "x") in any
+  // non-test file under src/.
+  it("every log call scrubs its error argument", () => {
+    const offenders: string[] = [];
+    let calls = 0;
+    for (const file of sourceFiles(join(__dirname, ".."))) {
+      const sf = ts.createSourceFile(
+        file,
+        readFileSync(file, "utf8"),
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      const at = (n: ts.Node) =>
+        `${file}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
+      const visit = (node: ts.Node): void => {
+        if (
+          ts.isCallExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          /^(trace|debug|info|warn|error|fatal)$/.test(
+            node.expression.name.text,
+          ) &&
+          /^(logger|reqLog|(\w+\.)?log)$/.test(
+            node.expression.expression.getText(),
+          )
+        ) {
+          calls++;
+          const [first] = node.arguments;
+          if (ts.isObjectLiteralExpression(first)) {
+            for (const prop of first.properties) {
+              const key = prop.name?.getText();
+              if (!key || !/^(err|error|e|cause)$/.test(key)) continue;
+              const value = ts.isPropertyAssignment(prop)
+                ? prop.initializer
+                : undefined;
+              // `{ ...safe, message: … }` where `const safe = safeErrorForLog(…)`
+              // (middleware/errorHandler.ts) is scrubbed too.
+              const spreadsScrubbed =
+                value !== undefined &&
+                ts.isObjectLiteralExpression(value) &&
+                value.properties.some(
+                  (p) =>
+                    ts.isSpreadAssignment(p) &&
+                    sf.text.includes(
+                      `const ${p.expression.getText()} = safeErrorForLog(`,
+                    ),
+                );
+              const scrubbed =
+                spreadsScrubbed ||
+                (value !== undefined &&
+                  ts.isCallExpression(value) &&
+                  value.expression.getText() === "safeErrorForLog");
+              if (!scrubbed) offenders.push(`${at(prop)}: ${prop.getText()}`);
+            }
+          } else if (!ts.isStringLiteralLike(first)) {
+            offenders.push(`${at(first)}: first argument ${first.getText()}`);
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sf);
+    }
+    expect(
+      calls,
+      "the scan found too few log calls to be trusting",
+    ).toBeGreaterThan(60);
+    expect(
+      offenders,
+      "pass a thrown error as { err: safeErrorForLog(err) } (lib/logger.ts): " +
+        "Prisma renders place names and coordinates into error messages, " +
+        "which redact.paths cannot reach. The first argument is an object " +
+        "literal or the message",
+    ).toEqual([]);
   });
 });

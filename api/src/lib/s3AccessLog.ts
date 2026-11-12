@@ -180,6 +180,20 @@ export type KeyAttribution =
       jobId: string;
     };
 
+/**
+ * Every top-level S3 prefix that holds a user's data, the ones attributeKey
+ * switches on. routes/accountPurge.unit.test.ts requires each key the API
+ * builds to start with one, and the account purge to delete each.
+ */
+export const USER_DATA_S3_HEADS = [
+  "media",
+  "file-sends",
+  "inputs",
+  "outputs",
+  "jobs",
+  "exports",
+] as const;
+
 export function attributeKey(key: string): KeyAttribution | null {
   const segments = key.split("/");
   if (segments.length < 2) return null;
