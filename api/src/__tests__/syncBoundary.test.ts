@@ -23,6 +23,7 @@ import {
   as,
   CANYON_TYPE_ID,
 } from "./_actors";
+import { uploadPhoto } from "./_tombstones";
 
 // Mandatory privacy-boundary suite for GET /sync/delta.
 // Requires `make dev`. Seed baseline: alice owns SHARED_PLACE_ID, shared
@@ -227,7 +228,7 @@ describe("sync delta — revocation signals", () => {
     // first would not do: the unshare's older tombstone is re-delivered inside
     // the delta's overlap window and would satisfy the assertion by itself.
     // Mutation that turns it red: skip the writeTombstones call in
-    // deletePlacesCascade (lib/bulkDelete.ts).
+    // deletePlacesCascade (lib/bulkDelete.ts), or drop its mediaIds.
     const second = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
@@ -244,6 +245,7 @@ describe("sync delta — revocation signals", () => {
       .set(as(ALICE_SUB))
       .send({ sharedWithUserId: BOB_ID });
     expect(shareDeleted.status).toBe(201);
+    const photoId = await uploadPhoto(ALICE_SUB, "place", deletedId);
     const bobMid = await fullPull(BOB_SUB, afterUnshare.cursor);
     const aliceMid = await fullPull(ALICE_SUB, afterUnshare.cursor);
 
@@ -262,11 +264,19 @@ describe("sync delta — revocation signals", () => {
         (c) => c.id === deletedId,
       ),
     ).toBe(false);
-    // The owner forgets it too.
+    expect(afterDelete.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
+    });
+    // The owner forgets it too, and its photo.
     const aliceAfter = await fullPull(ALICE_SUB, aliceMid.cursor);
     expect(aliceAfter.tombstones).toContainEqual({
       type: "place",
       id: deletedId,
+    });
+    expect(aliceAfter.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
     });
 
     await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));

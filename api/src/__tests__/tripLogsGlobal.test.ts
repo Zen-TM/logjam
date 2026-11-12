@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID } from "./_actors";
-import { deltaCursor, tombstonesSince } from "./_tombstones";
+import { deltaCursor, tombstonesSince, uploadPhoto } from "./_tombstones";
 
 const CAROL = as(CAROL_SUB);
 
@@ -512,21 +512,21 @@ describe("GET /trips — query param validation", () => {
 
 describe("DELETE /trips/:id (acting as carol)", () => {
   // Mutation that turns it red: skip the writeTombstones call in
-  // deleteTripsCascade (lib/bulkDelete.ts).
-  it("tombstones the trip for its owner", async () => {
+  // deleteTripsCascade (lib/bulkDelete.ts), or drop its mediaIds.
+  it("tombstones the trip and its photo for its owner", async () => {
     const placeId = await createPlace(`${TAG}-del`, CAROL);
     const trip = await createTrip(
       { placeIds: [placeId], date: "2024-03-17" },
       CAROL,
     );
     try {
+      const photoId = await uploadPhoto(CAROL_SUB, "tripLog", trip.id);
       const cursor = await deltaCursor(CAROL_SUB);
       const res = await request(API_URL).delete(`/trips/${trip.id}`).set(CAROL);
       expect(res.status).toBe(204);
-      expect(await tombstonesSince(CAROL_SUB, cursor)).toContainEqual({
-        type: "tripLog",
-        id: trip.id,
-      });
+      const tombstones = await tombstonesSince(CAROL_SUB, cursor);
+      expect(tombstones).toContainEqual({ type: "tripLog", id: trip.id });
+      expect(tombstones).toContainEqual({ type: "media", id: photoId });
     } finally {
       await deletePlace(placeId, CAROL);
     }

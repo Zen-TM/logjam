@@ -16,7 +16,11 @@ import { SYNC_ENTITY_TYPES } from "@logjam/shared";
 // and requires a tombstone write (`writeTombstones(` or a raw
 // `syncTombstone.createMany(`) in the same enclosing function. What it cannot
 // see is whether the tombstone names the right rows: the integration tests in
-// `__tests__` pull the delta after a delete for that.
+// `__tests__` pull the delta after a delete for that. Raw `$queryRaw` /
+// `$executeRaw` deletes are not scanned; those delta assertions hold them:
+// `DELETE FROM media` in lib/bulkDelete.ts (syncBoundary.test.ts,
+// tripLogsGlobal.test.ts), `place_shares` in routes/friends.ts
+// (friendPair.test.ts) and `shares` in lib/shareAccess.ts (directShare.test.ts).
 //
 // Mutation that turns it red: add a `tx.placeLink.delete(...)` to any function
 // with no tombstone write, or remove the `writeTombstones` call beside an
@@ -128,7 +132,7 @@ for (const file of sourceFiles(SRC)) {
   visit(sf);
 }
 
-describe("every hard delete of a synced entity writes a tombstone", () => {
+describe("every Prisma delete of a synced delegate has a tombstone write beside it", () => {
   it("names a Prisma model for every synced entity type", () => {
     const models = Object.keys(Prisma.ModelName).map(
       (m) => m[0].toLowerCase() + m.slice(1),
@@ -146,7 +150,7 @@ describe("every hard delete of a synced entity writes a tombstone", () => {
     const missing = sites.filter((s) => !s.tombstoned && !(s.key in EXEMPT));
     expect(
       missing.map((s) => s.where),
-      "A hard delete of a synced row needs writeTombstones(tx, ...) in the " +
+      "A Prisma delete of a synced model needs writeTombstones(tx, ...) in the " +
         "same transaction (lib/syncTombstones.ts has a builder for each " +
         "entity), for every user who could see the row. If the row never " +
         "reaches a phone, add the function to EXEMPT in " +

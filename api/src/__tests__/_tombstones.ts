@@ -44,3 +44,50 @@ export async function tombstonesSince(
 ): Promise<Tombstone[]> {
   return (await pullDelta(sub, cursor)).tombstones;
 }
+
+// 1x1 transparent PNG; the server only reads the uploaded object's size.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  "base64",
+);
+
+/** Attach a photo to a place or trip log `sub` owns; the media id. */
+export async function uploadPhoto(
+  sub: string,
+  linkedType: "place" | "tripLog",
+  linkedId: string,
+): Promise<string> {
+  const body = {
+    linkedType,
+    linkedId,
+    filename: "photo.png",
+    mediaType: "image/png",
+  };
+  const presign = await request(API_URL)
+    .post("/media/presign")
+    .set(as(sub))
+    .send({
+      ...body,
+      sizeBytes: PNG.length,
+      thumbnailSizeBytes: PNG.length,
+    });
+  if (presign.status !== 201) throw new Error(`presign ${presign.status}`);
+  const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presign.body;
+  for (const [url, type] of [
+    [displayUploadUrl, "image/png"],
+    [thumbnailUploadUrl, "image/jpeg"],
+  ]) {
+    const put = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": type },
+      body: PNG,
+    });
+    if (!put.ok) throw new Error(`upload ${put.status}`);
+  }
+  const confirm = await request(API_URL)
+    .post(`/media/${mediaId}/confirm`)
+    .set(as(sub))
+    .send(body);
+  if (confirm.status !== 201) throw new Error(`confirm ${confirm.status}`);
+  return mediaId as string;
+}
