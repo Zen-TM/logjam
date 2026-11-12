@@ -87,6 +87,35 @@ export const TOPO_JOB_SELECT = {
   updatedAt: true,
 } as const;
 
+/**
+ * The keys of a job as its RECIPIENT sees it: every TOPO_JOB_SELECT column but
+ * the two below, plus the derived syncRole. Stated so topoJobs.unit.test.ts can
+ * prove the view equals it and that every selected column is classified, as
+ * lib/placeVisibility.ts does for places: a column added to the select is a
+ * decision about sharees, not a default.
+ */
+export const SHAREE_VISIBLE_TOPO_JOB_FIELDS: readonly string[] = [
+  "id",
+  "status",
+  // A sharee sees what the owner called the job, where it is and why it failed.
+  "name",
+  "footprint",
+  "tileCount",
+  "estimatedSeconds",
+  "layerOptions",
+  "errorMessage",
+  "createdAt",
+  "updatedAt",
+  "syncRole",
+];
+
+/** Selected or stored, never in a recipient's view, each with its reason. */
+export const OWNER_ONLY_TOPO_JOB_FIELDS: Record<string, string> = {
+  userId:
+    "the owner's internal id; syncRole is the whole answer a recipient needs",
+  s3OutputKeys: "raw bucket keys, and a key can name a place",
+};
+
 /** syncRole mirrors the waypoint/route delta convention: a 'shared' row is
  *  read-only on the client. */
 function syncRoleFor(row: { userId: string }, callerId: string) {

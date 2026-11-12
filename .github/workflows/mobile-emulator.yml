@@ -46,6 +46,7 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       mobile: ${{ steps.scope.outputs.mobile }}
     steps:
@@ -76,7 +77,7 @@ jobs:
       # The same two services as ci.yml's api-integration job, which holds the
       # reasons for their shape.
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -89,7 +90,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3
           DEFAULT_REGION: ap-southeast-2
@@ -140,6 +141,20 @@ jobs:
       # A hit skips Gradle: the key is the native inputs (the action says which).
       - id: apk
         uses: ./.github/actions/build-dev-apk
+
+      # What Android and Play list for the app is the merged manifest, and a
+      # library can add a permission no config plugin sees. The APK is here on
+      # a cache hit too, so this reads whichever one the run will install.
+      - name: Check the APK's permissions
+        run: |
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt2" dump permissions "$APK" | sed 1d | LC_ALL=C sort > "$RUNNER_TEMP/permissions.actual"
+          { grep -v '^#' mobile/android-permissions.expected || true; } > "$RUNNER_TEMP/permissions.expected"
+          echo "Permissions in the APK:"; cat "$RUNNER_TEMP/permissions.actual"
+          if ! diff -u "$RUNNER_TEMP/permissions.expected" "$RUNNER_TEMP/permissions.actual"; then
+            echo "::error file=mobile/android-permissions.expected::The APK's permissions changed (diff above; - is expected, + is built). A dependency added one: block it with tools:node=\"remove\" in a config plugin (mobile/plugins/) or app.json android.blockedPermissions. If the app needs it, add it to mobile/android-permissions.expected, and a new permission needs the maintainer's eye."
+            exit 1
+          fi
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -224,7 +239,7 @@ jobs:
 
       - name: Install Maestro
         run: |
-          curl -sSLfo "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
           echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"

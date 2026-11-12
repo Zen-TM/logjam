@@ -35,7 +35,10 @@ services:
   # do in prod (no manual worker runs). Buckets + ECS task defs are provisioned
   # by Terraform (infra/terraform/envs/local), invoked from `make dev`/`make reset`.
   ministack:
-    image: ministackorg/ministack
+    # The one pin of MiniStack: every workflow and infra/brain/tests/e2e.sh must equal
+    # it (rollback-compat-mirrors-ci.py), so bump them together with the
+    # Dependabot PR for this line.
+    image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
     environment:
       SERVICES: s3,ecs,ses,cognito,secretsmanager
       DEFAULT_REGION: ap-southeast-2

@@ -13,6 +13,8 @@ import {
   as,
   CANYON_TYPE_ID,
 } from "./_actors";
+import prisma from "../services/prisma";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Sharing-audit surface: GET/DELETE /friends/:id/shares.
 //
@@ -394,6 +396,53 @@ describe("DELETE /friends/:id/shares — unshare all", () => {
     expect(rows.map((r) => r.entityId)).not.toContain(routeId);
     // ...and the seeded place shares are untouched.
     expect(placeIdsIn(rows)).toContain(SHARED_PLACE_ID);
+  });
+
+  // Mutation that turns it red: make the tombstone createMany in DELETE
+  // /friends/:id/shares (routes/friends.ts) write no rows.
+  it("tombstones the place for bob and the share row for alice", async () => {
+    const created = await request(API_URL)
+      .post("/places")
+      .set(as(ALICE_SUB))
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: "Revoked in bulk",
+        latitude: -33.71,
+        longitude: 150.31,
+      });
+    expect(created.status).toBe(201);
+    const placeId = created.body.id as string;
+    expect(
+      (
+        await request(API_URL)
+          .post(`/places/${placeId}/share`)
+          .set(as(ALICE_SUB))
+          .send({ sharedWithUserId: BOB_ID })
+      ).status,
+    ).toBe(201);
+    const { id: shareId } = await prisma.placeShare.findFirstOrThrow({
+      where: { placeId, sharedWithId: BOB_ID },
+      select: { id: true },
+    });
+
+    const aliceCursor = await deltaCursor(ALICE_SUB);
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const del = await request(API_URL)
+      .delete(`/friends/${aliceBobFriendshipId}/shares`)
+      .set(as(ALICE_SUB))
+      .send({ items: [{ entityType: "place", entityId: placeId }] });
+    expect(del.status).toBe(200);
+    expect(del.body.placesRevokedCount).toBe(1);
+
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual({
+      type: "place",
+      id: placeId,
+    });
+    expect(await tombstonesSince(ALICE_SUB, aliceCursor)).toContainEqual({
+      type: "placeShare",
+      id: shareId,
+    });
+    await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
   });
 
   // An EMPTY list is not "everything": a client that computed a selection and

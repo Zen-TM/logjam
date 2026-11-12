@@ -30,6 +30,7 @@ concurrency:
 jobs:
   drift:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
       TITLE: "Terraform drift in envs/prod"
@@ -94,6 +95,7 @@ jobs:
 
   drift-github:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: prod
     env:
       GH_TOKEN: ${{ github.token }}

@@ -4,6 +4,10 @@ import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
 import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
 
+// Mutations that turn it red, each in routes/placesBulk.ts: drop the
+// `rows.length === 0` or the `ids.length === 0` check (400 becomes 200), or
+// the `BULK_IMPORT_LIMIT` or `BULK_DELETE_LIMIT` check (413 becomes 200).
+//
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Tests that need a "foreign" place create one directly via Prisma owned by
 // BOB_ID and clean it up afterwards, rather than leaning on bob's seeded
@@ -115,6 +119,22 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       rows: [],
     });
     expect(res.status).toBe(400);
+  });
+
+  it("rejects more than 2000 import rows with 413", async () => {
+    const row = {
+      data: { name: "over the cap", latitude: -33.7, longitude: 150.3 },
+      resolution: { kind: "create" },
+    };
+    const res = await request(API_URL)
+      .post("/places/bulk")
+      .set(AUTH)
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: randomUUID(),
+        rows: Array.from({ length: 2001 }, () => row),
+      });
+    expect(res.status).toBe(413);
   });
 
   it("merges into an owned place by resolution", async () => {

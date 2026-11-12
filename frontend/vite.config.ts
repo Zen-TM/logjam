@@ -32,7 +32,11 @@ export const CSP_PROD = [
 function cspMetaPlugin(): Plugin {
   return {
     name: "csp-meta",
-    apply: "build",
+    // `--mode e2e` is the build the Playwright job serves (playwright.config.ts):
+    // it talks to an API on http://localhost:8080, which the policy's
+    // connect-src does not list. The deploy builds in the default mode.
+    apply: (_config, { command, mode }) =>
+      command === "build" && mode !== "e2e",
     transformIndexHtml(html) {
       const metaTags = [
         `<meta http-equiv="Content-Security-Policy" content="${CSP_PROD}">`,

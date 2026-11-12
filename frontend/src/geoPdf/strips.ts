@@ -6,7 +6,7 @@ export const STRIP_ROW_MULTIPLE = 16;
  * same count of rows is drawn above every strip after the first and cropped.
  */
 export const STRIP_OVERLAP_ROWS = 16;
-/** Below the 16.7 MP single-canvas cap of iOS Safari (16.6 MP measured on #602). */
+/** Below the 16.7 MP single-canvas cap of iOS Safari (16.6 MP measured on an iPhone 8). */
 export const STRIP_MAX_PX = 16_000_000;
 
 export type Strip = {

@@ -356,7 +356,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "test";
-    process.env.DB_HOST = "prod.abc.ap-southeast-2.rds.amazonaws.com";
+    process.env.DB_HOST = "db.prod.example.com";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
@@ -375,6 +375,19 @@ describe("auth module-load fail-closed guards", () => {
     process.env.NODE_ENV = "test";
     process.env.DB_HOST = "localhost";
     process.env.AWS_EXECUTION_ENV = "AWS_ECS_FARGATE";
+    await expect(import("./auth")).rejects.toThrow(/refused/);
+  });
+
+  // Mutation: drop AWS_LAMBDA_FUNCTION_NAME from hasAwsRuntime in auth.ts.
+  it("refuses AUTH_MODE=fake in a Lambda runtime, with every other signal reading local", async () => {
+    vi.resetModules();
+    process.env.AUTH_MODE = "fake";
+    process.env.NODE_ENV = "test";
+    process.env.DB_HOST = "localhost";
+    delete process.env.LOGJAM_RUNTIME;
+    delete process.env.ECS_CONTAINER_METADATA_URI_V4;
+    delete process.env.AWS_EXECUTION_ENV;
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "some-function";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 

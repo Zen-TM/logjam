@@ -19,14 +19,18 @@
   can make (`GET /friends/search`), and it has its own limiter. `/meta`,
   `/elevation` and `/places/search` stay
   behind the global rate limiter; `/health` and `/ready` sit before it. A
-  further exception needs the same kind of reason.
+  further exception needs the same kind of reason, written into the guard's
+  list: `src/routes/routeAuth.unit.test.ts` (every route runs `requireAuth`),
+  `src/staticRules.unit.test.ts` (no inline `subject` lookup).
 - **Every read or write of a user-owned row checks ownership** (`ownerId: user.id`
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**
   and `serializeSharedPlace`, on REST and delta alike: no access is 404,
-  not 403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
-- **A response about another user carries their username, never their email**
-  (`src/__tests__/friends.test.ts`).
+  not 403. Guards (the exact keys a sharee receives):
+  `src/__tests__/shareBoundary.test.ts`, `src/__tests__/syncBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
+- **A response about another user carries their id and username and nothing
+  else about them,** never their email (`src/__tests__/friends.test.ts`,
+  `src/__tests__/syncBoundary.test.ts`).
 - **The friends leaderboard is the one count of trip data another user sees,**
   and only between friends who both opted in (`uiPreferences.leaderboardOptIn`):
   a username and a number per person, never which places. Guard:
@@ -34,7 +38,7 @@
   [0002](../docs/decisions/0002-place-share-visibility.md)
 - **Errors are ``AppError(status, say`…`)``** from `middleware/errorHandler`,
   never `res.status(500)` or a bare `Error`: an upstream that refused is 502, a
-  dependency we own that is missing is 503.
+  dependency we own that is missing is 503. Guard: `src/staticRules.unit.test.ts`.
 - **Any text a client may show is user copy, written here once with
   `` say`…` ``:** what is wrong and what to do, with no field key, id or
   client's name, and worded the same for a thing that is hidden as for one
@@ -49,8 +53,10 @@
 
 - **Log through `logger` (`lib/logger.ts`), never `console.*`,** and never a raw
   thrown error: pass it through `safeErrorForLog`. Prisma renders place names
-  and coordinates into its messages, which `redact.paths` cannot reach.
-- **Env is read through `getEnv()` (`lib/env.ts`).** A new variable goes in its
+  and coordinates into its messages, which `redact.paths` cannot reach. Guards:
+  `no-console` in `eslint.config.mjs`, `src/lib/logger.unit.test.ts`.
+- **Env is read through `getEnv()` (`lib/env.ts`),** never `process.env`
+  (`src/staticRules.unit.test.ts`). A new variable goes in its
   schema; one with no default also goes in
   `infra/terraform/templates/env.local.tftpl`, which renders `.env.local`
   (`lib/env.unit.test.ts`). What prod runs with is `infra/brain/api.env`,
@@ -63,7 +69,8 @@
   the leader), `lib/noOwnTimer.unit.test.ts` (no other `setInterval`),
   `src/__tests__/sweepLeader.test.ts`.
 - **AWS clients are the singletons in `services/awsClients.ts`:** they honour
-  `AWS_ENDPOINT_URL`, so local dev stays on MiniStack.
+  `AWS_ENDPOINT_URL`, so local dev stays on MiniStack
+  (`src/staticRules.unit.test.ts`).
 
 ## Data
 
@@ -71,11 +78,14 @@
   account-delete purge** in `routes/users.ts`: S3 keys in its `Promise.all`,
   the table in its explicit `deleteMany` list, even under a cascade, which
   never deletes S3 objects. `src/routes/accountPurge.unit.test.ts` guards the
-  tables (each is deleted there or named as cascade-only); nothing guards the
-  S3 prefixes.
+  tables (each is deleted there or named as cascade-only) and the S3 prefixes
+  (`USER_DATA_S3_HEADS`).
 - **A hard delete of a synced entity calls `writeTombstones`**
   (`lib/syncTombstones.ts`) in the same transaction, for every user who could
-  see the row, or phones keep it forever.
+  see the row, or phones keep it forever. Guards:
+  `src/syncTombstoneSites.unit.test.ts` (a Prisma delete with no tombstone
+  beside it), and a delta assertion per delete site (`src/__tests__/_tombstones.ts`),
+  which is the only guard for a raw-SQL delete.
 - **A sync push op and its REST twin accept the same fields,** bounds
   included; a change to one is tested on both (`src/__tests__/syncPush.test.ts`).
 - **Never remove or narrow a `/sync/*` field, op or protocol that a
@@ -91,7 +101,8 @@
   still runs, so never drop, rename or narrow what it uses in the same
   migration. [0003](../docs/decisions/0003-pre-deploy-migrations-expand-contract.md)
 - A migration that moves data replaces the checks in `prisma/upgrade-check/`,
-  which CI's `migration-upgrade` job runs against a seeded `origin/main`.
+  which CI's `migration-upgrade` job runs against a seeded `origin/main`
+  (`src/lib/upgradeCheck.unit.test.ts`).
 
 ## Testing
 
@@ -104,7 +115,9 @@
   modules. Don't unit-test a thin Prisma/AWS pass-through; integration covers
   it, so extract any pure logic and test that.
 - **Multi-user tests** use `src/__tests__/_actors.ts`: `as(BOB_SUB)` /
-  `as(CAROL_SUB)` sets the fake-auth `x-fake-sub` header; none is alice.
+  `as(CAROL_SUB)` sets the fake-auth `x-fake-sub` header; none is alice. A
+  seeded row's id comes from `prisma/seedIds.ts` and its on-screen name from
+  `prisma/seedNames.ts`, never a literal in a test or spec.
 - **Rate limits:** actors share the per-IP budget and `_rateLimitGate.ts` waits
   it out, but not the per-user `userPatchLimiter`: a write-heavy file uses the
   `write()` retry from `src/__tests__/placeTypes.test.ts` and a timeout over 61 s.

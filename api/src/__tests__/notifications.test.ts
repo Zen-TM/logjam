@@ -18,7 +18,7 @@ const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 describe("GET /notifications (fake auth = alice)", () => {
-  it("drops a place_shared notification whose referenced place no longer exists (PRIV-001)", async () => {
+  it("drops a place_shared notification whose referenced place no longer exists", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
@@ -38,7 +38,7 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  it("drops a friend_request notification whose referenced friendship no longer exists (PRIV-001)", async () => {
+  it("drops a friend_request notification whose referenced friendship no longer exists", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
