@@ -69,7 +69,7 @@ services:
   # and verify it (api/src/services/email.ts, topo/email_send.py). It takes any
   # SMTP login.
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    image: axllent/mailpit:v1.33.1
     environment:
       MP_SMTP_TLS_CERT: /certs/dev-tls-cert.pem
       MP_SMTP_TLS_KEY: /certs/dev-tls-key.pem
