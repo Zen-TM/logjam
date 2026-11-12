@@ -12,14 +12,13 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
+// Multi-user / share-boundary coverage.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
-// Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides —
-// the perspectives the old single-user fake auth could not reach. Seed baseline:
-// alice owns SHARED_PLACE_ID and shares it with bob; carol is shared nothing.
-// Tests that mutate state create + tear down their own rows so the baseline seed
-// is left intact. The rich seed (2026-06-21) ships an accepted bob↔carol
+// Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides.
+// Seed baseline: alice owns SHARED_PLACE_ID and shares it with bob; carol is
+// shared nothing. Tests that mutate state create + tear down their own rows so
+// the baseline seed is left intact. The seed ships an accepted bob↔carol
 // friendship; the lifecycle tests below need that pair EMPTY, so they clear it
 // first via clearBobCarolFriendship() (they already restored it to empty on
 // exit, so reruns are unaffected).
@@ -62,12 +61,10 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.body.tripLogs).toBeUndefined();
   });
 
-  // The trip-list assertion above has a sibling the count slipped past: the
-  // LIST endpoint used to attach `_count: { tripLogLinks, shares }` to every
-  // row on BOTH /places and /places/shared. Withholding the trip list while
-  // shipping its cardinality is not a boundary — bob learned how many trips
-  // alice had logged on her place, and how many other people she'd shared it
-  // with. The frontend ignored the number; the API still sent it.
+  // Withholding the trip list while shipping its cardinality is not a
+  // boundary: the shared list must not attach `_count: { tripLogLinks, shares }`,
+  // which would reveal how many trips the owner logged or how many people they
+  // shared with.
   it("recipient's shared list carries NO owner-private counts (trip tally, share fan-out)", async () => {
     const res = await request(API_URL).get("/places/shared").set(as(BOB_SUB));
     expect(res.status).toBe(200);
@@ -102,8 +99,7 @@ describe("share boundary — recipient view (hybrid model)", () => {
   });
 
   it("recipient cannot read an individual trip log via the global GET /trips/:id — 404, not 403 (SEC-001: no ID oracle)", async () => {
-    // The nested single-trip GET was removed with the m2m cutover — single
-    // trip fetch now lives entirely on GET /trips/:id (owner-only). Resolve a
+    // Single trip fetch lives on GET /trips/:id (owner-only). Resolve a
     // real trip ID from the owner's side first.
     const ownerTrips = await request(API_URL)
       .get(`/places/${SHARED_PLACE_ID}/trips`)
@@ -171,6 +167,83 @@ describe("share boundary — recipient view (hybrid model)", () => {
     }
   });
 
+  // Mutation: drop "gaugeId" from SHAREE_VISIBLE_PLACE_FIELDS and add it to
+  // OWNER_PRIVATE_PLACE_FIELDS, or let PATCH skip the owner check: red.
+  it("recipient sees the owner's gauge link read-only, on REST and on the delta", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary gauge");
+    try {
+      const set = await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(ALICE_SUB))
+        .send({ gaugeId: "210001" });
+      expect(set.status).toBe(200);
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+
+      const rest = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(rest.body.gaugeId).toBe("210001");
+
+      const delta = await request(API_URL)
+        .get("/sync/delta")
+        .set({ ...as(BOB_SUB), "x-logjam-client": "mobile/0.1.0-test" })
+        .query({ limit: 500 });
+      const row = (delta.body.changes.places as Record<string, unknown>[]).find(
+        (p) => p.id === placeId,
+      );
+      expect(row?.syncRole).toBe("shared");
+      expect(row?.gaugeId).toBe("210001");
+
+      const edit = await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(BOB_SUB))
+        .send({ gaugeId: null });
+      expect(edit.status).toBe(403);
+      const after = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(ALICE_SUB));
+      expect(after.body.gaugeId).toBe("210001");
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  // Mutation: add `gaugeId: place.gaugeId` to the copy's data in places.ts.
+  it("a copy of a place does not carry the owner's gauge", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary gauge copy");
+    try {
+      await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(ALICE_SUB))
+        .send({ gaugeId: "210001" })
+        .expect(200);
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+      const copy = await request(API_URL)
+        .post(`/places/${placeId}/copy`)
+        .set(as(BOB_SUB))
+        .send({});
+      expect(copy.status).toBe(201);
+      expect(copy.body.gaugeId ?? null).toBeNull();
+      const got = await request(API_URL)
+        .get(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+      expect(got.body.gaugeId ?? null).toBeNull();
+      await request(API_URL)
+        .delete(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
   it("recipient may copy a shared place under their own account", async () => {
     const res = await request(API_URL)
       .post(`/places/${SHARED_PLACE_ID}/copy`)
@@ -205,8 +278,7 @@ describe("share boundary — stranger view", () => {
       .set(as(ALICE_SUB));
     const tripId = ownerTrips.body[0].id as string;
 
-    // Single-trip fetch now lives on the global /trips/:id (owner-only) —
-    // the nested single-GET route was removed with the m2m cutover.
+    // Single-trip fetch lives on the global /trips/:id (owner-only).
     const single = await request(API_URL)
       .get(`/trips/${tripId}`)
       .set(as(CAROL_SUB));

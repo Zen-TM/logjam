@@ -121,7 +121,7 @@ router.post(
 
     const fileSendId = randomUUID();
     // ContentLength is SIGNED into the URL, so S3 itself rejects an upload
-    // larger than the declaration (SEC-003, as media presign does).
+    // larger than the declaration (as media presign does).
     const uploadUrl = await getSignedUrl(
       s3,
       new PutObjectCommand({
@@ -155,7 +155,7 @@ router.post(
     // client mints per action and stamps on every notification that action
     // creates — the inbox groups on it, so ten files sent in one go collapse to
     // one expandable row instead of ten (lib/bulkShare.ts). An id and nothing
-    // else, like every other payload field: it names nothing (PRIV-005).
+    // else, like every other payload field: it names nothing.
     const batchId = parseClientSuppliedId(body.batchId, "batchId");
 
     // Idempotent confirm: a retried request returns the existing send rather
@@ -306,7 +306,7 @@ async function recordSend(args: {
         include: { recipients: { select: { userId: true, status: true } } },
       });
       // IDs ONLY in the payload — never the filename, which is user text and
-      // routinely names a place (PRIV-005). The sender's username AND the
+      // routinely names a place. The sender's username AND the
       // filename are both resolved from the live rows at read time in
       // notifications.ts, which is also what makes them vanish when the send
       // is declined or expires.
@@ -468,7 +468,7 @@ router.get(
             createdAt: true,
             expiresAt: true,
             // Username only — email on a friends surface is a regression
-            // (root CLAUDE.md).
+            // (root AGENTS.md).
             sender: { select: { id: true, username: true } },
           },
         },
@@ -596,8 +596,8 @@ router.post(
     // ("at least" N days, not exactly N), an operator can delete it, and a
     // restored database can point at a bucket that never held it. Without this
     // check the recipient is handed a signed URL that 404s, gets "Couldn't save
-    // that file", and can retry it forever — which is exactly what a wiped
-    // local bucket produced on 2026-08-30.
+    // that file", and can retry it forever — which is what a wiped local bucket
+    // produces.
     //
     // The prod ordering is still the primary guard and is unchanged: the
     // lifecycle rule is deliberately one day LONGER than FILE_SEND_TTL_DAYS
@@ -673,7 +673,7 @@ router.post(
       });
       // Drop the recipient's own notification, as share revoke does — the
       // read-time filter would hide it anyway, but a declined send should not
-      // leave a row at rest (PRIV-001).
+      // leave a row at rest.
       await tx.notification.deleteMany({
         where: {
           userId: user.id,

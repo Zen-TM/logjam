@@ -47,7 +47,7 @@ export function RangePills({
       drag.current = null;
       // The click that follows this pointerup must not toggle a pill as well —
       // and a click that never comes must not swallow the next real one, or
-      // the next Enter on a focused pill.
+      // the next Enter on a focused pill (RangePills.test.tsx).
       window.setTimeout(() => {
         justDragged.current = false;
       }, 0);

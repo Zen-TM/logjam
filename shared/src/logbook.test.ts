@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   activityTalliesOverlap,
   countTripsInLastMonths,
+  defaultTrackName,
   dateRangeLabel,
   datePresets,
   dateSummary,
@@ -32,7 +33,7 @@ const fromDateKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
 describe("date handling", () => {
   it("reads a UTC-midnight date as its own calendar day", () => {
-    // The CH-001 trap: in AEST, a local-time read of this instant is 14 March.
+    // In AEST, a local-time read of this instant is 14 March.
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("15");
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("2026");
@@ -362,7 +363,15 @@ describe("stats presentation", () => {
         customFields: {},
       },
     ],
-    places: [{ id: "p", name: "Claustral", placeTypeId: "t", fieldValues: {} }],
+    places: [
+      {
+        id: "p",
+        name: "Claustral",
+        placeTypeId: "t",
+        fieldValues: {},
+        owned: true,
+      },
+    ],
     tripDefs: [],
     placeDefs: [],
     placeTypes: [{ id: "t", name: "Canyon", color: "#000000" }],
@@ -389,11 +398,19 @@ describe("stats presentation", () => {
     expect(lines).toContain("longest run 2 days back to back");
   });
 
+  // Mutation: print the bare number again, "longest gap 730".
+  it("gives the longest gap its unit", () => {
+    const { lines } = statsCadence(base, null);
+    expect(lines.find((line) => line.includes("longest gap"))).toMatch(
+      /longest gap \d+ days?$/,
+    );
+  });
+
   it("swaps New places for Revisited on an unbounded range", () => {
     expect(statsHeadline(base, null, false).map((tile) => tile.label)).toEqual([
       "Trips",
       "Places visited",
-      "Activity types",
+      "Trip types",
       "Revisited",
     ]);
     expect(statsHeadline(base, "canyoning", true).at(-1)).toEqual({
@@ -402,8 +419,8 @@ describe("stats presentation", () => {
     });
   });
 
-  it("files a tag-less trip under Untagged, and flags double-counted tags", () => {
-    expect(logbookActivityLabel(UNTAGGED_ACTIVITY)).toBe("Untagged");
+  it("files a tag-less trip under No type, and flags double-counted tags", () => {
+    expect(logbookActivityLabel(UNTAGGED_ACTIVITY)).toBe("No type");
     expect(logbookActivityLabel("canyoning")).toBe("Canyoning");
     expect(activityTalliesOverlap(base)).toBe(true);
   });
@@ -518,5 +535,26 @@ describe("dateSummary", () => {
   it("names the open end when only one is set", () => {
     expect(dateSummary(["2026-01-01", null])).toBe("From 2026-01-01");
     expect(dateSummary([null, "2026-03-31"])).toBe("To 2026-03-31");
+  });
+});
+
+describe("defaultTrackName", () => {
+  // Mutation: build the name with `toLocaleDateString()` and the numeric,
+  // order-ambiguous "3/11/2026" is back.
+  it("names a track with the day the way every other date reads", () => {
+    const name = defaultTrackName(new Date(2026, 10, 3, 9, 30));
+    expect(name).toBe(`Track ${formatDateKey("2026-11-03")}`);
+    expect(name).toMatch(/Nov/);
+    expect(name).not.toContain("/");
+  });
+
+  // Mutation: `now.toISOString().slice(0, 10)` reads the 2nd here.
+  it("uses the local day, not the UTC one", () => {
+    // 01:30 on the 3rd in Sydney (UTC+11) is still the 2nd in UTC.
+    inTimeZone("Australia/Sydney", () => {
+      expect(defaultTrackName(new Date("2026-11-02T14:30:00.000Z"))).toBe(
+        `Track ${formatDateKey("2026-11-03")}`,
+      );
+    });
   });
 });

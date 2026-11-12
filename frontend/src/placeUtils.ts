@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { loadSession } from "./auth/oidc";
 import type {
   ScopedCustomFieldDef,
   StandaloneFile,
@@ -11,6 +11,8 @@ import type {
   MediaMetadata,
   MediaOrigin,
   PlaceMergePolicy,
+  SlopeBand,
+  ElevationPoint,
   ElevationProfile,
   FlowNetworkLookup,
   FlowNetworkLookupRequest,
@@ -19,7 +21,11 @@ import type {
 } from "@logjam/shared";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
+  PLACE_SEARCH_API_PATH,
+  loadStateOf,
   tallyNotifications,
+  type PlaceSearchRequest,
+  type PlaceSearchResponse,
 } from "@logjam/shared";
 import {
   settleReadOverrides,
@@ -28,26 +34,32 @@ import {
 } from "./notificationReadOverrides";
 import type {
   BulkShareItem,
+  BulkShareResult,
   FriendShareRow,
   FriendShares,
+  LeaderboardResponse,
 } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 // Profiles already sampled this session, so reopening or editing a line does
 // not re-ask the DEM a question it has answered (see the module's header).
-import { cacheProfile, cachedProfile } from "./elevationCache";
+import {
+  cacheProfile,
+  cachedProfile,
+  profileCacheGeneration,
+} from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
-// file cannot drift — they used to be two hand-maintained copies kept in step
-// by a comment. Every existing `from "./placeUtils"` import still resolves.
+// file cannot drift. Every existing `from "./placeUtils"` import still resolves.
 export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
+import { usernameAvailable as sharedUsernameAvailable } from "@logjam/shared";
 
 // Only http(s) URLs are safe to render as a clickable <a href> or store as a
 // place source link — any other scheme (javascript:, data:, vbscript:, ...)
-// is an XSS/hygiene sink. FEUI-012. Single source for both the save-time
-// reject in PlaceDialog and the render-time guard in PlaceDetailPanel.
+// is an XSS/hygiene sink. Single source for both the save-time reject in
+// PlaceDialog and the render-time guard in PlaceDetailPanel.
 export function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -82,7 +94,7 @@ export type TPlaceShare = {
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 // useAuth registers a handler here so apiFetch can flip the UI back to the
-// sign-in screen when the Cognito refresh token has expired or been revoked.
+// sign-in screen when the refresh token has expired or been revoked.
 // Without this, the UI would stay "authenticated" while every API call 401s.
 let sessionExpiredHandler: (() => void) | null = null;
 export function setSessionExpiredHandler(handler: (() => void) | null) {
@@ -94,16 +106,15 @@ function notifySessionExpired() {
 
 async function getIdToken(): Promise<string> {
   if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
-  // Amplify automatically refreshes the token using the refresh token when
-  // the ID token has expired (every 1 hour).
+  // loadSession refreshes with the refresh token when the ID token has
+  // expired (every hour), one refresh for however many calls are waiting.
   try {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.idToken?.toString();
-    if (!token) {
+    const user = await loadSession();
+    if (!user?.id_token) {
       notifySessionExpired();
       throw new Error("No auth session");
     }
-    return token;
+    return user.id_token;
   } catch (err) {
     notifySessionExpired();
     throw err;
@@ -114,11 +125,12 @@ async function getIdToken(): Promise<string> {
 // need a token parameter — just a boolean to control whether to fetch.
 export async function apiFetch<T>(
   path: string,
-  options?: { method?: string; body?: unknown },
+  options?: { method?: string; body?: unknown; signal?: AbortSignal },
 ): Promise<T> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
+    signal: options?.signal,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(options?.body != null && { "Content-Type": "application/json" }),
@@ -144,7 +156,7 @@ export async function apiFetch<T>(
 // Like apiFetch but also surfaces the X-Total-Count header (the true owner-
 // filtered total before the server's list cap). `total` is null when the header
 // is absent or unparseable. Used by list hooks to show a "Showing N of TOTAL"
-// truncation caption (UX-001). The body shape is unchanged (a bare array), so
+// truncation caption. The body shape is unchanged (a bare array), so
 // non-paginated consumers keep using plain apiFetch.
 export async function apiFetchWithTotal<T>(
   path: string,
@@ -301,21 +313,29 @@ export type RopeWikiApplyResult = {
   sourceUpdatedAt: string | null;
 };
 
-export function importFromRopeWiki(): Promise<ImportResult> {
-  return apiFetch<ImportResult>("/ropewiki/import", { method: "POST" });
-}
+const regionQuery = (regionId: string) =>
+  `?region=${encodeURIComponent(regionId)}`;
 
-export function applyRopeWikiImport(
-  decisions: RopeWikiApplyDecision[],
-): Promise<RopeWikiApplyResult> {
-  return apiFetch<RopeWikiApplyResult>("/ropewiki/import/apply", {
+export function importFromRopeWiki(regionId: string): Promise<ImportResult> {
+  return apiFetch<ImportResult>(`/ropewiki/import${regionQuery(regionId)}`, {
     method: "POST",
-    body: { decisions },
   });
 }
 
-export function refreshFromRopeWiki(): Promise<RefreshResult> {
-  return apiFetch<RefreshResult>("/ropewiki/refresh", { method: "POST" });
+export function applyRopeWikiImport(
+  regionId: string,
+  decisions: RopeWikiApplyDecision[],
+): Promise<RopeWikiApplyResult> {
+  return apiFetch<RopeWikiApplyResult>(
+    `/ropewiki/import/apply${regionQuery(regionId)}`,
+    { method: "POST", body: { decisions } },
+  );
+}
+
+export function refreshFromRopeWiki(regionId: string): Promise<RefreshResult> {
+  return apiFetch<RefreshResult>(`/ropewiki/refresh${regionQuery(regionId)}`, {
+    method: "POST",
+  });
 }
 
 export type CreatePlaceData = {
@@ -327,8 +347,7 @@ export type CreatePlaceData = {
    *  and no tab to appear under. */
   placeTypeId: string;
   notes?: string | null;
-  /** Type-specific values, keyed by definition key. Replaces the seven grade
-   *  members this type used to carry. */
+  /** Type-specific values, keyed by definition key. */
   fieldValues?: Record<string, unknown>;
 };
 
@@ -375,9 +394,8 @@ export type PlaceTrack = {
   color: string | null;
   displayUrl: string;
   /**
-   * What the file IS. Without these a place's track could only be listed as a
-   * kind of its own, named for its place, because nothing here said whether it
-   * was a recording or an import or what it was called (Ways, 2026-09-17).
+   * What the file is: whether it is a recording or an import, and its
+   * display name.
    */
   filename: string;
   displayName: string | null;
@@ -405,7 +423,7 @@ export function usePlaceTracks(enabled: boolean) {
     if (!enabled) return;
     // Guards against an earlier in-flight request landing after a newer one
     // (e.g. a write bumps refetch mid-request) and overwriting fresh state
-    // with stale data — mirrors useTopoExports (FECO-001).
+    // with stale data — mirrors useTopoExports.
     let cancelled = false;
     getPlaceTracks()
       .then((data) => {
@@ -428,17 +446,6 @@ export function usePlaceTracks(enabled: boolean) {
 
   return { tracks, loaded, error, refetch };
 }
-
-// ponytail: the web has no marker-specific surface at all until phase 6 — a
-// marker is listed, edited and mapped as the place it is. Upgrade path: the
-// type-tabbed places panel and the Linked places section, which need the
-// type-management screens beside them.
-//
-// Waypoints are GONE as a separate thing: phase 1c folded them into places of
-// the system "Marker" type, so the list, the map pins and the detail view are
-// the PLACE ones. The web's own marker surfaces (a type-tabbed places list, a
-// Linked places section) land with the rest of the web rework — until then a
-// marker is a place in the places panel, which is where it already appears.
 
 // ── Routes ───────────────────────────────────────────────────────────────
 // User-authored lines. Unlike tracks, geometry arrives INLINE (no presigned
@@ -522,6 +529,50 @@ export function getElevationProfile(
   );
 }
 
+/** The height and slope at one spot, read server-side from the DEM. */
+export function getElevationPoint(
+  point: [number, number],
+): Promise<ElevationPoint & { attribution: string }> {
+  return apiFetch<ElevationPoint & { attribution: string }>(
+    "/elevation/point",
+    { method: "POST", body: { point } },
+  );
+}
+
+/**
+ * The point popover's one request: height and slope for a tapped spot. Not
+ * cached: the popover is mounted per point, so a tap is a request, and nothing
+ * here keeps the coordinate past it.
+ */
+export function useElevationPoint(lon: number, lat: number) {
+  // Filed under the point it answers, so a new point reads as loading without
+  // the effect having to reset anything.
+  const key = `${lon},${lat}`;
+  const [answer, setAnswer] = useState<{
+    key: string;
+    reading: ElevationPoint | null;
+  } | null>(null);
+  useEffect(() => {
+    let current = true;
+    getElevationPoint([lon, lat])
+      .catch((err) => {
+        console.error(err);
+        return null;
+      })
+      .then((reading) => {
+        if (current) setAnswer({ key: `${lon},${lat}`, reading });
+      });
+    return () => {
+      current = false;
+    };
+  }, [lon, lat]);
+  const settled = answer?.key === key;
+  return {
+    reading: settled ? answer.reading : null,
+    loading: !settled,
+  };
+}
+
 /**
  * What a profile can be asked for: one line (a route, the measure tool), or a
  * track's segments, which the server samples without crossing the gap between
@@ -533,12 +584,10 @@ export type ProfiledLine = [number, number][] | [number, number][][];
  * Loads a profile for the given points, keyed on the geometry itself: move a
  * vertex and it re-samples, reopen the same line and it does not.
  *
- * The second half of that is `elevationCache.ts`, and it was a promise this
- * docstring made without keeping until 2026-09-17 — opening a way, editing it
- * and leaving the editor were three requests for a line nobody had touched.
- * A cache hit is seeded SYNCHRONOUSLY, before the first paint, so a line that
- * has already been sampled draws its chart immediately rather than flashing
- * "Reading the terrain…" at someone who was just looking at it.
+ * Backed by `elevationCache.ts`. A cache hit is seeded SYNCHRONOUSLY, before
+ * the first paint, so a line that has already been sampled draws its chart
+ * immediately rather than flashing "Reading the terrain…" at someone who was
+ * just looking at it.
  */
 export function useElevationProfile(points: ProfiledLine | null) {
   const geometryKey = points ? JSON.stringify(points) : null;
@@ -573,11 +622,13 @@ export function useElevationProfile(points: ProfiledLine | null) {
     if (!fetchKey) return;
     // A late response from a previous line must not overwrite this one's.
     let current = true;
+    const askedIn = profileCacheGeneration();
     getElevationProfile(JSON.parse(fetchKey) as ProfiledLine)
       .then((result) => {
-        // Cached even if this hook has moved on: the answer is about the
-        // geometry, not about who asked.
-        cacheProfile(fetchKey, result);
+        // Cached even if this hook has moved on to another line, but not if
+        // the user or their areas changed meanwhile: the answer read what
+        // the caller could see then (elevationCache.ts).
+        cacheProfile(fetchKey, result, askedIn);
         if (current) setProfile(result);
       })
       .catch((err) => {
@@ -668,7 +719,7 @@ export function useRoutes(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     getRoutes()
       .then((data) => {
@@ -698,6 +749,8 @@ export function usePlaces(enabled: boolean) {
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True once a fetch has SUCCEEDED, not merely settled: a failed first load
+  // is `state: "failed"`, never an empty list (`loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -707,18 +760,22 @@ export function usePlaces(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TPlace[]>("/places")
       .then(({ data, total }) => {
         if (cancelled) return;
         setPlaces(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
@@ -726,9 +783,7 @@ export function usePlaces(enabled: boolean) {
           setError(messageFromError(err, "Couldn't load places."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -737,7 +792,15 @@ export function usePlaces(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { places, total, loading, loaded, error, refetch };
+  return {
+    places,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 export function useSharedPlaces(enabled: boolean) {
@@ -757,7 +820,7 @@ export function useSharedPlaces(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetch<TPlace[]>("/places/shared")
       .then((data) => {
@@ -802,15 +865,7 @@ export type ComputeEstimate = {
   wouldExceed: boolean;
 };
 
-export type ComputeEstimateRequest =
-  | { kind: "topo"; tileCount: number | null }
-  | {
-      kind: "topoExport";
-      sourceJobId: string;
-      format: string;
-      bundling: string;
-    }
-  | { kind: "geoPdf"; config: unknown };
+export type ComputeEstimateRequest = { kind: "topo"; tileCount: number | null };
 
 export function fetchComputeEstimate(
   request: ComputeEstimateRequest,
@@ -825,6 +880,17 @@ export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
+  // Signed out (an expired session leaves Logjam Web mounted): the next person
+  // to sign in must never see this user's row, not even until their own
+  // /users/me answers. Reset during render, not in the effect.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (!enabled) {
+      setCurrentUser(null);
+      setError(null);
+    }
+  }
 
   useEffect(() => {
     if (!enabled) return;
@@ -835,14 +901,13 @@ export function useCurrentUser(enabled: boolean) {
         setCurrentUser(user);
         setError(null);
       })
-      // NOT best-effort, despite reading like it. This is the app's only source
-      // for the signed-in user, and `null` is load-bearing downstream:
+      // NOT best-effort, despite reading like it. This is Logjam Web's only
+      // source for the signed-in user, and `null` is load-bearing downstream:
       // Account renders "Loading…" for as long as it stays null, and
       // `currentUserId` feeds way ownership, where "no user" reads as "not
-      // mine" and hands a friend's shared route the OWNER's verbs. Swallowing
-      // the one failure meant a single 429 or 500 made both permanent, with
-      // nothing to retry. Every other data hook in this file returns `error`
-      // (frontend/CLAUDE.md, "Hook contract"); this one now does too.
+      // mine" and hands a friend's shared route the OWNER's verbs. Without
+      // surfacing `error`, a 429 or 500 leaves both permanent with nothing to
+      // retry.
       .catch((err) => {
         console.error(err);
         if (!cancelled)
@@ -853,7 +918,10 @@ export function useCurrentUser(enabled: boolean) {
     };
   }, [enabled, fetchCount]);
 
-  const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetchCurrentUser = useCallback(() => {
+    setError(null);
+    setFetchCount((n) => n + 1);
+  }, []);
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.
@@ -881,8 +949,11 @@ export function updateUserPreferences(
     // are rows, written through the row-grain calls below; sending them here
     // is a 400 naming the replacement rather than a silent no-op.
     notifications: Partial<NotificationPreferences>;
-    autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
+    leaderboardOptIn: boolean;
+    copyPlaceMedia: boolean;
+    slopeBands: SlopeBand[];
+    regions: string[];
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
@@ -970,17 +1041,15 @@ export function reassignPlaceType(
 ): Promise<{ movedCount: number }> {
   return apiFetch<{ movedCount: number }>(`/place-types/${id}/reassign`, {
     method: "POST",
-    // The server reads `placeTypeId` (routes/placeTypes.ts, pinned by
-    // `__tests__/placeTypes.test.ts`). Sent as `toPlaceTypeId`, every move
-    // came back 400 "A different placeTypeId is required" — the destination
-    // simply was not in the payload the route read.
+    // The server reads `placeTypeId` (api/src/routes/placeTypes.ts, pinned by
+    // api/src/__tests__/placeTypes.test.ts), not `toPlaceTypeId`.
     body: { placeTypeId: toPlaceTypeId },
   });
 }
 
 /**
  * Adopt, discard or append one value the place is holding for a field this
- * owner has no definition for (§2.6).
+ * owner has no definition for.
  *
  * ONE endpoint for the three because they share every precondition and differ
  * only in what they do at the end. Returns the updated place, so a caller can
@@ -1000,18 +1069,10 @@ export function resolveForeignField(
 
 // ── custom field definitions: ROW-GRAIN, always ─────────────────────────────
 //
-// These used to go through `PATCH /users/me { placeCustomFields: [...] }` — a
-// whole-list reconcile of `{key,label,type,min,max}`. That path is GONE, and
-// its removal is not a tidy-up: the shape cannot express what a definition is
-// any more. It carries no `placeTypeIds` and no `appliesToAllTypes`, so every
-// save from a dialog that round-tripped the list would have wiped the scoping
-// off every definition — silently, because the payload does not mention it —
-// and it matched only the caller's own rows, so the SYSTEM definitions fell
-// through to the create branch and gave the user a private duplicate of every
-// built-in field, colliding under the same key.
-//
-// Per-row writes also mean two devices that each add a field both keep it,
-// which is the same reason the phone's definitions moved off the user record.
+// Custom field definitions are written per-row rather than as a whole list on
+// the user record. Whole-list updates cannot preserve scoping (`placeTypeIds`
+// and `appliesToAllTypes`) or handle shared system definitions, and per-row
+// writes allow two devices adding fields concurrently to preserve both.
 
 /** Every definition for one entity, WITH its scoping. */
 export function getCustomFields(
@@ -1035,8 +1096,7 @@ export function createCustomField(
 ): Promise<ScopedCustomFieldDef[]> {
   // The server answers with the ONE definition it made ({ field }), and every
   // caller wants the list that definition now belongs to, in the server's
-  // order — so read the list back. Taking `res.fields` off that answer handed
-  // callers `undefined`, and the trip form crashed on its next render.
+  // order — so read the list back (`res.fields` is not returned here).
   return apiFetch<{ field: ScopedCustomFieldDef }>(`/custom-fields/${entity}`, {
     method: "POST",
     body: { field, ...scope },
@@ -1123,10 +1183,16 @@ export function deleteAccount(): Promise<void> {
   return apiFetch<void>("/users/me", { method: "DELETE" });
 }
 
-export function recordConsent(version: string): Promise<TUser> {
+export const usernameAvailable = (username: string): Promise<boolean> =>
+  sharedUsernameAvailable(API_BASE_URL, username);
+
+export function recordConsent(
+  version: string,
+  username?: string,
+): Promise<TUser> {
   return apiFetch<TUser>("/users/me", {
     method: "PATCH",
-    body: { consentVersion: version },
+    body: { consentVersion: version, ...(username && { username }) },
   });
 }
 
@@ -1283,6 +1349,10 @@ export function bulkCreateTripLogs(
 export type UndoImportResult = {
   deletedPlaces: number;
   deletedTrips: number;
+  restoredPlaces: number;
+  restoredTrips: number;
+  /** Fields changed since the import, which Undo left as they were. */
+  keptFields: number;
 };
 
 export function undoImport(batchId: string): Promise<UndoImportResult> {
@@ -1309,8 +1379,9 @@ export function useTripLogs(enabled: boolean) {
   // True owner-filtered total before the server's list cap; null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  // False until the first fetch settles: an empty list before then is not "no
-  // trips yet", and saying so flashes a first-run screen at every user.
+  // False until a fetch succeeds: an empty list before then is not "no trips
+  // yet", and saying so flashes a first-run screen at every user, or covers a
+  // failed load (`state: "failed"`, `loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1321,28 +1392,29 @@ export function useTripLogs(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TTripLog[]>("/trips")
       .then(({ data, total }) => {
         if (cancelled) return;
         setTripLogs(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load trip logs."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load trips."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1351,16 +1423,33 @@ export function useTripLogs(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, total, loading, loaded, error, refetch };
+  return {
+    tripLogs,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 // ── Media (object storage) ────────────────────────────────────
 
 type MediaUploadMeta = {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  /** Null on a standalone file (`linkedType: "none"`), which names its `origin` instead. */
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  /** What the API checks against `origin` (shared `parseMediaMetadata`). */
+  metadata?: Record<string, unknown>;
   filename: string;
   mediaType: string;
+  /** A trip's copy of a recorded track: the recording it came from. */
+  sourceMediaId?: string;
+  /** A track this one takes over from, deleted with it at confirm. */
+  replaces?: string;
 };
 
 type PresignMediaResponse = {
@@ -1371,33 +1460,48 @@ type PresignMediaResponse = {
 
 // Direct PUT to a presigned S3 URL. Intentionally raw (not apiFetch): the target
 // is S3, not our API, and it must NOT carry the Authorization header. The
-// Content-Type must match what the presign signed, or S3 rejects it.
+// Content-Type must match what the presign signed, or S3 rejects it; null sends
+// none, for a URL that signed none.
 //
 // Uses XMLHttpRequest rather than fetch so an optional onProgress callback can
 // report upload progress — fetch cannot observe request-body upload progress.
-// onProgress fires with bytes (loaded, total) as the body streams to S3.
+// onProgress fires with bytes (loaded, total) as the body streams to S3. With
+// stallMs, a request that sends nothing for that long is aborted and rejects.
 export function putToPresignedUrl(
   url: string,
   body: Blob,
-  contentType: string,
+  contentType: string | null,
   onProgress?: (loaded: number, total: number) => void,
+  stallMs?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
-    if (onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(e.loaded, e.total);
-      };
-    }
+    if (contentType) xhr.setRequestHeader("Content-Type", contentType);
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    let stalled = false;
+    const arm = () => {
+      if (!stallMs) return;
+      clearTimeout(stall);
+      stall = setTimeout(() => {
+        stalled = true;
+        xhr.abort();
+      }, stallMs);
+    };
+    xhr.upload.onprogress = (e) => {
+      arm();
+      if (onProgress && e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    xhr.onloadend = () => clearTimeout(stall);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`Upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("Upload failed (network error)"));
     xhr.ontimeout = () => reject(new Error("Upload failed (timeout)"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onabort = () =>
+      reject(new Error(stalled ? "Upload stalled" : "Upload cancelled"));
+    arm();
     xhr.send(body);
   });
 }
@@ -1406,16 +1510,28 @@ export function putToPresignedUrl(
 // `thumbnail` is the client-generated JPEG for images/videos, or null for tracks.
 export async function uploadMedia(params: {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  metadata?: Record<string, unknown>;
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
+  sourceMediaId?: string;
+  /** The uploaded track on this place that this one replaces. The API swaps
+   *  them when the upload is confirmed, so a failed upload keeps the old one. */
+  replaces?: string;
 }): Promise<MediaItem> {
   const meta: MediaUploadMeta = {
     linkedType: params.linkedType,
     linkedId: params.linkedId,
+    ...(params.origin && { origin: params.origin }),
+    ...(params.displayName && { displayName: params.displayName }),
+    ...(params.metadata && { metadata: params.metadata }),
     filename: params.file.name,
     mediaType: params.mediaType,
+    ...(params.sourceMediaId && { sourceMediaId: params.sourceMediaId }),
+    replaces: params.replaces,
   };
   // Declared sizes are signed into the presigned PUT's Content-Length, so the
   // uploaded bytes must match what's declared here (server caps per category).
@@ -1447,6 +1563,28 @@ export async function uploadMedia(params: {
 
 export function deleteMedia(id: string): Promise<void> {
   return apiFetch<void>(`/media/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Move a standalone file (an import or a recording) onto a place as its route,
+ * or off it with null. The same row changes parent, so the file survives being
+ * replaced; a photo or an upload has no life apart from its parent and the API
+ * refuses to move one.
+ */
+export function linkMediaToPlace(
+  id: string,
+  placeId: string | null,
+  /** The uploaded track on that place this one takes over from; the API
+   *  deletes it in the same step as the move. */
+  replaces?: string,
+): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}/link`, {
+    method: "PATCH",
+    body:
+      placeId === null
+        ? { linkedType: "none" }
+        : { linkedType: "place", linkedId: placeId, replaces },
+  });
 }
 
 // ── Standalone files ──────────────────────────────────────────
@@ -1594,6 +1732,18 @@ export function useStandaloneTracks(
   return { tracks, error };
 }
 
+// ── Location search ───────────────────────────────────────────
+
+/** The place registry, through the API. The query goes in the body. */
+export function searchPlaceRegistry(
+  q: string,
+  limit: number,
+  signal: AbortSignal,
+): Promise<PlaceSearchResponse> {
+  const body: PlaceSearchRequest = { q, limit };
+  return apiFetch(PLACE_SEARCH_API_PATH, { method: "POST", body, signal });
+}
+
 // ── Friends ───────────────────────────────────────────────────
 
 export function searchUsers(
@@ -1634,6 +1784,10 @@ export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
 }
 
+export function getLeaderboard(): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>("/friends/leaderboard");
+}
+
 // Invite links (api/src/routes/friendInvites.ts). The token only ever travels
 // in a request body.
 export function createFriendInvite(): Promise<{ token: string }> {
@@ -1672,7 +1826,7 @@ export function useFriends(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     getFriends()
       .then((data) => {
@@ -1714,6 +1868,27 @@ export function sharePlaceWith(
   });
 }
 
+/**
+ * Share many places with many friends in one request. Re-sharing is a no-op the
+ * server counts rather than a 409, which is why the bulk dialog uses this and
+ * not `sharePlaceWith` in a loop. One `batchId` makes the recipient's inbox one
+ * row.
+ */
+export function bulkSharePlaces(
+  placeIds: string[],
+  recipientIds: string[],
+): Promise<BulkShareResult> {
+  return apiFetch<BulkShareResult>("/bulk-share", {
+    method: "POST",
+    body: {
+      items: placeIds.map((entityId) => ({ entityType: "place", entityId })),
+      recipientIds,
+      batchId: crypto.randomUUID(),
+      copyCount: 0,
+    },
+  });
+}
+
 export function unsharePlaceWith(
   placeId: string,
   userId: string,
@@ -1728,7 +1903,7 @@ export function getPlaceShares(placeId: string): Promise<TPlaceShare[]> {
 }
 
 // ── Direct sharing, non-place entities ───────────────────────
-// Waypoints, routes, LiDAR topo jobs and GeoPDF jobs. A live, read-only view
+// Waypoints, routes and LiDAR topo jobs. A live, read-only view
 // the owner can revoke — NOT the same promise as a sent copy below.
 
 export type TEntityShare = {
@@ -1802,9 +1977,8 @@ export function sendCopyOfMedia(
 }
 
 // NO `GET /file-sends/inbox` HELPER. The Inbox draws every send from the
-// notification each one writes, and answers it there; the Friends page held a
-// second, separately-fetched copy of that list until 2026-09-18, which could
-// disagree with the Inbox about what was still pending.
+// notification each one writes, and answers it there, avoiding a second
+// separately-fetched copy that could disagree about what is pending.
 
 /** Returns a short-lived presigned URL. Accepted rows stay downloadable until
  *  the send expires, which is what makes a re-download possible after a failed
@@ -1824,7 +1998,7 @@ export function declineFileSend(fileSendId: string): Promise<void> {
   });
 }
 
-// ── Sharing audit, per friend (fix 24) ────────────────────────
+// ── Sharing audit, per friend ─────────────────────────────────
 // Answers "what does Bob see?" from the Friends panel. Deliberately a dedicated
 // endpoint rather than share rows on the /places list payload: the list is
 // capped at 500 (so client-side grouping would silently under-count), and the
@@ -1834,8 +2008,8 @@ export function declineFileSend(fileSendId: string): Promise<void> {
 // The row shape is `FriendShareRow` in shared/src/sharing.ts — (entityType,
 // entityId, name, sharedAt), the same pair a bulk share speaks, because the
 // payload covers every shareable kind and not just places. THIS panel still
-// renders places only (it filters on `entityType`), so waypoint/route/topo/
-// GeoPDF shares are visible on Logjam GPS and not here yet.
+// renders places only (it filters on `entityType`), so waypoint/route/topo
+// shares are visible on Logjam GPS and not here yet.
 export type TFriendShareRow = FriendShareRow;
 export type TFriendShares = FriendShares;
 
@@ -1878,9 +2052,9 @@ export type CopiedPlace = TPlace & {
  *
  * NO `copyMedia` IN THE BODY, deliberately: the server then falls back to the
  * account's `uiPreferences.copyPlaceMedia`, which is what the user last chose
- * on Logjam GPS. Sending a value here would silently override a preference this
- * app has no switch for. The response says what actually happened to the media,
- * which is what the caller reports.
+ * in Settings. Sending a value here would silently override that preference.
+ * The response says what actually happened to the media, which is what the
+ * caller reports.
  */
 export function copyPlace(placeId: string): Promise<CopiedPlace> {
   return apiFetch<CopiedPlace>(`/places/${placeId}/copy`, { method: "POST" });
@@ -1928,7 +2102,7 @@ export function useNotifications(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    // Guards a stale in-flight response landing after a newer one.
     let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
       .then(({ data, total }) => {
@@ -2015,7 +2189,7 @@ export type {
 
 // ── Vector style (live, per-user) ─────────────────────────────
 
-import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+import type { TopoExportJobView } from "@logjam/shared";
 
 // ── Topo exports (Stage 2 on-demand pipeline) ────────────────
 
@@ -2027,6 +2201,8 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // True once the first fetch has settled, either way.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -2053,10 +2229,13 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load exports."));
+          setError(messageFromError(err, "Couldn't load your maps."));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -2073,7 +2252,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { exports, total, loading, error, refetch };
+  return { exports, total, loading, loaded, error, refetch };
 }
 
 export function deleteTopoExport(id: string): Promise<void> {
@@ -2084,182 +2263,6 @@ export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
 }
 
-// ── GeoPDF jobs (async export pipeline) ──────────────────────
-
-export type { GeoPdfJobView } from "@logjam/shared";
-import type { GeoPdfJobView } from "@logjam/shared";
-
-// Polls every `pollMs` while enabled AND at least one job is in progress
-// (queued/running), mirroring useTopoExports.
-export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
-  const [jobs, setJobs] = useState<GeoPdfJobView[]>([]);
-  // True total (pre server-side list cap); null until known.
-  const [total, setTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  // True once the first fetch has settled, either way. `loading` alone starts
-  // false, so a list reading it would flash "nothing yet" before any request.
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
-      .then(({ data, total }) => {
-        if (!cancelled) {
-          setJobs(data.jobs);
-          setTotal(total);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load GeoPDF jobs."));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoaded(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, fetchCount]);
-
-  const hasInProgress = jobs.some(
-    (j) => j.status === "queued" || j.status === "running",
-  );
-  useEffect(() => {
-    if (!enabled || pollMs <= 0 || !hasInProgress) return;
-    const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
-    return () => clearInterval(id);
-  }, [enabled, pollMs, hasInProgress]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, total, loading, loaded, error, refetch };
-}
-
-export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {
-  return apiFetch<GeoPdfJobView>(`/geo-pdf/${id}`);
-}
-
-export function deleteGeoPdfJob(id: string): Promise<void> {
-  return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
-}
-
-export function useVectorStyle(enabled: boolean) {
-  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    apiFetch<VectorStyleSettings>("/vector-style")
-      .then((v) => {
-        setVectorStyle(v);
-        setError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(messageFromError(err, "Couldn't load vector style."));
-      })
-      .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  const save = useCallback(
-    async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
-      const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
-        method: "PUT",
-        body: next,
-      });
-      setVectorStyle(saved);
-      return saved;
-    },
-    [],
-  );
-
-  return { vectorStyle, loading, error, refetch, save };
-}
-
-const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
-
-// useLiveVectorStyle: wraps useVectorStyle to give a single, app-level source of
-// truth for the vector style. The returned `vectorStyle` updates optimistically
-// the instant `setVectorStyle` is called (so the map repaints live), while the
-// server PUT is debounced. This lets the LiDAR Topos panel be a controlled editor
-// whose edits flow straight to the MapLibre overlay without a page refresh.
-export function useLiveVectorStyle(enabled: boolean): {
-  vectorStyle: VectorStyleSettings | null;
-  setVectorStyle: (next: VectorStyleSettings) => void;
-  loadError: string | null;
-  saveError: string | null;
-} {
-  const {
-    vectorStyle: serverStyle,
-    error: loadError,
-    save,
-  } = useVectorStyle(enabled);
-  const [liveStyle, setLiveStyle] = useState<VectorStyleSettings | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Seed the live style once from the server value; never clobber an in-flight
-  // edit on a later server refetch (the saved value already equals the draft).
-  if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
-
-  const setVectorStyle = useCallback(
-    (next: VectorStyleSettings) => {
-      setLiveStyle(next);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        save(next)
-          .then(() => setSaveError(null))
-          .catch((err) => {
-            console.error(err);
-            setSaveError(messageFromError(err, "Couldn't save vector style."));
-          });
-      }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
-    },
-    [save],
-  );
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    [],
-  );
-
-  return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
-}
-
-// Renders `v3a4 III`, omitting unset segments (UX fix 4). Moved to
-// shared/src/canyonGrade.ts so web and mobile format identically; re-exported
-// here to keep existing import sites stable.
+// Renders `v3a4III`, omitting unset segments. Re-exported from
+// shared/src/canyonGrade.ts so Logjam Web and Logjam GPS format identically.
 export { formatCanyonGrade } from "@logjam/shared";

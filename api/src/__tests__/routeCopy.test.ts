@@ -12,8 +12,7 @@ import {
 } from "./_actors";
 
 // COPYING A SHARED ROUTE into your own account (`POST /routes/:id/copy`) — the
-// sibling of `POST /places/:id/copy`, and the half of "save a copy" that did
-// not exist until now.
+// sibling of `POST /places/:id/copy`.
 //
 // Requires `make dev` (Postgres + API on :8080) with AUTH_MODE=fake. Seed
 // baseline: alice owns SHARED_PLACE_ID and shares it with bob; carol is shared
@@ -28,7 +27,7 @@ import {
 //     place; a copy that inherited it would displace the original out of the
 //     place it belongs to — a write to the owner's data from the recipient's
 //     copy button.
-//  3. A STRANGER GETS 404, never 403 (SEC-001 anti-oracle): the status may not
+//  3. A STRANGER GETS 404, never 403 (anti-oracle): the status may not
 //     confirm that a route id exists to someone who cannot see it.
 
 const LINE: [number, number][] = [

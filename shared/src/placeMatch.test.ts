@@ -4,6 +4,7 @@ import {
   damerauLevenshtein,
   nameTier,
   matchPlace,
+  matchTripPlace,
   defaultsToMergeOnImport,
   MERGE_DEFAULT_DIST_M,
   type MatchCandidate,
@@ -188,7 +189,7 @@ describe("nameTier", () => {
   });
 });
 
-// The 19 positive corpus pairs (plan §5a). CSV/place imports carry coords, so
+// The 19 positive corpus pairs. CSV/place imports carry coords, so
 // every one resolves to "auto".
 describe("matchPlace — 19 positive corpus pairs (with coords)", () => {
   const cases: Array<{ input: string; candidates: MatchCandidate[] }> = [
@@ -381,9 +382,8 @@ describe("defaultsToMergeOnImport", () => {
     );
   });
 
-  // The reported harm: a name-similar place 1.8 km away arrived pre-checked to
-  // merge. It stays on the review list as a tickable option; it just no longer
-  // starts selected.
+  // A name-similar place 1.8 km away stays on the review list as an option,
+  // but does not default to merge.
   it("defaults to create-as-new for a name-similar match 1.8 km away", () => {
     expect(defaultsToMergeOnImport(scored(1800))).toBe(false);
   });
@@ -432,5 +432,36 @@ describe("defaultsToMergeOnImport", () => {
     );
     expect(result.best?.candidate.id).toBe("near");
     expect(defaultsToMergeOnImport(result.best)).toBe(true);
+  });
+});
+
+// Mutation that turns it red: dropping the `fits.length === 1` test (a
+// numbered twin then pre-selects), or the `confidence !== "none"` early return
+// (an exact match is then re-scored as a prefix).
+describe("matchTripPlace", () => {
+  const one = candidate("1", "Wollangambe One");
+  const two = candidate("2", "Wollangambe Two");
+
+  it("offers the one place a bare name starts", () => {
+    const r = matchTripPlace("Wollangambe", [
+      one,
+      candidate("3", "Grand Canyon"),
+    ]);
+    expect(r.confidence).toBe("review");
+    expect(r.best?.candidate.id).toBe("1");
+  });
+
+  it("offers every fit without choosing when several start with the name", () => {
+    const r = matchTripPlace("Wollangambe", [one, two]);
+    expect(r.confidence).toBe("review");
+    expect(r.best).toBeNull();
+    expect(r.candidates.map((c) => c.candidate.id)).toEqual(["1", "2"]);
+  });
+
+  it("keeps an exact match and refuses a mid-word prefix", () => {
+    expect(matchTripPlace("Wollangambe One", [one, two]).confidence).toBe(
+      "auto",
+    );
+    expect(matchTripPlace("Wollan", [one]).confidence).toBe("none");
   });
 });

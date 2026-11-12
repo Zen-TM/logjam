@@ -1,4 +1,4 @@
-// "Save maps offline" — frame an area, pick which maps and how much detail, see
+// "Save an offline map" — frame an area, pick which maps and how much detail, see
 // what it costs, download it.
 //
 // The screen answers ONE question and answers it in the hero: what is this going
@@ -16,19 +16,22 @@
 // (see regionFrame.ts).
 //
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
-// tile coordinates only. The one place it reaches the Logjam API is the body of
-// the vector clip request, which every signed-in save now makes
-// (offline/regionDownloads.ts; the API redacts it from logs and keeps the clip
-// 120 s). A guest's save makes no Logjam request at all.
+// tile coordinates only, as byte ranges of public archives to our CDN, and as
+// byte ranges of a sharpened area's private archive to the bucket, through the
+// presigned URL the account's list gave (offline/regionDownloads.ts). The one
+// Logjam API request is for that list, and it carries no bbox: the bbox never
+// reaches the API (docs/decisions/0036, update of 2026-10-24). Guards:
+// offline/regionDownloads.test.ts ("cuts the clip from the CDN, asking for
+// nothing but byte ranges", "cuts a sharpened area's clip through its
+// presigned URL, filed under the area").
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
 import {
   Camera,
@@ -37,21 +40,21 @@ import {
   type LngLatBounds,
   type MapRef,
 } from "@maplibre/maplibre-react-native";
-import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
-  NSW_5M,
-  NSW_CONTOURS,
+  NSW_REGION,
+  NSW_COVERAGE,
+  NSW_FIRE,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
-import { useAccountState } from "../auth/AccountStateContext";
 import { spacing, makeStyles, muted } from "../theme";
 import {
   BottomSheet,
@@ -62,26 +65,47 @@ import {
   Notice,
   ChipRail,
   TextField,
+  Toast,
+  type ToastMessage,
 } from "../ui";
 import {
   enqueueRegionDownloads,
   setRegionGroupLabel,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
-import { isExpensive } from "../offline/networkPolicy";
+import { placeRegistryWithRegion } from "../offline/placeRegistry";
+import { askAllowCellular } from "../offline/askMobileData";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
-import { savesVectorOnly, vectorClipFor } from "../offline/regionTilePlanning";
+import { regionClipSpecs } from "../offline/regionTilePlanning";
+import {
+  areaClipBytes,
+  areaClipSpecs,
+  areasForSave,
+  saveGate,
+} from "../offline/sharpenedClips";
+import { rememberSharpenedAreas } from "../offline/sharpenedAreaStore";
+import { useApiQuery } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityStatus } from "../auth/capabilities";
+import { getCompletedOverlays } from "./completedOverlays";
+import { useConnectivity } from "./connectivity";
+import { sharpenedAreasOf } from "./sharpenedArchives";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
+  bboxToFrame,
   defaultFrameInsets,
+  startingArea,
   frameToBbox,
+  detailLabel,
   metresPerPixel,
   type FrameInsets,
   type FrameViewport,
@@ -98,9 +122,9 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * worse than no affordance.
  *
  * `protomaps`, our own vector basemap, is not a choice here: it comes with
- * every area a signed-in user saves (`vectorClipFor`). It is a few megabytes
+ * every area anyone saves (`regionClipSpecs`). It is a few megabytes
  * against tens for one raster, and the route and measure tools snap to it, so
- * leaving it optional meant a tool that quietly stopped working in the field.
+ * leaving it optional would mean a tool that quietly stops working in the field.
  */
 type SelectableId = OfflineBasemapId;
 const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
@@ -145,49 +169,39 @@ function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
-  if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
-  if (basemapId === NSW_CONTOURS.id) return "Contours";
+  if (basemapId === NSW_REGION.terrain.heights.id)
+    return "Elevation data, NSW 5 m";
+  if (basemapId === NSW_REGION.terrain.contours.id) return "Contours";
+  if (basemapId === NSW_REGION.terrain.slope.id) return "Slope";
+  if (basemapId === NSW_REGION.terrain.land.id) return MAP_TERRAIN.copy.land;
+  if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
+  if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
-  return `${name ?? "Map"} region`;
+  return name ?? "Map";
 }
 
-/** How far the map runs up behind the hero — one corner radius. */
-const HERO_OVERLAP = 16;
 /**
- * Lowest the top edge may go. The overlap plus half a handle: clamping to the
- * overlap alone leaves the handle's upper half behind the hero, which is still
- * a handle you have to aim under.
+ * Lowest the top edge may go: half a handle below the hero, or the handle's
+ * upper half sits against the hero, which is still a handle you have to aim
+ * under.
  */
-const MIN_TOP_INSET = HERO_OVERLAP + 22;
-
-/**
- * The controls panel's height, fixed so the MAP never resizes under a frame the
- * user is mid-drag. Nothing inside it changes size any more: the "use mobile
- * data" toggle that used to appear and disappear with the connection is now a
- * dialog at the Save tap, and the warning moved onto the map. What is left —
- * the map-layer chips, the detail rail, the Save button — is always the same
- * shape, so the panel does not scroll.
- *
- * That includes the one line under the chips saying whether the detailed map
- * comes with the area: it is always one line, whatever it says.
- *
- * ponytail: fixed pixels, so a very large OS font setting will clip the last
- * row rather than scroll it. Measure and raise this number if that turns
- * up in the field; making the panel scrollable again just hides the Save button.
- */
-const PANEL_HEIGHT = 250;
-
-/** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
-const PROTOMAPS_FLAVOR = "light" as const;
+const MIN_TOP_INSET = 22;
+// Room for the frame's handles around a plan's area, which the camera fits
+// and the frame then sits on (see applyBounds). The top clears the hero; the
+// bottom clears the "Move the map" hint.
+const BOUNDS_PADDING = { top: 56, bottom: 64, left: 32, right: 32 };
 
 export function RegionDownloadScreen({
   onBack,
+  backLabel,
   onStarted,
   initialBasemapId,
   initialCenter,
   initialZoom,
+  initialBounds,
 }: {
   onBack: () => void;
+  backLabel: string;
   /**
    * The downloads are already enqueued and running by the time this fires: it
    * is called once the user has named the area (or dismissed the prompt), and
@@ -203,6 +217,8 @@ export function RegionDownloadScreen({
   initialBasemapId?: BasemapId;
   initialCenter?: [number, number];
   initialZoom?: number;
+  /** A plan's items: the frame starts on them, padded. */
+  initialBounds?: LngLatBounds;
 }) {
   const styles = useStyles();
 
@@ -220,24 +236,20 @@ export function RegionDownloadScreen({
     PROTOMAPS_FLAVOR,
   );
   const mapRef = useRef<MapRef>(null);
+  const framedRef = useRef(false);
+  const startArea = useMemo(
+    () => (initialBounds ? startingArea(initialBounds) : null),
+    [initialBounds],
+  );
 
-  // The vector clip is cut server-side (POST /basemap/region-clip) and streamed
-  // back over an authenticated request, so it is the one map source a guest
-  // genuinely cannot have. The three SIX rasters are fetched client-direct from
-  // the provider with no Logjam request at all (regionTileDownload.ts) and work
-  // exactly as they do for anyone else.
-  //
-  // Everyone else gets it with every area, unasked (`vectorClipFor`); the
-  // note under the chips says which of the two this is.
-  const isGuest = useAccountState().accountState === "guest";
   const downloadable = DOWNLOADABLE;
 
   const [selected, setSelected] = useState<SelectableId[]>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? [startBasemapId as SelectableId]
-      : // Arriving from the Vector map, signed in: that map is coming anyway,
-        // so nothing else is picked for them.
-        startBasemapId === "protomaps" && !isGuest
+      : // Arriving from the Vector map: that map is coming anyway, so nothing
+        // else is picked for them.
+        startBasemapId === "protomaps"
         ? []
         : ["six-topo"],
   );
@@ -248,15 +260,23 @@ export function RegionDownloadScreen({
   // Set while the free-space check is in flight, so a second tap can't enqueue
   // the same area twice.
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notifyError = useCallback((text: string) => {
+    setToast((prev) => ({
+      text,
+      tone: "error",
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
+  }, []);
   // The run being named. Non-null means the jobs are ALREADY enqueued and
   // running — this prompt is over the top of them, never in front of them.
   const [naming, setNaming] = useState<{
     groupId: string;
     name: string;
   } | null>(null);
-  const nameInputRef = useRef<TextInput>(null);
+  const nameInputRef = useRef<TextInputInstance>(null);
 
-  // "Region 3", numbered off what this phone already holds plus what is still
+  // "Offline map 3", numbered off what this phone already holds plus what is still
   // downloading. Nothing in it needs the network or says where the area is
   // (see regionName.ts).
   const { artifacts } = useMapArtifacts();
@@ -276,10 +296,9 @@ export function RegionDownloadScreen({
   // is the one the tap was about. Deselecting the previewed map falls back to
   // the default rather than to whatever happens to be left in the list.
   //
-  // The default is the vector basemap: it is the detailed one, and it is what
-  // the map screen draws. A guest cannot have it (the clip is an authed API
-  // call), so their default is the topo raster.
-  const defaultPreview: BasemapId = isGuest ? "six-topo" : "protomaps";
+  // The default is the vector basemap: it is the detailed one, it is what the
+  // map screen draws, and every area saves it.
+  const defaultPreview: BasemapId = "protomaps";
   const [preview, setPreview] = useState<BasemapId>(() =>
     downloadable.includes(startBasemapId as SelectableId)
       ? startBasemapId
@@ -293,9 +312,9 @@ export function RegionDownloadScreen({
       resolveMapSource(
         { kind: "basemap", basemapId: previewBasemap },
         // `artifacts: []` on purpose: the preview is the ONLINE map, not
-        // whatever this phone already holds. `cdnBaseUrl` is what the vector
-        // source's pmtiles:// URL is built from — empty, it resolved to an
-        // unfetchable archive path, which is why the vector map never drew.
+        // whatever this phone already holds. `cdnBaseUrl` builds the vector
+        // source's pmtiles:// URL — without it, it would resolve to an
+        // unfetchable archive path.
         {
           connectivity: "online",
           artifacts: [],
@@ -326,16 +345,30 @@ export function RegionDownloadScreen({
     (bounds: LngLatBounds) => {
       if (size.width === 0) return;
       const [west, south, east, north] = bounds;
-      setViewport({
+      const next = {
         north,
         south,
         east,
         west,
         width: size.width,
         height: size.height,
-      });
+      };
+      setViewport(next);
+      // A plan's area: the first settled reading puts the frame on the
+      // plan's places and ways, not on the default inset.
+      if (startArea && !framedRef.current) {
+        framedRef.current = true;
+        const [aw, as, ae, an] = startArea;
+        const f = bboxToFrame(next, {
+          west: aw,
+          south: as,
+          east: ae,
+          north: an,
+        });
+        setFrame({ ...f, top: Math.max(MIN_TOP_INSET, f.top) });
+      }
     },
-    [size.width, size.height],
+    [size.width, size.height, startArea],
   );
 
   /**
@@ -343,11 +376,11 @@ export function RegionDownloadScreen({
    *
    * MLRN 11's native getBounds is `mapLibreMap!!.projection.visibleRegion` — a
    * non-null assertion on a field that is null until the map is created. Asking
-   * on mount therefore raced the map: winning it gave a viewport, losing it
-   * threw a Kotlin NPE that React Native promotes to a HOST exception, which
+   * on mount therefore races the map: winning it gives a viewport, losing it
+   * throws a Kotlin NPE that React Native promotes to a HOST exception, which
    * tears down the whole React instance. That is not a JS error, so the root
-   * error boundary never sees it — the screen just goes blank and the app has
-   * to be killed and reopened. Observed as "save maps offline sometimes works".
+   * error boundary never sees it — the screen just goes blank and Logjam GPS has
+   * to be killed and reopened.
    *
    * Gated on `onDidFinishLoadingMap` below, which cannot fire before the map
    * exists. Every later reading comes off the region event instead (see
@@ -369,30 +402,48 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
+  // The account's sharpened areas the box reaches go into the save, cut
+  // through the list's presigned URLs (offline/sharpenedClips.ts); a guest
+  // has none. What Save does while the list loads or fails is `saveGate`'s.
+  // Online passed as true, as `capabilityScreenBlock` does: a query disabled
+  // offline would leave the list loading for good.
+  const loadsAreas =
+    capabilityStatus("lidarOverlays", useAccountState().accountState, true)
+      .status === "available";
+  const overlays = useApiQuery(
+    getCompletedOverlays,
+    "Couldn't load your sharpened areas.",
+    loadsAreas,
+  );
+  const areasState = areasForSave(loadsAreas, overlays);
+  // ONE connectivity reading for the Save button and its tap (`noConnection`
+  // below): two readings disagree on Wi-Fi with no internet, where a save
+  // would then queue with no area list and leave the areas out quietly.
+  // Guard: map/sharpenedWiring.test.ts ("lets Save go ahead only as the gate
+  // says, from the live connectivity", "asks for a connection at the tap by
+  // the gate's reading").
+  const online = useConnectivity() === "online";
+  const gate = saveGate(areasState, online);
+  const { sharpenedAreas, areasEpoch } = useMemo(
+    () => sharpenedAreasOf(overlays.data, loadsAreas),
+    [loadsAreas, overlays.data],
+  );
+  // The list the clips are cut from is the one the offline map and sampler
+  // must know, or an area new since the map loaded its list would be saved
+  // but never drawn or read.
+  useEffect(() => {
+    if (overlays.data && loadsAreas)
+      void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+  }, [overlays.data, loadsAreas, sharpenedAreas, areasEpoch]);
+  const areaBytes = bbox ? areaClipBytes(sharpenedAreas, bbox) : 0;
+
   const pyramidIds = selected;
-  const vectorClip = bbox ? vectorClipFor(isGuest) : "none";
-  const includesVector = vectorClip === "include";
-  // The contours ride with the vector map they are always drawn on, unasked:
-  // at most about 19 MB on the largest mountain area. So they follow its rule
-  // (docs/decisions/0029): every signed-in save has them, a guest's has none.
-  const includesContours = includesVector;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
-    ? planRegionForBasemaps(
-        bbox,
-        pyramidIds,
-        detailZoom,
-        catalogMaxZoom,
-        // The clip endpoint needs a signed-in user, as the vector map does.
-        !isGuest,
-        includesContours,
-      )
+    ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
     : null;
   const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
-  // The vector map alone is a download worth making, so no raster need be
-  // picked; with nothing picked and no vector map there is nothing to save.
-  const mapCount = selected.length + (includesVector ? 1 : 0);
-  const canDownload = mapCount > 0 && bbox != null && caps?.ok === true;
+  const canDownload = bbox != null && caps?.ok === true && gate.canSave;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -406,18 +457,42 @@ export function RegionDownloadScreen({
       .map((source) => source.zMax) ?? [];
   const deepestZoom =
     rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
-  const vectorOnly = savesVectorOnly(vectorClip, pyramidIds.length);
+  const vectorOnly = pyramidIds.length === 0;
 
   // ONE warning, over the map (DESIGN.md). The three cap reasons
   // (edge-too-long, area-too-large, tile-cap) all mean the same thing to the
   // user and all have the same ways out, so they are one chip — three
   // sentences in a hero band cost more map than they ever bought.
   const overCap = caps != null && !caps.ok;
+  // Why Save is off, for the press that asks: each cause as it reads on screen.
+  const noArea = bbox == null || caps == null;
+  const TOO_LARGE = "Too large — reduce the area, detail or maps";
+  const noSaveReason = busy
+    ? "Saving…"
+    : noArea
+      ? "Waiting for the map"
+      : overCap
+        ? TOO_LARGE
+        : gate.warning === "failed"
+          ? "Couldn't check your sharpened areas"
+          : "Checking your sharpened areas…";
 
   const startDownloads = useCallback(
-    (groupId: string, groupLabel: string, allowCellular: boolean) => {
+    (
+      groupId: string,
+      groupLabel: string,
+      allowCellular: boolean,
+      withAreas: boolean,
+    ) => {
       if (!bbox || !job) return;
       enqueueRegionDownloads([
+        // First, while the list's presigned URLs are freshest: the queue runs
+        // one job at a time, and an expired URL fails its clip for good.
+        ...areaClipSpecs(
+          { bbox, groupId, groupLabel, allowCellular },
+          withAreas ? sharpenedAreas : [],
+          uuid,
+        ),
         ...job.perSource.map((source) => ({
           taskKind: "tile-pyramid" as const,
           id: uuid(),
@@ -430,126 +505,71 @@ export function RegionDownloadScreen({
           zMax: source.zMax,
           allowCellular,
         })),
-        ...job.demArchives.map(({ sourceId }) => ({
-          taskKind: "http-file" as const,
-          id: uuid(),
-          basemapId: sourceId,
-          demSourceId: sourceId,
-          label: regionLabelFor(sourceId),
-          groupId,
-          groupLabel,
-          bbox,
-          zMax: detailZoom,
-          allowCellular,
-        })),
-        ...(includesContours
-          ? [
-              {
-                taskKind: "http-file" as const,
-                id: uuid(),
-                basemapId: NSW_CONTOURS.id,
-                contours: true,
-                label: regionLabelFor(NSW_CONTOURS.id),
-                groupId,
-                groupLabel,
-                bbox,
-                zMax: NSW_CONTOURS.maxzoom,
-                allowCellular,
-              },
-            ]
-          : []),
-        ...(includesVector
-          ? [
-              {
-                taskKind: "http-file" as const,
-                id: uuid(),
-                basemapId: "protomaps" as const,
-                label: regionLabelFor("protomaps"),
-                groupId,
-                groupLabel,
-                bbox,
-                // Always the archive's full detail, whatever the rail says:
-                // the rail prices rasters, and a full-detail clip is a few
-                // megabytes (measured: 1–7 MB for 5–40 km of bush).
-                zMax: catalogMaxZoom("protomaps"),
-                allowCellular,
-              },
-            ]
-          : []),
+        ...regionClipSpecs(
+          { bbox, groupId, groupLabel, allowCellular },
+          job.demArchives.map(({ sourceId }) => sourceId),
+          (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
+        ),
       ]);
+      // The first region brings the place names for search (ADR 0034).
+      placeRegistryWithRegion(allowCellular);
     },
-    [bbox, includesContours, includesVector, job],
+    [bbox, job, sharpenedAreas],
   );
 
-  const handleSave = useCallback(() => {
-    if (!bbox || !job) return;
-    setBusy(true);
-    void (async () => {
-      try {
-        // Asked HERE, at the tap, rather than from a subscription's last
-        // value: the answer decides whether tens of megabytes go on someone's
-        // plan, and the connection can change between the last event and the
-        // tap. It is also why there is no "use mobile data" toggle any more —
-        // a switch set before the walk out of Wi-Fi range answers a question
-        // about a connection the phone is no longer on.
-        const connection = await NetInfo.fetch();
-        if (connection.isConnected === false) {
-          Alert.alert(
-            "No connection",
-            "Saving maps needs a connection. Try again when you have one.",
-          );
-          return;
-        }
-        // Metered: ask, once, about THIS download. Declining is a cancel, not
-        // a setting to go and find.
-        let allowCellular = false;
-        if (isExpensive(connection)) {
-          allowCellular = await new Promise<boolean>((resolve) => {
-            Alert.alert(
-              "Use mobile data?",
-              "This download will use your mobile data.",
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resolve(false),
-                },
-                { text: "Download", onPress: () => resolve(true) },
-              ],
-              { cancelable: true, onDismiss: () => resolve(false) },
+  // `withAreas` false only from the failed-list warning's "Save without
+  // sharpened areas".
+  const handleSave = useCallback(
+    (withAreas: boolean) => {
+      if (!bbox || !job) return;
+      setBusy(true);
+      void (async () => {
+        try {
+          // Offline by the same reading that enabled Save (`gate`).
+          if (gate.noConnection) {
+            notifyError(
+              "Saving maps needs a connection. Try again when you have one.",
             );
-          });
-          if (!allowCellular) return;
+            return;
+          }
+          const allowCellular = await askAllowCellular();
+          if (allowCellular === null) return;
+          // Check space before starting: on a full phone the SQLite insert would
+          // fail mid-batch and report a generic failure with nothing reclaimed.
+          // The p90 estimate is what actually lands, so that is what has to fit.
+          //
+          // `p90Bytes` has no entry for the vector clip, whose size is known
+          // once its directories are read. That one is checked inside
+          // `runRegionClip`, through the same helper.
+          await assertSpaceFor(job.p90Bytes + (withAreas ? areaBytes : 0));
+          // One id for the whole run: every map chosen here covers the SAME area,
+          // so Saved shows them as one card (see MapArtifact.groupId).
+          //
+          // Enqueue FIRST, ask for a name after: the naming prompt opens over a
+          // download that is already running, which is the point of it — the
+          // tiles do not wait on the keyboard. The default name is written with
+          // the jobs, so dismissing the prompt is a complete answer.
+          const groupId = uuid();
+          startDownloads(groupId, defaultName, allowCellular, withAreas);
+          setNaming({ groupId, name: defaultName });
+        } catch (err) {
+          if (!(err instanceof NotEnoughSpaceError)) throw err;
+          notifyError(`Not enough space. ${err.message} Or pick fewer maps.`);
+        } finally {
+          setBusy(false);
         }
-        // The screen computes and shows a size estimate and then never compared
-        // it to the space available. On a full phone the SQLite insert fails
-        // mid-batch and the job reports "That didn't finish. Try again." — no
-        // hint that the phone is full, and nothing reclaimed. Check before
-        // starting; the p90 is what actually lands, so that is what has to fit.
-        //
-        // This covers the RASTER pyramids only — `p90Bytes` has no entry for
-        // the vector clip, whose size the server reports at request time. That
-        // one is checked inside `downloadProtomapsRegion`, through the same
-        // helper.
-        await assertSpaceFor(job.p90Bytes);
-        // One id for the whole run: every map chosen here covers the SAME area,
-        // so Saved shows them as one card (see MapArtifact.groupId).
-        //
-        // Enqueue FIRST, ask for a name after: the naming prompt opens over a
-        // download that is already running, which is the point of it — the
-        // tiles do not wait on the keyboard. The default name is written with
-        // the jobs, so dismissing the prompt is a complete answer.
-        const groupId = uuid();
-        startDownloads(groupId, defaultName, allowCellular);
-        setNaming({ groupId, name: defaultName });
-      } catch (err) {
-        if (!(err instanceof NotEnoughSpaceError)) throw err;
-        Alert.alert("Not enough space", `${err.message} Or pick fewer maps.`);
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [bbox, job, defaultName, startDownloads]);
+      })();
+    },
+    [
+      bbox,
+      job,
+      areaBytes,
+      defaultName,
+      startDownloads,
+      gate.noConnection,
+      notifyError,
+    ],
+  );
 
   // Confirm and dismiss do the same thing: the field starts on the default, so
   // an untouched dismissal rewrites the label the jobs already carry. Leaving
@@ -578,33 +598,29 @@ export function RegionDownloadScreen({
 
   return (
     <View style={styles.root}>
-      {/* Wrapped only to lift it above the map, which now slides up under its
-          rounded bottom corners. */}
-      <View style={styles.hero}>
-        <Hero
-          onBack={onBack}
-          eyebrow="Offline maps"
-          title="Save maps offline"
-          // TWO stats, equal weight, one line — the two things the decision is
-          // actually made on. The tile count and the p90 spread were the third
-          // and fourth, they overflowed the line, and neither changes what the
-          // user does next. The hero carries no warning slot at all now (the
-          // only one left is the chip over the map), which is what keeps its
-          // height fixed: a band that appeared and cleared resized the map
-          // under a frame the user was already dragging.
-          value={
-            job && job.totalTiles > 0 ? `≈ ${formatBytes(job.meanBytes)}` : "—"
-          }
-          secondaryValue={
-            job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
-          }
-        />
-      </View>
+      <Hero
+        onBack={onBack}
+        backLabel={backLabel}
+        title="Save an offline map"
+        wrapValue
+        // TWO stats, equal weight, one line — the two things the decision is
+        // actually made on. Showing additional stats would overflow the
+        // line without changing what the user does next. The hero carries no
+        // warning slot (warnings overlay the map), keeping its height fixed
+        // so the map does not resize under a frame the user is actively
+        // dragging.
+        value={
+          job && job.totalTiles > 0
+            ? `≈ ${formatBytes(job.meanBytes + areaBytes)}`
+            : "—"
+        }
+        secondaryValue={
+          job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
+        }
+      />
 
-      {/* The map slides UP under the hero's rounded bottom corners, so those
-          two notches show map instead of page colour. The frame's top inset is
-          clamped to the same overlap, or the top edge handle can be dragged in
-          behind the hero and become ungrabbable. */}
+      {/* The frame's top inset is clamped (MIN_TOP_INSET), or the top edge
+          handle can be dragged against the hero and become ungrabbable. */}
       <View style={styles.mapWrap} onLayout={handleLayout}>
         <Map
           ref={mapRef}
@@ -621,10 +637,11 @@ export function RegionDownloadScreen({
           onDidFinishLoadingMap={() => setMapReady(true)}
         >
           <Camera
-            initialViewState={{
-              center: startCenter,
-              zoom: startZoom,
-            }}
+            initialViewState={
+              startArea
+                ? { bounds: startArea, padding: BOUNDS_PADDING }
+                : { center: startCenter, zoom: startZoom }
+            }
           />
           {previewResolved.map((resolved) =>
             resolved.status === "ok" ? (
@@ -635,14 +652,13 @@ export function RegionDownloadScreen({
                   <ProtomapsLayers
                     flavor={PROTOMAPS_FLAVOR}
                     sourceID={sourceIdFor(resolved.key)}
-                    startIndex={1}
                   />
                 ) : (
                   <Layer
                     key={`region-preview-${resolved.key}`}
                     type="raster"
                     id={`region-preview-${resolved.key}`}
-                    layerIndex={1}
+                    beforeId={BAND_MARKERS.land}
                     style={{ rasterOpacity: 1 }}
                   />
                 )}
@@ -658,13 +674,52 @@ export function RegionDownloadScreen({
           />
         ) : null}
         {/* The screen's ONLY warning, over the map rather than in the hero:
-            the hero's band was vertical space the map wanted, and the three
-            cap reasons it carried were one message wearing three hats. */}
+            a hero band would take vertical space the map needs, and the three
+            cap reasons represent one message wearing three hats. One at a
+            time: the cap first, then the account's area list, which a save
+            waits for (`areasForSave`). */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Notice icon="warning" tone="warning">
               Too large — reduce the area or detail, or pick fewer maps.
             </Notice>
+          </View>
+        ) : gate.warning === "failed" ? (
+          // `box-none`: "Try again" takes a press, and the strip around it
+          // still lets the frame's top handle and a pan through.
+          <View style={styles.mapWarning} pointerEvents="box-none">
+            <Notice
+              icon="warning"
+              tone="warning"
+              action={
+                <View style={styles.warningActions}>
+                  <Button
+                    label="Try again"
+                    variant="outlineAccent"
+                    onPress={overlays.refetch}
+                  />
+                  <Button
+                    label="Save without sharpened areas"
+                    variant="outlineAccent"
+                    onPress={() => handleSave(false)}
+                    disabled={bbox == null || caps?.ok !== true || busy}
+                    disabledReason={
+                      busy
+                        ? "Saving…"
+                        : noArea
+                          ? "Waiting for the map"
+                          : TOO_LARGE
+                    }
+                  />
+                </View>
+              }
+            >
+              {overlays.error ?? ""}
+            </Notice>
+          </View>
+        ) : gate.warning === "loading" ? (
+          <View style={styles.mapWarning} pointerEvents="none">
+            <Notice>Checking for your sharpened areas…</Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
@@ -703,12 +758,6 @@ export function RegionDownloadScreen({
           })}
         </ScrollView>
 
-        <Text style={styles.sourceNote}>
-          {isGuest
-            ? "The detailed map needs an account. These download without one."
-            : "The detailed map is saved with every area."}
-        </Text>
-
         <View style={styles.panelBody}>
           <Field
             label="Detail"
@@ -720,7 +769,7 @@ export function RegionDownloadScreen({
                   archive comes with you. */}
                 {vectorOnly
                   ? "Detailed map only · sharp at any zoom"
-                  : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
+                  : `Sharp to about ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m on the ground`}
               </Text>
             }
           >
@@ -728,7 +777,7 @@ export function RegionDownloadScreen({
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
                 value: String(zoom),
-                label: `z${zoom}`,
+                label: detailLabel(zoom, centreLat),
               }))}
               value={String(detailZoom)}
               onChange={(next) => setDetailZoom(Number(next))}
@@ -739,10 +788,11 @@ export function RegionDownloadScreen({
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
           <Button
-            label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
+            label="Save this area"
             icon="saveOffline"
-            onPress={handleSave}
+            onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
+            disabledReason={noSaveReason}
           />
         </View>
       </View>
@@ -775,14 +825,14 @@ export function RegionDownloadScreen({
             returnKeyType="done"
             onSubmitEditing={closeNaming}
           />
-          {/* The honesty the progress screen's back-press warning used to
-              carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
             Downloads keep going after you leave Logjam GPS. Watch them in
             Saved.
           </Text>
         </View>
       </BottomSheet>
+
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
@@ -790,8 +840,7 @@ export function RegionDownloadScreen({
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
-  hero: { zIndex: 1 },
-  mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
+  mapWrap: { flex: 1, overflow: "hidden" },
   mapHint: {
     position: "absolute",
     left: spacing(2),
@@ -802,22 +851,22 @@ const useStyles = makeStyles((theme, textRole) => ({
   // The one warning, at the TOP of the map — same overlay treatment as the
   // hint along the bottom, in the warning colour. Over the map rather than in
   // the hero so that it costs no layout: the hero and the panel are what the
-  // map is measured against, and a band appearing or clearing there resized
-  // the map mid-gesture and moved the frame the user was dragging.
-  // Clear of the hero, which overlaps the map's top strip: at two lines the
-  // pill used to slide up behind it and lose its first line. `HERO_OVERLAP`
-  // is that strip; the rest is air.
+  // map is measured against, and a band appearing or clearing there would resize
+  // the map mid-gesture and move the frame the user is dragging.
   mapWarning: {
     position: "absolute",
     left: spacing(2),
     right: spacing(2),
-    top: HERO_OVERLAP + spacing(1),
+    top: spacing(1),
     alignItems: "center",
   },
+  warningActions: { gap: spacing(1) },
   namingBody: { gap: spacing(1.5) },
   namingNote: { ...muted(theme, textRole.detail) },
+  // Sized to its contents, which have a fixed shape (the connection
+  // confirmation is a dialog and warnings overlay the map), so the map takes
+  // every spare pixel and still never resizes under a frame mid-drag.
   panel: {
-    height: PANEL_HEIGHT,
     backgroundColor: theme.page,
     paddingTop: spacing(1),
     paddingBottom: spacing(1.5),
@@ -826,26 +875,24 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderTopColor: theme.line,
   },
   panelBody: {
-    flex: 1,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1),
     gap: spacing(1),
   },
-  // Horizontally scrolling, like the detail rail: four chips wrapped onto a
-  // second line and took the height straight out of the map.
+  // Horizontally scrolling, like the detail rail: wrapping chips onto a
+  // second line would take the height straight out of the map.
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
-  sourceNote: {
-    ...muted(theme, textRole.detail),
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(0.5),
-  },
   chipRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { ...muted(theme, textRole.meta) },
+  detailCaption: {
+    ...muted(theme, textRole.meta),
+    flexShrink: 1,
+    textAlign: "right",
+  },
 }));

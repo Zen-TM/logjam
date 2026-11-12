@@ -3,7 +3,7 @@
 // A column added only to CREATE TABLE exists on fresh installs and is missing
 // on every upgraded device; a column added only to ADDED_COLUMNS is the
 // mirror, and both break at a distance from the edit. This asserts the pair
-// agrees, which is the failure root CLAUDE.md records having shipped once.
+// agrees, which is the failure root AGENTS.md records having shipped once.
 import { describe, expect, it } from "vitest";
 
 import { ADDED_COLUMNS, SCHEMA_SQL } from "./schema";
@@ -13,7 +13,7 @@ import { OFFLINE_TABLES } from "./wipedStores";
 function createTableColumns(sql: string): Map<string, Set<string>> {
   const tables = new Map<string, Set<string>>();
   // Comments go FIRST: the table pattern stops at the next `;`, so a single
-  // semicolon inside a `--` comment used to truncate that table's column set
+  // semicolon inside a `--` comment would truncate that table's column set
   // and quietly make the ADDED_COLUMNS check below vacuous for it.
   const code = sql.replace(/--.*$/gm, "");
   const pattern = /CREATE TABLE IF NOT EXISTS (\w+) \(([^;]*?)\n\s*\);/g;
@@ -62,11 +62,10 @@ describe("offline schema", () => {
   });
 });
 
-// MOT-001: OFFLINE_TABLES (wipedStores.ts, which wipeLocalData.ts clears) vs
-// the CREATE TABLEs above is a THIRD hand-kept pair, beside ADDED_COLUMNS, with
-// its own drift history — `track_point_rejected` (lon/lat of every rejected
-// fix) joined SCHEMA_SQL without joining OFFLINE_TABLES, so those coordinates
-// survived the account-transition wipe on a shared phone. `wipedStores.test.ts`
+// OFFLINE_TABLES (wipedStores.ts, which wipeLocalData.ts clears) vs
+// the CREATE TABLEs above must agree: `track_point_rejected` (lon/lat of
+// rejected fixes) must be in OFFLINE_TABLES so those coordinates do not
+// survive the account-transition wipe on a shared phone. `wipedStores.test.ts`
 // holds the same pair together for the sign-out confirmation as well.
 describe("the sign-out wipe covers every table this schema creates", () => {
   it("wipes every table SCHEMA_SQL creates", () => {
@@ -78,7 +77,7 @@ describe("the sign-out wipe covers every table this schema creates", () => {
     expect(missing).toEqual([]);
   });
 
-  it("holds the table the audit found leaking", () => {
+  it("holds track_point_rejected", () => {
     expect(OFFLINE_TABLES).toContain("track_point_rejected");
   });
 });

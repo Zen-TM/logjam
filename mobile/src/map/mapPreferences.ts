@@ -1,16 +1,15 @@
 // Map preferences — the device-scoped switches behind Settings → Map.
 //
-// ONE module rather than one file per switch (the shape `compassPreference.ts`,
-// `snapPreference.ts` and `basemapPreference.ts` each took): those predate the
-// settings split and each has a caller outside this screen, where these five are
-// read in exactly two places — the Map settings page that writes them and
-// `MapScreen` that renders them. Five near-identical 20-line files would be five
-// copies of the same read/validate/write.
+// ONE module rather than one file per switch: `compassPreference.ts`,
+// `snapPreference.ts` and `basemapPreference.ts` each have callers outside
+// MapScreen, where these switches are read in exactly two places — the Map
+// settings screen that writes them and `MapScreen` that renders them.
+// Consolidating them here avoids multiple copies of the same read/validate/write.
 //
 // DEVICE-scoped, all of them, and deliberately: which side your thumb reaches
 // from, whether this handset's screen may stay lit, and what its long press does
 // are claims about a phone, not about a person. None of them syncs, so all of
-// them work as a guest and with no signal (DESIGN.md).
+// them work as a guest and with no signal (mobile/DESIGN.md).
 //
 // Every read is SYNCHRONOUS (`prefsDb`), because `MapScreen` renders its chrome
 // on the first frame and a layout that settles into the correct side a moment
@@ -33,9 +32,9 @@ export { MARKER_COLOR_ORDER, MARKER_COLORS, type MarkerColorId };
 export type MapControlSide = "right" | "left";
 
 /**
- * What a press-and-hold on the map does. `ask` is the default and the original
- * behaviour: the sheet that offers the two things that can go at a point. The
- * rest skip the sheet for people who always pick the same one.
+ * What a press-and-hold on the map does. `ask` is the default: the sheet
+ * that offers the two things that can go at a point. The rest skip the sheet
+ * for people who always pick the same one.
  */
 export type LongPressAction =
   | "ask"
@@ -120,7 +119,7 @@ export function writeKeepAwakeMode(mode: KeepAwakeMode): boolean {
 
 /**
  * True when the map is pinned north-up. Stored as the non-default ("on" means
- * locked) so an absent preference reads as the existing free-rotation behaviour.
+ * locked) so an absent preference reads as free-rotation behaviour.
  */
 export function isNorthUpLocked(): boolean {
   return readPref(NORTH_UP_KEY) === "on";

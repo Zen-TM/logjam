@@ -1,16 +1,16 @@
-import { MAP_MEASURE } from "@logjam/shared";
+import { MAP_MEASURE, navLabel, TRIP_PLANS_LIST } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
- * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Maps (GeoPDFs,
- * LiDAR topos) · Friends, then Inbox · Account · Settings. What is on the map
- * is not a page: it is the Layers control over the map.
+ * Places · Trips (and Stats) · Ways (routes, tracks, imports) · Plans ·
+ * Friends, then Inbox · Settings · Account. What is on
+ * the map is not a page: it is the Layers control over the map.
  */
 export type PanelId =
   | "places"
   | "logs"
   | "ways"
-  | "maps"
+  | "plans"
   | "friends"
   | "inbox"
   | "account"
@@ -19,6 +19,7 @@ export type PanelId =
   | "place-detail"
   | "trip-detail"
   | "way-detail"
+  | "plan-detail"
   // The route tool, as a page rather than a card over the map: the map is the
   // canvas and nothing should float on it while a line is being drawn.
   | "way-draw"
@@ -32,6 +33,11 @@ const DRAFT_PANELS: readonly PanelId[] = ["way-draw", "measure"];
 export const isDraftPanel = (panel: PanelId | null) =>
   panel !== null && DRAFT_PANELS.includes(panel);
 
+/** The drawing tools whose ✕ asks before it discards work (the route's
+ *  `cancelRouteGuard`). Narrow, a swipe must not close them around that
+ *  question; Measure keeps nothing, so its ✕, and a swipe, close at once. */
+export const closeAsksFirst = (panel: PanelId | null) => panel === "way-draw";
+
 /** How much of a drawing tool's sheet shows at its peek, in px: the grab bar,
  *  the hero (57, or 73 for a finger) and one row, which is `DraftPeek`. Taller
  *  than a title's peek, which would show the hero and none of the readout. */
@@ -40,9 +46,9 @@ export const DRAFT_PEEK_REVEAL_PX = 152;
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
   places: "Places",
-  logs: "Logs",
+  logs: navLabel("logs"),
   ways: "Ways",
-  maps: "Maps",
+  plans: TRIP_PLANS_LIST.title,
   friends: "Friends",
   inbox: "Inbox",
   account: "Account",
@@ -50,11 +56,26 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   "place-detail": "Place",
   "trip-detail": "Trip",
   "way-detail": "Way",
+  "plan-detail": "Plan",
   "way-draw": "Draw a route",
   measure: MAP_MEASURE.title,
 };
 
-/** A page with two views swaps its content in place under one rail of chips,
- *  rather than being two pages. */
+/** A page with several views swaps its content in place under one rail of
+ *  chips, rather than being several pages. */
 export type LogsView = "logs" | "stats";
-export type MapsView = "geopdfs" | "lidar";
+
+// The lists wait on the account load (frontend/AGENTS.md: no user data loads
+// before it settles), so one that failed leaves each of them with nothing to
+// show but "Loading…". They say it once instead.
+const WAITS_ON_ACCOUNT: readonly PanelId[] = [
+  "places",
+  "logs",
+  "ways",
+  "plans",
+  "friends",
+  "inbox",
+];
+
+export const waitsOnAccount = (panel: PanelId | null) =>
+  panel !== null && WAITS_ON_ACCOUNT.includes(panel);

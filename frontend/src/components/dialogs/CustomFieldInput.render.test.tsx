@@ -22,9 +22,8 @@ Element.prototype.scrollIntoView = () => {};
 
 afterEach(cleanup);
 
-// A checkbox has no empty state, so the form used to write `false` for every
-// yes/no it showed — a "No" nobody gave. Unset has to render as unset and
-// save as nothing.
+// A checkbox has no empty state and would record `false` for an unanswered
+// field — a "No" nobody gave. Unset has to render as unset and save as nothing.
 describe("CustomFieldInput, a yes/no", () => {
   it("starts on — and an untouched one saves no answer", () => {
     render(<CustomFieldInput def={YES_NO} value="" onChange={() => {}} />);

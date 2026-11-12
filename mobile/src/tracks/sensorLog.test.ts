@@ -19,6 +19,7 @@ const stopLogging = vi.fn(() => ({
   samples: 0,
   dropped: 0,
 }));
+const mark = vi.fn((_n: number) => true);
 // `null` here is a USER BUILD: the plugin excludes the native module from
 // autolinking, so `requireOptionalNativeModule` hands back nothing.
 let nativeModule: unknown = null;
@@ -40,11 +41,14 @@ const realModule = {
   logStatus: () => logStatus(),
   startLogging: (...args: unknown[]) => startLogging(...(args as [])),
   stopLogging: () => stopLogging(),
+  mark: (n: number) => mark(n),
 };
 
 const getInfoAsync = vi.fn(async () => ({ exists: false }));
+const deleteAsync = vi.fn(async () => {});
 vi.mock("expo-file-system/legacy", () => ({
   makeDirectoryAsync: vi.fn(async () => {}),
+  deleteAsync: (...args: unknown[]) => deleteAsync(...(args as [])),
   getInfoAsync: (...args: unknown[]) => getInfoAsync(...(args as [])),
 }));
 
@@ -64,17 +68,29 @@ vi.mock("../offline/freeSpace", () => ({
 }));
 
 let enabled = "1";
+let marksPref: string | null = null;
 vi.mock("../prefsDb", () => ({
-  readPref: () => enabled,
-  writePref: () => true,
+  readPref: (key: string) =>
+    key === "devSensorLogMarks" ? marksPref : enabled,
+  writePref: (key: string, value: string) => {
+    if (key === "devSensorLogMarks") marksPref = value;
+    return true;
+  },
 }));
 
-const { sensorLoggingAvailable, startSensorLog } = await import("./sensorLog");
+let sensorLog: typeof import("./sensorLog");
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // A fresh module per test: what a stop leaves behind is module state, and a
+  // test must not inherit the previous one's stop.
+  vi.resetModules();
+  sensorLog = await import("./sensorLog");
+  startLogging.mockImplementation(() => "/data/sensor-logs/t1.csv");
   nativeModule = realModule;
   enabled = "1";
+  marksPref = null;
+  mark.mockReturnValue(true);
   logStatus.mockReturnValue({
     logging: false,
     path: "",
@@ -88,26 +104,26 @@ beforeEach(() => {
 
 describe("who may begin a log", () => {
   it("a recording start begins one", async () => {
-    expect(await startSensorLog("t1")).toBe(true);
+    expect(await sensorLog.startSensorLog("t1")).toBe(true);
     expect(startLogging).toHaveBeenCalledTimes(1);
   });
 
   it("the per-batch re-arm does NOT begin one", async () => {
     // The toggle was flipped during a recording that started without logging.
-    expect(await startSensorLog("t1", true)).toBe(false);
+    expect(await sensorLog.startSensorLog("t1", true)).toBe(false);
     expect(startLogging).not.toHaveBeenCalled();
   });
 
   it("the per-batch re-arm DOES resume an existing log", async () => {
     // A headless relaunch after a process kill: the file is already there.
     getInfoAsync.mockResolvedValue({ exists: true });
-    expect(await startSensorLog("t1", true)).toBe(true);
+    expect(await sensorLog.startSensorLog("t1", true)).toBe(true);
     expect(startLogging).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing at all while the toggle is off", async () => {
     enabled = "0";
-    expect(await startSensorLog("t1")).toBe(false);
+    expect(await sensorLog.startSensorLog("t1")).toBe(false);
     expect(startLogging).not.toHaveBeenCalled();
   });
 
@@ -119,7 +135,7 @@ describe("who may begin a log", () => {
       samples: 1,
       dropped: 0,
     });
-    expect(await startSensorLog("t1")).toBe(true);
+    expect(await sensorLog.startSensorLog("t1")).toBe(true);
     expect(startLogging).not.toHaveBeenCalled();
   });
 
@@ -127,7 +143,7 @@ describe("who may begin a log", () => {
     // The log and the offline DB share a filesystem, so a logger that fills the
     // phone takes the recording — the thing the trip cannot repeat — with it.
     hasSpaceFor.mockResolvedValue(false);
-    expect(await startSensorLog("t1")).toBe(false);
+    expect(await sensorLog.startSensorLog("t1")).toBe(false);
     expect(startLogging).not.toHaveBeenCalled();
   });
 
@@ -135,7 +151,93 @@ describe("who may begin a log", () => {
     startLogging.mockImplementation(() => {
       throw new Error("no such device");
     });
-    await expect(startSensorLog("t1")).resolves.toBe(false);
+    await expect(sensorLog.startSensorLog("t1")).resolves.toBe(false);
+  });
+});
+
+describe("a stopped recording leaves no logger running", () => {
+  // Mutation: drop the `stopped` check or the `stops` re-check in
+  // `startSensorLog` and the matching test goes red.
+  it("a late batch after the stop does NOT re-arm the log", async () => {
+    // The disarm stops the logger first and marks the row finished last, so a
+    // fix batch delivered in between still sees a live recording and asks for
+    // the log back. Its file exists, so only the stop itself can refuse it.
+    getInfoAsync.mockResolvedValue({ exists: true });
+    expect(await sensorLog.startSensorLog("t1")).toBe(true);
+    sensorLog.stopSensorLog();
+    expect(await sensorLog.startSensorLog("t1", true)).toBe(false);
+    expect(startLogging).toHaveBeenCalledTimes(1);
+  });
+
+  it("a deliberate start after a stop does begin again, and re-arms after it", async () => {
+    getInfoAsync.mockResolvedValue({ exists: true });
+    sensorLog.stopSensorLog();
+    expect(await sensorLog.startSensorLog("t1")).toBe(true);
+    expect(await sensorLog.startSensorLog("t1", true)).toBe(true);
+    expect(startLogging).toHaveBeenCalledTimes(2);
+  });
+
+  it("a start still asking the disk when the recording stops does not begin", async () => {
+    let answer: (fits: boolean) => void = () => {};
+    hasSpaceFor.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const starting = sensorLog.startSensorLog("t1");
+    sensorLog.stopSensorLog();
+    answer(true);
+    expect(await starting).toBe(false);
+    expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("a logger left on another track's file is stopped, not joined", async () => {
+    logStatus.mockReturnValueOnce({
+      logging: true,
+      path: "/logs/old.csv",
+      bytes: 10,
+      samples: 1,
+      dropped: 0,
+    });
+    expect(await sensorLog.startSensorLog("t1")).toBe(true);
+    expect(stopLogging).toHaveBeenCalledTimes(1);
+    expect(startLogging).toHaveBeenCalledWith("/logs/t1.csv", 100, 30);
+  });
+
+  it("deleting a recording deletes its log", async () => {
+    await sensorLog.deleteSensorLog("t1");
+    expect(deleteAsync).toHaveBeenCalledWith("/logs/t1.csv", {
+      idempotent: true,
+    });
+  });
+});
+
+describe("marking the log", () => {
+  it("numbers marks from 1 and carries on from the stored count", () => {
+    expect(sensorLog.markSensorLog("t1")).toBe(1);
+    expect(sensorLog.markSensorLog("t1")).toBe(2);
+    expect(mark).toHaveBeenLastCalledWith(2);
+    // What a relaunch mid-trip reads back: the count is stored, not held.
+    expect(sensorLog.sensorLogMarkCount("t1")).toBe(2);
+    // Another recording's file starts again.
+    expect(sensorLog.markSensorLog("t2")).toBe(1);
+  });
+
+  it("counts nothing when no row was written", () => {
+    mark.mockReturnValue(false);
+    expect(sensorLog.markSensorLog("t1")).toBeNull();
+    expect(sensorLog.sensorLogMarkCount("t1")).toBe(0);
+  });
+
+  it("says a log is running from its start to its stop", async () => {
+    const seen: boolean[] = [];
+    sensorLog.onSensorLogRunningChanged(() =>
+      seen.push(sensorLog.sensorLogRunning()),
+    );
+    expect(sensorLog.sensorLogRunning()).toBe(false);
+    await sensorLog.startSensorLog("t1");
+    sensorLog.stopSensorLog();
+    expect(seen).toEqual([true, false]);
   });
 });
 
@@ -149,12 +251,23 @@ describe("a user build has no logger at all", () => {
   });
 
   it("reports itself unavailable", () => {
-    expect(sensorLoggingAvailable()).toBe(false);
+    expect(sensorLog.sensorLoggingAvailable()).toBe(false);
   });
 
   it("refuses to start even with the preference on", async () => {
     enabled = "1";
-    expect(await startSensorLog("t1")).toBe(false);
+    expect(await sensorLog.startSensorLog("t1")).toBe(false);
     expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("has no mark button, no mark and nothing to delete", async () => {
+    // Mutation: drop a `LogjamSensors == null` return from `sensorLogRunning`,
+    // `markSensorLog` or `deleteSensorLog`. The mark button draws only while
+    // `sensorLogRunning()` is true.
+    expect(sensorLog.sensorLogRunning()).toBe(false);
+    expect(sensorLog.markSensorLog("t1")).toBeNull();
+    expect(marksPref).toBeNull();
+    await sensorLog.deleteSensorLog("t1");
+    expect(deleteAsync).not.toHaveBeenCalled();
   });
 });

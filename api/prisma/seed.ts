@@ -1,11 +1,33 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
+  hashFriendInviteToken,
+  mintFriendInviteToken,
+} from "../src/lib/friendInviteToken";
+import {
+  TOPO_EXPORT_STOPPED_MESSAGE,
+  TOPO_UNREADABLE_MESSAGE,
+} from "../src/lib/failureCopy";
+import {
+  NOTIFICATION_TYPES,
+  FILE_SEND_TTL_DAYS,
+  FRIEND_INVITE_TTL_DAYS,
+  RASTER_TEMPLATE_DEFAULTS,
+  VECTOR_STYLE_DEFAULTS,
+  validateRasterTemplateSettings,
   enforceCanyoningTag,
   linksCanyon,
+  friendInviteUrl,
+  isFriendInviteToken,
+  planInviteUrl,
+  TRIP_PLAN_INVITE_TTL_DAYS,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -14,29 +36,81 @@ import {
   SYSTEM_FIELD_DEFS,
   PLACE_TYPE_COLORS,
   canonicalLinkPair,
+  PLACE_REGISTRY_POINTER_PATH,
+  PLACE_REGISTRY_PREFIX,
   SYSTEM_PLACE_TYPE_IDS,
+  currentSeason,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
   trackPointsToGpx,
 } from "@logjam/shared";
 import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
+import {
+  flatPng,
+  lineVectorTile,
+  singleTilePmtiles,
+  tileAt,
+  tileBounds,
+} from "./seedArchives";
 import { saveSeedSnapshot } from "../src/__tests__/_seedBaseline";
+
+// ── Place registry ──────────────────────────────────────────────────────────
+
+/**
+ * Publishes the shared fixture as the place registry, where the builder would
+ * (topo/build_place_registry.py), so a dev stack answers location search with
+ * no build of its own (services/placeRegistry.ts). Best effort, as the files
+ * below are.
+ */
+async function uploadPlaceRegistry(): Promise<void> {
+  const bucket = process.env.S3_BUCKET_TOPO;
+  if (!bucket) {
+    console.warn("S3_BUCKET_TOPO is unset — no place registry was uploaded.");
+    return;
+  }
+  const fixture = readFileSync(
+    join(__dirname, "../../shared/src/__fixtures__/place-registry.json"),
+  );
+  const { format, version } = JSON.parse(fixture.toString("utf8"));
+  const body = gzipSync(fixture);
+  // Named and served as the builder publishes a build: the version and a
+  // content hash, gzipped under a .json name with Content-Encoding.
+  const hash = createHash("sha256").update(body).digest("hex").slice(0, 8);
+  const path = `places-${version}-${hash}.json`;
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: `${PLACE_REGISTRY_PREFIX}${path}`,
+        Body: body,
+        ContentType: "application/json",
+        ContentEncoding: "gzip",
+      }),
+    );
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: PLACE_REGISTRY_POINTER_PATH,
+        Body: JSON.stringify({ format, version, path, bytes: body.length }),
+        ContentType: "application/json",
+      }),
+    );
+    console.log(`Uploaded the fixture place registry to s3://${bucket}/`);
+  } catch (err) {
+    console.warn(
+      `Could not upload the place registry (${(err as Error).message}). Location search will answer 503.`,
+    );
+  }
+}
 
 // ── Seeded vector files ─────────────────────────────────────────────────────
 //
-// These rows used to be metadata with NO object behind them ("the rows exist to
-// populate media-list code paths"). That was defensible while a file was only
-// ever a row in a list. It stopped being defensible when Ways gave every file a
-// page of its own and the map began drawing them: a row promising 27 KB of
-// "Coin Slot descent" with nothing in S3 behind it is data no client could have
-// produced, and it reads as a broken app (operator, 2026-09-17).
+// Every vector file row has a real S3 object behind it: a row with nothing in
+// S3 behind it is data no client can produce.
 //
 // Every figure a row states is DERIVED from the bytes actually uploaded —
 // extent, point count, length, size — so a row cannot contradict its own file.
-// The hand-written ones had already drifted apart: the Du Faur bbox excluded
-// the last point of its own line, and the Wollangambe recording's bbox did not
-// contain its line at all.
 
 /**
  * When the two seeded recordings ran: stated once, for the row and the file.
@@ -121,8 +195,7 @@ function seededFile(
  * BEST EFFORT on purpose: a box brought up with `docker compose up postgres
  * ministack` skips `make _ministack-tf`, so no bucket exists (CLAUDE.local.md).
  * Failing the seed over that would block every other fixture for the sake of
- * five small files, so this warns and leaves the rows — which then behave
- * exactly as they did before this change.
+ * five small files, so this warns and leaves the rows.
  */
 async function uploadSeededFiles(files: SeededFile[]): Promise<void> {
   const bucket = process.env.S3_BUCKET_MEDIA;
@@ -157,7 +230,7 @@ const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
 
 // ---------------------------------------------------------------------------
-// Rich synthetic seed (operator-trust plan, Part A).
+// Rich synthetic seed.
 //
 // Goal: realistic volume + edge cases so prod data is never needed to develop
 // or debug. Places are well-published NSW classics (drawn from the public
@@ -169,6 +242,9 @@ const prisma = new PrismaClient({ adapter });
 //     trip log. PLACE_IDS[1] also shared with bob. carol is shared NOTHING and
 //     is NOT alice's friend (sharing.test.ts asserts a 403 for share->carol).
 //   - alice<->bob accepted friendship; carol->alice pending request.
+//   - alice and bob have joined the friends leaderboard, with canyon trips in
+//     the current season; carol, bob's friend, has not, so bob's board names
+//     her (leaderboard.test.ts starts by taking both off it).
 // New data uses fresh ids and never mutates those invariants.
 // ---------------------------------------------------------------------------
 
@@ -178,9 +254,9 @@ const CAROL_ID = seedId("0", 3);
 
 // Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
 // .env.local (infra/terraform/templates/env.local.tftpl)
-const ALICE_COGNITO_ID = "fake-alice-sub";
-const BOB_COGNITO_ID = "fake-bob-sub";
-const CAROL_COGNITO_ID = "fake-carol-sub";
+const ALICE_SUB = "fake-alice-sub";
+const BOB_SUB = "fake-bob-sub";
+const CAROL_SUB = "fake-carol-sub";
 
 // Stable anchor place ids referenced by the integration suite.
 const PLACE_IDS = [
@@ -191,15 +267,14 @@ const PLACE_IDS = [
   cid(5),
 ];
 
-// Custom-field definitions are ROWS in `custom_field_defs` (they used to live
-// on the user's uiPreferences); trip customFields JSON is keyed by these
-// `key`s. Ids come from seedId like every other seeded row — the sync push
-// path validates op ids with isUuidV4 and rejects the whole request on a
-// mismatch, so a hand-written id here would make alice's definitions
-// permanently unsyncable from the phone.
+// Custom-field definitions are ROWS in `custom_field_defs`; trip customFields
+// JSON is keyed by these `key`s. Ids come from seedId like every other seeded
+// row — the sync push path validates op ids with isUuidV4 and rejects the whole
+// request on a mismatch, so a hand-written id here would make alice's
+// definitions permanently unsyncable from the phone.
 /** Marker-place and route ids — prefixes "6" and "7" (prisma/seedIds.ts). The
- * "6" space is the old waypoint space: the phase 1c migration preserved
- * waypoint ids as place ids, so the seed does too. */
+ * "6" space is the waypoint space: waypoint ids are preserved as place ids, so
+ * the seed does too. */
 const wpid = (n: number) => seedId("6", n);
 const rtid = (n: number) => seedId("7", n);
 
@@ -216,9 +291,7 @@ const BOB_SHARED_PLACE_ID = seedId("2", 2);
 //
 // Every line STARTS ON THE PLACE IT BELONGS TO and runs a kilometre or two
 // downstream from it, so opening a way centres the map on ground that matches
-// its name. They used to wander: the Claustral file's extent sat 15 km from
-// Claustral, which is the sort of thing that reads as a broken app rather than
-// as thin fixtures (operator, 2026-09-17).
+// its name.
 const CLAUSTRAL_LINE: [number, number][] = [
   [150.4033, -33.5603],
   [150.4041, -33.5611],
@@ -321,9 +394,7 @@ const KANANGRA_LINE: [number, number][] = [
 
 // `appliesToAllTypes` SPELLED OUT, not left to the column default: a definition
 // with the flag off and no place types scoped to it appears on no form at all,
-// and a trip-log definition has no type picker to answer the question with. The
-// seed wrote all three with the default and they were invisible on the trip
-// form until 20260911140000 repaired them.
+// and a trip-log definition has no type picker to answer the question with.
 //
 // `rope_length_m` is scoped to the `canyoning` TRIP TYPE rather than to every
 // trip, so dev has an attribute that appears and disappears as a trip's tags
@@ -353,10 +424,9 @@ const ALICE_TRIP_FIELD_DEFS = [
   },
 ];
 
-// A place type ALICE made herself, so copy reconciliation (§2.6) is
-// exercisable in dev: bob receiving a copy of one of these has to match it by
-// NAME against his own types, and there is no way to try that without a user
-// type existing.
+// A place type ALICE made herself, so copy reconciliation is exercisable in
+// dev: bob receiving a copy of one of these has to match it by NAME against his
+// own types, and there is no way to try that without a user type existing.
 const ALICE_TYPE_ID = seedId("9", 1);
 
 // Place-scoped definitions alice owns. `access_beta` is scoped to her own type;
@@ -364,8 +434,9 @@ const ALICE_TYPE_ID = seedId("9", 1);
 // free — the case join rows cannot express.
 //
 // NONE of these may use a reserved key: `assertKeyNotReserved` refuses them on
-// the API path, and the seed writing one directly would create the exact
-// two-writers-one-key state the reservation exists to prevent.
+// the API path (src/__tests__/placeTypes.test.ts), and the seed writing one
+// directly would create the exact two-writers-one-key state the reservation
+// exists to prevent.
 const ALICE_PLACE_FIELD_DEFS = [
   {
     id: seedId("5", 10),
@@ -383,7 +454,47 @@ const ALICE_PLACE_FIELD_DEFS = [
     placeTypeIds: [] as string[],
     appliesToAllTypes: true,
   },
+  // The other value types a definition can have (string is `permit_no`), so a
+  // form, a filter and a sync round trip each meet every type in dev. The
+  // system fields add integer, float and boolean on the campsite type.
+  {
+    id: seedId("5", 12),
+    key: "water_temp_c",
+    label: "Water temperature (°C)",
+    type: "float",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 13),
+    key: "last_checked",
+    label: "Last checked",
+    type: "date",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 14),
+    key: "rope_count",
+    label: "Ropes needed",
+    type: "integer",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+  {
+    id: seedId("5", 15),
+    key: "needs_permit",
+    label: "Needs a permit",
+    type: "boolean",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
 ];
+
+// Types bob and carol made themselves, so the user-type paths are reachable
+// as each of them and not only as alice.
+const BOB_TYPE_ID = seedId("9", 2);
+const CAROL_TYPE_ID = seedId("9", 3);
 
 type SeedPlace = {
   id: string;
@@ -409,15 +520,7 @@ type SeedPlace = {
   forkedFromId?: string;
 };
 
-// `sandstone()` IS GONE. It wrote `rockType` and `wetsuit` into the attributes
-// blob — two keys the owner added early, decided were too niche, and has asked
-// to have dropped. They were never declared in TPlaceAttributes either, so the
-// seed was the only thing that made them look like part of the model. Anyone
-// who wants them adds them back as ordinary custom fields, which is what they
-// always should have been.
-//
-// What replaces it is `sources()`: the one non-customFields key that survives,
-// under the reserved `_sources` key.
+// `sources()` stores entries under the reserved `_sources` key.
 const sources = (...entries: [string, string][]): Record<string, unknown> => ({
   [SOURCES_FIELD_KEY]: entries,
 });
@@ -866,15 +969,12 @@ const ALICE_PLACES: SeedPlace[] = [
 
   // ── the field machinery, made visible in dev ─────────────────────────────
   //
-  // Before the places rework NO seeded place carried a custom-field value, so
-  // the shape every prod canyon may hold was invisible here and the migration's
-  // hoist had to be proved against a hand-built fixture instead of dev data.
-  // These three make each case reachable by opening the app:
+  // These three make each case reachable in dev:
   //
   //  * a canyon carrying a user-defined value on the system type
   //    (`permit_no`, which is appliesToAllTypes — the flag a new type inherits)
   //  * a place of a USER type carrying a value scoped to that type, which is
-  //    what a copy has to reconcile (§2.6)
+  //    what a copy has to reconcile
   //  * a place of a SYSTEM type that is not Canyon, so the Places screen has
   //    more than one populated tab and the zero-places hide rule is observable
   {
@@ -914,7 +1014,42 @@ const ALICE_PLACES: SeedPlace[] = [
     quality: 4,
     fieldValues: { capacity: 12, is_cave: false },
   },
+  // One value of each type a definition can have: string, float, date,
+  // integer, boolean.
+  {
+    id: cid(32),
+    ownerId: ALICE_ID,
+    name: "Fabricated Pool",
+    latitude: -33.52,
+    longitude: 150.27,
+    notes: "Fabricated place for local development.",
+    quality: 3,
+    fieldValues: {
+      permit_no: "NPWS-2026-207",
+      water_temp_c: 14.5,
+      last_checked: "2026-08-02",
+      rope_count: 2,
+      needs_permit: true,
+    },
+  },
 ];
+
+/** A made-up place that is only here to be of a type; nothing about it is real. */
+const fabricated = (
+  id: string,
+  ownerId: string,
+  name: string,
+  latitude: number,
+  longitude: number,
+): SeedPlace => ({
+  id,
+  ownerId,
+  name,
+  latitude,
+  longitude,
+  notes: "Fabricated place for local development.",
+  fieldValues: {},
+});
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
 const BOB_PLACES: SeedPlace[] = [
@@ -961,6 +1096,21 @@ const BOB_PLACES: SeedPlace[] = [
     hours: 10,
     fieldValues: {},
   },
+  {
+    ...fabricated(seedId("2", 4), BOB_ID, "Galah camp", -33.2531, 150.3012),
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+    fieldValues: { capacity: 6 },
+  },
+  {
+    ...fabricated(
+      seedId("2", 5),
+      BOB_ID,
+      "Coin Slot lookout",
+      -33.1202,
+      150.3331,
+    ),
+    placeTypeId: BOB_TYPE_ID,
+  },
 ];
 
 // carol owns her own places (and is shared nothing of alice's — the stranger).
@@ -988,6 +1138,27 @@ const CAROL_PLACES: SeedPlace[] = [
     quality: 4.5,
     hours: 12,
     fieldValues: {},
+  },
+  {
+    ...fabricated(
+      seedId("3", 3),
+      CAROL_ID,
+      "Surefire camp",
+      -33.2301,
+      150.2911,
+    ),
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+    fieldValues: { capacity: 4 },
+  },
+  {
+    ...fabricated(
+      seedId("3", 4),
+      CAROL_ID,
+      "Pipeline lookout",
+      -33.1671,
+      150.2652,
+    ),
+    placeTypeId: CAROL_TYPE_ID,
   },
 ];
 
@@ -1067,9 +1238,6 @@ function buildTrips(): SeedTrip[] {
               // the wrong type READS AS ABSENT everywhere (the forgiving-read
               // rule in shared/src/fieldValues.ts), so a stringified integer is
               // not a harmless variation — it is a value no reader can use.
-              // Seeded as strings until 2026-09-13, which made two of alice's
-              // three trip attributes invisible to anything that aggregates
-              // them while still rendering as text on the trip screen.
               rope_length_m: 15 + ((seed * 5) % 50),
               wetsuit: seed % 2 === 0,
             }
@@ -1129,7 +1297,179 @@ function buildTrips(): SeedTrip[] {
     }
   }
 
+  // This season's canyons, for the friends leaderboard: bob 3, alice 2. Last,
+  // so every trip above keeps its id and date. A week apart from the season's
+  // start and never after today, so a re-seed in any month lands them in the
+  // season it is.
+  const season = currentSeason();
+  const daysIn = Math.floor((Date.now() - season.start.getTime()) / 86_400_000);
+  const isCanyon = (place: SeedPlace) =>
+    seedPlaceTypeId(place.id) === SYSTEM_PLACE_TYPE_IDS.canyon;
+  for (const [userId, places] of [
+    [ALICE_ID, ALICE_PLACES.filter(isCanyon).slice(0, 2)],
+    [BOB_ID, BOB_PLACES.filter(isCanyon).slice(0, 3)],
+  ] as const) {
+    for (const [i, place] of places.entries()) {
+      seed++;
+      trips.push({
+        placeId: place.id,
+        userId,
+        date: new Date(
+          season.start.getTime() +
+            // Sydney's 21 June starts while UTC is still on the 20th: -1 there.
+            Math.max(0, Math.min(i * 7, daysIn)) * 86_400_000,
+        ),
+        notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} This season.`,
+      });
+    }
+  }
+
   return trips;
+}
+
+// ── Jobs, templates and what they leave in S3 ───────────────────────────────
+//
+// A COMPLETE job has its outputs in S3 behind it, as a vector file does: the
+// topo ones are tiny real PMTiles archives (seedArchives.ts) at the keys the
+// row's `sharpen` names. Every size a row states
+// is the length of the bytes uploaded.
+
+/** Minted per seed run; the invite row stores only its hash, as the route does. */
+const SEED_FRIEND_INVITE_TOKEN = mintFriendInviteToken();
+assertValid(
+  "the seeded invite token",
+  isFriendInviteToken(SEED_FRIEND_INVITE_TOKEN) ? null : "not a token",
+);
+
+/** Alice's link to her plan, minted per run like the friend one. */
+const SEED_PLAN_INVITE_TOKEN = mintFriendInviteToken();
+
+const TOPO_TILE = tileAt(12, 150.3179, -33.6563);
+const TOPO_BOUNDS = tileBounds(TOPO_TILE.z, TOPO_TILE.x, TOPO_TILE.y);
+/** What the pipeline stores: the union of the per-tile coverage, here one tile. */
+const TOPO_FOOTPRINT = {
+  type: "Polygon" as const,
+  coordinates: [
+    [
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[1]],
+      [TOPO_BOUNDS[2], TOPO_BOUNDS[1]],
+      [TOPO_BOUNDS[2], TOPO_BOUNDS[3]],
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[3]],
+      [TOPO_BOUNDS[0], TOPO_BOUNDS[1]],
+    ],
+  ],
+};
+/** The z16 tile of the sharpened heights and slope, and the z14 one of its contours. */
+const SHARP_TILE = tileAt(16, 150.3179, -33.6563);
+const CONTOUR_TILE = tileAt(14, 150.3179, -33.6563);
+const CONTOUR_BOUNDS = tileBounds(
+  CONTOUR_TILE.z,
+  CONTOUR_TILE.x,
+  CONTOUR_TILE.y,
+);
+/** A made-up contour across the contour tile, in tile units (extent 4096). */
+const CONTOUR_LINE: [number, number][] = [
+  [0, 2600],
+  [1200, 2100],
+  [2600, 2300],
+  [4096, 1500],
+];
+/** The same line in degrees, so an export of the layer matches its tile. */
+const CONTOUR_LONLAT = CONTOUR_LINE.map(([x, y]) => [
+  CONTOUR_BOUNDS[0] + (x / 4096) * (CONTOUR_BOUNDS[2] - CONTOUR_BOUNDS[0]),
+  CONTOUR_BOUNDS[3] - (y / 4096) * (CONTOUR_BOUNDS[3] - CONTOUR_BOUNDS[1]),
+]);
+
+type SeededObject = { key: string; body: Buffer | string; contentType: string };
+
+const SHARPEN_ARCHIVES = [
+  {
+    name: "heights",
+    ...SHARP_TILE,
+    tile: flatPng(150),
+    type: "png" as const,
+  },
+  { name: "slope", ...SHARP_TILE, tile: flatPng(95), type: "png" as const },
+  {
+    name: "contours",
+    ...CONTOUR_TILE,
+    tile: lineVectorTile("contours", CONTOUR_LINE),
+    type: "mvt" as const,
+  },
+].map((layer) => ({ ...layer, archive: singleTilePmtiles(layer) }));
+
+/**
+ * A complete sharpened job's `sharpen` result and the objects behind it, in the
+ * shape topo/worker.py stores (shared/src/__fixtures__/sharpen-result.json).
+ * The z15 block is the whole z14 tile around the heights tile.
+ */
+function sharpenedJob(jobId: string) {
+  const x0 = Math.floor(SHARP_TILE.x / 4) * 2;
+  const y0 = Math.floor(SHARP_TILE.y / 4) * 2;
+  const keys = Object.fromEntries(
+    SHARPEN_ARCHIVES.map((layer) => [
+      layer.name,
+      `outputs/${jobId}/${layer.name}.pmtiles`,
+    ]),
+  );
+  const [west, , , north] = tileBounds(15, x0, y0);
+  const [, south, east] = tileBounds(15, x0 + 1, y0 + 1);
+  const objects: SeededObject[] = SHARPEN_ARCHIVES.map((layer) => ({
+    key: keys[layer.name],
+    body: layer.archive,
+    contentType: "application/octet-stream",
+  }));
+  return {
+    sharpen: {
+      v: 1,
+      zmax: 16,
+      tiles15: [x0, y0, x0 + 1, y0 + 1],
+      coverage: [west, south, east, north],
+      ground: "class-2",
+      extracted: "March 2025",
+      credit: "Elevation: made up for Logjam's seed data.",
+      keys,
+      vegetation: false,
+    },
+    objects,
+    bytes: BigInt(
+      SHARPEN_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
+    ),
+  };
+}
+
+/** Puts seeded objects in a bucket; best effort for the reason uploadSeededFiles gives. */
+async function uploadObjects(
+  bucketVar: "S3_BUCKET_MEDIA" | "S3_BUCKET_TOPO",
+  objects: SeededObject[],
+): Promise<void> {
+  const bucket = process.env[bucketVar];
+  if (!bucket) {
+    console.warn(`${bucketVar} is unset — seeded job files were not uploaded.`);
+    return;
+  }
+  try {
+    for (const object of objects) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: object.key,
+          Body: object.body,
+          ContentType: object.contentType,
+        }),
+      );
+    }
+    console.log(`Uploaded ${objects.length} seeded objects to s3://${bucket}/`);
+  } catch (err) {
+    console.warn(
+      `Could not upload seeded job files (${(err as Error).message}). The rows still exist; their downloads and tiles will report a file that isn't there.`,
+    );
+  }
+}
+
+/** Throws when a seeded config is one the API would refuse to store. */
+function assertValid(what: string, error: string | null): void {
+  if (error) throw new Error(`seed: ${what} is invalid: ${error}`);
 }
 
 async function main() {
@@ -1137,8 +1477,7 @@ async function main() {
   // statement). Every seeded table is NAMED here even where `user.deleteMany()`
   // would cascade it: this is a hand-kept list that must agree with what the
   // seed writes, and relying on cascade order means a future table with no user
-  // FK survives the wipe silently — the ARCH-001 shape in the root CLAUDE.md.
-  // Guarded by src/lib/seedWipe.unit.test.ts.
+  // FK survives the wipe silently. Guarded by src/lib/seedWipe.unit.test.ts.
   await prisma.$transaction([
     prisma.share.deleteMany(),
     prisma.placeShare.deleteMany(),
@@ -1152,8 +1491,25 @@ async function main() {
     prisma.customFieldDef.deleteMany(),
     prisma.placeType.deleteMany(),
     prisma.notification.deleteMany(),
+    prisma.announcement.deleteMany(),
     prisma.topoJob.deleteMany(),
-    prisma.geoPdfTemplate.deleteMany(),
+    prisma.topoExportJob.deleteMany(),
+    // After the jobs: deleting them writes the carry-over.
+    prisma.computeUsageCarryover.deleteMany(),
+    prisma.siteComputeCarryover.deleteMany(),
+    prisma.topoTemplate.deleteMany(),
+    prisma.fileSendRecipient.deleteMany(),
+    prisma.fileSend.deleteMany(),
+    prisma.friendInvite.deleteMany(),
+    prisma.tripPlanInvite.deleteMany(),
+    prisma.tripPlanAnswer.deleteMany(),
+    prisma.tripPlanForm.deleteMany(),
+    prisma.tripPlanSection.deleteMany(),
+    prisma.tripPlanMember.deleteMany(),
+    prisma.tripPlan.deleteMany(),
+    prisma.deviceToken.deleteMany(),
+    prisma.syncTombstone.deleteMany(),
+    prisma.egressLogCursor.deleteMany(),
     prisma.user.deleteMany(),
   ]);
 
@@ -1162,24 +1518,25 @@ async function main() {
     data: [
       {
         id: ALICE_ID,
-        cognitoId: ALICE_COGNITO_ID,
+        subject: ALICE_SUB,
         username: "alice",
         email: "alice@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
-        uiPreferences: { autoDownloadGeoPdfs: false },
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: BOB_ID,
-        cognitoId: BOB_COGNITO_ID,
+        subject: BOB_SUB,
         username: "bob",
         email: "bob@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: CAROL_ID,
-        cognitoId: CAROL_COGNITO_ID,
+        subject: CAROL_SUB,
         username: "carol",
         email: "carol@local",
         consentedAt,
@@ -1235,11 +1592,32 @@ async function main() {
       ownerId: ALICE_ID,
       name: "Swimming hole",
       iconKey: "droplet",
-      // From the curated palette, like any type a user could make — the seed
-      // must not be the one row that fails `isPlaceTypeColor`.
+      // From the curated palette, like any type a user could make, so dev
+      // holds no colour the API would refuse to save.
       color: PLACE_TYPE_COLORS[6],
       position: 0,
     },
+  });
+
+  await prisma.placeType.createMany({
+    data: [
+      {
+        id: BOB_TYPE_ID,
+        ownerId: BOB_ID,
+        name: "Lookout",
+        iconKey: "droplet",
+        color: PLACE_TYPE_COLORS[2],
+        position: 0,
+      },
+      {
+        id: CAROL_TYPE_ID,
+        ownerId: CAROL_ID,
+        name: "Swim spot",
+        iconKey: "droplet",
+        color: PLACE_TYPE_COLORS[4],
+        position: 0,
+      },
+    ],
   });
 
   await prisma.customFieldDef.createMany({
@@ -1252,12 +1630,9 @@ async function main() {
     })),
   });
 
-  // Place-scoped definitions alice owns, plus their scoping rows. This is what
-  // makes the field machinery VISIBLE in dev: before the places rework the seed
-  // had no place-scoped definitions and no place carried a custom-field value
-  // at all, so the nested `attributes.customFields` shape that every prod
-  // canyon may hold was invisible here — which is why the migration's hoist had
-  // to be proved against a hand-built fixture rather than against dev data.
+  // Place-scoped definitions alice owns, plus their scoping rows. Makes the
+  // field machinery VISIBLE in dev so the nested `attributes.customFields`
+  // shape is present in dev data.
   for (const [position, def] of ALICE_PLACE_FIELD_DEFS.entries()) {
     await prisma.customFieldDef.create({
       data: {
@@ -1343,19 +1718,12 @@ async function main() {
     },
   });
 
-  // MARKER places and routes. The seed had NO waypoints or routes at all until
-  // they were added for the Saved share marks; waypoints are places of the
-  // system Marker type since phase 1c, so what was five waypoints is five more
-  // places here.
-  //
+  // MARKER places and routes. Waypoints are places of the system Marker type.
   // The set covers every combination the row builders branch on:
   //   owned, unshared            → no mark
   //   owned + a place share      → the fan-out glyph
   //   received via place share   → "From bob": the owner resolves through the
   //                                mirrored place_shares row.
-  //
-  // `symbol` is gone with the fold — the icon is the place TYPE's now — and the
-  // notes came across unchanged.
   await prisma.place.createMany({
     data: [
       {
@@ -1403,11 +1771,19 @@ async function main() {
         latitude: -33.2521,
         longitude: 150.3044,
       },
+      {
+        id: wpid(6),
+        ownerId: CAROL_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Surefire carpark",
+        latitude: -33.2279,
+        longitude: 150.2919,
+      },
     ],
   });
 
   // Links between places — navigational only. A link grants NO visibility, so
-  // wpid(4) does NOT reach alice through bob's shared place any more: she sees
+  // wpid(4) does NOT reach alice through bob's shared place: she sees
   // the place she was shared, and nothing it points at. Both endpoints of every
   // link belong to one owner, which the server asserts on create.
   await prisma.placeLink.createMany({
@@ -1432,8 +1808,7 @@ async function main() {
 
   // A place holds ONE way — a drawn route or an attached file, never both
   // (shared/mobile routeSlot.ts, and assertPlaceTrackSlotFree on the media
-  // side). The seed used to put a route AND a track file on Claustral and on
-  // Coin Slot, which no client can produce. Each place below carries at most
+  // side), as no client can produce both. Each place below carries at most
   // one, and the places that carry a FILE are named in the media block.
   await prisma.route.createMany({
     data: [
@@ -1455,7 +1830,7 @@ async function main() {
         points: DU_FAUR_LINE,
         anchors: Prisma.DbNull,
       },
-      // Bob's route is UNLINKED now, so his Coin Slot can carry the track file
+      // Bob's route is unlinked, so his Coin Slot can carry the track file
       // below. It keeps its direct share to alice, which is the whole point of
       // it: a route shared with you on its own row, removable by you.
       {
@@ -1509,8 +1884,7 @@ async function main() {
   // Direct per-item shares — the second, independent visibility source
   // (lib/shareAccess.ts), and the only thing that puts a number in a ROUTE's
   // sharedCount. A place is never shared this way (PlaceShare is its own
-  // table), and a waypoint no longer exists to be, so what was three rows is
-  // one. alice's fan-out is 1 because bob is her only friend: carol is shared
+  // table). alice's fan-out is 1 because bob is her only friend: carol is shared
   // nothing and is not her friend, and sharing.test.ts asserts a 403 on
   // share->carol.
   await prisma.share.createMany({
@@ -1607,18 +1981,18 @@ async function main() {
     wollangambeFile,
     bellCreekFile,
   ]);
+  await uploadPlaceRegistry();
 
   // Media. Every VECTOR row has a real object behind it (above); the photo is
   // still metadata only, so its thumbnail will not load — generating a
   // believable JPEG is a different job from generating a believable track, and
   // a photo is not what a way's page draws.
   //
-  // Covers all three parent states, because they behave differently and only
-  // the first one used to exist: a photo ATTACHED to a place (dies with it), a
-  // standalone import LINKED as a place's way (survives the place, and is the
-  // shape a sharee sees), and an unlinked recording (owner-private, in Saved
-  // and nowhere else). A seed with only attachments leaves every standalone
-  // path untested by the integration suite.
+  // Covers all three parent states, because they behave differently: a photo
+  // ATTACHED to a place (dies with it), a standalone import LINKED as a place's
+  // way (survives the place, and is the shape a sharee sees), and an unlinked
+  // recording (owner-private, in Saved and nowhere else). A seed with only
+  // attachments leaves every standalone path untested by the integration suite.
   await prisma.media.createMany({
     data: [
       {
@@ -1634,9 +2008,7 @@ async function main() {
       },
       // Empress Falls carries a FILE as its way (no route is linked to it), and
       // its extent sits on Empress Falls. Every extent below is the file's own,
-      // so it brackets the place it belongs to by construction: a file whose
-      // extent is nowhere near its own name is what made the old fixtures read
-      // as broken data.
+      // so it brackets the place it belongs to by construction.
       {
         id: seedId("4", 2),
         ownerId: ALICE_ID,
@@ -1692,7 +2064,8 @@ async function main() {
           elevationGainM: 95,
           elevationLossM: 130,
           // The finest source, so opening the page finds nothing finer and
-          // writes nothing: the a11y e2e cases must not change the account.
+          // writes nothing: the a11y e2e cases (frontend/e2e/a11y.spec.ts) must
+          // not change the account.
           elevationSource: "nsw-5m",
           pointCount: wollangambeFile.positionCount,
           ...WOLLANGAMBE_RECORDED,
@@ -1700,8 +2073,7 @@ async function main() {
       },
       // BOB's file on the place he shares with alice. This is the only way a
       // track on someone ELSE's place is reachable in dev, and it is what the
-      // Ways page lists beside alice's own files — the case that had no fixture
-      // at all, so its column read as permanently empty.
+      // Ways page lists beside alice's own files.
       {
         id: seedId("4", 5),
         ownerId: BOB_ID,
@@ -1741,7 +2113,8 @@ async function main() {
           elevationGainM: 70,
           elevationLossM: 95,
           // The finest source, so opening the page finds nothing finer and
-          // writes nothing: the a11y e2e cases must not change the account.
+          // writes nothing: the a11y e2e cases (frontend/e2e/a11y.spec.ts) must
+          // not change the account.
           elevationSource: "nsw-5m",
           pointCount: bellCreekFile.positionCount,
           ...BELL_CREEK_RECORDED,
@@ -1750,7 +2123,457 @@ async function main() {
     ],
   });
 
-  // Notifications (payloads are enriched server-side from the referenced ids).
+  // Jobs, templates and everything an account's background work leaves behind.
+  // Ids are the "f" space. `ago` keeps the dates relative to the seed run, so a
+  // completed export is never older than the sweeps that expire it.
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+  const fid = (n: number) => seedId("f", n);
+
+  // A made-up token: CI points EXPO_PUSH_URL at a stub and local dev reaches
+  // Expo, which refuses it and lets the API prune the row (services/push.ts).
+  await prisma.deviceToken.create({
+    data: {
+      id: fid(19),
+      userId: ALICE_ID,
+      token: "ExponentPushToken[seed-alice-device]",
+      platform: "android",
+    },
+  });
+
+  const aliceTopo = fid(1);
+  const bobTopo = fid(4);
+  const aliceTopoOutputs = sharpenedJob(aliceTopo);
+  const bobTopoOutputs = sharpenedJob(bobTopo);
+  // What a finished run costs the owner's monthly credits is its elapsed time
+  // (lib/computeCredits.ts): the worker's own `wallSeconds` for a complete
+  // topo, `updatedAt - startedAt` for a failed one. Both are minutes here, as
+  // a run of one tile is, so seeding spends nothing worth noticing.
+  const topoRun = (endedMinutesAgo: number, wallSeconds: number) => ({
+    attemptCount: 1,
+    startedAt: ago(endedMinutesAgo + wallSeconds / 60),
+    updatedAt: ago(endedMinutesAgo),
+  });
+  const pipelineMetrics = (wallSeconds: number) => ({
+    schemaVersion: 1,
+    wallSeconds,
+    phases: { pdal: wallSeconds / 2, render: wallSeconds / 2 },
+    inputTileCount: 1,
+    outputTileCount: 1,
+    zoomMin: TOPO_TILE.z,
+    zoomMax: TOPO_TILE.z,
+  });
+  await prisma.topoJob.createMany({
+    data: [
+      // Complete and sharpened: what Logjam Web's Terrain group and
+      // GeoPDF dialog need to show an area and draw its terrain.
+      {
+        id: aliceTopo,
+        userId: ALICE_ID,
+        status: "complete",
+        name: "Grand Canyon LiDAR",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 1,
+        estimatedSeconds: 600,
+        outputTileCount: 1,
+        s3OutputKeys: [],
+        sharpen: aliceTopoOutputs.sharpen,
+        outputBytes: aliceTopoOutputs.bytes,
+        createdAt: ago(300),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(285, 300),
+      },
+      {
+        id: fid(2),
+        userId: ALICE_ID,
+        status: "failed",
+        name: "Wollangambe LiDAR",
+        tileCount: 2,
+        estimatedSeconds: 1200,
+        errorMessage: TOPO_UNREADABLE_MESSAGE,
+        createdAt: ago(200),
+        ...topoRun(188, 120),
+      },
+      // Bob's, shared with alice (below): read-only to her.
+      {
+        id: bobTopo,
+        userId: BOB_ID,
+        status: "complete",
+        name: "Coin Slot LiDAR",
+        footprint: TOPO_FOOTPRINT,
+        tileCount: 1,
+        estimatedSeconds: 600,
+        outputTileCount: 1,
+        s3OutputKeys: [],
+        sharpen: bobTopoOutputs.sharpen,
+        outputBytes: bobTopoOutputs.bytes,
+        createdAt: ago(400),
+        pipelineMetrics: pipelineMetrics(300),
+        ...topoRun(385, 300),
+      },
+    ],
+  });
+
+  const exportDone = fid(5);
+  const exportFile = JSON.stringify({
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { layer: "contours" },
+        geometry: { type: "LineString", coordinates: CONTOUR_LONLAT },
+      },
+    ],
+  });
+  await prisma.topoExportJob.createMany({
+    data: [
+      {
+        id: exportDone,
+        userId: ALICE_ID,
+        sourceJobIds: [aliceTopo],
+        layers: ["contours"],
+        format: "geojson",
+        bundling: "per-layer",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 60,
+        status: "completed",
+        resultKey: `exports/${exportDone}/contours.geojson`,
+        resultBytes: BigInt(Buffer.byteLength(exportFile)),
+        startedAt: ago(100),
+        createdAt: ago(105),
+        completedAt: ago(98),
+      },
+      {
+        id: fid(6),
+        userId: ALICE_ID,
+        sourceJobIds: [aliceTopo],
+        layers: ["contours"],
+        format: "gpkg",
+        bundling: "composite",
+        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
+        sourceTileCount: 1,
+        estimatedSeconds: 60,
+        status: "failed",
+        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        startedAt: ago(70),
+        createdAt: ago(75),
+        completedAt: ago(67),
+      },
+    ],
+  });
+
+  await prisma.share.createMany({
+    data: [
+      {
+        id: seedId("8", 4),
+        entityType: "topoJob",
+        entityId: bobTopo,
+        sharedById: BOB_ID,
+        sharedWithId: ALICE_ID,
+      },
+    ],
+  });
+
+  // Topo templates, validated as POST /topo-jobs validates a job's settings
+  // (they have no route left; these rows are kept for the data export and
+  // account deletion).
+  const topoTemplateConfig = validateRasterTemplateSettings({
+    ...RASTER_TEMPLATE_DEFAULTS,
+    hillshade: { ...RASTER_TEMPLATE_DEFAULTS.hillshade, azimuth: 270 },
+  });
+  if (!topoTemplateConfig.ok) {
+    throw new Error(
+      `seed: the topo template is invalid: ${topoTemplateConfig.errors.join("; ")}`,
+    );
+  }
+  await prisma.topoTemplate.createMany({
+    data: [
+      {
+        id: fid(12),
+        userId: ALICE_ID,
+        name: "Low sun",
+        config: topoTemplateConfig.value as object,
+      },
+      {
+        id: fid(13),
+        userId: BOB_ID,
+        name: "Bob's default",
+        config: RASTER_TEMPLATE_DEFAULTS as object,
+      },
+    ],
+  });
+
+  // Sends are copies: a pending one for alice to accept and an accepted one
+  // she made. Each has its object in the media bucket, under the key
+  // lib/fileSendAccess.ts fileSendKey gives it today (a download reads the
+  // row's own key, so a change there strands only the seeded object).
+  const bobSend = fid(14);
+  const aliceSend = fid(15);
+  const sendExpires = new Date(
+    Date.now() + FILE_SEND_TTL_DAYS * 24 * 60 * 60_000,
+  );
+  await prisma.fileSend.createMany({
+    data: [
+      {
+        id: bobSend,
+        senderId: BOB_ID,
+        sourceKind: "import",
+        filename: "coin-slot.gpx",
+        s3Key: `file-sends/${BOB_ID}/${bobSend}/copy.gpx`,
+        sizeBytes: BigInt(coinSlotFile.fileSizeBytes),
+        expiresAt: sendExpires,
+      },
+      {
+        id: aliceSend,
+        senderId: ALICE_ID,
+        sourceKind: "track",
+        filename: "Wollangambe, 2 Aug.gpx",
+        s3Key: `file-sends/${ALICE_ID}/${aliceSend}/copy.gpx`,
+        sizeBytes: BigInt(wollangambeFile.fileSizeBytes),
+        expiresAt: sendExpires,
+      },
+    ],
+  });
+  await prisma.fileSendRecipient.createMany({
+    data: [
+      { id: fid(16), fileSendId: bobSend, userId: ALICE_ID, status: "pending" },
+      {
+        id: fid(17),
+        fileSendId: aliceSend,
+        userId: BOB_ID,
+        status: "accepted",
+        respondedAt: ago(30),
+      },
+    ],
+  });
+
+  // A pending invite link from alice, for another user to open: the seed prints
+  // it, as only its hash is stored. Alice's, since friendInvites.test.ts clears
+  // bob's and carol's.
+  await prisma.friendInvite.create({
+    data: {
+      id: fid(18),
+      inviterId: ALICE_ID,
+      tokenHash: hashFriendInviteToken(SEED_FRIEND_INVITE_TOKEN),
+      expiresAt: new Date(
+        Date.now() + FRIEND_INVITE_TTL_DAYS * 24 * 60 * 60_000,
+      ),
+    },
+  });
+
+  // A made-up plan: alice leads, bob is in it, carol used alice's link and
+  // waits to be let in. It holds one place and one route of its own, which
+  // belong to no user.
+  const planId = fid(100);
+  const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+  await prisma.tripPlan.create({
+    data: {
+      id: planId,
+      createdById: ALICE_ID,
+      name: "Wollangambe weekend",
+      startDate: inDays(21),
+      endDate: inDays(22),
+      tripTypes: ["canyoning"],
+    },
+  });
+  await prisma.tripPlanMember.createMany({
+    data: [
+      {
+        id: fid(101),
+        planId,
+        userId: ALICE_ID,
+        role: "leader",
+        status: "active",
+      },
+      {
+        id: fid(102),
+        planId,
+        userId: BOB_ID,
+        role: "member",
+        status: "active",
+        invitedById: ALICE_ID,
+      },
+      {
+        id: fid(106),
+        planId,
+        userId: CAROL_ID,
+        role: "member",
+        status: "requested",
+        invitedById: ALICE_ID,
+      },
+    ],
+  });
+  await prisma.tripPlanInvite.create({
+    data: {
+      id: fid(107),
+      planId,
+      createdById: ALICE_ID,
+      tokenHash: hashFriendInviteToken(SEED_PLAN_INVITE_TOKEN),
+      expiresAt: inDays(TRIP_PLAN_INVITE_TTL_DAYS),
+    },
+  });
+  // carol's plan, which she has invited alice to by username.
+  const carolPlanId = fid(110);
+  await prisma.tripPlan.create({
+    data: {
+      id: carolPlanId,
+      createdById: CAROL_ID,
+      name: "Kanangra Walls loop",
+      startDate: inDays(35),
+      endDate: inDays(36),
+      tripTypes: ["bushwalking"],
+      members: {
+        create: [
+          { id: fid(111), userId: CAROL_ID, role: "leader", status: "active" },
+          {
+            id: fid(112),
+            userId: ALICE_ID,
+            role: "member",
+            status: "invited",
+            invitedById: CAROL_ID,
+          },
+        ],
+      },
+    },
+  });
+  await prisma.tripPlanSection.create({
+    data: {
+      id: fid(103),
+      planId,
+      title: "Overview",
+      body: "Two days on the Wollangambe. Wetsuits and lilos.",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanForm.create({
+    data: {
+      id: fid(104),
+      planId,
+      title: "Safety contacts",
+      preset: "safetyContacts",
+      questions: [
+        { id: "name", kind: "text", label: "Contact's name", required: true },
+        {
+          id: "phone",
+          kind: "phone",
+          label: "Contact's phone",
+          required: true,
+        },
+      ],
+      visibleTo: "members",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanAnswer.createMany({
+    data: [
+      {
+        id: fid(105),
+        formId: fid(104),
+        userId: BOB_ID,
+        answers: { name: "Sam Example", phone: "0400 000 000" },
+      },
+      {
+        id: fid(108),
+        formId: fid(104),
+        userId: CAROL_ID,
+        answers: { name: "Jo Example", phone: "0400 000 001" },
+      },
+    ],
+  });
+  await prisma.place.create({
+    data: {
+      id: wpid(100),
+      planId,
+      addedById: ALICE_ID,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+      name: "Wollangambe meeting point",
+      latitude: -33.4789,
+      longitude: 150.3612,
+    },
+  });
+  await prisma.route.create({
+    data: {
+      id: rtid(100),
+      planId,
+      addedById: ALICE_ID,
+      name: "Walk in to the Wollangambe",
+      color: TRACK_COLORS[2],
+      points: [
+        [150.3612, -33.4789],
+        [150.3625, -33.4801],
+        [150.3641, -33.4812],
+      ],
+    },
+  });
+
+  // Deletions a phone has yet to hear about. The ids name nothing: the rows are
+  // gone, which is what a tombstone says.
+  await prisma.syncTombstone.createMany({
+    data: [
+      { userId: ALICE_ID, entityType: "place", entityId: seedId("1", 900) },
+      { userId: ALICE_ID, entityType: "media", entityId: seedId("4", 900) },
+      { userId: ALICE_ID, entityType: "route", entityId: seedId("7", 900) },
+      { userId: BOB_ID, entityType: "place", entityId: seedId("2", 900) },
+    ],
+  });
+
+  await uploadObjects("S3_BUCKET_TOPO", [
+    ...aliceTopoOutputs.objects,
+    ...bobTopoOutputs.objects,
+    {
+      key: `exports/${exportDone}/contours.geojson`,
+      body: exportFile,
+      contentType: "application/geo+json",
+    },
+  ]);
+  await uploadObjects("S3_BUCKET_MEDIA", [
+    {
+      key: `file-sends/${BOB_ID}/${bobSend}/copy.gpx`,
+      body: coinSlotFile.body,
+      contentType: coinSlotFile.contentType,
+    },
+    {
+      key: `file-sends/${ALICE_ID}/${aliceSend}/copy.gpx`,
+      body: wollangambeFile.body,
+      contentType: wollangambeFile.contentType,
+    },
+  ]);
+
+  // Notifications: one of every stored type for alice, with the payload its
+  // producer writes (the producer is named on each). Payloads carry ids only;
+  // names are resolved at read time (routes/notifications.ts). The types are
+  // NOTIFICATION_TYPES, and src/lib/seedCoverage.unit.test.ts holds the seed to
+  // them. Bob's two place_shared rows predate this block.
+  const egressQuota = 53_687_091_200n; // the column default
+  // Made up, and using every piece of the Markdown subset the clients draw
+  // (shared/src/announcementMarkdown.ts), all three heading levels included,
+  // so the dialog shows them all.
+  const announcement = await prisma.announcement.create({
+    data: {
+      id: fid(20),
+      title: "Logjam is moving to a new server",
+      body: [
+        "Logjam will be **offline for about an hour** on Saturday morning while it moves.",
+        "",
+        "# What to expect",
+        "",
+        "- Logjam GPS keeps recording and *syncs* when it is back.",
+        "- Logjam Web shows `Couldn't reach Logjam` until then.",
+        "",
+        "## If something looks wrong",
+        "",
+        "1. Pull down to refresh on Logjam GPS, or reload the page on Logjam Web.",
+        "2. Sign out and in again.",
+        "",
+        "### On Logjam GPS",
+        "",
+        "Recorded tracks wait on the phone until it syncs.",
+        "",
+        "Questions go to [the issue tracker](https://example.com/issues) or [email](mailto:maintainer@example.com).  ",
+        "Thanks for your patience.",
+      ].join("\n"),
+    },
+  });
   await prisma.notification.createMany({
     data: [
       {
@@ -1765,29 +2588,180 @@ async function main() {
         payload: { placeId: PLACE_IDS[1], sharedById: ALICE_ID },
         read: true,
       },
+      // routes/friends.ts
       {
         userId: ALICE_ID,
         type: "friend_request",
-        payload: { friendshipId: carolPending.id, requesterUsername: "carol" },
+        payload: { friendshipId: carolPending.id, requesterId: CAROL_ID },
         read: false,
+        createdAt: ago(5),
+      },
+      // routes/friends.ts, on acceptance
+      {
+        userId: ALICE_ID,
+        type: "friend_request_accepted",
+        payload: { friendshipId: seedId("d", 1), acceptedById: BOB_ID },
+        read: true,
+        createdAt: ago(600),
+      },
+      // routes/sharing.ts
+      {
+        userId: ALICE_ID,
+        type: "place_shared",
+        payload: { placeId: BOB_SHARED_PLACE_ID, sharedById: BOB_ID },
+        read: false,
+        createdAt: ago(120),
+      },
+      // routes/shares.ts
+      {
+        userId: ALICE_ID,
+        type: "item_shared",
+        payload: { entityType: "route", entityId: rtid(3), sharedById: BOB_ID },
+        read: false,
+        createdAt: ago(110),
+      },
+      // routes/fileSends.ts
+      {
+        userId: ALICE_ID,
+        type: "file_sent",
+        payload: { fileSendId: bobSend, sentById: BOB_ID },
+        read: false,
+        createdAt: ago(25),
+      },
+      // topo/worker.py
+      {
+        userId: ALICE_ID,
+        type: "topo_complete",
+        payload: {
+          jobId: aliceTopo,
+          jobName: "Grand Canyon LiDAR",
+          footprint: TOPO_FOOTPRINT,
+        },
+        read: true,
+        createdAt: ago(285),
+      },
+      // topo/worker.py's failure path
+      {
+        userId: ALICE_ID,
+        type: "topo_failed",
+        payload: { jobId: fid(2), jobName: "Wollangambe LiDAR" },
+        read: false,
+        createdAt: ago(188),
+      },
+      // topo/export_worker.py
+      {
+        userId: ALICE_ID,
+        type: "topo_export_complete",
+        payload: {
+          exportJobId: exportDone,
+          format: "geojson",
+          jobName: "Grand Canyon LiDAR",
+          status: "completed",
+          errorMessage: null,
+        },
+        read: false,
+        createdAt: ago(98),
+      },
+      // No longer sent (auto-export is gone); an older one still shows.
+      {
+        userId: ALICE_ID,
+        type: "topo_export_skipped",
+        payload: {
+          topoJobId: aliceTopo,
+          reason: "none of the chosen layers were produced by this job",
+        },
+        read: false,
+        createdAt: ago(280),
+      },
+      // lib/planMembership.ts, called by routes/planMembers.ts,
+      // planInvites.ts and plans.ts
+      {
+        userId: ALICE_ID,
+        type: "plan_invited",
+        payload: { planId: carolPlanId, invitedById: CAROL_ID },
+        read: false,
+        createdAt: ago(15),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_join_request",
+        payload: { planId, requesterId: CAROL_ID },
+        read: false,
+        createdAt: ago(10),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_member_joined",
+        payload: { planId, memberId: BOB_ID },
+        read: true,
+        createdAt: ago(700),
+      },
+      {
+        userId: BOB_ID,
+        type: "plan_join_approved",
+        payload: { planId, approvedById: ALICE_ID },
+        read: false,
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_access_ended",
+        payload: {
+          planId: fid(120),
+          reason: "deleted",
+          planName: "Mount Solitary loop",
+        },
+        read: true,
+        createdAt: ago(2000),
+      },
+      // lib/egressMeter.ts: the two numbers, stringified
+      {
+        userId: ALICE_ID,
+        type: "egress_quota_warning",
+        payload: {
+          usedBytes: ((egressQuota * 85n) / 100n).toString(),
+          quotaBytes: egressQuota.toString(),
+        },
+        read: true,
+        createdAt: ago(1500),
+      },
+      // src/scripts/announce.ts
+      {
+        userId: ALICE_ID,
+        type: "announcement",
+        payload: { announcementId: announcement.id },
+        read: false,
+        createdAt: ago(1),
+      },
+      {
+        userId: ALICE_ID,
+        type: "egress_quota_exceeded",
+        payload: {
+          usedBytes: egressQuota.toString(),
+          quotaBytes: egressQuota.toString(),
+        },
+        read: true,
+        createdAt: ago(1400),
       },
     ],
   });
-
-  // Topo jobs are intentionally not seeded: a "complete" job with no S3 tiles
-  // behind it renders nothing / breaks the map UI. Submit a real LiDAR ZIP in
-  // dev to exercise the topo flow end-to-end instead.
 
   // Last: the integration suite refuses to run on a database that differs
   // from this (src/__tests__/_seedBaseline.ts).
   await saveSeedSnapshot(prisma);
 
-  const placeCount = ALL_PLACES.length;
   console.log(
-    `Seed complete: 3 users, ${placeCount} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 2 direct route shares (1 each way), ` +
-      `${trips.length} trip logs, ` +
-      `5 marker places, 3 place links, 7 routes, 6 media, 3 notifications, 0 topo jobs`,
+    `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
+      `(1 incoming to alice), 3 direct shares (2 incoming to alice), ` +
+      `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 2 topo templates, ` +
+      `2 file sends, 1 invite, 4 tombstones, 1 announcement, ` +
+      `${NOTIFICATION_TYPES.length} notification types`,
+  );
+  console.log(
+    `Alice's invite link, for another user: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
+  );
+  console.log(
+    `Alice's plan invite link: open Logjam Web at ${planInviteUrl("", SEED_PLAN_INVITE_TOKEN)}`,
   );
 }
 

@@ -2,6 +2,7 @@
 // individual files. Keep this the single public surface of the UI kit.
 export { ActivitySpark, type ActivityBucket } from "./ActivitySpark";
 export { Button } from "./Button";
+export { CardActions } from "./CardActions";
 export { Meter, type MeterSegment } from "./Meter";
 export { Avatar } from "./Avatar";
 export { Chip, type ChipOption } from "./Chip";
@@ -16,7 +17,19 @@ export {
   nextRange,
   type NumberRange,
 } from "@logjam/shared";
+export {
+  answerConfirm,
+  confirm,
+  pendingConfirm,
+  subscribeConfirm,
+} from "./confirm";
 export { Hero } from "./Hero";
+export { tabBadgeLabel, tabBadgeStyle } from "./tabBadgeStyle";
+export { HeroAdd } from "./HeroAdd";
+export { CollapsingHeader, CollapsingHero } from "./CollapsingHero";
+export { HeroFlatList, HeroScrollView, HeroSectionList } from "./HeroLists";
+export { useHeroCollapse } from "./useHeroCollapse";
+export { compactHeroTitle } from "./heroCollapseRule";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { Icon, type Glyph } from "./Icon";
 export { IconButton } from "./IconButton";
@@ -28,20 +41,40 @@ export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
+export { MapBanner } from "./MapBanner";
+export { NavReadout } from "./NavReadout";
+export { holdTick } from "./holdTick";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
 export { BottomSheet, closedSheet } from "./BottomSheet";
+export { mergeScrollProps, useRefreshFromTop } from "./refreshFromTop";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";
+export { useReducedMotion } from "./useReducedMotion";
+export { SearchField } from "./SearchField";
 export { TextField } from "./TextField";
 export { Field, FormStack } from "./Field";
 export { TextLink } from "./TextLink";
-export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
+export {
+  EmptyState,
+  ErrorState,
+  ListBody,
+  LoadingState,
+} from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";
 export { FieldError } from "./FieldError";
 export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
-export { Row } from "./Row";
+export { IconTile, Row } from "./Row";
+export {
+  RequestAnswers,
+  RequestRow,
+  type RequestAnswer,
+} from "./RequestRow";
+export { ForecastRail, type ForecastCard } from "./ForecastRail";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
-export { Toast, type ToastMessage } from "./Toast";
+export { Toast, ToastHost, type ToastMessage } from "./Toast";
+export { TAB_BAR_TOP_PAD, useTabBarHeight } from "./tabBar";
+export { backLabelOf } from "./backLabel";
+export { useNow } from "./useNow";

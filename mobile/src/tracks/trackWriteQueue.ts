@@ -2,17 +2,10 @@
 //
 // Deliveries can arrive faster than a write completes, and two interleaved
 // handlers would both read the same `lastTrackPoint` — so batches are chained.
-// The chain used to be `chain = chain.then(write)` with no rejection handler,
-// and `.then(onFulfilled)` on a REJECTED promise does not call the handler: the
-// first failed write (locked DB, disk pressure, a `getOfflineDb()` failure)
-// left the chain permanently rejected and every later batch was silently
-// dropped without `write` ever being called, for the life of the process, while
-// the foreground service, the notification and the HUD all still said
-// "Recording" (MLIFE-001).
-//
-// So each link settles BOTH ways, and a run of failures is published as
-// recording-health the HUD shows: a recorder that cannot write must not present
-// as one that is writing.
+// Each link settles both ways (fulfilled or rejected) so a failed write does
+// not poison the promise chain and prevent later batches from writing.
+// A run of failures is published as recording-health the HUD shows: a recorder
+// that cannot write must not present as one that is writing.
 //
 // Native-free on purpose — the poisoning invariant is unit-testable here.
 

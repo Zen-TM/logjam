@@ -1,4 +1,4 @@
-// Save a way — a route or a recorded track — out of the app as GPX or KML,
+// Save a way — a route or a recorded track — out of Logjam GPS as GPX or KML,
 // or hand back an imported file exactly as it arrived.
 //
 // Serialisation is shared (shared/src/routeExport.ts for an authored route,
@@ -8,11 +8,13 @@
 // here rather than under routes/ or tracks/: both own a caller, neither owns
 // the writing.
 //
-// ANDROID uses the Storage Access Framework, which is already part of
-// expo-file-system: the user picks a real folder, we write into it, and the
-// file lands somewhere they can find with any file manager. No new native
-// module — expo-sharing would mean a fresh dev client build for what SAF
-// already does.
+// ANDROID uses the Storage Access Framework through expo-file-system's
+// Directory API: the user picks a real folder, we write into it, and the file
+// lands somewhere they can find with any file manager. Not the legacy
+// StorageAccessFramework helpers: they accept only com.android.externalstorage
+// trees, so a phone whose picker offers just Downloads (or Drive) rejects a
+// valid grant. Guard: fileExport.test.ts. No new native module — expo-sharing
+// would mean a fresh dev client build for what SAF already does.
 //
 // iOS has no SAF equivalent, so export fails loudly there rather than
 // pretending. It needs expo-sharing (share sheet, whose "Save to Files" is the
@@ -24,19 +26,31 @@
 // it is precise timestamped location history. It goes only to the folder the
 // user chose; nothing here logs the name, the path, or the geometry.
 import { Platform } from "react-native";
+import { Directory } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   exportFilename,
   GEOJSON_MIME_TYPE,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
+  buildPlaceExport,
+  type PlaceTypeName,
   routeToGpx,
   routeToKml,
   trackPointsToGpx,
   trackPointsToKml,
+  type ExportFieldLabel,
   type RecordedTrackPoint,
+  type TExportFormat,
+  type TPlace,
   type RoutePoint,
 } from "@logjam/shared";
+
+// Read by callers as `Saved ${name}.` when the provider didn't report a name.
+const UNNAMED = "to the folder you chose";
+
+// Directory.pickDirectoryAsync rejects with this code when the user backs out.
+const PICKER_CANCELLED = "ERR_PICKER_CANCELLED";
 
 export type ExportFormat = "gpx" | "kml";
 
@@ -48,10 +62,22 @@ export class ExportUnsupportedError extends Error {
   }
 }
 
+// "Name.gpx" -> "Name 2026-11-06 1432.gpx" (local time). A second export lands
+// on a new name instead of a clash, because on a clash Android 10 names an
+// unknown MIME type "Name.gpx (1)", which no app opens as GPX. Two exports in
+// the same minute still clash and get Android's naming. Guard: fileExport.test.ts.
+function stampedName(filename: string, now = new Date()): string {
+  const dot = filename.lastIndexOf(".");
+  const p = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}${p(now.getMinutes())}`;
+  return `${filename.slice(0, dot)} ${stamp}${filename.slice(dot)}`;
+}
+
 /**
  * Write one file to a folder the user picks.
  *
- * Returns the filename actually used on success, or null when the user backed
+ * Returns the filename actually used on success (or a phrase that completes
+ * "Saved …." when the provider didn't report it), or null when the user backed
  * out of the folder picker — a cancel is not a failure and must not raise an
  * error the caller shows as one.
  */
@@ -62,36 +88,31 @@ async function saveExportFile(
 ): Promise<string | null> {
   if (Platform.OS !== "android") throw new ExportUnsupportedError();
 
-  const permission =
-    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-  if (!permission.granted) return null;
-
-  // Android's own collision handling appends its counter to the END of the
-  // display name — "route.gpx (1)" — which leaves the file without a usable
-  // extension and Gaia refuses it. So the collision is resolved HERE, where the
-  // counter can go before the dot, and SAF is only ever handed a free name.
-  const existing = await FileSystem.StorageAccessFramework.readDirectoryAsync(
-    permission.directoryUri,
-  );
-  const taken = new Set(
-    existing.map((uri) => decodeURIComponent(uri).split("/").pop() ?? ""),
-  );
-  const extension = filename.slice(filename.lastIndexOf(".") + 1);
-  const base = filename.slice(0, filename.lastIndexOf("."));
-  let candidate = filename;
-  for (let n = 1; taken.has(candidate) && n < 100; n++) {
-    candidate = `${base} (${n}).${extension}`;
+  let directory: Directory;
+  try {
+    directory = await Directory.pickDirectoryAsync();
+  } catch (err) {
+    if ((err as { code?: string }).code === PICKER_CANCELLED) return null;
+    throw err;
   }
 
-  const target = await FileSystem.StorageAccessFramework.createFileAsync(
-    permission.directoryUri,
-    candidate,
-    mimeType,
-  );
-  await FileSystem.writeAsStringAsync(target, content, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
-  return candidate;
+  // The provider makes the name unique itself: Android's
+  // FileSystemProvider.createDocument runs FileUtils.buildUniqueFile, and the
+  // Downloads and external-storage providers both extend it. On Android 10 a
+  // MIME type its table doesn't know (GPX, GeoJSON) gets the counter after the
+  // extension on a clash, "route.gpx (1)"; KML gets "route (1).kml". We used to
+  // list the folder and count ourselves, but Directory.list() is a synchronous
+  // call on the JS thread, one provider query per child, and on Downloads the
+  // children's URIs are opaque ids whose names can't be compared.
+  const file = directory.createFile(stampedName(filename), mimeType);
+  await file.write(content);
+
+  // The real name only when the URI says it. On Downloads the new file's id is
+  // a number, so claiming `filename` could name a file that doesn't exist.
+  const extension = filename.slice(filename.lastIndexOf("."));
+  return file.name.toLowerCase().endsWith(extension.toLowerCase())
+    ? file.name
+    : UNNAMED;
 }
 
 const mimeTypeFor = (format: ExportFormat) =>
@@ -150,4 +171,20 @@ export async function exportTrack(
     content,
     mimeTypeFor(format),
   );
+}
+
+/** A place as GPX, KML, GeoJSON or CSV: the file Logjam Web downloads. */
+export async function exportPlace(
+  place: TPlace,
+  format: TExportFormat,
+  defs: ExportFieldLabel[],
+  types: PlaceTypeName[],
+): Promise<string | null> {
+  const { content, mimeType, filename } = buildPlaceExport(
+    [place],
+    format,
+    defs,
+    types,
+  );
+  return saveExportFile(filename, content, mimeType);
 }

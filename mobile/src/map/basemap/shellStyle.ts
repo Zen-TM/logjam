@@ -1,19 +1,20 @@
-// Shell style builder (stage 4a §8.3). Same shell approach as web Map.tsx:
-// empty style + glyphs/sprite only; every source and layer is declarative on
-// top. Must be an OBJECT — a JSON string is treated as a style URL by the
-// native side, which drops the glyphs entry and silently kills every
-// symbol layer's text.
+// Shell style builder. Same shell approach as Logjam Web's
+// frontend/src/components/map/Map.tsx: empty style + glyphs/sprite only; every
+// source and layer is declarative on top. Must be an OBJECT — a JSON string is
+// treated as a style URL by the native side, which drops the glyphs entry and
+// silently kills every symbol layer's text (shellStyle.test.ts).
 //
 // Glyphs + sprite resolve to the bundled copy under file:// ALWAYS (online
 // too) once the first-launch install completes (basemapAssets.ts): zero glyph
-// fetches, and offline regions render labels with zero network — the Stage 4a
-// requirement. The remote host is only the fallback while installing on first
+// fetches, and offline regions render labels with zero network.
+// The remote host is only the fallback while installing on first
 // launch or if the install fails. No user data rides these requests either way.
 import { useMemo } from "react";
 import type { ThemeTokens } from "@logjam/shared";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
 
 import { useTheme } from "../../theme";
+import { BAND_MARKERS } from "../layerOrder";
 
 export const BASEMAP_ASSETS_REMOTE_BASE =
   "https://protomaps.github.io/basemaps-assets";
@@ -42,6 +43,11 @@ export function buildShellStyle(
         type: "background",
         paint: { "background-color": theme.page },
       },
+      ...Object.values(BAND_MARKERS).map((id) => ({
+        id,
+        type: "background" as const,
+        layout: { visibility: "none" as const },
+      })),
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,
     sprite: `${base}/sprites/v4/${flavor}`,
@@ -49,7 +55,7 @@ export function buildShellStyle(
 }
 
 /**
- * The shell style in the scheme the app is painted in. A scheme change hands
+ * The shell style in the scheme Logjam GPS is painted in. A scheme change hands
  * the map a new style object, which reloads it: the background is the one
  * colour the map cannot take as a layer prop.
  */

@@ -1,9 +1,12 @@
-// Offline-region tile math (stage4a-basemaps.md §3) — single source for the
+// Offline-region tile math — single source for the
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
-import { NSW_CONTOURS } from "./nswContours.js";
+import { NSW_COVERAGE } from "./nswCoverage.js";
+import { NSW_FIRE } from "./nswFire.js";
+import { landClip } from "./nswLand.js";
+import { NSW_REGION } from "./regions.js";
 
 export type RegionBbox = {
   west: number;
@@ -27,9 +30,8 @@ export function lonLatToTile(
 }
 
 /**
- * XYZ→TMS row flip for MBTiles writes. The single shared flip helper
- * (deviation DV5): Stage 4a writes through it in JS; Stage 6's native module
- * documents the same convention.
+ * XYZ→TMS row flip for MBTiles writes: JS and native tile writers share the
+ * same convention.
  */
 export function xyzToTmsRow(z: number, y: number): number {
   return (1 << z) - 1 - y;
@@ -83,11 +85,11 @@ export function planRegionTiles(
   return { perZoom, totalTiles };
 }
 
-// ── Caps (client-enforced; stage4a §3.3) ─────────────────────────────────────
+// ── Caps (client-enforced) ──────────────────────────────────────────────────
 
 /**
  * Hard cap on the tiles ONE download job may fetch — download disabled above
- * it. ~22 min at the politeness pace (§5.4), which is the real reason for the
+ * it. ~22 min at the politeness pace, which is the real reason for the
  * number: it bounds how long the user is asked to hold the app open.
  *
  * Applied to the TOTAL across every selected source, because that total is what
@@ -103,9 +105,7 @@ export const MAX_REGION_EDGE_KM = 50;
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
-/** Area cap for every save, set by the server-side clip. The API enforces the same
- * number (api/src/lib/regionClip.ts imports it) — one source, so the client
- * can never offer a region the server will refuse. */
+/** Area cap for every save, which bounds what the clips cut on the phone cost. */
 export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
 
 export function regionEdgesKm(bbox: RegionBbox): [number, number] {
@@ -136,10 +136,10 @@ export function checkRegionCaps(
   if (w > MAX_REGION_EDGE_KM || h > MAX_REGION_EDGE_KM) {
     return { ok: false, reason: "edge-too-long" };
   }
-  // One area for every save, whatever is in it (docs/decisions/0029). The
-  // clip endpoint refuses anything larger, and every signed-in save asks it
-  // for the vector map, the contours and a DEM archive: a larger area could
-  // only be saved without them, which is the save that breaks in the field.
+  // One area for every save, whatever is in it
+  // (docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md): every save
+  // cuts the vector map, the contours and a DEM archive, and the cap bounds
+  // what that costs a phone in requests, bytes and time.
   if (w * h > MAX_REGION_AREA_KM2) {
     return { ok: false, reason: "area-too-large" };
   }
@@ -170,15 +170,15 @@ export type DownloadableTileSourceId = OfflineBasemapId | typeof DEM_SOURCE_ID;
 
 /**
  * The pyramid always starts here: z8–z9 context costs ~10 tiles in total and is
- * what stops a zoomed-out offline map being a blank screen (deviation DV2 — the
- * user picks only the detail end).
+ * what stops a zoomed-out offline map being a blank screen (the user picks only
+ * the detail end).
  */
 export const REGION_MIN_ZOOM = 8;
 
 /**
  * MEASURED bytes per tile, per source, per zoom.
  *
- * Provenance: `shared/scripts/calibrate-basemap-tile-sizes.mjs`, run 2026-07-30
+ * Provenance: `shared/scripts/calibrate-basemap-tile-sizes.mjs`
  * against the live SIXMaps caches — 14 random tiles per zoom, half from Blue
  * Mountains bush (dense contours, no streets) and half from the Katoomba–
  * Blackheath strip. Re-run that script and update these together.
@@ -189,15 +189,14 @@ export const REGION_MIN_ZOOM = 8;
  * of photo everywhere). A flat mean would over-estimate a deep download by an
  * order of magnitude and under-estimate a shallow one.
  *
- * BOTH terrain types, because the first pass sampled only bush and the estimate
- * came out 40 % under for a real download centred on Katoomba: a topo tile over a
- * town carries streets, labels and building fill and measures ~1.5× a bush tile
- * at the same zoom. People save the area around a trailhead, and a trailhead is
- * usually near a town, so bush-only sampling is a systematically optimistic lie.
+ * BOTH terrain types: a topo tile over a town carries streets, labels and
+ * building fill and measures ~1.5× a bush tile at the same zoom. People save
+ * the area around a trailhead, and a trailhead is usually near a town, so
+ * bush-only sampling would systematically under-estimate downloads.
  *
- * Also measured: `six-imagery` returns 404 for some z18 tiles, which is the
- * "advertised LOD ≠ cached tile" case the plan flagged. Those are gaps, not
- * errors — the downloader records them and the UI counts them separately.
+ * Also measured: `six-imagery` returns 404 for some z18 tiles, where advertised
+ * LOD differs from cached tiles. Those are gaps, not errors — the downloader
+ * records them and the UI counts them separately.
  */
 const TILE_BYTES: Record<
   DownloadableTileSourceId,
@@ -220,9 +219,9 @@ const TILE_BYTES: Record<
     18: { meanBytes: 5_720, p90Bytes: 8_066 },
   },
   // ONE zoom, because a source's `sampleZoom` is the only level anything
-  // reads (shared/src/demSources.ts). Measured 2026-08-16, same script, 14 tiles over
-  // the same two bboxes: terrarium PNGs are noise-like height fields, so town
-  // and bush cost the same and the spread is narrow.
+  // reads (shared/src/demSources.ts). Measured with the same script, 14 tiles
+  // over the same two bboxes: terrarium PNGs are noise-like height fields, so
+  // town and bush cost the same and the spread is narrow.
   terrarium: {
     13: { meanBytes: 34_495, p90Bytes: 38_109 },
   },
@@ -290,7 +289,7 @@ export function estimateRegionSize(
 }
 
 /**
- * Sustained tiles/second of the politeness envelope (stage4a §5.4: token bucket
+ * Sustained tiles/second of the politeness envelope (token bucket
  * refilling 3/s). The honest number for "how long will this take" — the burst
  * capacity only helps the first two seconds.
  */
@@ -301,17 +300,40 @@ export function estimateRegionSeconds(totalTiles: number): number {
 }
 
 /**
- * MEASURED bytes of one tile of a DEM archive at its `sampleZoom`: full z15
- * tiles of six whole sheets built by `topo/build_nsw_dem.py`, from 4.7 KB on
- * the Hay plain to 36 KB in the ranges. People save rugged ground, so the p90
- * is the rugged figure, not a statistical one.
+ * MEASURED bytes of one tile of a DEM archive at each zoom a clip holds. The
+ * sampler reads only the `sampleZoom`; the shallower zooms are saved for the
+ * hillshade (`NSW_REGION.terrain.hillshade`), which would vanish below z15 without them.
+ *
+ * z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
+ * 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
+ * so the p90 is the rugged figure, not a statistical one. z8–z14: one figure
+ * for all seven, from clips of the Katoomba sheet (single zooms, tiles of
+ * 43–56 KB) and of the Katoomba Falls box (the 15 tiles under z15 averaged
+ * 59 KB), a rugged place, so it is the p90; the mean is the same 0.72 of it
+ * that z15's is. Low zooms have too few whole tiles on the sheet to say more.
  */
 const DEM_ARCHIVE_TILE_BYTES: Record<
   string,
-  { meanBytes: number; p90Bytes: number }
+  Record<number, { meanBytes: number; p90Bytes: number }>
 > = {
-  "nsw-5m": { meanBytes: 24_000, p90Bytes: 36_000 },
+  "nsw-5m": {
+    8: { meanBytes: 42_000, p90Bytes: 60_000 },
+    9: { meanBytes: 42_000, p90Bytes: 60_000 },
+    10: { meanBytes: 42_000, p90Bytes: 60_000 },
+    11: { meanBytes: 42_000, p90Bytes: 60_000 },
+    12: { meanBytes: 42_000, p90Bytes: 60_000 },
+    13: { meanBytes: 42_000, p90Bytes: 60_000 },
+    14: { meanBytes: 42_000, p90Bytes: 60_000 },
+    15: { meanBytes: 24_000, p90Bytes: 36_000 },
+  },
 };
+
+/** The zoom a saved clip of this DEM archive starts at. */
+export function demClipMinZoom(source: DemSource): number {
+  return source.id === NSW_REGION.terrain.heights.id
+    ? NSW_REGION.terrain.hillshade.minzoom
+    : source.sampleZoom;
+}
 
 /**
  * The DEM archives an offline area saves a clip of: every one whose coverage
@@ -355,25 +377,119 @@ const CONTOUR_TILE_BYTES: Record<
   14: { meanBytes: 24_000, p90Bytes: 28_000 },
 };
 
-export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
-  const { perZoom } = planRegionTiles(
-    bbox,
-    NSW_CONTOURS.minzoom,
-    NSW_CONTOURS.maxzoom,
-  );
+/**
+ * MEASURED bytes of one tile of the statewide slope (1° steps, PNG level 6),
+ * from every whole tile of the Katoomba sheet, one of the most rugged: so the
+ * mean is already a mountain figure. Zooms under 11 take z11's, as the sheet
+ * holds no whole tile there.
+ */
+const SLOPE_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  8: { meanBytes: 39_000, p90Bytes: 64_000 },
+  9: { meanBytes: 39_000, p90Bytes: 64_000 },
+  10: { meanBytes: 39_000, p90Bytes: 64_000 },
+  11: { meanBytes: 39_000, p90Bytes: 64_000 },
+  12: { meanBytes: 40_000, p90Bytes: 58_000 },
+  13: { meanBytes: 42_000, p90Bytes: 53_000 },
+  14: { meanBytes: 36_000, p90Bytes: 45_000 },
+  15: { meanBytes: 28_000, p90Bytes: 33_000 },
+};
+
+/**
+ * MEASURED bytes of one tile of the Land overlay at each zoom a clip holds, as
+ * stored (gzip), from every tile of a 40 km Blue Mountains box.
+ */
+const LAND_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
+  {
+    12: { meanBytes: 7_000, p90Bytes: 15_000 },
+    13: { meanBytes: 3_600, p90Bytes: 8_500 },
+  };
+
+/**
+ * MEASURED bytes of one tile of the Fire history overlay at each zoom, as
+ * stored (gzip), from every tile of a 40 km Blue Mountains box, in the
+ * November 2026 build. A coarse tile holds every fire under it, so it weighs
+ * most.
+ */
+const FIRE_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
+  {
+    8: { meanBytes: 89_000, p90Bytes: 136_000 },
+    9: { meanBytes: 49_000, p90Bytes: 83_000 },
+    10: { meanBytes: 23_000, p90Bytes: 64_000 },
+    11: { meanBytes: 9_700, p90Bytes: 33_000 },
+    12: { meanBytes: 3_100, p90Bytes: 9_000 },
+  };
+
+/**
+ * MEASURED bytes of one tile of the Coverage overlay, as stored (gzip), every
+ * carrier's together, from every tile of a 40 km Blue Mountains box, in the
+ * 2026 release's build. The archive holds z12 alone.
+ */
+const COVERAGE_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  12: { meanBytes: 8_300, p90Bytes: 13_900 },
+};
+
+function estimateStatewideClip(
+  bbox: RegionBbox,
+  archive: { minzoom: number; maxzoom: number },
+  tileBytes: Record<number, RegionSizeEstimate>,
+): RegionSizeEstimate {
+  const { perZoom } = planRegionTiles(bbox, archive.minzoom, archive.maxzoom);
   const bytes = (key: keyof RegionSizeEstimate) =>
-    perZoom.reduce(
-      (sum, { z, count }) => sum + count * CONTOUR_TILE_BYTES[z]![key],
-      0,
-    );
+    perZoom.reduce((sum, { z, count }) => sum + count * tileBytes[z]![key], 0);
   return { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") };
 }
 
+export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.contours,
+    CONTOUR_TILE_BYTES,
+  );
+}
+
+export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.slope,
+    SLOPE_TILE_BYTES,
+  );
+}
+
+export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(
+    bbox,
+    landClip(NSW_REGION.terrain.land),
+    LAND_TILE_BYTES,
+  );
+}
+
+export function estimateFireClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_FIRE, FIRE_TILE_BYTES);
+}
+
+export function estimateCoverageClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_COVERAGE, COVERAGE_TILE_BYTES);
+}
+
 export interface MultiSourceRegionPlan {
-  /** The contour clip, when the user is saving one: bytes only, like a DEM. */
-  contours: RegionSizeEstimate | null;
+  /** The contour clip: bytes only, like a DEM archive's. */
+  contours: RegionSizeEstimate;
+  /** The slope clip, the same way. */
+  slope: RegionSizeEstimate;
+  /** The Land overlay's clip, the same way. */
+  land: RegionSizeEstimate;
+  /** The Fire history overlay's clip, the same way. */
+  fire: RegionSizeEstimate;
+  /** The Coverage overlay's clip, the same way. */
+  coverage: RegionSizeEstimate;
   /**
-   * DEM archive clips: one request each to our own API, so they count toward
+   * DEM archive clips: cut by byte range from our own CDN, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
    * fetched one by one from a provider.
    */
@@ -404,33 +520,36 @@ export interface MultiSourceRegionPlan {
  * elevation profiles, point heights and route gain/loss the moment the phone
  * goes offline — which is the trip the download exists for. Costing it into
  * these totals (rather than adding it silently later) is what keeps the size
- * estimate, the tile cap and the free-space check honest.
+ * estimate, the tile cap and the free-space check honest. So are the clips
+ * of each DEM archive the area touches and of the statewide contours, slope,
+ * land, fire history and coverage, which every area saves too.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
   basemapIds: OfflineBasemapId[],
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
-  /** False for a guest: the clip endpoint needs a signed-in user. */
-  includeDemArchives = false,
-  /** True when a clip of the statewide contours is saved with the area. */
-  includeContours = false,
 ): MultiSourceRegionPlan {
-  const contours = includeContours ? estimateContourClip(bbox) : null;
+  const contours = estimateContourClip(bbox);
+  const slope = estimateSlopeClip(bbox);
+  const land = estimateLandClip(bbox);
+  const fire = estimateFireClip(bbox);
+  const coverage = estimateCoverageClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
-  const demArchives = (includeDemArchives ? planDemDownload(bbox) : []).map(
-    (source) => {
-      const tiles = planRegionTiles(bbox, source.sampleZoom, source.sampleZoom);
-      const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
-      return {
-        sourceId: source.id,
-        size: {
-          meanBytes: tiles.totalTiles * perTile.meanBytes,
-          p90Bytes: tiles.totalTiles * perTile.p90Bytes,
-        },
-      };
-    },
-  );
+  const demArchives = planDemDownload(bbox).map((source) => {
+    const { perZoom } = planRegionTiles(
+      bbox,
+      demClipMinZoom(source),
+      source.sampleZoom,
+    );
+    const perTile = DEM_ARCHIVE_TILE_BYTES[source.id]!;
+    const bytes = (key: keyof RegionSizeEstimate) =>
+      perZoom.reduce((sum, { z, count }) => sum + count * perTile[z]![key], 0);
+    return {
+      sourceId: source.id,
+      size: { meanBytes: bytes("meanBytes"), p90Bytes: bytes("p90Bytes") },
+    };
+  });
 
   const perSource = [
     ...basemapIds.map((basemapId) => {
@@ -455,9 +574,17 @@ export function planRegionForBasemaps(
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>
     [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
-    (contours?.[key] ?? 0);
+    contours[key] +
+    slope[key] +
+    land[key] +
+    fire[key] +
+    coverage[key];
   return {
     contours,
+    slope,
+    land,
+    fire,
+    coverage,
     perSource,
     demArchives,
     totalTiles,

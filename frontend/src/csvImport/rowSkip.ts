@@ -2,8 +2,8 @@
 // required field, unreadable value). Pure and separate from
 // UnifiedImportDialog.tsx so the drop conditions are unit-testable without
 // rendering the dialog. Returns null when the row is fine to import.
-// See FECO-006 / 01-decisions.md D5: every drop must be reported with the
-// source row number and offending value, not silently discarded.
+// Every drop must be reported with the source row number and offending value,
+// not silently discarded.
 
 export function describeDroppedPlaceRow(args: {
   name: string;

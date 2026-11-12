@@ -69,6 +69,20 @@ class TestMbtilesSchema(unittest.TestCase):
             # bounds/center are only written by finalise_bounds.
             self.assertNotIn("bounds", meta)
             self.assertNotIn("center", meta)
+            self.assertNotIn("attribution", meta)
+        finally:
+            conn.close()
+
+    # Mutation: drop the attribution row, or ignore the zooms passed in, and
+    # an area export's MBTiles loses its credit or claims the job zooms.
+    def test_an_area_exports_zooms_credit_and_centre(self):
+        conn = create_mbtiles(self.path, "area", "desc", 11, 16, "© someone")
+        try:
+            finalise_bounds(conn, 150.0, -34.0, 150.2, -33.8, center_zoom=13)
+            meta = dict(conn.execute("SELECT name, value FROM metadata"))
+            self.assertEqual((meta["minzoom"], meta["maxzoom"]), ("11", "16"))
+            self.assertEqual(meta["attribution"], "© someone")
+            self.assertEqual(meta["center"], "150.1,-33.9,13")
         finally:
             conn.close()
 

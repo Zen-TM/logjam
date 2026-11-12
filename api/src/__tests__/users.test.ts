@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
+import { MAX_SLOPE_BANDS } from "@logjam/shared";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -8,9 +9,9 @@ import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 // wipes the authenticated user (alice) and every owned record, which would
 // destroy the shared seed for all other integration tests running against the
 // same local DB. The cascade-delete + S3 cleanup path it drives is covered by
-// reading the route and by CH-002 (s3Cleanup now throws on failure); a
-// dedicated destructive test would need an isolated throwaway user, which fake
-// auth (always alice) cannot impersonate. See code-health-unaddressed.md.
+// unit tests (s3Cleanup throws on failure); a dedicated destructive test would
+// need an isolated throwaway user, which fake auth (always alice) cannot
+// impersonate.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
@@ -24,7 +25,6 @@ describe("users routes (fake auth = alice)", () => {
     expect(typeof res.body.storageQuotaBytes).toBe("number");
     // uiPreferences is normalized into the canonical shape.
     expect(res.body.uiPreferences).toBeTruthy();
-    expect(typeof res.body.uiPreferences.themeSchemeId).toBe("string");
     expect(res.body.uiPreferences.notifications).toBeTruthy();
     // Derived monthly-tile-usage fields are augmented onto the response.
     expect(typeof res.body.monthlyComputeUsage).toBe("number");
@@ -32,17 +32,15 @@ describe("users routes (fake auth = alice)", () => {
     expect(typeof res.body.monthlyComputeResetAt).toBe("string");
   });
 
-  // Regression: PATCH /me previously returned the raw Prisma row, dropping the
-  // derived monthlyComputeUsage/monthlyComputeResetAt (not columns). The frontend
-  // replaces its cached user with this response, so the dropped fields made the
-  // Account panel render " / 40" and a full progress bar after any profile
-  // update (fresh-signup consent flow being the reliable trigger).
+  // PATCH /users/me must include the derived monthlyComputeUsage and
+  // monthlyComputeResetAt (not DB columns), because the frontend replaces its
+  // cached user with this response.
   it("PATCH /users/me returns the derived monthly-tile-usage fields", async () => {
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const res = await request(API_URL)
       .patch("/users/me")
       .set(AUTH)
-      .send({ themeSchemeId: before.body.uiPreferences.themeSchemeId });
+      .send({ slopeBands: before.body.uiPreferences.slopeBands });
     expect(res.status).toBe(200);
     expect(typeof res.body.monthlyComputeUsage).toBe("number");
     expect(typeof res.body.monthlyComputeCredits).toBe("number");
@@ -62,8 +60,9 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
-  // Found by taking bob's name in Logjam Web: the refusal read "Conflict
-  // updating profile". Mutation: answer a P2002 by `meta.target` again.
+  // When a chosen username is already taken, the refusal must inform the user
+  // rather than returning a generic conflict error.
+  // Mutation: answer a P2002 by `meta.target` again.
   it("PATCH /users/me says a taken username is taken", async () => {
     const res = await request(API_URL)
       .patch("/users/me")
@@ -71,6 +70,27 @@ describe("users routes (fake auth = alice)", () => {
       .send({ username: "bob" });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe("That username is taken. Choose another.");
+  });
+
+  // Two usernames that differ only in case are one username (issue #360):
+  // `users_username_as_read_key` holds the lower-case form. Mutation: drop the
+  // index and this rename succeeds, taking alice's username off the seed.
+  it("PATCH /users/me refuses a username that differs only in case", async () => {
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "Bob" });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe("That username is taken. Choose another.");
+    } finally {
+      // Under the mutation above the rename lands; the export test later in
+      // this file expects "alice" back.
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "alice" });
+    }
   });
 
   it("PATCH /users/me rejects an invalid themeSchemeId", async () => {
@@ -92,15 +112,43 @@ describe("users routes (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.uiPreferences.themeSchemeId).toBe("scribblyGum");
     } finally {
+      // There is no way to unset a pick, so an account that had none keeps
+      // the retired id's scheme.
+      if (original) {
+        await request(API_URL)
+          .patch("/users/me")
+          .set(AUTH)
+          .send({ themeSchemeId: original });
+      }
+    }
+  });
+
+  // An old client (ADR 0022) still sends the retired GeoPDF preferences. They
+  // must not fail the whole request. Mutation: make the body validation strict,
+  // or have isNotificationPreferences reject unknown keys, and this is a 400.
+  it("PATCH /users/me ignores the retired GeoPDF preferences an old client sends", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.notifications.topoEmail;
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({
+          autoDownloadGeoPdfs: true,
+          notifications: { geoPdfEmail: true, topoEmail: !original },
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.notifications.topoEmail).toBe(!original);
+    } finally {
       await request(API_URL)
         .patch("/users/me")
         .set(AUTH)
-        .send({ themeSchemeId: original });
+        .send({ notifications: { topoEmail: original } });
     }
   });
 
   it("PATCH /users/me updates the email notification preferences and restores them", async () => {
-    const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
+    const keys = ["topoEmail", "exportEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const original: Record<string, boolean> = Object.fromEntries(
       keys.map((k) => [k, before.body.uiPreferences.notifications[k]]),
@@ -127,7 +175,87 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
-  // Consent boundary (PRIV-002): the server is the integrity half of the
+  it("PATCH /users/me stores the user's slope bands, and restores", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.slopeBands;
+    expect(original.length).toBeGreaterThan(0);
+    const bands = [
+      { fromDeg: 30, toDeg: 45, colour: "#ffff00ff" },
+      { fromDeg: 45, toDeg: 90, colour: "#ff0000ff" },
+    ];
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: bands });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.slopeBands).toEqual(bands);
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: original });
+    }
+  });
+
+  // Mutation: store `regions` as sent, and an id no region has reaches both
+  // clients; or accept [] or only unknown ids, and an account that chose
+  // something is silently given NSW.
+  it("PATCH /users/me stores the chosen regions, dropping unknown ids", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    expect(before.body.uiPreferences.regions).toEqual(["nsw"]);
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ regions: ["atlantis", "nsw"] });
+    expect(res.status).toBe(200);
+    expect(res.body.uiPreferences.regions).toEqual(["nsw"]);
+    for (const regions of [[], "nsw", [7], null, ["atlantis"]]) {
+      const bad = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ regions });
+      expect(bad.status).toBe(400);
+    }
+    const tooMany = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ regions: Array.from({ length: 65 }, () => "nsw") });
+    expect(tooMany.status).toBe(413);
+  });
+
+  // Mutation: store the body's bands without `parseSlopeBands`, and a band
+  // MapLibre cannot draw reaches both clients' maps.
+  it("PATCH /users/me rejects slope bands the editor would not accept", async () => {
+    for (const slopeBands of [
+      [],
+      [{ fromDeg: 40, toDeg: 30, colour: "#ff0000ff" }],
+      [{ fromDeg: 40, toDeg: 50, colour: "red" }],
+    ]) {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  // Mutation: drop the length check before `parseSlopeBands`, and an
+  // over-long list is a 400 checked element by element.
+  it("PATCH /users/me answers too many slope bands with 413", async () => {
+    const slopeBands = Array.from({ length: MAX_SLOPE_BANDS + 1 }, (_, i) => ({
+      fromDeg: i * 10,
+      toDeg: i * 10 + 10,
+      colour: "#ff0000ff",
+    }));
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ slopeBands });
+    expect(res.status).toBe(413);
+  });
+
+  // Consent boundary: the server is the integrity half of the
   // re-consent mechanism — it must reject any consentVersion other than the
   // current constant, and must expose consentVersion so the client gate
   // (frontend needsReconsent/ConsentGate) can fire after a version bump.
@@ -155,6 +283,11 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body).toHaveProperty("consentVersion");
   });
 
+  it("GET /users/me names the current consent version so a build need not bake it", async () => {
+    const res = await request(API_URL).get("/users/me").set(AUTH);
+    expect(res.body.currentConsentVersion).toBe(CURRENT_CONSENT_VERSION);
+  });
+
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
@@ -168,12 +301,11 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
-  // PRIV-004: privacy.html promises a "complete machine-readable JSON copy"
-  // (APP 12 access). schemaVersion 2 adds the previously omitted user-owned
-  // collections — topo jobs carry location-bearing footprints, so their
-  // absence made "complete" inaccurate. BigInt byte fields (topoJob
-  // outputBytes, topoExportJob resultBytes) must serialise via the global
-  // replacer without crashing.
+  // privacy.html promises a "complete machine-readable JSON copy" (APP 12
+  // access). Topo jobs carry location-bearing footprints, so they must be
+  // included in the export. BigInt byte fields (topoJob outputBytes,
+  // topoExportJob resultBytes) must serialise via the global replacer without
+  // crashing.
   it("GET /users/me/export includes topo jobs, topo exports, topo templates, and notifications (schemaVersion 2)", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
@@ -209,7 +341,6 @@ describe("users routes (fake auth = alice)", () => {
       "itemSharesReceived",
       "fileSendsSent",
       "fileSendsReceived",
-      "geoPdfJobs",
       "devices",
     ]) {
       expect(Array.isArray(res.body[section]), section).toBe(true);

@@ -9,10 +9,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { previewFriendInvite, redeemFriendInvite } from "../../placeUtils";
-import {
-  clearPendingFriendInvite,
-  pendingFriendInvite,
-} from "../../pendingFriendInvite";
+import { friendInvite } from "../../pendingInvite";
 
 const copy = FRIENDS.copy;
 
@@ -37,14 +34,14 @@ function FriendInviteDialog({
 
   useEffect(() => {
     if (!enabled) return;
-    const token = pendingFriendInvite();
+    const token = friendInvite.pending();
     if (!token) return;
-    // Cleared before the answer, not after: a link that fails must not ask
-    // again on every reload.
-    clearPendingFriendInvite();
+    // Cleared before the answer, not after, so a link that fails is not asked
+    // about again on every reload.
+    friendInvite.clear();
     previewFriendInvite(token)
       .then(({ inviter, alreadyFriends }) => {
-        if (alreadyFriends) toast.info(alreadyFriendsMessage(inviter.username));
+        if (alreadyFriends) toast.done(alreadyFriendsMessage(inviter.username));
         else setInvite({ token, username: inviter.username });
       })
       .catch((err) => {
@@ -58,7 +55,7 @@ function FriendInviteDialog({
     setBusy(true);
     try {
       await redeemFriendInvite(invite.token);
-      toast.success(friendAcceptedMessage(invite.username));
+      toast.done(friendAcceptedMessage(invite.username));
       onFriended();
     } catch (err) {
       console.error(err);
@@ -73,10 +70,13 @@ function FriendInviteDialog({
   return (
     <ConfirmDialog
       open={invite != null}
-      title={words?.confirmTitle ?? ""}
-      message={words?.confirmBody ?? null}
-      confirmLabel={copy.inviteAccept}
-      confirmColor="primary"
+      copy={
+        words && {
+          ...words,
+          confirmLabel: copy.inviteAccept,
+          tone: "filled",
+        }
+      }
       busy={busy}
       onConfirm={() => void accept()}
       onClose={() => setInvite(null)}

@@ -11,7 +11,8 @@ feature — a user who thinks a sent file can be taken back has been misled by t
 UI, not by the API.
 
 - **Share** — a LIVE, revocable view of a server-backed row the sender still
-  owns: places, routes, LiDAR topo jobs and GeoPDF jobs. The recipient can view
+  owns: places, routes and LiDAR topo jobs (updated 2026-10-29: GeoPDF jobs
+  are gone, [0043](0043-geopdfs-render-in-the-browser.md)). The recipient can view
   and export, never edit. `POST /shares` (places keep their own
   `/places/:id/share`).
 - **Send a copy** — a FILE handed over. Once accepted it is the recipient's own,

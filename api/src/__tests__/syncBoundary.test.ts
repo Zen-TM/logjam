@@ -24,7 +24,7 @@ import {
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Stage 8 §11 mandatory privacy-boundary suite for GET /sync/delta.
+// Mandatory privacy-boundary suite for GET /sync/delta.
 // Requires `make dev`. Seed baseline: alice owns SHARED_PLACE_ID, shared
 // with bob; carol is shared nothing. Synthetic coords only.
 
@@ -293,13 +293,11 @@ describe("media download-urls boundary", () => {
 //
 // `shared/src/sync.ts` declares what a delta row must look like, and the mobile
 // pull runs every row through it — a row that fails is DROPPED, with a warning
-// that reads as data loss. Every test of those parsers, on both sides, built
-// its rows by hand, so a spec that disagreed with the server was invisible to
-// all of them: `ownerId: isString` on a custom field definition dropped all
-// NINE system definitions off every page a phone pulled (grades arriving on
-// places with nothing to label or bound them), and it took running the app to
-// see it. This is that class of bug's guard — the rows come from the live
-// server, so at least one side is ground truth.
+// that reads as data loss. Hand-built parser fixtures miss when a client spec
+// disagrees with what the server sends (such as `ownerId: isString` on a
+// custom field definition dropping system definitions where ownerId is null).
+// This suite guards that contract: the rows come from the live server, so at
+// least one side is ground truth.
 const ROW_PARSERS: Record<string, (row: unknown) => unknown> = {
   placeTypes: parseSyncDeltaPlaceTypeRow,
   customFieldDefs: parseSyncDeltaCustomFieldDefRow,
@@ -338,7 +336,7 @@ describe("sync delta — every row the server sends parses on the client", () =>
     }
   });
 
-  // The case that actually broke: a SYSTEM definition belongs to no account.
+  // A SYSTEM definition belongs to no account.
   it("sends system definitions with a null owner, and the spec accepts them", async () => {
     const { changes } = await fullPull(ALICE_SUB);
     const defs = (changes.customFieldDefs ?? []) as {

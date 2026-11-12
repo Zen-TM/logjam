@@ -1,7 +1,7 @@
 # 0029. A signed-in region save always includes the vector map; a guest's never does
 
 - **Date:** 2026-10-10
-- **Status:** Accepted
+- **Status:** Superseded by [0036](0036-the-phone-cuts-its-own-offline-clips.md)
 - **Supersedes:** —
 
 ## Context

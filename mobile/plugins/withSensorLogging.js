@@ -25,8 +25,8 @@
 // `tracks/sensorLog.ts` treats null as "this build cannot log".
 //
 // NATIVE CHANGE, so switching between the two shapes needs a fresh
-// `expo prebuild` + build — an OTA update cannot move it (mobile/CLAUDE.md,
-// Builds & distribution).
+// `expo prebuild` + build — an OTA update cannot move it (mobile/AGENTS.md,
+// Builds and verify).
 const {
   withAndroidManifest,
   withSettingsGradle,
@@ -83,17 +83,14 @@ const withSensorModuleExclusion = (config) =>
 /**
  * ACTIVITY_RECOGNITION does NOT come from us — `expo-sensors` declares it in
  * its own `AndroidManifest.xml` for a Pedometer this app never uses, and
- * manifest merging pulls it into every build. Logjam has therefore been asking
- * for the body-activity permission since expo-sensors was added for the
- * compass, which for an app whose pitch is that it does not watch you is a
- * permission worth not having.
+ * manifest merging pulls it into every build. For an app whose pitch is that
+ * it does not watch you, that is a permission worth not having.
  *
  * So a user build BLOCKS it (`tools:node="remove"`, the same mechanism app.json
  * already uses for SYSTEM_ALERT_WINDOW) and a developer build allows it,
  * because there the step counter genuinely needs it. Not merely "does not
- * declare it" — a library-level declaration has to be actively removed, which
- * is why the earlier add/remove version of this was a no-op that still shipped
- * the permission.
+ * declare it" — a library-level declaration must be actively removed with
+ * `tools:node="remove"`, otherwise manifest merging puts it back.
  */
 const withSensorPermission = (config) =>
   withAndroidManifest(config, (cfg) => {

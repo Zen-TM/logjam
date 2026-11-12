@@ -1,14 +1,10 @@
 // "Will this fit?", asked once, by everything that writes a large file.
 //
-// The download screen already asked it — and it was the ONLY writer that did.
-// The vector clip (up to 80 MB), the topo overlay bundle, a GeoPDF's rendered
-// pyramid and both unattended auto-downloaders all wrote until SQLite failed
-// mid-batch, which surfaces as "That didn't finish. Try again." with no hint
-// that the phone is full and nothing reclaimed. Worse, the screen's own check
-// summed only the RASTER pyramids, so a vector-only selection prechecked zero
-// bytes against an up-to-80 MB download.
+// Writers (the vector clip, topo overlay bundle, GeoPDF rendered pyramid, and
+// unattended auto-downloaders) check space upfront so writes do not fail
+// mid-batch when storage is exhausted.
 //
-// There is no eviction anywhere in this app: nothing reclaims an artifact by
+// There is no eviction anywhere in Logjam GPS: nothing reclaims an artifact by
 // age or pressure, so "not enough space" is a decision the user has to make.
 // This module only makes sure they are asked before the bytes start, not after.
 //
@@ -22,7 +18,7 @@ import * as FileSystem from "expo-file-system/legacy";
  */
 const HEADROOM = 0.9;
 
-/** Pure half, so the rule is testable without a filesystem. */
+/** Pure half, so the rule is testable without a filesystem. Guard: `src/offline/freeSpace.test.ts`. */
 export function fitsInFreeSpace(
   neededBytes: number,
   freeBytes: number,

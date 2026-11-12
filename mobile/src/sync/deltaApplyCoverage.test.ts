@@ -1,16 +1,15 @@
 // Every delta entity the protocol carries must actually be WRITTEN to the
 // mirror, and the row tally must count it.
 //
-// This exists because `placeTypes` was parsed and then silently dropped: the
-// `satisfies DeltaEntityKey` clause in `deltaPull.ts` pins the PARSE side, so
-// the key could not go missing from the `changes` object — and nothing pinned
-// the apply side, so the loop that writes it was simply absent. Every other
-// entity had one. The failure was invisible because `listMirrorPlaceTypes`
-// falls back to the compiled-in `SYSTEM_PLACE_TYPES` when the table is empty:
-// the three built-ins rendered perfectly, and a user's own place type never
-// reached the phone at all — no tab, and no way to pick it on a place form.
+// The `satisfies DeltaEntityKey` clause in `deltaPull.ts` pins the parse side,
+// so the key cannot go missing from the `changes` object, but nothing in
+// TypeScript checks the apply side. Without an apply loop, parsed rows are
+// silently dropped. A missing apply loop for place types is otherwise masked
+// because `listMirrorPlaceTypes` falls back to the compiled-in
+// `SYSTEM_PLACE_TYPES` when the table is empty, hiding that custom place types
+// never reach the phone.
 //
-// Root CLAUDE.md, "two lists that must agree = one declaration + a test". The
+// Root AGENTS.md, "two lists that must agree = one declaration + a test". The
 // declaration is `DELTA_ENTITY_ORDER`; this derives the other list from it
 // rather than restating it, so an entity added tomorrow fails here until
 // someone writes its loop.
@@ -18,7 +17,7 @@
 // Source-parsing rather than a fake database, for the same reason
 // `placeVisibility.unit.test.ts` parses `schema.prisma`: what is being asserted
 // is that a line EXISTS, and a mocked SQLite that never sees the missing loop
-// would pass exactly as happily as the shipped bug did.
+// would pass even if the loop is missing.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

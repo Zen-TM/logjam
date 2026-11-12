@@ -9,8 +9,8 @@
 //
 // It runs only while a panel is OPEN (`enabled`), which is also the only time
 // the phone is in someone's hand: a full read of the series plus O(points) of
-// arithmetic is exactly the work `refreshTrackStats` was moved out of the
-// background to avoid (mobile/CLAUDE.md, Battery).
+// arithmetic is work kept out of the background (mobile/AGENTS.md, Privacy and
+// battery).
 //
 // PRIVACY: the series is precise location history. It stays in memory for as
 // long as the panel is open and is never logged.
@@ -137,7 +137,7 @@ export function useTrackDetail(
 
     // A live recording appends a batch every fix, and re-reading on that is
     // what makes an open panel a live readout rather than a snapshot of the
-    // moment it opened. `readNonce` is that signal, already gated on the app
+    // moment it opened. `readNonce` is that signal, already gated on Logjam GPS
     // being in front of someone. A finished track never moves it.
     read();
     return () => {

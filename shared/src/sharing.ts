@@ -6,7 +6,7 @@
 //   SHARE ("Share")        — a live, revocable view of a row the sender still
 //                            owns. The recipient sees the sender's copy; the
 //                            sender can take it back; the recipient can never
-//                            edit it. Routes, LiDAR topos, GeoPDFs.
+//                            edit it. Routes, LiDAR topos.
 //
 //   SEND A COPY ("Send a   — a file handed over. Once accepted it is the
 //   copy")                   recipient's own, editable, permanent, and NOT
@@ -21,17 +21,15 @@
  * Places are absent deliberately: they keep `PlaceShare`, which is
  * load-bearing in sync, notifications and tombstones. Two tables, ONE reader —
  * `api/src/lib/shareAccess.ts` unions them, and nothing else re-derives the
- * decision (root CLAUDE.md, SEC-001).
+ * decision.
  */
 export const SHARABLE_ENTITY_TYPES = [
-  // `waypoint` LEFT this list when waypoints became places: a place is shared
-  // through a `PlaceShare` row, not a polymorphic `Share` one, and admitting
-  // "place" here would silently widen /shares to a table it cannot write.
-  // See BULK_SHARE_ITEM_TYPES below, which is where "place" is admitted and
-  // the only caller that fans a mixed list across both tables.
+  // A place is shared through a `PlaceShare` row, not a polymorphic `Share`
+  // one, and admitting "place" here would silently widen /shares to a table
+  // it cannot write. See BULK_SHARE_ITEM_TYPES below, which is where "place"
+  // is admitted and the only caller that fans a mixed list across both tables.
   "route",
   "topoJob",
-  "geoPdfJob",
 ] as const;
 
 export type SharableEntityType = (typeof SHARABLE_ENTITY_TYPES)[number];
@@ -163,8 +161,8 @@ export const MAX_BULK_SHARE_ITEMS = 200;
  *
  * Deliberately not per-id: an id-keyed result ("that one wasn't yours") is an
  * existence oracle on ids the caller may have guessed, which is the rule
- * `/shares` already follows by answering 404 rather than 403 (SEC-001). The
- * caller supplied the list, so it can label its own rows from the totals.
+ * `/shares` already follows by answering 404 rather than 403. The caller
+ * supplied the list, so it can label its own rows from the totals.
  */
 export type BulkShareResult = {
   /** New share rows written, summed over items x recipients. */
@@ -186,13 +184,11 @@ export type BulkShareResult = {
 // directions, and DELETE /friends/:id/shares is the bulk revoke of the forward
 // one.
 //
-// A ROW IS NOT A PLACE. The payload used to be place-only (`placeId`), which
-// made the surface understate itself the moment direct item sharing shipped:
-// routes, LiDAR topos and GeoPDFs live in the `Share` table, and a
-// friend holding six of them saw an audit screen that said "nothing shared".
-// The row therefore carries the same (entityType, entityId) pair the bulk share
-// speaks, so the two halves of the feature cannot disagree about what a
-// shareable thing is.
+// A ROW IS NOT A PLACE: routes and LiDAR topos live in the `Share`
+// table, and an audit screen that only looked at places would show "nothing
+// shared" for them. The row carries the same (entityType, entityId) pair the
+// bulk share speaks, so the two halves of the feature cannot disagree about
+// what a shareable thing is.
 //
 // WHAT IT STILL DOES NOT SAY: a shared place carries its place-level notes,
 // its place-level media and its linked route with it, with no `Share` row of
@@ -200,13 +196,12 @@ export type BulkShareResult = {
 // unsharing the PLACE is what takes them back. Every surface listing these
 // rows has to say so, or the user unshares three routes and believes the
 // friend is blind. (A place LINKED to a shared place carries nothing: a link
-// grants no visibility at all, which is what phase 1c settled.)
+// grants no visibility at all.)
 
 /**
  * One thing one friend can see, in either direction.
  *
- * `name` is nullable because a job may be untitled (a LiDAR topo with no name,
- * a GeoPDF whose config carried no title) — `shareRowTitle` is the one place
+ * `name` is nullable because a job may be untitled (a LiDAR topo with no name) — `shareRowTitle` is the one place
  * that decides what an untitled row is called.
  */
 export type FriendShareRow = {
@@ -221,8 +216,8 @@ export type FriendShareRow = {
    *
    * The SERVER answers this, because only the server can. A client deriving it
    * from its own mirror is right only once the mirror has pulled the linked
-   * row: on a phone that had not yet synced, the same route offered a Remove
-   * that would silently undo itself (seen on device, 2026-09-05).
+   * row: on a phone that has not yet synced, the same route would offer a
+   * Remove that silently undoes itself.
    */
   alsoViaPlace?: true;
 };
@@ -235,18 +230,17 @@ export type FriendShares = {
 };
 
 /**
- * The kind, lower-case, as it reads mid-sentence — "place", "topo", "GeoPDF".
+ * The kind, lower-case, as it reads mid-sentence — "place", "route", "topo".
  *
  * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
  * clients, so a kind cannot be worded two ways on two screens. A
- * `Record<BulkShareItemType, …>` on purpose: a sixth shareable kind cannot be
+ * `Record<BulkShareItemType, …>` on purpose: a new shareable kind cannot be
  * added without naming it here.
  */
 export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
   place: "place",
   route: "route",
   topoJob: "topo",
-  geoPdfJob: "GeoPDF",
 };
 
 /** What an audit row is called, untitled jobs included. */
@@ -263,13 +257,12 @@ export function shareRowTitle(row: FriendShareRow): string {
  *   ROWS — a place (`POST /places/:id/copy`) and a route
  *          (`POST /routes/:id/copy`) are copied INTO THE ACCOUNT. They sync,
  *          they are the copier's to edit, and they outlive the share.
- *   MAP  — a LiDAR topo and a GeoPDF are downloaded ONTO THE DEVICE, which is
- *   ARTEFACTS  what "things you made sync, maps you downloaded stay on this
- *          device" already says (`mobile/src/saved/savedKeys.ts`). The download
- *          is the copy and it ALREADY outlives the share: the phone's Saved
- *          cards for both kinds are built from its local registry, not from the
- *          server's job list, and `removeSharedEntity` deliberately drops
- *          nothing local for them.
+ *   MAP  — a LiDAR topo is downloaded ONTO THE DEVICE, which is what "things
+ *   ARTEFACT  you made sync, maps you downloaded stay on this device" already
+ *          says (`mobile/src/saved/savedKeys.ts`). The download is the copy
+ *          and it ALREADY outlives the share: the phone's Saved card is built
+ *          from its local registry, not from the server's job list, and
+ *          `removeSharedEntity` deliberately drops nothing local for it.
  *
  * So jobs are absent here not because a sharee cannot keep one, but because
  * keeping one is not an account copy. Making it one would duplicate multi-GB
@@ -314,10 +307,9 @@ export function copyAndRemoveConfirm(args: {
   mediaLeftBehind?: number;
 }): { title: string; body: string } {
   // TWO FORMS OF THE SAME FALLBACK, because it appears in two positions and
-  // the generic one is not a proper noun: "…on every device. the owner keeps
-  // the original." shipped to the emulator and reads as a rendering fault.
-  // `removeShareConfirm` has always capitalised its sentence-initial one; this
-  // needs both, so it spells both.
+  // the generic one is not a proper noun: in sentence-initial position, a
+  // lowercase "the owner" reads as a rendering fault. `removeShareConfirm`
+  // capitalises its sentence-initial one; this needs both, so it spells both.
   const owner = args.ownerName ?? "the owner";
   const Owner = args.ownerName ?? "The owner";
   const left = args.mediaLeftBehind ?? 0;
@@ -372,7 +364,7 @@ export function sharedRowVisibility(row: {
   syncRole: string | null | undefined;
   /**
    * Places THE CALLER CAN SEE that this row is linked to. Empty — or omitted,
-   * for the kinds with no place link at all (topo and GeoPDF jobs) — means no
+   * for the kinds with no place link at all (topo jobs) — means no
    * inherited arm exists, so a direct share is the whole reason it is here.
    *
    * Both clients already hold this: a route's single `placeId` counts only

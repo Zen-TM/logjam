@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   copySay,
   copyViolations,
@@ -23,6 +23,11 @@ import {
 const SRC = dirname(fileURLToPath(import.meta.url));
 const ALLOWED: { file: string; text: string; reason: string }[] = [
   {
+    file: "components/TermsTick.tsx",
+    text: "Privacy Policy",
+    reason: "the document's title, as it reads on the page it links to",
+  },
+  {
     file: "components/dialogs/TopoDialog.tsx",
     text: "Order Data",
     reason:
@@ -42,6 +47,12 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   },
   {
     file: "components/dialogs/TopoDialog.tsx",
+    text: "Digital Elevation Model",
+    reason:
+      "the name of ELVIS's own menu entry, which the step tells the user to open",
+  },
+  {
+    file: "components/dialogs/TopoDialog.tsx",
     text: "select the specific tiles",
     reason:
       "ELVIS's own map draws its LiDAR tiles, and the user picks them there",
@@ -50,9 +61,8 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
 
 /**
  * The words a JSX child expression can put on screen: `{a ? "x" : \`y ${n}\`}`.
- * `userFacingStrings` reads JSX text and the string props that carry words; a
- * string reaching the screen as a child expression's branch was outside that
- * net (a `tile` count sat there), so it is read here.
+ * `userFacingStrings` reads JSX text and the string props that carry words;
+ * strings reaching the screen as child expression branches are read here.
  */
 function childExpressionStrings(
   path: string,
@@ -101,6 +111,42 @@ function childExpressionStrings(
   return found;
 }
 
+// Strings still to reword to the glossary; delete an entry with its string.
+const BASELINE: { file: string; text: string; rule: string }[] = [];
+
+const baselined = (file: string, rule: string, text: string) =>
+  BASELINE.some(
+    (entry) =>
+      entry.file === file && entry.rule === rule && text.includes(entry.text),
+  );
+
+/** Every rule a user-facing string, or a JSX child expression's string,
+ *  breaks, bar what ALLOWED excuses. */
+let cached: ReturnType<typeof scan> | undefined;
+const hits = () => (cached ??= scan());
+function scan() {
+  return sources(SRC).flatMap((path) => {
+    const source = readFileSync(path, "utf8");
+    const found = [
+      ...userFacingStrings(ts, path, source).filter(
+        ({ text }) =>
+          !ALLOWED.some(
+            (a) => relative(SRC, path) === a.file && text.includes(a.text),
+          ),
+      ),
+      ...(path.endsWith(".tsx") ? childExpressionStrings(path, source) : []),
+    ];
+    return found.flatMap(({ line, text }) =>
+      copyViolations(text).map((rule) => ({
+        file: relative(SRC, path),
+        line,
+        rule,
+        text,
+      })),
+    );
+  });
+}
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -111,7 +157,15 @@ function sources(dir: string): string[] {
   });
 }
 
+// The scan parses every source file once, about a second alone and several
+// under a loaded machine, near vitest's 5 s default. The parse is the work, so
+// it runs in a beforeAll with the 30 s `switchCopy.test.ts` gives its own, and
+// no test pays for it whatever order the tests run in.
 describe("copy on Logjam Web", () => {
+  beforeAll(() => {
+    hits();
+  }, 30_000);
+
   it("reads a string that is a JSX child expression's branch", () => {
     const [first] = childExpressionStrings(
       "x.tsx",
@@ -130,39 +184,28 @@ describe("copy on Logjam Web", () => {
   });
 
   it("breaks no copy rule", () => {
-    const offenders = sources(SRC).flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
-        ({ line, text }) =>
-          copyViolations(text)
-            .filter(
-              () =>
-                !ALLOWED.some(
-                  (a) =>
-                    relative(SRC, path) === a.file && text.includes(a.text),
-                ),
-            )
-            .map(
-              (id) =>
-                `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-            ),
-      ),
-    );
+    const offenders = hits()
+      .filter(({ file, rule, text }) => !baselined(file, rule, text))
+      .map(
+        ({ file, line, rule, text }) =>
+          `${file}:${line} "${text}" — ${copySay(rule)}`,
+      );
     expect(offenders).toEqual([]);
   });
 
-  it("breaks no copy rule in a child expression either", () => {
-    const offenders = sources(SRC).flatMap((path) =>
-      path.endsWith(".tsx")
-        ? childExpressionStrings(path, readFileSync(path, "utf8")).flatMap(
-            ({ line, text }) =>
-              copyViolations(text).map(
-                (id) =>
-                  `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-              ),
-          )
-        : [],
+  // Mutation: reword one baselined string so it no longer offends.
+  it("every baseline entry still offends — the list only shrinks", () => {
+    const all = hits();
+    const stale = BASELINE.filter(
+      (entry) =>
+        !all.some(
+          ({ file, rule, text }) =>
+            file === entry.file &&
+            rule === entry.rule &&
+            text.includes(entry.text),
+        ),
     );
-    expect(offenders).toEqual([]);
+    expect(stale).toEqual([]);
   });
 
   // The API writes its refusals for the user and `messageFromError` shows them

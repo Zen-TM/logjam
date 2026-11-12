@@ -23,13 +23,13 @@ export type FieldDraft = {
  * The identity of what the form is editing: a change in it re-seeds the draft.
  *
  * A NEW attribute's identity includes the place type it was opened from. With
- * one constant key for every "new", the draft seeded on the place form's first
- * render (a Canyon) was still the draft after the user switched the place to a
- * type they had just made, so the attribute was added to Canyon instead.
+ * one constant key for every "new", the draft seeded on first render would
+ * persist after the user switched types, attaching the attribute to the wrong
+ * type (Guard: fieldDraft.test.ts).
  *
  * Being CLOSED is an identity of its own, as for the place type form
- * (`placeTypeFormKey`): a label typed and abandoned with Cancel was otherwise
- * still in the box the next time "Add an attribute" was opened.
+ * (`placeTypeFormKey`): a label typed and abandoned with Cancel would otherwise
+ * linger in the box on the next open (Guard: fieldDraft.test.ts).
  */
 export function fieldFormKey(
   open: boolean,

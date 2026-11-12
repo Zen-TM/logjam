@@ -27,9 +27,14 @@ Property ... remains unchanged, maintained and preserved".
 ## Decision
 
 - **The source.** Inside NSW and the ACT, heights come from the Spatial
-  Services 5 m DEM: the `NSW_5M` entry in `shared/src/demSources.ts`, ahead of
+  Services 5 m DEM: `NSW_REGION.terrain.heights` in `shared/src/regions.ts`, ahead of
   the worldwide tiles, which still answer wherever it has no height
   ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)).
+- **Update 2026-10-23: inside a sharpened area, its owner and the users it
+  is shared with read the area's heights first**
+  ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)). Everywhere
+  else, and for everyone else, the 5 m DEM answers as above. Everything else
+  above stands.
 - **Our own copy.** `topo/build_nsw_dem.py` builds every sheet into one
   archive, kept in the topo bucket beside the vector basemap
   ([0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md)). Nothing asks
@@ -37,14 +42,19 @@ Property ... remains unchanged, maintained and preserved".
 - **All of the state**, not only the rugged or forested parts.
 - **The credit** is shown wherever a height from it is shown, and names the
   publisher, that the data is derived, the licence, and the month the sheets
-  were downloaded. In Logjam it is `NSW_5M.credit`. The archive's metadata
+  were downloaded. In Logjam it is `NSW_REGION.terrain.heights.credit`. The archive's metadata
   carries the same four things, in the build's own words; the build takes the
   month as `--extracted`.
 - **A rebuild** replaces the whole archive and updates the month in the credit
   in the same change.
 
-No guard test enforces the credit's wording. `shared/src/demSources.test.ts`
-checks that a result credits the sources it was read from.
+No guard test enforces `NSW_REGION.terrain.heights.credit`'s own wording or month.
+`shared/src/demSources.test.ts` checks that a result credits the sources it was
+read from, and `topo/tests/test_nsw_dem.py`
+(`test_both_archives_carry_the_credit_of_the_heights`) checks that the credit of the height archive `nsw-5m.pmtiles` and of the slope
+archive `nsw-5m-slope.pmtiles` that `build_nsw_dem.py slope` builds from it
+carries `NSW_REGION.terrain.heights.credit`'s text from "the NSW 5 m" to "extracted"
+(updated 2026-10-18).
 
 ## Consequences
 
@@ -63,7 +73,7 @@ checks that a result credits the sources it was read from.
   beside it, and the publisher's own data is served from AWS through ELVIS, so
   the decision is to build on the other reading: keep the notice and licence with
   the data. Spatial Services has not been asked. If they answer otherwise, the
-  archive is deleted and `NSW_5M` removed; the worldwide tiles then answer
+  archive is deleted and `NSW_REGION.terrain.heights` removed; the worldwide tiles then answer
   again with no other change.
 - **Neutral:** NSW heights are AHD and the worldwide tiles are EGM96. They
   differ by well under a metre here and no correction is made.
@@ -85,3 +95,7 @@ checks that a result credits the sources it was read from.
 - **Ask Spatial Services' servers per request.** No copy to host. It would
   send where each user is looking to a third party, depend on their
   availability in the field, and still need tiling for offline areas.
+- **Keep the 5 m DEM first inside a sharpened area** (2026-10-23). One
+  answer for everyone at a point. Rejected because the area's survey is
+  finer, and its owner and the users it is shared with sharpened it to read
+  it. 0040 lists the other options it rejected.

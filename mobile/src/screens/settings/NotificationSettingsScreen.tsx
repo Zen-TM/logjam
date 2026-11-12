@@ -5,15 +5,14 @@
 // The two email switches for topo jobs and topo exports are kept even though
 // mobile cannot start either — they are account-wide EMAIL settings, and telling
 // someone holding their phone to find a laptop to stop an email is not an
-// answer. `geoPdfEmail` is directly mobile-relevant (this app imports and
-// auto-downloads them) and both in-app kinds are live here.
+// answer. both in-app kinds are live here.
 //
 // The OS row is not a preference and is deliberately last: no in-app switch can
 // do anything if Android is dropping the notification, and that is a fact about
 // the phone rather than about the account, so it sits under its own header.
 //
 // PRIVACY: booleans and a permission state. Push payloads themselves carry
-// opaque ids only (mobile/CLAUDE.md).
+// opaque ids only (mobile/AGENTS.md, guard: `api/src/services/push.unit.test.ts`).
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Linking } from "react-native";
 import * as Notifications from "expo-notifications";
@@ -45,10 +44,6 @@ import {
 } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
 
-// One row per switch, so the list is data and a new preference is one entry:
-// `NOTIFICATION_PREFERENCES`, which Logjam Web reads too.
-const sentence = (what: string) => what.charAt(0).toUpperCase() + what.slice(1);
-
 export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
   const userQuery = useApiQuery(
@@ -59,7 +54,7 @@ export function NotificationSettingsScreen() {
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -73,7 +68,7 @@ export function NotificationSettingsScreen() {
     useState<NotificationPreferences | null>(null);
   // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
   // user, so a preference edited on another device and pulled in by a refetch
-  // while this screen stayed mounted was silently dropped. Keying on the
+  // while this screen stays mounted would be silently dropped. Keying on the
   // serialized value (rather than the object, which a refetch mints fresh every
   // time) is also what keeps an in-flight optimistic toggle from being clobbered
   // by an identical server answer.
@@ -117,7 +112,7 @@ export function NotificationSettingsScreen() {
   const [pushAllowed, setPushAllowed] = useState<boolean | null>(null);
   // Whether Android will still show its dialog. This screen is the one place
   // that asks: a POST_NOTIFICATIONS prompt at cold start lands over a blank
-  // screen, and a denial there is permanent for the install (MRUN-004).
+  // screen, and a denial there is permanent for the install.
   const [canAskPush, setCanAskPush] = useState(false);
   useEffect(() => {
     const read = () => {
@@ -157,7 +152,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}
@@ -171,7 +166,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}
@@ -186,12 +181,12 @@ export function NotificationSettingsScreen() {
             it can be changed. A toggle here would be a lie. */}
         <Row
           icon="phone"
-          title="Notifications from Logjam"
+          title="Notifications from Logjam GPS"
           subtitle={
             pushAllowed === null
               ? undefined
               : pushAllowed
-                ? "Allowed"
+                ? "Allowed — tap to change in your phone's settings"
                 : canAskPush
                   ? "Not allowed yet — tap to allow"
                   : "Blocked in your phone's settings"

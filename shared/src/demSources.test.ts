@@ -7,7 +7,7 @@ import {
   CLIMB_SOURCES,
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
-  NSW_5M,
+  SHARPENED_CLIMB_SOURCE,
   clearDemArchives,
   demArchive,
   readDemArchive,
@@ -21,6 +21,8 @@ import {
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
 import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
+import { sharpenedDemSource } from "./sharpen.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("demTileUrl", () => {
   // The decode fixture is a REAL terrarium tile named for its address: z13,
@@ -44,14 +46,25 @@ describe("the declaration", () => {
     expect(DEM_SOURCES.at(-1)!.coverage).toBeNull();
   });
 
-  // Mutation: give a source both a tile set and an archive, or neither, and
-  // each reader has to guess which one to read.
-  it("serves each source one way: a public tile set or an archive", () => {
-    for (const source of DEM_SOURCES)
+  // Mutation: give a source two of a tile set, an archive and an area, or
+  // none, and each reader has to guess which one to read.
+  it("serves each source one way: a tile set, an archive or an area's", () => {
+    const area = sharpenedDemSource({
+      id: "a1",
+      zmax: 16,
+      tiles15: [0, 0, 1, 1],
+      coverage: [150, -34, 150.01, -33.99],
+      contours: true,
+      credit: "Elevation: a survey.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+    });
+    for (const source of [...DEM_SOURCES, area])
       expect(
-        (source.urlTemplate == null) !== (source.archivePath == null),
+        [source.urlTemplate, source.archivePath, source.areaId].filter(
+          (way) => way != null,
+        ),
         source.id,
-      ).toBe(true);
+      ).toHaveLength(1);
   });
 
   it("credits only the sources a result was read from", () => {
@@ -60,7 +73,7 @@ describe("the declaration", () => {
   });
 
   // Mutation: paste a source's host into a reader instead of importing the
-  // declaration, and this names the file.
+  // declaration, and this names the file. A region declares its own sources.
   it("is the only place a DEM host is written", () => {
     const prefixes = DEM_SOURCES.map(
       (s) => s.archivePath ?? s.urlTemplate!.split("{")[0]!,
@@ -70,7 +83,11 @@ describe("the declaration", () => {
       const root = join(import.meta.dirname, "../..", pkg, "src");
       for (const file of readdirSync(root, { recursive: true }) as string[]) {
         if (!/\.tsx?$/.test(file) || /\.test\.tsx?$/.test(file)) continue;
-        if (file.endsWith("demSources.ts")) continue;
+        if (
+          pkg === "shared" &&
+          (file === "demSources.ts" || file === "regions.ts")
+        )
+          continue;
         const text = readFileSync(join(root, file), "utf8");
         if (prefixes.some((prefix) => text.includes(prefix)))
           offenders.push(`${pkg}/src/${file}`);
@@ -86,9 +103,12 @@ describe("the declaration", () => {
 describe("climb sources", () => {
   it("rank every DEM source above GPS heights, finest first", () => {
     expect(CLIMB_SOURCES).toEqual([
+      SHARPENED_CLIMB_SOURCE,
       ...DEM_SOURCES.map((source) => source.id),
       GPS_CLIMB_SOURCE,
     ]);
+    expect(isFinerClimbSource("lidar", "nsw-5m")).toBe(true);
+    expect(isFinerClimbSource("nsw-5m", "lidar")).toBe(false);
     expect(isFinerClimbSource("nsw-5m", "terrarium")).toBe(true);
     expect(isFinerClimbSource("terrarium", "gps")).toBe(true);
     expect(isFinerClimbSource("terrarium", "nsw-5m")).toBe(false);
@@ -311,7 +331,9 @@ describe("an open archive", () => {
     };
     const first = demArchive(source);
     await expect(
-      readDemArchive(first, NSW_5M, [{ tileX: 1, tileY: 1 }]),
+      readDemArchive(first, NSW_REGION.terrain.heights, [
+        { tileX: 1, tileY: 1 },
+      ]),
     ).rejects.toThrow("no connection");
     const second = demArchive(source);
     expect(second).not.toBe(first);
@@ -319,9 +341,9 @@ describe("an open archive", () => {
     const before = asked;
     // The bytes are not an archive, so the read still fails: what matters is
     // that the source was asked again.
-    await readDemArchive(second, NSW_5M, [{ tileX: 1, tileY: 1 }]).catch(
-      () => {},
-    );
+    await readDemArchive(second, NSW_REGION.terrain.heights, [
+      { tileX: 1, tileY: 1 },
+    ]).catch(() => {});
     expect(asked).toBeGreaterThan(before);
     clearDemArchives();
   });

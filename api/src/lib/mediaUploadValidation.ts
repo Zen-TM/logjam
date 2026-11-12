@@ -19,7 +19,8 @@ function assertPositiveInteger(value: unknown, field: string): number {
 }
 
 /**
- * Validate the client-declared upload sizes for a presign request (SEC-003).
+ * Validate the client-declared upload sizes for a presign request. Guard:
+ * api/src/lib/mediaUploadValidation.unit.test.ts.
  * The declared sizes bound the presigned PUT via a signed Content-Length —
  * without them a client could upload arbitrarily large objects and never
  * confirm, orphaning off-quota bytes. Caps mirror the authoritative

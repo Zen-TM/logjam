@@ -4,7 +4,7 @@
 // Reads live from the offline mirror so an optimistic edit shows immediately,
 // falling back to the navigation snapshot before the first mirror read
 // resolves. Editing reuses the Logs screen's TripEditSheet — one trip form in
-// the app, so the fields can't drift between "log" and "edit".
+// Logjam GPS, so the fields can't drift between "log" and "edit".
 //
 // PRIVACY: everything here (place names, notes, photos) is already on the
 // device in the mirror. Nothing is logged, and photos leave only through the
@@ -14,6 +14,7 @@ import { ScrollView, Text, View } from "react-native";
 import {
   attributeRows,
   contractSectionKeys,
+  distinctGaugeIds,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
@@ -24,10 +25,12 @@ import {
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
+import { TripGaugeReading } from "../gauges/TripGaugeReading";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
+import { NoteBody } from "../plans/WriteUpBody";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -44,7 +47,6 @@ import {
   StatusPill,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 import { TripEditSheet } from "./TripEditSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
@@ -53,11 +55,13 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 export function TripDetailScreen({
   trip,
   onBack,
+  backLabel,
   onOpenPlace,
   onFocusOnMap,
 }: {
   trip: MirrorTrip;
   onBack: () => void;
+  backLabel: string;
   onOpenPlace: (placeId: string, name: string) => void;
   /** Opens the Map tab framed on this route attachment's extent (resolved
    *  here, first) — nothing is drawn on the map. */
@@ -81,7 +85,7 @@ export function TripDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
@@ -138,14 +142,25 @@ export function TripDetailScreen({
               icon="place"
               hue={theme.accent}
               title={place.name}
-              right={
-                <Icon idea="disclosure" size={20} color={theme.textMuted} />
-              }
+              chevron
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))
         )}
       </>
+    ),
+
+    gauge: () => (
+      <TripGaugeReading
+        title={copy.gauge}
+        gaugeIds={distinctGaugeIds(
+          current.places.map(
+            (p) => placesQuery.data?.find((x) => x.id === p.id)?.gaugeId,
+          ),
+        )}
+        dates={[current.date]}
+        when="trip"
+      />
     ),
 
     photos: () => (
@@ -159,6 +174,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.photosEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "done")}
         />
       </>
     ),
@@ -174,6 +190,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.routesEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "done")}
           onShowRoute={(item) => {
             resolveRouteAttachmentBbox({
               mediaId: item.id,
@@ -199,7 +216,7 @@ export function TripDetailScreen({
       <>
         <SectionHeader title={copy.notes} />
         {current.notes ? (
-          <Text style={styles.notes}>{current.notes}</Text>
+          <NoteBody notes={current.notes} />
         ) : (
           <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
@@ -222,12 +239,11 @@ export function TripDetailScreen({
         title={tripTitle(current)}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="overflow"
             accessibilityLabel={`Actions for ${tripTitle(current)}`}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }
@@ -249,7 +265,7 @@ export function TripDetailScreen({
         surface="page"
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditing(true)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
         onGone={onBack}
       />
@@ -261,7 +277,7 @@ export function TripDetailScreen({
         places={placesQuery.data ?? []}
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -278,8 +294,4 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   muted: { ...muted(theme, textRole.detail) },
-  notes: {
-    ...textRole.paragraph,
-    color: theme.text,
-  },
 }));

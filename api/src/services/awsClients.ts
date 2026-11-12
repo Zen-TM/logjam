@@ -7,7 +7,7 @@ const endpoint = process.env.AWS_ENDPOINT_URL;
 
 export const s3 = new S3Client({
   region,
-  // Don't auto-add CRC32 integrity checksums to uploads. Since SDK v3.729 this
+  // Don't auto-add CRC32 integrity checksums to uploads. The AWS SDK
   // defaults to "when_supported", which bakes an x-amz-checksum-crc32 requirement
   // into presigned PUT URLs that a plain browser fetch can't satisfy (S3 returns
   // 400 "Value for x-amz-checksum-crc32 header is invalid"). WHEN_REQUIRED still
@@ -21,8 +21,10 @@ export const ecs = new ECSClient({
   ...(endpoint && { endpoint }),
 });
 
-const cognitoRegion = process.env.COGNITO_REGION ?? region;
-export const cognitoIdp = new CognitoIdentityProviderClient({
-  region: cognitoRegion,
-  ...(endpoint && { endpoint }),
-});
+// Built per use: the region comes from the configured issuer
+// (lib/identityProvider.ts), not from the process's own.
+export const cognitoIdpClient = (cognitoRegion: string) =>
+  new CognitoIdentityProviderClient({
+    region: cognitoRegion,
+    ...(endpoint && { endpoint }),
+  });

@@ -1,12 +1,10 @@
-// The ONE declaration of every on-disk tree this app writes, and the single
+// The ONE declaration of every on-disk tree Logjam GPS writes, and the single
 // place `documentDirectory` / `cacheDirectory` may be named.
 //
-// It exists for the same reason `sync/mirrorSchema.ts` does. The recurring
-// defect on this side of the app is enumeration drift: a store gets added, its
-// path literal is written inline at the producer, and nobody adds it to the
-// wipe. Track GPX exports landed in `cacheDirectory` and were never wiped or
-// even deleted; MapLibre's own ambient tile cache was never in the list at all.
-// A list maintained beside the producers drifts from them; a list the producers
+// It exists for the same reason `sync/mirrorSchema.ts` does. The defect this
+// guards against is enumeration drift: a store gets added, its path literal is
+// written inline at the producer, and nobody adds it to the wipe. A list
+// maintained beside the producers drifts from them; a list the producers
 // are BUILT from cannot.
 //
 // `localStores.test.ts` fails when a source file outside this one reaches for a
@@ -15,7 +13,8 @@
 //
 // PRIVACY: these trees hold place coordinates (regions, imports, route/track
 // exports) and photos. `wipeAllLocalData` deleting all of them IS the privacy
-// boundary between two users of one phone (mobile/CLAUDE.md).
+// boundary between two users of one phone (mobile/AGENTS.md, Privacy and battery).
+// Guard: `offline/localStores.test.ts`.
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
@@ -49,12 +48,12 @@ export const RECORDED_TRACK_DIR = `${FileSystem.documentDirectory}recorded-track
 export const SCRATCH_DIR = `${FileSystem.cacheDirectory}logjam-scratch/`;
 
 /**
- * The app's whole cache directory, which `wipeAllLocalData` EMPTIES on sign-out
- * (MOT-005). Not a store of ours — it is the root the OS hands out for
+ * The whole cache directory, which `wipeAllLocalData` EMPTIES on sign-out.
+ * Not a store of ours — it is the root the OS hands out for
  * disposable scratch, and every library that caches writes into it, including
  * the pickers, which keep their own copy of every photo and file the user
  * attaches. Emptying it names no third-party path, so it cannot drift when a
- * dependency renames its subdirectory, and it catches what earlier builds left.
+ * dependency renames its subdirectory, and it catches any leftover files.
  *
  * Not in `WIPED_DIRS`, and not named `*_DIR`, because the wipe EMPTIES it
  * rather than deleting it: the platform owns this directory and libraries write
@@ -71,13 +70,59 @@ export const CACHE_ROOT = FileSystem.cacheDirectory;
 export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets/`;
 
 /**
+ * The place registry for location search (`offline/placeRegistry.ts`, ADR
+ * 0034): the OpenStreetMap file, saved as plain JSON, and the CDN pointer it
+ * came with. DELIBERATELY NOT WIPED, for BASEMAP_ASSETS_DIR's reasons: it is
+ * the same public file on every phone, holds nothing about the user, and a
+ * wipe would only cost the next user the download
+ * (PLACE_REGISTRY_DOWNLOAD_ESTIMATE in placeRegistry.ts).
+ */
+export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry/`;
+
+/**
  * Raw sensor logs from the developer-only research logger
- * (modules/logjam-sensors, private/todo/track-accuracy.md). WIPED: the samples
- * describe how one person moved through a place for a day, which is location
- * history by another name even though no coordinate is written — so it leaves
- * with the account like everything else.
+ * (modules/logjam-sensors). WIPED: each file holds a recording's raw GPS fixes
+ * beside how its owner moved, which is location history, so it leaves with the
+ * account like everything else.
  */
 export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
+
+/**
+ * The last forecast for each 0.1° cell the user asked about
+ * (`weather/weatherStorage.ts`, ADR 0038). WIPED: a cell is where this person
+ * went looking, which is location history at 11 km rather than none.
+ */
+export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
+
+/**
+ * The sharpened areas the account could last see, without their URLs
+ * (`offline/sharpenedAreaStore.ts`). WIPED: an area's coverage and tile range
+ * say where its owner surveyed.
+ */
+export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-areas/`;
+
+/**
+ * TileJSONs Logjam GPS writes for map sources MLRN can't describe in props
+ * (`map/tileJsonFile.ts`). WIPED: a sharpened area's holds its tile range,
+ * which says where its owner surveyed. Each is written again when the map
+ * next needs it.
+ */
+export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
+
+/**
+ * The last river gauge file (`gauges/gaugeStorage.ts`, ADR 0044). WIPED, though
+ * the file is public and the same for everyone, because every on-device store
+ * joins the wipe (ADR 0006); the next user fetches it again.
+ */
+export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
+
+/**
+ * A trip plan's files, downloaded for the trip (`plans/planFiles.ts`): one
+ * folder per plan, its photos and files inside. WIPED: they are other
+ * people's places and photos, shared with this account only. A plan dropped
+ * from the phone takes its folder with it.
+ */
+export const PLAN_DIR = `${FileSystem.documentDirectory}plans/`;
 
 /**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
@@ -91,6 +136,11 @@ export const WIPED_DIRS = [
   RECORDED_TRACK_DIR,
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
+  WEATHER_DIR,
+  GAUGES_DIR,
+  TILEJSON_DIR,
+  SHARPENED_AREAS_DIR,
+  PLAN_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */
@@ -102,8 +152,8 @@ export async function scratchFileUri(name: string): Promise<string> {
 let backupExclusionApplied = false;
 
 /**
- * Keep local data out of iCloud backup (mobile/CLAUDE.md privacy mandate: the
- * iOS half of `allowBackup=false`).
+ * Keep local data out of iCloud backup (mobile/AGENTS.md, Privacy and battery:
+ * the iOS half of `allowBackup=false`).
  *
  * `NSDocumentDirectory` is backed up by default, which would send the sync
  * mirror, every downloaded region and every imported GeoPDF — place names,

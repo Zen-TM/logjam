@@ -7,7 +7,7 @@ import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   ELEVATION_TRACK_MAX_SAMPLES,
   MAX_ROUTE_POINTS,
-  NSW_5M,
+  NSW_REGION,
 } from "@logjam/shared";
 
 import { s3 } from "../services/awsClients";
@@ -37,7 +37,7 @@ beforeAll(async () => {
   await s3.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_TOPO,
-      Key: NSW_5M.archivePath,
+      Key: NSW_REGION.terrain.heights.archivePath,
       Body: readFileSync(join(FIXTURES, "nsw-5m-z15-katoomba.pmtiles")),
     }),
   );
@@ -50,8 +50,8 @@ describe("POST /elevation/profile", () => {
       .set(as(ALICE_SUB))
       .send({ points: LINE });
     expect(res.status).toBe(200);
-    expect(res.body.demSourceIds).toEqual([NSW_5M.id]);
-    expect(res.body.attribution).toBe(NSW_5M.credit);
+    expect(res.body.demSourceIds).toEqual([NSW_REGION.terrain.heights.id]);
+    expect(res.body.attribution).toBe(NSW_REGION.terrain.heights.credit);
     expect(res.body.samples.length).toBeGreaterThan(2);
     // The ends are in shared/src/__fixtures__/dem-parity-nsw.json: 983.42 m
     // and 999.54 m, worked out by an independent decoder.
@@ -140,5 +140,44 @@ describe("POST /elevation/profile — validation", () => {
     const half = Math.floor(MAX_ROUTE_POINTS / 2) + 1;
     const res = await post({ segments: [line(half), line(half)] });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /elevation/point", () => {
+  const ask = (body: unknown) =>
+    request(API_URL)
+      .post("/elevation/point")
+      .set(as(ALICE_SUB))
+      .send(body as object);
+
+  it("answers a height and a slope from the NSW archive, and credits it", async () => {
+    const res = await ask({ point: LINE[0] });
+    expect(res.status).toBe(200);
+    expect(res.body.elevationM).toBeCloseTo(983.42, 1);
+    // A hillside on the fixture: steeper than flat, short of a wall.
+    expect(res.body.slopeDegrees).toBeGreaterThan(0);
+    expect(res.body.slopeDegrees).toBeLessThan(90);
+    expect(res.body.demSourceIds).toEqual([NSW_REGION.terrain.heights.id]);
+    expect(res.body.attribution).toBe(NSW_REGION.terrain.heights.credit);
+  });
+
+  // No unauthenticated-401 case: fake auth treats a missing header as alice.
+  // routes/elevation.unit.test.ts holds it.
+  // Mutation: drop the route's parseElevationPoint refusal (or parse
+  // req.body, not req.body.point) and a malformed body reaches the DEM reader.
+  it("400s a body that is not one in-range [longitude, latitude] pair", async () => {
+    for (const body of [
+      [150.31, -33.7],
+      {},
+      { point: [] },
+      { point: [150.31] },
+      { point: [150.31, -33.7, 5] },
+      { point: ["150.31", "-33.7"] },
+      { point: [181, -33.7] },
+      { point: [150.31, -91] },
+      { point: { lon: 150.31, lat: -33.7 } },
+    ]) {
+      expect((await ask(body)).status).toBe(400);
+    }
   });
 });

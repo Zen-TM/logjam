@@ -67,7 +67,7 @@ describe("friends routes (fake auth = alice)", () => {
     const tag = randomUUID();
     const blocker = await prisma.user.create({
       data: {
-        cognitoId: `blocker-${tag}`,
+        subject: `blocker-${tag}`,
         username: `blocker-${tag.slice(0, 8)}`,
         email: `blocker-${tag}@example.invalid`,
       },

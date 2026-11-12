@@ -65,8 +65,7 @@ describe("places routes (fake auth = alice)", () => {
     const placeName = "CH-003 detach test";
     const id = await createPlace(placeName);
 
-    // Attach a trip log so we exercise the detach path (creation moved to the
-    // global POST /trips surface — the nested POST was removed).
+    // Attach a trip log so we exercise the detach path.
     const tripRes = await request(API_URL)
       .post("/trips")
       .set(AUTH)
@@ -186,9 +185,9 @@ describe("places routes (fake auth = alice)", () => {
   });
 });
 
-// APIR-010: `name`/`altNames`/`notes`/`attributes` were unvalidated, so a
-// mistyped field passed validation and died inside Prisma as a raw 500 — and
-// on the sync push path one such op poisoned every flush of that batch.
+// Free-text fields (`name`, `altNames`, `notes`, `attributes`) must fail
+// validation (400) rather than dying inside Prisma as a raw 500, which on the
+// sync push path would poison every flush of that batch.
 describe("POST /places — free-text field validation", () => {
   const AUTH_LOCAL = { Authorization: "Bearer fake-token" } as const;
 
@@ -264,5 +263,55 @@ describe("DELETE /places/:id racing itself", () => {
         data: { storageUsedBytes: before },
       });
     }
+  });
+});
+
+// Mutation that turns it red: scope the place_shared purge to the owner
+// (lib/bulkDelete.ts), which leaves the sharee's notification behind.
+describe("DELETE /places/:id with a shared place", () => {
+  it("drops the sharee's place_shared notification", async () => {
+    const id = await createPlace("Shared then deleted");
+    await prisma.placeShare.create({
+      data: { placeId: id, sharedById: ALICE_ID, sharedWithId: BOB_ID },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: id, sharedById: ALICE_ID },
+      },
+    });
+    expect(
+      (await request(API_URL).delete(`/places/${id}`).set(AUTH)).status,
+    ).toBe(204);
+    expect(
+      await prisma.notification.count({
+        where: { payload: { path: ["placeId"], equals: id } },
+      }),
+    ).toBe(0);
+  });
+});
+
+// Mutation that turns it red: re-add a recipient scope to the place_shared
+// purge in lib/bulkDelete.ts. A row with no PlaceShare behind it (legacy, or
+// left by an unfriend race) is then no longer cleaned.
+describe("DELETE /places/:id with no share row", () => {
+  it("still drops a place_shared notification whose share is gone", async () => {
+    const id = await createPlace("Orphaned notification");
+    await prisma.notification.create({
+      data: {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: id, sharedById: ALICE_ID },
+      },
+    });
+    expect(
+      (await request(API_URL).delete(`/places/${id}`).set(AUTH)).status,
+    ).toBe(204);
+    expect(
+      await prisma.notification.count({
+        where: { payload: { path: ["placeId"], equals: id } },
+      }),
+    ).toBe(0);
   });
 });

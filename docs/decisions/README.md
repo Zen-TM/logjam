@@ -79,7 +79,8 @@ An accepted ADR changes in three ways only:
 
 - **A moved path or renamed symbol** is corrected in place, unmarked, in the
   change that moved it: this directory is found by searching for the paths a
-  change touches. Guard: `shared/src/adrReferences.test.ts`.
+  change touches. Guard: `shared/src/adrReferences.test.ts`, which also fails
+  on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
   "(updated YYYY-MM-DD)".
 - **A narrow exception, or a reason that no longer holds,** is a bullet under
@@ -104,7 +105,7 @@ supersede instead.
 | [0006](0006-on-device-data-privacy.md) | On-device data privacy: app lock off by default, declared stores, one wipe path | 2026-08-04 | Accepted |
 | [0007](0007-guest-mode-is-dont-sync-yet.md) | Guest mode is "don't sync yet", not a separate storage path | 2026-08-05 | Accepted |
 | [0008](0008-geopdf-import-by-file-uri.md) | GeoPDF import takes a file URI, never bytes | 2026-08-10 | Accepted |
-| [0009](0009-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Accepted |
+| [0009](0009-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Superseded by [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) |
 | [0010](0010-map-sensors-only-while-focused.md) | Map sensors run only while the map is focused and foregrounded; the heading lives outside React state | 2026-08-17 | Accepted |
 | [0011](0011-compass-heading-pipeline.md) | Compass heading: gyro-fused source, one camera writer, a rate-tracking display | 2026-08-17 | Accepted |
 | [0012](0012-declination-and-compass-fault-warnings.md) | Declination is learned from the platform; compass faults are warned about, not corrected | 2026-08-17 | Accepted |
@@ -122,11 +123,25 @@ supersede instead.
 | [0024](0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md) | Prod Terraform applies on merge, and only the plan the PR showed | 2026-09-28 | Superseded by [0026](0026-plan-fingerprint-covers-planned-values.md) |
 | [0025](0025-github-settings-in-terraform.md) | The repository's GitHub settings are Terraform, applied on merge like prod | 2026-09-29 | Accepted |
 | [0026](0026-plan-fingerprint-covers-planned-values.md) | The apply compares an HMAC of each changed resource's planned values, reporting first and refusing once trusted | 2026-10-02 | Accepted |
-| [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Accepted |
+| [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Superseded by [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) |
 | [0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md) | A height comes from the finest DEM source that has it, and a seam is measured in one source | 2026-10-10 | Accepted |
-| [0029](0029-vector-map-with-every-signed-in-region.md) | A signed-in region save always includes the vector map; a guest's never does | 2026-10-10 | Accepted |
+| [0029](0029-vector-map-with-every-signed-in-region.md) | A signed-in region save always includes the vector map; a guest's never does | 2026-10-10 | Superseded by [0036](0036-the-phone-cuts-its-own-offline-clips.md) |
 | [0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md) | A DEM Logjam builds is terrarium PNG tiles, rounded to a quarter metre, in one PMTiles archive | 2026-10-10 | Accepted |
 | [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md) | Heights in NSW come from the Spatial Services 5 m DEM, built once into our own archive | 2026-10-10 | Accepted |
 | [0032](0032-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |
 | [0033](0033-the-api-writes-the-sentence-a-user-reads.md) | The API writes the sentence a user reads when it refuses a request | 2026-10-13 | Accepted |
+| [0034](0034-location-search-reads-a-public-osm-place-registry.md) | Location search reads a public place registry built from OpenStreetMap | 2026-10-17 | Accepted |
+| [0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md) | Pull-request plans run unattended, and a main-only job signs their comments | 2026-10-18 | Accepted |
+| [0036](0036-the-phone-cuts-its-own-offline-clips.md) | Logjam GPS cuts every offline clip itself, from the public archives, for guests too | 2026-10-18 | Accepted |
+| [0037](0037-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
+| [0038](0038-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |
+| [0039](0039-the-statewide-slope-archive-is-rounded-to-1-degree.md) | The statewide slope archive is terrarium PMTiles rounded to 1°: Horn over the height tiles, a max pyramid | 2026-10-18 | Accepted |
+| [0040](0040-a-sharpened-area-is-a-private-dem-source.md) | A sharpened area is a private DEM source, and each map tile comes from one archive | 2026-10-23 | Accepted |
+| [0041](0041-a-session-lasts-ten-years-and-sign-out-everywhere-ends-it.md) | A Cognito session lasts ten years, and Sign out everywhere is how one ends | 2026-10-24 | Accepted |
+| [0042](0042-logjam-web-needs-the-popover-api.md) | Logjam Web needs the Popover API: Safari 17, Chrome 114, Firefox 125, and a static page below that | 2026-10-29 | Accepted |
+| [0043](0043-geopdfs-render-in-the-browser.md) | GeoPDFs render in the browser, and nothing about one reaches the server | 2026-10-29 | Accepted |
+| [0044](0044-river-gauges-are-public-files-from-waternsw-and-bom.md) | River gauges are public files, with readings from WaterNSW and history from the Bureau of Meteorology | 2026-10-30 | Accepted |
+| [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
+| [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
+| [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
 | [0034](0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md) | Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix | 2026-10-15 | Accepted |

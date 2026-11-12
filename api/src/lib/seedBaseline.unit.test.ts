@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-// `prisma db seed` imports _seedBaseline with its own client; loading the app's
-// would run the app's env validation, which the migration-upgrade job's seed
+// `prisma db seed` imports _seedBaseline with its own client; loading the API's
+// would run the API's env validation, which the migration-upgrade job's seed
 // has no env for. Restoring a static `import prisma` there turns this red.
 vi.mock("../services/prisma", () => {
-  throw new Error("_seedBaseline loaded the app's prisma client");
+  throw new Error("_seedBaseline loaded the API's prisma client");
 });
 
 import {
@@ -15,7 +15,7 @@ import {
 } from "../__tests__/_seedBaseline";
 
 describe("takeSnapshot", () => {
-  it("runs on the client it is given without loading the app's", async () => {
+  it("runs on the client it is given without loading the API's", async () => {
     const db = {
       $queryRawUnsafe: vi.fn(async () => []),
       $executeRawUnsafe: vi.fn(),

@@ -1,5 +1,5 @@
 import { useThemePreferences } from "../../../themePreferences";
-import { SectionHeader, Icon, ErrorBanner, LoadingState } from "../../../ui";
+import { Icon, ErrorBanner, LoadingState } from "../../../ui";
 import classes from "./ThemeChooser.module.css";
 
 /**
@@ -9,12 +9,12 @@ import classes from "./ThemeChooser.module.css";
  * else.
  *
  * NATIVE RADIOS, so the group is one tab stop and the arrow keys move the
- * choice. It was a row of `aria-pressed` buttons, which is four tab stops and
- * announces four separate toggles rather than one choice of four.
+ * choice: a row of `aria-pressed` buttons would be four tab stops and announce
+ * four separate toggles rather than one choice of four.
  *
- * The web applies a scheme as it is picked, so there is no "next time you open"
- * note here — the phone needs one because its native shell reads the palette at
- * launch.
+ * Logjam Web applies a scheme as it is picked, so there is no "next time you
+ * open" note here — Logjam GPS needs one because its native shell reads the
+ * palette at launch.
  */
 function ThemeChooser() {
   const { schemeId, schemes, isHydrating, isSaving, error, setThemeScheme } =
@@ -22,7 +22,6 @@ function ThemeChooser() {
 
   return (
     <>
-      <SectionHeader title="Theme" />
       {error && <ErrorBanner message={error} />}
       {isHydrating ? (
         <LoadingState label="Loading your saved theme…" />
@@ -59,7 +58,10 @@ function ThemeChooser() {
                     />
                   ))}
                 </span>
-                <span className={classes.name}>{scheme.name}</span>
+                <span className={classes.label}>
+                  <span>{scheme.name}</span>
+                  <span className={classes.mode}>{scheme.mode}</span>
+                </span>
                 {selected && (
                   <Icon
                     idea="done"

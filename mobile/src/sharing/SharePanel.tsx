@@ -1,6 +1,6 @@
 // THE sharing panel. One component, both verbs, every kind of item.
 //
-// Places, waypoints, routes, LiDAR topos, GeoPDFs, imports and recorded
+// Places, waypoints, routes, LiDAR topos, imports and recorded
 // tracks all render this — from Saved's item sheet, the route sheet, the track
 // sheet, the map's waypoint sheet and the place detail screen. The only
 // per-kind parts are the API calls behind `target` and the sentence describing
@@ -40,7 +40,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -59,6 +58,7 @@ import {
   sharePromise,
   type SectionKeysOn,
   type SharableEntityType,
+  type SharePromiseKind,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -68,6 +68,7 @@ import {
   statusRowProps,
   unavailableReasonText,
 } from "../auth/capabilities";
+import { getMirrorPlace } from "../sync/mirrorStore";
 import { usePendingCreateIds } from "../sync/useSyncQueries";
 import {
   getFriends,
@@ -79,7 +80,15 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
+import {
+  Avatar,
+  Button,
+  confirm,
+  ErrorBanner,
+  SectionHeader,
+  Row,
+  Icon,
+} from "../ui";
 import {
   radius,
   spacing,
@@ -88,6 +97,7 @@ import {
   useTheme,
   controlSize,
   muted,
+  wash,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -123,7 +133,13 @@ const noFriendsText = (purpose: "share" | "copy") => {
  * grant access to at all — it can only be copied.
  */
 export type SharePanelTarget =
-  | { kind: "entity"; entityType: SharableEntityType; entityId: string }
+  | {
+      kind: "entity";
+      entityType: SharableEntityType;
+      entityId: string;
+      /** What to promise, when the entity type alone can't say (a LiDAR job). */
+      promise?: SharePromiseKind;
+    }
   | { kind: "place"; placeId: string }
   | { kind: "copy"; sendCopy: NonNullable<AssetActions["sendCopy"]> }
   /**
@@ -208,9 +224,9 @@ export function useSharePanel({
 
   // WHAT the target is, as primitives. Every caller builds `target` as an
   // object literal in its render, so its identity changes on every pass —
-  // depending on the object itself made the reset effect below fire on each
-  // render and clear the user's ticks as fast as they made them (a tap on a
-  // friend appeared to do nothing at all). Deps are keyed on these instead.
+  // depending on the object itself would make the reset effect below fire on
+  // each render and clear the user's ticks as fast as they are made. Deps are
+  // keyed on these primitives instead.
   const placeId = target?.kind === "place" ? target.placeId : null;
   const entityType = target?.kind === "entity" ? target.entityType : null;
   const entityId = target?.kind === "entity" ? target.entityId : null;
@@ -253,8 +269,8 @@ export function useSharePanel({
   // Does the account hold this row yet? A route drawn in the field, a waypoint
   // dropped on the trail or a place added offline has a `create` op still in
   // the outbox, so `/shares/<kind>/<id>` 404s — the panel's door closes with
-  // the reason, AND `useSharing` never fires the doomed lookup. Kinds the phone
-  // cannot create (a LiDAR topo, a GeoPDF job) are never in this set.
+  // the reason, AND `useSharing` never fires the doomed lookup. A kind the phone
+  // cannot create (a LiDAR topo) is never in this set.
   const pendingCreates = usePendingCreateIds();
   const shareRowId = placeId ?? entityId;
   const onServer = shareRowId == null || !pendingCreates.has(shareRowId);
@@ -263,6 +279,8 @@ export function useSharePanel({
     calls,
     online,
     onServer,
+    stillHeld: async () =>
+      placeId ? (await getMirrorPlace(placeId)) !== null : true,
     // Neither a copy nor a bulk has ONE item whose recipients could be listed,
     // so neither ever loads share state.
     enabled: enabled && target != null && !isCopy && bulkPlan === null,
@@ -349,18 +367,17 @@ export function useSharePanel({
    * The confirm, and the only place a user is told that part of what they
    * picked is going out for keeps. Destructive-styled because half of it is.
    */
-  const confirmBulk = useCallback(() => {
+  const confirmBulk = useCallback(async () => {
     if (!bulkPlan) return;
-    const confirm = bulkShareConfirm(bulkPlan, selected.size);
-    if (!confirm) return;
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: bulkPlan.copies.length > 0 ? "destructive" : "default",
-        onPress: () => void runBulk(),
-      },
-    ]);
+    const ask = bulkShareConfirm(bulkPlan, selected.size);
+    if (!ask) return;
+    const ok = await confirm({
+      confirmTitle: ask.title,
+      confirmBody: ask.body,
+      confirmLabel: ask.confirmLabel,
+      tone: bulkPlan.copies.length > 0 ? "destructive" : "filled",
+    });
+    if (ok) void runBulk();
   }, [bulkPlan, runBulk, selected.size]);
 
   const toggle = useCallback((id: string) => {
@@ -455,6 +472,13 @@ export function useSharePanel({
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
             }
+            disabledReason={
+              sending
+                ? "Sending…"
+                : selected.size === 0
+                  ? "Pick at least one friend"
+                  : "None of these can be shared"
+            }
           />
         </View>
       ),
@@ -527,6 +551,7 @@ export function useSharePanel({
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
+            disabledReason={sending ? "Sending…" : "Pick at least one friend"}
             loading={sending}
           />
         </View>
@@ -568,7 +593,13 @@ export function useSharePanel({
     promise: () => (
       <PromiseBanner
         tone="share"
-        text={sharePromise(placeId ? "place" : (entityType ?? "route"))}
+        text={sharePromise(
+          placeId
+            ? "place"
+            : ((target?.kind === "entity" ? target.promise : undefined) ??
+                entityType ??
+                "route"),
+        )}
       />
     ),
     search: () => search,
@@ -646,17 +677,17 @@ function useFriendList({
   const [list, setList] = useState<Friend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A failed load leaves `list` null and changes none of the other deps, so
-  // without this the effect never runs again: the panel showed "Couldn't load
-  // friends." until the whole sheet was closed and reopened. Bumping the
-  // attempt is the retry.
+  // without this the effect never runs again: the panel would stay stuck on
+  // "Couldn't load friends." until the whole sheet was closed and reopened.
+  // Bumping the attempt is the retry.
   const [attempt, setAttempt] = useState(0);
   const { accountState } = useAccountState();
   const status = capabilityStatus("sharing", accountState, online);
   const available = status.status === "available";
   // Which load — if any — should be running right now. Pure and exhaustively
-  // tested in ./friendListLoad, because a hook is a place nothing can run: the
-  // bug was that a failed load changed none of the effect's inputs, so the key
-  // is what the retry moves.
+  // tested in ./friendListLoad.test.ts, because a hook is a place nothing can run:
+  // a failed load changes none of the effect's inputs, so the key is what the
+  // retry moves.
   const loadKey = friendListLoadKey({
     active,
     available,
@@ -797,8 +828,8 @@ function PromiseBanner({
       style={[
         styles.promise,
         {
-          backgroundColor: withAlpha(hue, 0.12),
-          borderColor: withAlpha(hue, 0.5),
+          backgroundColor: withAlpha(hue, wash.selected),
+          borderColor: hue,
         },
       ]}
     >

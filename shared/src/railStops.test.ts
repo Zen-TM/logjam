@@ -9,17 +9,15 @@ const def = (over: Partial<TripLogCustomFieldDef>): TripLogCustomFieldDef => ({
 });
 
 describe("railStops", () => {
-  // The canyon axes are the reason the rule exists, so they are what pins it:
-  // they used to be seven hand-written controls that named their own keys.
+  // The canyon axes are the reason the rule exists, so they are what pins it.
   it("draws a bounded integer as its stops", () => {
     expect(railStops(def({ min: 1, max: 7 }))).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(railStops(def({ min: 1, max: 6 }))).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("leaves a FLOAT alone, however tight its bounds", () => {
-    // `quality` is 1-5 float. Drawn as a rail it could not express the 4.5 the
-    // web stores — the stored value matched no stop, so the control showed
-    // nothing selected and saving rounded it away.
+    // `quality` is a 1-5 float. Drawn as a rail it cannot express fractional
+    // values like 4.5 that Logjam Web allows.
     expect(railStops(def({ type: "float", min: 1, max: 5 }))).toBeNull();
   });
 

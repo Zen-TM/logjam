@@ -1,7 +1,17 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import { CurrentUserIdContext } from "../CurrentUserIdContext";
+import { useIsMobile } from "../useIsMobile";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
-import Map, { BASE_LAYERS, type SnapMode } from "./map/Map";
+import Map, { type SnapMode } from "./map/Map";
+import { baseLayersFor } from "./map/baseLayers";
 import { useRouteDraft } from "./routes/useRouteDraft";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
@@ -11,33 +21,23 @@ import type {
   GeoJsonPolygonal,
   DownloadUrl,
 } from "./dialogs/TopoDialog";
+import { routeMadeTopoJob } from "./dialogs/topoUpload";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
-import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
 import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
+import { useWayImport } from "./sidebar/panels/useWayImport";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
-import { NSW_CONTOURS_ENTRY_ID, type TBbox } from "./map/Map";
+import type { TBbox } from "./map/Map";
+import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
+import { setRoutedAreas } from "./map/terrainRouter";
+import { useBootDefinitions } from "../useBootDefinitions";
+import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
-import type {
-  TFilters,
-  TPlace,
-  TPlaceType,
-  GeoPdfJobView,
-} from "../placeUtils";
+import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
-import {
-  PANEL_TITLES,
-  type LogsView,
-  type MapsView,
-  type PanelId,
-} from "./sidebar/panels";
-import { TOPO_LAYERS } from "../topoLayerTypes";
-import type {
-  CompletedTopoJob,
-  CompletedOverlaysResponse,
-} from "../topoLayerTypes";
+import { PANEL_TITLES, type LogsView, type PanelId } from "./sidebar/panels";
 import {
   usePlaces,
   usePlaceTracks,
@@ -53,39 +53,60 @@ import {
   useNotifications,
   useTripLogs,
   useCurrentUser,
-  useLiveVectorStyle,
   useTopoExports,
-  useGeoPdfJobs,
   fetchCurrentUser,
-  getCustomFields,
-  getPlaceTypes,
-  recordConsent,
   passesFilters,
   hasActiveFilters,
   emptyFilters,
   reconcileCustomFilters,
   apiFetch,
+  getRoutes,
   getTopoExport,
+  getPlaceDetail,
 } from "../placeUtils";
+import {
+  drawExitPanel,
+  drawTarget,
+  fillWaySlot,
+  placeIsGone,
+  planDrawnSave,
+  type SlotIncumbent,
+} from "./dialogs/addWayModel";
+import { useConfirm } from "./sidebar/panels/useConfirm";
 import LayersPopover from "./map/LayersPopover";
-import type { MapTool } from "./map/MapChrome";
+import { findRouteById } from "./sidebar/panels/inboxModel";
+import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
-  CURRENT_CONSENT_VERSION,
-  PENDING_CONSENT_STORAGE_KEY,
   consentGate,
-  needsReconsent,
+  currentConsentVersionOf,
+  showsRegionStep,
 } from "../consent";
 import ConsentGate from "./ConsentGate";
+import RegionStep from "./RegionStep";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
-import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import TripLogDialog, {
+  type TripLogPrefill,
+  type TripLogTrack,
+} from "./dialogs/TripLogDialog";
 import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
+import { footprintBounds } from "./map/topoFootprint";
 import {
+  armBox,
+  boxFor,
+  boxPickDimsUI,
+  endBox,
+  isPicking,
+  NO_BOX_PICK,
+  type BoxPick,
+} from "./map/boxPick";
+import {
+  boundsOfPoints,
   buildWays,
   wayFromRoute,
   type WayItem,
@@ -93,52 +114,60 @@ import {
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import FriendInviteDialog from "./dialogs/FriendInviteDialog";
+import PlansPanel from "./plans/PlansPanel";
+import PlanDetailPanel from "./plans/PlanDetailPanel";
+import PlanInvitedPage from "./plans/PlanInvitedPage";
+import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
+import { planBounds, planMapPress } from "./plans/plansModel";
+import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
+  abandonConfirm,
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
-  NSW_CONTOURS,
+  ADD_WAY,
+  wayFailureMessage,
+  WayRemovalError,
+  TERRAIN_LAYER_DEFAULTS,
+  TERRAIN_LAYER_KEYS,
   drawsNswContours,
-  MAP_MEASURE,
-  MAP_MEASURE_ICON,
+  drawsNswHillshade,
+  normalizeTerrainLayers,
+  normalizeCarrier,
+  drawsCoverage,
+  normalizeUserUiPreferences,
+  type TerrainSwitchKey,
+  MAP_OVERLAY_DEFAULTS,
+  MAP_TERRAIN,
+  canyonOffersFor,
+  opensPreview,
+  PLAN_ADD_VERBS,
+  planVerbsFor,
+  TRIP_PLAN_PAGE,
+  tripPlansBadgeCount,
+  tripPlanTripLogPrefill,
+  type TripPlanItemKind,
+  type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
-import { useAuth } from "../useAuth";
+import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
+import { useToastOnce } from "./feedback/useToastOnce";
+import { useBasemapFallback } from "./map/useBasemapFallback";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
-
-const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
-const defaultLayerToggles = Object.fromEntries(
-  currentLayerNames.map((n) => [n, true]),
-);
-
-/**
- * The statewide contours as one entry of the Map's topo layer list.
- * Same origin, like the vector basemap: `/master/*` is served by the web
- * distribution and proxied in dev.
- */
-const NSW_CONTOURS_ENTRY = {
-  id: NSW_CONTOURS_ENTRY_ID,
-  pmtilesUrl: `${window.location.origin}/${NSW_CONTOURS.archivePath}`,
-  format: "vector" as const,
-  attribution: NSW_CONTOURS.creditHtml,
-};
 
 function App() {
   const toast = useToast();
   // Session-scoped, like the search box beside it: every member of TFilters
   // hides places, and a filter the user set last month greets them as "my
-  // places are missing" rather than as a favour (UX finding 5). The search box
-  // moved for that reason while this — grades, ownership, completion, dates,
-  // custom fields, the larger hider — was left on localStorage. Same principle,
-  // same polarity. Sort order is the counter-example and stays in localStorage:
-  // it reorders, it never hides. Survives the panel's unmount-on-close
-  // (PLACE-12) without surviving the week.
+  // places are missing" rather than as a favour. Sort order is the
+  // counter-example and stays in localStorage: it reorders, it never hides.
+  // Survives the panel's unmount-on-close without surviving the week.
   const [storedFilters, setFilters] = useStoredState<TFilters>(
     "logjam.filters",
     emptyFilters,
@@ -174,10 +203,16 @@ function App() {
   );
   // The trip whose page is open. A trip is READ on a page like a place and a
   // way (DESIGN.md), so it needs the same one piece of state.
-  const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
+  const [selectedTripLogId, setSelectedTripLogIdRaw] = useState<string | null>(
     null,
   );
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
+  // The plan whose page is open.
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  // "Start a trip log from this plan": the trip form, pre-filled.
+  const [tripLogPrefill, setTripLogPrefill] = useState<TripLogPrefill | null>(
+    null,
+  );
   // Which view the two-view pages open on — remembered for the session, so a
   // return to Logs lands where the user left it.
   const [logsView, setLogsView] = useStoredState<LogsView>(
@@ -185,13 +220,12 @@ function App() {
     "logs",
     sessionStorage,
   );
-  const [mapsView, setMapsView] = useStoredState<MapsView>(
-    "logjam.mapsView",
-    "geopdfs",
-    sessionStorage,
-  );
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
+  // The Inbox's "Show" opens the popover on the sharpened areas.
+  const [layersStartView, setLayersStartView] = useState<{
+    view: "sharpened";
+  } | null>(null);
   const layersButtonRef = useRef<HTMLButtonElement>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
@@ -200,16 +234,23 @@ function App() {
     "logjam.activeLayerId",
     "protomaps",
   );
-  // A basemap the picker no longer offers (the raster "Default", dropped for
-  // the vector one) would otherwise hide every basemap layer and show nothing.
-  const activeLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
-    ? storedLayerId
-    : "protomaps";
 
-  const [contoursOverImagery, setContoursOverImagery] = useStoredState(
-    "logjam.contoursOverImagery",
-    false,
+  // On the device, like the basemap choice; the slope bands are the account's.
+  const [storedTerrainLayers, setStoredTerrainLayers] = useStoredState<unknown>(
+    "logjam.terrainLayers",
+    TERRAIN_LAYER_DEFAULTS,
   );
+  const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
+  const [storedCarrier, setCoverageCarrier] = useStoredState<unknown>(
+    "logjam.coverageCarrier",
+    null,
+  );
+  const coverageCarrier = normalizeCarrier(storedCarrier);
+  const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
+    setStoredTerrainLayers((prev: unknown) => ({
+      ...normalizeTerrainLayers(prev),
+      [key]: on,
+    }));
 
   const [showAdd, setShowAdd] = useState(false);
   // "Add a place here" from the map: the form opens on this spot.
@@ -220,7 +261,7 @@ function App() {
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // True when the unified importer was opened from the onboarding wizard, so its
-  // Back/close returns to the welcome hub instead of dropping into an empty app.
+  // Back/close returns to the welcome hub instead of dropping onto an empty map.
   const [importedFromOnboarding, setImportedFromOnboarding] = useState(false);
   // Whether the first-login onboarding check has run (once, below).
   const [importChecked, setImportChecked] = useState(false);
@@ -232,8 +273,21 @@ function App() {
   // NEW KEYS, not the old four reused: those answered different questions, and
   // a stored `false` for "shared ways" arriving as "hide every line I have"
   // would silently empty the map of someone who had only ever hidden a friend's.
-  const [showPlaces, setShowPlaces] = useStoredState("logjam.showPlaces", true);
+  const [showPlaces, setShowPlaces] = useStoredState(
+    "logjam.showPlaces",
+    MAP_OVERLAY_DEFAULTS.places,
+  );
   const [showWays, setShowWays] = useStoredState("logjam.showWays", true);
+  // Off until asked for: the layer fetches a public file only while it is on.
+  const [showGauges, setShowGauges] = useStoredState(
+    "logjam.showGauges",
+    MAP_OVERLAY_DEFAULTS.gauges,
+  );
+
+  const [showMgaGrid, setShowMgaGrid] = useStoredState(
+    "logjam.showMgaGrid",
+    MAP_OVERLAY_DEFAULTS.mgaGrid,
+  );
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -248,6 +302,10 @@ function App() {
   // what stands in the way (arming the measure tool over a draft with points).
   const afterRouteCancel = useRef<(() => void) | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  // The place whose route slot a new drawing fills, when "Add a way" asked for
+  // the pen; the save links it and the way out comes back to that place.
+  const [drawPlaceId, setDrawPlaceId] = useState<string | null>(null);
+  const displaceConfirm = useConfirm();
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
   // Persisted: a canyoner who wants creek-following wants it every session.
@@ -289,43 +347,91 @@ function App() {
    * box, and it lands in the filter.
    */
   const [selectingFilterArea, setSelectingFilterArea] = useState(false);
-  // The places handed to the share-and-export dialog.
+  // The places handed to the bulk share or export dialog, and which it is.
   const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
+  const [selectionMode, setSelectionMode] = useState<"share" | "export">(
+    "share",
+  );
+  const openSelection = (ids: string[], mode: "share" | "export") => {
+    setSelectionMode(mode);
+    setSelectedAreaPlaceIds(ids);
+  };
   // Page ↔ map: a sheet beside the list pushes the map's chrome over and the
   // row under the pointer lights its pin. Any page's sheet, not just
   // Places': a page is unmounted when it closes and `usePanelSheet` clears this
-  // on the way out, so the panel it belongs to never needs naming here — naming
-  // it is what left Logs' date sheet out (operator, 2026-09-16).
+  // on the way out, so the panel it belongs to never needs naming here.
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [placeHighlight] = useState(createPlaceHighlight);
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
-  const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
+  // The box tool, drawing a topo's area or a print or GIS map's (`boxPick.ts`).
+  const [boxPick, setBoxPick] = useState<BoxPick>(NO_BOX_PICK);
+  const selectingTopoBbox = isPicking(boxPick, "topo");
+  const selectingExportBox = isPicking(boxPick, "export");
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
+  const [pendingExportBox, setPendingExportBox] = useState<TBbox | null>(null);
+  // The box an opening was given (a selection's, a topo's).
+  const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
+  // A new key for every opening that is not a pick coming back
+  // (`freshExportDialog`), so an opening never starts on another's form. While a
+  // pick is out, Tools is off and the pages are dimmed, so the pick comes back
+  // or is cancelled back (e2e/export-area.spec.ts).
+  const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygonal | null>(
     null,
   );
-  // All of the user's completed topo jobs (with presigned PMTiles URLs per
-  // layer). Replaces the old single "master" mosaic — each job is its own
-  // set of overlays, controlled per-job in the Overlays panel.
-  const [completedTopoJobs, setCompletedTopoJobs] = useState<
-    CompletedTopoJob[]
-  >([]);
-  // True once the first fetch settles, either way: an empty list before then is
-  // not "no topos yet" (shared/DESIGN.md §11).
-  const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
-  // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
-  // to load this session (e.g. output files gone from S3). Drives the
-  // "unavailable" badge in the Layers panel (LAYERS-1).
-  const [unavailableTopoEntryIds, setUnavailableTopoEntryIds] = useState<
-    Set<string>
-  >(new Set());
-  // One toast for the whole session, however many sources fail.
+  const auth = useAuth();
+  const authenticated = auth.state === "authenticated";
+  const { hydrateFromUser } = useThemePreferences();
+  const {
+    currentUser,
+    error: currentUserError,
+    refetchCurrentUser,
+    applyCurrentUser,
+  } = useCurrentUser(authenticated);
+  const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Keyed by string: the fallback toast's effect depends on this list.
+  const regionKey = normalizeUserUiPreferences(
+    currentUser?.uiPreferences,
+  ).regions.join(",");
+  const baseLayers = useMemo(
+    () => baseLayersFor(regionKey.split(",")),
+    [regionKey],
+  );
+  // A basemap the picker does not offer (a region unchosen, or the raster
+  // "Default") would otherwise be shown with no way to switch off it.
+  const pickedLayerId = baseLayers.some((layer) => layer.id === storedLayerId)
+    ? storedLayerId
+    : (baseLayers.find((layer) => layer.id === "protomaps") ?? baseLayers[0]!)
+        .id;
+  const {
+    shownLayerId: activeLayerId,
+    down: downBasemaps,
+    setHealth: setBasemapHealth,
+  } = useBasemapFallback(pickedLayerId, baseLayers);
+  // `authenticated` is NOT enough to start fetching the user's data: a user
+  // whose recorded consent is stale gets ConsentGate rendered instead of
+  // Logjam Web, and user data must not load behind the gate (frontend/AGENTS.md).
+  // `loadsUserData` is what they wait on.
+  //
+  // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
+  // the answer arrives. Everything downstream of them gates on this instead.
+  const { blocked: consentBlocked, settled: consentSettled } =
+    consentGate(currentUser);
+  const loadsUserData = authenticated && consentSettled;
+  // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
+  // on signing out (useCompletedTopoJobs.ts).
+  const {
+    jobs: completedTopoJobs,
+    loaded: completedTopoJobsLoaded,
+    refetch: refetchCompletedTopoJobs,
+  } = useCompletedTopoJobs(loadsUserData, authenticated);
+  // One toast for the whole session, however many vegetation sources fail.
   const topoUnavailableToastShownRef = useRef(false);
 
   // GeoPDF dialog
@@ -371,29 +477,6 @@ function App() {
     pitch: number;
   } | null>("logjam.mapView", null);
 
-  // GeoPDF template editing state (undefined = normal mode, null = new template, object = edit)
-  const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
-    GeoPdfTemplate | null | undefined
-  >(undefined);
-  // ID to pre-select when opening GeoPdfDialog in normal mode
-  const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<
-    string | null
-  >(null);
-  // Bumped after template save/delete to trigger panel refetch
-  const [geoPdfTemplateRefetch, setGeoPdfTemplateRefetch] = useState(0);
-
-  // Bumped when a GeoPDF job is queued, to trigger the panel's job list refetch
-  const [geoPdfJobsRefetch, setGeoPdfJobsRefetch] = useState(0);
-
-  // Topo template: ID to pre-select when opening TopoDialog
-  const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<
-    string | null
-  >(null);
-
-  // Bumped when TopoDialog saves a template inline, so LidarPanel's template
-  // list refreshes without waiting for an accordion re-open (TOPO-1)
-  const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
-
   // Place fly-to target
   const [flyToPlace, setFlyToPlace] = useState<{
     lat: number;
@@ -413,142 +496,115 @@ function App() {
     if (target) setFlyToPlace({ lat: target.latitude, lng: target.longitude });
   }, []);
 
-  // LiDAR topo panel state — lifted so it persists across panel open/close
-  const [lidarEnabled, setLidarEnabled] = useStoredState(
-    "logjam.lidarEnabled",
-    false,
-  );
+  // Opening a trip fits the map to its places, in the one setter every way to
+  // open a trip ends in (UX §3). A trip with no place on the map leaves the
+  // camera alone.
+  const tripLogsRef = useRef<{ id: string; places: { id: string }[] }[]>([]);
+  const setSelectedTripLogId = useCallback((id: string | null) => {
+    setSelectedTripLogIdRaw(id);
+    const trip = id && tripLogsRef.current.find((t) => t.id === id);
+    if (!trip) return;
+    const points = trip.places.flatMap(({ id: placeId }) => {
+      const place = allPlacesRef.current.find((p) => p.id === placeId);
+      return place
+        ? [[place.longitude, place.latitude] as [number, number]]
+        : [];
+    });
+    const bounds = boundsOfPoints(points);
+    if (bounds) setFlyToBounds(bounds);
+  }, []);
 
-  const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<
-    Record<string, boolean>
-  >("logjam.lidarLayerToggles", defaultLayerToggles);
-  // Drop unknown layers, add missing new layers as true
-  const lidarLayerToggles = useMemo<Record<string, boolean>>(
-    () => ({
-      ...defaultLayerToggles,
-      ...Object.fromEntries(
-        Object.entries(rawLidarLayerToggles).filter(([k]) =>
-          currentLayerNames.includes(k),
-        ),
-      ),
-    }),
-    [rawLidarLayerToggles],
-  );
+  // A sharpened area's optional vegetation layer: every area's, newest first
+  // so a newer survey draws over an older one, while the Terrain switch is on.
+  const vegetationLayers = useMemo(() => {
+    if (!terrainLayers.vegetation) return [];
+    // Credit the layer's open-data sources (ELVIS / SVTM) so MapLibre's
+    // AttributionControl surfaces the required CC BY / ODbL attribution.
+    const attribution = (
+      TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>
+    ).vegetation
+      ?.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s])
+      .join(" · ");
+    return completedTopoJobs.flatMap((job) => {
+      const match = job.layers.find((l) => l.name === "vegetation");
+      return match
+        ? [
+            {
+              id: `${job.jobId}-vegetation`,
+              pmtilesUrl: match.pmtilesUrl,
+              format: match.format,
+              attribution,
+            },
+          ]
+        : [];
+    });
+  }, [terrainLayers.vegetation, completedTopoJobs]);
 
-  const [rawLidarLayerOrder, setLidarLayerOrder] = useStoredState<string[]>(
-    "logjam.lidarLayerOrder",
-    currentLayerNames,
+  // The Terrain group rides the same list, bottom first and underneath every
+  // topo area's own layers, so the Map draws and styles it with the code it has.
+  const { contours, coverage, fire, slope, land, hillshade } = terrainLayers;
+  const sharpenedAreas = useMemo(
+    () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
+    [completedTopoJobs],
   );
-  // Drop unknown names, append any new layers at end
-  const lidarLayerOrder = useMemo<string[]>(
-    () => [
-      ...rawLidarLayerOrder.filter((n) => currentLayerNames.includes(n)),
-      ...currentLayerNames.filter((n) => !rawLidarLayerOrder.includes(n)),
-    ],
-    [rawLidarLayerOrder],
-  );
-
-  // Per-completed-job visibility. Newly fetched jobs default to true (visible).
-  const [lidarJobToggles, setLidarJobToggles] = useStoredState<
-    Record<string, boolean>
-  >("logjam.lidarJobToggles", {});
-
-  // Compose all (job × layer) pairs into the flat list the Map consumes.
-  // Z-order: outer loop = layer (per user-chosen order), inner loop = jobs
-  // (newest first so newer data renders on top of older within the same layer).
-  // A pair is included only when both the layer toggle and the job toggle are on.
-  const combinedTopoLayers = useMemo(() => {
-    if (!lidarEnabled) return [];
-    const out: {
-      id: string;
-      pmtilesUrl: string;
-      format?: "raster" | "vector";
-      attribution?: string;
-    }[] = [];
-    for (const layerName of lidarLayerOrder) {
-      if (!lidarLayerToggles[layerName]) continue;
-      // Credit the overlay's open-data source (ELVIS / SVTM / OSM) so MapLibre's
-      // AttributionControl surfaces the required CC BY / ODbL attribution.
-      // A layer may credit more than one source (e.g. vegetation density is a
-      // LiDAR CHM, so it credits both elevation and the SVTM vegetation source).
-      // layerName comes from persisted user state (string), so index the
-      // TopoLayerName-keyed record defensively rather than crash on a stale
-      // stored name.
-      const overlaySources =
-        (TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>)[
-          layerName
-        ] ?? [];
-      const attribution = overlaySources.length
-        ? overlaySources.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s]).join(" · ")
-        : undefined;
-      for (const job of completedTopoJobs) {
-        if (!(lidarJobToggles[job.jobId] ?? true)) continue;
-        const match = job.layers.find((l) => l.name === layerName);
-        if (!match) continue;
-        out.push({
-          id: `${job.jobId}-${layerName}`,
-          pmtilesUrl: match.pmtilesUrl,
-          format: match.format,
-          attribution,
-        });
-      }
-    }
-    return out;
+  const mapTopoLayers = useMemo(() => {
+    // Here, not in an effect: the Map's effects run before this component's,
+    // and its routed sources ask for tiles as soon as it adds them.
+    setRoutedAreas(sharpenedAreas);
+    const entries = terrainEntries(sharpenedAreas);
+    const shown = {
+      contours: drawsNswContours(activeLayerId, contours),
+      coverage: drawsCoverage(coverage, coverageCarrier),
+      fire,
+      slope,
+      land,
+      hillshade: drawsNswHillshade(activeLayerId, hillshade),
+    };
+    return [
+      ...[...TERRAIN_LAYER_KEYS]
+        .reverse()
+        .filter((key) => shown[key])
+        .map((key) => entries[key]),
+      ...vegetationLayers,
+    ];
   }, [
-    lidarEnabled,
-    lidarLayerOrder,
-    lidarLayerToggles,
-    lidarJobToggles,
-    completedTopoJobs,
+    activeLayerId,
+    contours,
+    coverage,
+    coverageCarrier,
+    fire,
+    slope,
+    land,
+    hillshade,
+    vegetationLayers,
+    sharpenedAreas,
   ]);
 
-  // The statewide contours ride the same list, underneath every topo area's
-  // own layers, so the Map draws and styles them with the code it has.
-  const mapTopoLayers = useMemo(
-    () =>
-      drawsNswContours(activeLayerId, contoursOverImagery)
-        ? [NSW_CONTOURS_ENTRY, ...combinedTopoLayers]
-        : combinedTopoLayers,
-    [activeLayerId, contoursOverImagery, combinedTopoLayers],
-  );
-
-  // A topo overlay's PMTiles source failed to load (Map already tore it down
-  // to stop the retry spam). Record it for the Layers-panel badge and tell the
-  // user once — silently missing layers were the LAYERS-1 finding.
+  // A PMTiles source failed to load (Map already tore it down to stop the
+  // retry spam). Tell the user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
-      // Not a topo area's layer, and nothing the user switched on: the map is
-      // simply drawn without contours.
-      if (entryId === NSW_CONTOURS_ENTRY.id) return;
-      setUnavailableTopoEntryIds((prev) => {
-        if (prev.has(entryId)) return prev;
-        const next = new Set(prev);
-        next.add(entryId);
-        return next;
-      });
+      // A Terrain layer's switch is on, so say which one draws nothing. Only
+      // a reload retries it: the pmtiles protocol keeps the failed header for
+      // the page's life.
+      const terrainKey = TERRAIN_LAYER_KEYS.find(
+        (key) => TERRAIN_ENTRIES[key].id === entryId,
+      );
+      if (terrainKey) {
+        toast.error(
+          `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
+        );
+        return;
+      }
       if (!topoUnavailableToastShownRef.current) {
         topoUnavailableToastShownRef.current = true;
         toast.error(
-          "Some LiDAR topo layers couldn't be loaded — their map files are missing. Affected layers are marked in the Layers panel.",
+          `${MAP_TERRAIN.copy.vegetation} couldn't be loaded for some sharpened areas — their map files are missing.`,
         );
       }
     },
     [toast],
   );
-
-  // Layer names with at least one failed source, for the Layers-panel badge.
-  const unavailableTopoLayerNames = useMemo(() => {
-    const names = new Set<string>();
-    if (unavailableTopoEntryIds.size === 0) return names;
-    for (const job of completedTopoJobs) {
-      for (const layer of job.layers) {
-        if (unavailableTopoEntryIds.has(`${job.jobId}-${layer.name}`)) {
-          names.add(layer.name);
-        }
-      }
-    }
-    return names;
-  }, [completedTopoJobs, unavailableTopoEntryIds]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -572,13 +628,10 @@ function App() {
   /**
    * The map's visible bounds, kept in a ref rather than in state: "Filter to
    * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render the app on every pan for a value nothing
+   * them in state would re-render App on every pan for a value nothing
    * renders.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
-  // The same bounds as state, for the Layers popover's "In this view". Set on
-  // moveend only, so it re-renders once per gesture rather than per frame.
-  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -604,6 +657,9 @@ function App() {
     if (panel !== "trip-detail") {
       setSelectedTripLogId(null);
     }
+    if (panel !== "plan-detail") {
+      setSelectedPlanId(null);
+    }
     setActivePanel(panel);
   }, []);
 
@@ -615,41 +671,76 @@ function App() {
     if (activePanel === "trip-detail") {
       setSelectedTripLogId(null);
     }
+    if (activePanel === "plan-detail") {
+      setSelectedPlanId(null);
+    }
     setActivePanel(null);
   }, [activePanel]);
 
-  const auth = useAuth();
-  const authenticated = auth.state === "authenticated";
-  const { hydrateFromUser } = useThemePreferences();
-  const {
-    currentUser,
-    error: currentUserError,
-    refetchCurrentUser,
-    applyCurrentUser,
-  } = useCurrentUser(authenticated);
-  // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
-  // a user whose recorded consent is stale gets ConsentGate rendered instead of
-  // the app, but rendering is all that used to stop — every hook and boot
-  // effect below still pulled their places, trips, friends and notifications
-  // out of the API behind the gate. `loadsUserData` is what they wait on now.
-  //
-  // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
-  // the answer arrives. Everything downstream of them gates on this instead.
-  // The localStorage read is deliberately unmemoised — it is a string compare,
-  // and the key is removed in the boot effect below, whose `applyCurrentUser`
-  // re-render is what re-reads it.
-  const { blocked: consentBlocked, settled: consentSettled } = consentGate(
-    currentUser,
-    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
+  // The view a plan opens on (a join request opens on People, where it is
+  // answered), and whether it opens as an invite's preview: said by whoever
+  // opens it, since the plans list may not know of an invite yet.
+  const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
+  const [planInvited, setPlanInvited] = useState(false);
+  const [planAddCopy, setPlanAddCopy] = useState<{
+    kind: TripPlanItemKind;
+    id: string;
+  } | null>(null);
+  const consumePlanAddCopy = useCallback(() => setPlanAddCopy(null), []);
+  const openPlan = useCallback(
+    (planId: string, view: TripPlanPageView = "writeUp", invited = false) => {
+      setSelectedPlanId(planId);
+      setPlanView(view);
+      setPlanInvited(invited);
+      setActivePanel("plan-detail");
+    },
+    [],
   );
-  const loadsUserData = authenticated && consentSettled;
   const {
     places,
     total: placesTotal,
     loaded: placesLoaded,
+    state: placesState,
     error: placesError,
     refetch,
   } = usePlaces(loadsUserData);
+  const {
+    plans,
+    loaded: plansLoaded,
+    error: plansError,
+    refetch: refetchPlans,
+  } = usePlans(loadsUserData);
+  const planPreviewed =
+    selectedPlanId != null &&
+    opensPreview(
+      planInvited,
+      plans.find((plan) => plan.id === selectedPlanId)?.status,
+    );
+  // The open plan's full fetch: its page renders from it, and while it is
+  // open the map draws its places and ways instead of the user's own.
+  const planFetch = usePlan(
+    loadsUserData && activePanel === "plan-detail" && !planPreviewed
+      ? selectedPlanId
+      : null,
+    toast.error,
+  );
+  const planOnMap = planFetch.view;
+  // Fit once per plan opened, not per refetch: the user may have panned since.
+  // Adjusted during render, as the lint rule against setState in an effect asks.
+  const [fittedPlanId, setFittedPlanId] = useState<string | null>(null);
+  if ((planOnMap?.id ?? null) !== fittedPlanId) {
+    setFittedPlanId(planOnMap?.id ?? null);
+    const bounds = planOnMap && planBounds(planOnMap);
+    if (bounds) setFlyToBounds(bounds);
+  }
+  const planMapPlaces = useMemo<TPlace[]>(
+    () => planOnMap?.places.map((place) => ({ ...place, ownerId: "" })) ?? [],
+    [planOnMap],
+  );
+  const planMapRoutes = useMemo<TRoute[]>(
+    () => planOnMap?.routes.map((route) => ({ ...route, ownerId: "" })) ?? [],
+    [planOnMap],
+  );
   const {
     places: sharedPlaces,
     error: sharedError,
@@ -668,18 +759,21 @@ function App() {
   // Standalone files: the user's own imports and Logjam GPS recordings. They
   // hang off no place, so Ways is the only page they surface on.
   //
-  // The "Ways" OVERLAY draws them now. It used to be a switch on each file's
-  // own detail page — a per-item control you had to open a page to find, and
-  // one that could never answer "show me my lines" (operator, 2026-09-17).
-  // Presigned URLs are still minted only for what is actually drawn, so the
-  // egress gate on POST /media/download-urls is unchanged; it is the overlay
-  // that opens it now rather than a switch per row.
+  // The "Ways" overlay draws them. Presigned URLs are minted only for what is
+  // actually drawn, so the egress gate on POST /media/download-urls is
+  // unchanged.
   const {
     files: standaloneFiles,
     loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
-  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showWays));
+  } = useStandaloneFiles(
+    // A plan's page offers them to Add a place or way, whatever the Ways layer says.
+    loadsUserData &&
+      (activePanel === "ways" || activePanel === "plan-detail" || showWays),
+  );
+  const { openPicker: openWayImportPicker, input: wayImportInput } =
+    useWayImport(refetchStandaloneFiles);
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -711,8 +805,52 @@ function App() {
     loaded: routesLoaded,
     refetch: refetchRoutes,
   } = useRoutes(
-    loadsUserData && (showWays || drawingRoute || activePanel === "ways"),
+    loadsUserData &&
+      (showWays ||
+        drawingRoute ||
+        activePanel === "ways" ||
+        activePanel === "plan-detail"),
   );
+  // Beside a plan the user's own are drawn as the layer switches allow, all
+  // dimmed beside the plan's.
+  const mineShown = {
+    places: !planOnMap || showPlaces,
+    ways: !planOnMap || showWays,
+  };
+  const mutedIds = useMemo<ReadonlySet<string>>(
+    () =>
+      planOnMap
+        ? new Set([
+            ...places.map((place) => place.id),
+            ...sharedPlaces.map((place) => place.id),
+            ...routes.map((route) => route.id),
+            ...standaloneFiles.map((file) => file.id),
+          ])
+        : new Set(),
+    [planOnMap, places, sharedPlaces, routes, standaloneFiles],
+  );
+  // One of the user's own things pressed on the map asks for Add a place or way,
+  // only while the page itself offers it (not on an archived plan).
+  const pressInPlan = (press: Parameters<typeof planMapPress>[0]) => {
+    const pick = planMapPress(
+      press,
+      {
+        places: [...places, ...sharedPlaces],
+        routes,
+        files: standaloneFiles,
+        tracks: placeTracks,
+      },
+      currentUser?.id ?? null,
+    );
+    if (
+      pick &&
+      planOnMap &&
+      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
+        archived: planOnMap.archivedAt != null,
+      }).some((verb) => verb.id === "copy")
+    )
+      setPlanAddCopy(pick);
+  };
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
@@ -724,6 +862,11 @@ function App() {
   const sharedPlaceIds = useMemo(
     () => new Set(sharedPlaces.map((place) => place.id)),
     [sharedPlaces],
+  );
+
+  const ownPlaceIds = useMemo(
+    () => new Set(places.map((place) => place.id)),
+    [places],
   );
 
   // The overlay's count is the SAME list the Ways page builds — including its
@@ -738,8 +881,16 @@ function App() {
         placeTracks,
         currentUserId: currentUser?.id ?? null,
         sharedPlaceIds,
+        ownPlaceIds,
       }),
-    [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
+    [
+      routes,
+      standaloneFiles,
+      placeTracks,
+      currentUser?.id,
+      sharedPlaceIds,
+      ownPlaceIds,
+    ],
   );
   const wayCount = allWays.length;
 
@@ -765,10 +916,13 @@ function App() {
   const {
     tripLogs,
     total: tripLogsTotal,
-    loaded: tripLogsLoaded,
+    state: tripLogsState,
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(loadsUserData);
+  useEffect(() => {
+    tripLogsRef.current = tripLogs;
+  });
   // Every trip write also moves place state, not just trip state: a place's
   // map marker is green iff `_count.tripLogLinks > 0` (isPlaceDoneByViewer),
   // and that tally is computed server-side on the OWNED place list. Nothing in
@@ -781,12 +935,10 @@ function App() {
   const refetchAfterTripWrite = useCallback(() => {
     refetchTripLogs();
     refetch();
-  }, [refetchTripLogs, refetch]);
-  const {
-    vectorStyle,
-    setVectorStyle: setLiveVectorStyle,
-    saveError: vectorStyleSaveError,
-  } = useLiveVectorStyle(loadsUserData);
+    // A trip logged from a recording (or deleted) changes whether the
+    // recording still offers "Log a trip".
+    refetchStandaloneFiles();
+  }, [refetchTripLogs, refetch, refetchStandaloneFiles]);
 
   // Trip-log definitions, read from the same row-grain endpoint as the place
   // ones. A trip field carries scoping too (`tripTypes`, the trip's own tags),
@@ -800,13 +952,19 @@ function App() {
   // dialog must offer every one or a user could never make their first canyon.
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
-  // Surface background data-load errors as toasts
-  useEffect(() => {
-    if (placesError) toast.error(placesError);
-  }, [placesError, toast]);
-  useEffect(() => {
-    if (currentUserError) toast.error(currentUserError);
-  }, [currentUserError, toast]);
+  // Surface background data-load errors as toasts. A failure the open panel
+  // says in place (Places and Trips on a first load, Settings and Account for
+  // the account) is not also a toast.
+  useToastOnce(
+    placesError,
+    placesState === "failed" && activePanel === "places",
+    toast,
+  );
+  useToastOnce(
+    currentUserError,
+    activePanel === "settings" || activePanel === "account",
+    toast,
+  );
   useEffect(() => {
     if (sharedError) toast.error(sharedError);
   }, [sharedError, toast]);
@@ -816,58 +974,36 @@ function App() {
   useEffect(() => {
     if (notificationsError) toast.error(notificationsError);
   }, [notificationsError, toast]);
+  useToastOnce(
+    tripLogsError,
+    tripLogsState === "failed" && activePanel === "logs",
+    toast,
+  );
+  // A first load that fails is said by Plans itself (its ErrorState); only
+  // a later refetch's failure, under a list already shown, is a toast.
+  const plansBackgroundError = plans.length > 0 ? plansError : null;
   useEffect(() => {
-    if (tripLogsError) toast.error(tripLogsError);
-  }, [tripLogsError, toast]);
-  useEffect(() => {
-    if (vectorStyleSaveError) toast.error(vectorStyleSaveError);
-  }, [vectorStyleSaveError, toast]);
+    if (plansBackgroundError) toast.error(plansBackgroundError);
+  }, [plansBackgroundError, toast]);
 
+  useBootDefinitions(
+    loadsUserData,
+    setPlaceCustomFieldDefs,
+    setCustomFieldDefs,
+    setPlaceTypes,
+  );
   useEffect(() => {
     if (!authenticated) return;
+    // hydrateFromUser stays here: it only re-reads /users/me (the gate's own
+    // request) for the theme, and the gate itself is themed by it.
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
-    // The place definitions come from the row-grain endpoint because only it
-    // carries the scoping. Best-effort: a failure leaves the forms with the
-    // built-in fields alone, and the panels show their own error states.
-    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
-    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
-    getPlaceTypes().then(setPlaceTypes).catch(console.error);
-    fetchCurrentUser()
-      .then((user) => {
-        // Record the consent given on the sign-up form. Only a pending value
-        // matching the current version is recordable (the server 400s any
-        // other), and only while the user's stored version is actually stale —
-        // this also covers a stale-version user who re-signed-up, which the
-        // old `!user.consentedAt` check silently skipped.
-        const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
-        if (pending === CURRENT_CONSENT_VERSION && needsReconsent(user)) {
-          recordConsent(pending)
-            .then((updated) => {
-              // Sync the cached user before dropping the pending key so the
-              // ConsentGate never flashes for a fresh sign-up.
-              applyCurrentUser(updated);
-              localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
-            })
-            .catch((err) => {
-              console.error(err);
-              toast.error(
-                messageFromError(
-                  err,
-                  "Couldn't record your consent. It will be retried next time you sign in.",
-                ),
-              );
-            });
-        } else if (pending) {
-          localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load your preferences."));
-      });
-  }, [authenticated, hydrateFromUser, toast, applyCurrentUser]);
+    fetchCurrentUser().catch((err) => {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't load your preferences."));
+    });
+  }, [authenticated, hydrateFromUser, toast]);
 
   // Resume tracking any jobs that were pending/processing before page load
   useEffect(() => {
@@ -891,74 +1027,15 @@ function App() {
       });
   }, [loadsUserData]);
 
-  // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
-  // auth and whenever a job transitions to complete.
-  const [overlaysExpiresAt, setOverlaysExpiresAt] = useState<string | null>(
-    null,
-  );
-  const refetchCompletedTopoJobs = useCallback(() => {
-    return (
-      apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
-        .then(({ jobs, expiresAt }) => {
-          setCompletedTopoJobs(jobs);
-          setOverlaysExpiresAt(expiresAt);
-          setLidarJobToggles((prev) => {
-            // Default newly-seen jobs to visible; preserve prior toggle state
-            // for jobs we already knew about.
-            const next: Record<string, boolean> = { ...prev };
-            for (const j of jobs) {
-              if (next[j.jobId] === undefined) next[j.jobId] = true;
-            }
-            return next;
-          });
-        })
-        // Best-effort: called again on the next poll tick / job completion,
-        // so a transient failure here is non-critical.
-        .catch((err) => {
-          console.error(err);
-        })
-        .finally(() => setCompletedTopoJobsLoaded(true))
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!loadsUserData) return;
-    refetchCompletedTopoJobs();
-  }, [loadsUserData, refetchCompletedTopoJobs]);
-
-  // Pre-refetch presigned PMTiles URLs ~30 min before the server-reported expiry
-  // so MapLibre tile requests never see a 403 in an active session.
-  useEffect(() => {
-    if (!loadsUserData || !overlaysExpiresAt) return;
-    const refetchAt = new Date(overlaysExpiresAt).getTime() - 30 * 60 * 1000;
-    const delay = refetchAt - Date.now();
-    if (delay <= 0) {
-      refetchCompletedTopoJobs();
-      return;
-    }
-    const timer = setTimeout(() => {
-      refetchCompletedTopoJobs();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [loadsUserData, overlaysExpiresAt, refetchCompletedTopoJobs]);
-
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
-  // recent-exports list (rendered in the LiDAR panel accordion) and the
-  // auto-download on completion work regardless of which panel or dialog is
+  // auto-download on completion works regardless of which panel or dialog is
   // open. The hook self-throttles: it only polls while an export is in
   // progress.
   const {
     exports: topoExports,
-    total: topoExportsTotal,
     loading: topoExportsLoading,
     refetch: refetchTopoExports,
   } = useTopoExports(loadsUserData);
-
-  // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
-  // auto-download works even when the Generated PDFs panel is closed. The hook
-  // self-throttles: it only polls while a job is queued/running.
-  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } =
-    useGeoPdfJobs(loadsUserData);
 
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
@@ -1007,32 +1084,6 @@ function App() {
     }
   }, [authenticated, topoExports, topoExportsLoading]);
 
-  // Auto-download GeoPDFs that this tab queued during this session. Arming is
-  // in-memory only: a job id is added to armedGeoPdfJobIds when queued here, and
-  // the ref is empty on a fresh load, so pre-existing completed jobs returned by
-  // GET /geo-pdf are never armed and never auto-download (the new-browser bug).
-  const armedGeoPdfJobIds = useRef<Set<string>>(new Set());
-  const autoDownloadedGeoPdfJobIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    for (const job of geoPdfJobs) {
-      if (!armedGeoPdfJobIds.current.has(job.id)) continue;
-      if (job.status === "failed") {
-        armedGeoPdfJobIds.current.delete(job.id);
-        continue;
-      }
-      if (
-        job.status === "completed" &&
-        job.downloadUrl &&
-        !autoDownloadedGeoPdfJobIds.current.has(job.id)
-      ) {
-        autoDownloadedGeoPdfJobIds.current.add(job.id);
-        armedGeoPdfJobIds.current.delete(job.id);
-        triggerDownload(job.downloadUrl);
-        toast.success("GeoPDF downloaded.");
-      }
-    }
-  }, [geoPdfJobs, toast]);
-
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
     const nonTerminal = activeTopoJobs.filter(
@@ -1062,11 +1113,19 @@ function App() {
     return () => clearInterval(interval);
   }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
-  const handleTopoJobCreated = useCallback((job: TopoJob) => {
-    // Register for active-job polling. The dialog owns the success surface
-    // (in-dialog "Submitted" view) and its own close, so no toast/close here.
-    setActiveTopoJobs((prev) => [job, ...prev]);
-  }, []);
+  // The dialog owns the success surface (in-dialog "Submitted" view) and its
+  // own close, so no toast/close here.
+  const handleTopoJobCreated = useCallback(
+    (job: TopoJob) =>
+      routeMadeTopoJob(job, {
+        track: (made) => setActiveTopoJobs((prev) => [made, ...prev]),
+        finished: () => {
+          refetchCompletedTopoJobs();
+          refetchNotifications();
+        },
+      }),
+    [refetchCompletedTopoJobs, refetchNotifications],
+  );
 
   // Durable delete replaces the old hide-only dismiss so failed rows can't
   // linger invisibly (DELETE /topo-jobs/:id handles failed rows + S3 cleanup
@@ -1085,23 +1144,9 @@ function App() {
     [refetchCurrentUser, toast],
   );
 
-  const handleGeoPdfJobQueued = useCallback(
-    (job: GeoPdfJobView) => {
-      setGeoPdfJobsRefetch((n) => n + 1);
-      // Arm for auto-download if the user hasn't disabled it (default on).
-      if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
-        armedGeoPdfJobIds.current.add(job.id);
-      }
-      // Kick the App-level poller so it picks up the freshly queued job and starts
-      // polling toward completion (the panel may be closed).
-      refetchGeoPdfJobs();
-    },
-    [currentUser, refetchGeoPdfJobs],
-  );
-
-  // Capture completion-email deep links on mount (?topoJob / ?export /
-  // ?geoPdfJob), stash in sessionStorage so they survive a Cognito sign-in
-  // redirect, then clean the URL once.
+  // Capture completion-email deep links on mount (?topoJob / ?export), stash
+  // in sessionStorage so they survive a Cognito sign-in redirect, then clean
+  // the URL once.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let matched = false;
@@ -1115,11 +1160,6 @@ function App() {
     const exportId = params.get("export");
     if (exportId) {
       sessionStorage.setItem("pendingExportId", exportId);
-      matched = true;
-    }
-    const geoPdfJobId = params.get("geoPdfJob");
-    if (geoPdfJobId) {
-      sessionStorage.setItem("pendingGeoPdfJobId", geoPdfJobId);
       matched = true;
     }
     if (matched) window.history.replaceState({}, "", window.location.pathname);
@@ -1171,8 +1211,8 @@ function App() {
   }, [loadsUserData, toast]);
 
   // Resolve a stashed ?export=<id> deep link: download the export directly
-  // (mirrors NotificationsPanel.handleDownloadExport). A presign that has
-  // expired (no downloadUrl) opens the LiDAR panel so the user can re-presign.
+  // (mirrors NotificationsPanel.handleDownloadExport). An export that has
+  // expired (the API says so, 404) opens the Inbox with that as the toast.
   useEffect(() => {
     if (!loadsUserData) return;
     const exportId = sessionStorage.getItem("pendingExportId");
@@ -1184,34 +1224,20 @@ function App() {
         if (view.downloadUrl) {
           triggerDownload(view.downloadUrl);
         } else {
-          setMapsView("lidar");
-          setActivePanel("maps");
+          setActivePanel("inbox");
           toast.error(
-            "Export download expired. Open it again from Maps, LiDAR topos.",
+            view.status === "failed"
+              ? (view.errorMessage ?? "That map couldn't be made.")
+              : "That map isn't ready yet. It comes to your Inbox when it is.",
           );
         }
       })
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't load the export."));
+        setActivePanel("inbox");
+        toast.error(messageFromError(err, "Couldn't load that map."));
       });
-  }, [loadsUserData, toast, setMapsView]);
-
-  // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
-  // job list carries per-item download buttons (and auto-download for jobs this
-  // tab queued). Refetch so a just-finished job shows immediately.
-  useEffect(() => {
-    if (!loadsUserData) return;
-    const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
-    if (!geoPdfJobId) return;
-    sessionStorage.removeItem("pendingGeoPdfJobId");
-    // Not derivable in render: the id is read from, and consumed in,
-    // sessionStorage, once, when user data starts loading.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActivePanel("maps");
-    setMapsView("geopdfs");
-    setGeoPdfJobsRefetch((n) => n + 1);
-  }, [loadsUserData, setMapsView]);
+  }, [loadsUserData, toast]);
 
   // First login (empty account): offer a non-forced onboarding choice once,
   // after the first place fetch completes. The user picks RopeWiki, file
@@ -1223,9 +1249,7 @@ function App() {
   // "Welcome to Logjam — load the NSW place database?" over the places they
   // already have. Worse than alarming: the offer they are most likely to take
   // is the one that writes a second copy of a dataset they cannot see. It
-  // needs a load that SUCCEEDED and came back empty. (Found 2026-09-19 as the
-  // a11y suite's fourteenth case failing behind an onboarding dialog it never
-  // asked for; the suite is what pushes the dev limiter hard enough to see it.)
+  // needs a load that SUCCEEDED and came back empty.
   // Checked during render, the first time the places have loaded.
   if (placesLoaded && !importChecked) {
     setImportChecked(true);
@@ -1262,48 +1286,71 @@ function App() {
     setEditingRouteId(null);
     setDrawColor(null);
     routeHover.set(null);
-    // The tool is a PAGE, so leaving it has to go somewhere. Clearing the draft
-    // while the panel still showed "way-draw" rendered nothing at all, which is
-    // the blank panel left behind after a discard (operator, 2026-09-17). Back
-    // to the way being edited, or to the list a new route came from. A save
-    // calls this too and then opens the saved way, which wins.
+    // The tool is a PAGE, so leaving it has to go somewhere: back to the way
+    // being edited, or to the list a new route came from. A save calls this
+    // too and then opens the saved way, which wins.
+    setDrawPlaceId(null);
     setActivePanel(
-      editingRouteId && selectedWay?.id === editingRouteId
-        ? "way-detail"
-        : "ways",
+      drawExitPanel({
+        drawPlaceId,
+        editingRouteId,
+        selectedWayId: selectedWay?.id ?? null,
+      }),
     );
     afterRouteCancel.current?.();
     afterRouteCancel.current = null;
   };
 
-  // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
-  // deliberate map clicks, plus `reset()` also drops the undo history) with
-  // no confirm. Reuse the same discard-guard the dialogs already use for
-  // unsaved changes — "dirty" here means at least one placed vertex.
+  // Discard guard for in-progress route drawing/editing (the same discard-guard
+  // the dialogs use for unsaved changes).
   //
   // These two sit ABOVE the loading/unauthenticated early returns below: a
   // hook after an early return runs on some renders and not others, so the
   // sign-in -> map transition would shift every later hook's slot.
   // "Dirty" for a NEW route is any point placed; for an EDIT it is the geometry
-  // differing from what was opened. Closing an edit you made no change to used
-  // to raise a discard confirm over work that did not exist, which teaches
-  // people to dismiss the confirm that matters (operator, 2026-09-17).
+  // or a colour the route already had differing from what was opened.
   const editingOriginal = editingRouteId
     ? (routes.find((route) => route.id === editingRouteId) ?? null)
     : null;
   const draftChanged = editingOriginal
     ? JSON.stringify(routeDraft.points) !==
-      JSON.stringify(editingOriginal.points)
+        JSON.stringify(editingOriginal.points) ||
+      (editingOriginal.color != null && drawColor !== editingOriginal.color)
     : routeDraft.points.length > 0;
 
-  const cancelRouteGuard = useUnsavedChangesGuard(
-    draftChanged,
-    cancelDrawingRoute,
-  );
-  const clearRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
-    () => routeDraft.reset(),
-  );
+  // The route editor is a map tool, not a Dialog, so it asks for itself.
+  const [routeConfirm, setRouteConfirm] = useState<"cancel" | null>(null);
+  const abandonRoute = abandonConfirm("route", !editingRouteId);
+  const requestCancelRoute = () =>
+    draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
+
+  // Escape leaves an armed Measure or Draw tool, as its × does (the route's
+  // goes through the discard confirm). Heard on the document because the user
+  // is on the map, where no panel holds the key; a layer above it (a dialog, a
+  // menu, a field) has already consumed the press.
+  const cancelArmedTool = useEffectEvent(() => {
+    if (drawingRoute) requestCancelRoute();
+    else setActivePanel(null);
+  });
+  const toolArmed = measuring || drawingRoute;
+  // The panel is a landmark to skip to only beside the map: a phone has a sheet.
+  const isNarrow = useIsMobile();
+  useEffect(() => {
+    if (!toolArmed) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (
+        (event.target as Element).closest?.(
+          'input, textarea, select, dialog, [role="menu"], [popover]',
+        )
+      )
+        return;
+      event.preventDefault();
+      cancelArmedTool();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [toolArmed]);
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1318,17 +1365,9 @@ function App() {
   if (!authenticated) {
     return (
       <SignIn
-        authState={auth.state}
         error={auth.error}
-        onSignIn={auth.signIn}
-        onSignUp={auth.signUp}
-        onConfirmSignUp={auth.confirmSignUp}
-        onResendCode={auth.resendSignUpCode}
-        onForgotPassword={auth.forgotPassword}
-        onConfirmForgotPassword={auth.confirmForgotPassword}
-        goToSignUp={auth.goToSignUp}
-        goToSignIn={auth.goToSignIn}
-        goToForgotPassword={auth.goToForgotPassword}
+        onRedirect={auth.signIn}
+        onPasswordSignIn={auth.signInWithPassword}
       />
     );
   }
@@ -1342,13 +1381,24 @@ function App() {
    * Open a way's own page, and centre the map on it.
    *
    * Opening and centring are ONE action: a page describing a line while the map
-   * shows somewhere else is two halves of an answer (operator, 2026-09-17).
+   * shows somewhere else is two halves of an answer.
    */
   const openWay = (way: WayItem, verb?: WayVerbId) => {
     setSelectedWay(way);
     setPendingWayVerb(verb ?? null);
     if (way.bounds) setFlyToBounds(way.bounds);
     setActivePanel("way-detail");
+  };
+
+  /** Open a route by id; false when the user no longer holds it (a share
+   *  since revoked or a route since deleted). The cached list may predate the
+   *  share, or never have loaded, so a miss asks the server before it says so. */
+  const openRoute = async (routeId: string): Promise<boolean> => {
+    const route = await findRouteById(routes, routeId, getRoutes);
+    if (!route) return false;
+    if (!routes.includes(route)) refetchRoutes();
+    openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));
+    return true;
   };
 
   /**
@@ -1364,15 +1414,25 @@ function App() {
     openWay(wayFromRoute(copy, currentUser?.id ?? null, sharedPlaceIds));
   };
 
-  const startDrawingRoute = () => {
+  /** Arm the route tool, from `from` when a point asked for it (as a press on
+   *  the map there would have made it the first point). */
+  const startDrawingRoute = (from?: MapPointCoord) => {
     setEditingRouteId(null);
+    setDrawPlaceId(null);
     routeDraft.reset();
+    if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
     setDrawColor(nextColor);
     setDrawingRoute(true);
     // The tool is a PAGE now, not a card over the map: the panel is where a
     // route's figures already live, and the canvas stays clear for drawing.
     setActivePanel("way-draw");
+  };
+
+  /** "Draw a route on the map" from a place's Add a way. */
+  const startDrawingRouteForPlace = (placeId: string) => {
+    startDrawingRoute();
+    setDrawPlaceId(placeId);
   };
 
   /**
@@ -1389,11 +1449,12 @@ function App() {
     };
     if (!drawingRoute) return arm();
     afterRouteCancel.current = arm;
-    cancelRouteGuard.requestClose();
+    requestCancelRoute();
   };
 
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
+    setDrawPlaceId(null);
     // Anchors come back with the route, so a snapped line reopens with the
     // user's own handful of points rather than every snapped vertex.
     routeDraft.reset({ points: route.points, anchors: route.anchors });
@@ -1410,6 +1471,33 @@ function App() {
   };
 
   const saveDrawnRoute = async (name: string) => {
+    const placeId = drawTarget(editingRouteId, drawPlaceId);
+    if (!placeId) return void writeDrawnRoute(name, null, null);
+    // Into a place's route slot, which may have filled since the pen was armed
+    // (or the place may be gone): ask at the moment of the write, as every
+    // other source does.
+    setSavingRoute(true);
+    try {
+      const plan = await planDrawnSave(placeId, routes, getPlaceDetail);
+      setSavingRoute(false);
+      if (plan.kind === "standalone")
+        return void writeDrawnRoute(name, null, null, true);
+      const go = async () => writeDrawnRoute(name, placeId, plan.incumbent);
+      if (plan.confirm) displaceConfirm.ask({ copy: plan.confirm, run: go });
+      else await go();
+    } catch (err) {
+      console.error(err);
+      setSavingRoute(false);
+      toast.error(wayFailureMessage(err));
+    }
+  };
+
+  const writeDrawnRoute = async (
+    name: string,
+    placeId: string | null,
+    incumbent: SlotIncumbent | null,
+    placeGone = false,
+  ) => {
     setSavingRoute(true);
     try {
       const chosenColor = drawColor ?? undefined;
@@ -1419,67 +1507,166 @@ function App() {
         anchors: routeDraft.anchorIndices,
         ...(chosenColor ? { color: chosenColor } : {}),
       };
-      const result = editingRouteId
-        ? await updateRoute(editingRouteId, payload)
-        : await createRoute(payload);
+      let result: Awaited<ReturnType<typeof createRoute>> | undefined;
+      if (editingRouteId) result = await updateRoute(editingRouteId, payload);
+      else if (placeId) {
+        try {
+          await fillWaySlot({
+            incumbent,
+            source: "draw",
+            write: async () => {
+              result = await createRoute({ ...payload, placeId });
+            },
+          });
+        } catch (err) {
+          // The route is in; only the old way stayed.
+          if (!(err instanceof WayRemovalError)) throw err;
+          toast.error(err.message);
+        }
+      } else result = await createRoute(payload);
       setNamingRoute(false);
       cancelDrawingRoute();
       refetchRoutes();
-      openWay(wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds));
+      if (placeId) {
+        // A file the swap unlinked is drawn on the map from its own copy.
+        refetchStandaloneFiles();
+        refetchPlaceTracks();
+        toast.done(ADD_WAY.copy.routeDone);
+      } else {
+        if (placeGone) toast.done(ADD_WAY.copy.placeGone);
+        if (result)
+          openWay(
+            wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds),
+          );
+      }
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't save the route."));
+      if (placeId && (await placeStillGone(placeId))) {
+        // Gone between the read and the write: keep the drawing on its own.
+        setSavingRoute(false);
+        return void writeDrawnRoute(name, null, null, true);
+      }
+      toast.error(
+        placeId
+          ? wayFailureMessage(err)
+          : messageFromError(err, "Couldn't save the route."),
+      );
     } finally {
       setSavingRoute(false);
     }
   };
 
-  // Blocking re-consent gate (PRIV-002): a signed-in user whose recorded
-  // consent version is stale or absent must re-consent before using the app
-  // (the privacy.html / tos.html "re-consent on next sign-in" promise). The
-  // pending-key fast path keeps the gate from flashing for fresh sign-ups
-  // whose consent PATCH (recorded by the effect above) is still in flight.
+  /** Whether the place a failed write named has been deleted since. */
+  const placeStillGone = async (placeId: string) =>
+    getPlaceDetail(placeId).then(
+      () => false,
+      (err: unknown) => placeIsGone(err),
+    );
+
+  // Blocking re-consent gate: a signed-in user whose recorded consent version
+  // is stale or absent must re-consent before using Logjam Web (the
+  // privacy.html / tos.html "re-consent on next sign-in" promise). A new
+  // account lands here too and answers the questions the provider's sign-up
+  // page cannot ask.
   // Decided once, up beside the data hooks the same answer holds back
   // (`consentGate`), so the gate and the fetches can never disagree.
-  if (consentBlocked) {
+  if (consentBlocked && currentUser) {
     return (
-      <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />
+      <ConsentGate
+        consentVersion={currentConsentVersionOf(currentUser)}
+        newAccount={currentUser.consentVersion === null}
+        currentUsername={currentUser.username}
+        onAccepted={applyCurrentUser}
+        onSignOut={signOut}
+      />
     );
   }
 
-  const dimUI = pickingCoords || selectingFilterArea || selectingGeoPdfExtent;
+  // Logjam Web's own sign-up form records consent itself, so the gate above
+  // never shows for it; this is where that account is asked its regions.
+  if (currentUser && showsRegionStep({ signedUpNow: auth.newAccount })) {
+    return (
+      <RegionStep
+        onDone={(user) => {
+          applyCurrentUser(user);
+          auth.finishNewAccount();
+        }}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  const dimUI =
+    pickingCoords ||
+    selectingFilterArea ||
+    selectingGeoPdfExtent ||
+    boxPickDimsUI(boxPick);
 
   // A filter changes what the MAP shows too, so the map says so while the
-  // Places page is closed or scrolled away.
-  const notices =
-    filtersActive && !dimUI ? (
-      <Notice
-        icon="filter"
-        action={
-          <IconButton
-            icon="close"
-            label="Clear filters"
-            size={14}
-            round
-            onClick={clearFilters}
-          />
-        }
-      >
-        Showing {filteredPlaces.length} of {allPlaces.length} places
-      </Notice>
-    ) : null;
+  // Places page is closed or scrolled away, and on no other page: a trip or a
+  // way is not about the filter.
+  // While a plan is open the map shows it, and says so first.
+  const backToMyMap = () => {
+    setSelectedPlanId(null);
+    setActivePanel(null);
+  };
+  const notices = planOnMap ? (
+    <Notice
+      icon="plan"
+      twoLines
+      action={
+        <IconButton
+          icon="close"
+          label={TRIP_PLAN_PAGE.copy.backToMap}
+          size={14}
+          round
+          onClick={backToMyMap}
+        />
+      }
+    >
+      {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
+    </Notice>
+  ) : filtersActive &&
+    !dimUI &&
+    (activePanel === null || activePanel === "places") ? (
+    <Notice
+      icon="filter"
+      action={
+        <IconButton
+          icon="close"
+          label="Clear filters"
+          size={14}
+          round
+          onClick={clearFilters}
+        />
+      }
+    >
+      Places filter: {filteredPlaces.length} of {allPlaces.length} shown
+    </Notice>
+  ) : null;
+
+  // Opening Make a map anew: no stale form, and no pick result from last time.
+  const freshExportDialog = () => {
+    setExportDialogKey((key) => key + 1);
+    setPendingGeoPdfExtent(null);
+    setPendingGeoPdfScale(null);
+    setPendingExportBox(null);
+    setExportAreaSeed(null);
+  };
 
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
-  // A topo goes straight to its dialog with the box; a GeoPDF opens its paper
-  // frame on the map over the box, because the paper decides the final extent.
+  // A topo goes straight to its dialog with the box; a print or GIS map opens a GeoPDF's
+  // paper frame on the map over the box, because the paper decides the final
+  // extent, and keeps the box for a GIS format.
   const makeMap = (bounds: TBbox, kind: MapKind) => {
     if (kind === "topo") {
       setPendingTopoBbox(bounds);
       setShowTopo(true);
       return;
     }
-    setEditingGeoPdfTemplate(undefined);
-    setInitialGeoPdfTemplateId(null);
+    freshExportDialog();
+    setExportAreaSeed(bounds);
+    setBoxPick((pick) => endBox(pick, "export"));
     setGeoPdfPaperAspect(210 / 297);
     setGeoPdfPaperDimensions({ w: 210, h: 297 });
     setGeoPdfInitialExtent(bounds);
@@ -1491,646 +1678,772 @@ function App() {
     setSelectingGeoPdfExtent(true);
   };
 
-  // Verbs that START on the map, in Logjam GPS's order for the two it has.
-  const mapTools: MapTool[] = [
-    {
-      id: "measure",
-      label: MAP_MEASURE.title,
-      icon: MAP_MEASURE_ICON,
-      onSelect: () => startMeasuring(),
+  // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
+  // Handed to Map as actions, not built here: `startMeasuring` writes a ref, and
+  // react-hooks/refs refuses a function that does passed to a call in render.
+  const mapToolActions: MapToolActions = {
+    measure: { onSelect: () => startMeasuring() },
+    route: { onSelect: () => startDrawingRoute() },
+    place: { onSelect: () => setShowAdd(true) },
+    makeMap: {
+      onSelect: () => {
+        setBoxPick((pick) => endBox(pick, "export"));
+        freshExportDialog();
+        setShowGeoPdf(true);
+      },
     },
-    {
-      id: "route",
-      label: "Draw a route",
-      icon: "draw",
-      onSelect: startDrawingRoute,
-    },
-    {
-      id: "place",
-      label: "Add a place",
-      icon: "addPlace",
-      onSelect: () => setShowAdd(true),
-    },
-    {
-      id: "make-map",
-      label: "Make a map of an area",
-      icon: "pickArea",
-      menu: [
-        {
-          id: "topo",
-          label: "Make a LiDAR topo",
-          icon: "lidar",
-          onSelect: () => {
-            setActivePanel(null);
-            setSelectingTopoBbox(true);
-          },
-        },
-        {
-          id: "geopdf",
-          label: "Make a GeoPDF",
-          icon: "geoPdf",
-          onSelect: () => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(null);
-            setShowGeoPdf(true);
-          },
-        },
-      ],
-    },
-  ];
+    // The dialog draws the area itself ("Draw the area"), as the Layers
+    // popover's Sharpen button opens it.
+    sharpen: { onSelect: () => setShowTopo(true) },
+  };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =
     pickingCoords ||
     selectingFilterArea ||
     selectingGeoPdfExtent ||
-    selectingTopoBbox;
+    selectingTopoBbox ||
+    selectingExportBox;
 
   return (
-    <div className={classes.app}>
-      <a href="#main-content" className={classes.skipLink}>
-        Skip to map
-      </a>
-      <TopoDialog
-        open={showTopo}
-        onClose={() => {
-          setShowTopo(false);
-          setSelectingTopoBbox(false);
-          setInitialTopoTemplateId(null);
-          // The dialog empties itself on a real close; the drawn area is held
-          // out here (going off to draw closes the dialog), so it has to be
-          // emptied with it or the next topo starts with the last one's box.
-          setPendingTopoBbox(null);
-        }}
-        onSelectBbox={() => {
-          setShowTopo(false);
-          setSelectingTopoBbox(true);
-        }}
-        awaitingBbox={selectingTopoBbox}
-        pendingBbox={pendingTopoBbox}
-        onJobCreated={handleTopoJobCreated}
-        onTemplateSaved={() => setTopoTemplateRefetch((n) => n + 1)}
-        initialTemplateId={initialTopoTemplateId}
-        existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
-          .map((j) => j.name)
-          .filter((n): n is string => !!n)}
-      />
-      <GeoPdfDialog
-        open={showGeoPdf}
-        onClose={() => {
-          setShowGeoPdf(false);
-          setEditingGeoPdfTemplate(undefined);
-          setInitialGeoPdfTemplateId(null);
-        }}
-        onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
-          // The latest pick, every visit: the map follows the dialog.
-          setGeoPdfFramingLayer(baseLayerId ?? null);
-          setGeoPdfPaperAspect(aspect);
-          setGeoPdfPaperDimensions(paperDims);
-          setGeoPdfInitialExtent(extent);
-          setGeoPdfInitialScale(scale);
-          setShowGeoPdf(false);
-          setActivePanel(null);
-          setSelectingGeoPdfExtent(true);
-        }}
-        pendingExtent={pendingGeoPdfExtent}
-        pendingScale={pendingGeoPdfScale}
-        activeLayerId={activeLayerId}
-        completedTopoJobs={completedTopoJobs}
-        mapCenter={mapCenter}
-        places={places}
-        sharedPlaces={sharedPlaces}
-        templateMode={editingGeoPdfTemplate !== undefined}
-        editingTemplate={editingGeoPdfTemplate ?? undefined}
-        onTemplateSaved={() => {
-          setEditingGeoPdfTemplate(undefined);
-          setShowGeoPdf(false);
-          setGeoPdfTemplateRefetch((n) => n + 1);
-        }}
-        initialTemplateId={initialGeoPdfTemplateId}
-        onJobQueued={handleGeoPdfJobQueued}
-      />
-      <div className={dimUI ? classes.dimmed : undefined}>
-        <NavRail
-          activePanel={activePanel}
-          onPanelChange={handlePanelChange}
-          badgeCounts={{ inbox: unreadCount }}
+    <CurrentUserIdContext.Provider value={currentUser?.id ?? null}>
+      <div className={classes.app}>
+        {activePanel && !isNarrow && (
+          <a
+            href="#panel"
+            className={classes.skipLink}
+            onClick={(event) => {
+              const panel = document.getElementById("panel");
+              if (!panel) return;
+              event.preventDefault();
+              panel.focus();
+            }}
+          >
+            Skip to panel
+          </a>
+        )}
+        <a href="#main-content" className={classes.skipLink}>
+          Skip to map
+        </a>
+        <TopoDialog
+          open={showTopo}
+          onClose={() => {
+            setShowTopo(false);
+            setBoxPick((pick) => endBox(pick, "topo"));
+            // The dialog empties itself on a real close; the drawn area is held
+            // out here (going off to draw closes the dialog), so it has to be
+            // emptied with it or the next topo starts with the last one's box.
+            setPendingTopoBbox(null);
+          }}
+          onSelectBbox={() => {
+            setShowTopo(false);
+            setBoxPick((pick) => armBox(pick, "topo"));
+          }}
+          awaitingBbox={selectingTopoBbox}
+          pendingBbox={pendingTopoBbox}
+          onJobCreated={handleTopoJobCreated}
+          existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
+            .map((j) => j.name)
+            .filter((n): n is string => !!n)}
         />
-        <SidebarPanel
-          activePanel={activePanel}
-          onClose={handlePanelClose}
-          onTopoFlyTarget={(footprint) => {
-            setLidarEnabled(true);
-            setTopoFlyTarget(footprint);
+        <GeoPdfDialog
+          key={exportDialogKey}
+          open={showGeoPdf}
+          onClose={() => {
+            setShowGeoPdf(false);
+            setExportAreaSeed(null);
+            setPendingExportBox(null);
+            setBoxPick((pick) => endBox(pick, "export"));
           }}
-          logsView={logsView}
-          onLogsViewChange={setLogsView}
-          mapsView={mapsView}
-          onMapsViewChange={setMapsView}
-          onStartDrawingRoute={startDrawingRoute}
-          waysLoaded={waysLoaded}
-          allRoutes={routes}
-          placeTracks={placeTracks}
-          standaloneFiles={standaloneFiles}
-          standaloneFilesError={standaloneFilesError}
-          onRetryStandaloneFiles={refetchStandaloneFiles}
-          onOpenWay={openWay}
-          currentUserId={currentUser?.id ?? null}
-          wayDetail={
-            selectedWay ? (
-              <WayDetailPanel
-                way={selectedWay}
-                route={selectedRoute}
-                file={
-                  standaloneFiles.find((each) => each.id === selectedWay.id) ??
-                  null
-                }
-                placeTrack={
-                  placeTracks.find((each) => each.mediaId === selectedWay.id) ??
-                  null
-                }
-                initialVerb={pendingWayVerb}
-                onVerbConsumed={() => setPendingWayVerb(null)}
-                friends={friends}
-                ownedPlaces={places}
-                sharedPlaces={sharedPlaces}
-                allRoutes={routes}
-                onBack={() => {
-                  setSelectedWay(null);
-                  setActivePanel("ways");
-                }}
-                onEdit={startEditingRoute}
-                onCopied={showCopiedRoute}
-                onChanged={() => {
-                  refetchRoutes();
-                  refetchStandaloneFiles();
-                  // A file linked to a place is drawn by the place-tracks layer
-                  // too, from its own copy of the colour.
-                  refetchPlaceTracks();
-                }}
-                onOpenPlace={(placeId) => {
-                  setSelectedPlaceID(placeId);
-                  setActivePanel("place-detail");
-                }}
-                onLogTrip={setLogTripFromTrack}
-                onDeleteFile={handleDeleteStandaloneFile}
-                routeHover={routeHover}
-              />
-            ) : null
-          }
-          drawPanel={
-            drawingRoute ? (
-              <RouteDrawPanel
-                points={routeDraft.points}
-                anchorCount={routeDraft.draft.anchors.length}
-                canUndo={routeDraft.canUndo}
-                atCap={routeDraft.atCap}
-                editingName={
-                  routes.find((r) => r.id === editingRouteId)?.name ?? null
-                }
-                color={drawColor}
-                onColorChange={setDrawColor}
-                onUndo={routeDraft.undo}
-                onClear={clearRouteGuard.requestClose}
-                onReverse={routeDraft.reverse}
-                routeHover={routeHover}
-                // Editing keeps the name it already has. Asking again on every
-                // save made a rename the price of moving one point, and the
-                // dialog's only honest default was the answer it already had
-                // (operator, 2026-09-17). Naming belongs to CREATING a route.
-                onSave={() => {
-                  const existing = routes.find((r) => r.id === editingRouteId);
-                  if (existing) void saveDrawnRoute(existing.name);
-                  else setNamingRoute(true);
-                }}
-                onCancel={cancelRouteGuard.requestClose}
-                saving={savingRoute}
-                snapMode={snapMode}
-                onSnapModeChange={setSnapMode}
-              />
-            ) : null
-          }
-          measurePanel={
-            measuring ? (
-              <MeasurePanel
-                points={routeDraft.points}
-                anchorCount={routeDraft.draft.anchors.length}
-                canUndo={routeDraft.canUndo}
-                atCap={routeDraft.atCap}
-                onUndo={routeDraft.undo}
-                onClear={() => routeDraft.reset()}
-                onClose={() => setActivePanel(null)}
-                snapMode={snapMode}
-                onSnapModeChange={setSnapMode}
-              />
-            ) : null
-          }
-          places={places}
-          placesLoaded={placesLoaded}
-          placesTotal={placesTotal}
-          sharedPlaces={sharedPlaces}
-          onAddPlace={() => setShowAdd(true)}
-          onOpenUnifiedImport={() => setShowUnifiedImport(true)}
-          onSharePlaces={setSelectedAreaPlaceIds}
-          onMakeMap={makeMap}
-          onHoverPlace={placeHighlight.set}
-          onFiltersOpenChange={setSidebarSheetOpen}
-          onRefetch={refetch}
-          filters={filters}
-          onChangeFilters={setFilters}
-          onDrawFilterArea={startFilterAreaSelection}
-          onFilterToMapView={() => {
-            const bounds = mapBoundsRef.current;
-            if (bounds) setFilters({ ...filters, area: bounds });
+          onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
+            // The latest pick, every visit: the map follows the dialog.
+            setGeoPdfFramingLayer(baseLayerId ?? null);
+            setGeoPdfPaperAspect(aspect);
+            setGeoPdfPaperDimensions(paperDims);
+            setGeoPdfInitialExtent(extent);
+            setGeoPdfInitialScale(scale);
+            setShowGeoPdf(false);
+            setActivePanel(null);
+            setBoxPick((pick) => endBox(pick, "export"));
+            setSelectingGeoPdfExtent(true);
           }}
-          openFiltersRequested={openFiltersRequested}
-          onOpenFiltersConsumed={consumeOpenFilters}
-          onOpenGeoPdf={() => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(null);
-            setShowGeoPdf(true);
-          }}
-          onOpenGeoPdfWithTemplate={(id) => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(id);
-            setShowGeoPdf(true);
-          }}
-          onEditGeoPdfTemplate={(t) => {
-            setEditingGeoPdfTemplate(t);
-            setInitialGeoPdfTemplateId(null);
-            setShowGeoPdf(true);
-          }}
-          onCreateGeoPdfTemplate={() => {
-            setEditingGeoPdfTemplate(null);
-            setInitialGeoPdfTemplateId(null);
-            setShowGeoPdf(true);
-          }}
-          geoPdfTemplateRefetch={geoPdfTemplateRefetch}
-          topoTemplateRefetch={topoTemplateRefetch}
-          geoPdfJobsRefetch={geoPdfJobsRefetch}
-          activeTopoJobs={activeTopoJobs}
+          pendingExtent={pendingGeoPdfExtent}
+          pendingScale={pendingGeoPdfScale}
+          activeLayerId={activeLayerId}
+          terrainLayers={terrainLayers}
           completedTopoJobs={completedTopoJobs}
+          mapCenter={mapCenter}
+          places={places}
+          sharedPlaces={sharedPlaces}
+          slopeBands={slopeBands.drawn}
           topoJobsLoaded={completedTopoJobsLoaded}
-          topoExports={topoExports}
-          topoExportsTotal={topoExportsTotal}
-          onRefetchTopoExports={refetchTopoExports}
-          setLidarJobToggles={setLidarJobToggles}
-          onOpenTopo={() => {
-            setInitialTopoTemplateId(null);
-            setShowTopo(true);
+          areaSeed={exportAreaSeed}
+          onPickArea={() => {
+            setShowGeoPdf(false);
+            setActivePanel(null);
+            setBoxPick((pick) => armBox(pick, "export"));
           }}
+          pendingArea={pendingExportBox}
+          onExportQueued={refetchTopoExports}
+          sharpenedAreas={sharpenedAreas}
+        />
+        <div className={dimUI ? classes.dimmed : undefined}>
+          <NavRail
+            activePanel={activePanel}
+            onPanelChange={handlePanelChange}
+            badgeCounts={{
+              inbox: unreadCount,
+              plans: tripPlansBadgeCount(plans),
+            }}
+          />
+          <SidebarPanel
+            activePanel={activePanel}
+            onClose={handlePanelClose}
+            onTopoFlyTarget={setTopoFlyTarget}
+            onShowSharpened={() => {
+              setLayersStartView({ view: "sharpened" });
+              setLayersOpen(true);
+            }}
+            logsView={logsView}
+            onLogsViewChange={setLogsView}
+            onStartDrawingRoute={() => startDrawingRoute()}
+            onDrawRouteForPlace={startDrawingRouteForPlace}
+            waysLoaded={waysLoaded}
+            allRoutes={routes}
+            placeTracks={placeTracks}
+            standaloneFiles={standaloneFiles}
+            standaloneFilesError={standaloneFilesError}
+            onRetryStandaloneFiles={refetchStandaloneFiles}
+            onOpenWay={openWay}
+            onFocusBounds={setFlyToBounds}
+            onOpenRoute={(route) =>
+              openWay(
+                wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
+              )
+            }
+            onRoutesChanged={refetchRoutes}
+            onOpenRouteById={openRoute}
+            currentUserId={currentUser?.id ?? null}
+            wayDetail={
+              selectedWay ? (
+                <WayDetailPanel
+                  way={selectedWay}
+                  route={selectedRoute}
+                  file={
+                    standaloneFiles.find(
+                      (each) => each.id === selectedWay.id,
+                    ) ?? null
+                  }
+                  placeTrack={
+                    placeTracks.find(
+                      (each) => each.mediaId === selectedWay.id,
+                    ) ?? null
+                  }
+                  initialVerb={pendingWayVerb}
+                  onVerbConsumed={() => setPendingWayVerb(null)}
+                  friends={friends}
+                  ownedPlaces={places}
+                  sharedPlaces={sharedPlaces}
+                  allRoutes={routes}
+                  onBack={() => {
+                    setSelectedWay(null);
+                    setActivePanel("ways");
+                  }}
+                  onEdit={startEditingRoute}
+                  onCopied={showCopiedRoute}
+                  onChanged={() => {
+                    refetchRoutes();
+                    refetchStandaloneFiles();
+                    // A file linked to a place is drawn by the place-tracks layer
+                    // too, from its own copy of the colour.
+                    refetchPlaceTracks();
+                  }}
+                  onOpenPlace={(placeId) => {
+                    setSelectedPlaceID(placeId);
+                    setActivePanel("place-detail");
+                  }}
+                  onLogTrip={setLogTripFromTrack}
+                  onDeleteFile={handleDeleteStandaloneFile}
+                  routeHover={routeHover}
+                />
+              ) : null
+            }
+            plansPanel={
+              <PlansPanel
+                plans={plans}
+                loaded={plansLoaded}
+                error={plansError}
+                onRefetch={refetchPlans}
+                onOpenPlan={(id, invited) => openPlan(id, "writeUp", invited)}
+              />
+            }
+            onOpenPlan={(target) => {
+              refetchPlans();
+              openPlan(target.planId, target.view, target.invited);
+            }}
+            planDetail={
+              selectedPlanId && planPreviewed ? (
+                <PlanInvitedPage
+                  key={selectedPlanId}
+                  planId={selectedPlanId}
+                  onBack={() => {
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                  onJoined={() => {
+                    refetchPlans();
+                    setPlanInvited(false);
+                  }}
+                  onDeclined={() => {
+                    refetchPlans();
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                />
+              ) : selectedPlanId ? (
+                <PlanDetailPanel
+                  myUserId={currentUser?.id ?? null}
+                  initialView={planView}
+                  key={selectedPlanId}
+                  view={planFetch.view}
+                  error={planFetch.error}
+                  gone={planFetch.gone}
+                  name={plans.find((plan) => plan.id === selectedPlanId)?.name}
+                  refetch={planFetch.refetch}
+                  own={{
+                    // A place shared with the caller is added as a copy too.
+                    places: [...places, ...sharedPlaces],
+                    routes,
+                    files: standaloneFiles,
+                  }}
+                  currentUser={currentUser}
+                  onOwnChanged={() => {
+                    refetch();
+                    refetchRoutes();
+                    refetchStandaloneFiles();
+                    refetchCurrentUser();
+                  }}
+                  onOpenItem={(item) => {
+                    if (item.kind === "place")
+                      setFlyToPlace({
+                        lat: item.latitude,
+                        lng: item.longitude,
+                      });
+                    else if (item.kind === "route") {
+                      const bounds = boundsOfPoints(item.points);
+                      if (bounds) setFlyToBounds(bounds);
+                    }
+                  }}
+                  addCopyRequest={planAddCopy}
+                  onAddCopyRequestConsumed={consumePlanAddCopy}
+                  onBack={() => {
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                  onPlansChanged={refetchPlans}
+                  onStartTripLog={(plan, places) =>
+                    setTripLogPrefill({
+                      ...tripPlanTripLogPrefill(plan),
+                      ...places,
+                    })
+                  }
+                />
+              ) : null
+            }
+            drawPanel={
+              drawingRoute ? (
+                <RouteDrawPanel
+                  points={routeDraft.points}
+                  anchorCount={routeDraft.draft.anchors.length}
+                  canUndo={routeDraft.canUndo}
+                  atCap={routeDraft.atCap}
+                  editingName={
+                    routes.find((r) => r.id === editingRouteId)?.name ?? null
+                  }
+                  color={drawColor}
+                  onColorChange={setDrawColor}
+                  onUndo={routeDraft.undo}
+                  onClear={routeDraft.clear}
+                  onReverse={routeDraft.reverse}
+                  routeHover={routeHover}
+                  // Editing keeps the name it already has; naming belongs to
+                  // CREATING a route.
+                  onSave={() => {
+                    const existing = routes.find(
+                      (r) => r.id === editingRouteId,
+                    );
+                    if (existing) void saveDrawnRoute(existing.name);
+                    else setNamingRoute(true);
+                  }}
+                  onCancel={requestCancelRoute}
+                  saving={savingRoute}
+                  snapMode={snapMode}
+                  onSnapModeChange={setSnapMode}
+                />
+              ) : null
+            }
+            measurePanel={
+              measuring ? (
+                <MeasurePanel
+                  points={routeDraft.points}
+                  anchorCount={routeDraft.draft.anchors.length}
+                  canUndo={routeDraft.canUndo}
+                  atCap={routeDraft.atCap}
+                  onUndo={routeDraft.undo}
+                  onClear={() => routeDraft.reset()}
+                  onClose={() => setActivePanel(null)}
+                  snapMode={snapMode}
+                  onSnapModeChange={setSnapMode}
+                />
+              ) : null
+            }
+            places={places}
+            placesState={placesState}
+            placesError={placesError}
+            placesTotal={placesTotal}
+            sharedPlaces={sharedPlaces}
+            onAddPlace={() => setShowAdd(true)}
+            onOpenUnifiedImport={() => setShowUnifiedImport(true)}
+            onImportWay={openWayImportPicker}
+            onSharePlaces={(ids) => openSelection(ids, "share")}
+            onExportPlaces={(ids) => openSelection(ids, "export")}
+            onMakeMap={makeMap}
+            onHoverPlace={placeHighlight.set}
+            onFiltersOpenChange={setSidebarSheetOpen}
+            onRefetch={refetch}
+            filters={filters}
+            onChangeFilters={setFilters}
+            onDrawFilterArea={startFilterAreaSelection}
+            onFilterToMapView={() => {
+              const bounds = mapBoundsRef.current;
+              if (bounds) setFilters({ ...filters, area: bounds });
+            }}
+            openFiltersRequested={openFiltersRequested}
+            onOpenFiltersConsumed={consumeOpenFilters}
+            onQuotaChanged={refetchCurrentUser}
+            onWaysChanged={() => {
+              refetchStandaloneFiles();
+              refetchPlaceTracks();
+            }}
+            currentUser={currentUser}
+            currentUserError={currentUserError}
+            onRetryCurrentUser={refetchCurrentUser}
+            onCurrentUserChange={applyCurrentUser}
+            friends={friends}
+            friendRequests={friendRequests}
+            onRefetchFriends={refetchFriends}
+            onRefetchPlans={refetchPlans}
+            onRefetchShared={refetchShared}
+            notifications={notifications}
+            notificationsLoaded={notificationsLoaded}
+            notificationsError={notificationsError}
+            notificationsTotal={notificationsTotal}
+            onRefetchNotifications={refetchNotifications}
+            onOverrideNotificationRead={overrideNotificationRead}
+            setSelectedPlaceID={setSelectedPlaceID}
+            setActivePanel={setActivePanel}
+            place={place}
+            isOwnedPlace={isOwnedPlace}
+            onPickCoords={startPickingCoords}
+            pickingCoords={pickingCoords}
+            onCancelPickCoords={cancelPickingCoords}
+            tripLogs={tripLogs}
+            selectedTripLogId={selectedTripLogId}
+            setSelectedTripLogId={setSelectedTripLogId}
+            tripLogsTotal={tripLogsTotal}
+            tripLogsState={tripLogsState}
+            tripLogsError={tripLogsError}
+            onRefetchTripLogs={refetchAfterTripWrite}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
+            placeTypes={placeTypes}
+            onPlaceTypesChange={setPlaceTypes}
+            collapseToPeek={mapInteractionActive}
+          />
+        </div>
+        <main id="main-content" className={classes.main}>
+          <h1 className={classes.visuallyHidden}>Logjam place map</h1>
+          <Map
+            filters={planOnMap ? emptyFilters : filters}
+            // An open plan's things are drawn whatever the layer switches say;
+            // the switches go on deciding the user's own, shown beside them
+            // dimmed (`mutedIds`).
+            places={
+              planOnMap
+                ? [...planMapPlaces, ...(mineShown.places ? places : [])]
+                : places
+            }
+            sharedPlaces={!planOnMap || mineShown.places ? sharedPlaces : []}
+            showPlaces={showPlaces || !!planOnMap}
+            // One overlay for every line, so nothing has to be partitioned by
+            // ownership on the way to the map any more.
+            showWays={showWays || !!planOnMap}
+            showGauges={showGauges}
+            onShowGauges={() => setShowGauges(true)}
+            showMgaGrid={showMgaGrid}
+            placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
+            standaloneTracks={
+              !planOnMap || mineShown.ways ? standaloneTracks : []
+            }
+            routes={
+              planOnMap
+                ? [...planMapRoutes, ...(mineShown.ways ? routes : [])]
+                : routes
+            }
+            mutedIds={mutedIds}
+            searchSelects={!planOnMap}
+            routeHover={routeHover}
+            selectRoute={(id) => {
+              if (planOnMap) return pressInPlan({ kind: "route", id });
+              const route = routes.find((r) => r.id === id);
+              if (route)
+                openWay(
+                  wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
+                );
+            }}
+            onAddPlaceAt={(point) => {
+              setAddPlaceAt(point);
+              setShowAdd(true);
+            }}
+            // The point is the measurement's first, as a press on the map there
+            // would have made it.
+            onMeasureFrom={startMeasuring}
+            onDrawRouteFrom={startDrawingRoute}
+            selectTrack={(mediaId) => {
+              if (planOnMap) return pressInPlan({ kind: "track", id: mediaId });
+              const way = allWays.find(
+                (each) => each.kind !== "route" && each.id === mediaId,
+              );
+              if (way) openWay(way);
+            }}
+            drawingRoute={drawingRoute || measuring}
+            measuring={measuring}
+            // A measurement has no colour of its own: it draws in the accent.
+            drawColor={measuring ? undefined : (drawColor ?? undefined)}
+            drawPoints={routeDraft.points}
+            drawAnchorIndices={routeDraft.anchorIndices}
+            draft={routeDraft.draft}
+            editingRouteId={editingRouteId}
+            snapMode={snapMode}
+            onDrawPointAdd={routeDraft.addAnchor}
+            onDrawSnap={routeDraft.applySnap}
+            onDrawPointMove={routeDraft.moveAnchorAt}
+            onDrawPointDelete={routeDraft.deleteAnchorAt}
+            onDrawPointInsert={routeDraft.insertAnchorAt}
+            selectPlace={(id) => {
+              if (planOnMap) {
+                if (id) pressInPlan({ kind: "place", id });
+                return;
+              }
+              // A pin opens the place, wherever you pressed it from.
+              setSelectedPlaceID(id);
+              setActivePanel("place-detail");
+            }}
+            pickingCoords={pickingCoords}
+            onCoordsPicked={handleCoordsPicked}
+            onCancelPickCoords={cancelPickingCoords}
+            selectingFilterArea={selectingFilterArea}
+            onFilterAreaSelected={(bbox) => {
+              setSelectingFilterArea(false);
+              setFilters({ ...filters, area: bbox });
+              // Straight back to where the button was, with the filters open — the
+              // panel was closed to uncover the map, not dismissed.
+              setActivePanel("places");
+              setOpenFiltersRequested(true);
+            }}
+            onMapBoundsChange={(bounds) => {
+              mapBoundsRef.current = bounds;
+            }}
+            selectingBbox={boxFor(boxPick) !== null}
+            onBboxSelected={(bbox) => {
+              if (boxFor(boxPick) === "export") {
+                setPendingExportBox(bbox);
+                setBoxPick((pick) => endBox(pick, "export"));
+                setShowGeoPdf(true);
+                return;
+              }
+              setPendingTopoBbox(bbox);
+              setBoxPick((pick) => endBox(pick, "topo"));
+              setShowTopo(true);
+            }}
+            onBboxCancelled={
+              boxFor(boxPick) === "export"
+                ? () => {
+                    setBoxPick((pick) => endBox(pick, "export"));
+                    setShowGeoPdf(true);
+                  }
+                : undefined
+            }
+            onBasemapHealth={setBasemapHealth}
+            topoLayers={mapTopoLayers}
+            sharpenedAreas={sharpenedAreas}
+            slopeBands={slopeBands.drawn}
+            coverageCarrier={coverageCarrier}
+            activeLayerId={mapLayerId}
+            selectingGeoPdfExtent={selectingGeoPdfExtent}
+            geoPdfPaperAspect={geoPdfPaperAspect}
+            geoPdfPaperDimensions={geoPdfPaperDimensions}
+            geoPdfInitialExtent={geoPdfInitialExtent}
+            geoPdfInitialScale={geoPdfInitialScale}
+            onGeoPdfExtentConfirmed={(extent, scale) => {
+              setPendingGeoPdfExtent(extent);
+              setPendingGeoPdfScale(scale);
+              setSelectingGeoPdfExtent(false);
+              setShowGeoPdf(true);
+            }}
+            onGeoPdfExtentCancelled={() => {
+              setSelectingGeoPdfExtent(false);
+              setShowGeoPdf(true);
+            }}
+            onMapViewChange={(view) => setMapCenter(view)}
+            initialView={mapCenter}
+            topoFlyTarget={topoFlyTarget}
+            onTopoFlyConsumed={() => setTopoFlyTarget(null)}
+            flyToPlace={flyToPlace}
+            onFlyToPlaceConsumed={() => setFlyToPlace(null)}
+            panelOpen={activePanel !== null}
+            sheetOpen={sidebarSheetOpen}
+            placeHighlight={placeHighlight}
+            placeTypes={placeTypes}
+            layersButton={
+              <MapButton
+                ref={layersButtonRef}
+                icon="layers"
+                label="Layers"
+                expanded={layersOpen}
+                onClick={() => setLayersOpen((open) => !open)}
+              />
+            }
+            mapToolActions={mapToolActions}
+            notices={notices}
+            flyToBounds={flyToBounds}
+            onFlyToBoundsConsumed={() => setFlyToBounds(null)}
+            onTopoSourceUnavailable={handleTopoSourceUnavailable}
+          />
+        </main>
+
+        {wayImportInput}
+        <LayersPopover
+          onImportFile={openWayImportPicker}
+          open={layersOpen}
+          onClose={() => setLayersOpen(false)}
+          anchorRef={layersButtonRef}
+          startView={layersStartView}
+          sharpenedLoaded={completedTopoJobsLoaded}
+          activeTopoJobs={activeTopoJobs}
+          friends={friends}
+          onSharpen={() => setShowTopo(true)}
+          onExportArea={(job) => {
+            const bounds = job.footprint && footprintBounds(job.footprint);
+            if (bounds) makeMap(bounds, "geopdf");
+          }}
+          onFlyToArea={setTopoFlyTarget}
           onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
           onDismissActiveJob={handleDismissActiveTopoJob}
           onQuotaChanged={refetchCurrentUser}
-          currentUser={currentUser}
-          currentUserError={currentUserError}
-          onRetryCurrentUser={refetchCurrentUser}
-          onOpenTopoWithTemplate={(templateId) => {
-            setInitialTopoTemplateId(templateId);
-            setShowTopo(true);
+          showPlaces={showPlaces}
+          setShowPlaces={setShowPlaces}
+          showWays={showWays}
+          setShowWays={setShowWays}
+          showGauges={showGauges}
+          setShowGauges={setShowGauges}
+          showMgaGrid={showMgaGrid}
+          setShowMgaGrid={setShowMgaGrid}
+          placeCount={places.length + sharedPlaces.length}
+          wayCount={showWays ? wayCount : null}
+          completedTopoJobs={completedTopoJobs}
+          baseLayers={baseLayers}
+          activeLayerId={activeLayerId}
+          onActiveLayerChange={setActiveLayerId}
+          unavailableBasemaps={downBasemaps}
+          onBasemapHealth={setBasemapHealth}
+          terrainLayers={terrainLayers}
+          onTerrainLayerChange={setTerrainLayer}
+          coverageCarrier={coverageCarrier}
+          onCoverageCarrierChange={setCoverageCarrier}
+          slopeBands={slopeBands.bands}
+          onSlopeBandsChange={slopeBands.setBands}
+          mapView={mapCenter}
+        />
+
+        <PlanInviteLinkDialog
+          enabled={loadsUserData}
+          onOpenPlan={(id, invited) => {
+            refetchPlans();
+            openPlan(id, "writeUp", invited);
           }}
-          friends={friends}
-          friendRequests={friendRequests}
-          onRefetchFriends={refetchFriends}
-          onRefetchShared={refetchShared}
-          notifications={notifications}
-          notificationsLoaded={notificationsLoaded}
-          notificationsError={notificationsError}
-          notificationsTotal={notificationsTotal}
-          onRefetchNotifications={refetchNotifications}
-          onOverrideNotificationRead={overrideNotificationRead}
-          setSelectedPlaceID={setSelectedPlaceID}
-          setActivePanel={setActivePanel}
-          place={place}
-          isOwnedPlace={isOwnedPlace}
-          onPickCoords={startPickingCoords}
-          pickingCoords={pickingCoords}
-          onCancelPickCoords={cancelPickingCoords}
-          tripLogs={tripLogs}
-          selectedTripLogId={selectedTripLogId}
-          setSelectedTripLogId={setSelectedTripLogId}
-          tripLogsTotal={tripLogsTotal}
-          tripLogsLoaded={tripLogsLoaded}
-          onRefetchTripLogs={refetchAfterTripWrite}
+          onShowPlans={() => {
+            refetchPlans();
+            handlePanelChange("plans");
+          }}
+        />
+        <FriendInviteDialog
+          enabled={loadsUserData}
+          onFriended={() => {
+            refetchFriends();
+            // A request waiting between the two is accepted by the link, and
+            // its Inbox row is gone on the server.
+            refetchNotifications();
+          }}
+        />
+
+        <ConfirmDialog
+          open={routeConfirm === "cancel"}
+          copy={abandonRoute}
+          onConfirm={() => {
+            setRouteConfirm(null);
+            cancelDrawingRoute();
+          }}
+          onClose={() => {
+            // Keeping the route also drops whatever was waiting on its discard.
+            afterRouteCancel.current = null;
+            setRouteConfirm(null);
+          }}
+        />
+
+        {displaceConfirm.dialog}
+
+        <RouteNameDialog
+          open={namingRoute}
+          initialName={routes.find((r) => r.id === editingRouteId)?.name ?? ""}
+          busy={savingRoute}
+          onSave={(name) => void saveDrawnRoute(name)}
+          onClose={() => setNamingRoute(false)}
+        />
+
+        {selectingFilterArea && (
+          <div className={classes.selectAllButtons}>
+            <Button
+              compact
+              variant="filled"
+              onClick={cancelFilterAreaSelection}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {/* First-login onboarding choice */}
+        <OnboardingChoiceDialog
+          open={showOnboarding}
+          canyonRegions={canyonOffersFor(currentUser?.uiPreferences)}
+          onLoaded={refetch}
+          onImportFiles={() => {
+            setShowOnboarding(false);
+            setImportedFromOnboarding(true);
+            setShowUnifiedImport(true);
+          }}
+          onStartEmpty={() => setShowOnboarding(false)}
+        />
+
+        {/* The trip form, opened from a track's "Log a trip". Mounted only while
+          it is open, so every open starts from the track it was asked for. */}
+        {logTripFromTrack && (
+          <TripLogDialog
+            open={!pickingCoords}
+            onClose={() => setLogTripFromTrack(null)}
+            onSaved={() => {
+              setLogTripFromTrack(null);
+              refetchAfterTripWrite();
+              refetchCurrentUser();
+            }}
+            places={places}
+            fromTrack={logTripFromTrack}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onPickCoords={startPickingCoords}
+            onPlaceCreated={refetch}
+          />
+        )}
+
+        {/* The trip form, opened from a plan's "Start a trip log". */}
+        {tripLogPrefill && (
+          <TripLogDialog
+            open={!pickingCoords}
+            onClose={() => setTripLogPrefill(null)}
+            onSaved={() => {
+              setTripLogPrefill(null);
+              refetchAfterTripWrite();
+              refetchCurrentUser();
+            }}
+            places={places}
+            prefill={tripLogPrefill}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onPickCoords={startPickingCoords}
+            onPlaceCreated={refetch}
+          />
+        )}
+
+        {/* Unified file importer (places + logbooks) */}
+        <UnifiedImportDialog
+          open={showUnifiedImport && !pickingCoords}
+          onClose={() => {
+            setShowUnifiedImport(false);
+            setImportedFromOnboarding(false);
+          }}
+          onBack={
+            importedFromOnboarding
+              ? () => {
+                  setShowUnifiedImport(false);
+                  setImportedFromOnboarding(false);
+                  setShowOnboarding(true);
+                }
+              : undefined
+          }
+          places={places}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
           placeCustomFieldDefs={placeCustomFieldDefs}
-          onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
           placeTypes={placeTypes}
-          onPlaceTypesChange={setPlaceTypes}
-          vectorStyle={vectorStyle}
-          onVectorStyleChange={setLiveVectorStyle}
-          collapseToPeek={mapInteractionActive}
+          currentUser={currentUser}
+          onRefetchPlaces={refetch}
+          onRefetchTripLogs={refetchTripLogs}
+          onPickCoords={startPickingCoords}
+        />
+
+        {/* Add place dialog */}
+        <PlaceDialog
+          place={null}
+          open={showAdd && !pickingCoords}
+          initialCoords={addPlaceAt}
+          onClose={() => {
+            setShowAdd(false);
+            setAddPlaceAt(null);
+          }}
+          onSaved={refetch}
+          onPickCoords={startPickingCoords}
+          onCancelPickCoords={cancelPickingCoords}
+          customFieldDefs={placeCustomFieldDefs}
+          onCustomFieldDefsChange={setPlaceCustomFieldDefs}
+          placeTypes={placeTypes}
+        />
+
+        <SelectedPlacesDialog
+          open={selectedAreaPlaceIds.length > 0}
+          mode={selectionMode}
+          selectedPlaces={selectedAreaPlaces}
+          placeCustomFieldDefs={placeCustomFieldDefs}
+          placeTypes={placeTypes}
+          availablePlaces={allPlaces}
+          ownedPlaceIds={ownedPlaceIds}
+          friends={friends}
+          onClose={() => setSelectedAreaPlaceIds([])}
+          onRemovePlace={(id) =>
+            setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
+          }
+          onAddPlace={(id) =>
+            setSelectedAreaPlaceIds((ids) =>
+              ids.includes(id) ? ids : [...ids, id],
+            )
+          }
         />
       </div>
-      <main id="main-content" className={classes.main}>
-        <h1 className={classes.visuallyHidden}>Logjam place map</h1>
-        <Map
-          filters={filters}
-          places={places}
-          sharedPlaces={sharedPlaces}
-          showPlaces={showPlaces}
-          // One overlay for every line, so nothing has to be partitioned by
-          // ownership on the way to the map any more.
-          showWays={showWays}
-          placeTracks={placeTracks}
-          standaloneTracks={standaloneTracks}
-          routes={routes}
-          routeHover={routeHover}
-          selectRoute={(id) => {
-            const route = routes.find((r) => r.id === id);
-            if (route)
-              openWay(
-                wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
-              );
-          }}
-          onAddPlaceAt={(point) => {
-            setAddPlaceAt(point);
-            setShowAdd(true);
-          }}
-          // The point is the measurement's first, as a press on the map there
-          // would have made it.
-          onMeasureFrom={startMeasuring}
-          selectTrack={(mediaId) => {
-            const way = allWays.find(
-              (each) => each.kind !== "route" && each.id === mediaId,
-            );
-            if (way) openWay(way);
-          }}
-          drawingRoute={drawingRoute || measuring}
-          measuring={measuring}
-          // A measurement has no colour of its own: it draws in the accent.
-          drawColor={measuring ? undefined : (drawColor ?? undefined)}
-          drawPoints={routeDraft.points}
-          drawAnchorIndices={routeDraft.anchorIndices}
-          draft={routeDraft.draft}
-          editingRouteId={editingRouteId}
-          snapMode={snapMode}
-          onDrawPointAdd={routeDraft.addAnchor}
-          onDrawSnap={routeDraft.applySnap}
-          onDrawPointMove={routeDraft.moveAnchorAt}
-          onDrawPointDelete={routeDraft.deleteAnchorAt}
-          onDrawPointInsert={routeDraft.insertAnchorAt}
-          selectPlace={(id) => {
-            // A pin opens the place, wherever you pressed it from. It used to
-            // scroll to the row instead while the Places list was open, which
-            // made one gesture mean two things depending on a panel the user
-            // may not have been looking at (operator, 2026-09-19).
-            setSelectedPlaceID(id);
-            setActivePanel("place-detail");
-          }}
-          pickingCoords={pickingCoords}
-          onCoordsPicked={handleCoordsPicked}
-          onCancelPickCoords={cancelPickingCoords}
-          selectingFilterArea={selectingFilterArea}
-          onFilterAreaSelected={(bbox) => {
-            setSelectingFilterArea(false);
-            setFilters({ ...filters, area: bbox });
-            // Straight back to where the button was, with the filters open — the
-            // panel was closed to uncover the map, not dismissed.
-            setActivePanel("places");
-            setOpenFiltersRequested(true);
-          }}
-          onMapBoundsChange={(bounds) => {
-            mapBoundsRef.current = bounds;
-            setMapBounds(bounds);
-          }}
-          selectingBbox={selectingTopoBbox}
-          onBboxSelected={(bbox) => {
-            setPendingTopoBbox(bbox);
-            setSelectingTopoBbox(false);
-            setShowTopo(true);
-          }}
-          topoLayers={mapTopoLayers}
-          vectorStyle={vectorStyle}
-          activeLayerId={mapLayerId}
-          selectingGeoPdfExtent={selectingGeoPdfExtent}
-          geoPdfPaperAspect={geoPdfPaperAspect}
-          geoPdfPaperDimensions={geoPdfPaperDimensions}
-          geoPdfInitialExtent={geoPdfInitialExtent}
-          geoPdfInitialScale={geoPdfInitialScale}
-          onGeoPdfExtentConfirmed={(extent, scale) => {
-            setPendingGeoPdfExtent(extent);
-            setPendingGeoPdfScale(scale);
-            setSelectingGeoPdfExtent(false);
-            setShowGeoPdf(true);
-          }}
-          onGeoPdfExtentCancelled={() => {
-            setSelectingGeoPdfExtent(false);
-            setShowGeoPdf(true);
-          }}
-          onMapViewChange={(view) => setMapCenter(view)}
-          initialView={mapCenter}
-          topoFlyTarget={topoFlyTarget}
-          onTopoFlyConsumed={() => setTopoFlyTarget(null)}
-          flyToPlace={flyToPlace}
-          onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-          panelOpen={activePanel !== null}
-          sheetOpen={sidebarSheetOpen}
-          placeHighlight={placeHighlight}
-          placeTypes={placeTypes}
-          layersButton={
-            <MapButton
-              ref={layersButtonRef}
-              icon="layers"
-              label="Layers"
-              expanded={layersOpen}
-              onClick={() => setLayersOpen((open) => !open)}
-            />
-          }
-          mapTools={mapTools}
-          notices={notices}
-          flyToBounds={flyToBounds}
-          onFlyToBoundsConsumed={() => setFlyToBounds(null)}
-          onTopoSourceUnavailable={handleTopoSourceUnavailable}
-        />
-      </main>
-
-      <LayersPopover
-        onImportFile={() => setShowUnifiedImport(true)}
-        open={layersOpen}
-        onClose={() => setLayersOpen(false)}
-        anchorRef={layersButtonRef}
-        showPlaces={showPlaces}
-        setShowPlaces={setShowPlaces}
-        showWays={showWays}
-        setShowWays={setShowWays}
-        placeCount={places.length + sharedPlaces.length}
-        wayCount={showWays ? wayCount : null}
-        lidarEnabled={lidarEnabled}
-        setLidarEnabled={setLidarEnabled}
-        lidarLayerToggles={lidarLayerToggles}
-        setLidarLayerToggles={setLidarLayerToggles}
-        lidarLayerOrder={lidarLayerOrder}
-        setLidarLayerOrder={setLidarLayerOrder}
-        unavailableTopoLayerNames={unavailableTopoLayerNames}
-        completedTopoJobs={completedTopoJobs}
-        lidarJobToggles={lidarJobToggles}
-        setLidarJobToggles={setLidarJobToggles}
-        mapBounds={mapBounds}
-        baseLayers={BASE_LAYERS}
-        activeLayerId={activeLayerId}
-        onActiveLayerChange={setActiveLayerId}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={setContoursOverImagery}
-        mapView={mapCenter}
-      />
-
-      <FriendInviteDialog
-        enabled={loadsUserData}
-        onFriended={() => {
-          refetchFriends();
-          // A request waiting between the two is accepted by the link, and
-          // its Inbox row is gone on the server.
-          refetchNotifications();
-        }}
-      />
-
-      <ConfirmDialog
-        open={cancelRouteGuard.guardOpen}
-        // Editing and drawing lose different things, so they cannot share one
-        // sentence: abandoning an edit costs the changes, not the route.
-        title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
-        message={
-          editingRouteId
-            ? "Your changes to this route will be lost. The route itself is not deleted."
-            : "Your placed points will be lost. This cannot be undone."
-        }
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={cancelRouteGuard.confirmDiscard}
-        onClose={() => {
-          // Keeping the route also drops whatever was waiting on its discard.
-          afterRouteCancel.current = null;
-          cancelRouteGuard.cancelDiscard();
-        }}
-      />
-
-      <ConfirmDialog
-        open={clearRouteGuard.guardOpen}
-        title="Clear this route?"
-        message="Your placed points will be lost. This cannot be undone."
-        confirmLabel="Clear"
-        confirmColor="error"
-        onConfirm={clearRouteGuard.confirmDiscard}
-        onClose={clearRouteGuard.cancelDiscard}
-      />
-
-      <RouteNameDialog
-        open={namingRoute}
-        initialName={
-          routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
-        }
-        busy={savingRoute}
-        onSave={(name) => void saveDrawnRoute(name)}
-        onClose={() => setNamingRoute(false)}
-      />
-
-      {selectingFilterArea && (
-        <div className={classes.selectAllButtons}>
-          <Button compact variant="filled" onClick={cancelFilterAreaSelection}>
-            Cancel
-          </Button>
-        </div>
-      )}
-
-      {/* First-login onboarding choice */}
-      <OnboardingChoiceDialog
-        open={showOnboarding}
-        onLoaded={refetch}
-        onImportFiles={() => {
-          setShowOnboarding(false);
-          setImportedFromOnboarding(true);
-          setShowUnifiedImport(true);
-        }}
-        onStartEmpty={() => setShowOnboarding(false)}
-      />
-
-      {/* The trip form, opened from a track's "Log a trip". Mounted only while
-          it is open, so every open starts from the track it was asked for. */}
-      {logTripFromTrack && (
-        <TripLogDialog
-          open={!pickingCoords}
-          onClose={() => setLogTripFromTrack(null)}
-          onSaved={() => {
-            setLogTripFromTrack(null);
-            refetchAfterTripWrite();
-            refetchCurrentUser();
-          }}
-          places={places}
-          fromTrack={logTripFromTrack}
-          customFieldDefs={customFieldDefs}
-          onCustomFieldDefsChange={setCustomFieldDefs}
-          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
-          onPickCoords={startPickingCoords}
-          onPlaceCreated={refetch}
-        />
-      )}
-
-      {/* Unified file importer (places + logbooks) */}
-      <UnifiedImportDialog
-        open={showUnifiedImport && !pickingCoords}
-        onClose={() => {
-          setShowUnifiedImport(false);
-          setImportedFromOnboarding(false);
-        }}
-        onBack={
-          importedFromOnboarding
-            ? () => {
-                setShowUnifiedImport(false);
-                setImportedFromOnboarding(false);
-                setShowOnboarding(true);
-              }
-            : undefined
-        }
-        places={places}
-        customFieldDefs={customFieldDefs}
-        onCustomFieldDefsChange={setCustomFieldDefs}
-        placeCustomFieldDefs={placeCustomFieldDefs}
-        placeTypes={placeTypes}
-        currentUser={currentUser}
-        onRefetchPlaces={refetch}
-        onRefetchTripLogs={refetchTripLogs}
-        onPickCoords={startPickingCoords}
-      />
-
-      {/* Add place dialog */}
-      <PlaceDialog
-        place={null}
-        open={showAdd && !pickingCoords}
-        initialCoords={addPlaceAt}
-        onClose={() => {
-          setShowAdd(false);
-          setAddPlaceAt(null);
-        }}
-        onSaved={refetch}
-        onPickCoords={startPickingCoords}
-        onCancelPickCoords={cancelPickingCoords}
-        customFieldDefs={placeCustomFieldDefs}
-        onCustomFieldDefsChange={setPlaceCustomFieldDefs}
-        placeTypes={placeTypes}
-      />
-
-      <SelectedPlacesDialog
-        open={selectedAreaPlaceIds.length > 0}
-        selectedPlaces={selectedAreaPlaces}
-        placeCustomFieldDefs={placeCustomFieldDefs}
-        availablePlaces={allPlaces}
-        ownedPlaceIds={ownedPlaceIds}
-        friends={friends}
-        onClose={() => setSelectedAreaPlaceIds([])}
-        onDeleted={refetch}
-        onQuotaChanged={refetchCurrentUser}
-        onRemovePlace={(id) =>
-          setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
-        }
-        onAddPlace={(id) =>
-          setSelectedAreaPlaceIds((ids) =>
-            ids.includes(id) ? ids : [...ids, id],
-          )
-        }
-      />
-    </div>
+    </CurrentUserIdContext.Provider>
   );
 }
 

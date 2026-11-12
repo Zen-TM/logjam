@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { parseTrackGeoJSON, trackGeoCacheKey } from "./trackGeo";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import {
+  clearTrackTexts,
+  fetchTrackText,
+  parseTrackGeoJSON,
+  trackGeoCacheKey,
+} from "./trackGeo";
 
 const GPX = `<?xml version="1.0"?>
 <gpx version="1.1" creator="test">
@@ -95,8 +100,7 @@ describe("parseTrackGeoJSON", () => {
 describe("trackGeoCacheKey", () => {
   const entry = { mediaId: "m1", color: "#e6194b", stamp: { mediaId: "m1" } };
 
-  // The colour is baked into the parsed features, so a recolour that reused the
-  // cached entry kept drawing the old line until the page was reloaded.
+  // The colour is baked into the parsed features, so recolouring busts the cached entry.
   it("changes when the file's colour changes", () => {
     expect(trackGeoCacheKey(entry)).not.toBe(
       trackGeoCacheKey({ ...entry, color: "#469990" }),
@@ -107,5 +111,24 @@ describe("trackGeoCacheKey", () => {
     expect(trackGeoCacheKey(entry)).not.toBe(
       trackGeoCacheKey({ ...entry, stamp: { placeId: "p1" } }),
     );
+  });
+});
+
+describe("fetchTrackText", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearTrackTexts();
+  });
+
+  // Map.tsx logs this error. Mutation: put the URL in the thrown message.
+  it("fails with the status only, never the presigned URL or its filename", async () => {
+    const url =
+      "https://s3.example/media/Secret%20Creek.gpx?X-Amz-Signature=abc";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 403 })),
+    );
+    const err: Error = await fetchTrackText("m1", () => url).catch((e) => e);
+    expect(err.message).toBe("Couldn't fetch track (403)");
   });
 });

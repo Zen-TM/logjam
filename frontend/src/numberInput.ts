@@ -56,8 +56,8 @@ export type NumericFieldConstraints = {
  * An empty string (or a lone "-") is treated as "unset" and returns null — the
  * caller decides whether the field is required. Unlike the keystroke
  * sanitizers, this never mutates the value: a decimal typed into an integer
- * field is reported ("Whole numbers only"), not silently truncated
- * (TRIP-1/TRIP-2). Pure — no side effects.
+ * field is reported ("Whole numbers only"), not silently truncated. Pure —
+ * no side effects.
  */
 export function numericFieldError(
   raw: string,

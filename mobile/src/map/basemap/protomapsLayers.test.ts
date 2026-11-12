@@ -1,0 +1,61 @@
+import { drawsOverTerrain, TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
+import { describe, expect, it } from "vitest";
+
+import { protomapsLayerDefs, type ProtomapsFlavor } from "./protomapsLayers";
+
+// Mutation: drop the filter in generate-style.mjs and regenerate, and offline
+// the top saved area's stack paints over every other saved area.
+describe.each<ProtomapsFlavor>(["light", "dark"])(
+  "the %s basemap Logjam GPS draws",
+  (flavor) => {
+    it("paints only where a tile has data, so one saved area's stack shows through another's", () => {
+      expect(
+        protomapsLayerDefs(flavor).map((layer) => layer.type),
+      ).not.toContain("background");
+    });
+
+    // Mutation: put buildings back above the water, or leave rail translucent,
+    // and regenerate: it darkens wherever two saved areas share a tile.
+    it("has nothing translucent from the water up, where saved areas paint over each other", () => {
+      const style = protomapsLayerDefs(flavor);
+      const water = style.findIndex(
+        (layer) => layer.id === TERRAIN_BASEMAP_ANCHORS.hillshade,
+      );
+      const translucent = style
+        .slice(water)
+        .filter(
+          ({ style: paint }) =>
+            "fillOpacity" in paint || "lineOpacity" in paint,
+        )
+        .map((layer) => layer.id);
+      expect(translucent).toEqual([]);
+    });
+  },
+);
+
+// Mutation: rename an anchor, regenerate the style without it, or pick one the
+// roads or labels sit under, and the Terrain group waits for a layer that
+// never mounts, or draws over them.
+describe.each<ProtomapsFlavor>(["light", "dark"])(
+  "TERRAIN_BASEMAP_ANCHORS in the %s basemap Logjam GPS draws",
+  (flavor) => {
+    const style = protomapsLayerDefs(flavor);
+    const index = (id: string) => style.findIndex((layer) => layer.id === id);
+
+    it("are layers of the style, the shading's under the slope's", () => {
+      for (const anchor of Object.values(TERRAIN_BASEMAP_ANCHORS))
+        expect(index(anchor), anchor).toBeGreaterThan(0);
+      expect(index(TERRAIN_BASEMAP_ANCHORS.hillshade)).toBeLessThan(
+        index(TERRAIN_BASEMAP_ANCHORS.slope),
+      );
+    });
+
+    it("leave every road, boundary and label above the whole Terrain group", () => {
+      const top = Math.max(
+        ...Object.values(TERRAIN_BASEMAP_ANCHORS).map(index),
+      );
+      for (const layer of style.filter(drawsOverTerrain))
+        expect(index(layer.id), layer.id).toBeGreaterThanOrEqual(top);
+    });
+  },
+);

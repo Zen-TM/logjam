@@ -40,7 +40,14 @@ export type DedupeProposal = {
   bestPlaceId: string | null; // populated when tier === "autoLink"
 };
 
-function toMatchCandidate(c: Place): MatchCandidate {
+// The columns the dedupe and merge read: a caller's select must include them,
+// and this Pick makes a missing one a type error.
+export type DedupePlace = Pick<
+  Place,
+  "id" | "name" | "altNames" | "latitude" | "longitude" | "fieldValues"
+>;
+
+function toMatchCandidate(c: DedupePlace): MatchCandidate {
   return {
     id: c.id,
     name: c.name,
@@ -51,13 +58,13 @@ function toMatchCandidate(c: Place): MatchCandidate {
 }
 
 // Existing places within the spatial review radius of an incoming RopeWiki
-// row, regardless of name. This preserves the long-standing behaviour where a
-// place sitting on top of an incoming one is surfaced for human review even
-// when the names don't match at all — the shared name matcher deliberately
-// discards non-name candidates, so the spatial signal is recovered here.
+// row, regardless of name. A place sitting on top of an incoming one is
+// surfaced for human review even when the names don't match at all — the
+// shared name matcher discards non-name candidates, so the spatial signal is
+// recovered here.
 function spatialReviewCandidates(
   rw: RopeWikiCanyon,
-  existing: Place[],
+  existing: DedupePlace[],
 ): CandidateScore[] {
   const nearby: CandidateScore[] = [];
   for (const c of existing) {
@@ -97,7 +104,7 @@ function spatialReviewCandidates(
 // -name places are surfaced for `review` via spatialReviewCandidates.
 export function buildProposals(
   incoming: RopeWikiCanyon[],
-  existing: Place[],
+  existing: DedupePlace[],
 ): DedupeProposal[] {
   const matchCandidates = existing.map(toMatchCandidate);
 
@@ -205,13 +212,12 @@ function mergeSources(
 // Returns the merged FIELD VALUES and the list of fields RopeWiki contributed
 // (i.e. fields that were empty on the existing place).
 //
-// The seven scalars are `fieldValues` keys now rather than columns, so "is it
-// null" became "is the key absent" — and those are the same question, because
-// setFieldValues stores no nulls (a stored null would render as an empty field
-// and count as a value here, letting RopeWiki think a field was user-owned when
-// the user had never touched it).
+// "Is it null" is "is the key absent", because setFieldValues stores no nulls
+// (a stored null would render as an empty field and count as a value here,
+// letting RopeWiki think a field was user-owned when the user had never touched
+// it).
 export function mergeFillNulls(
-  existing: Place,
+  existing: Pick<Place, "fieldValues">,
   fresh: RopeWikiCanyon,
 ): {
   ropeWikiId: number;

@@ -3,24 +3,26 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 
 /**
- * Single source of the hybrid-share access decision (root CLAUDE.md):
+ * Single source of the hybrid-share access decision (root AGENTS.md):
  * - "owner"  → full access, including per-trip notes/media and the trip list.
  * - "shared" → place record + place-level notes/media ONLY. All per-trip
  *              data is owner-private.
  * - "none"   → no access.
  *
  * Every endpoint that serves place or trip-log data must derive its decision
- * from these helpers rather than re-implementing the owner/share checks inline
- * (SEC-001: the one inline re-derivation that drifted leaked owner-private
- * trip data to share recipients).
+ * from these helpers rather than re-implementing owner/share checks inline.
+ * Guard: api/src/lib/placeAccess.unit.test.ts.
  */
 export type PlaceRole = "owner" | "shared" | "none";
 
 export async function getPlaceRole(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
 ): Promise<PlaceRole> {
   if (place.ownerId === userId) return "owner";
+  // A plan-owned place (null owner) is nobody's and is never shared.
+  // Guard: src/__tests__/tripPlanRows.test.ts.
+  if (place.ownerId === null) return "none";
   const share = await prisma.placeShare.findFirst({
     where: { placeId: place.id, sharedWithId: userId },
     select: { id: true },
@@ -37,7 +39,7 @@ export async function getPlaceRole(
  */
 export async function requirePlaceAccess(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
 ): Promise<Exclude<PlaceRole, "none">> {
   const role = await getPlaceRole(userId, place);
   if (role === "none") throw new AppError(404, say`Couldn't find that place.`);
@@ -55,7 +57,7 @@ export async function requirePlaceAccess(
  */
 export async function requirePlaceOwnerAccess(
   userId: string,
-  place: { id: string; ownerId: string },
+  place: { id: string; ownerId: string | null },
   forbiddenMessage: UserSentence,
 ): Promise<void> {
   const role = await getPlaceRole(userId, place);
@@ -65,18 +67,16 @@ export async function requirePlaceOwnerAccess(
 
 /**
  * Assert the user owns the place, for owner-private resources reached through
- * one (trip logs, trip media). NO CURRENT CALL SITE — the nested single-trip
- * route it was written for is gone, and routes/tripLogs.ts does the same check
- * inline against getPlaceRole.
+ * one (trip logs, trip media).
  *
- * The default denial is a 404 ON PURPOSE (PRIV-102): the whole point of an
+ * The default denial is a 404 ON PURPOSE: the whole point of an
  * owner-private resource is that its existence is not confirmable, so the
  * lazy call — no `denial` argument — has to be the safe one. Pass a 403
  * explicitly only where the caller can already legitimately see the place.
  */
 export function requirePlaceOwner(
   userId: string,
-  place: { ownerId: string },
+  place: { ownerId: string | null },
   denial: AppError = new AppError(404, say`Couldn't find that place.`),
 ): void {
   if (place.ownerId !== userId) throw denial;
@@ -87,7 +87,7 @@ export function requirePlaceOwner(
  * owner arm, for the bulk-share endpoint.
  *
  * Here rather than in the caller because "what makes someone the owner of a
- * place" is this file's answer and must stay this file's answer (SEC-001).
+ * place" is this file's answer and must stay this file's answer.
  * Ownership is deliberately the ONLY arm batched: a sharee may not re-share, so
  * the bulk path never needs the "shared" role, and a helper that returned it
  * would invite a caller to accept it.

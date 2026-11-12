@@ -20,13 +20,13 @@ function customFieldTypeName(type: TripLogCustomFieldType): string {
 
 /**
  * The attribute form, shared between PlaceDialog, TripLogDialog and Settings'
- * add/edit dialogs, so the four cannot drift (UX-002/UX-003).
+ * add/edit dialogs, so the four cannot drift.
  *
  * TWO SHAPES, one form. Inside a place's or a trip's own dialog it is a card
  * with its own heading and buttons, opened beneath the fields it will join.
  * From Settings it IS the dialog (`asDialogBody`) — a form in a card inside a
- * panel had no precedent anywhere else in the app, and every other "make one of
- * these" in Logjam Web is a dialog.
+ * panel has no precedent anywhere else in Logjam Web, and every other "make one
+ * of these" in Logjam Web is a dialog.
  *
  * Bounds (min/max) are opt-in via the `bounds` prop group. The bounds row only
  * renders for integer/float types.

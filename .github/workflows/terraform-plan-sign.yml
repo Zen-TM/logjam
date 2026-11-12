@@ -1,0 +1,95 @@
+name: terraform-plan-sign
+
+# Posts the plan comment for a PR's terraform-plan run. The plan jobs run the
+# PR's own code (its workflows, Terraform and infra/lambda), so they never
+# hold PLAN_FINGERPRINT_KEY: each uploads its plan, encrypted to this
+# workflow's age key, and this workflow renders the comment and signs it
+# (infra/scripts/plan-summary.mjs). A workflow_run workflow always runs
+# main's copy, and the terraform-plan-sign Environment admits main only
+# (infra/terraform/envs/github/environments.tf), so no PR's code ever runs
+# with the key or the age identity.
+#
+# Everything in the artifact is the PR's to choose. It is decrypted and read
+# as data, never run; a plan that lies only makes a fingerprint the apply's
+# plan won't match. Nothing here checks out the PR, and nothing uses the
+# Actions cache, which runs on main share with every later main run.
+
+on:
+  workflow_run:
+    workflows: [terraform-plan]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-plan-sign-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    # A fork's run has no pull_requests entry here, and never planned.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-latest
+    environment: terraform-plan-sign
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      # One artifact per root the run planned; a root out of the PR's scope
+      # uploads none. plan.json.age is missing when the plan failed.
+      - name: Sign and post each root's plan
+        env:
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+          PLAN_TRANSFER_IDENTITY: ${{ secrets.PLAN_TRANSFER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          # A newer push has its own run, which signs its own head.
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "PR #$PR moved on to $head; its own run signs that."
+            exit 0
+          fi
+          printf '%s\n' "$PLAN_TRANSFER_IDENTITY" > "$RUNNER_TEMP/identity"
+          uploaded=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name')
+          for root in prod github; do
+            dir="$RUNNER_TEMP/$root"
+            if ! grep -qx "plan-$root" <<< "$uploaded"; then
+              echo "No $root plan in run $RUN_ID: nothing to sign."
+              continue
+            fi
+            gh run download "$RUN_ID" -n "plan-$root" -D "$dir"
+            age -d -i "$RUNNER_TEMP/identity" -o "$dir/plan.txt" "$dir/plan.txt.age"
+            status=failure
+            if [ -f "$dir/plan.json.age" ]; then
+              age -d -i "$RUNNER_TEMP/identity" -o "$dir/plan.json" "$dir/plan.json.age"
+              status=success
+            fi
+            # Exits 1 for a failed plan, whose comment still posts; a crash
+            # writes nothing.
+            node infra/scripts/plan-summary.mjs comment "$root" "$dir/plan.txt" "$status" \
+              "$dir/plan.json" "$HEAD_SHA" > "$dir/comment.md" || [ -s "$dir/comment.md" ]
+            existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"<!-- terraform-plan-$root -->\"))) | .id" \
+              | tail -n1)
+            if [ -n "$existing" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@"$dir/comment.md" > /dev/null
+            else
+              gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$dir/comment.md" > /dev/null
+            fi
+          done
+          rm -f "$RUNNER_TEMP/identity"

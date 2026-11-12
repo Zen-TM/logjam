@@ -3,7 +3,7 @@ import { mediaCategory, type MediaItem } from "@logjam/shared";
 import Lightbox from "./Lightbox";
 import { slideshowDots } from "./slideshowDots";
 import classes from "./PlaceSlideshow.module.css";
-import { Icon } from "../../ui";
+import { Button, Icon } from "../../ui";
 
 // Square photo/video slideshow shown at the top of the place detail panel.
 // Images render in their native aspect ratio, letterboxed on black. Videos show
@@ -11,10 +11,17 @@ import { Icon } from "../../ui";
 // opens the full-res lightbox. Callers pass visual-only media (no tracks).
 const MAX_DOTS = 7;
 
-export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
+export default function PlaceSlideshow({
+  media,
+  onDelete,
+}: {
+  media: MediaItem[];
+  /** Owner-only: asks the caller to delete the slide on show. */
+  onDelete?: (item: MediaItem) => void;
+}) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
-  // Slides that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked by
+  // Slides that failed to load (e.g. a 404'd S3 object). Tracked by
   // id so a broken slide shows a labelled fallback instead of the browser's
   // broken-image glyph on the black letterbox.
   const [failedSlideIds, setFailedSlideIds] = useState<Set<string>>(new Set());
@@ -103,6 +110,12 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
             />
           ))}
         </div>
+      )}
+
+      {onDelete && (
+        <Button compact icon="delete" onClick={() => onDelete(current)}>
+          Delete this photo
+        </Button>
       )}
 
       {lightbox && (

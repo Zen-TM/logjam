@@ -5,9 +5,8 @@
 // GeoJSON on their own device. From that moment it is theirs: editable,
 // permanent, and unaffected by anything the sender does later.
 //
-// Its own module (rather than the notifications screen's business) because the
-// screen changed once already: this ran inside `screens/ReceivedFilesScreen.tsx`
-// until the inbox absorbed it, and the pipeline is not what changed.
+// Independent module rather than tied to a notification screen, keeping the
+// import pipeline decoupled from UI container changes.
 //
 // PRIVACY: `filename` is user text and routinely names a place. It reaches the
 // import and the on-screen label; it is never logged.

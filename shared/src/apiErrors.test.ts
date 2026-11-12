@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
-import { messageFromError, ApiError } from "./apiErrors.js";
+import {
+  messageFromError,
+  ApiError,
+  SIGNUP_CAP_MESSAGE,
+  SIGNUP_CAP_SENTENCE,
+} from "./apiErrors.js";
 
 describe("messageFromError", () => {
   it("prefers a server-supplied message on an ApiError", () => {
@@ -14,18 +20,30 @@ describe("messageFromError", () => {
     );
   });
 
-  it("maps a known status code when no server message is present", () => {
-    expect(messageFromError(new ApiError(403, "/x", "GET"), "fallback")).toBe(
-      "You don't have permission to do that.",
+  it("maps a status that means the same everywhere when no server message is present", () => {
+    expect(messageFromError(new ApiError(401, "/x", "GET"), "fallback")).toBe(
+      "You're signed out. Sign in and try again.",
     );
-    expect(messageFromError(new ApiError(404, "/x", "GET"), "fallback")).toBe(
-      "The requested item could not be found.",
+    expect(messageFromError(new ApiError(429, "/x", "GET"), "fallback")).toBe(
+      "Too many requests. Wait a moment and try again.",
     );
+  });
+
+  // Mutation: put 404 back into STATUS_MESSAGES.
+  it("prefers the caller's words over the 403 and 404 status text", () => {
+    for (const status of [403, 404]) {
+      expect(
+        messageFromError(
+          new ApiError(status, "/x", "GET"),
+          "Couldn't find this place.",
+        ),
+      ).toBe("Couldn't find this place.");
+    }
   });
 
   it("uses a generic 5xx message for unmapped server errors", () => {
     expect(messageFromError(new ApiError(502, "/x", "GET"), "fallback")).toBe(
-      "Something went wrong on our end. Please try again.",
+      "Something went wrong on our end. Try again.",
     );
   });
 
@@ -54,5 +72,41 @@ describe("messageFromError", () => {
   it("returns the fallback for an unknown error", () => {
     expect(messageFromError(new Error("weird"), "fallback")).toBe("fallback");
     expect(messageFromError("a string", "fallback")).toBe("fallback");
+  });
+});
+
+describe("the sign-up cap", () => {
+  const cognito = (message: string) =>
+    Object.assign(new Error(message), {
+      name: "UserLambdaValidationException",
+    });
+
+  // Mutation: match on the exception name alone and any other trigger's
+  // failure tells people Logjam is full.
+  it("maps the pre sign-up refusal, and only that, to the closed-for-the-month sentence", () => {
+    expect(
+      messageFromError(
+        cognito(`PreSignUp failed with error ${SIGNUP_CAP_SENTENCE}.`),
+        "fallback",
+      ),
+    ).toBe(SIGNUP_CAP_MESSAGE);
+    expect(
+      messageFromError(
+        cognito("CustomEmailSender failed with error boom."),
+        "fallback",
+      ),
+    ).toBe("fallback");
+  });
+
+  // Mutation: reword the sentence in either place alone.
+  it("matches the sentence the Lambda throws", () => {
+    const lambda = readFileSync(
+      new URL(
+        "../../infra/lambda/cognito-pre-signup/src/index.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(lambda).toContain(`CAP_MESSAGE = "${SIGNUP_CAP_SENTENCE}"`);
   });
 });

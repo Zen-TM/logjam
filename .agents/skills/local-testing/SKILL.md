@@ -10,9 +10,7 @@ wrong when a local run misbehaves in a way the error does not explain.
 
 - **A worktree has none of the gitignored files.** `make setup` installs
   every package, builds `shared/`, generates the Prisma client and writes
-  `frontend/.env`. No `.env.local`: copy it from
-  the checkout that ran `make dev` (the API exits at boot on env validation
-  without it). Mobile's extra files are listed in `mobile/AGENTS.md`.
+  `frontend/.env`. Mobile's extra files are listed in `mobile/AGENTS.md`.
 - **Suspect the environment before your change** when failures land in code
   the change does not touch: find the symptom in the table for that area
   before editing anything.

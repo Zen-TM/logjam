@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 // `vi.mock` is hoisted above these by the transform, so the descriptor still
 // loads against the stubs below.
 import {
+  deleteLabel,
+  geoPdfActions,
   remoteTrackActions,
   routeActions,
   trackActions,
@@ -12,6 +14,7 @@ import { WAY_SHARE_VERB } from "@logjam/shared";
 import type { Track } from "../tracks/tracksDb";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import type { VectorImport } from "../imports/importsDb";
+import type { GeoPdfImport } from "../geopdf/geoPdfImportsDb";
 
 // The descriptor's own modules all reach SQLite / the filesystem; this test is
 // about which verbs the descriptor OFFERS, so they are stubbed wholesale.
@@ -19,6 +22,7 @@ vi.mock("../geopdf/importPipeline", () => ({ deleteGeoPdfImport: vi.fn() }));
 vi.mock("../geopdf/geoPdfImportsDb", () => ({ updateGeoPdfImport: vi.fn() }));
 vi.mock("../imports/importsDb", () => ({}));
 vi.mock("../imports/vectorImports", () => ({ deleteVectorImport: vi.fn() }));
+vi.mock("../tracks/sensorLog", () => ({ deleteSensorLog: vi.fn() }));
 vi.mock("../tracks/tracksDb", () => ({
   deleteTrack: vi.fn(),
   listTrackPoints: vi.fn(),
@@ -152,7 +156,7 @@ describe("vectorImportActions exports", () => {
   });
 
   it("offers GeoJSON only when no original was kept", () => {
-    // A row from before originals were stored. It must still export something
+    // When no original was retained, it must still export GeoJSON
     // rather than showing a button that reads back a file that isn't there.
     const titles = vectorImportActions(imported(null)).exports?.map(
       (option) => option.title,
@@ -276,12 +280,12 @@ describe("the share / send-a-copy verb matrix", () => {
   // A place's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
   // only fail is absent, not offered (DESIGN.md).
-  it("gives EVERY import Attach to a place — attaching links the row", () => {
+  it("gives EVERY import Link to a place — attaching links the row", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",
       "/imports/i1-source.kml",
-      // GeoJSON joined TRACK_MIME_TYPES when standalone imports became media —
-      // a place's way may be any format an import may be.
+      // GeoJSON is an accepted track format: a place's way may be any format
+      // an import may be.
       "/imports/i1-source.geojson",
       // No bytes on this phone at all: a file that synced from another device
       // and has not been downloaded here. Linking is a row change, so there is
@@ -294,7 +298,7 @@ describe("the share / send-a-copy verb matrix", () => {
     }
   });
 
-  it("never offers Attach to a place on the kinds that are not files", () => {
+  it("never offers Link to a place on the kinds that are not files", () => {
     expect(routeActions(route("owner")).attachToPlace).toBeUndefined();
     // A recording gets there through createRouteFrom instead: the track itself
     // is never linked, a route made from it is.
@@ -313,6 +317,34 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(trackActions(track(2)).logTrip).toBeDefined();
     expect(trackActions(track(1)).logTrip).toBeUndefined();
     expect(trackActions(track(0)).logTrip).toBeUndefined();
+  });
+
+  // Once a trip has been logged from a recording, the offer is spent. Parity
+  // with Logjam Web's wayActions.test.ts. Mutation: drop the `loggedTrackIds`
+  // test from either action builder, and the offer comes back.
+  it("stops offering Log a trip on a recording a trip was logged from", () => {
+    const logged = new Set(["m1"]);
+    expect(
+      trackActions({ ...track(3), mediaId: "m1" }, logged).logTrip,
+    ).toBeUndefined();
+    // Another recording's trip, or a recording with no account copy yet.
+    expect(
+      trackActions({ ...track(3), mediaId: "m2" }, logged).logTrip,
+    ).toBeDefined();
+    expect(
+      trackActions({ ...track(3), mediaId: null }, logged).logTrip,
+    ).toBeDefined();
+    const file = {
+      id: "m1",
+      filename: "Creek.gpx",
+      displayName: "Creek",
+      mediaType: "application/gpx+xml",
+      origin: "track",
+      metadata: {},
+      localDisplayPath: null,
+    } as unknown as Parameters<typeof remoteTrackActions>[0];
+    expect(remoteTrackActions(file, logged).logTrip).toBeUndefined();
+    expect(remoteTrackActions(file, new Set()).logTrip).toBeDefined();
   });
 
   // A recording made on another device is in the account as a file, and goes
@@ -423,5 +455,69 @@ describe("the share / send-a-copy verb matrix", () => {
         name: "My Track (route)",
       }),
     );
+  });
+});
+
+describe("deleting a recording", () => {
+  // Mutation: delete the local track before the media row.
+  it("keeps the local track when deleting its backup fails, so it can be retried", async () => {
+    const { getMediaById } = await import("../sync/mirrorStore");
+    const { deleteMediaLocal } = await import("../sync/mediaUpload");
+    const { deleteTrack } = await import("../tracks/tracksDb");
+    vi.mocked(deleteTrack).mockClear();
+    vi.mocked(getMediaById).mockResolvedValueOnce({ id: "m1" } as never);
+    vi.mocked(deleteMediaLocal).mockRejectedValueOnce(new Error("offline"));
+
+    const recording = { ...track(3), mediaId: "m1" } as unknown as Track;
+    await expect(trackActions(recording).delete?.run()).rejects.toThrow();
+    expect(deleteTrack).not.toHaveBeenCalled();
+  });
+});
+
+// A delete that reaches the account must not read as a local one, and the
+// descriptor has to say which it is: `synced` is required, so a new kind
+// cannot default into the device-only wording. Mutation: drop `synced` from
+// any one of these descriptors (tsc catches the type, this the value).
+describe("delete reach, for every descriptor", () => {
+  const remote = {
+    id: "m1",
+    filename: "Creek.gpx",
+    displayName: "Creek",
+    mediaType: "application/gpx+xml",
+    origin: "track",
+    metadata: {},
+  } as unknown as Parameters<typeof remoteTrackActions>[0];
+  const geoPdf = {
+    id: "g1",
+    label: "Kanangra map",
+    state: "ready",
+    dirPath: "/g1",
+  } as unknown as GeoPdfImport;
+
+  it.each([
+    ["GeoPDF", false, "Delete from device", geoPdfActions(geoPdf).delete],
+    ["import", true, "Delete", vectorImportActions(importRow()).delete],
+    [
+      "recording from elsewhere",
+      true,
+      "Delete",
+      remoteTrackActions(remote).delete,
+    ],
+    ["recording made here", true, "Delete", trackActions(track(5)).delete],
+    ["owned route", true, "Delete", routeActions(route("owner")).delete],
+  ])("%s: synced=%s, row reads %s", (_kind, synced, label, removal) => {
+    expect(removal?.synced).toBe(synced);
+    expect(deleteLabel(removal!)).toBe(label);
+  });
+
+  it("names the file in the import's confirm", () => {
+    expect(vectorImportActions(importRow()).delete!.confirmTitle).toBe(
+      `Delete ${importRow().name}?`,
+    );
+  });
+
+  it("says from device for a device-only group", () => {
+    expect(deleteLabel({ synced: false })).toBe("Delete from device");
+    expect(deleteLabel({ synced: false }, 3)).toBe("Delete all from device");
   });
 });

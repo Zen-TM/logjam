@@ -1,4 +1,11 @@
-import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -18,8 +25,10 @@ import {
   statsTruncatedNote,
   statsUnderActivitiesNote,
   tripYear,
+  TRIPS_LIST,
   UNTAGGED_ACTIVITY,
   type FieldStat,
+  type LoadState,
   type LogbookRange,
   type LogbookStats,
   type ScopedCustomFieldDef,
@@ -42,7 +51,7 @@ import {
   StatGrid,
   type SparkBucket,
   Icon,
-  LoadingState,
+  ListBody,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -78,22 +87,25 @@ function namedBuckets(spark: StatsSpark): SparkBucket[] {
  * which Logjam Web does not have.
  */
 function AnalyticsPanel({
-  views,
+  onBack,
   tripLogs,
   tripLogsTotal,
-  loaded,
+  state,
+  error,
+  onRetry,
   places,
   customFieldDefs,
   placeCustomFieldDefs,
   placeTypes,
 }: {
-  /** The Logs | Stats switch, drawn under the hero. */
-  views: ReactNode;
+  /** Back to the logbook this page opened from. */
+  onBack: () => void;
   tripLogs: TTripLog[];
   tripLogsTotal: number | null;
-  loaded: boolean;
-  /** The user's OWN places. A shared place is someone else's ground; counting
-   *  it would inflate "places visited" with rows the user never kept. */
+  state: LoadState;
+  error: string | null;
+  onRetry: () => void;
+  /** The user's own places: `GET /places`, never the shared list. */
   places: TPlace[];
   customFieldDefs: ScopedCustomFieldDef[];
   placeCustomFieldDefs: ScopedCustomFieldDef[];
@@ -130,6 +142,7 @@ function AnalyticsPanel({
           name: place.name,
           placeTypeId: place.placeTypeId,
           fieldValues: place.fieldValues,
+          owned: true,
         })),
         tripDefs: customFieldDefs,
         placeDefs: placeCustomFieldDefs,
@@ -163,6 +176,9 @@ function AnalyticsPanel({
     lastOpened.current = index;
   };
   const lastOpened = useRef(0);
+  useEffect(() => {
+    rootRef.current?.querySelector<HTMLElement>("header button")?.focus();
+  }, []);
   const closeActivity = () => {
     setActivity(null);
     requestAnimationFrame(() =>
@@ -174,29 +190,36 @@ function AnalyticsPanel({
     );
   };
 
+  const loaded = state === "ready";
   const title = !loaded
     ? STATS.title
     : activity
       ? logbookActivityLabel(activity)
       : statsHeroTitle(stats.days);
 
-  const status = !loaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : stats.trips === 0 ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon="stats"
-        title={copy.emptyTitle}
-        body={
-          activity
-            ? statsEmptyActivityBody(logbookActivityLabel(activity))
-            : copy.emptyBody
-        }
-      />
-    </div>
-  ) : null;
+  const status = (
+    <ListBody
+      state={state}
+      loadingLabel={copy.loading}
+      error={error}
+      onRetry={onRetry}
+      empty={
+        stats.trips === 0 ? (
+          <EmptyState
+            icon="stats"
+            title={copy.emptyTitle}
+            body={
+              activity
+                ? statsEmptyActivityBody(logbookActivityLabel(activity))
+                : copy.emptyBody
+            }
+          />
+        ) : null
+      }
+    >
+      {null}
+    </ListBody>
+  );
 
   const showing = loaded && stats.trips > 0;
   // Exhaustive by type: a section the contract names and this panel does not
@@ -209,12 +232,13 @@ function AnalyticsPanel({
       <>
         <Hero
           title={title}
-          onBack={activity ? closeActivity : undefined}
-          backLabel={copy.backToActivities}
+          onBack={activity ? closeActivity : onBack}
+          backLabel={
+            activity ? copy.backToActivities : `Back to ${TRIPS_LIST.title}`
+          }
         />
-        <div className={classes.rails}>
-          {views}
-          {tripLogs.length > 0 && (
+        {tripLogs.length > 0 && (
+          <div className={classes.rails}>
             <ChipRail
               label="Period"
               options={ranges.map((entry) => ({
@@ -224,8 +248,8 @@ function AnalyticsPanel({
               value={range.label}
               onChange={setRangeLabel}
             />
-          )}
-        </div>
+          </div>
+        )}
       </>
     ),
     truncated: () =>

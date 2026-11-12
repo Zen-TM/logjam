@@ -37,12 +37,6 @@
   margin-top: 2px;
 }
 
-/* The destructive verb sits at the far left of the footer, away from Close
-   (DESIGN.md). */
-.deleteVerb {
-  margin-right: auto;
-}
-
 .addMark {
   display: flex;
   color: var(--color-text-muted);

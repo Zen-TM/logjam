@@ -42,19 +42,6 @@
   color: var(--color-text);
 }
 
-.legal {
-  composes: detail from "../textRoles.generated.module.css";
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
-/* `text` and underlined, not accent: accent fails 4.5:1 on a card in
- * every scheme. Same rule and same numbers as SignIn's legal line. */
-.legal a {
-  color: var(--color-text);
-  text-decoration: underline;
-}
-
 .action {
   width: 100%;
   justify-content: center;

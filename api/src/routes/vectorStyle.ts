@@ -11,7 +11,7 @@ import { resolveUser as getUser } from "../lib/resolveUser";
 const router = Router();
 
 // GET / — current user's active vector style. Returns defaults if the column
-// is null (new users created before the migration ran, or test fixtures).
+// is null (when unset or in test fixtures).
 router.get(
   "/",
   requireAuth,

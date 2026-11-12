@@ -22,14 +22,11 @@ import {
   moveAnchor,
   reverseDraft,
   setFiller,
+  withUndoStep,
   type RouteDraft,
   type RoutePoint,
   MAX_ROUTE_POINTS,
 } from "@logjam/shared";
-
-/** Deepest undo stack. Far past what anyone reaches for, and bounded so a long
- *  drawing session can't grow without limit. */
-const MAX_HISTORY = 100;
 
 export type RouteDraftHandle = {
   draft: RouteDraft;
@@ -49,6 +46,8 @@ export type RouteDraftHandle = {
    *  it belongs here rather than being applied to the saved route. */
   reverse: () => void;
   undo: () => void;
+  /** Empty the line. Undoable, unlike `reset`, which starts a new one. */
+  clear: () => void;
   reset: (
     route?: { points: RoutePoint[]; anchors?: number[] | null } | null,
   ) => void;
@@ -63,10 +62,9 @@ export function useRouteDraft(): RouteDraftHandle {
   const commit = useCallback((next: (current: RouteDraft) => RouteDraft) => {
     setDraft((current) => {
       const updated = next(current);
-      // A no-op action must not consume an undo step — otherwise pressing
-      // Undo appears to do nothing.
-      if (updated === current) return current;
-      history.current = [...history.current, current].slice(-MAX_HISTORY);
+      const nextHistory = withUndoStep(history.current, current, updated);
+      if (!nextHistory) return current;
+      history.current = nextHistory;
       setCanUndo(true);
       return updated;
     });
@@ -114,7 +112,8 @@ export function useRouteDraft(): RouteDraftHandle {
     // Deliberately NOT through `commit`: a snapped run arriving is not
     // something the user did, so it must not consume an undo step. Undo after
     // "click, click, snap lands" should take back the click — not silently
-    // straighten the line and leave the point where it was.
+    // straighten the line and leave the point where it was
+    // (useRouteDraft.test.ts).
     applySnap: useCallback(
       (from: RoutePoint, to: RoutePoint, between: RoutePoint[]) =>
         setDraft((current) => {
@@ -150,6 +149,7 @@ export function useRouteDraft(): RouteDraftHandle {
       [commit],
     ),
     undo,
+    clear: useCallback(() => commit(() => emptyDraft), [commit]),
     reset,
   };
 }

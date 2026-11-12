@@ -10,8 +10,8 @@
 // sheet only says how each one runs here. "Show on map" is the one row the
 // list has and the pin does not: on the map you are already looking at it.
 //
-// Share is a SUB-MODE of this sheet rather than a second sheet (§6 — swap the
-// content, never stack), so no caller can be the surface that forgot it. The
+// Share and Export are SUB-MODES of this sheet rather than second sheets (§6 —
+// swap the content, never stack), so no caller can be the surface that forgot it. The
 // two verbs that need a FORM (a trip, an edit) are the caller's, because a
 // form is a sheet of its own: the caller closes this one and opens that one.
 //
@@ -20,19 +20,22 @@
 // and no Edit, Share or Delete, on BOTH surfaces, because the gate lives in
 // this component rather than in its callers.
 import { Fragment, useMemo, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import {
+  PLACE_EXPORT_FORMATS,
   placeDeleteConfirm,
+  placeDeleteDone,
   placeVerbs,
   removeShareConfirm,
   type PlaceVerbIdOn,
+  type TExportFormat,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme } from "../theme";
-import { BottomSheet, closedSheet, Row } from "../ui";
+import { BottomSheet, closedSheet, confirm, Row } from "../ui";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useCopyPanel } from "../sharing/CopySheet";
 import {
@@ -43,9 +46,11 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { requestSync } from "../sync/syncEngine";
 import { useConnectivity } from "../map/connectivity";
-import { useMirrorTrips } from "../sync/useSyncQueries";
+import { useMirrorPlaceTypes, useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
+import { useFieldDefs } from "../customFields/useFieldDefs";
+import { exportPlace, ExportUnsupportedError } from "../fileExport";
 
 type GpsPlaceVerbId = PlaceVerbIdOn<"gps">;
 
@@ -98,6 +103,9 @@ export function PlaceOptionsSheet({
   const styles = useStyles();
 
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const { defs: fieldDefs } = useFieldDefs("place");
+  const placeTypes = useMirrorPlaceTypes();
   const online = useConnectivity() === "online";
   const trips = useMirrorTrips();
 
@@ -108,7 +116,7 @@ export function PlaceOptionsSheet({
   // THE sharing panel, the same one the place's detail screen renders — and
   // withheld on a place shared WITH this user, because re-sharing is the
   // owner's to do and the API refuses it. Memoised on the id: an object literal
-  // reloads the hook forever (mobile/CLAUDE.md, SharePanel).
+  // reloads the hook forever.
   const shareTarget = useMemo(
     () =>
       place && isOwner ? ({ kind: "place", placeId: place.id } as const) : null,
@@ -136,13 +144,13 @@ export function PlaceOptionsSheet({
 
   // The sub-modes reset when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // has shipped twice on the sibling sheets.
+  // set means the NEXT open lands inside it instead of on the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (!visible) {
       setSharing(false);
+      setExporting(false);
       setCopyMode(null);
     }
   }
@@ -160,7 +168,7 @@ export function PlaceOptionsSheet({
     targets: copyTargets,
     mode: copyMode ?? "copy",
     // No username reaches a mirrored row, so the confirms spell their own
-    // fallback — in both sentence positions. Passing "the owner" here is what
+    // fallback — in both sentence positions. Passing "the owner" here would
     // put a lowercase word at the start of a sentence on the device.
     friendName: null,
     busy: copyBusy,
@@ -208,38 +216,65 @@ export function PlaceOptionsSheet({
 
   const close = () => {
     setSharing(false);
+    setExporting(false);
     setCopyMode(null);
     onClose();
   };
 
-  const confirmRemoveShare = () => {
-    const confirm = removeShareConfirm({
+  // Same path as a route's export: the user picks a folder and the file is
+  // written there. A shared place exports too, as the share promise says.
+  const save = (format: TExportFormat) => {
+    close();
+    exportPlace(
+      place,
+      format,
+      [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])],
+      placeTypes.data ?? [],
+    )
+      .then((filename) => {
+        // Null = the user backed out of the folder picker, not a failure.
+        if (filename) onInfo(`Saved ${filename}.`);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof ExportUnsupportedError) {
+          onError(err.message);
+          return;
+        }
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't save that file.");
+      });
+  };
+
+  const confirmRemoveShare = async () => {
+    const copy = removeShareConfirm({
       kindLabel: "place",
       itemName: place.name,
     });
     close();
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        // Not `destructive`: alice keeps her place, its notes and its photos.
-        text: "Remove",
-        onPress: () => {
-          removeSharedPlace(place.id)
-            .then(() => {
-              onInfo("Removed.");
-              onGone?.();
-            })
-            .catch((err: unknown) => {
-              // Our own copy, never the error's: it may carry the name.
-              console.error(err);
-              onError("Couldn't remove this shared place.");
-            });
-        },
-      },
-    ]);
+    if (
+      !(await confirm({
+        confirmTitle: copy.title,
+        confirmBody: copy.body,
+        confirmLabel: "Remove",
+        // Not destructive: alice keeps her place, its notes and its photos.
+        tone: "filled",
+      }))
+    )
+      return;
+    removeSharedPlace(place.id)
+      .then(() => {
+        onInfo("Removed.");
+        onGone?.();
+      })
+      .catch((err: unknown) => {
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't remove this shared place.");
+      });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     // The sentence is per-instance — it counts the trips that lose their link —
     // and it is written once, in placeDeleteConfirm (DESIGN.md). The count
     // is derived HERE from the mirrored trips rather than passed in, so neither
@@ -247,27 +282,19 @@ export function PlaceOptionsSheet({
     const linkedTrips = (trips.data ?? []).filter((trip) =>
       trip.places.some((link) => link.id === place.id),
     ).length;
-    const confirm = placeDeleteConfirm({ name: place.name }, linkedTrips);
+    const copy = placeDeleteConfirm({ name: place.name }, linkedTrips);
     close();
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          deletePlaceLocal(place.id)
-            .then(() => {
-              onInfo("Place deleted.");
-              onGone?.();
-            })
-            .catch((err: unknown) => {
-              // Our own copy, never the error's: it may carry the name.
-              console.error(err);
-              onError("Couldn't delete this place.");
-            });
-        },
-      },
-    ]);
+    if (!(await confirm(copy))) return;
+    deletePlaceLocal(place.id)
+      .then(() => {
+        onInfo(placeDeleteDone(1));
+        onGone?.();
+      })
+      .catch((err: unknown) => {
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't delete this place.");
+      });
   };
 
   // Exhaustive by type: every verb the contract gives Logjam GPS runs here.
@@ -282,37 +309,53 @@ export function PlaceOptionsSheet({
     show: leaveFor((target) => onShowOnMap?.(target)),
     logTrip: leaveFor(onLogTrip),
     edit: leaveFor(onEdit),
+    exportPlace: () => setExporting(true),
     share: () => setSharing(true),
     copy: () => setCopyMode("copy"),
     copyAndRemove: () => setCopyMode("copyAndRemove"),
-    remove: confirmRemoveShare,
-    delete: confirmDelete,
+    remove: () => void confirmRemoveShare(),
+    delete: () => void confirmDelete(),
   };
+
+  const leaveSubMode = sharing
+    ? () => setSharing(false)
+    : exporting
+      ? () => setExporting(false)
+      : copyMode
+        ? () => setCopyMode(null)
+        : null;
 
   return (
     <BottomSheet
       visible={visible}
-      // Either sub-mode backs out to the verb list; only the list closes the
+      // Any sub-mode backs out to the verb list; only the list closes the
       // sheet.
-      onClose={
+      onClose={leaveSubMode ?? close}
+      title={
         sharing
-          ? () => setSharing(false)
-          : copyMode
-            ? () => setCopyMode(null)
-            : close
+          ? share.title
+          : exporting
+            ? "Export place"
+            : copyMode
+              ? copy.title
+              : place.name
       }
-      title={sharing ? share.title : copyMode ? copy.title : place.name}
-      onBack={
-        sharing
-          ? () => setSharing(false)
-          : copyMode
-            ? () => setCopyMode(null)
-            : undefined
-      }
+      onBack={leaveSubMode ?? undefined}
       footer={copyMode ? copy.footer : undefined}
     >
       {sharing ? (
         share.body
+      ) : exporting ? (
+        <View style={styles.body}>
+          {PLACE_EXPORT_FORMATS.map(({ value, label }) => (
+            <Row
+              key={value}
+              icon="export"
+              title={label}
+              onPress={() => save(value)}
+            />
+          ))}
+        </View>
       ) : copyMode ? (
         copy.body
       ) : (

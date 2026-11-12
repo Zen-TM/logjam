@@ -1,10 +1,8 @@
 // What you can DO with a way, in one place.
 //
-// Logjam GPS learned this the hard way (`mobile/src/saved/assetActions.ts`): a
-// verb list written per surface drifts, and a verb wired into only one of them
-// ships invisible. Ways had three surfaces disagreeing — a row's ⋯, a detail
-// page's ⋯, and controls inline in the detail body — with no rule saying which
-// belonged where (operator, 2026-09-17). The rule now:
+// Logjam GPS and Logjam Web share this design: a verb list written per
+// surface drifts, and a verb wired into only one of them ships invisible.
+// The rules governing way surfaces:
 //
 //   * A PROPERTY you change in place is inline in the detail body: the colour,
 //     which place it belongs to. Not a verb, never in a menu.
@@ -22,18 +20,14 @@
 // one of them is a delete: Remove drops the caller's own share and the owner
 // keeps their row; "Save to my Ways and remove" is the same thing with a copy
 // kept first, offered as ONE verb because it is one decision — as two steps it
-// asks the user to guess whether the copy survives the removal. Remove arrived
-// here on 2026-09-17 from a button in the detail body, which is the one place a
-// verb may not be, and where it read as a leftover from another app.
+// asks the user to guess whether the copy survives the removal.
 //
-// Two things left this list the same day, both because a menu was the wrong
-// home for them:
+// Actions kept out of this menu:
 //   * REVERSE is a button in the draw tool while a route is open for editing.
 //     It changes the geometry you are looking at, so it belongs beside the
 //     other edits to that geometry rather than behind a menu that closes.
-//   * VISIBILITY was a per-file switch on a detail page, which is a control the
-//     user had to open a page to find. The Layers overlays draw these files
-//     now, so the switch has nowhere left to be and nothing left to do.
+//   * VISIBILITY is handled by the Layers overlays for these files, so a
+//     per-file switch on a detail page is unnecessary.
 import { WAY_SHARE_VERB, WAY_VERBS, wayVerbLabel } from "@logjam/shared";
 import type { WayItem, WayKind } from "./waysModel";
 
@@ -73,14 +67,10 @@ export type WayVerb = {
 /** Which surface is asking. The two differ by one verb, and only one. */
 export type WaySurface = "row" | "detail";
 
-// The words are the contract's (`WAY_VERBS`); Delete is the one verb whose
-// noun depends on the way, so it is said here.
-const LABELS: Record<WayVerbId, string> = {
-  ...(Object.fromEntries(
-    WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
-  ) as Record<Exclude<WayVerbId, "delete">, string>),
-  delete: "Delete",
-};
+// The words are the contract's (`WAY_VERBS`).
+const LABELS = Object.fromEntries(
+  WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
+) as Record<WayVerbId, string>;
 
 /** A route's geometry is inline, so the browser can write it out itself. A
  *  file's is an object in S3 that the page has not downloaded. */
@@ -94,7 +84,10 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * one verb that makes a copy of its own.
  */
 export function wayVerbs(
-  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">,
+  way: Pick<
+    WayItem,
+    "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin" | "hasTrip"
+  >,
   surface: WaySurface,
 ): WayVerb[] {
   const owned = !way.shared;
@@ -117,33 +110,36 @@ export function wayVerbs(
   // A recorded track only, and the owner's: it is attached to the trip as a
   // copy of the file, which is the owner's to take. An import is somebody
   // else's walk with no start of its own, and a route is a plan, not a day out.
-  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
+  // Once a trip has been logged from it the offer is spent: a recording with a
+  // trip is not asking for one.
+  if (owned && way.kind === "track" && !way.hasTrip) {
+    verbs.push(verb("logTrip"));
+  }
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
-  // Taking your own copy of someone else's route. `POST /routes/:id/copy` has
-  // existed since sharing shipped and nothing on the web ever offered it
-  // (operator, 2026-09-17), so a sharee's only way to keep a route was to
-  // export it and import it back. Routes only: a file on a shared place is
-  // media, and no copy endpoint takes one.
+  // Taking your own copy of someone else's route (`POST /routes/:id/copy`)
+  // lets a sharee keep a route without export-and-reimport. Routes only: a
+  // file on a shared place is media, and no copy endpoint takes one.
   if (direct && way.kind === "route") verbs.push(verb("copy"));
   // Which of the two, per kind, is WAY_SHARE_VERB's and Logjam GPS's alike: a
   // route is a row `POST /shares` can grant, a file is not and is handed over
   // as a copy instead (`POST /file-sends/from-media`, owner only).
   if (owned && WAY_SHARE_VERB[way.kind] === "share") verbs.push(verb("share"));
-  if (owned && WAY_SHARE_VERB[way.kind] === "sendCopy") {
+  if (owned && way.hasOrigin && WAY_SHARE_VERB[way.kind] === "sendCopy") {
     verbs.push(verb("sendCopy"));
   }
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }
   // A file's bytes are in S3, so getting them back is a download rather than an
-  // export — and it was offered nowhere at all, so a GPX brought in here could
-  // never be taken out again (operator, 2026-09-17). Owner only: the presigned
-  // URL is minted by `POST /media/download-urls`, which is where the egress
-  // gate lives, and a file on someone else's place is not the caller's to pull.
+  // export. Owner only: the presigned URL is minted by
+  // `POST /media/download-urls`, which is where the egress gate lives, and a
+  // file on someone else's place is not the caller's to pull.
   if (owned && way.kind !== "route") verbs.push(verb("download"));
-  // A route is renamed by the form that named it; a file is renamed in place.
-  if (owned && way.kind !== "route") verbs.push(verb("rename"));
+  // A file with no origin was attached in a place's form, which names it.
+  if (owned && (way.kind === "route" || way.hasOrigin)) {
+    verbs.push(verb("rename"));
+  }
 
   // Below the rule: the ways this stops being something the user carries.
   // "Save to my Ways and remove" sits with Remove rather than with Copy because
@@ -163,7 +159,7 @@ export function wayVerbs(
  * being a habit each panel follows differently.
  */
 export function wayProperties(
-  way: Pick<WayItem, "kind" | "shared" | "placeId">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "hasOrigin">,
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
@@ -171,7 +167,9 @@ export function wayProperties(
     // can be changed from here; a recording's lives on the phone that made it
     // (its own table), so a picker here would paint a line that phone never
     // redraws.
-    colour: owned && (way.kind === "route" || way.kind === "import"),
+    colour:
+      owned &&
+      (way.kind === "route" || (way.kind === "import" && way.hasOrigin)),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

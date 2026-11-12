@@ -27,6 +27,8 @@ export const ICONS = {
   // — verbs: what a control does —
   add: { web: "plus", gps: "plus" },
   addPlace: { web: "map-pin-plus", gps: "mci:map-marker-plus-outline" },
+  addTrip: { web: "book-plus", gps: "mci:book-plus-outline" },
+  addSaved: { web: "folder-plus", gps: "folder-plus" },
   remove: { web: "minus", gps: "minus" }, // take out of a selection
   close: { web: "x", gps: "x" }, // close a surface, clear a field, cancel a job
   back: { web: "arrow-left", gps: "arrow-left" },
@@ -43,7 +45,8 @@ export const ICONS = {
   moveCopy: { web: "archive", gps: "archive" }, // save a copy and remove the original
   send: { web: "send", gps: "send" },
   shareFriend: { web: "share-2", gps: "share-2" },
-  unshare: { web: "user-minus", gps: "user-minus" }, // unshare, remove a friend
+  unshare: { web: "user-x", gps: "user-x" }, // the owner stops sharing
+  removeFriend: { web: "user-minus", gps: "user-minus" }, // end a friendship, drop someone from a plan
   export: { web: "share", gps: "share" }, // write a new file
   download: { web: "download", gps: "download" }, // stored bytes
   saveOffline: { web: "cloud-download", gps: "download-cloud" },
@@ -72,15 +75,21 @@ export const ICONS = {
   northUp: { web: "arrow-up", gps: "arrow-up" },
   play: { web: "play", gps: "play" },
   pause: { web: "pause", gps: "pause" },
+  signIn: { web: "log-in", gps: "log-in" },
   signOut: { web: "log-out", gps: "log-out" },
   accept: { web: "user-check", gps: "user-check" },
-  ignore: { web: "user-x", gps: "user-x" },
+  ignore: { web: "circle-x", gps: "x-circle" }, // decline an offer
   addFriend: { web: "user-plus", gps: "user-plus" },
   loading: { web: "loader", gps: "loader" },
   dragHandle: { web: "grip-vertical", gps: "mci:drag-vertical" },
+  archive: { web: "inbox", gps: "inbox" }, // archive a plan, bring it back: a tray, not moveCopy's box
+  leave: { web: "door-open", gps: "mci:exit-run" }, // leave a plan
+  print: { web: "printer", gps: "printer" },
 
   // — structure: where the user is, and how it opens —
   disclosure: { web: "chevron-right", gps: "chevron-right" }, // opens a sub-view
+  scrollBack: { web: "chevrons-left", gps: "chevrons-left" }, // a row of cards, a page back
+  scrollOn: { web: "chevrons-right", gps: "chevrons-right" }, // ...a page on
   expand: { web: "chevron-down", gps: "chevron-down" },
   collapse: { web: "chevron-up", gps: "chevron-up" },
   overflow: { web: "ellipsis-vertical", gps: "more-vertical" }, // a thing's verbs
@@ -93,6 +102,7 @@ export const ICONS = {
   info: { web: "info", gps: "info" },
   help: { web: "circle-help", gps: "help-circle" },
   pending: { web: "clock", gps: "clock" },
+  recent: { web: "history", gps: "mci:history" }, // a recent search
   offline: { web: "cloud-off", gps: "cloud-off" },
   sync: { web: "cloud", gps: "cloud" },
   uploading: { web: "cloud-upload", gps: "upload-cloud" },
@@ -102,8 +112,13 @@ export const ICONS = {
 
   // — things: what a row or tile is —
   map: { web: "map", gps: "map" }, // a map, the Maps tab, show on map
+  region: { web: "globe", gps: "globe" }, // where someone canyons (regions.ts)
   place: { web: "map-pin", gps: "map-pin" },
+  gauge: { web: "droplets", gps: "mci:water-outline" }, // a river gauge
+  mgaGrid: { web: "grid-3x3", gps: "grid" }, // the MGA grid overlay
   trip: { web: "book-open", gps: "book-open" },
+  plan: { web: "clipboard-list", gps: "clipboard" }, // a trip plan, the Plans page
+  form: { web: "text-cursor-input", gps: "mci:form-textbox" }, // a plan's form: a field to fill, not plan's clipboard or multiSelect's list
   saved: { web: "folder", gps: "folder" }, // Saved: everything kept on this phone
   route: { web: "route", gps: "mci:map-marker-path" },
   track: { web: "activity", gps: "activity" },
@@ -115,8 +130,9 @@ export const ICONS = {
   layers: { web: "layers", gps: "layers" }, // the layer picker
   template: { web: "layout-template", gps: "layout" },
   notes: { web: "align-left", gps: "align-left" },
-  stats: { web: "chart-column", gps: "bar-chart-2" },
+  stats: { web: "chart-no-axes-column", gps: "bar-chart-2" },
   friends: { web: "users", gps: "users" },
+  leaderboard: { web: "award", gps: "award" }, // the friends leaderboard, a medal
   account: { web: "circle-user", gps: "user" },
   notifications: { web: "bell", gps: "bell" },
   settings: { web: "settings", gps: "settings" },
@@ -134,7 +150,19 @@ export const ICONS = {
   colour: { web: "palette", gps: "mci:palette-outline" },
   sensors: { web: "cpu", gps: "cpu" },
   elevation: { web: "trending-up", gps: "trending-up" },
-  scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square-compass" },
+  scaleBar: { web: "ruler-dimension-line", gps: "mci:arrow-expand-horizontal" },
+  weather: { web: "umbrella", gps: "umbrella" }, // the forecast for a spot
+
+  // — weather: one per `WEATHER_CONDITIONS` entry. Feather's plain cloud is
+  // already sync's and its sun a trip type's, so those draw MaterialCommunityIcons' —
+  weatherClear: { web: "sun-medium", gps: "mci:weather-sunny" }, // "sun" is bushwalking's
+  weatherPartCloud: { web: "cloud-sun", gps: "mci:weather-partly-cloudy" },
+  weatherCloud: { web: "cloudy", gps: "mci:weather-cloudy" },
+  weatherFog: { web: "cloud-fog", gps: "mci:weather-fog" },
+  weatherDrizzle: { web: "cloud-drizzle", gps: "cloud-drizzle" },
+  weatherRain: { web: "cloud-rain", gps: "cloud-rain" },
+  weatherStorm: { web: "cloud-lightning", gps: "cloud-lightning" },
+  weatherSnow: { web: "cloud-snow", gps: "cloud-snow" },
 } as const satisfies Record<string, { web: LucideKebabName; gps: GpsGlyph }>;
 
 export type IconIdea = keyof typeof ICONS;

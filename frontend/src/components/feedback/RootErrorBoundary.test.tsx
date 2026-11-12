@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { RootErrorBoundary } from "./RootErrorBoundary";
 
-// THE BOUNDARY HAD NEVER BEEN TRIGGERED — not in a live run, not in a test — so
-// "the app shows a way out of a render crash" was an assumption about code that
-// had only ever been read. A render throw is not something a suite can wait for;
-// it is something a suite CAUSES, which is what this file is.
+// A render throw is not something a live run waits for; the suite causes it to
+// verify that the boundary replaces a thrown render with a recovery surface.
 //
 // The fallback is the last screen anyone sees during a crash loop, so what it
 // owes the reader is checked here rather than left to the next incident: it
@@ -13,26 +11,45 @@ import { RootErrorBoundary } from "./RootErrorBoundary";
 // session cleanup as the app's own sign-out rather than a bare reload.
 
 const mocks = vi.hoisted(() => ({
-  signOut: vi.fn(async () => {}),
+  signOut: vi.fn(async () => "https://auth.example.com/logout"),
+  assign: vi.fn(),
   clearTripDraft: vi.fn(),
+  clearTileCache: vi.fn(async () => {}),
+  clearRecentSearches: vi.fn(),
   reload: vi.fn(),
 }));
 
-vi.mock("aws-amplify/auth", () => ({ signOut: mocks.signOut }));
+vi.mock("../../auth/oidc", () => ({
+  endProviderSession: mocks.signOut,
+  loadSession: vi.fn(),
+  completeSignInFromUrl: vi.fn(),
+  signInRedirect: vi.fn(),
+  issuerUrl: vi.fn(),
+}));
 vi.mock("../../tripDraft", () => ({ clearTripDraft: mocks.clearTripDraft }));
+vi.mock("../../recentSearches", () => ({
+  clearRecentSearches: mocks.clearRecentSearches,
+}));
+vi.mock("../../geoPdf/cache", () => ({
+  clearTileCache: mocks.clearTileCache,
+}));
 
 function Thrower(): never {
   throw new Error("render exploded");
 }
 
 beforeEach(() => {
+  vi.stubEnv("VITE_AUTH_MODE", "oidc");
   mocks.signOut.mockClear();
   mocks.clearTripDraft.mockClear();
+  mocks.clearTileCache.mockClear();
+  mocks.clearRecentSearches.mockClear();
   mocks.reload.mockClear();
+  mocks.assign.mockClear();
   // jsdom cannot navigate: give the recovery verbs somewhere to land.
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { reload: mocks.reload },
+    value: { reload: mocks.reload, assign: mocks.assign },
   });
   // React logs the caught error itself; the boundary's own line is asserted
   // below, and the rest would only be noise.
@@ -40,6 +57,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   cleanup();
   vi.restoreAllMocks();
 });
@@ -77,7 +95,7 @@ describe("RootErrorBoundary", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("signs out through the same flow the app does, then reloads", async () => {
+  it("signs out through the same flow the app does, ending the provider's session", async () => {
     render(
       <RootErrorBoundary>
         <Thrower />
@@ -89,12 +107,24 @@ describe("RootErrorBoundary", () => {
     // The draft must not outlive the session down ANY exit, and this exit
     // bypasses useAuth — which is why it repeats the clear.
     await vi.waitFor(() => expect(mocks.clearTripDraft).toHaveBeenCalled());
+    // Mutation: drop clearRecentSearches() from endSession.
+    await vi.waitFor(() =>
+      expect(mocks.clearRecentSearches).toHaveBeenCalled(),
+    );
+    // Mutation: drop the clearTileCache call in handleSignOut.
+    await vi.waitFor(() => expect(mocks.clearTileCache).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalled());
-    await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalled());
+    // Mutation: drop the clear after sign-out in handleSignOut.
+    await vi.waitFor(() =>
+      expect(mocks.clearTileCache).toHaveBeenCalledTimes(2),
+    );
+    // The redirect leaves, after both clears; a reload here would race it.
+    await vi.waitFor(() => expect(mocks.assign).toHaveBeenCalled());
+    expect(mocks.reload).not.toHaveBeenCalled();
   });
 
   it("reloads even when signing out fails, so a corrupt session is still escapable", async () => {
-    mocks.signOut.mockRejectedValueOnce(new Error("fake auth has no Amplify"));
+    mocks.signOut.mockRejectedValueOnce(new Error("provider unreachable"));
     render(
       <RootErrorBoundary>
         <Thrower />

@@ -2,8 +2,8 @@
 #
 # Build, install and wire up the on-device verification APK.
 #
-# This is the debuggable-release loop (mobile/CLAUDE.local.md): a release-shaped
-# build with `debuggable true`, used because Metro cannot run on the dev laptop.
+# This is the debuggable-release loop: a release-shaped build with
+# `debuggable true`, used when Metro cannot run on the development host.
 # Doing it by hand means remembering four separate things, and each of them
 # fails SILENTLY or misleadingly:
 #
@@ -11,12 +11,12 @@
 #      invalidate `createBundleReleaseJsAndAssets`, so `assembleRelease` prints
 #      BUILD SUCCESSFUL in ~10s and reships the PREVIOUS bundle with the old URL
 #      baked in. We delete the generated bundle to force it.
-#   2. Cleartext is blocked in a release variant, so the app cannot reach a
+#   2. Cleartext is blocked in a release variant, so Logjam GPS cannot reach a
 #      local http API at all. LOGJAM_LOCAL_API=1 turns on the loopback-only
 #      exemption (plugins/withLocalApiCleartext.js).
 #   3. The Sentry sourcemap upload fails the build when no org/project is
 #      configured, which is every local build.
-#   4. `:app:packageRelease` is flaky above one worker on this laptop.
+#   4. `:app:packageRelease` is flaky above one worker on constrained hosts.
 #
 # 1, 2 and 3 all present as something OTHER than a build problem — a bare
 # `TypeError: Network request failed` with no console output, which reads as a
@@ -25,19 +25,31 @@
 # Usage:  ./scripts/build-local-apk.sh [--no-install]
 #
 # Assumes the API + MiniStack are reachable on the HOST at 8080 / 4566 (over an
-# ssh tunnel if they run on another machine) and that `.env` points the app at
-# http://127.0.0.1:8080 — loopback plus `adb reverse` is the one configuration
+# ssh tunnel if they run on another machine) and that `.env` points Logjam GPS
+# at http://127.0.0.1:8080 — loopback plus `adb reverse` is the one configuration
 # that works on the emulator and a physical device alike, so it never needs
 # editing per target. Never 10.0.2.2: that is emulator-only and routes nowhere
 # on a phone.
+#
+# A prod-pointed field APK is the same script with the EXPO_PUBLIC_* values
+# overridden in the shell, which Expo prefers to `.env`:
+#   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=oidc \
+#   EXPO_PUBLIC_API_URL=https://api.logjamnsw.com \
+#   EXPO_PUBLIC_WEB_URL=https://logjamnsw.com \
+#   EXPO_PUBLIC_OIDC_ISSUER=... EXPO_PUBLIC_OIDC_CLIENT_ID=... \
+#   ./scripts/build-local-apk.sh
+# The issuer and client id can come from `.env` instead.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# config.ts throws at launch when either is unset: fail before the build, not
-# on the device after it.
-for v in EXPO_PUBLIC_API_URL EXPO_PUBLIC_WEB_URL; do
-  grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
+# The app throws at launch when one of these is unset: fail before the build,
+# not on the device after it. Only fake auth goes without a provider.
+required="EXPO_PUBLIC_API_URL EXPO_PUBLIC_WEB_URL"
+auth_mode=${EXPO_PUBLIC_AUTH_MODE:-$(sed -n 's/^EXPO_PUBLIC_AUTH_MODE=//p' .env 2>/dev/null | tr -d '"'"'"'\r' || true)}
+[ "$auth_mode" = fake ] || required="$required EXPO_PUBLIC_OIDC_ISSUER EXPO_PUBLIC_OIDC_CLIENT_ID"
+for v in $required; do
+  [ -n "${!v:-}" ] || grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
 done
 
 install_apk=1
@@ -46,7 +58,9 @@ install_apk=1
 export LOGJAM_LOCAL_API=1
 export SENTRY_DISABLE_AUTO_UPLOAD=true
 
-bundle_dir="android/app/build/generated/assets/createBundleReleaseJsAndAssets"
+# The whole generated tree, not the bundle task's own folder: that path changes
+# between React Native versions, and a delete that misses it ships a stale bundle.
+generated_assets="android/app/build/generated/assets"
 apk="android/app/build/outputs/apk/release/app-release.apk"
 
 # The plugin writes into android/, which is prebuild-generated, so prebuild has
@@ -59,7 +73,7 @@ echo "==> prebuild (android)"
 npx expo prebuild --platform android --no-install
 
 echo "==> forcing a fresh JS bundle (.env is not a gradle input)"
-rm -rf "$bundle_dir"
+rm -rf "$generated_assets"
 
 echo "==> assembleRelease"
 (cd android && ./gradlew assembleRelease --max-workers=1)
@@ -69,19 +83,21 @@ echo "==> assembleRelease"
 # the first place.
 echo "==> verifying the APK"
 
-# Grep for the URL .env ASKS for, not for "some loopback URL" — the bundle also
+# Grep for the URL the build ASKS for, not for "some loopback URL" — the bundle also
 # contains Metro's own http://localhost:8081, which matches a loose pattern and
 # makes a stale API URL look fine.
-want=$(grep -E '^EXPO_PUBLIC_API_URL=' .env | cut -d= -f2- | tr -d '"'"'"'\r')
+want=${EXPO_PUBLIC_API_URL:-$(grep -E '^EXPO_PUBLIC_API_URL=' .env | cut -d= -f2- | tr -d '"'"'"'\r')}
 if [ -z "$want" ]; then
   echo "    EXPO_PUBLIC_API_URL is not set in .env" >&2
   exit 1
 fi
-if grep -aqF "$want" "$bundle_dir/index.android.bundle"; then
+# The bundle inside the APK, which is what ships. Not `grep -q`: it exits at the
+# first match, unzip dies of SIGPIPE, and pipefail reports a miss.
+if unzip -p "$apk" assets/index.android.bundle | grep -aF "$want" >/dev/null; then
   echo "    API URL:   $want (in the bundle)"
 else
-  echo "    API URL:   MISSING — .env says $want but the bundle does not contain it." >&2
-  echo "               The JS bundle is stale; delete $bundle_dir and rebuild." >&2
+  echo "    API URL:   MISSING — the build asked for $want but the bundle does not contain it." >&2
+  echo "               The JS bundle is stale; delete android/app/build and rebuild." >&2
   exit 1
 fi
 case "$want" in

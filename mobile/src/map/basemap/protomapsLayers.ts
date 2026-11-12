@@ -2,15 +2,23 @@
 // scripts/basemap/generate-style.mjs — regenerate there, never hand-edit the
 // JSONs). Each entry is MLRN-ready: paint+layout already merged into a
 // camelCase `style` object; filter/zooms/source-layer ride as component props.
+import { TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
+
+import { BAND_MARKERS } from "../layerOrder";
 import lightLayers from "./protomapsLayers.light.json";
 import darkLayers from "./protomapsLayers.dark.json";
 
 export type ProtomapsFlavor = "light" | "dark";
 
+/** The flavor every map in Logjam GPS mounts, so they all render the same
+ *  vector basemap. Light matches the paper-topo look of the SIX rasters; the
+ *  dark JSON ships alongside for a later theme pass. */
+export const PROTOMAPS_FLAVOR: ProtomapsFlavor = "light";
+
 export interface ProtomapsLayerDef {
   id: string;
-  type: "background" | "fill" | "line" | "symbol";
-  sourceLayer?: string;
+  type: "fill" | "line" | "symbol";
+  sourceLayer: string;
   filter?: unknown[];
   minzoom?: number;
   maxzoom?: number;
@@ -31,4 +39,22 @@ export function protomapsLayerDefs(
   flavor: ProtomapsFlavor,
 ): ProtomapsLayerDef[] {
   return FILES[flavor].layers;
+}
+
+/**
+ * The band marker each layer of the stack goes under, in the order of
+ * `protomapsLayerDefs`: the Terrain group's anchors are where the bands change.
+ */
+export function protomapsBandMarkers(flavor: ProtomapsFlavor): string[] {
+  const layers = protomapsLayerDefs(flavor);
+  const start = (id: string) => layers.findIndex((layer) => layer.id === id);
+  const water = start(TERRAIN_BASEMAP_ANCHORS.hillshade);
+  const top = start(TERRAIN_BASEMAP_ANCHORS.slope);
+  return layers.map((_, i) =>
+    i < water
+      ? BAND_MARKERS.land
+      : i < top
+        ? BAND_MARKERS.water
+        : BAND_MARKERS.top,
+  );
 }

@@ -70,6 +70,36 @@ as below. In full:
   differently as the plan and apply identities). A spurious one is fixed by
   stripping that attribute for its resource type, and restarts the four
   weeks. Flipping the variable is a reviewed PR.
+- **Update 2026-10-17: `PLAN_VALUE_CHECK` is `enforce`.** The trial ran from
+  2026-10-02 over eleven apply runs (fourteen root jobs; two were refused by
+  the address fingerprint before the value check). The one value mismatch was
+  #281: its plan ran before `PLAN_FINGERPRINT_KEY` moved into the
+  `terraform-plan` and `prod` Environments, so the plan job read the old
+  repository secret and the apply read the new Environment secret, and every
+  changed resource's HMAC differed while the plans were identical and
+  CloudTrail shows no hand change. A key migration is not a planned value
+  that moved, so no attribute was stripped. The maintainer cut the four weeks
+  to 15 days. Everything else above stands.
+- **Update 2026-10-17: the HMAC also covers `before`.** The enforce drill
+  added a tag by hand to `aws_sns_topic.alerts` and merged a PR that also
+  updated it. The apply's plan proposed to remove the hand tag, so its `after`
+  was the config's tags, identical to the PR's plan: the check passed, the
+  apply went ahead and reverted the hand edit — the #268 case above, still
+  open. Each changed resource's fingerprint now hashes `before` and `after`,
+  with `before_sensitive`/`before_unknown` stripped as well. A plan comment
+  from before this update carries after-only hashes and cannot be compared;
+  re-plan those PRs. Everything else above stands.
+- **Update 2026-10-17: envs/github hashes without what differs by viewer.**
+  The first ruleset apply after the `before` update (#453) was refused with
+  identical diffs and no hand change. GitHub's ETag hashes the response, which
+  differs by token, so the plan App's `etag` is never the apply App's, on any
+  resource; `before.bypass_actors` differs the same way. `plan-summary.mjs`
+  leaves the root's `perViewer` attributes (`etag`) and its `unreadable` ones
+  out of the HMAC; the fingerprint already hashes the configured
+  `bypass_actors`. A hand edit to `bypass_actors` was never visible to the
+  plan App, so nothing it could catch is lost. Guard: "a ruleset the PR
+  updates has the same value fingerprint read by either App"
+  (`infra/scripts/plan-summary.test.mjs`). Everything else above stands.
 - The rest of 0024 as it was. The plan comment leads with counts and every
   delete, replace and forget address; a truncated comment keeps that header
   and the end of the plan text, and one whose header alone won't fit carries
@@ -99,14 +129,32 @@ as below. In full:
   Only a run the maintainer approved can read it, so the Negative
   consequence that anyone who can push a branch reaches it no longer applies.
   A rotation still invalidates open PRs' comments. Everything else above stands.
+- **Update 2026-10-18: the key also signs the comment.** Any PR's workflow
+  can post a comment as `github-actions[bot]` from a job outside the
+  `terraform-plan` Environment, and the address fingerprint is unkeyed, so
+  such a comment could pair the real plan's fingerprint with text that
+  describes another. Where nothing is created, updated or replaced (only
+  deletes, forgets, or a ruleset's unreadable `bypass_actors`), the value map
+  is empty on both sides and nothing keyed was compared. The comment now
+  carries `plan-signature`, an HMAC with `PLAN_FINGERPRINT_KEY` over the
+  root, fingerprint, sha and value map, and `check` counts a comment whose
+  signature does not verify as one whose values cannot be compared, which
+  `enforce` refuses. A comment from before this update is unsigned: re-plan
+  those PRs. Everything else above stands.
+- **Update 2026-10-18: `PLAN_FINGERPRINT_KEY` is a secret of
+  `terraform-plan-sign` and `prod`.** The PR's plan jobs now run unapproved
+  and never hold it: a main-only workflow decrypts their plan and renders and
+  signs the comment
+  ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)).
+  The key still never reaches a PR's code. Everything else above stands.
 
 Guard: `infra/scripts/plan-summary.test.mjs`, run in
 `.github/workflows/terraform-ci.yml`. Beside 0024's checks it covers: a
 changed value on an updated resource changes its HMAC; a sensitive value, or
 one unknown until apply, does not; a different key gives a different HMAC and
-no key gives none; report mode never refuses; enforce refuses on a mismatch
-and when the values cannot be compared. Each test names the mutation that
-turns it red.
+no key gives none; report mode never refuses; enforce refuses on a mismatch,
+when the values cannot be compared, and on an unsigned or edited comment.
+Each test names the mutation that turns it red.
 
 ## Consequences
 
@@ -147,3 +195,6 @@ turns it red.
   how stable planned values are across a PR's plan and its apply.
 - **An Environment secret.** Rejected: the PR's plan job could not read it
   without an Environment, and `prod` is deployable from `main` only.
+- **Plan PRs as the apply App, so both read the same etag.** Rejected: it
+  gives a PR's plan a token that can edit the repository's settings
+  ([0025](0025-github-settings-in-terraform.md)).

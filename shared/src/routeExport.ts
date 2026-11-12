@@ -4,26 +4,17 @@
  * Separate from gpxWrite.ts, which writes a recorded track, because the two are
  * different things in GPX itself: `<trk>` is where you went, `<rte>` is where
  * you intend to go. A drawn route has no timestamps, so writing it as a track
- * forces a lie — the previous web export stamped every point 1970-01-01, which
- * other apps read as a real (and very old) recording. `<rte>`/`<rtept>` says
- * exactly what a Logjam route is, and our own importer already maps `rte` to a
- * LineString, so the round trip holds.
+ * would force dummy timestamps that other apps read as a real recording.
+ * `<rte>`/`<rtept>` says exactly what a Logjam route is, and our own importer
+ * already maps `rte` to a LineString, so the round trip holds.
  *
  * PRIVACY: the output IS the line through a place — the most sensitive shape
- * of data this app holds. It is written to a file the user chose or handed to
+ * of data Logjam holds. It is written to a file the user chose or handed to
  * the share sheet; it never goes to the server, and callers must never log it.
  */
 import type { RoutePoint } from "./routeValidation.js";
-
-/** XML text escaping. Route names are user text and can contain & or <. */
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+import { escapeXml } from "./escapeXml.js";
+import { MEDIA_EXTENSION_BY_MIME, TRACK_MIME_TYPES } from "./media.js";
 
 /** Six decimal places ≈ 0.1 m — past GPS precision, and keeps files small. */
 function coord(value: number): string {
@@ -98,4 +89,15 @@ export function exportFilename(
     .replace(/^[.\s]+|[.\s]+$/g, "")
     .slice(0, 80);
   return `${safe || fallback}.${extension}`;
+}
+
+// Every extension a stored track file can carry, from the one list uploads use.
+const TRACK_EXTENSION = new RegExp(
+  `(?<=.)\\.(${TRACK_MIME_TYPES.map((mime) => MEDIA_EXTENSION_BY_MIME[mime]).join("|")})$`,
+  "i",
+);
+
+/** A track file's name for a list: the extension is for the download only. */
+export function trackDisplayName(filename: string): string {
+  return filename.replace(TRACK_EXTENSION, "");
 }

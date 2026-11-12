@@ -1,8 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("./prisma", () => ({ default: {} }));
+const { findMany } = vi.hoisted(() => ({ findMany: vi.fn() }));
+const { pushUrl } = vi.hoisted(() => ({
+  pushUrl: { value: undefined as string | undefined },
+}));
+vi.mock("../lib/env", async (orig) => {
+  const real = await orig<typeof import("../lib/env")>();
+  return {
+    ...real,
+    getEnv: () => ({
+      ...real.getEnv(),
+      ...(pushUrl.value ? { EXPO_PUSH_URL: pushUrl.value } : {}),
+    }),
+  };
+});
+vi.mock("./prisma", () => ({ default: { deviceToken: { findMany } } }));
 
-import { buildPushMessages, pushTitleFor, tokensToPrune } from "./push";
+import {
+  buildPushMessages,
+  pushTitleFor,
+  sendPushToUser,
+  tokensToPrune,
+} from "./push";
 
 describe("buildPushMessages — privacy invariant", () => {
   it("builds one message per token with a static generic title", () => {
@@ -34,8 +53,6 @@ describe("buildPushMessages — privacy invariant", () => {
       "topo_failed",
       "topo_export_complete",
       "topo_export_skipped",
-      "geo_pdf_complete",
-      "geo_pdf_failed",
       "unknown_future_type",
     ]) {
       const title = pushTitleFor(type);
@@ -45,16 +62,6 @@ describe("buildPushMessages — privacy invariant", () => {
       expect(title).toBe(pushTitleFor(type)); // deterministic
     }
     expect(pushTitleFor("unknown_future_type")).toBe("Logjam notification");
-  });
-
-  // APIC-002: a failed GeoPDF used to push "GeoPDF finished" — the push carries
-  // no status field, so the type is the only thing that can carry the outcome.
-  it("gives a failed GeoPDF its own title, distinct from the success one", () => {
-    expect(pushTitleFor("geo_pdf_failed")).toBe("GeoPDF failed");
-    expect(pushTitleFor("geo_pdf_failed")).not.toBe(
-      pushTitleFor("geo_pdf_complete"),
-    );
-    expect(pushTitleFor("geo_pdf_failed")).not.toBe("Logjam notification");
   });
 
   it("throws loudly on a non-whitelisted data key (no free-text smuggling)", () => {
@@ -72,6 +79,22 @@ describe("buildPushMessages — privacy invariant", () => {
         latitude: -33.7,
       }),
     ).toThrow(/not allowed: latitude/);
+  });
+
+  // Mutation: title an announcement push with its own (free-text) title, or
+  // drop announcementId from ALLOWED_DATA_KEYS.
+  it("titles an announcement generically and carries only its id", () => {
+    const [message] = buildPushMessages(["t"], {
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
+    expect(message.title).toBe("A message from the Logjam maintainer");
+    expect(message.data).toEqual({
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
   });
 
   it("has no body field — titles only, details fetched over the authed API", () => {
@@ -96,5 +119,38 @@ describe("tokensToPrune", () => {
 
   it("handles missing tickets gracefully", () => {
     expect(tokensToPrune(["a", "b"], [{ status: "ok" }])).toEqual([]);
+  });
+});
+
+// Mutation: rethrow from sendPushToUser's catch.
+describe("sendPushToUser", () => {
+  it("swallows a failed send, so the request that triggered it still succeeds", async () => {
+    findMany.mockResolvedValueOnce([{ token: "ExponentPushToken[a]" }]);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("fetch failed"));
+    await expect(
+      sendPushToUser("u1", { type: "friend_request", notificationId: "n1" }),
+    ).resolves.toBeUndefined();
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
+  });
+});
+
+// Mutation: hard-code Expo's URL in sendPushToUser again.
+describe("sendPushToUser — EXPO_PUSH_URL", () => {
+  it("posts to the configured URL, so CI can point it at a stub", async () => {
+    pushUrl.value = "http://localhost:9099";
+    findMany.mockResolvedValueOnce([{ token: "ExponentPushToken[a]" }]);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+    await sendPushToUser("u1", {
+      type: "friend_request",
+      notificationId: "n1",
+    });
+    expect(fetchSpy.mock.calls[0][0]).toBe("http://localhost:9099");
+    fetchSpy.mockRestore();
+    pushUrl.value = undefined;
   });
 });

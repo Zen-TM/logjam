@@ -1,19 +1,12 @@
-// Where this install keeps its custom-field DEFINITIONS — which is now the
-// same answer for everyone: the local mirror (`custom_field_defs` in
-// `logjam.db`), written through the outbox like every other thing the user
-// makes.
+// Where this install keeps its custom-field DEFINITIONS: the local mirror
+// (`custom_field_defs` in `logjam.db`), written through the outbox like every
+// other thing the user makes.
 //
-// This file used to branch on account state. A LINKED install kept its
-// definitions on the user record (`uiPreferences`), which made editing them
-// online-only — a JSON array on the user row has no id, no updatedAt and no
-// tombstone, so an offline queue would have had nothing to merge with. A GUEST
-// kept a second, private list in `sync_state`, and `adoptLocalFieldDefs` had to
-// carry it up on link. Definitions are rows now, so both halves are gone:
-// defining, renaming and deleting a field works with no signal for anyone, and
-// a guest's definitions reach their new account the same way their places do
-// — the outbox flushes.
+// Definitions are rows in the mirror, so defining, renaming and deleting a
+// field works with no signal for anyone, and a guest's definitions reach their
+// new account the same way their places do — through the outbox.
 //
-// The VALUES were always local for both, and still are.
+// Values and definitions are both offline-first.
 //
 // PRIVACY: field labels are user-authored ("water level", "car shuttle"). They
 // live in the mirror, which means they are inside the sign-out wipe derived
@@ -171,8 +164,9 @@ export async function saveFieldDefs(
 
 /**
  * A built-in row. Not `ownerId === null` alone: a definition made on this
- * phone has no owner here until it syncs, and that test made it impossible to
- * edit or delete in the meantime. Same rule as `isSystemFieldDef`, on the row.
+ * phone has no owner here until it syncs, so checking only null would make it
+ * impossible to edit or delete in the meantime. Same rule as `isSystemFieldDef`,
+ * on the row.
  */
 function isBuiltIn(row: { ownerId: string | null; key: string }): boolean {
   return row.ownerId === null && isReservedFieldKey(row.key);
@@ -219,10 +213,9 @@ export async function removeFieldDef(
     (candidate) => candidate.entity === entity && candidate.key === key,
   );
   if (!row) return 0;
-  // The one that mattered: deleting a built-in stripped its value off every
-  // place in the account, and the server answered the def delete with
-  // "already applied" — so the definition came back on the next pull and the
-  // values did not.
+  // Deleting a built-in would strip its value off every place in the account;
+  // since the server rejects deleting system definitions, the definition would
+  // return on the next pull without its values (Guard: fieldDefsStore.test.ts).
   if (isBuiltIn(row)) {
     throw new Error("A built-in field can't be deleted.");
   }
@@ -273,7 +266,7 @@ async function rowsWithFieldValue(
   return (
     places
       // A place shared WITH this user is read-only, and its owner's fields are
-      // not this user's to strip.
+      // not this user's to strip (Guard: fieldDefsStore.test.ts).
       .filter(
         (place) =>
           place.syncRole === "owner" &&

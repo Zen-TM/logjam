@@ -1,18 +1,21 @@
 // The Places panel's decisions, kept out of the component so they can be tested:
-// how the status rail maps onto the filter, what the sheet's badge counts, and
+// how the status chips map onto the filter, what the sheet's badge counts, and
 // the area a "Make a map" starts from.
 import {
   activePlaceFilterCount,
   EMPTY_PLACE_FILTERS,
+  PLACES_ADD,
+  ROPEWIKI_OFFER,
   type PlaceFilters,
-  type PlaceStatus,
+  type PlaceStatusFilterValue,
+  type Region,
   type RegionBbox,
 } from "@logjam/shared";
 
-export type StatusBucket = "all" | PlaceStatus;
+export type StatusBucket = PlaceStatusFilterValue;
 
 /**
- * The status rail is two filter fields read together — ownership and
+ * The status is two filter fields read together — ownership and
  * completion — because "shared" is an ownership and "visited" a completion.
  * A place you visited is always your own (a trip links only its owner's
  * places), so visited and not visited both mean owned.
@@ -34,7 +37,7 @@ export function withBucket(
 }
 
 /**
- * Which chip the filter corresponds to. A combination the rail cannot show (an
+ * Which chip the filter corresponds to. A combination the sheet cannot show (an
  * ownership or completion set by an older build's accordion, still in session
  * storage) maps to its nearest chip — and `normaliseBucket` rewrites the filter
  * to match, so no hidden axis goes on narrowing the list with no chip lit.
@@ -46,7 +49,7 @@ export function bucketOf(filters: PlaceFilters): StatusBucket {
   return "all";
 }
 
-/** The filter with its status axes exactly as the rail shows them, or the same
+/** The filter with its status axes exactly as the sheet shows them, or the same
  *  object when they already are. */
 export function normaliseBucket(filters: PlaceFilters): PlaceFilters {
   const normalised = withBucket(filters, bucketOf(filters));
@@ -56,24 +59,24 @@ export function normaliseBucket(filters: PlaceFilters): PlaceFilters {
     : normalised;
 }
 
-/** The filters the SHEET owns — everything but the two rails (type, status). */
+/** The filters the SHEET owns, everything but the type rail. The status counts
+ *  once, though it is two fields. */
 export function sheetFilterCount(filters: PlaceFilters): number {
-  return activePlaceFilterCount({
+  const others = activePlaceFilterCount({
     ...filters,
     placeTypeId: null,
     ownership: "all",
     completion: "any",
   });
+  return others + (bucketOf(filters) === "all" ? 0 : 1);
 }
 
-/** Clear what the sheet owns and keep what the rails show. */
+/** Clear what the sheet owns and keep what the rail shows. */
 export function clearSheetFilters(filters: PlaceFilters): PlaceFilters {
   return {
     ...EMPTY_PLACE_FILTERS,
     custom: {},
     placeTypeId: filters.placeTypeId,
-    ownership: filters.ownership,
-    completion: filters.completion,
   };
 }
 
@@ -133,4 +136,23 @@ export function idRange(
   if (end < 0) return [];
   if (start < 0) return [to];
   return ids.slice(Math.min(start, end), Math.max(start, end) + 1);
+}
+
+/**
+ * The Add menu's RopeWiki entries: one per region with a canyon list, none
+ * without. `importing` is the region id being imported, which labels its entry.
+ */
+export function ropewikiAddEntries(
+  canyonRegions: readonly Region[],
+  importing: string | null,
+) {
+  return canyonRegions.map((region) => ({
+    id: `importRopewiki-${region.id}`,
+    region,
+    label:
+      importing === region.id
+        ? PLACES_ADD.copy.importingRopewiki
+        : ROPEWIKI_OFFER.menu(region, canyonRegions.length),
+    disabled: importing !== null,
+  }));
 }

@@ -1,19 +1,17 @@
-// Plan §5.5 / §7.12 — the prod-snapshot privacy scrub cannot silently stop
-// matching.
+// The prod-snapshot privacy scrub cannot silently stop matching.
 //
-// `scripts/snapshot.sh` used to inline its scrub in a psql heredoc with no
-// ON_ERROR_STOP. psql exits 0 after a statement error there and `set -e` does
-// not catch it, so when `canyons` became `places` the scrub printed
-// `relation "canyons" does not exist` and then exported a snapshot with every
-// note intact — a mandatory privacy boundary failing OPEN, quietly.
+// psql exits 0 after a statement error in a heredoc unless ON_ERROR_STOP is
+// set; without it, `set -e` does not catch failures and an unmapped table or
+// column name would export a snapshot with user notes intact — a mandatory
+// privacy boundary failing open, quietly.
 //
 // Two things are checked, because ON_ERROR_STOP only catches the first:
 //  1. every table/column the scrub names still exists in the schema (a rename
 //     breaks the build, not the next snapshot);
 //  2. every user-authored column on the owner-data models is either scrubbed
 //     or exempted BY NAME here (a new column cannot join the schema and miss
-//     the scrub — root CLAUDE.md's "two lists that must agree" rule).
-import { readFileSync } from "node:fs";
+//     the scrub — root AGENTS.md's "two lists that must agree" rule).
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TRIP_TYPE_SUGGESTIONS } from "@logjam/shared";
@@ -29,7 +27,16 @@ const schema = readFileSync(
 );
 
 /** Models holding what a user typed about where they have been. */
-const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
+const OWNER_DATA_MODELS = [
+  "Place",
+  "TripLog",
+  "CustomFieldDef",
+  "ImportSnapshot",
+  "TripPlan",
+  "TripPlanSection",
+  "TripPlanForm",
+  "TripPlanAnswer",
+];
 
 /**
  * Columns on those models that are NOT scrubbed, each with the reason. An
@@ -38,12 +45,15 @@ const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
 const SCRUB_EXEMPT: Record<string, string> = {
   "places.import_key":
     "derived from name+coords, but opaque and needed for re-import dedupe",
+  "places.type_icon_key": "curated icon vocabulary, not user text",
   "places.ropewiki_snapshot": "public RopeWiki text, not user-authored",
   "trip_logs.import_key": "opaque",
   "custom_field_defs.key":
     "slug of the label, which IS scrubbed; kept so values stay addressable",
   "custom_field_defs.entity": "protocol vocabulary, not user text",
   "custom_field_defs.type": "protocol vocabulary, not user text",
+  "trip_plan_forms.visible_to": "protocol vocabulary, not user text",
+  "trip_plan_forms.preset": "protocol vocabulary, not user text",
 };
 
 /** `@@map("x")` for a model, else its snake-cased name. */
@@ -78,10 +88,8 @@ function textColumns(model: string): string[] {
  * The DB column for a field with no `@map`.
  *
  * Prisma does NOT snake_case automatically — an unmapped `altNames` is a column
- * literally called "altNames". This helper used to snake_case it, which made
- * the guard agree with a scrub that named a column that does not exist: both
- * sides shared one wrong assumption, so the test passed and the scrub would
- * have aborted on the next snapshot. Verbatim is the rule.
+ * literally called "altNames". Verbatim is the rule: snake_casing here would
+ * hide mismatches with a scrub that named a nonexistent column.
  */
 const columnName = (field: string) => field;
 
@@ -158,7 +166,7 @@ describe("snapshot-scrub.sql", () => {
     ).toEqual([]);
   });
 
-  // The app's suggested trip types survive the scrub — they are not user text,
+  // Logjam's suggested trip types survive the scrub — they are not user text,
   // and dev analytics key on `canyoning`. The SQL spells that list itself, so it
   // has to agree with the one declaration or a new suggestion gets pseudonymised.
   it("keeps exactly TRIP_TYPE_SUGGESTIONS when scrubbing trip types", () => {
@@ -166,6 +174,44 @@ describe("snapshot-scrub.sql", () => {
     expect(kept, "scrub_trip_types' kept-vocabulary array").not.toBeNull();
     const words = [...kept![1].matchAll(/'([^']*)'/g)].map(([, word]) => word);
     expect(words).toEqual([...TRIP_TYPE_SUGGESTIONS]);
+  });
+
+  // notifications.payload is Json, so the column walk above cannot see inside
+  // it. Any payload key a writer stamps whose name says text must be removed
+  // by the scrub. Mutation: drop 'planName' from the UPDATE and this fails.
+  it("removes every text key a notification payload is written with", () => {
+    const writers = ["lib", "routes"].flatMap((dir) =>
+      readdirSync(join(REPO_ROOT, "api", "src", dir))
+        .filter((f) => f.endsWith(".ts") && !/test/.test(f))
+        .map((f) => join(REPO_ROOT, "api", "src", dir, f)),
+    );
+    const textKeys = new Set<string>();
+    for (const file of writers) {
+      for (const [, body] of readFileSync(file, "utf8").matchAll(
+        /\bpayload:\s*\{([^}]*)\}/g,
+      )) {
+        for (const [, key] of body.matchAll(/(?:^|[\s{,])(\w+)\s*:/g)) {
+          if (/name|title|body|text|label/i.test(key)) textKeys.add(key);
+        }
+      }
+    }
+    // Read-time display only, never stored (notifications.ts resolves them
+    // from live rows), or not user text: maintainer copy, account usernames.
+    for (const exempt of [
+      "title",
+      "body",
+      "placeName",
+      "sentByUsername",
+      "sharedByUsername",
+    ])
+      textKeys.delete(exempt);
+    expect(textKeys.size).toBeGreaterThan(0);
+    const removed =
+      /UPDATE notifications\s+SET payload = payload((?: - '\w+')+);/.exec(
+        scrubSql,
+      );
+    expect(removed, "the notifications payload scrub").not.toBeNull();
+    for (const key of textKeys) expect(removed![1]).toContain(`'${key}'`);
   });
 
   it("has no stale exemptions", () => {

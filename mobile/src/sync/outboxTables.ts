@@ -5,10 +5,9 @@
 // mapping is only used to clean up after a discarded create, inside a
 // transaction, so an entity that falls off the end produces `DELETE FROM
 // undefined`, an exception, a rolled-back transaction — and a "Discard" button
-// with no visible effect whatsoever. That was the bug (media rows are parked
-// like any other, and `media` is deliberately absent from
-// SYNC_PUSH_OPS_BY_ENTITY). The test asserts totality so a new entity can't
-// reintroduce it.
+// with no visible effect whatsoever (media rows are parked like any other,
+// and `media` is deliberately absent from SYNC_PUSH_OPS_BY_ENTITY).
+// `outboxTables.test.ts` asserts totality.
 import { SYNC_PUSH_OPS_BY_ENTITY, type SyncPushEntity } from "@logjam/shared";
 
 /**

@@ -3,26 +3,47 @@ import { WAY_SHARE_VERB } from "@logjam/shared";
 import { wayProperties, wayVerbs, type WaySurface } from "./wayActions";
 import type { WayItem } from "./waysModel";
 
-type Subject = Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">;
+type Subject = Pick<
+  WayItem,
+  "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin" | "hasTrip"
+>;
 
 const route = (over: Partial<Subject> = {}): Subject => ({
   kind: "route",
   shared: false,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const importFile = (over: Partial<Subject> = {}): Subject => ({
   kind: "import",
   shared: false,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const ids = (subject: Subject, surface: WaySurface = "row") =>
   wayVerbs(subject, surface).map((verb) => verb.id);
 
 describe("wayVerbs", () => {
+  // `PATCH /media/:id` and `POST /file-sends/from-media` take only a file that
+  // says what it is; one attached in a place's form has no origin. Red when
+  // the `hasOrigin` gate is dropped from `wayVerbs` or `wayProperties`.
+  it("offers a file with no origin only Download and Delete among the file verbs", () => {
+    const subject = importFile({ hasOrigin: false, placeId: "p1" });
+    const offered = ids(subject);
+    expect(offered).toEqual(
+      expect.arrayContaining(["download", "delete", "openPlace"]),
+    );
+    expect(offered).not.toContain("rename");
+    expect(offered).not.toContain("sendCopy");
+    expect(wayProperties(subject).colour).toBe(false);
+  });
+
   // The rule the three surfaces were drifting away from.
   it("gives a row and a detail page the same verbs but for Open", () => {
     const subject = route({ placeId: "p1" });
@@ -48,8 +69,7 @@ describe("wayVerbs", () => {
     );
   });
 
-  // The endpoint has existed since sharing shipped; nothing on the web offered
-  // it, so a sharee's only way to keep a route was export-and-reimport.
+  // A sharee can keep a route without export-and-reimport.
   it("lets a sharee take their own copy of a route", () => {
     expect(ids(route({ shared: true }))).toContain("copy");
   });
@@ -58,8 +78,7 @@ describe("wayVerbs", () => {
     expect(ids(route())).not.toContain("copy");
   });
 
-  // It was a button in the detail body, which is the one place a verb may not
-  // be (operator, 2026-09-17) — and it read as a leftover from another app.
+  // Verbs belong in the menu, not in the detail body.
   it("offers Remove on a way shared directly with you", () => {
     expect(ids(route({ shared: true }))).toContain("removeShare");
   });
@@ -106,7 +125,7 @@ describe("wayVerbs", () => {
     expect(ids(importFile({ shared: true }))).not.toContain("copy");
   });
 
-  // It is a button in the draw tool now: it changes the geometry you are
+  // Reverse is a button in the draw tool: it changes the geometry you are
   // looking at, so it belongs beside the other edits to that geometry.
   it("keeps Reverse out of every menu", () => {
     expect(ids(route())).not.toContain("reverse");
@@ -117,8 +136,8 @@ describe("wayVerbs", () => {
     expect(ids(importFile())).not.toContain("edit");
   });
 
-  // `POST /shares` admits route, topoJob and geoPdfJob (`SHARABLE_ENTITY_TYPES`),
-  // so a file has nothing to share: Share… on one opened no dialog. Mutation:
+  // `POST /shares` admits route and topoJob (`SHARABLE_ENTITY_TYPES`),
+  // so a file has nothing to share. Mutation:
   // drop the `WAY_SHARE_VERB` test from the share verb in `wayVerbs`.
   it("offers Share… on a route and on no kind of file", () => {
     expect(ids(route())).toContain("share");
@@ -167,8 +186,7 @@ describe("wayVerbs", () => {
   });
 
   // Export writes a new file out of geometry the page holds; a file's bytes are
-  // in S3, so getting them back is a download — and nothing offered it, so an
-  // imported GPX could never be taken out again.
+  // in S3, so getting them back is a download.
   it("offers a download of a file and an export of a route, never both", () => {
     expect(ids(importFile())).toContain("download");
     expect(ids(importFile())).not.toContain("exportGpx");
@@ -184,9 +202,10 @@ describe("wayVerbs", () => {
     ).not.toContain("download");
   });
 
-  it("renames a file in place, and leaves a route to its own form", () => {
+  // Mutation: restore the `kind !== "route"` exclusion in `wayVerbs`.
+  it("renames a file or a route in place", () => {
     expect(ids(importFile())).toContain("rename");
-    expect(ids(route())).not.toContain("rename");
+    expect(ids(route())).toContain("rename");
   });
 
   it("offers its place only when it has one", () => {
@@ -206,6 +225,14 @@ describe("wayVerbs", () => {
       "logTrip",
     ]);
     expect(ids(track, "detail").slice(0, 2)).toEqual(["openPlace", "logTrip"]);
+  });
+
+  // Mutation: drop `!way.hasTrip` from the logTrip verb, and a recording with
+  // a trip is offered one again.
+  it("stops offering Log a trip on a recording that has a trip", () => {
+    const track = importFile({ kind: "track", hasTrip: true });
+    expect(ids(track, "row")).not.toContain("logTrip");
+    expect(ids(track, "detail")).not.toContain("logTrip");
   });
 
   // A route is a plan and an import is somebody's walk with no day of its own;
@@ -242,7 +269,7 @@ describe("wayProperties", () => {
     expect(wayProperties(route({ shared: true })).colour).toBe(false);
   });
 
-  // PATCH /media/:id takes a palette colour since imports became recolourable.
+  // PATCH /media/:id takes a palette colour for recolouring imports.
   it("lets the owner change an import's colour and nobody else", () => {
     expect(wayProperties(importFile()).colour).toBe(true);
     expect(wayProperties(importFile({ shared: true })).colour).toBe(false);
@@ -259,8 +286,8 @@ describe("wayProperties", () => {
     expect(wayProperties(importFile({ shared: true })).place).toBe(true);
   });
 
-  // The Layers overlays draw these files now, so a per-item switch buried on a
-  // detail page has nothing left to do (operator, 2026-09-17).
+  // The Layers overlays draw these files, so a per-item switch buried on a
+  // detail page has nothing left to do.
   it("has no per-item visibility switch left to offer", () => {
     expect(wayProperties(importFile())).not.toHaveProperty("visibility");
   });

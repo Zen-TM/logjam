@@ -7,11 +7,8 @@
 // added in a browser and pulled in while the screen stayed mounted, shows up
 // in the trip form without a remount.
 //
-// This used to hold a second path for linked users that re-seeded from
-// `/users/me`, with the account list serialized into a dependency key to spot
-// changes. That is gone with the storage change: there is no account list to
-// diverge from any more, and no fetch to fail, which is why `error` is gone
-// too — reading definitions can no longer depend on the network.
+// Reading definitions is purely local and never depends on the network,
+// with no account-specific fetch to fail or diverge from.
 import { useEffect, useState } from "react";
 import type { CustomFieldEntity, ScopedCustomFieldDef } from "@logjam/shared";
 

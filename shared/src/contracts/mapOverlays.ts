@@ -6,7 +6,9 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
+import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
+import { MAP_TERRAIN } from "./mapTerrain.js";
 import type { ScreenContract } from "./types.js";
 
 export const MAP_OVERLAYS = {
@@ -18,19 +20,42 @@ export const MAP_OVERLAYS = {
       key: "geoPdfs",
       on: "gps",
       reason:
-        "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web draws them from its Maps panel.",
+        "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
     },
-    { key: "lidarTopos" },
+    { key: "land" },
+    { key: "fire" },
+    { key: "coverage" },
+    { key: "gauges" },
+    { key: "mgaGrid" },
     { key: "importFile" },
   ],
   copy: {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
+    land: MAP_TERRAIN.copy.land,
+    fire: MAP_TERRAIN.copy.fire,
+    coverage: MAP_TERRAIN.copy.coverage,
+    gauges: GAUGES.copy.overlay,
+    mgaGrid: "MGA grid",
     geoPdfs: "GeoPDF maps",
-    lidarTopos: MAP_LAYERS.copy.lidarTopos,
     importFile: MAP_LAYERS.copy.importFile,
   },
 } as const satisfies ScreenContract;
+
+/**
+ * What a fresh install draws, on both clients: the user's own pins, and
+ * nothing that fetches a public file (river gauges) or draws across every map
+ * (the MGA grid) until it is asked for. Ways are left out: Logjam GPS splits
+ * them into the sub-switches below. Guards: `contracts.test.ts`, and each
+ * client's test that a fresh install reads these.
+ */
+export const MAP_OVERLAY_DEFAULTS: Readonly<
+  Record<"places" | "gauges" | "mgaGrid", boolean>
+> = {
+  places: true,
+  gauges: false,
+  mgaGrid: false,
+};
 
 /**
  * Sub-switches Logjam GPS draws under a row, one level deep. Logjam Web has

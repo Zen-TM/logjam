@@ -43,19 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     librsvg2-2 \
     openssl \
     ca-certificates \
-    curl \
   && rm -rf /var/lib/apt/lists/*
-
-# go-pmtiles for the Stage 4a region-clip endpoint (POST /basemap/region-clip
-# runs `pmtiles extract` against PROTOMAPS_ARCHIVE_URI). Pinned release +
-# sha256 (no upstream checksums file — hash recorded from the fetched
-# artifact at pin time).
-RUN curl -fsSL -o /tmp/go-pmtiles.tar.gz \
-      https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_x86_64.tar.gz \
-  && echo "3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f  /tmp/go-pmtiles.tar.gz" | sha256sum -c - \
-  && tar -xzf /tmp/go-pmtiles.tar.gz -C /usr/local/bin pmtiles \
-  && rm /tmp/go-pmtiles.tar.gz \
-  && pmtiles version
 
 # Shared package (production deps only)
 COPY shared/package*.json /shared/
@@ -73,13 +61,16 @@ RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
 
-# Static assets read at runtime (e.g. topo point-feature icons for GeoPDF).
-COPY api/assets ./assets/
-
 # RDS CA bundle for verified TLS to Postgres. node-postgres (Prisma 7 driver
 # adapter) does not negotiate TLS by default; services/prisma.ts enables
 # verified TLS whenever this file exists. Covers all AWS regions.
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
+
+# The brain's Postgres certificate: with brain_serving on, DATABASE_SSL_CA
+# points here (infra/brain/api.env) and the connection is verified by name. The
+# build fails when the file is missing, so an image that cannot reach the brain
+# is never published.
+COPY infra/brain/brain-ca.pem /app/brain-ca.pem
 
 EXPOSE 8080
 

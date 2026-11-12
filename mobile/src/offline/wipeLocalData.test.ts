@@ -72,6 +72,39 @@ vi.mock("../tracks/trackRecorder", () => ({
     return Promise.resolve();
   },
 }));
+const clearRecentSearches = vi.hoisted(() => vi.fn());
+vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
+const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
+vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
+const forgetRegions = vi.hoisted(() => vi.fn());
+vi.mock("../regionsPreference", () => ({ forgetRegions }));
+vi.mock("../map/sharpenedArchives", () => ({
+  stopSharpenedAreasForWipe: () => record("stop:sharpened"),
+}));
+vi.mock("./sharpenedAreaStore", () => ({
+  forgetSharpenedAreas: () => {
+    record("stop:sharpened-areas");
+    return Promise.resolve();
+  },
+}));
+vi.mock("../weather/weatherStorage", () => ({
+  stopWeatherForWipe: () => {
+    record("stop:weather");
+    return Promise.resolve();
+  },
+}));
+vi.mock("../gauges/gaugeStorage", () => ({
+  stopGaugesForWipe: () => {
+    record("stop:gauges");
+    return Promise.resolve();
+  },
+}));
+vi.mock("../plans/plansCache", () => ({
+  stopPlansForWipe: () => {
+    record("stop:plans");
+    return Promise.resolve();
+  },
+}));
 const resetDatabase = vi.hoisted(() => vi.fn());
 vi.mock("@maplibre/maplibre-react-native", () => ({
   OfflineManager: { resetDatabase: () => resetDatabase() },
@@ -90,6 +123,28 @@ beforeEach(() => {
 
 describe("wipeAllLocalData", () => {
   // Red if a directory is dropped from the loop (or from WIPED_DIRS' use).
+  // Mutation: drop clearRecentSearches() from wipeAllLocalData.
+  it("forgets the recent map searches", async () => {
+    await wipeAllLocalData();
+    expect(clearRecentSearches).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop forgetSlopeBandsEdit() from wipeAllLocalData, and the same
+  // account signing back in has its slope bands ignored until a restart.
+  it("forgets a slope-band edit not yet sent", async () => {
+    forgetSlopeBandsEdit.mockClear();
+    await wipeAllLocalData();
+    expect(forgetSlopeBandsEdit).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop forgetRegions() from wipeAllLocalData, and the next account
+  // on this phone is offered the previous one's regions.
+  it("forgets the chosen regions", async () => {
+    forgetRegions.mockClear();
+    await wipeAllLocalData();
+    expect(forgetRegions).toHaveBeenCalledOnce();
+  });
+
   it("deletes every declared directory", async () => {
     const { failed } = await wipeAllLocalData();
     expect(failed).toEqual([]);
@@ -121,7 +176,6 @@ describe("wipeAllLocalData", () => {
       "track_point",
       "geo_pdf_import",
       "route_draft",
-      "overlay_enabled",
     ]) {
       expect(events).toContain(`sql:DELETE FROM ${table}`);
     }
@@ -129,11 +183,23 @@ describe("wipeAllLocalData", () => {
   });
 
   // Red if the stop calls move after (or are removed from before) the first
-  // delete: a live producer would re-create what the wipe just removed.
+  // delete: a live producer would re-create what the wipe just removed, and
+  // the sharpened areas' transforms would keep their presigned URLs.
+  // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
+  // landing after sign-out writes the departing user's plan back.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
-    for (const stop of ["stop:regions", "stop:geopdf", "stop:track"]) {
+    for (const stop of [
+      "stop:regions",
+      "stop:geopdf",
+      "stop:track",
+      "stop:weather",
+      "stop:gauges",
+      "stop:sharpened",
+      "stop:sharpened-areas",
+      "stop:plans",
+    ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(firstDelete);
@@ -148,6 +214,17 @@ describe("wipeAllLocalData", () => {
     expect(failed).toContain("downloaded files");
     expect(events).toContain("delete:file:///cache/logjam-scratch/");
     expect(events).toContain("sql:DELETE FROM map_artifact");
+  });
+
+  // Red if the area epoch moves after the area list is forgotten: a list
+  // landing while the wipe waits would pass the epoch check and put the
+  // departing account's areas back after the forget.
+  it("moves the sharpened areas' epoch before it forgets the area list", async () => {
+    await wipeAllLocalData();
+    expect(events.indexOf("stop:sharpened")).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf("stop:sharpened")).toBeLessThan(
+      events.indexOf("stop:sharpened-areas"),
+    );
   });
 
   // Red if a failure in the mirror wipe is swallowed or aborts the later steps.

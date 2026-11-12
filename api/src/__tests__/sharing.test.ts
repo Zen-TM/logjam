@@ -85,6 +85,25 @@ describe("sharing routes (fake auth = alice)", () => {
     }
   });
 
+  // Mutation: look the target user up and answer 404 before the friendship check.
+  it("POST share answers an unknown user id exactly as it answers a non-friend", async () => {
+    const placeId = await createPlace("CH-003 unknown-user share");
+    try {
+      const [unknown, stranger] = await Promise.all(
+        [NONEXISTENT_ID, CAROL_ID].map((sharedWithUserId) =>
+          request(API_URL)
+            .post(`/places/${placeId}/share`)
+            .set(AUTH)
+            .send({ sharedWithUserId }),
+        ),
+      );
+      expect(unknown.status).toBe(403);
+      expect(unknown.body.error).toBe(stranger.body.error);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
   it("POST share rejects a duplicate with 409", async () => {
     const placeId = await createPlace("CH-003 duplicate share");
     try {

@@ -53,10 +53,9 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     const types = await prisma.placeType.findMany({
       where: visiblePlaceTypeWhere(user.id),
-      // `nulls: "first"` is load-bearing, not decoration: a system type has a
-      // NULL ownerId, and Postgres sorts NULLS LAST on a plain ASC — so the
-      // built-in types landed at the BOTTOM of every picker and tab bar while
-      // this route's own docstring promised the opposite.
+      // `nulls: "first"` is load-bearing: a system type has a NULL ownerId, and
+      // Postgres sorts NULLS LAST on a plain ASC — so without it, built-in
+      // types land at the bottom. Guard: src/__tests__/placeTypes.test.ts.
       orderBy: [
         { ownerId: { sort: "asc", nulls: "first" } },
         { position: "asc" },
@@ -168,8 +167,7 @@ router.post(
 
     // Values the new type does not carry are NOT destroyed — they stay in
     // `fieldValues`, which the "render any key that already has a value" rule
-    // keeps visible. Phase 4 moves them into `foreignFields` so they read as
-    // what they are.
+    // keeps visible.
     const { count } = await prisma.place.updateMany({
       where: { ownerId: user.id, placeTypeId: from },
       data: { placeTypeId: to },

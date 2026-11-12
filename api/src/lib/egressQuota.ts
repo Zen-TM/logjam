@@ -41,7 +41,7 @@ export async function getEgressUsage(userId: string, db: DbClient = prisma) {
 
   // Reads must apply the same lazy reset the sweeper's write does, or a user
   // whose sweep has not run since the 1st would keep seeing last month's total
-  // and stay locked out into the new month.
+  // and stay locked out into the new month. Guard: egressQuota.unit.test.ts ("reads a stale period as zero used").
   const rolledOver = periodHasRolledOver(user.egressPeriodStart);
   const used = rolledOver ? 0n : user.monthlyEgressUsedBytes;
 
@@ -75,7 +75,7 @@ export async function exhaustedEgressOwnerIds(
     where: {
       id: { in: userIds },
       // Only rows whose period is current can be over — a stale period means
-      // the sweeper has not run since the 1st and usage is logically zero.
+      // the sweeper has not run since the 1st and usage is logically zero. Guard: egressQuota.unit.test.ts ("only considers rows whose period is current").
       egressPeriodStart: { gte: monthStart },
     },
     select: {

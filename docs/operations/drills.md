@@ -9,7 +9,9 @@ checks that on every migration PR, for the release live at the time.
 `smoke.yml` or `rollback.yml` (a changed mechanism is an untested one),
 quarterly, and at the first tagged mobile release for the OTA rollback. Pick
 a quiet hour: each API step is a cold Elastic Beanstalk restart, a minute or
-two of downtime.
+two of downtime. With `brain_serving` on ([brain.md](brain.md)) an API step is
+the brain's release pointer and a few seconds of failed requests instead, and
+the same boxes below apply with the brain's variants (marked).
 
 Copy the checklist into a new record at the bottom, tick it as you go, and
 note times and surprises. [rollback.md](rollback.md) has the commands.
@@ -26,6 +28,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       frontend `release-sha` on `index.html`; worker image tag on
       `logjam-topo-worker`. Note the release before each.
 - [ ] Any Terraform the change needs has been applied.
+- [ ] Which mode applies: `grep -E '^brain_(serving|public)' infra/terraform/envs/prod/brain.auto.tfvars`.
 
 ### Deploy guards
 
@@ -48,9 +51,24 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       both task definitions carry the old image, the smoke test passes.
       Time from dispatch to green: ____
 - [ ] **API forward:** the same with the newest sha. Time: ____
+- [ ] **API back and forward on the brain** (`brain_serving` on; skip while it
+      is off): the same two dispatches. The task definitions carry the sha, the
+      workflow rewrote `release.json` (it prints the sha), the status file's
+      `api_sha` follows within about a minute (`aws s3 cp s3://logjam-brain-signals-620853681701/status.json -`),
+      and the smoke test of the public `/meta` passes within its 5 minutes
+      (with `brain_public` still off the run says it cannot see the brain:
+      check `api_sha` and `localhost/ready` on the host instead,
+      [brain.md](brain.md)). Times: ____ / ____
+- [ ] **A sha with no `infra/brain/api.env` changes nothing** (brain mode): the
+      workflow fails before the pointer changes. (It does not look inside the
+      image: one without `/app/brain-ca.pem` is rolled back to like any other
+      and fails when its container starts, with "DATABASE_SSL_CA points to a
+      missing file"; [rollback.md](rollback.md).)
 - [ ] **Frontend back and forward.** Times: ____ / ____
-- [ ] **Worker back and forward.** `logjam-topo-worker` and
-      `logjam-topo-export-worker` carry the chosen tag. Times: ____ / ____
+- [ ] **Worker back and forward.** `logjam-topo-worker`,
+      `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,
+      `logjam-fire-history` and `logjam-coverage` carry the
+      chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
       with no ECR image (or no `releases/<sha>/`) fails before any swap.
 - [ ] **Refused while a deploy is busy:** a rollback dispatched while a
@@ -102,10 +120,12 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 Proves `terraform-apply.yml` refuses a plan other than the one the PR showed,
 for both kinds of hand change ([0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
 **When:** after a change to `infra/scripts/plan-summary.mjs`, `terraform-plan.yml`
-or `terraform-apply.yml`, and before flipping the repository variable
-`PLAN_VALUE_CHECK` from `report` to `enforce`. The key is the repository
-secret `PLAN_FINGERPRINT_KEY`. Use a harmless one-tag change in
-`infra/terraform/envs/prod` as the PR, and undo every hand edit afterwards.
+or `terraform-apply.yml`, and when flipping the repository variable
+`PLAN_VALUE_CHECK` from `report` to `enforce`: the report-mode half before
+the flip, the enforce-mode half after it. The key is `PLAN_FINGERPRINT_KEY`,
+a secret of the `terraform-plan` and `prod` Environments. Use a harmless
+one-tag change in `infra/terraform/envs/prod` as the PR, and undo every hand
+edit afterwards.
 
 - [ ] **Drift on a resource the PR does not touch** (refuses now, in either
       mode). After the PR's plan comment posts, add a tag by hand to a
@@ -113,7 +133,7 @@ secret `PLAN_FINGERPRINT_KEY`. Use a harmless one-tag change in
       "is not the plan on the PR" and applies nothing. This works only if the
       hand edit shows up in the plan at merge, so pick a resource with that
       attribute in Terraform.
-- [ ] **Drift on a resource the PR updates** (the case #268 found). After the
+- [ ] **Drift on a resource the PR updates**. After the
       plan comment posts, add a tag by hand to the resource the PR is
       updating, then merge.
   - With `PLAN_VALUE_CHECK` = `report`: the apply goes ahead, and the result
@@ -134,9 +154,38 @@ Time: ____ Surprises: ____
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
 
+### 2026-10-17: maintainer and Claude, the apply refusal under enforce
+
+**Change under test:** `PLAN_VALUE_CHECK` = `enforce`, and the value check
+hashing `before` as well as `after`
+([0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
+
+- **The first run failed, and found a gap.** #441 added `drill =
+  "apply-refusal"` to `aws_sns_topic.alerts`; a `hand = "drill"` tag was added
+  to the topic by hand after the plan posted, then the PR merged. The apply
+  **applied** and reverted the hand tag (76 s). The check hashed only the
+  planned `after`, which is the config's tags either way, so the hand tag
+  never appeared in it — the #268 case the check exists for. #443 made the
+  HMAC cover `before` too; its new test goes red when only `after` is hashed.
+- **Then it refused correctly.** #444 removed the drill's tag; a hand tag was
+  added after its plan posted, then it merged. The apply refused 61 s after
+  the merge: "different values on 1 resource(s) … `aws_sns_topic.alerts` …
+  The values are not shown. Nothing applied." The topic kept both tags.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run;
+  it applied the PR's removal 105 s later. The topic has no tags now.
+- **Not re-run:** drift on a resource the PR does not touch (unchanged since
+  #270), and the no-key case (deleting the key destroys its value; the unit
+  test in `plan-summary.test.mjs` covers the refusal).
+- The plan comment carried a `plan-values` line of `address → 16 hex` and
+  nothing else about values.
+
+Time: 76 s / 61 s / 105 s. **Surprise:** the enforce drill showed the value
+check did not catch the hand edit ADR 0026 was written for; #443 fixed it
+before the second run.
+
 ### 2026-10-02: maintainer and Lead (Claude), first full drill
 
-**Change under test:** the whole mechanism (Phase 3: deploy guards, `rollback.yml`, smoke, auto-rollback, `rollback-compat`, the plan fingerprint).
+**Change under test:** the whole mechanism (deploy guards, `rollback.yml`, smoke, auto-rollback, `rollback-compat`, the plan fingerprint).
 
 **Rollback workflow** (dispatch to green):
 

@@ -14,9 +14,8 @@ describe("demTileCache", () => {
   });
 
   it("hides a network tile while simulating offline", () => {
-    // The device bug this fixes: a tile fetched seconds earlier answered a tap
-    // taken with "Simulating offline mode" ON, showing 1019 m for a place with
-    // no saved region — coverage the field trip would not have had.
+    // When "Simulating offline mode" is ON, network tiles must not answer
+    // taps for places with no saved region.
     cacheTile("1/2", TILE, "network");
     expect(cachedTile("1/2", { allowNetwork: true })).toBe(TILE);
     expect(cachedTile("1/2", { allowNetwork: false })).toBeUndefined();

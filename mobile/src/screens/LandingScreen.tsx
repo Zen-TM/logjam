@@ -1,12 +1,14 @@
 // First thing a fresh install shows, and the sign-in screen for the rest of the
-// app's life. One screen, two states: the sign-in form, and the explainer that
-// stands between "continue without an account" and actually doing it.
+// app's life. One screen, two states: the sign-in button, and the explainer
+// that stands between "continue without an account" and actually doing it.
 //
-// It renders for BOTH `chooser` and `signIn` — they were two screens with the
-// sign-in form one tap behind a menu, and a second copy of the form in
-// `AuthFlow`. The only difference left is which way out is offered: a fresh
-// install can go on without an account, a guest linking one (or a rejected
-// session) goes back to where they came from.
+// It renders for both `chooser` and `signIn`. The only difference is which way
+// out is offered: a fresh install can go on without an account, while a guest
+// linking one (or a rejected session) goes back to where they came from.
+//
+// Under a Cognito issuer the screen signs in, signs up and resets a password
+// itself (`AccountForms`, ADR 0045); under any other issuer it is one button to
+// the provider's page.
 //
 // Load-bearing rather than decorative:
 //
@@ -16,25 +18,19 @@
 //     phone is total loss. It is a STATE here, not a card below the fold: by
 //     the time someone has a season of trips recorded it is too late to
 //     mention, so "continue without an account" shows it and asks again.
-//  2. Cognito errors arrive pre-mapped through `messageFromError`/
-//     `mapAuthError` — never raw text in the banner.
+//  2. Sign-in errors arrive pre-mapped through `messageFromError` — never raw
+//     text in the banner. A closed browser sheet is no error at all.
 //
-// The crash-report question is NOT here any more: it is a one-time dialog shown
-// once the user is inside the app (`CrashReportConsent`, mounted from App.tsx),
-// for a guest and a signed-in user alike.
+// Crash-report consent is asked once the user is inside Logjam GPS
+// (`CrashReportConsent`, mounted from App.tsx), for a guest and a signed-in
+// user alike.
 import { useState } from "react";
-import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Image, ScrollView, Text, View } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
 import { radius, spacing, makeStyles, muted } from "../theme";
-import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
+import { Button, ErrorBanner, FormStack } from "../ui";
+import { AccountForms } from "./AccountForms";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -44,16 +40,13 @@ export function LandingScreen({ auth }: { auth: Auth }) {
   // A guest LINKING an account is the only visitor with somewhere else to go,
   // so they get "Back"; everyone else can still go on without an account.
   // Not `auth.state === "chooser"`: this screen renders for `signIn` too, and
-  // keying on the state showed a "Back" that went to the screen it was already
-  // on (see useAuth.offersGuestEntry).
+  // keying on the state would show a "Back" that goes to the screen it is
+  // already on (see useAuth.offersGuestEntry).
   const offersGuest = auth.offersGuestEntry;
   const [mode, setMode] = useState<"signIn" | "guestExplainer">("signIn");
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -66,11 +59,17 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           />
           <Text style={styles.appTitle}>Logjam</Text>
           <Text style={styles.tagline}>
-            Your canyoning logbook and offline maps.
+            Your canyoning trips and offline maps.
           </Text>
         </View>
 
-        {mode === "signIn" ? (
+        {mode === "signIn" && auth.ownForms ? (
+          <AccountForms
+            auth={auth}
+            offersGuest={offersGuest}
+            onExplainGuest={() => setMode("guestExplainer")}
+          />
+        ) : mode === "signIn" ? (
           <SignInPanel
             auth={auth}
             offersGuest={offersGuest}
@@ -80,12 +79,11 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           <GuestExplainer
             auth={auth}
             onBack={() => setMode("signIn")}
-            onCreateAccount={auth.goToSignUp}
             onContinue={auth.chooseGuest}
           />
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -100,50 +98,27 @@ function SignInPanel({
 }) {
   const styles = useStyles();
 
-  const [email, setEmail] = useState(auth.pendingUsername);
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     setSubmitting(true);
-    await auth.signIn(email.trim(), password);
+    await auth.signIn();
     setSubmitting(false);
   };
 
   return (
     <FormStack>
-      <TextField
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        textContentType="emailAddress"
-      />
-      <TextField
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-        textContentType="password"
-        returnKeyType="go"
-        onSubmitEditing={submit}
-      />
       {/* Directly above the submit it belongs to, not at the top of the
           screen — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
-      <Button label="Sign in" onPress={submit} loading={submitting} />
-      <TextLink label="Forgot password?" onPress={auth.goToForgotPassword} />
+      <Button
+        label="Sign in or create an account"
+        onPress={submit}
+        loading={submitting}
+      />
 
       {/* Everything below the rule is deliberately quieter than Sign in. */}
       <View style={styles.secondary}>
-        <Button
-          label="Create an account"
-          variant="outlineAccent"
-          onPress={auth.goToSignUp}
-        />
         {offersGuest ? (
           <Button
             label="Continue without an account"
@@ -161,12 +136,10 @@ function SignInPanel({
 function GuestExplainer({
   auth,
   onBack,
-  onCreateAccount,
   onContinue,
 }: {
   auth: Auth;
   onBack: () => void;
-  onCreateAccount: () => void;
   /** Returns false when the choice could not be stored (auth.error says why). */
   onContinue: () => boolean;
 }) {
@@ -181,8 +154,8 @@ function GuestExplainer({
         what you&apos;ve already recorded.
       </Text>
       <Text style={styles.body}>
-        Sharing with friends and LiDAR maps from Logjam Web need an account.
-        Downloaded topos work without one.
+        Sharing with friends and sharpened areas from Logjam Web need an
+        account. Downloaded maps work without one.
       </Text>
       {/* "Continue anyway" is this panel's submit — a failure to store the
           choice belongs directly above it (shared/DESIGN.md §11). */}
@@ -193,12 +166,7 @@ function GuestExplainer({
           variant="outlineAccent"
           onPress={onContinue}
         />
-        <Button
-          label="Create an account"
-          variant="ghost"
-          onPress={onCreateAccount}
-        />
-        <Button label="Back to login" variant="ghost" onPress={onBack} />
+        <Button label="Back to sign in" variant="ghost" onPress={onBack} />
       </View>
     </FormStack>
   );
@@ -223,7 +191,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // registers it in the embedded asset map. The drawable ships, the runtime
   // cannot resolve it, and the Image renders 88pt of nothing — which is
   // exactly what a release build did, silently, while debug was fine. Do not
-  // "de-duplicate" these two files.
+  // "de-duplicate" these two files (LandingScreen.test.ts).
   logo: {
     width: 88,
     height: 88,

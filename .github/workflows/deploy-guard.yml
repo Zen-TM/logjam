@@ -88,21 +88,25 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Where each target records the commit it runs: the EB version label, the
-      # index.html object's release-sha metadata (deploy-frontend.yml writes
-      # it), the topo task definition's image tag. Never fails: a lookup error
-      # means "unknown", which deploys and rules out an automatic rollback.
+      # Where each target records the commit it runs: the EB version label (or,
+      # once brain_serving is on in brain.auto.tfvars and EB no longer
+      # deploys, the public /meta's sha: the one thing both the brain and CI
+      # can see), the index.html object's release-sha metadata
+      # (deploy-frontend.yml writes it), the topo task definition's image tag.
+      # Never fails: a lookup error, or a settings file infra/scripts/brain-setting.sh
+      # cannot read, means "unknown", which deploys and rules out an automatic
+      # rollback.
       - name: What is live?
         id: live
         env:
           EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
           FRONTEND_BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
+          API_URL: ${{ vars.PROD_API_URL }}
         run: |
           set +e
           case "$TARGET" in
             api)
-              LIVE=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
-                --query 'Environments[0].VersionLabel' --output text) || LIVE="" ;;
+              LIVE=$(infra/scripts/brain-setting.sh --live) || LIVE="" ;;
             frontend)
               LIVE=$(aws s3api head-object --bucket "$FRONTEND_BUCKET" --key index.html \
                 --query 'Metadata."release-sha"' --output text) || LIVE="" ;;
@@ -113,7 +117,7 @@ jobs:
               LIVE=${IMAGE##*:} ;;
             *) LIVE="" ;;
           esac
-          # A lookup that failed, index.html from before release-sha existed,
+          # A lookup that failed, index.html missing release-sha metadata,
           # or a task def Terraform reset to :latest all land here.
           if ! [[ "$LIVE" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::warning::could not tell which release of $TARGET is live (got '$LIVE'). Deploying, but a failed smoke test cannot roll back automatically."

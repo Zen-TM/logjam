@@ -1,7 +1,7 @@
 # 0009. OTA updates are code-signed, with the private key outside the repo
 
 - **Date:** 2026-08-16
-- **Status:** Accepted
+- **Status:** Superseded by [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)
 - **Supersedes:** —
 
 ## Context

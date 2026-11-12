@@ -173,6 +173,12 @@ describe("TrackProfiles", () => {
     expect(view.container.textContent).toBe("Size12 kB");
   });
 
+  // The store is a passive effect, which React flushes a task AFTER the commit
+  // that paints the caption, so seeing the caption proves nothing about `save`:
+  // a slow runner reads it first (the strict call assertion fails) and the
+  // `not.toHaveBeenCalled` ones pass before the effect could have run. Unmounting
+  // runs the pending effects first, so each `save` is read once the store has
+  // had its turn.
   // Mutation: drop the `isFinerClimbSource` check and the second case stores.
   it("stores a climb read from a finer source than the stored one, and only then", async () => {
     dem.profile = {
@@ -188,10 +194,15 @@ describe("TrackProfiles", () => {
       attribution: "Terrain credit",
     };
     const save = vi.fn();
-    show("finer", gpx(true), [{ label: "Ascent", value: "↑ 70 m" }], {
-      source: "terrarium",
-      save,
-    });
+    const { view } = show(
+      "finer",
+      gpx(true),
+      [{ label: "Ascent", value: "↑ 70 m" }],
+      {
+        source: "terrarium",
+        save,
+      },
+    );
     // The chart and the stored figures each name their own source.
     await screen.findByText("Heights from NSW 5 m terrain data");
     // Directly under the two cells it is about, before the rest of the grid.
@@ -203,6 +214,7 @@ describe("TrackProfiles", () => {
     expect(caption.nextElementSibling?.querySelector("dt")?.textContent).toBe(
       "Avg speed",
     );
+    view.unmount();
     expect(save).toHaveBeenCalledExactlyOnceWith({
       elevationGainM: 80,
       elevationLossM: 0,
@@ -211,8 +223,12 @@ describe("TrackProfiles", () => {
 
     cleanup();
     const same = vi.fn();
-    show("same", gpx(true), [], { source: "nsw-5m", save: same });
+    const { view: sameView } = show("same", gpx(true), [], {
+      source: "nsw-5m",
+      save: same,
+    });
     await screen.findByText("Heights from NSW 5 m terrain data");
+    sameView.unmount();
     expect(same).not.toHaveBeenCalled();
 
     // A reading with a hole sums a surface and nothing: never stored.
@@ -225,8 +241,12 @@ describe("TrackProfiles", () => {
       ],
     };
     const holed = vi.fn();
-    show("holed", gpx(true), [], { source: undefined, save: holed });
+    const { view: holedView } = show("holed", gpx(true), [], {
+      source: undefined,
+      save: holed,
+    });
     await screen.findByText("Terrain data incomplete — heights from GPS");
+    holedView.unmount();
     expect(holed).not.toHaveBeenCalled();
   });
 

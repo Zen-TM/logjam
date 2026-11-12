@@ -1,5 +1,5 @@
-"""Status-transition guards in worker.py / export_worker.py (Design L1) and
-the single-commit storage charge (ARCH-003 / in-code ARCH-009).
+"""Status-transition guards in worker.py / export_worker.py and
+(worker.py's single-commit storage charge; an export is never charged).
 
 Pure SQL-emission tests on a fake connection: assert the guard predicate is
 present, the rowcount is returned, the storage UPDATE shares the commit with
@@ -173,29 +173,25 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
             0,
         )
 
-    def test_completed_charge_shares_the_single_commit(self):
-        # ARCH-003 regression: status flip + storage charge must be one commit.
+    def test_completed_export_never_charges_storage(self):
+        # An export is not charged to storage; a charge would be one the owner
+        # can neither see nor delete.
         conn = _FakeConn(rowcount=1)
         export_worker.update_status(
             conn,
             "e1",
             "completed",
             expected_status="running",
-            storage_delta_bytes=2048,
             result_key="exports/e1/out.mbtiles",
             result_bytes=2048,
         )
-        before_commit = conn.ops_before_first_commit()
-        self.assertEqual(len(before_commit), 2)
-        self.assertIn("storage_used_bytes", before_commit[1][1])
-        self.assertEqual(sum(1 for op in conn.ops if op[0] == "commit"), 1)
-
-    def test_zero_rows_skips_storage_charge(self):
-        conn = _FakeConn(rowcount=0)
-        export_worker.update_status(
-            conn, "e1", "completed", expected_status="running", storage_delta_bytes=2048
-        )
         self.assertEqual(len(conn.executes()), 1)
+        self.assertNotIn("users", conn.executes()[0][1])
+        self.assertEqual(sum(1 for op in conn.ops if op[0] == "commit"), 1)
+        # Mutation: a charge written anywhere in the worker turns this red.
+        import inspect
+
+        self.assertNotIn("storage_used_bytes", inspect.getsource(export_worker))
 
     def test_failed_write_emits_no_storage_update(self):
         conn = _FakeConn(rowcount=1)
@@ -205,7 +201,7 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
         self.assertEqual(len(conn.executes()), 1)
 
     def test_increment_user_storage_helper_is_gone(self):
-        # The separate-commit charge path (ARCH-003) must not come back.
+        # The separate-commit charge path must not come back.
         self.assertFalse(hasattr(export_worker, "increment_user_storage"))
 
 
@@ -213,13 +209,13 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
     _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
 )
 class TestWorkerPostCompletionSelfClean(unittest.TestCase):
-    """STP-001: a raise AFTER the `complete` flip must never delete outputs.
+    """A raise AFTER the `complete` flip must never delete outputs.
 
     The guarded `failed` write matches 0 rows once the row is `complete`, and
     the 0-rowcount branch means "reaped or deleted" — self-clean S3. That is
-    only true before the flip. Post-flip (the lazy `from push_send import
-    send_push` of STP-006, a create_notification blip) it destroyed the
-    finished job's PMTiles/COGs while the row still said complete.
+    only true before the flip. Post-flip (e.g. push notification failure, a
+    create_notification blip) outputs must not be deleted while the row says
+    complete.
     """
 
     def _run_main(self, *, fail_in_process_job=False, fail_after_complete=False):
@@ -234,14 +230,13 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
         def _update_status(conn, job_id, status, **kwargs):
             statuses.append(status)
             # claim + complete succeed; the guarded `failed` write matches 0
-            # rows (row is `complete` or the reaper already failed it) — the
-            # rowcount the buggy code read as "reaped, delete the outputs".
+            # rows (row is `complete` or the reaper already failed it).
             return 0 if status == "failed" else 1
 
         def _process_job(job, tmp):
             if fail_in_process_job:
                 raise RuntimeError("pipeline blew up")
-            return ([], None, False, 0, None)
+            return ([], None, 0, None, {})
 
         def _create_notification(conn, user_id, kind, payload):
             if fail_after_complete and kind == "topo_complete":
@@ -281,8 +276,8 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
         )
 
     def test_pre_complete_failure_still_self_cleans(self):
-        # The reaped/deleted path must survive the fix: a failure before the
-        # flip whose guarded `failed` write matches 0 rows still cleans up.
+        # A failure before the flip whose guarded `failed` write matches 0 rows
+        # still cleans up.
         deleted, statuses = self._run_main(fail_in_process_job=True)
         self.assertNotIn("complete", statuses)
         self.assertIn("failed", statuses)

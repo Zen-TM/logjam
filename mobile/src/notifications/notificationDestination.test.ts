@@ -2,9 +2,36 @@
 // rules that are easy to lose: a notification about something that does not
 // exist has NO destination, and a file send only has one once it was kept.
 import { describe, expect, it } from "vitest";
+import {
+  NOTIFICATION_DESTINATIONS,
+  NOTIFICATION_TYPES,
+  notificationWayTarget,
+} from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 import { notificationDestination } from "./notificationDestination";
+
+type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+const SAMPLE_PAYLOADS = {
+  friend_request: {},
+  friend_request_accepted: {},
+  place_shared: { placeId: "p1" },
+  item_shared: { entityType: "route", entityId: "r1" },
+  file_sent: { fileSendStatus: "accepted", filename: "x.gpx" },
+  topo_complete: { jobId: "j1" },
+  topo_failed: {},
+  topo_export_complete: {},
+  topo_export_skipped: {},
+  egress_quota_warning: {},
+  egress_quota_exceeded: {},
+  announcement: {},
+  plan_invited: { planId: "pl1" },
+  plan_join_request: { planId: "pl1" },
+  plan_join_approved: { planId: "pl1" },
+  plan_member_joined: { planId: "pl1" },
+  plan_access_ended: { planId: "pl1", reason: "removed" },
+} satisfies Record<NotificationType, Record<string, unknown>>;
 
 function notification(
   type: string,
@@ -78,41 +105,25 @@ describe("notificationDestination", () => {
     ).toBeNull();
     expect(
       notificationDestination(
-        notification("geo_pdf_complete", {
-          geoPdfJobId: "g1",
-          status: "failed",
-        }),
-      ),
-    ).toBeNull();
-    expect(
-      notificationDestination(
         notification("topo_export_skipped", { reason: "x" }),
       ),
     ).toBeNull();
   });
 
-  it("points a rendered GeoPDF at its account row", () => {
-    expect(
-      notificationDestination(
-        notification("geo_pdf_complete", {
-          geoPdfJobId: "g2",
-          status: "completed",
-        }),
-      ),
-    ).toMatchObject({ filter: "geoPdf", highlightKey: "g2" });
-  });
-
   it("only points at a sent file once it has been kept, and by its kind", () => {
     expect(
       notificationDestination(
-        notification("file_sent", { fileSendId: "f1", filename: "Ranon.gpx" }),
+        notification("file_sent", {
+          fileSendId: "f1",
+          filename: "test-track.gpx",
+        }),
       ),
     ).toBeNull();
     expect(
       notificationDestination(
         notification("file_sent", {
           fileSendId: "f1",
-          filename: "Ranon.gpx",
+          filename: "test-track.gpx",
           fileSendStatus: "accepted",
         }),
       ),
@@ -127,7 +138,7 @@ describe("notificationDestination", () => {
       notificationDestination(
         notification("file_sent", {
           fileSendId: "f2",
-          filename: "Bell Creek.PDF",
+          filename: "test-map.PDF",
           fileSendStatus: "accepted",
         }),
       ),
@@ -138,5 +149,32 @@ describe("notificationDestination", () => {
     expect(
       notificationDestination(notification("place_shared", { placeId: "c1" })),
     ).toBeNull();
+  });
+
+  // Parity with Logjam Web, which opens a shared route by the same function:
+  // both must point at the same route. Mutation that turns it red: key the
+  // Saved row by anything but the payload's entity id.
+  it("points at the route notificationWayTarget names", () => {
+    const n = notification("item_shared", {
+      entityType: "route",
+      entityId: "r9",
+    });
+    expect(notificationDestination(n)).toMatchObject({
+      highlightKey: notificationWayTarget(n),
+    });
+  });
+
+  // Mutation that turns it red: add a type to NOTIFICATION_TYPES whose
+  // declared destination this table does not reach. A place or plan is reached
+  // through its own target (`notificationPlaceId`, `notificationPlanTarget`,
+  // held to the same declaration in `shared`), not here.
+  it("reaches a destination for every type that declares one", () => {
+    const here = new Set(["friends", "item", "topo", "file"]);
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, SAMPLE_PAYLOADS[type]);
+      expect(notificationDestination(n) !== null, type).toBe(
+        here.has(NOTIFICATION_DESTINATIONS[type]),
+      );
+    }
   });
 });

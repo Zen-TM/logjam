@@ -36,8 +36,6 @@ import {
   computeLogbookStats,
   contractSectionKeys,
   fieldStatDisplay,
-  formatDistanceM,
-  formatDurationMs,
   logbookActivityLabel,
   logbookRanges,
   pluralCount,
@@ -77,8 +75,8 @@ import {
   ScreenScroll,
   SectionHeader,
   StatGrid,
-  Icon,
 } from "../ui";
+import { onFootStats } from "./onFootStats";
 import { tripTypeMeta } from "./tripTypeMeta";
 
 const copy = STATS.copy;
@@ -88,10 +86,12 @@ const RANGE_PREF_KEY = "logbookStatsRange";
 export function StatsScreen({
   activity = null,
   onBack,
+  backLabel,
   onOpenActivity,
 }: {
   activity?: string | null;
   onBack: () => void;
+  backLabel: string;
   onOpenActivity: (activity: string) => void;
 }) {
   const styles = useStyles();
@@ -129,14 +129,6 @@ export function StatsScreen({
   const range: LogbookRange =
     ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
 
-  // OWN PLACES ONLY. A place shared with this account is someone else's ground;
-  // counting it would inflate "places visited" and the completion meter with
-  // rows the user never chose to keep.
-  const ownPlaces = useMemo(
-    () => places.filter((place) => place.syncRole !== "shared"),
-    [places],
-  );
-
   const stats = useMemo(
     () =>
       computeLogbookStats({
@@ -147,11 +139,12 @@ export function StatsScreen({
           places: trip.places,
           customFields: trip.customFields,
         })),
-        places: ownPlaces.map((place) => ({
+        places: places.map((place) => ({
           id: place.id,
           name: place.name,
           placeTypeId: place.placeTypeId,
           fieldValues: place.fieldValues,
+          owned: place.syncRole === "owner",
         })),
         tripDefs,
         placeDefs,
@@ -164,13 +157,13 @@ export function StatsScreen({
         to: range.to,
         activity,
       }),
-    [trips, ownPlaces, tripDefs, placeDefs, placeTypes, range, activity],
+    [trips, places, tripDefs, placeDefs, placeTypes, range, activity],
   );
 
   // `data == null` rather than `loading`: that flag is false once the FIRST
   // sync of the process has happened, so a screen pushed later renders with no
   // rows for a frame — long enough to flash "nothing logged in here yet" over a
-  // logbook with 123 trips in it, which is what the drill-down did.
+  // logbook with existing trips in it.
   const reading = tripsQuery.data == null || placesQuery.data == null;
 
   const title = activity
@@ -186,10 +179,10 @@ export function StatsScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow={activity ? "Logbook stats" : "Logbook"}
         title={title}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
       >
         {/* The rail is part of the hero rather than the scroll: it is the frame
               every number below is read in, and a window control that scrolls
@@ -336,7 +329,7 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
             onPress={() => onOpenActivity(tally.type)}
           />
         );
@@ -353,7 +346,7 @@ function Activities({
 
 /**
  * How much of the library the trips in range actually reached — "Places" alone
- * left the reader guessing whether the bar was places stored or places been to.
+ * leaves the reader guessing whether the bar is places stored or places been to.
  * The row reads "29 of 31", so the header only has to name the verb.
  */
 function PlacesVisited({ stats }: { stats: LogbookStats }) {
@@ -444,12 +437,12 @@ function OnFoot({
     <View style={styles.section}>
       <SectionHeader title={copy.onFoot} />
       <StatGrid
-        stats={[
-          { label: "Distance", value: formatDistanceM(distanceM) },
-          { label: "Ascent", value: `${Math.round(ascentM)} m` },
-          { label: "Time", value: formatDurationMs(durationMs) },
-          { label: "Longest", value: formatDistanceM(longest.distanceM) },
-        ]}
+        stats={onFootStats({
+          distanceM,
+          durationMs,
+          ascentM,
+          longestM: longest.distanceM,
+        })}
       />
       <Text style={styles.caption}>
         {`from ${pluralCount(inRange.length, "recording")} on this phone — recordings aren't linked to trips, so these are the same days seen another way`}
@@ -521,11 +514,10 @@ function AttributeSections({
 /**
  * EVERY attribute is a `Row`, distribution or not.
  *
- * The rating cards used `Card` and the rest used `Row`, which differ by four
- * points of corner radius and by whether the parent supplies a gap — so a list
- * of attributes rendered as two visibly different kinds of card, unevenly
- * spaced. `Row`'s `footer` slot exists for exactly this: full-width content
- * pinned under the row's own line, inside the same card.
+ * `Card` and `Row` differ by four points of corner radius and by whether the
+ * parent supplies a gap, which would leave a mixed list unevenly spaced.
+ * `Row`'s `footer` slot exists for exactly this: full-width content pinned
+ * under the row's own line, inside the same card.
  */
 function AttributeStat({ stat }: { stat: FieldStat }) {
   // What a stat of each shape says — and why a quantity has no total — is
@@ -559,8 +551,8 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
   );
 }
 
-/** A number with a dimmed unit beside it. The bare figure on the right edge
- *  read as disconnected from the words explaining it — this puts the word that
+/** A number with a dimmed unit beside it. A bare figure on the right edge
+ *  reads as disconnected from the words explaining it — this puts the word that
  *  names it in the same breath, and lets the subtitle be about something else. */
 function RowMetric({ value, suffix }: { value: string; suffix: string }) {
   const styles = useStyles();

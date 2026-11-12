@@ -14,8 +14,8 @@ const depth: ScopedCustomFieldDef = {
 };
 
 describe("the attribute form's draft", () => {
-  // Add a type, switch the place being added to it, add an attribute: the
-  // attribute went on Canyon, the type the form had when it first rendered.
+  // Adding a type, switching the place being added to it, and adding an
+  // attribute would leave the attribute on the type the form had on first render.
   // Mutation: one constant key for every new attribute.
   it("starts over when a new attribute is opened from a different place type", () => {
     expect(fieldFormKey(true, null, "type-canyon")).not.toBe(
@@ -26,8 +26,8 @@ describe("the attribute form's draft", () => {
     ]);
   });
 
-  // Type a label, Cancel, "Add an attribute" again: the abandoned label was
-  // still in the box, because both opens were the same key.
+  // Typing a label, cancelling, and opening "Add an attribute" again would leave
+  // the abandoned label in the box if both opens shared the same key.
   // Mutation: a key that ignores `open`.
   it("starts over each time the form is opened", () => {
     expect(fieldFormKey(false, null, "type-cave")).not.toBe(

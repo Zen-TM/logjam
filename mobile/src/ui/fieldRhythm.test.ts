@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 //
 // `Field` draws the label (`fieldLabel`) and puts it `formRhythm.label` above
 // its control; `FormStack` puts one field `formRhythm.field` from the next
-// (shared/DESIGN.md §2). A form that imported `fieldLabel` to draw its own
-// label also hand-rolled the wrapper gap, which is how a control once sat 4dp
-// under the chips above it. So only `src/ui` may import it.
+// (shared/DESIGN.md §2). A form that imports `fieldLabel` to draw its own
+// label also hand-rolls the wrapper gap, leaving a control to sit 4dp under
+// the chips above it. So only `src/ui` may import it.
 //
 // Mutation that turns it red: add `import { fieldLabel } from "../ui/fieldLabel";`
 // to `places/PlaceEditSheet.tsx`.

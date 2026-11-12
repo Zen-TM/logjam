@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<gpx version="1.1" creator="OsmAnd~ 4.6.8" xmlns="http://www.topografix.com/GPX/1/1" xmlns:osmand="https://osmand.net" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>corpus-osmand</name>
+  </metadata>
+  <wpt lat="-33.0400" lon="150.0500">
+    <ele>455</ele>
+    <name>Corpus Lookout</name>
+    <type>viewpoint</type>
+    <extensions>
+      <osmand:icon>tourism_viewpoint</osmand:icon>
+      <osmand:background>circle</osmand:background>
+      <osmand:color>#10c0f0</osmand:color>
+    </extensions>
+  </wpt>
+  <trk>
+    <name>Corpus OsmAnd Track</name>
+    <extensions>
+      <osmand:color>#ff8800</osmand:color>
+      <osmand:width>bold</osmand:width>
+    </extensions>
+    <trkseg>
+      <trkpt lat="-33.0400" lon="150.0500">
+        <ele>455.0</ele>
+        <time>2023-01-14T22:10:00Z</time>
+        <extensions><speed>1.2</speed></extensions>
+      </trkpt>
+      <trkpt lat="-33.0412" lon="150.0511">
+        <ele>449.3</ele>
+        <time>2023-01-14T22:15:00Z</time>
+        <extensions><speed>0.9</speed></extensions>
+      </trkpt>
+      <trkpt lat="-33.0425" lon="150.0528">
+        <ele>441.0</ele>
+        <time>2023-01-14T22:22:30Z</time>
+        <extensions><speed>1.1</speed></extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

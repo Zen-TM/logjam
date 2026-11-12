@@ -1,21 +1,27 @@
-// "Offline maps only" used to leave a blurry smear around every downloaded
-// area. Nothing was wrong: a region pyramid starts at z8, and one z8 tile
-// covers hundreds of kilometres, so MapLibre draws that whole tile wherever it
-// overlaps the source's bounds — upscaled 256× at walking zoom. The result
-// reads as a map, a soft and wrong one, over ground the phone has no real data
-// for.
+// Without a mask, "Use only saved maps" leaves a blurry smear around downloaded
+// areas: a region pyramid starts at z8, and one z8 tile covers hundreds of
+// kilometres, so MapLibre draws that whole tile wherever it overlaps the
+// source's bounds — upscaled 256× at walking zoom. The result reads as a map,
+// a soft and wrong one, over ground the phone has no real data for.
 //
 // So the map draws its own edge: a fill over everywhere EXCEPT the downloaded
-// regions, mounted directly above the basemap band. Inside a region you see
-// the tiles you saved; outside it you see that there is nothing there, which is
-// the true answer.
+// regions and saved Terrain clips (`offlineMaskBoxes`), mounted directly above
+// the basemap band. Inside a region you see the tiles you saved; outside it you
+// see that there is nothing there, which is the true answer.
 //
 // The complement is built as DISJOINT RECTANGLES, not as a world polygon with
 // a hole per region. Holes are the obvious encoding and they do not survive
 // contact with reality: two saved areas that overlap (the same ground saved at
 // two depths, which is a normal thing to do) give earcut two overlapping holes,
 // and it triangulates them into a wedge of map that stays visible. Rectangles
-// of the complement can't overlap by construction.
+// of the complement cannot overlap by construction. Guard:
+// mobile/src/map/offlineMask.test.ts.
+
+import {
+  drawsTerrain,
+  type MapArtifact,
+  type ResolvedTileSource,
+} from "./sourceResolver";
 
 /** [west, south, east, north] */
 export type MaskBbox = [number, number, number, number];
@@ -27,7 +33,7 @@ const MERCATOR_LIMIT = 85.06;
  * How far past the saved regions the mask extends, in degrees (~220 km).
  *
  * NOT the whole world: a single fill polygon spanning 360° of longitude is
- * carried into every tile MapLibre builds and did not render at all on device.
+ * carried into every tile MapLibre builds and fails to render on device.
  * The pad only has to cover the ground a z8 tile can smear into view, and by
  * the time the user is 220 km outside their saved area the map is zoomed far
  * enough out that a low-detail tile is honest rather than misleading.
@@ -128,4 +134,26 @@ export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
     properties: {},
     geometry: { type: "MultiPolygon", coordinates: polygons },
   };
+}
+
+/**
+ * What the mask leaves clear offline: the saved clips of the basemap being
+ * drawn, and every saved Terrain clip, so a save whose basemap clip failed
+ * still shows its terrain. A Terrain clip's bounds are the save's box, and
+ * one whose layer is switched off clears only the mask's own colour. Null
+ * while the basemap isn't drawn from saved tiles.
+ */
+export function offlineMaskBoxes(
+  basemap: readonly ResolvedTileSource[],
+  artifacts: readonly MapArtifact[],
+): MaskBbox[] | null {
+  if (!basemap.some((r) => r.status === "ok" && r.origin === "local")) {
+    return null;
+  }
+  return [
+    ...basemap.flatMap((r) =>
+      r.status === "ok" && r.bounds ? [r.bounds] : [],
+    ),
+    ...artifacts.flatMap((a) => (drawsTerrain(a) && a.bbox ? [a.bbox] : [])),
+  ];
 }

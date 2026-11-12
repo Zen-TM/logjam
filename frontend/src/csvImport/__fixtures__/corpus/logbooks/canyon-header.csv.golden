@@ -1,0 +1,57 @@
+{
+  "headers": [
+    "Canyon",
+    "Date",
+    "Notes"
+  ],
+  "dataRows": 2,
+  "parseErrors": [],
+  "kind": "triplog",
+  "assignments": {
+    "Canyon": "name",
+    "Date": "date",
+    "Notes": "notes"
+  },
+  "dateFormat": "DD/MM/YYYY",
+  "ambiguousDates": false,
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourcePlaceName": "Claustral Canyon",
+      "date": "2021-02-06",
+      "notes": "Corpus note",
+      "types": [],
+      "customFields": {}
+    },
+    {
+      "rowIndex": 1,
+      "sourcePlaceName": "Grand Canyon",
+      "date": "2021-02-13",
+      "notes": null,
+      "types": [],
+      "customFields": {}
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Grand Canyon",
+      "decision": "link",
+      "confidence": "auto",
+      "best": "Grand Canyon",
+      "candidates": [
+        "Grand Canyon"
+      ]
+    }
+  ]
+}

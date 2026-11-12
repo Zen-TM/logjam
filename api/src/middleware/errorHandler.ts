@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { SERVER_FAULT_SENTENCE, withoutQuoted } from "@logjam/shared";
-import { AppError } from "../lib/appError";
+import { AppError, malformed } from "../lib/appError";
 import { logger, redactTilePathPatterns, safeErrorForLog } from "../lib/logger";
 
 // The class lives apart so that auth.ts can refuse a request without loading
 // the logger, which reads the environment as it loads.
 export {
+  accepted,
   AppError,
   fault,
   malformed,
@@ -13,12 +14,19 @@ export {
 } from "../lib/appError";
 
 export function errorHandler(
-  err: Error,
+  thrown: Error,
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction,
 ) {
+  // express.json's SyntaxError quotes the body it could not parse, which may
+  // hold a place name the user typed: answer it as malformed, without the
+  // message (placeSearch.unit.test.ts, "never logs the query").
+  const err =
+    (thrown as Error & { type?: string }).type === "entity.parse.failed"
+      ? malformed("the request body is not valid JSON")
+      : thrown;
   const reqId = (req as Request & { id?: string }).id;
   const reqLog = (req as Request & { log?: typeof logger }).log ?? logger;
 
@@ -42,7 +50,8 @@ export function errorHandler(
       },
       "request_failed",
     );
-    // Echo only whitelisted detail keys — never blind-spread err.details.
+    // Echo only whitelisted detail keys — never blind-spread err.details. Guard:
+    // errorHandler.unit.test.ts.
     const body: Record<string, unknown> = {
       error: err.message,
       requestId: reqId,

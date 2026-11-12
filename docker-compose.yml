@@ -1,14 +1,21 @@
-# Pinned project name. Without it Compose uses the directory name, so a
-# worktree got its own project: an empty DB and MiniStack when nothing else
-# ran, and "port is already allocated" on 5432 when the main checkout's stack
-# did. Every checkout now shares one stack and its volumes (logjam_postgres-data,
-# logjam_ministack-data), which is what the main checkout already used.
+# Pinned project name. Without it Compose uses the directory name, so each
+# worktree would get its own project: an empty DB and MiniStack when nothing else
+# runs, and "port is already allocated" on 5432 when another stack runs.
+# All worktrees share one stack and its volumes (logjam_postgres-data,
+# logjam_ministack-data).
 name: logjam
 
 services:
+  # The image and postgresql.conf built for prod's Postgres (infra/brain/postgres),
+  # so a config mistake shows up here. BRAIN_DEV=1 keeps the plain-TCP
+  # pg_hba.conf the local API needs and adds a certificate to a volume the stock
+  # image made; archive_mode=off because dev has no S3 for its database.
   postgres:
-    image: postgres:16
+    build: infra/brain/postgres
+    command: ["postgres", "-c", "archive_mode=off"]
     environment:
+      BRAIN_DEV: "1"
+      BRAIN_INIT: bootstrap
       POSTGRES_DB: logjam
       POSTGRES_USER: logjam
       POSTGRES_PASSWORD: logjam
@@ -24,7 +31,7 @@ services:
 
   # MiniStack — drop-in LocalStack-compatible AWS emulator (port 4566). Unlike
   # LocalStack Community it also EXECUTES ECS RunTask containers via the host
-  # Docker socket, so topo/export/GeoPDF workers launch locally exactly as they
+  # Docker socket, so topo/export workers launch locally exactly as they
   # do in prod (no manual worker runs). Buckets + ECS task defs are provisioned
   # by Terraform (infra/terraform/envs/local), invoked from `make dev`/`make reset`.
   ministack:
@@ -33,8 +40,9 @@ services:
       SERVICES: s3,ecs,ses,cognito,secretsmanager
       DEFAULT_REGION: ap-southeast-2
       AWS_DEFAULT_REGION: ap-southeast-2
-      # Network that RunTask-launched worker containers join, so they resolve
-      # `postgres` and `ministack` by name. Must match the compose network below.
+      # Not what decides where a RunTask-launched worker runs: MiniStack puts it
+      # on its own container's first network by name (see `networks:` below).
+      # Kept in case a MiniStack version reads it.
       DOCKER_NETWORK: logjam-local
     ports:
       - "127.0.0.1:4566:4566"
@@ -53,12 +61,32 @@ services:
       timeout: 5s
       retries: 20
 
+  # Mailpit catches everything `make dev` sends: read it at localhost:8025.
+  # STARTTLS with a throwaway certificate, because the senders refuse plaintext
+  # and verify it (api/src/services/email.ts, topo/email_send.py). It takes any
+  # SMTP login.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    environment:
+      MP_SMTP_TLS_CERT: /certs/dev-tls-cert.pem
+      MP_SMTP_TLS_KEY: /certs/dev-tls-key.pem
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - ./infra/mailpit:/certs:ro
+
 volumes:
   postgres-data:
   ministack-data:
 
-# Fixed network name so MiniStack's DOCKER_NETWORK is deterministic (not derived
-# from the project directory). Worker containers launched via RunTask attach here.
+# Fixed network name (not derived from the project directory). MiniStack runs a
+# RunTask-launched worker on the first of its own container's networks by name;
+# this is its only one, so workers land here and resolve `postgres` and
+# `ministack`. A second network on ministack can move them off it. CI's
+# topo-e2e job (ci.yml) relies on the same rule and checks where workers land.
 networks:
   default:
     name: logjam-local

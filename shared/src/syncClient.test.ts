@@ -38,7 +38,7 @@ function entry(
   return { seq, state, attempts, op: o };
 }
 
-describe("planOutboxEnqueue (§8.2 coalescing)", () => {
+describe("planOutboxEnqueue (coalescing)", () => {
   it("update folds into a still-queued create for the same row", () => {
     const create = op({
       entity: "place",
@@ -203,8 +203,8 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete does not cancel a create that has already been SENT", () => {
     // Back in the queue after a network failure or a process kill — the
-    // server may hold the row regardless. Cancelling here let the create
-    // stand server-side while the delete was thrown away.
+    // server may hold the row regardless. Cancelling here would let the create
+    // stand server-side while the delete is thrown away.
     const entries = [
       entry(
         1,
@@ -287,7 +287,7 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
   });
 });
 
-describe("selectFlushBatch (§8.3 dependency closure)", () => {
+describe("selectFlushBatch (dependency closure)", () => {
   it("takes queued ops in seq order up to max", () => {
     const entries = [
       entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} })),
@@ -402,7 +402,7 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
   });
 });
 
-describe("filterSelfConflicts (§6 over-report contract)", () => {
+describe("filterSelfConflicts (over-report contract)", () => {
   it("drops receipts whose serverValue equals the client base value", () => {
     const receipts = [
       { field: "notes", serverValue: "web edit" },
@@ -437,7 +437,7 @@ describe("filterSelfConflicts (§6 over-report contract)", () => {
   });
 });
 
-describe("collectDirtyFields + rebaseRow (§8.5)", () => {
+describe("collectDirtyFields + rebaseRow", () => {
   it("merges pending op fields in seq order; server fields not dirty track the server", () => {
     const entries = [
       entry(
@@ -619,7 +619,7 @@ describe("giving up on a sync op", () => {
 
 describe("isTransientSyncError", () => {
   // One classifier, two readers: the flush engine decides whether to retry an
-  // op by itself, and the mobile Sync issues screen decides whether to offer a
+  // op by itself, and the Logjam GPS Sync issues screen decides whether to offer a
   // Retry button at all. Disagreement means either a button for something
   // already given up on, or an op parked that the engine would have fixed.
   it("is true for the failures a later attempt can survive", () => {

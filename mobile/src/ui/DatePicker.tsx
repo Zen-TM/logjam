@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
+import { weekBand, type BandCell } from "@logjam/shared";
+
 import {
   hitSlop,
   radius,
@@ -8,9 +10,12 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  wash,
+  opacity,
 } from "../theme";
 import {
   addMonths,
+  type DateRange,
   formatMonthLabel,
   monthGrid,
   monthOf,
@@ -47,6 +52,9 @@ const SWIPE_SLOP = 8;
 const PAGE_MS = 130;
 /** Day pill box; the radius is exactly half of this — see the style comment. */
 const DAY_PILL_SIZE = 36;
+// Wider than tall: a 6-row month plus the nav and weekday row must fit a
+// 360x740dp sheet with its footer, with no scrolling. The pill is 36 high.
+const DAY_ASPECT = 7 / 6;
 const YEAR_COLUMNS = 4;
 const YEAR_ROWS = 5;
 const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
@@ -54,9 +62,16 @@ const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
 export function DatePicker({
   value,
   onChange,
+  range,
+  allowFuture = false,
 }: {
   value: string | null;
   onChange: (key: string) => void;
+  /** Highlights start..end (end null = one day). Taps still arrive in
+   *  `onChange`; `pickDay` turns them into the next range. */
+  range?: DateRange;
+  /** A trip log records what happened; a plan looks ahead. */
+  allowFuture?: boolean;
 }) {
   const styles = useStyles();
 
@@ -94,8 +109,8 @@ export function DatePicker({
     PanResponder.create({
       // CAPTURE, not bubble. A disabled cell still swallows the touch on the way
       // down, so a bubbling responder never sees a swipe that starts over one —
-      // which made a future month (every day disabled) and the future half of a
-      // year page completely unswipeable while the arrows still worked.
+      // which would make a future month (every day disabled) and the future
+      // half of a year page completely unswipeable while the arrows still worked.
       // Capturing claims the gesture before any child, and the predicate keeps
       // taps and vertical sheet scrolling working.
       onMoveShouldSetPanResponderCapture: (_event, gesture) =>
@@ -173,13 +188,13 @@ export function DatePicker({
       {/* `collapsable={false}` matters on Android: a View whose children are all
           plain layout Views (an all-in-the-future month, where every cell is
           inert) gets optimised out of the native hierarchy, and the touch then
-          never reaches this responder at all — the grid became unswipeable
-          exactly when nothing in it was pressable. */}
+          never reaches this responder at all — the grid would become
+          unswipeable exactly when nothing in it is pressable. */}
       <View style={styles.viewport} collapsable={false} {...swipe.panHandlers}>
         <Animated.View style={{ transform: [{ translateX: pan }] }}>
           {pickingYear
             ? // Explicit rows rather than flex-wrap: wrapped cells size
-              // themselves independently, which left the first row's pills
+              // themselves independently, which leaves the first row's pills
               // sitting at slightly different heights.
               chunk(years, YEAR_COLUMNS).map((row, rowIndex) => (
                 <View key={rowIndex} style={styles.yearRow}>
@@ -201,24 +216,32 @@ export function DatePicker({
                   ))}
                 </View>
               ))
-            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => (
-                <View key={weekIndex} style={styles.week}>
-                  {week.map((key, dayIndex) => {
-                    if (key === null)
-                      return <View key={dayIndex} style={styles.day} />;
-                    return (
-                      <DayCell
-                        key={dayIndex}
-                        dateKey={key}
-                        selected={key === value}
-                        isToday={key === today}
-                        disabled={key > today}
-                        onPress={() => onChange(key)}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
+            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => {
+                const band = range ? weekBand(range, week) : [];
+                return (
+                  <View key={weekIndex} style={styles.week}>
+                    {week.map((key, dayIndex) => {
+                      if (key === null)
+                        return <View key={dayIndex} style={styles.day} />;
+                      return (
+                        <DayCell
+                          key={key}
+                          dateKey={key}
+                          selected={
+                            range
+                              ? key === range.start || key === range.end
+                              : key === value
+                          }
+                          band={band[dayIndex] ?? null}
+                          isToday={key === today}
+                          disabled={!allowFuture && key > today}
+                          onPress={() => onChange(key)}
+                        />
+                      );
+                    })}
+                  </View>
+                );
+              })}
         </Animated.View>
       </View>
     </View>
@@ -233,6 +256,10 @@ function usePager() {
   const [width, setWidth] = useState(0);
   const [pan] = useState(() => new Animated.Value(0));
   const paging = useRef(false);
+  // The slide-in waits for the new month to be on screen: starting it from
+  // the animation callback put the OLD grid (and its range band) on the
+  // incoming side for the frames before React's render landed.
+  const slideIn = useRef<number | null>(null);
   const widthRef = useRef(0);
   useEffect(() => {
     widthRef.current = width;
@@ -250,22 +277,30 @@ function usePager() {
       duration: PAGE_MS,
       useNativeDriver: true,
     }).start(() => {
+      slideIn.current = delta;
       commit();
-      pan.setValue(delta * widthRef.current);
-      Animated.timing(pan, {
-        toValue: 0,
-        duration: PAGE_MS,
-        useNativeDriver: true,
-      }).start(() => {
-        paging.current = false;
-      });
-      // Belt and braces: if that second animation is interrupted its callback
-      // may never run, and a stuck flag silently disables paging forever.
+      // Belt and braces: if the slide-in is interrupted its callback may never
+      // run, and a stuck flag silently disables paging forever.
       setTimeout(() => {
         paging.current = false;
-      }, PAGE_MS * 3);
+      }, PAGE_MS * 4);
     });
   };
+
+  // Runs after the render that `commit` caused.
+  useEffect(() => {
+    const delta = slideIn.current;
+    if (delta === null) return;
+    slideIn.current = null;
+    pan.setValue(delta * widthRef.current);
+    Animated.timing(pan, {
+      toValue: 0,
+      duration: PAGE_MS,
+      useNativeDriver: true,
+    }).start(() => {
+      paging.current = false;
+    });
+  });
 
   return {
     pan,
@@ -280,12 +315,14 @@ function usePager() {
 function DayCell({
   dateKey,
   selected,
+  band,
   isToday,
   disabled,
   onPress,
 }: {
   dateKey: string;
   selected: boolean;
+  band: BandCell | null;
   isToday: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -310,11 +347,11 @@ function DayCell({
   // Both alternatives break the swipe that pages the grid, for the same
   // underlying reason: RN's touch dispatch looks for a JS touch target under
   // the finger, and an inert View isn't one. In a month entirely in the future
-  // EVERY cell is unavailable, so nothing under the finger was a target, the
-  // gesture went to the sheet's native ScrollView, and the pan responder was
-  // never consulted — the grid became unswipeable exactly when nothing in it
-  // was pressable. Keeping them pressable keeps the responder chain alive;
-  // `accessibilityState` still announces them as unavailable.
+  // EVERY cell is unavailable, so nothing under the finger is a target, the
+  // gesture goes to the sheet's native ScrollView, and the pan responder is
+  // never consulted — the grid would become unswipeable exactly when nothing
+  // in it is pressable. Keeping them pressable keeps the responder chain
+  // alive; `accessibilityState` still announces them as unavailable.
   return (
     <Pressable
       accessibilityRole="button"
@@ -324,16 +361,43 @@ function DayCell({
       style={styles.day}
     >
       {({ pressed }) => (
-        <View
-          style={[
-            styles.dayPill,
-            isToday && styles.todayRing,
-            selected && styles.selectedFill,
-            pressed && !disabled && styles.pressed,
-          ]}
-        >
-          {label}
-        </View>
+        <>
+          {band ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.band,
+                {
+                  // A piece's ends are the pill's own footprint, so a selected
+                  // start or end day's pill covers the band's end exactly; a row's
+                  // ends are rounded too, so a range across weeks reads as pieces.
+                  left: band.pieceStart ? "50%" : 0,
+                  marginLeft: band.pieceStart ? -DAY_PILL_SIZE / 2 : 0,
+                  right: band.pieceEnd ? "50%" : 0,
+                  marginRight: band.pieceEnd ? -DAY_PILL_SIZE / 2 : 0,
+                  borderTopLeftRadius: band.pieceStart ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomLeftRadius: band.pieceStart
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                  borderTopRightRadius: band.pieceEnd ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomRightRadius: band.pieceEnd
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                },
+              ]}
+            />
+          ) : null}
+          <View
+            style={[
+              styles.dayPill,
+              isToday && styles.todayRing,
+              selected && styles.selectedFill,
+              pressed && !disabled && styles.pressed,
+            ]}
+          >
+            {label}
+          </View>
+        </>
       )}
     </Pressable>
   );
@@ -486,7 +550,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  disabledNav: { opacity: 0.3 },
+  disabledNav: { opacity: opacity.disabled },
   labelButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -507,19 +571,19 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   day: {
     flex: 1,
-    aspectRatio: 1,
+    aspectRatio: DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },
   // Pill sized to the glyph and centred in its cell, not filling it.
   //
-  // Two Android-specific details, both learned the hard way: the radius is
-  // exactly half the box rather than `radius.pill`'s 999, and the background is
-  // always set (transparent when unselected) instead of appearing only on the
-  // selected state. RN Android draws corner radii through the view's background
-  // drawable, so a cell that gains a background AFTER it was first laid out —
-  // which is what happens when the grid pages away and back and React reuses
-  // the same cell for a different date — could come back square.
+  // Two Android-specific details: the radius is exactly half the box rather
+  // than `radius.pill`'s 999, and the background is always set (transparent
+  // when unselected) instead of appearing only on the selected state. RN
+  // Android draws corner radii through the view's background drawable, so a
+  // cell that gains a background after it was first laid out — which happens
+  // when the grid pages away and back and React reuses the same cell for a
+  // different date — can come back square.
   dayPill: {
     width: DAY_PILL_SIZE,
     height: DAY_PILL_SIZE,
@@ -529,20 +593,27 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
+  todayRing: { borderWidth: 1, borderColor: theme.accent },
+  band: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -DAY_PILL_SIZE / 2,
+    height: DAY_PILL_SIZE,
+    backgroundColor: withAlpha(theme.accent, wash.strong),
+  },
   selectedFill: { backgroundColor: theme.accent },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: opacity.pressed },
   dayText: { ...textRole.detail, color: theme.text },
   selectedText: { ...textRole.control, color: theme.onFill },
-  disabledText: { color: withAlpha(theme.textMuted, 0.45) },
+  disabledText: { color: theme.textMuted, opacity: opacity.disabled },
   // Four rows of four, sized to match the six day rows so switching grids
   // barely moves the sheet's height.
   yearRow: { flexDirection: "row" },
   yearCell: {
     flex: 1,
-    // Five rows of these match the six 1:1 day rows, so switching grids barely
+    // Five rows of these match the six day rows, so switching grids barely
     // moves the sheet's height.
-    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6),
+    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6) * DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },

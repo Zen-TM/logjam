@@ -1,14 +1,14 @@
 // Places, the tick list: Logjam Web's `PlacesPanel.tsx` and Logjam GPS's
 // `places/PlacesScreen.tsx`.
 //
-// Declared elsewhere and read by both, not copied here: the status buckets
-// and their order (`PLACE_STATUS_ORDER`, `PLACE_STATUS_LABELS`), the sorts
+// Declared elsewhere and read by both, not copied here: the sorts
 // (`PLACE_SORT_OPTIONS`), a row's second line (`placeSummary`).
 import type { IconIdea } from "../icons.js";
+import { canyonRegionsOf, type Region } from "../regions.js";
+import { normalizeUserUiPreferences } from "../themeSchemes.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
-import type { PlaceStatus } from "../placeStatus.js";
-import type { ContractPlatform, ScreenContract } from "./types.js";
+import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
 
 export const PLACES_LIST = {
   id: "places.list",
@@ -16,17 +16,17 @@ export const PLACES_LIST = {
   title: "Places",
   sections: [
     { key: "hero" },
-    // Two rails, in this order: what kind of place, then where it is in the
-    // tick list. Only the status rail gives way to the selection bar.
+    // One rail: what kind of place. The selection bar takes its place.
     { key: "typeRail" },
-    { key: "statusRail" },
+    // Hidden with nothing to search, and disabled during a selection.
+    { key: "search" },
     // Filters the user cannot see announce themselves, with the way out.
     { key: "filterNote" },
     {
       key: "listHead",
       on: "web",
       reason:
-        "It carries the keyboard's range-selection hint, which a touch screen has no use for. Logjam GPS names a sort that is not the default in the filter note instead.",
+        "It carries the keyboard's range-selection hint, which a touch screen can't use. Logjam GPS names a sort that is not the default in the filter note instead.",
     },
     {
       key: "truncated",
@@ -38,16 +38,10 @@ export const PLACES_LIST = {
   ],
   copy: {
     typeRail: "Place type",
-    statusRail: "Status",
-    // "Any type", not "All": the status rail under it has its own "All".
-    anyType: "Any type",
+    anyType: "All",
     newType: "New type",
-    allStatuses: "All",
 
     search: "Search places",
-    searchField: "Search by name or alternative name",
-    searchPlaceholder: "Name or alternative name",
-    closeSearch: "Close search",
     clearFilters: "Clear filters",
     sortByNameAgain: "Sort by name again",
     loading: "Loading your places…",
@@ -64,14 +58,6 @@ export const PLACES_LIST = {
     filteredTitle: "No places match",
     filteredBody:
       "Nothing matches your search and filters. Clear them to see the rest.",
-    todoTitle: "Your list is clear",
-    todoBody:
-      "You've logged a trip for every place. Add a new place and it appears here.",
-    doneTitle: "Nothing visited yet",
-    doneBody: "Log a trip at a place and it moves here.",
-    sharedTitle: "Nothing shared with you",
-    sharedBody:
-      "Places a friend shares appear here with notes and photos. Share your own from a place's page.",
   },
 } as const satisfies ScreenContract;
 
@@ -89,23 +75,59 @@ export const PLACES_ADD = {
       key: "importFile",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
     {
       key: "importRopewiki",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
   ],
   copy: {
     add: "Add a place",
-    importFile: "Import from file",
+    importFile: "Import from CSV",
     importRopewiki: "Import from RopeWiki",
     importingRopewiki: "Importing from RopeWiki…",
     menu: "Add places",
   },
 } as const satisfies ScreenContract;
+
+/**
+ * The canyon-list import, one offer per chosen region with a source
+ * (`canyonRegionsOf`): in the first-run dialog and the Add menu. With one
+ * region the menu entry needs no name.
+ */
+export const ROPEWIKI_OFFER = {
+  title: (region: Region) =>
+    `Load the ${region.name} place database (RopeWiki)`,
+  hint: (region: Region) =>
+    `Recommended — hundreds of ${region.name} canyons, so your trips have something to match against`,
+  menu: (region: Region, offers: number) =>
+    offers > 1
+      ? `Import ${region.name} from RopeWiki`
+      : PLACES_ADD.copy.importRopewiki,
+  confirmBody: (region: Region) =>
+    `This fetches the public ${region.name} canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.`,
+};
+
+/** The regions an account is offered a canyon import for, from its preferences. */
+export function canyonOffersFor(uiPreferences: unknown): Region[] {
+  return canyonRegionsOf(normalizeUserUiPreferences(uiPreferences).regions);
+}
+
+/**
+ * The first-run dialog offering to load the place database or import the
+ * user's own files. Not a menu entry, so not a `PLACES_ADD` section.
+ */
+export const PLACES_ONBOARDING = [
+  {
+    id: "welcomeDialog",
+    on: "web",
+    reason:
+      "Loading RopeWiki and importing files is desk work, like the imports in the Add menu. Logjam GPS's first-run empty state sends the user to Logjam Web for it.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** The glyph of each way in, the same idea on both clients. Exhaustive by
  *  type, so an entry cannot be added without one. */
@@ -125,10 +147,12 @@ export function placesCountLabel(count: number): string {
 
 /**
  * Logjam GPS's hero: the size of the whole collection, whatever is filtered.
- * Logjam Web's hero is `PLACES_LIST.title`: its chips already show the counts.
+ * Empty it is "0 places", so the first-run empty state's "No places yet" is
+ * the only line saying so.
+ * Logjam Web's hero is `PLACES_LIST.title`.
  */
 export function placesHeroTitle(count: number): string {
-  return count === 0 ? PLACES_LIST.copy.firstRunTitle : placesCountLabel(count);
+  return placesCountLabel(count);
 }
 
 /**
@@ -164,28 +188,16 @@ export function placeTypeHasTab(type: {
   return !type.builtIn || type.places > 0;
 }
 
-export type PlacesEmptyKind = "firstRun" | "filtered" | PlaceStatus;
+export type PlacesEmptyKind = "firstRun" | "filtered";
 
-/**
- * Which empty state an empty list is. An empty collection, an over-tight
- * filter and an exhausted bucket are different problems with different ways
- * out. A type tab with nothing behind it is "filtered": the user is looking
- * at nothing and Clear filters is the way back to everything.
- */
-export function placesEmptyKind(args: {
-  /** Places in the whole collection, shared ones included. */
-  total: number;
-  /** A search or a filter the sheet owns is set. */
-  filtering: boolean;
-  bucket: "all" | PlaceStatus;
-}): PlacesEmptyKind {
-  if (args.total === 0) return "firstRun";
-  if (args.filtering || args.bucket === "all") return "filtered";
-  return args.bucket;
+/** An empty collection and an over-tight filter are different problems with
+ *  different ways out. A type tab with nothing behind it is "filtered". */
+export function placesEmptyKind(args: { total: number }): PlacesEmptyKind {
+  return args.total === 0 ? "firstRun" : "filtered";
 }
 
-/** The way out an empty state offers: add a place, clear the filters, or none. */
-export type PlacesEmptyAction = "add" | "clear" | null;
+/** The way out an empty state offers: add a place, clear the filters. */
+export type PlacesEmptyAction = "add" | "clear";
 
 export function placesEmptyState(
   kind: PlacesEmptyKind,
@@ -197,46 +209,22 @@ export function placesEmptyState(
   action: PlacesEmptyAction;
 } {
   const copy = PLACES_LIST.copy;
-  switch (kind) {
-    case "firstRun":
-      return {
-        icon: "place",
-        title: copy.firstRunTitle,
-        body:
-          viewer.platform === "web"
-            ? copy.firstRunBodyWeb
-            : viewer.guest
-              ? copy.firstRunBodyGuest
-              : copy.firstRunBodyGps,
-        action: "add",
-      };
-    case "filtered":
-      return {
-        icon: "filter",
-        title: copy.filteredTitle,
-        body: copy.filteredBody,
-        action: "clear",
-      };
-    case "todo":
-      return {
-        icon: "place",
-        title: copy.todoTitle,
-        body: copy.todoBody,
-        action: "add",
-      };
-    case "done":
-      return {
-        icon: "success",
-        title: copy.doneTitle,
-        body: copy.doneBody,
-        action: null,
-      };
-    case "shared":
-      return {
-        icon: "friends",
-        title: copy.sharedTitle,
-        body: copy.sharedBody,
-        action: null,
-      };
-  }
+  if (kind === "filtered")
+    return {
+      icon: "filter",
+      title: copy.filteredTitle,
+      body: copy.filteredBody,
+      action: "clear",
+    };
+  return {
+    icon: "place",
+    title: copy.firstRunTitle,
+    body:
+      viewer.platform === "web"
+        ? copy.firstRunBodyWeb
+        : viewer.guest
+          ? copy.firstRunBodyGuest
+          : copy.firstRunBodyGps,
+    action: "add",
+  };
 }

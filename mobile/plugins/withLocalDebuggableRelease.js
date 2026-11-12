@@ -14,8 +14,7 @@
 // empty, and every `require()`d asset resolves to an empty URI. On a fresh
 // install the map draws no glyph pack, no labels, and no location marker —
 // line and fill layers look fine, so it presents as a styling bug in whatever
-// you last touched. Found 2026-09-01; full writeup in
-// private/todo/local-release-asset.resolution.md.
+// you last touched.
 //
 // THE FIX. Force `BuildConfig.DEBUG` back to false in the release build type,
 // next to `debuggable true`. The APK stays debuggable (the manifest

@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import { radius, spacing, withAlpha, makeStyles, muted } from "../theme";
+import { radius, spacing, withAlpha, makeStyles, muted, wash } from "../theme";
 
 export type MeterSegment = {
   /** Legend text. */
@@ -79,7 +79,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
-    backgroundColor: withAlpha(theme.text, 0.1),
+    backgroundColor: withAlpha(theme.text, wash.selected),
     gap: spacing(0.25),
   },
   legend: {

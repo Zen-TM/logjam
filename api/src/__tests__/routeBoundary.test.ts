@@ -61,7 +61,7 @@ describe("route visibility — unlinked routes are owner-private", () => {
     expect(owner.status).toBe(200);
     expect(owner.body.points).toHaveLength(3);
 
-    // 404 not 403: the status must not confirm the route exists (SEC-001).
+    // 404 not 403: the status must not confirm the route exists.
     for (const sub of [BOB_SUB, CAROL_SUB]) {
       const res = await request(API_URL).get(`/routes/${routeId}`).set(as(sub));
       expect(res.status).toBe(404);
@@ -92,12 +92,18 @@ describe("route visibility — linked to a shared place", () => {
 
     const list = await request(API_URL).get("/routes").set(as(BOB_SUB));
     expect(list.body.some((r: { id: string }) => r.id === routeId)).toBe(true);
+    expect(Number(list.headers["x-total-count"])).toBe(list.body.length);
 
-    // Carol is shared nothing — the place link must not leak to her.
+    // Carol is shared nothing — the place link must not leak to her, by id or
+    // in her list.
     const carol = await request(API_URL)
       .get(`/routes/${routeId}`)
       .set(as(CAROL_SUB));
     expect(carol.status).toBe(404);
+    const carolList = await request(API_URL).get("/routes").set(as(CAROL_SUB));
+    expect(carolList.body.some((r: { id: string }) => r.id === routeId)).toBe(
+      false,
+    );
   });
 
   it("the sharee may NOT edit or delete it (403, not 404 — they can see it)", async () => {

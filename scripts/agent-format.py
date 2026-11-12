@@ -4,8 +4,10 @@
 Claude Code (.claude/settings.json) and Antigravity (.agents/hooks.json) pass
 the tool call as JSON on stdin; a path given as the first argument also works.
 Uses the repo's pinned Biome (root node_modules) and Ruff on PATH. When either
-is missing it does nothing: the pre-commit hook and CI's format check still
-catch the file, and a hook that fails would interrupt the agent's edit.
+is missing it does nothing: the pre-commit hook formats the file when it is
+committed, CI's format check catches the rest, and a hook that fails would
+interrupt the agent's edit. Edits made through a shell command never reach
+this hook, which is why the pre-commit hook writes rather than only checks.
 """
 
 import json

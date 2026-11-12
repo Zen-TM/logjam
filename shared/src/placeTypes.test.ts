@@ -6,9 +6,12 @@ import {
   SYSTEM_FIELD_DEFS,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_COLOR_NAMES,
+  PLACE_TYPE_ICON_KEYS,
+  NEW_PLACE_TYPE_ICON_KEY,
   placeTypeColorName,
   RESERVED_FIELD_KEYS,
   SHARED_PLACE_COLOR,
+  VISITED_PLACE_COLOR,
   isReservedFieldKey,
   isSystemPlaceTypeId,
   freePlaceTypeName,
@@ -28,11 +31,11 @@ import {
 } from "./tripLogFields.js";
 
 describe("system row ids", () => {
-  // The seedIds.ts incident, in its new home. parsePushOp validates every
-  // client-minted entity id with isUuidV4 and rejects the WHOLE request on a
-  // mismatch, so a hand-minted id with a version nibble of 0 makes every place
-  // of a system type permanently unsyncable — invisibly, because the local
-  // mirror still updates and only the outbox row holds the 400.
+  // parsePushOp validates every client-minted entity id with isUuidV4 and
+  // rejects the WHOLE request on a mismatch, so a hand-minted id with a version
+  // nibble of 0 makes every place of a system type permanently unsyncable —
+  // invisibly, because the local mirror still updates and only the outbox row
+  // holds the 400.
   it("are real UUIDv4s, version and variant nibbles included", () => {
     for (const id of systemRowIds()) {
       expect(isUuidV4(id), `${id} is not a UUIDv4`).toBe(true);
@@ -77,9 +80,8 @@ describe("the three system place types", () => {
     );
   });
 
-  // Marker carries no fields at all — it is where every existing Waypoint lands
-  // in phase 1c, and a waypoint that was never about anything must not acquire
-  // a form to fill in.
+  // Marker carries no fields at all — it is where waypoints land, and a
+  // waypoint must not acquire a form to fill in.
   it("give Marker no fields", () => {
     const scoped = SYSTEM_FIELD_DEFS.filter((def) =>
       def.placeTypes.includes("marker"),
@@ -134,7 +136,7 @@ describe("system field definitions", () => {
 
 describe("reserved keys", () => {
   // DERIVED, not restated. A hardcoded copy is the "two lists that must agree"
-  // failure the root CLAUDE.md rule names — a tenth system def would join one
+  // failure the root AGENTS.md rule names — a tenth system def would join one
   // list and not the other, and the collision would surface as a RopeWiki
   // import writing a value nothing can render.
   it("are exactly the system definitions' keys", () => {
@@ -189,10 +191,9 @@ describe("the internal `_` namespace", () => {
   });
 });
 
-// FILL IS THE TYPE, RING IS SHARED (§2.8) — two axes, so they cannot share
-// ink. The first palette had the shared marker's own blue in it, and
-// `SYSTEM_PLACE_TYPES.marker` used exactly that value: a shared Marker was a
-// blue dot with a blue ring, i.e. indistinguishable from an owned one.
+// FILL IS THE TYPE, RING IS SHARED — two axes, so they cannot share
+// ink. If the palette contained the shared marker's blue, a shared Marker
+// would be a blue dot with a blue ring, indistinguishable from an owned one.
 describe("SHARED_PLACE_COLOR", () => {
   it("is not available as a type colour", () => {
     expect(
@@ -284,5 +285,27 @@ describe("a place type's name is the user's only one of it", () => {
     const renamed = freePlaceTypeName(long, [{ id: "x", name: long }]);
     expect(renamed).toHaveLength(PLACE_TYPE_NAME_MAX_LENGTH);
     expect(renamed.endsWith(" (2)")).toBe(true);
+  });
+});
+
+// Mutation: add VISITED_PLACE_COLOR to PLACE_TYPE_COLORS, or set it equal to
+// SHARED_PLACE_COLOR, and this turns red.
+describe("VISITED_PLACE_COLOR", () => {
+  it("is reserved: no type colour and not the shared badge", () => {
+    const visited = VISITED_PLACE_COLOR.toUpperCase();
+    expect(
+      (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
+    ).not.toContain(visited);
+    expect(visited).not.toBe(SHARED_PLACE_COLOR.toUpperCase());
+  });
+});
+
+// Mutation that turns this red: set NEW_PLACE_TYPE_ICON_KEY to "map-pin".
+describe("NEW_PLACE_TYPE_ICON_KEY", () => {
+  it("is a choosable icon that no built-in type wears", () => {
+    expect(PLACE_TYPE_ICON_KEYS).toContain(NEW_PLACE_TYPE_ICON_KEY);
+    for (const type of SYSTEM_PLACE_TYPES) {
+      expect(type.iconKey).not.toBe(NEW_PLACE_TYPE_ICON_KEY);
+    }
   });
 });

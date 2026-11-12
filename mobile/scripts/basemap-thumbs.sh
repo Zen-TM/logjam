@@ -5,12 +5,11 @@
 # 128px PNG. Six requests total, not a scrape; every source here is licensed
 # for redistribution with credit (see BASEMAP_THUMB_CREDIT).
 #
-# PNG, not WEBP: the set shipped as WEBP and the thumbnails intermittently
-# rendered blank on-device (see BasemapThumb.tsx). Keep it PNG so Fresco decodes
-# it on every handset.
+# PNG, not WEBP: WEBP thumbnails intermittently render blank on-device (see
+# BasemapThumb.tsx). Keep it PNG so Fresco decodes it on every handset.
 #
 # `protomaps` is a vector style with no tile to fetch. Its sample is a
-# screenshot of the app rendering it:
+# screenshot of Logjam GPS rendering it:
 #   adb exec-out screencap -p > /tmp/shot.png
 #   python3 -c "from PIL import Image; Image.open('/tmp/shot.png').crop((412,900,924,1412)).resize((128,128)).save('assets/basemap-thumbs/protomaps.png')"
 #

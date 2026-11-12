@@ -1,9 +1,9 @@
-// Local identity — MOBILE_APP_PLAN Stage 1 offline-session semantics.
+// Local identity — offline-session semantics.
 //
 // After the first successful login we persist who is signed in (Cognito sub +
 // username) so the app can cold-start into that account's local data with
 // zero network. Cognito gates the *API*; the gate on local data is the app
-// lock (Stage 4), not a token check. This record outlives token expiry and is
+// lock, not a token check. This record outlives token expiry and is
 // cleared only on explicit sign-out or when a *different* user signs in
 // (which also wipes local data — enforced by the caller in useAuth).
 import * as SecureStore from "expo-secure-store";
@@ -61,9 +61,9 @@ export async function readPreviousIdentity(): Promise<PreviousIdentity> {
  * `null` is nobody — a guest linking an account keeps what they made, by
  * design. An UNREADABLE record cannot prove the data is this account's, so it
  * is treated as someone else's: the wipe costs at most this user's own unsent
- * changes, where keeping it hands a stranger's places to whoever signs in. The
- * sign-in used to `.catch(() => null)` here, which turned a corrupt record into
- * a guest and skipped the wipe entirely.
+ * changes, where keeping it hands a stranger's places to whoever signs in;
+ * catching errors as null would turn a corrupt record into a guest and skip the
+ * wipe entirely (Guard: localIdentity.test.ts).
  */
 export function signInNeedsWipe(
   previous: PreviousIdentity,

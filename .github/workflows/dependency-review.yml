@@ -1,20 +1,12 @@
 name: Dependency Review
 
-# Runs GitHub Dependency Review on pull requests that modify dependencies or
-# manifests. Requires the repository's Dependency graph to be enabled in
+# Runs GitHub Dependency Review on every pull request, so it can be a required
+# check: on a PR that changes no manifest it finds nothing and passes in
+# seconds. Requires the repository's Dependency graph to be enabled in
 # repository settings (it fails until enabled).
 
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - '**/package.json'
-      - '**/package-lock.json'
-      - '**/requirements*.txt'
-      - '**/pyproject.toml'
-      - '**/Dockerfile'
-      - '**/.terraform.lock.hcl'
 
 permissions:
   contents: read

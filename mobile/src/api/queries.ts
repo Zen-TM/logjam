@@ -1,14 +1,15 @@
-// Typed API calls + data hooks for the Stage 1 read-only screens. Follows the
+// Typed API calls + data hooks for read-only screens. Follows the
 // web hook pattern (frontend/src/placeUtils.ts): useState + useEffect +
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
 import { useCallback, useEffect, useState } from "react";
 import {
   messageFromError,
+  usernameAvailable,
   type TripLogCustomFieldDef,
-  type VectorStyleSettings,
 } from "@logjam/shared";
 
+import { CLIENT_VERSION, CLIENT_VERSION_HEADER, config } from "../config";
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 import type { TNotification, TUser } from "./types";
 
@@ -16,15 +17,24 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
-export function updateConsent(consentVersion: string): Promise<TUser> {
+/** Before an account exists, so no token: the sign-up form's username check. */
+export const isUsernameFree = (username: string): Promise<boolean> =>
+  usernameAvailable(config.apiUrl, username, {
+    [CLIENT_VERSION_HEADER]: CLIENT_VERSION,
+  });
+
+/** A new account sends its chosen username in the same PATCH as its consent. */
+export function updateConsent(
+  consentVersion: string,
+  username?: string,
+): Promise<TUser> {
   return apiFetch<TUser>("/users/me", {
     method: "PATCH",
-    body: { consentVersion },
+    body: { consentVersion, ...(username && { username }) },
   });
 }
 
-// Place/trip list + detail reads moved to the Stage 8 offline mirror
-// (src/sync/useSyncQueries.ts) — REST fetchers for them died with the swap.
+// Place and trip reads live in the offline mirror (src/sync/useSyncQueries.ts).
 
 export function getNotifications(): Promise<{
   data: TNotification[];
@@ -50,10 +60,6 @@ export function markAllNotificationsRead(): Promise<void> {
   return apiFetch<void>("/notifications/read-all", { method: "PATCH" });
 }
 
-export function getVectorStyle(): Promise<VectorStyleSettings> {
-  return apiFetch<VectorStyleSettings>("/vector-style");
-}
-
 // ── Custom fields (trip logs AND places) ────────────────────────────────────
 //
 // The DEFINITIONS live in User.uiPreferences (`tripLogCustomFields` /
@@ -63,7 +69,7 @@ export function getVectorStyle(): Promise<VectorStyleSettings> {
 // that carried one, which only the server can do transactionally.
 //
 // Online-only, deliberately: this edits an account-level preference that every
-// device and the web share, so an offline queue would need conflict rules for a
+// device and Logjam Web share, so an offline queue would need conflict rules for a
 // list the user could also be reordering in a browser. The forms degrade to the
 // fields they already know about.
 //

@@ -1,10 +1,10 @@
-// Stage 2 — on-demand export pipeline.
+// On-demand export pipeline.
 //
-// Users submit POST /topo-exports with {sourceJobIds, layers, format,
-// bundling}. The server snapshots the live vector style, persists a
-// TopoExportJob row, and launches an ECS task that produces the requested
-// artefact and emails the user when ready. The dialog polls
-// GET /topo-exports for the recent-exports list and pre-signed download URLs.
+// Users submit POST /topo-exports with {bbox, layers, format}: an export of an
+// area. The server persists a TopoExportJob row and launches an ECS task that
+// produces the file and emails the user when ready. Logjam Web polls
+// GET /topo-exports for the recent-exports list and pre-signed download URLs;
+// older exports of a LiDAR topo are listed there until they expire.
 
 import { Router, Response } from "express";
 import { z } from "zod";
@@ -16,10 +16,16 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import {
   say,
-  EXPORT_FORMAT_RULES,
-  RASTER_LAYERS,
-  validateExportRequest,
-  VECTOR_STYLE_DEFAULTS,
+  AREA_EXPORT_FORMATS,
+  AREA_EXPORT_LAYERS,
+  AREA_EXPORT_OUTSIDE_TERRAIN,
+  AREA_EXPORT_TOO_LARGE,
+  areaExportRequestError,
+  areaExportStyleSnapshot,
+  areasInBox,
+  areaExportTooLarge,
+  areaInTerrainRegion,
+  type AreaBbox,
   type ExportFormat,
   type ExportBundling,
   type TopoExportJobView,
@@ -28,26 +34,24 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
-import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
-import { directlySharedIds } from "../lib/shareAccess";
+import { visibleSharpenedAreas } from "../services/sharpenedAreas";
 
-const exportRequestSchema = z.object({
-  sourceJobIds: z.array(z.string()).length(1),
-  layers: z.array(z.string()).min(1),
-  format: z.enum(Object.keys(EXPORT_FORMAT_RULES) as [string, ...string[]]),
-  bundling: z.enum(["composite", "per-layer"]),
+// An export of an area: the statewide terrain over a box (topo/area_export.py).
+const areaRequestSchema = z.object({
+  bbox: z.object({
+    west: z.number(),
+    south: z.number(),
+    east: z.number(),
+    north: z.number(),
+  }),
+  layers: z
+    .array(z.enum(AREA_EXPORT_LAYERS))
+    .min(1)
+    .max(AREA_EXPORT_LAYERS.length),
+  format: z.enum(AREA_EXPORT_FORMATS),
 });
-
-type S3OutputKey = {
-  name: string;
-  cogKey: string | null;
-  pmtilesKey: string | null;
-};
 
 const router = Router();
 
@@ -56,7 +60,7 @@ const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
 // Server-side cap on the exports list. X-Total-Count carries the true total so
-// the client can show a truncation caption when this cap bites (UX-002).
+// the client can show a truncation caption when this cap bites.
 const EXPORT_LIST_CAP = 50;
 
 async function presignResult(
@@ -87,6 +91,7 @@ function rowToView(
     errorMessage: string | null;
     createdAt: Date;
     completedAt: Date | null;
+    bbox: unknown;
   },
   download: { url: string; expiresAt: string } | null,
 ): TopoExportJobView {
@@ -102,6 +107,7 @@ function rowToView(
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    bbox: (row.bbox as AreaBbox | null) ?? null,
     downloadUrl: download?.url ?? null,
     downloadExpiresAt: download?.expiresAt ?? null,
   };
@@ -114,102 +120,41 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
-    // Entry gate (ARCH-012): every byte-producing flow checks storage quota at
-    // submission. The worker charges result_bytes unconditionally on
-    // completion, so without this an over-quota user could keep accruing.
-    // No pre-render size estimate exists, so this is the same soft gate the
-    // other flows use (in-flight work may still finish past quota, bounded by
-    // the per-user concurrency cap).
-    await assertHasStorageQuota(user.id);
-
-    const parsed = exportRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw malformed(
-        parsed.error.issues[0]?.message ?? "Invalid export request",
-      );
+    const area = areaRequestSchema.safeParse(req.body);
+    if (!area.success) {
+      throw malformed(area.error.issues[0]?.message ?? "Invalid area export");
     }
-    const { sourceJobIds, bundling } = parsed.data;
-    const format = parsed.data.format as ExportFormat;
-    const layers = parsed.data.layers as TopoLayerKey[];
-
-    const v = validateExportRequest({ format, bundling, layers });
-    if (!v.ok) throw malformed(v.error);
-
-    // Read-access check on every source job — owned OR directly shared with
-    // the caller, the same OR arm the list endpoints use. A recipient can
-    // already see the topo's overlay tiles, so exporting it broadens nothing;
-    // the export job is created under THEIR user id, so it charges their quota
-    // and lands in their downloads, not the owner's.
-    // A job the caller cannot read is 404 (never 403) — the id must not be
-    // confirmable to a stranger who guessed it.
-    const jobs = await prisma.topoJob.findMany({
-      where: {
-        id: { in: sourceJobIds },
-        OR: [
-          { userId: user.id },
-          { id: { in: await directlySharedIds(user.id, "topoJob") } },
-        ],
-      },
-    });
-    if (jobs.length !== sourceJobIds.length) {
-      throw new AppError(404, say`Couldn't find one of those LiDAR maps.`);
+    const detail = areaExportRequestError(area.data);
+    if (detail) throw malformed(detail);
+    if (areaExportTooLarge(area.data.bbox)) {
+      throw new AppError(400, AREA_EXPORT_TOO_LARGE);
     }
-    for (const j of jobs) {
-      if (j.status !== "complete") {
-        throw new AppError(
-          400,
-          say`One of those LiDAR maps isn't finished yet.`,
-        );
-      }
-      // A job without a footprint (legacy / failed-but-marked-complete) crashes
-      // the export worker at render_composite_* ("No source-job footprints
-      // available"). Reject here; re-running the job recomputes the footprint.
-      if (j.footprint === null) {
-        throw new AppError(
-          400,
-          say`This LiDAR map was made before exports existed. Make it again to export it.`,
-        );
-      }
+    if (!areaInTerrainRegion(area.data.bbox)) {
+      throw new AppError(400, AREA_EXPORT_OUTSIDE_TERRAIN);
     }
-
-    // Reject pre-Stage-2 jobs whose outputs predate the COG export source:
-    // they would otherwise fail deep inside the export worker. Only raster
-    // layers need a COG; vector layers export from raw GeoJSON.
-    const requestedRasterLayers = layers.filter((l) =>
-      RASTER_LAYERS.includes(l),
+    // The sharpened areas in the box this user may read (ADR 0040), in the
+    // router's order: the worker reads only these, so a stranger's area never
+    // reaches a file. Decided now, at submit.
+    const areas = areasInBox(
+      await visibleSharpenedAreas(user.id),
+      area.data.bbox,
     );
-    for (const j of jobs) {
-      const outputs = (j.s3OutputKeys as S3OutputKey[] | null) ?? [];
-      for (const layer of requestedRasterLayers) {
-        const match = outputs.find((o) => o.name === layer);
-        if (!match?.cogKey) {
-          throw new AppError(
-            400,
-            say`This LiDAR map was made before exports existed. Make it again to export it.`,
-          );
-        }
-      }
-    }
-
-    const vectorStyleSnapshot =
-      (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
-
-    // Cap-checked create + ECS launch — shared with the reaper's auto-export
-    // pass so both enforce the same per-user concurrency limit (ARCH-009) and
-    // fail-on-launch semantics (ARCH-002).
     const exportJobId = await createAndLaunchTopoExport({
       userId: user.id,
-      sourceJobIds,
-      layers,
-      format,
-      bundling,
-      vectorStyleSnapshot,
-      // zod pins sourceJobIds to length 1 (exportRequestSchema above) — if that
-      // ever loosens to multiple source jobs, sum their tileCounts here instead.
-      sourceTileCount: jobs[0].tileCount ?? null,
+      sourceJobIds: areas.map((each) => each.id),
+      layers: area.data.layers,
+      format: area.data.format,
+      // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
+      bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
+      vectorStyleSnapshot: areaExportStyleSnapshot(
+        area.data.format,
+        user.uiPreferences,
+      ),
+      // No size signal the estimator knows yet, so no estimate.
+      sourceTileCount: null,
       monthlyComputeCredits: user.monthlyComputeCredits,
+      bbox: area.data.bbox,
     });
-
     res.status(201).json({ id: exportJobId });
   },
 );
@@ -237,7 +182,7 @@ router.get(
         ),
       ),
     );
-    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    // True total (pre-cap) so the client can flag a truncated view.
     res.set("X-Total-Count", String(total));
     res.json({ exports: views });
   },
@@ -251,11 +196,17 @@ router.get(
     const user = await getUser(req.user!.sub);
     // Owner-scoped lookup: a foreign export id gets the SAME 404 a
     // non-existent one gets, so the status is no existence oracle for export
-    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    // ids the caller may not see (matching topoJobs.ts).
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that export.`);
+    // The link in an email or the Inbox outlives the file, so say why.
+    if (!row) {
+      throw new AppError(
+        404,
+        say`That map file has expired or was deleted. Map files are kept for 7 days.`,
+      );
+    }
     // An export artefact is one of the largest single objects the app serves,
     // and this endpoint exists to re-mint an expired URL — i.e. it is the
     // deliberate "download it again" action. Owner-scoped above, so the caller
@@ -275,31 +226,26 @@ router.delete(
     const user = await getUser(req.user!.sub);
     // Owner-scoped lookup: a foreign export id gets the SAME 404 a
     // non-existent one gets, so the status is no existence oracle for export
-    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    // ids the caller may not see (matching topoJobs.ts).
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that export.`);
+    if (!row) throw new AppError(404, say`Couldn't find that map.`);
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(
         409,
-        say`An export that is still running can't be deleted.`,
+        say`A map that is still being made can't be deleted.`,
       );
     }
 
-    // Delete the S3 object and reclaim the storage quota in the same
-    // transaction as the row delete so a completed export never orphans bytes.
+    // An export is not charged to storage (it is gone in 7 days), so there is
+    // no quota to give back.
     if (row.status === "completed" && row.resultKey) {
       await s3.send(
         new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }),
       );
     }
-    await prisma.$transaction(async (tx) => {
-      if (row.status === "completed" && row.resultBytes) {
-        await decrementStorageUsed(user.id, row.resultBytes, tx);
-      }
-      await tx.topoExportJob.delete({ where: { id: row.id } });
-    });
+    await prisma.topoExportJob.delete({ where: { id: row.id } });
     res.status(204).send();
   },
 );

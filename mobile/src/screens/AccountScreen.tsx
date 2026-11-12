@@ -6,12 +6,12 @@
 // signing out (which drops unsynced work — the confirmation lives in App.tsx)
 // and deleting the account.
 //
-// One sheet, four modes (§6 — never a second sheet): rename, change email
+// One sheet, four modes (shared/DESIGN.md §6 — never a second sheet): rename, change email
 // (two-step, the code goes to the new address), and delete.
 //
 // PRIVACY: username, email, byte counts and tile counts. The email appears here
-// and nowhere else in the app — friend search and lists are username-only, per
-// the root CLAUDE.md convention.
+// and nowhere else in Logjam GPS — friend search and lists are username-only, per
+// the privacy conventions (AGENTS.md).
 import {
   Fragment,
   useCallback,
@@ -19,8 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, Text, View } from "react-native";
-import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
+import { Text, View } from "react-native";
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
@@ -28,7 +27,11 @@ import {
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
   formatCredits,
+  formatCreditsOf,
+  confirmEmailChange,
   messageFromError,
+  requestEmailChange,
+  hasCognitoAccount,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -38,8 +41,10 @@ import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
-import { capabilityRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION } from "../config";
+import { getSession } from "../auth/oidcSession";
+import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
+import { CLIENT_VERSION_LABEL, config } from "../config";
+import { LegalLinks } from "./LegalLinks";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -49,6 +54,7 @@ import {
   BottomSheet,
   Button,
   Meter,
+  confirm,
   ErrorBanner,
   ErrorState,
   Hero,
@@ -60,7 +66,6 @@ import {
   TextField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 
 const copy = ACCOUNT.copy;
@@ -75,7 +80,13 @@ const copy = ACCOUNT.copy;
  * is told the counts and the irreversibility BEFORE they reach a password
  * field, not after.
  */
-function GuestAccountScreen({ onBack }: { onBack: () => void }) {
+function GuestAccountScreen({
+  onBack,
+  backLabel,
+}: {
+  onBack: () => void;
+  backLabel: string;
+}) {
   const styles = useStyles();
 
   const { linkAccount } = useAccountState();
@@ -93,7 +104,7 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
     };
   }, []);
 
-  const startLinking = () => {
+  const startLinking = async () => {
     const message = counts ? linkConfirmationMessage(counts) : null;
     // Nothing recorded yet — there is nothing to warn about, so don't make
     // them dismiss a dialog about their zero places.
@@ -101,17 +112,20 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
       linkAccount();
       return;
     }
-    Alert.alert("Add this phone's data to an account?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Continue", onPress: linkAccount },
-    ]);
+    const ok = await confirm({
+      confirmTitle: "Add this phone's data to an account?",
+      confirmBody: message,
+      confirmLabel: "Continue",
+      tone: "filled",
+    });
+    if (ok) linkAccount();
   };
 
   const summary = counts ? describeLocalData(counts) : null;
 
   return (
     <View style={styles.root}>
-      <Hero eyebrow="Account" title="No account" onBack={onBack}>
+      <Hero title="No account" onBack={onBack} backLabel={backLabel}>
         <Text style={styles.email}>
           {summary
             ? `${summary} on this phone`
@@ -133,8 +147,8 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         />
         <Row
           icon="lidar"
-          title="LiDAR maps"
-          subtitle="Import topos from Logjam Web"
+          title="Sharpened areas"
+          subtitle="Save the areas you sharpen on Logjam Web"
         />
 
         <SectionHeader title="Get an account" />
@@ -148,7 +162,8 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
           there&apos;s no way to un-upload it.
         </Text>
 
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
       </ScreenScroll>
     </View>
   );
@@ -157,6 +172,10 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 function updateUsername(username: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
 }
+
+// Change email and sign out everywhere are Cognito's own calls: another
+// provider has neither, so its users don't see them.
+const COGNITO_ACCOUNT = hasCognitoAccount(config.authMode, config.oidcIssuer);
 
 type SheetMode = "closed" | "username" | "email" | "delete";
 
@@ -168,35 +187,36 @@ const SHEET_TITLE: Record<Exclude<SheetMode, "closed">, string> = {
 
 export function AccountScreen({
   onBack,
+  backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
+  backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
   // A guest has no account record, no quotas and nothing to sign out of, so
   // this is a different screen rather than the same one with everything
   // disabled — the whole point of it is the way IN.
-  if (accountState === "guest") return <GuestAccountScreen onBack={onBack} />;
+  if (accountState === "guest")
+    return <GuestAccountScreen onBack={onBack} backLabel={backLabel} />;
   return (
     <LinkedAccountScreen
       onBack={onBack}
+      backLabel={backLabel}
       onSignOut={onSignOut}
-      onOpenFriends={onOpenFriends}
     />
   );
 }
 
 function LinkedAccountScreen({
   onBack,
+  backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
+  backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -207,7 +227,7 @@ function LinkedAccountScreen({
   const [sheet, setSheet] = useState<SheetMode>("closed");
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -239,9 +259,9 @@ function LinkedAccountScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow="Account"
         title={user.username}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="edit"
@@ -295,8 +315,10 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatCredits(user.monthlyComputeUsage)} of{" "}
-          {formatCredits(user.monthlyComputeCredits)}
+          {formatCreditsOf(
+            user.monthlyComputeUsage,
+            user.monthlyComputeCredits,
+          )}
           {creditsResetLabel ? (
             <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}
@@ -304,26 +326,21 @@ function LinkedAccountScreen({
         </Text>
       </>
     ),
-    signIn: () => (
-      <>
-        <SectionHeader title={copy.signIn} />
-        <Row
-          icon="email"
-          title={copy.email}
-          subtitle={online ? user.email : undefined}
-          {...capabilityRowProps("serverPrefs", "linked", online)}
-          onPress={() => setSheet("email")}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-        />
-        <Row
-          icon="friends"
-          title="Friends"
-          {...capabilityRowProps("friends", "linked", online)}
-          onPress={onOpenFriends}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-        />
-      </>
-    ),
+    // Friends lives on More; the Email row is all that belongs under Sign-in.
+    signIn: () =>
+      COGNITO_ACCOUNT ? (
+        <>
+          <SectionHeader title={copy.signIn} />
+          <Row
+            icon="email"
+            title={copy.email}
+            subtitle={online ? user.email : undefined}
+            {...changeEmailRowProps(online, config.authMode)}
+            onPress={() => setSheet("email")}
+            chevron
+          />
+        </>
+      ) : null,
     leaving: () => (
       <>
         <SectionHeader title={copy.leaving} />
@@ -333,16 +350,31 @@ function LinkedAccountScreen({
           icon="signOut"
           onPress={() => onSignOut()}
         />
+        {COGNITO_ACCOUNT ? (
+          <Button
+            label={copy.signOutEverywhere}
+            variant="outlineAccent"
+            icon="signOut"
+            disabled={!online}
+            disabledReason="Needs a connection"
+            onPress={() => onSignOut({ everywhere: true })}
+          />
+        ) : null}
         <Row
           icon="delete"
-          hue={theme.warning}
+          hue={theme.accent}
           title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}
         />
       </>
     ),
-    footer: () => <Text style={styles.version}>{CLIENT_VERSION}</Text>,
+    footer: () => (
+      <>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
+      </>
+    ),
   };
   const keys = contractSectionKeys(ACCOUNT, "gps");
 
@@ -459,6 +491,14 @@ function UsernameForm({
   );
 }
 
+const issuer = (): string => config.oidcIssuer ?? "";
+
+async function accessToken(): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new Error("No auth session");
+  return session.accessToken;
+}
+
 /**
  * Two steps, because Cognito owns the email and verifies it: request the change,
  * then confirm with the code sent to the NEW address. The step is state, not a
@@ -488,9 +528,7 @@ function EmailForm({
     setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({
-        userAttribute: { attributeKey: "email", value: trimmed },
-      });
+      await requestEmailChange(issuer(), await accessToken(), trimmed);
       setStep("confirm");
     } catch (err) {
       console.error(err);
@@ -509,10 +547,7 @@ function EmailForm({
     setBusy(true);
     setError(null);
     try {
-      await confirmUserAttribute({
-        userAttributeKey: "email",
-        confirmationCode: trimmed,
-      });
+      await confirmEmailChange(issuer(), await accessToken(), trimmed);
       onSaved();
     } catch (err) {
       console.error(err);
@@ -575,7 +610,7 @@ function EmailForm({
 /**
  * Deletion confirms by typing the username, which is the web's bar and a higher
  * one than an Alert: the sheet can carry the whole consequence in readable copy,
- * where an Android Alert would ellipsise it (§7 — consequence copy belongs in the
+ * where an Android Alert would ellipsise it (shared/DESIGN.md §7 — consequence copy belongs in the
  * dialog, and here the sheet IS the dialog). No second Alert on top; the typing
  * is the confirmation.
  */
@@ -624,6 +659,7 @@ function DeleteAccountForm({
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}
+        disabledReason="Type the phrase above first"
         onPress={() => void run()}
       />
     </View>

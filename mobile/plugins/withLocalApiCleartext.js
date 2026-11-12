@@ -5,13 +5,12 @@
 // targetSdk >= 28. React Native grants an exemption in
 // `android/app/src/debug/AndroidManifest.xml`, so `expo run:android` works —
 // but this repo's on-device verification path is a *debuggable release* build
-// (`android/app/build.gradle`, release + `debuggable true`), because Metro
-// cannot run on the dev laptop. That variant gets release's network policy, so
+// (`android/app/build.gradle`, release + `debuggable true`), when Metro
+// cannot run on the development host. That variant gets release's network policy, so
 // every request to `http://127.0.0.1:8080` is refused inside the app, before a
 // packet moves. React Native reports it as a bare `TypeError: Network request
 // failed` and a release bundle has no console, so it is indistinguishable from
-// a dead `adb reverse` or a stopped API — which is exactly how it burned an
-// afternoon on 2026-08-30.
+// a dead `adb reverse` or a stopped API.
 //
 // WHY NOT `usesCleartextTraffic: true`. That is the one-line fix and it is the
 // wrong one: it disables the guard for every host in every shipped build, to
@@ -28,7 +27,7 @@
 // 127.0.0.1 only, never 10.0.2.2. `adb reverse tcp:8080 tcp:8080` works on the
 // emulator and on a physical device alike, so loopback is the one address that
 // needs no per-target `.env` edit — and editing `.env` has its own trap (see
-// the script, and mobile/CLAUDE.local.md).
+// the script).
 const {
   AndroidConfig,
   withAndroidManifest,

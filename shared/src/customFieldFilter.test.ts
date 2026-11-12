@@ -48,8 +48,7 @@ describe("passesCustomFieldFilters", () => {
   });
 
   // THE SAME OBJECT SHAPE SERVES BOTH ENTITIES: a place passes `fieldValues`
-  // and a trip `customFields`, and the predicate cannot tell them apart. This
-  // is the whole reason the rule was lifted out of `passesPlaceFilters`.
+  // and a trip `customFields`, and the predicate cannot tell them apart.
   it("reads a place's fieldValues and a trip's customFields identically", () => {
     const filter: Record<string, CustomFieldFilter> = {
       rope_length: { kind: "number", op: "More than", value: 30 },
@@ -95,8 +94,8 @@ describe("passesCustomFieldFilters", () => {
     ).toBe(false);
   });
 
-  // The regression the extracted module exists to keep fixed: a date that
-  // cannot be placed on a calendar used to match EVERY range, in or out.
+  // A date that cannot be placed on a calendar is treated as unknown rather
+  // than matching every range, in or out.
   it("treats an unparsable date as unknown rather than as a match", () => {
     const filter: Record<string, CustomFieldFilter> = {
       surveyed: { kind: "date", range: ["2026-01-01", "2026-12-31"] },
@@ -140,9 +139,8 @@ describe("passesDateRangeFilter", () => {
   });
 
   it("is inclusive of a bound's whole day", () => {
-    // A bound is a LOCAL calendar day, so the values are local times too. They
-    // were written as +11:00 literals, which only meant "that day" in Sydney
-    // and failed in CI's UTC.
+    // A bound is a LOCAL calendar day, so the values are local times too rather
+    // than fixed offset literals that vary across timezones.
     const local = (day: number, hour: number, minute: number) =>
       new Date(2026, 0, day, hour, minute).toISOString();
     expect(

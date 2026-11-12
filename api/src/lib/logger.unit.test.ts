@@ -9,9 +9,9 @@ import {
   serializeRequestForLog,
 } from "./logger";
 
-// Build a pino logger using the SAME redact paths the app logger uses, but
+// Build a pino logger using the SAME redact paths the API logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
-// This guards the CLAUDE.md privacy rule: place coords/names must never reach
+// This guards the AGENTS.md privacy rule: place coords/names must never reach
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
@@ -55,25 +55,17 @@ describe("logger redaction", () => {
     expect(nested.coords).toBe("[redacted]");
   });
 
-  // The vector clip request (POST /basemap/region-clip) is the one place a
-  // saved area's bounds reach the API, and every signed-in region save makes
-  // it (docs/decisions/0029). The body is exactly what Logjam GPS sends.
-  // Mutation: delete any one of "req.body.west|south|east|north" from
-  // `redactPaths` and the first test goes red; put `body` back into
-  // `serializeRequestForLog` and the second does.
-  describe("the region clip's bbox", () => {
-    const clipBody = {
-      west: 150.2613,
-      south: -33.7457,
-      east: 150.3689,
-      north: -33.6551,
-      maxzoom: 15,
-    };
-    const bounds = ["150.2613", "33.7457", "150.3689", "33.6551"];
+  // Location search as you type sends what the user typed on every pause,
+  // often the name of a place they would rather not publish (ADR 0034).
+  // Mutation: delete "req.body.q" from `redactPaths` and the first test goes
+  // red; put `body` back into `serializeRequestForLog` and the second does.
+  // The route's own log lines: placeSearch.unit.test.ts.
+  describe("the place search query", () => {
+    const query = "Hidden Gorge";
 
     it("is censored if a log line ever carries the request body", () => {
-      const line = JSON.stringify(captureLog({ req: { body: clipBody } }));
-      for (const bound of bounds) expect(line).not.toContain(bound);
+      const line = JSON.stringify(captureLog({ req: { body: { q: query } } }));
+      expect(line).not.toContain(query);
     });
 
     it("is not in what the request logger keeps of the request", () => {
@@ -81,12 +73,11 @@ describe("logger redaction", () => {
         serializeRequestForLog({
           id: "r1",
           method: "POST",
-          url: "/basemap/region-clip",
-          body: clipBody,
+          url: "/places/search",
+          body: { q: query },
         } as Parameters<typeof serializeRequestForLog>[0]),
       );
-      for (const bound of bounds) expect(kept).not.toContain(bound);
-      expect(kept).toContain("/basemap/region-clip");
+      expect(kept).not.toContain(query);
     });
   });
 
@@ -161,13 +152,72 @@ describe("logger redaction", () => {
     expect(body.ops[0].fields.tripTypes).toBe("[redacted]");
   });
 
+  // Every write shape of /plans, compare-and-set pairs included. Mutation:
+  // delete any one of the four "PLANS" paths from `redactPaths`.
+  it("censors a plan's name, sections, form labels and answers", () => {
+    const words = ["Wollangambe", "Exit up the gully", "Contact", "0400"];
+    const bodies = [
+      { name: "Wollangambe weekend", tripTypes: ["with Dad"] },
+      { name: { from: "Wollangambe", to: "Wollangambe 2" } },
+      { title: "Exit up the gully", body: "Exit up the gully, then left" },
+      { title: { from: "Exit", to: "Exit up the gully" } },
+      {
+        title: "Contact",
+        questions: [
+          {
+            id: "q",
+            kind: "choice",
+            label: "Contact",
+            help: "Contact",
+            options: [{ id: "a", label: "0400" }],
+          },
+        ],
+      },
+      { questions: { from: [{ label: "Contact" }], to: [{ label: "0400" }] } },
+      { answers: { name: "Contact Person", phone: "0400 000 000" } },
+      { answers: { "form-1": { phone: "0400 000 000" } } },
+    ];
+    for (const body of bodies) {
+      const line = JSON.stringify(captureLog({ req: { body } }));
+      for (const word of words) expect(line).not.toContain(word);
+    }
+  });
+
+  // A plan item's edit nests everything under { from, to }. Mutation: delete
+  // "req.body.position" or "req.body.geometry" from `redactPaths`.
+  it("censors a plan item edit's names, positions, lines and values", () => {
+    const bodies = [
+      { name: { from: "Secret Place", to: "Secret Place 2" } },
+      {
+        position: {
+          from: { latitude: -33.51, longitude: 150.41 },
+          to: { latitude: -33.52, longitude: 150.42 },
+        },
+      },
+      { notes: { from: null, to: "Secret Place beta" } },
+      { fieldValues: { v_grade: { from: null, to: "Secret Place" } } },
+      {
+        geometry: {
+          from: { points: [[150.41, -33.51]], anchors: null },
+          to: { points: [[150.42, -33.52]], anchors: null },
+        },
+      },
+      { displayName: { from: null, to: "Secret Place exit" } },
+    ];
+    for (const body of bodies) {
+      const line = JSON.stringify(captureLog({ req: { body } }));
+      for (const word of ["Secret", "33.5", "150.4"])
+        expect(line).not.toContain(word);
+    }
+  });
+
   it("leaves non-sensitive fields intact", () => {
     const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.id).toBe("place-1");
   });
 
-  // PRIV-001 defence-in-depth: array-shaped bulk-import/create payloads carry
+  // Defence-in-depth: array-shaped bulk-import/create payloads carry
   // user-typed names the coordinate wildcards can't reach. No log site emits
   // these today (unproven hardening), but the redact paths must censor them if
   // one ever does.
@@ -183,6 +233,7 @@ describe("logger redaction", () => {
                 longitude: 150.3,
                 altNames: ["X"],
                 notes: "beta",
+                gaugeId: "210001",
               },
             },
           ],
@@ -197,6 +248,7 @@ describe("logger redaction", () => {
     expect(row.longitude).toBe("[redacted]");
     expect(row.altNames).toBe("[redacted]");
     expect(row.notes).toBe("[redacted]");
+    expect(row.gaugeId).toBe("[redacted]");
   });
 
   // PLACE FIELD VALUES. A user-authored field label names the thing it
@@ -225,9 +277,8 @@ describe("logger redaction", () => {
     expect(body.foreignFields).toBe("[redacted]");
   });
 
-  // THE SYNC PUSH is the phone's only write path: every place the app has ever
-  // created reached the server inside `ops[*].fields`, which no path in the list
-  // reached until 2026-09-10.
+  // THE SYNC PUSH is the phone's only write path: every place Logjam GPS creates
+  // reaches the server inside `ops[*].fields`.
   it("censors a place inside a sync push op", () => {
     const out = captureLog({
       req: {
@@ -312,8 +363,8 @@ describe("logger redaction", () => {
   });
 });
 
-// Guards the SEC-002 boundary: tile z/x/y indices are approximate coordinates
-// and must never reach logs, even embedded in fetch-error URLs.
+// Tile z/x/y indices are approximate coordinates and must never reach logs,
+// even embedded in fetch-error URLs.
 describe("redactTilePathPatterns", () => {
   it("strips a full tile URL including host and z/x/y path", () => {
     const out = redactTilePathPatterns(
@@ -347,10 +398,10 @@ describe("redactTilePathPatterns", () => {
   });
 });
 
-// Guards the SEC-001 (DoD) boundary: pino redact paths cannot scrub free text
-// inside err.message/err.stack, and Prisma renders user-supplied place
-// name/coords into a validation error's message. safeErrorForLog must drop the
-// rendered argument block before it can reach logs.
+// Pino redact paths cannot scrub free text inside err.message/err.stack, and
+// Prisma renders user-supplied place name/coords into a validation error's
+// message. safeErrorForLog must drop the rendered argument block before it can
+// reach logs.
 describe("safeErrorForLog", () => {
   it("strips a Prisma rendered-args block carrying place name/coords", () => {
     const err = new Error(
@@ -425,9 +476,8 @@ describe("safeErrorForLog", () => {
   });
 });
 
-// PRIV-109: the query string carries user search terms (?search= is matched
-// against place NAMES in GET /trips), and no redact path can reach inside a
-// URL string.
+// The query string carries user search terms (?search= is matched against
+// place NAMES in GET /trips), and no redact path can reach inside a URL string.
 describe("serializeRequestForLog", () => {
   it("logs the path without the query string", () => {
     const out = serializeRequestForLog({
@@ -450,11 +500,10 @@ describe("serializeRequestForLog", () => {
   });
 });
 
-// The api/CLAUDE.md rule "never log a raw thrown error; scrub it with
-// safeErrorForLog" was a comment until this test: 21 sites had drifted past it
-// by the 2026-08-28 review (APIC-001). Pino's redact.paths only censor
-// structured keys — they cannot reach free text inside err.message/err.stack,
-// where Prisma renders user-supplied place names and coordinates.
+// The api/AGENTS.md rule: never log a raw thrown error; scrub it with
+// safeErrorForLog. Pino's redact.paths only censor structured keys — they
+// cannot reach free text inside err.message/err.stack, where Prisma renders
+// user-supplied place names and coordinates.
 describe("no raw err reaches a log site", () => {
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

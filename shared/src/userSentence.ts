@@ -12,7 +12,8 @@ export type Quoted = { readonly quoted: string };
 
 /**
  * Put the user's own words in a sentence. They are set in “ ”, which is how
- * `withoutQuoted` finds them again: a log line never carries a label or a name.
+ * `withoutQuoted` finds them again: a log line never carries a label or a name
+ * (api/src/middleware/errorHandler.unit.test.ts).
  */
 export function quote(text: string): Quoted {
   return { quoted: text };
@@ -46,7 +47,7 @@ export function withoutQuoted(sentence: string): string {
 }
 
 /** For a request only a bug in a client, or a hand-made request, can send. */
-export const MALFORMED_REQUEST_SENTENCE = say`That didn't work because of a fault in Logjam, not something you did.`;
+export const MALFORMED_REQUEST_SENTENCE = say`Couldn't do that because of a fault in Logjam, not something you did.`;
 
 /** For a failure on our side that trying again may get past. */
-export const SERVER_FAULT_SENTENCE = say`Something went wrong on our end. Please try again.`;
+export const SERVER_FAULT_SENTENCE = say`Something went wrong on our end. Try again.`;

@@ -11,8 +11,8 @@ import {
 } from "@logjam/shared";
 
 /**
- * A graded axis as a row of numbered pills — the mobile form of the web's
- * double-ended grade slider. Every stop is a 36pt tap target, the current
+ * A graded axis as a row of numbered pills — the Logjam GPS form of Logjam
+ * Web's double-ended grade slider. Every stop is a 36pt tap target, the current
  * selection is readable without a tooltip, and it costs no gesture (a slider
  * inside a draggable sheet fights the sheet).
  *

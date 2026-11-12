@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { spacing } from "../theme";
+import { IconButton } from "./IconButton";
 import { Row } from "./Row";
 import { Toggle } from "./Toggle";
 import type { Glyph } from "./Icon";
@@ -11,7 +12,9 @@ import type { Glyph } from "./Icon";
  * The WHOLE row is the switch's target (UX §4: a thing that does something on
  * press looks pressable), so it sits on the card colour like any pressable row,
  * and a screen reader meets one `switch` named by the title. The `Toggle`
- * inside is the drawing; it takes no touches of its own.
+ * inside is the drawing; it takes no touches of its own. `help` is the one
+ * press inside it that doesn't flip the switch: a button to a finger and, since
+ * a screen reader meets the row as one switch, an action of that switch.
  *
  * `disabled` dims it and stops it answering; `description` then carries the
  * reason ("Needs an account"), which a screen reader hears as the hint.
@@ -25,6 +28,7 @@ export function SwitchRow({
   hue,
   leading,
   badge,
+  help,
   style,
   checked,
   onChange,
@@ -40,6 +44,8 @@ export function SwitchRow({
   leading?: React.ReactNode;
   /** Beside the switch: a count of what the switch shows. */
   badge?: React.ReactNode;
+  /** A help button beside the switch, where the row's press doesn't reach. */
+  help?: { label: string; onPress: () => void };
   style?: ComponentProps<typeof Row>["style"];
   checked: boolean;
   onChange: (next: boolean) => void;
@@ -57,9 +63,20 @@ export function SwitchRow({
       checked={checked}
       disabled={disabled}
       onPress={() => onChange(!checked)}
+      accessibilityActions={
+        help ? [{ name: "help", label: help.label }] : undefined
+      }
+      onAccessibilityAction={help?.onPress}
       right={
         <View style={styles.trailing}>
           {badge}
+          {help ? (
+            <IconButton
+              icon="help"
+              accessibilityLabel={help.label}
+              onPress={help.onPress}
+            />
+          ) : null}
           <View
             pointerEvents="none"
             importantForAccessibility="no-hide-descendants"

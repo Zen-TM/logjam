@@ -5,9 +5,18 @@ import { z } from "zod";
 import {
   say,
   normalizeThemeSchemeId,
-  normalizeUserUiPreferences,
+  normalizeUserUiPreferencesKeepingNoPick,
+  MAX_SLOPE_BANDS,
+  normalizeRegionIds,
+  REGIONS,
+  parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  USERNAME_PATTERN,
+  USERNAME_RULE,
+  USERNAME_TAKEN,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
 import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
@@ -16,48 +25,27 @@ import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
-import { userPatchLimiter } from "../middleware/rateLimit";
-import { cognitoIdp } from "../services/awsClients";
+import {
+  userPatchLimiter,
+  usernameCheckLimiter,
+} from "../middleware/rateLimit";
+import { identityProvider } from "../lib/identityProvider";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { deleteTopoJobObjects } from "../lib/topoUpload";
+import { handOverPlans } from "../lib/planItems";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
-import {
-  AdminGetUserCommand,
-  UserNotFoundException,
-} from "@aws-sdk/client-cognito-identity-provider";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
-}
-
-async function cognitoUserExists(sub: string): Promise<boolean> {
-  // env.ts makes COGNITO_USER_POOL_ID required whenever AUTH_MODE=cognito, so an
-  // unset pool id only ever happens in fake-auth dev, where there is no Cognito
-  // directory to ask and no takeover to guard against. Deliberate fail-safe.
-  const poolId = getEnv().COGNITO_USER_POOL_ID;
-  if (!poolId) return true;
-  try {
-    await cognitoIdp.send(
-      new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }),
-    );
-    return true;
-  } catch (err) {
-    if (err instanceof UserNotFoundException) return false;
-    // IAM not granted or network error — fail safe: treat as existing, but say
-    // so, or a missing AdminGetUser permission silently disables the guard.
-    logger.warn(
-      { err: safeErrorForLog(err) },
-      "cognito_user_exists_check_failed",
-    );
-    return true;
-  }
 }
 
 // Create the first-login User row for a sub that has no row yet AND whose email
@@ -66,7 +54,7 @@ async function cognitoUserExists(sub: string): Promise<boolean> {
 //   - username already taken by a DIFFERENT user → retry with progressively
 //     more-unique suffixes derived from the sub;
 //   - a concurrent first-login request for THIS same sub winning the race →
-//     recover the row it created (matched on cognitoId).
+//     recover the row it created (matched on subject).
 // An email that becomes owned between the caller's pre-check and the insert is a
 // genuine concurrent conflict → AppError(409). Persistent collisions propagate
 // rather than looping.
@@ -76,14 +64,30 @@ export async function createUserForSignup(params: {
   initialUsername: string;
 }): Promise<User> {
   const { sub, email, initialUsername } = params;
-  // Substring match so it works whether Postgres reports the field name
-  // ("username") or the constraint name ("User_username_key").
-  const targetHas = (e: Prisma.PrismaClientKnownRequestError, name: string) =>
-    ((e.meta?.target as string[] | undefined) ?? []).some((t) =>
-      t.includes(name),
+  // Which unique index a P2002 names, as a substring: the indexes are named
+  // for their columns (`users_username_key`, `users_email_key`), and a
+  // case-variant username trips `users_username_as_read_key` — still
+  // "username". Under the pg driver adapter Prisma leaves `meta.target`
+  // undefined and reports the index under `driverAdapterError`; `target` is
+  // kept for an engine that fills it.
+  const indexHas = (e: Prisma.PrismaClientKnownRequestError, name: string) => {
+    const meta = e.meta as
+      | {
+          target?: unknown;
+          driverAdapterError?: {
+            cause?: { constraint?: { index?: unknown } };
+          };
+        }
+      | undefined;
+    const target = Array.isArray(meta?.target) ? meta.target.join(" ") : "";
+    const index = meta?.driverAdapterError?.cause?.constraint?.index;
+    return (
+      target.includes(name) ||
+      (typeof index === "string" && index.includes(name))
     );
+  };
   const recoverRacingRow = async (): Promise<User | null> =>
-    prisma.user.findUnique({ where: { cognitoId: sub } });
+    prisma.user.findUnique({ where: { subject: sub } });
 
   const candidateUsernames = [
     initialUsername,
@@ -94,7 +98,11 @@ export async function createUserForSignup(params: {
   for (let attempt = 0; attempt < candidateUsernames.length; attempt++) {
     try {
       return await prisma.user.create({
-        data: { cognitoId: sub, email, username: candidateUsernames[attempt] },
+        data: {
+          subject: sub,
+          email,
+          username: candidateUsernames[attempt],
+        },
       });
     } catch (e) {
       if (
@@ -104,7 +112,7 @@ export async function createUserForSignup(params: {
         throw e;
       }
 
-      if (targetHas(e, "email")) {
+      if (indexHas(e, "email")) {
         // Email got owned between the pre-check and now. If a concurrent
         // request for this same sub created it, use that row; otherwise a
         // genuinely different account owns the email.
@@ -112,11 +120,11 @@ export async function createUserForSignup(params: {
         if (racing) return racing;
         throw new AppError(
           409,
-          say`An account already exists for this email address. Contact support if you think that's a mistake.`,
+          say`An account already exists for this email address. Sign in with that account instead.`,
         );
       }
 
-      if (targetHas(e, "username")) {
+      if (indexHas(e, "username")) {
         // Taken by a different user — try the next, more-unique suffix.
         if (attempt < candidateUsernames.length - 1) continue;
         // Exhausted suffixes (astronomically unlikely): recover a racing row or
@@ -126,7 +134,7 @@ export async function createUserForSignup(params: {
         throw e;
       }
 
-      // Otherwise the cognitoId unique tripped: a concurrent first-login for
+      // Otherwise the subject unique tripped: a concurrent first-login for
       // this sub won the race. Use its row.
       const racing = await recoverRacingRow();
       if (racing) return racing;
@@ -141,10 +149,32 @@ export async function createUserForSignup(params: {
 const usernameSchema = z
   .string()
   .trim()
-  .min(3)
-  .max(32)
-  .regex(/^[A-Za-z0-9_.-]+$/);
-const USERNAME_RULE = say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
+  .min(USERNAME_MIN)
+  .max(USERNAME_MAX)
+  .regex(USERNAME_PATTERN);
+
+/**
+ * The name a new account starts with, which other users then see and search.
+ * The token's own username counts only if it is a valid name that doesn't
+ * contain the email's local part. usernameSchema already refuses an email or a
+ * UUID, which is what arrives from a Managed Login sign-up, which has no
+ * username field. Otherwise a neutral name from the sub: never anything derived
+ * from the email.
+ * Guard: users.unit.test.ts.
+ */
+export function initialUsernameFor(params: {
+  sub: string;
+  email: string;
+  username: string;
+}): string {
+  const { sub, email, username } = params;
+  const parsed = usernameSchema.safeParse(username);
+  const local = email.split("@")[0].toLowerCase();
+  if (parsed.success && !parsed.data.toLowerCase().includes(local)) {
+    return parsed.data;
+  }
+  return `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
+}
 
 const router = Router();
 
@@ -170,7 +200,7 @@ async function serializeUserForResponse(
     storageUsedBytes: Number(user.storageUsedBytes),
     storageQuotaBytes: Number(user.storageQuotaBytes),
     uiPreferences: {
-      ...normalizeUserUiPreferences(user.uiPreferences),
+      ...normalizeUserUiPreferencesKeepingNoPick(user.uiPreferences),
       ...(await defsForUserResponse(user.id)),
     },
   };
@@ -196,6 +226,7 @@ async function serializeUserWithUsage(
   return {
     ...(await serializeUserForResponse(user)),
     monthlyComputeCredits: credits.quota,
+    currentConsentVersion: CURRENT_CONSENT_VERSION,
     monthlyComputeUsage: credits.used,
     monthlyComputeResetAt: credits.resetAt,
     // Egress has no progress bar in the UI — the cap sits far above real use
@@ -206,6 +237,22 @@ async function serializeUserWithUsage(
   };
 }
 
+// GET /users/username-available — yes or no, before an account exists, so the
+// sign-up form can say a name is taken before the email code rather than after.
+// No auth, by the exception in api/AGENTS.md. lower() is the unique index's own
+// expression, and Prisma's insensitive mode (ILIKE) would not use it.
+router.get(
+  "/username-available",
+  usernameCheckLimiter,
+  async (req, res: Response) => {
+    const parsed = usernameSchema.safeParse(req.query.username);
+    if (!parsed.success) throw new AppError(400, USERNAME_RULE);
+    const rows = await prisma.$queryRaw<unknown[]>`
+      SELECT 1 FROM users WHERE lower(username) = lower(${parsed.data}) LIMIT 1`;
+    res.json({ available: rows.length === 0 });
+  },
+);
+
 // GET /users/me — get current user's profile
 // Creates the user in DB if it's their first request (post-Cognito signup)
 router.get(
@@ -215,16 +262,11 @@ router.get(
     const { sub, email, username } = req.user!;
 
     let user = await prisma.user.findUnique({
-      where: { cognitoId: sub },
+      where: { subject: sub },
     });
 
     // First time this user has hit the API — create their DB record.
-    // Prefer preferred_username from Cognito; fall back to email prefix rather
-    // than raw cognito:username which can be an auto-generated UUID.
-    const isUUID = (s: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
-    const initialUsername =
-      username && !isUUID(username) ? username : email.split("@")[0];
+    const initialUsername = initialUsernameFor({ sub, email, username });
 
     if (!user) {
       // Resolve provisioning deterministically rather than depending on which
@@ -236,32 +278,33 @@ router.get(
       // case exists for.
       const emailOwner = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, cognitoId: true },
+        select: { id: true, subject: true },
       });
 
-      if (emailOwner && emailOwner.cognitoId !== sub) {
-        // A row exists for this email under a different Cognito sub. Rebind it
+      if (emailOwner && emailOwner.subject !== sub) {
+        // A row exists for this email under a different sub. Rebind it
         // to the new sub only when the inbound JWT is email-verified AND the
-        // previous Cognito user no longer exists (account deleted + recreated).
+        // previous identity no longer exists at the provider (account deleted + recreated).
         // Any other case returns 409 to prevent account takeover.
-        const oldSub = emailOwner.cognitoId;
+        const oldSub = emailOwner.subject;
         const canRebind =
-          req.user!.emailVerified && !(await cognitoUserExists(oldSub));
+          req.user!.emailVerified &&
+          !(await identityProvider().userExists(oldSub));
 
         if (!canRebind) {
           throw new AppError(
             409,
-            say`An account already exists for this email address. Contact support if you think that's a mistake.`,
+            say`An account already exists for this email address. Sign in with that account instead.`,
           );
         }
 
         logger.warn(
           { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
-          "cognito_rebind",
+          "identity_rebind",
         );
         user = await prisma.user.update({
           where: { id: emailOwner.id },
-          data: { cognitoId: sub },
+          data: { subject: sub },
         });
       } else {
         // No row owns this email (or a concurrent request for this same sub is
@@ -294,6 +337,9 @@ router.get(
   },
 );
 
+/** Far over any list of regions there will be; the body cap is no substitute. */
+const MAX_REGIONS = 64;
+
 // PATCH /users/me — update current user's profile
 router.patch(
   "/me",
@@ -301,39 +347,32 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    // `tripLogCustomFields` / `placeCustomFields` USED TO BE ACCEPTED HERE, as
-    // a whole list reconciled by `replaceFieldDefs`. Both are gone, and the
-    // deletion is deliberate rather than a tidy-up — the whole-list shape
-    // cannot express what a definition now is:
-    //
-    //  * It carried `{key,label,type,min,max}` and nothing else, so every save
-    //    from a dialog that round-tripped the list would have wiped
-    //    `placeTypeIds` and `appliesToAllTypes` on every definition — silently,
-    //    because the payload simply did not mention them.
-    //  * It matched `existing` scoped to `ownerId: userId`, so the SYSTEM
-    //    definitions (ownerId null) fell through to the create branch and the
-    //    user acquired a private duplicate of every built-in field, colliding
-    //    with the real one under the same key.
-    //
-    // Definitions have been rows since the custom_field_defs table landed; the
-    // row-grain endpoints in routes/customFields.ts and the sync push op are
+    // `tripLogCustomFields` / `placeCustomFields` are rejected here rather than
+    // silently ignored: definitions cannot be updated as a whole list because
+    // the whole-list shape cannot express `placeTypeIds`, `appliesToAllTypes`,
+    // or system field ownership. Definitions are rows in `custom_field_defs`;
+    // the row-grain endpoints in routes/customFields.ts and sync push ops are
     // the write paths. A client sending the old key gets a 400 naming the
     // replacement rather than a silent no-op.
     const {
       username,
       themeSchemeId,
       notifications,
-      autoDownloadGeoPdfs,
       importMergePolicy,
       copyPlaceMedia,
+      leaderboardOptIn,
+      slopeBands,
+      regions,
       consentVersion,
     } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       notifications?: unknown;
-      autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
+      leaderboardOptIn?: unknown;
+      slopeBands?: unknown;
+      regions?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -381,9 +420,11 @@ router.patch(
     if (
       themeSchemeId !== undefined ||
       notifications !== undefined ||
-      autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined ||
-      copyPlaceMedia !== undefined
+      copyPlaceMedia !== undefined ||
+      leaderboardOptIn !== undefined ||
+      slopeBands !== undefined ||
+      regions !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -400,14 +441,39 @@ router.patch(
       ) {
         throw malformed("Invalid notifications");
       }
-      if (
-        autoDownloadGeoPdfs !== undefined &&
-        typeof autoDownloadGeoPdfs !== "boolean"
-      ) {
-        throw malformed("Invalid autoDownloadGeoPdfs");
-      }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
+      }
+      if (
+        leaderboardOptIn !== undefined &&
+        typeof leaderboardOptIn !== "boolean"
+      ) {
+        throw malformed("Invalid leaderboardOptIn");
+      }
+      if (Array.isArray(slopeBands) && slopeBands.length > MAX_SLOPE_BANDS) {
+        throw malformed(`At most ${MAX_SLOPE_BANDS} slopeBands`, 413);
+      }
+      const nextSlopeBands =
+        slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
+      if (nextSlopeBands === null) {
+        throw malformed("Invalid slopeBands");
+      }
+      if (regions !== undefined) {
+        if (
+          !Array.isArray(regions) ||
+          regions.length === 0 ||
+          !regions.every((id) => typeof id === "string")
+        ) {
+          throw malformed("Invalid regions");
+        }
+        if (regions.length > MAX_REGIONS) {
+          throw malformed(`At most ${MAX_REGIONS} regions`, 413);
+        }
+        // An unknown id among known ones is dropped (a newer client's); a
+        // choice of none that this server knows would be stored as NSW.
+        if (!REGIONS.some((region) => regions.includes(region.id))) {
+          throw malformed("No known region in regions");
+        }
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -416,7 +482,9 @@ router.patch(
         }
       }
 
-      const current = normalizeUserUiPreferences(user.uiPreferences);
+      const current = normalizeUserUiPreferencesKeepingNoPick(
+        user.uiPreferences,
+      );
       updates.uiPreferences = {
         ...current,
         // The projection this object was built from carries the two custom
@@ -432,8 +500,13 @@ router.patch(
               },
             }
           : {}),
-        ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
+        ...(leaderboardOptIn !== undefined ? { leaderboardOptIn } : {}),
+        ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
+        // An id no region has is dropped, as a stored one is on read.
+        ...(regions !== undefined
+          ? { regions: normalizeRegionIds(regions) }
+          : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),
@@ -447,7 +520,7 @@ router.patch(
     let updated;
     try {
       updated = await prisma.user.update({
-        where: { cognitoId: sub },
+        where: { subject: sub },
         data: updates,
       });
     } catch (e) {
@@ -455,11 +528,10 @@ router.patch(
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2002"
       ) {
-        // The username is the only unique column this route writes. The
-        // error's `meta.target` used to be asked which column it was, but it
-        // does not name one under the driver adapter, so a taken name read
-        // "Conflict updating profile" (users.test.ts).
-        throw new AppError(409, say`That username is taken. Choose another.`);
+        // The username is the only unique column this route writes.
+        // `meta.target` does not name the column under the driver adapter, so
+        // any P2002 here indicates a taken username (users.test.ts).
+        throw new AppError(409, USERNAME_TAKEN);
       }
       throw e;
     }
@@ -506,14 +578,17 @@ router.delete(
 
     const user = await resolveUser(sub);
 
+    // First the plans let go of the user: what they added stays, and what it
+    // counts against moves on (lib/planItems.ts handOverPlans).
+    await handOverPlans(user.id);
+
     // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
-    // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
+    // can re-derive the keys — no orphaned objects, no lost keys.
     const [
       topoJobs,
       topoExportJobs,
-      geoPdfJobs,
       media,
       ownedPlaces,
       friendships,
@@ -530,10 +605,6 @@ router.delete(
         where: { userId: user.id },
         select: { id: true, resultKey: true },
       }),
-      prisma.geoPdfJob.findMany({
-        where: { userId: user.id },
-        select: { id: true },
-      }),
       // linkedType/linkedId feed the sync-tombstone fan-out below (which
       // place each media row belonged to).
       prisma.media.findMany({
@@ -547,7 +618,7 @@ router.delete(
         },
       }),
       // Place IDs and friendship IDs are needed to purge cross-user
-      // notifications that reference this user's data (PRIV-003); the party
+      // notifications that reference this user's data; the party
       // ids feed the sync-tombstone fan-out (counterparts must forget the
       // friendship edge).
       prisma.place.findMany({
@@ -607,27 +678,18 @@ router.delete(
       .map((e) => e.resultKey)
       .filter((k): k is string => Boolean(k));
 
-    // S3 cleanup first. The helpers throw on failure (see lib/s3Cleanup.ts), so
+    // S3 cleanup first. The deletes throw on failure (see lib/s3Cleanup.ts), so
     // any error here aborts before the DB transaction — the account is not
     // deleted and the user can retry. Belt-and-braces against bucket-lifecycle
-    // drift, not a substitute for it.
+    // drift, not a substitute for it. The multipart abort inside
+    // deleteTopoJobObjects is best-effort; the abort-incomplete-uploads
+    // lifecycle rule clears what it misses.
     await Promise.all([
       deleteS3Keys(MEDIA_BUCKET, mediaKeys),
       deleteS3Keys(TOPO_BUCKET, exportResultKeys),
-      ...topoJobs.flatMap(({ id }) => [
-        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
-      ]),
+      ...topoJobs.map(({ id }) => deleteTopoJobObjects(TOPO_BUCKET, id)),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
-      ),
-      // GeoPDF outputs live under exports/geo-pdf/{jobId}/ (geoPdfWorker
-      // resultKeyFor). Delete the whole per-job prefix, not just the recorded
-      // resultKey, so an object uploaded by a running/failed job before its row
-      // was recorded is still purged (ARCH-001).
-      ...geoPdfJobs.map(({ id }) =>
-        deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
       // Sent copies live in the MEDIA bucket under file-sends/{senderId}/.
       // One prefix delete covers every send, including one whose upload was
@@ -643,7 +705,7 @@ router.delete(
     // defense-in-depth and to keep the delete deterministic if a future child
     // table is added without a cascade. `Media` has a polymorphic linkedId with
     // no DB FK, so its row delete MUST stay explicit.
-    // Sync tombstones for OTHER users' mirrors (Stage 8): the deleted user's
+    // Sync tombstones for OTHER users' mirrors: the deleted user's
     // own tombstones are pointless (the cascade wipes their account, and
     // SyncTombstone.userId cascades too), so every row here targets a
     // counterpart. Ids only — never names/coords.
@@ -680,15 +742,30 @@ router.delete(
     });
 
     await prisma.$transaction([
+      // First, so this transaction takes the row of every plan the user is
+      // in or created before any row inside one (an answer, a membership),
+      // the order every plan write takes them in (lib/planAccess.ts
+      // touchPlan); the other order deadlocks against a leader deleting a
+      // form this user answered, or a plan they're in. Touching the plans
+      // also tells the other members' poll that someone left. The user.delete
+      // below would null createdById anyway (SetNull), but last.
+      prisma.tripPlan.updateMany({
+        where: { members: { some: { userId: user.id } } },
+        data: { updatedAt: new Date() },
+      }),
+      prisma.tripPlan.updateMany({
+        where: { createdById: user.id },
+        data: { createdById: null },
+      }),
       ...(accountTombstones.length > 0
         ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
         : []),
       // The deleted user's own tombstone log (rows other users' deletes wrote
-      // FOR this user) — cascade covers it; explicit per ARCH-001 convention.
+      // FOR this user) — cascade covers it; explicit per account-delete convention.
       prisma.syncTombstone.deleteMany({ where: { userId: user.id } }),
       prisma.notification.deleteMany({ where: { userId: user.id } }),
-      // Purge notifications held by OTHER users that reference this user's data
-      // (PRIV-003): place_shared rows pointing at any of the deleted user's
+      // Purge notifications held by OTHER users that reference this user's data:
+      // place_shared rows pointing at any of the deleted user's
       // places, and friend_request(_accepted) rows pointing at any friendship
       // this user was party to. The cascade removes the places/shares/
       // friendships but not the recipient's denormalised notification rows.
@@ -718,7 +795,7 @@ router.delete(
         : []),
       // Direct shares and file sends this user made: the Share and
       // FileSendRecipient rows cascade, the recipients' notification rows do
-      // not. Both payloads carry the sender's id from the first release.
+      // not. Both payloads carry the sender's id.
       prisma.notification.deleteMany({
         where: {
           OR: [
@@ -733,6 +810,16 @@ router.delete(
           ],
         },
       }),
+      // Plan rows other members hold that name this user. Read time would
+      // drop them too, once the memberships are gone (routes/notifications.ts).
+      prisma.notification.deleteMany({
+        where: {
+          OR: Object.entries(PLAN_PERSON_KEY).map(([type, key]) => ({
+            type,
+            payload: { path: [key], equals: user.id },
+          })),
+        },
+      }),
       prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),
@@ -743,34 +830,54 @@ router.delete(
       prisma.friendInvite.deleteMany({ where: { inviterId: user.id } }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
-      prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
+      // After the jobs: deleting them writes the carry-over. The site-wide
+      // row has no owner and stays, so the month's pool still counts them.
+      prisma.computeUsageCarryover.deleteMany({ where: { userId: user.id } }),
       prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       // Explicit even though TripLogPlace.tripLogId cascades on TripLog
-      // delete — ARCH-001 convention: never rely solely on an implicit
+      // delete — account-delete convention: never rely solely on an implicit
       // cascade for the account-delete purge list.
       prisma.tripLogPlace.deleteMany({
         where: { tripLog: { userId: user.id } },
       }),
+      // Explicit even though every relation cascades.
+      prisma.importSnapshot.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.place.deleteMany({ where: { ownerId: user.id } }),
-      prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
-      // Routes store their geometry on the row, so there is no S3 leg here —
-      // that is the point of the design (ARCH-001). No S3 objects involved;
-      // explicit per convention even though the cascade covers the rows.
+      // Routes store their geometry on the row, so there is no S3 leg here.
+      // No S3 objects involved; explicit per convention even though the
+      // cascade covers the rows.
       prisma.route.deleteMany({ where: { ownerId: user.id } }),
       // Links between this account's places. Owner-private, no S3 leg, no
       // tombstone fan-out — the only viewer is the account being deleted.
       prisma.placeLink.deleteMany({ where: { ownerId: user.id } }),
       // Custom field definitions: user-authored labels, no S3 leg, and never
       // shared — so no tombstone fan-out either, the only viewer is the
-      // account being deleted. Explicit per the ARCH-001 convention even
-      // though the FK cascade covers the rows.
+      // account being deleted. Explicit per convention even though the FK
+      // cascade covers the rows.
       prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
+      // The user's own place types, after their places (Place.placeTypeId
+      // restricts). Explicit per convention even though the FK cascades.
+      prisma.placeType.deleteMany({ where: { ownerId: user.id } }),
+      // Plans: the user's answers (safety contacts name people who are not
+      // Logjam users) and memberships go with them; the plans, and what the
+      // user added to them, stay with the group. Explicit per convention
+      // even though the FK cascade covers the rows.
+      prisma.tripPlanAnswer.deleteMany({ where: { userId: user.id } }),
+      prisma.tripPlanMember.deleteMany({ where: { userId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
+
+    // Logjam's data is gone either way; the identity at the provider is a
+    // clean-up we report but never fail the request over.
+    try {
+      await identityProvider().deleteUser(sub);
+    } catch (err) {
+      logger.warn({ err: safeErrorForLog(err) }, "identity_delete_failed");
+    }
 
     res.status(204).end();
   },

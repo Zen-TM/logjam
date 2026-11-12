@@ -21,22 +21,22 @@ import {
   ALICE_SUB,
   BOB_SUB,
   BOB_ID,
+  CAROL_SUB,
   ALICE_ID,
   as,
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// COPYING A SHARED PLACE, from the recipient's side (plan §2.6, §7.1, §7.13,
-// §7.16). Everything here is a two-actor test on purpose: the rules being
-// pinned are about what one account can see of another's, and a mocked-Prisma
-// unit test cannot reach any of them.
+// COPYING A SHARED PLACE, from the recipient's side. Everything here is a
+// two-actor test on purpose: the rules being pinned are about what one account
+// can see of another's, and a mocked-Prisma unit test cannot reach any of them.
 //
 // The three rules, in the order they are easiest to half-implement:
 //
 //  1. A sharee of a place whose TYPE they do not own gets `fieldDefsSnapshot`
 //     on the delta row. Without it they see bare keys — and this is the same
 //     shape of bug as `loadDefRows` filtering to `ownerId`, which hid the
-//     SYSTEM definitions from their own owner in phase 1b.
+//     SYSTEM definitions from their own owner.
 //  2. `foreignFields` is OWNER-PRIVATE: absent from every surface a sharee can
 //     reach, and never on a delta row with syncRole "shared". Without it the
 //     design inherits the propagation objection that got the notes-dump
@@ -191,6 +191,61 @@ describe("a sharee of a place of the sender's own type", () => {
     expect(snapshot.find((d) => d.key === "passage_m")?.label).toBe(
       "Passage length (m)",
     );
+  });
+
+  // Mutations in `defsForForeignPlaceTypes`' JS filter: drop the owner check
+  // and carol's place gains alice's all-type `water_temp_c` (the
+  // not.toContain on places[1]); drop `appliesToAllTypes ||` and alice's place
+  // loses `water_temp_c` (the toContain on places[0]). The join check is
+  // guarded by placeTypeDefs.test.ts. Carol is not alice's friend in the seed,
+  // so bob (friends with both) is the recipient.
+  it("gets each place's own owner's defs when one page spans two owners' types", async () => {
+    const stamp = Date.now();
+    const aliceType = await makeType(ALICE_SUB, `Cave ${stamp}-a`);
+    const carolType = await makeType(CAROL_SUB, `Cave ${stamp}-c`);
+    await makeField(
+      ALICE_SUB,
+      { key: "alice_only", label: "Alice only", type: "integer", min: 0 },
+      [aliceType],
+    );
+    await makeField(
+      CAROL_SUB,
+      { key: "carol_only", label: "Carol only", type: "integer", min: 0 },
+      [carolType],
+    );
+    const places = [];
+    for (const [sub, placeTypeId] of [
+      [ALICE_SUB, aliceType],
+      [CAROL_SUB, carolType],
+    ] as const) {
+      const place = await makePlace(sub, {
+        placeTypeId,
+        name: "Batched snapshot",
+        latitude: -33.62,
+        longitude: 150.32,
+      });
+      await shareWith(sub, place.id as string, BOB_ID);
+      places.push(place);
+    }
+
+    const delta = await request(API_URL)
+      .get("/sync/delta")
+      .set({ ...as(BOB_SUB), ...CLIENT })
+      .query({ limit: 500 });
+    expect(delta.status).toBe(200);
+    const keysOf = (id: unknown) =>
+      (
+        (delta.body.changes.places as Record<string, unknown>[]).find(
+          (p) => p.id === id,
+        )?.fieldDefsSnapshot as { key: string }[] | undefined
+      )?.map((d) => d.key);
+    // Each also carries its owner's fields that apply to every type.
+    expect(keysOf(places[0].id)).toContain("water_temp_c");
+    expect(keysOf(places[1].id)).not.toContain("water_temp_c");
+    expect(keysOf(places[0].id)).toContain("alice_only");
+    expect(keysOf(places[0].id)).not.toContain("carol_only");
+    expect(keysOf(places[1].id)).toContain("carol_only");
+    expect(keysOf(places[1].id)).not.toContain("alice_only");
   });
 
   it("gets NO snapshot for a system type, which it already holds", async () => {
@@ -607,10 +662,9 @@ describe("a place-type change parks what the new type cannot hold", () => {
     ]);
   });
 
-  // The REST half of the same rule. `PATCH /places/:id` dropped `placeTypeId`
-  // on the floor and answered 200, so Logjam Web — which has no push path —
-  // offered a type picker on an existing place that did nothing at all. Found
-  // by retyping a place in the browser (2026-09-19).
+  // The REST half of the same rule: `PATCH /places/:id` retypes and parks what
+  // the new type cannot hold, so Logjam Web — which has no push path — can
+  // retype a place.
   it("PATCH /places/:id retypes, and parks what the new type cannot hold", async () => {
     const stamp = Date.now();
     const key = `chok_${stamp}`.slice(0, 20);

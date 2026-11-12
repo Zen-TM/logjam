@@ -1,11 +1,12 @@
 // Draft state for the route draw/edit tool, with undo.
 //
 // Deliberately a near-copy of frontend/src/components/routes/useRouteDraft.ts.
-// The part worth sharing — what an anchor is, and every operation on a draft —
-// already lives in @logjam/shared (routeDraft.ts) and IS shared. What is
+// The part worth sharing — what an anchor is, every operation on a draft, and
+// how an edit enters the undo history (`withUndoStep`) — lives in
+// @logjam/shared (`shared/src/routeDraft.ts`) and IS shared. What is
 // duplicated here is only the thin React wrapper around it, because `shared/`
-// is React-free by design and adding React to it to save fifty lines would be a
-// bad trade. If the two drift, the shared module is the one that matters.
+// is React-free by design. If the two drift, the shared module is the one that
+// matters.
 //
 // Undo is a stack of whole drafts rather than inverse operations: a draft is a
 // handful of coordinate pairs, so snapshotting one is free, and it makes every
@@ -23,12 +24,11 @@ import {
   moveAnchor,
   reverseDraft,
   setFiller,
+  withUndoStep,
   MAX_ROUTE_POINTS,
   type RouteDraft,
   type RoutePoint,
 } from "@logjam/shared";
-
-const MAX_HISTORY = 100;
 
 export type RouteDraftHandle = {
   draft: RouteDraft | null;
@@ -66,8 +66,8 @@ export function useRouteDraft(): RouteDraftHandle {
   // Where a drag has the anchor RIGHT NOW. Kept apart from the draft so a
   // gesture at frame rate neither fills the undo stack nor rewrites the
   // persisted draft sixty times a second; the drop commits it once.
-  // ponytail: it is still screen state, so a drag re-renders the map screen per
-  // frame (the cost DESIGN.md's scale bar avoids with a ref). Move it to a ref
+  // It is still screen state, so a drag re-renders the map screen per
+  // frame (the cost mobile/DESIGN.md's scale bar avoids with a ref). Move it to a ref
   // + imperative shape update if a long route drags roughly.
   const [dragging, setDragging] = useState<{
     index: number;
@@ -78,9 +78,9 @@ export function useRouteDraft(): RouteDraftHandle {
     setDraft((current) => {
       if (!current) return current;
       const updated = next(current);
-      // A no-op must not consume an undo step, or Undo appears to do nothing.
-      if (updated === current) return current;
-      history.current = [...history.current, current].slice(-MAX_HISTORY);
+      const nextHistory = withUndoStep(history.current, current, updated);
+      if (!nextHistory) return current;
+      history.current = nextHistory;
       setCanUndo(true);
       return updated;
     });

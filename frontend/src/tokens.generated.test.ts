@@ -6,8 +6,10 @@ import {
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
+  MEDAL_HUES,
   MOTION,
   OPACITY,
+  SCRIM,
   PLACE_STATUS_HUES,
   ASSET_HUES,
   RADIUS,
@@ -82,6 +84,7 @@ describe("tokens.generated.css", () => {
       ...Object.keys({ ...ASSET_HUES, ...PLACE_STATUS_HUES }).map(
         (n) => `--hue-${kebab(n)}`,
       ),
+      ...Object.keys(MEDAL_HUES).map((n) => `--hue-medal-${n}`),
       ...Object.keys(SPACE).map((n) => `--space-${kebab(n)}`),
       ...Object.keys(FORM_RHYTHM).map((n) => `--form-${n}`),
       ...Object.keys(RADIUS).map((n) => `--radius-${n}`),
@@ -90,6 +93,7 @@ describe("tokens.generated.css", () => {
       ...Object.keys(CONTROL.web).map((n) => `--control-${n}`),
       ...Object.keys(MOTION).map((n) => `--motion-${n}`),
       ...Object.keys(OPACITY).map((n) => `--opacity-${n}`),
+      ...Object.keys(SCRIM).map((n) => `--scrim-${n}`),
       ...colourNames,
     ].sort();
     expect(namesIn(":root")).toEqual(expected);

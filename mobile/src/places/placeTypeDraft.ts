@@ -5,9 +5,9 @@
 /**
  * The identity of what the form holds: a change in it re-seeds the draft.
  *
- * Being CLOSED is an identity of its own. With one key for every "new", the
- * draft of a type just added was still the draft the next time "New type" was
- * opened; so was one abandoned with Cancel. Guard: `placeTypeDraft.test.ts`.
+ * Being CLOSED is an identity of its own. Without it, the draft of a type just
+ * added or abandoned with Cancel would persist into the next "New type" open.
+ * Guard: `placeTypeDraft.test.ts`.
  */
 export function placeTypeFormKey(
   open: boolean,

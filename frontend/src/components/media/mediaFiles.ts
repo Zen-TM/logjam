@@ -16,10 +16,8 @@ const THUMBNAIL_QUALITY = 0.7;
 // application/octet-stream), so tracks are resolved by extension.
 //
 // INVERTED from the shared table rather than restated: two lists that must
-// agree are one declaration (root CLAUDE.md). Hand-keeping this one already
-// cost a disagreement — `application/geo+json` joined TRACK_MIME_TYPES when
-// standalone imports became media, and this copy kept rejecting the .geojson
-// the API had started accepting.
+// agree are one declaration (AGENTS.md). Deriving extension lookup from
+// TRACK_MIME_TYPES keeps it in sync as track types are added.
 const TRACK_MIME_BY_EXTENSION: Record<string, string> = Object.fromEntries(
   TRACK_MIME_TYPES.map((mime) => [MEDIA_EXTENSION_BY_MIME[mime], mime]),
 );

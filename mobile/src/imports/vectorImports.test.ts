@@ -18,7 +18,7 @@ vi.mock("./importsDb", () => ({
   getVectorImport: vi.fn(),
   upsertImportViewState: vi.fn(),
 }));
-// An import is a standalone media row now, so this module reaches the sync
+// An import is a standalone media row, so this module reaches the sync
 // layer — which reaches react-native. Stubbed to the two calls it makes.
 vi.mock("../sync/mediaUpload", () => ({
   createStandaloneMediaLocal: vi.fn(),
@@ -55,8 +55,7 @@ describe("kmlFromKmz", () => {
   // file, so without a cap on the declared uncompressed size this entry alone
   // inflates past it — and a real hostile archive scales that to gigabytes on
   // the one input path an outside party controls (share sheet, "Open in
-  // Logjam", a friend's file-send). The old `unzipSync(bytes)` inflated this
-  // eagerly and returned the text.
+  // Logjam", a friend's file-send).
   it("refuses a .kml that declares more than the import ceiling", () => {
     const zip = zipSync(
       { "doc.kml": new Uint8Array(31 * 1024 * 1024) },
@@ -79,9 +78,8 @@ describe("kmlFromKmz", () => {
 describe("pickImportColor", () => {
   // The server reassigns an import's colour at upload with
   // pickNextTrackColor over what the account already holds. A local guess made
-  // by COUNT disagrees as soon as one import is deleted (two left, colours 0
-  // and 2: count says 2, which is taken), so the line changed colour when the
-  // upload landed.
+  // by count would disagree once an import is deleted (two left, colours 0
+  // and 2: count says 2, which is taken).
   it("is the colour the server will pick: the first one not in use", () => {
     expect(pickImportColor([TRACK_COLORS[0], TRACK_COLORS[2]])).toBe(
       TRACK_COLORS[1],

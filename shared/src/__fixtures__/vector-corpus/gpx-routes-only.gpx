@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Corpus Route Planner" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Corpus Planned Route A</name>
+    <rtept lat="-33.0600" lon="150.0700"><name>Start</name></rtept>
+    <rtept lat="-33.0612" lon="150.0715"><name>Mid</name></rtept>
+    <rtept lat="-33.0630" lon="150.0731"><name>End</name></rtept>
+  </rte>
+  <rte>
+    <name>Corpus Planned Route B</name>
+    <rtept lat="-33.0640" lon="150.0740"/>
+    <rtept lat="-33.0650" lon="150.0752"/>
+  </rte>
+</gpx>

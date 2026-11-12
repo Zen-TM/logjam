@@ -17,8 +17,9 @@ account" first shows the storage explainer as a state of that screen, and only
 
 **The mechanism is "don't sync yet", not a separate storage path.** Guest
 mutations write the mirror and enqueue to the outbox exactly as they always do —
-`AppShell` simply never calls `registerSyncTriggers()`, so the mutation handler
-is never installed and the queue accumulates. Linking an account starts the
+`AppShell` arms nothing account-backed for a guest (`registerShellTriggers`
+skips `registerSyncTriggers()`), so the mutation handler is never installed and
+the queue accumulates. Guard: `mobile/src/shellTriggers.test.ts`. Linking an account starts the
 engine and the first cycle drains it. There is no import, no id remapping (ids
 are client-minted UUIDv4 already) and no merge code; the delta pull is
 `INSERT OR REPLACE`, so linking into an account that already has data merges

@@ -77,12 +77,17 @@ describe("theme parity with @logjam/shared", () => {
       expect(style.textTransform === "uppercase").toBe("uppercase" in role);
       // Only a role that says so sets its lines apart; the rest take the font's own.
       expect(style.lineHeight !== undefined).toBe("leading" in role);
+      expect(style.fontVariant !== undefined).toBe("tabular" in role);
       expect(Object.keys(style).sort()).toEqual(
         Object.keys(style)
           .filter((k) =>
-            ["fontSize", "fontWeight", "lineHeight", "textTransform"].includes(
-              k,
-            ),
+            [
+              "fontSize",
+              "fontWeight",
+              "lineHeight",
+              "textTransform",
+              "fontVariant",
+            ].includes(k),
           )
           .sort(),
       );

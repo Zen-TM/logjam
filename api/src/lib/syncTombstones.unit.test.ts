@@ -70,7 +70,7 @@ describe("placeDeleteTombstones", () => {
       has(rows, { userId: "carol", entityType: "place", entityId: "c1" }),
     ).toBe(true);
     // Sharees never receive placeShare tombstones for shares that aren't
-    // theirs (a sharee cannot enumerate co-sharees — §4.6.1).
+    // theirs (a sharee cannot enumerate co-sharees).
     expect(
       rows
         .filter((r) => r.entityType === "placeShare")
@@ -124,7 +124,7 @@ describe("shareRevokeTombstones", () => {
       has(rows, { userId: "alice", entityType: "placeShare", entityId: "s1" }),
     ).toBe(true);
     // The sharee's signal is indistinguishable from a place delete: exactly
-    // one `place` tombstone, nothing owner-only rides along (§4.6.3).
+    // one `place` tombstone, nothing owner-only rides along.
     const shareeRows = rows.filter((r) => r.userId === "bob");
     expect(shareeRows.filter((r) => r.entityType === "place")).toHaveLength(1);
     expect(shareeRows.some((r) => r.entityType === "placeShare")).toBe(false);
@@ -431,11 +431,10 @@ describe("accountDeleteTombstones", () => {
     ]);
   });
 
-  // PRIV-107: the place tombstone does NOT imply the ROUTES a sharee could
-  // reach through that place (via Route.placeId — a foreign key, which is why
-  // it survived the waypoint fold). Account delete hard-deletes them, so every
-  // current viewer must be told — the single-place delete path fans these out
-  // explicitly and this one has to match.
+  // The place tombstone does NOT imply the routes a sharee could reach
+  // through that place (via Route.placeId foreign key). Account delete
+  // hard-deletes them, so every current viewer must be told — the single-place
+  // delete path fans these out explicitly and this one has to match.
   it("tombstones place sharees for routes they saw through the place", () => {
     const rows = accountDeleteTombstones({
       ...base,

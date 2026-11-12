@@ -5,30 +5,42 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import { say, NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
+import { planPersonKey } from "../lib/planMembership";
 
 const router = Router();
 
 // The list cap is shared: the true total (see X-Total-Count below) lets a
-// client show a truncation caption when the cap bites (UX-002), and
+// client show a truncation caption when the cap bites, and
 // `notificationsTruncated` is how both clients decide that it did.
 
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
-// place names or usernames (PRIV-005). Display strings are resolved from the
+// place names or usernames. Display strings are resolved from the
 // live rows at read time below:
 //   friend_request / friend_request_accepted: payload.friendshipId (+ counterpart username)
 //   place_shared:                            payload.placeId, payload.sharedById (+ placeName, sharedByUsername)
 //   item_shared:                              payload.entityType, payload.entityId, payload.sharedById (+ sharedByUsername)
 //   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername, filename, fileSendStatus)
-//     — filename is resolved from the live send while one exists. The single
-//       exception to "ids only" in this table: when a send EXPIRES unsaved the
+//     — filename is resolved from the live send while one exists. One of two
+//       exceptions to "ids only" in this table: when a send EXPIRES unsaved the
 //       reaper stamps the filename into the payload before deleting the last
 //       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
 //       name of the file they missed. Nothing else ever writes it.
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
+//   announcement:                             payload.announcementId (+ title, body)
+//     — the maintainer's own text, sent to everyone (scripts/announce.ts);
+//       deleting the announcement retracts it here.
+//   plan_invited / plan_join_request / plan_join_approved / plan_member_joined:
+//                                             payload.planId and the other person's id
+//                                             (+ planName and their username), shown
+//                                             only while the memberships still say it
+//     — the other exception: plan_access_ended carries planName, stamped when
+//       the recipient lost the plan (removed, turned down, deleted), since
+//       there is nothing left they may resolve it from and they are owed which
+//       plan it was. They had seen the name.
 // When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
-// leaks a stale name (PRIV-001/003). Opportunistic row deletion on revoke/
+// leaks a stale name. Opportunistic row deletion on revoke/
 // delete (sharing.ts, friends.ts, places.ts, users.ts) is the primary
 // cleanup; this read-time drop is the fallback.
 function payloadString(payload: unknown, key: string): string | null {
@@ -64,6 +76,8 @@ router.get(
     const sharerIds = new Set<string>();
     const sharedItems: { entityType: string; entityId: string }[] = [];
     const fileSendIds = new Set<string>();
+    const announcementIds = new Set<string>();
+    const planIds = new Set<string>();
     for (const n of notifications) {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -78,24 +92,32 @@ router.get(
         if (id) fileSendIds.add(id);
         const sentById = payloadString(n.payload, "sentById");
         if (sentById) sharerIds.add(sentById);
+      } else if (planPersonKey(n.type)) {
+        const planId = payloadString(n.payload, "planId");
+        if (planId) planIds.add(planId);
+        const otherId = payloadString(n.payload, planPersonKey(n.type)!);
+        if (otherId) sharerIds.add(otherId);
       } else if (n.type === "item_shared") {
         const entityType = payloadString(n.payload, "entityType");
         const entityId = payloadString(n.payload, "entityId");
         if (entityType && entityId) sharedItems.push({ entityType, entityId });
         // No name is resolved for a directly-shared item: the client already
         // has the row through delta sync (waypoint/route) or its own list
-        // endpoint (topo/GeoPDF job), and resolving one here would mean
+        // endpoint (topo job), and resolving one here would mean
         // reading a waypoint name into a notification payload for no gain.
         const sharedById = payloadString(n.payload, "sharedById");
         if (sharedById) sharerIds.add(sharedById);
+      } else if (n.type === "announcement") {
+        const id = payloadString(n.payload, "announcementId");
+        if (id) announcementIds.add(id);
       }
     }
 
     // Resolve display strings (place names, usernames) from the LIVE rows at
-    // read time. Nothing is persisted in the payload (PRIV-005), so a revoked
+    // read time. Nothing is persisted in the payload, so a revoked
     // share, deleted place, or removed friendship simply has no row to resolve
-    // and the notification is dropped below (PRIV-001/003).
-    const [existingFriendships, existingPlaces, sharerUsers] =
+    // and the notification is dropped below.
+    const [existingFriendships, existingPlaces, sharerUsers, announcements] =
       await Promise.all([
         friendshipIds.size > 0
           ? prisma.friendship.findMany({
@@ -129,15 +151,24 @@ router.get(
               select: { id: true, username: true },
             })
           : Promise.resolve([] as { id: string; username: string }[]),
+        announcementIds.size > 0
+          ? prisma.announcement.findMany({
+              where: { id: { in: [...announcementIds] } },
+              select: { id: true, title: true, body: true },
+            })
+          : Promise.resolve(
+              [] as { id: string; title: string; body: string }[],
+            ),
       ]);
 
     const friendshipById = new Map(existingFriendships.map((f) => [f.id, f]));
     const placeById = new Map(existingPlaces.map((c) => [c.id, c]));
     const sharerById = new Map(sharerUsers.map((u) => [u.id, u]));
+    const announcementById = new Map(announcements.map((a) => [a.id, a]));
 
     // Which item_shared notifications still have a live Share row for this
     // recipient. A revoked share resolves to nothing and the notification is
-    // dropped below (PRIV-001/003), mirroring the place_shared rule.
+    // dropped below, mirroring the place_shared rule.
     const liveShares =
       sharedItems.length > 0
         ? await prisma.share.findMany({
@@ -153,7 +184,7 @@ router.get(
     // stays alive under its owner), so "the place still exists" is not the
     // same question as "this recipient may still see its name" — checking only
     // existence made the documented read-time fallback unable to catch a
-    // revoked place share (APIR-012/PRIV-103).
+    // revoked place share.
     const livePlaceShares =
       placeIds.size > 0
         ? await prisma.placeShare.findMany({
@@ -190,7 +221,7 @@ router.get(
               fileSendId: { in: [...fileSendIds] },
             },
             // The filename is resolved from the live row like every other
-            // display string here (PRIV-005 — nothing denormalised into the
+            // display string here (nothing denormalised into the
             // stored payload). The recipient is entitled to know WHAT they are
             // being offered before they accept it, and it is the one piece of
             // user text on a send: rendered, never logged.
@@ -203,6 +234,28 @@ router.get(
         : [];
     const liveFileSendById = new Map(
       liveFileSends.map((row) => [row.fileSendId, row]),
+    );
+
+    // The plan twin of livePlaceShares: a plan row outlives a membership, so
+    // what decides whether the row still shows is where its people stand.
+    const planMembers =
+      planIds.size > 0
+        ? await prisma.tripPlanMember.findMany({
+            where: {
+              planId: { in: [...planIds] },
+              userId: { in: [user.id, ...sharerIds] },
+            },
+            select: {
+              planId: true,
+              userId: true,
+              status: true,
+              role: true,
+              plan: { select: { name: true } },
+            },
+          })
+        : [];
+    const planMember = new Map(
+      planMembers.map((row) => [`${row.planId}:${row.userId}`, row]),
     );
 
     const visible = notifications.flatMap((n) => {
@@ -291,6 +344,37 @@ router.get(
           },
         ];
       }
+      const personKey = planPersonKey(n.type);
+      if (personKey) {
+        const planId = payloadString(n.payload, "planId");
+        const otherId = payloadString(n.payload, personKey);
+        const mine = planMember.get(`${planId}:${user.id}`);
+        const theirs = planMember.get(`${planId}:${otherId}`);
+        const shows =
+          n.type === "plan_invited"
+            ? mine?.status === "invited"
+            : n.type === "plan_join_request"
+              ? mine?.status === "active" &&
+                mine.role === "leader" &&
+                theirs?.status === "requested"
+              : n.type === "plan_member_joined"
+                ? mine?.status === "active" && theirs?.status === "active"
+                : mine?.status === "active";
+        if (!mine || !shows) return [];
+        const other = otherId ? sharerById.get(otherId) : undefined;
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              planName: mine.plan.name,
+              ...(other && {
+                [personKey.replace(/Id$/, "Username")]: other.username,
+              }),
+            },
+          },
+        ];
+      }
       if (n.type === "item_shared") {
         // Dropped when the share is gone, exactly as place_shared is: the
         // revoke deletes the row opportunistically, and this is the fallback.
@@ -307,6 +391,21 @@ router.get(
             payload: {
               ...(n.payload as object),
               ...(sharer ? { sharedByUsername: sharer.username } : {}),
+            },
+          },
+        ];
+      }
+      if (n.type === "announcement") {
+        const id = payloadString(n.payload, "announcementId");
+        const announcement = id ? announcementById.get(id) : undefined;
+        if (!announcement) return [];
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              title: announcement.title,
+              body: announcement.body,
             },
           },
         ];
@@ -333,7 +432,7 @@ router.get(
       return [n];
     });
 
-    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    // True total (pre-cap) so the client can flag a truncated view.
     res.set("X-Total-Count", String(total));
     res.json(visible);
   },
@@ -358,7 +457,7 @@ router.get(
 // ── PATCH /notifications/:id/read ─────────────────────────────
 // Mark a single notification read, or unread again with `{ "read": false }` —
 // the REST twin of the sync push's markRead / markUnread ops, for Logjam Web.
-// Anything but a boolean `read` (including no body) marks it read, as before.
+// Anything but a boolean `read` (including no body) marks it read.
 router.patch(
   "/:id/read",
   requireAuth,
@@ -368,7 +467,7 @@ router.patch(
     const id = getParam(req.params.id);
     // Owner-scoped lookup: a foreign id gets the SAME 404 a non-existent one
     // gets, so the status cannot confirm that a notification id exists to
-    // anyone but its owner (house anti-oracle rule, PRIV-105).
+    // anyone but its owner (the anti-oracle rule).
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });
@@ -411,7 +510,7 @@ router.delete(
     const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
-    // Owner-scoped, same reason as PATCH /:id/read above (PRIV-105).
+    // Owner-scoped, same reason as PATCH /:id/read above.
     const notification = await prisma.notification.findFirst({
       where: { id, userId: user.id },
     });

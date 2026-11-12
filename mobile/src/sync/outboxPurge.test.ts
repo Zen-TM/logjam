@@ -1,5 +1,5 @@
-// Plan §7.14 — the mirror version bump must not leave the outbox holding ops
-// the protocol no longer accepts.
+// The mirror version bump must not leave the outbox holding ops the protocol
+// no longer accepts.
 //
 // `dropStaleMirror` spares the `local` tables on purpose (the outbox holds
 // writes the server has never seen), so a bump that RENAMES an entity leaves
@@ -52,7 +52,7 @@ const queued = (entity: string, opId: string) =>
     .run(opId, entity, `id-${opId}`);
 
 beforeAll(async () => {
-  // An install from before the rework: the local tables at their shipped shape,
+  // Simulates an earlier install: the local tables at their earlier shape,
   // stamped at the previous mirror version, with writes still queued.
   sqlite.exec(createSchemaSql("local"));
   sqlite
@@ -61,8 +61,8 @@ beforeAll(async () => {
     )
     .run();
   queued("canyon", "op-canyon");
-  // Dead since phase 1c, exactly as `canyon` has been since 1a: a waypoint is
-  // a place now, and an op naming one is rejected by `parsePushOp` forever.
+  // Dead vocabulary: a waypoint is a place now, and an op naming one is
+  // rejected by `parsePushOp` forever.
   queued("waypoint", "op-waypoint");
   queued("place", "op-place");
   queued("placeLink", "op-link");

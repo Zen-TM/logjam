@@ -5,6 +5,10 @@ const baseSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
+  // Proxies in front of the API that append to X-Forwarded-For (index.ts).
+  // 2 is CloudFront -> Elastic Beanstalk's nginx; a host with CloudFront
+  // straight to the container sets 1.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(2),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -23,11 +27,17 @@ const baseSchema = z.object({
   // ECS workers get DB_USER/DB_PASSWORD injected directly.
   DB_SECRET_ID: z.string().optional(),
 
-  AUTH_MODE: z.enum(["fake", "cognito"]),
+  AUTH_MODE: z.enum(["fake", "oidc"]),
+  // Set to "prod" by a host that has no AWS-injected variables for
+  // middleware/auth.ts to key on; there it forces real auth. Read from
+  // process.env at module load, declared here so it is validated at boot.
+  LOGJAM_RUNTIME: z.enum(["prod"]).optional(),
   FAKE_USER_SUB: z.string().optional(),
-  COGNITO_REGION: z.string().optional(),
-  COGNITO_USER_POOL_ID: z.string().optional(),
-  COGNITO_CLIENT_ID: z.string().optional(),
+  // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
+  // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens
+  // are accepted (parsed to OIDC_AUDIENCE_LIST).
+  OIDC_ISSUER: z.string().optional(),
+  OIDC_AUDIENCE: z.string().optional(),
 
   AWS_REGION: z.string().default("ap-southeast-2"),
   AWS_ENDPOINT_URL: z.string().url().optional(),
@@ -43,7 +53,7 @@ const baseSchema = z.object({
     .regex(/^\d+\.\d+\.\d+$/, "must be a bare semver like 1.2.3")
     .default("0.0.0"),
 
-  // CloudFront origin-verify (WAF-bypass guard, SEC). CloudFront injects a
+  // CloudFront origin-verify (WAF-bypass guard). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
   // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
   // The app compares that header to ORIGIN_VERIFY_SECRET, which is resolved at
@@ -65,31 +75,40 @@ const baseSchema = z.object({
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
-  ECS_GEO_PDF_TASK_DEF: z.string().default("logjam-geo-pdf-worker"),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Protomaps basemap archive the region-clip endpoint extracts from
-  // (stage 4a). s3:// URI in prod (go-pmtiles reads S3 natively under the
-  // task role); an https:// URL works for local dev (public CDN archive).
-  // Optional: the endpoint 503s when unset instead of crashing the API.
-  PROTOMAPS_ARCHIVE_URI: z.string().optional(),
-
-  // Transactional email (Resend). Only the geoPdfWorker sends from the Node
-  // side; the API server itself sends none. Both optional so a worker with no
-  // key configured degrades to a no-op send (services/email.ts) instead of
-  // crashing — mirrors the Python workers' guard. FRONTEND_URL builds the
-  // completion-email deep link.
-  RESEND_API_KEY: z.string().optional(),
+  // Transactional email over SMTP (services/email.ts). All optional so a
+  // process with no provider configured degrades to a no-op send instead of
+  // crashing; SMTP_PORT stays a string so that an empty one does too. The names
+  // are shared with the Python workers (@logjam/shared SMTP_ENV_KEYS).
+  // RESEND_SECRET_ID is the Secrets Manager id src/boot.ts resolves
+  // SMTP_PASSWORD from, on a host with no secrets injection. FRONTEND_URL
+  // builds the completion-email deep link.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_CA_CERT: z.string().optional(),
+  RESEND_SECRET_ID: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   FRONTEND_URL: z.string().url().optional(),
 
-  // Stuck-topo-job reaper (ARCH-002). A job stuck in `pending` longer than the
+  // Where services/push.ts POSTs. CI points it at infra/scripts/expo-push-stub.mjs
+  // so no run reaches Expo; everywhere else the default is the real service.
+  EXPO_PUSH_URL: z
+    .string()
+    .url()
+    .default("https://exp.host/--/api/v2/push/send"),
+
+  // Stuck-topo-job reaper. A job stuck in `pending` longer than the
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
-  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
+  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely, which also
+  // stops every other sweep startTopoJobReaper runs (topoJobReaper.ts),
+  // import-snapshot expiry among them.
   TOPO_REAPER_INTERVAL_MS: z.coerce
     .number()
     .int()
@@ -102,7 +121,7 @@ const baseSchema = z.object({
     .default(900_000), // 15 min
   // A processing job is reaped when its render/PDAL progress STALLS for this
   // long (the worker heartbeats lastProgressAt through the long phases), so a
-  // slow-but-advancing job is never force-failed (ARCH-001).
+  // slow-but-advancing job is never force-failed.
   TOPO_REAPER_PROGRESS_STALL_MS: z.coerce
     .number()
     .int()
@@ -118,12 +137,7 @@ const baseSchema = z.object({
     .default(21_600_000), // 6 h
   // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
   // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
-  // then it falls back to DEFAULT_SECONDS_PER_TILE (= the old 8.5 min/tile
-  // constant — conservative, self-corrects down as real jobs accumulate).
-  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
-    .number()
-    .positive()
-    .default(510),
+  // then it falls back to a cold-start rate (lib/runtimeEstimates.ts).
   TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Adaptive runtime estimator for topo exports (lib/runtimeEstimates.ts):
   // fitted per-(format, bundling) bucket from recent completed exports' actual
@@ -138,14 +152,6 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(3),
-  // Adaptive runtime estimator for GeoPDF jobs (lib/runtimeEstimates.ts): fitted
-  // per-megapixel rate (native render-canvas size) from recent completed jobs.
-  // Falls back to this cold-start rate below MIN_SAMPLES.
-  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce
-    .number()
-    .positive()
-    .default(6),
-  GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Account-wide ceiling on concurrently running worker vCPUs
   // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
   // service quota (30 in ap-southeast-2) so excess load becomes a retryable
@@ -158,6 +164,16 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(24),
+  // The month's compute credits (vCPU-minutes) all accounts share, checked
+  // before a launch beside the per-user allowance (lib/computeCredits.ts). A
+  // credit is about US$0.001 of Fargate at ap-southeast-2 on-demand prices
+  // (about US$0.062 per vCPU-hour with the workers' 2 GiB per vCPU), so 15000
+  // credits, 250 vCPU-hours, is about US$15 a month. 0 = no site-wide cap.
+  SITE_MONTHLY_COMPUTE_CREDITS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(15000),
   // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
   // existing interval rather than owning a timer — it is incremental and does
   // nothing when no new log objects have been delivered.
@@ -170,7 +186,7 @@ const baseSchema = z.object({
   // requester field. Only requests signed by the API are user downloads; the
   // workers' same-region reads and CloudFront's basemap reads share the same
   // buckets and must not be charged to anyone. An empty value matches nothing
-  // (fail closed — under-count rather than bill users for worker traffic).
+  // (fail closed — under-count rather than bill users for worker traffic). Guard: s3AccessLog.unit.test.ts ("charges nothing when the requester pattern is empty").
   EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
   // Ceiling on access-log objects consumed per sweep, so a backlog is worked
   // through over several passes instead of one unbounded run.
@@ -179,7 +195,7 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(500),
-  // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
+  // TopoExportJob sweeps: queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
   TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS: z.coerce
@@ -193,37 +209,23 @@ const baseSchema = z.object({
     .positive()
     .default(10_800_000), // 3 h
   // Completed exports older than this are swept: S3 object deleted, quota
-  // decremented, row removed (ARCH-006). 0 disables the sweep.
+  // decremented, row removed. 0 disables the sweep.
   TOPO_EXPORT_TTL_MS: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(604_800_000), // 7 days
-  // GeoPdfJob sweeps (mirrors TOPO_REAPER_EXPORT_*_TIMEOUT_MS): queued rows
-  // older than the QUEUED timeout (task never placed/started) and running
-  // rows older than the RUNNING timeout (worker SIGKILLed before its terminal
-  // write) are force-failed.
-  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(900_000), // 15 min
-  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(1_800_000), // 30 min
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
-  // called — no Media row exists) are orphans in S3 with no quota charge
-  // (SEC-003). Objects older than this with no confirmed row are deleted by
-  // the periodic sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an
-  // in-flight upload+confirm is never raced. 0 disables the sweep.
+  // called — no Media row exists) are orphans in S3 with no quota charge.
+  // Objects older than this with no confirmed row are deleted by the periodic
+  // sweep. A value near the 15-minute upload URL lifetime (routes/media.ts)
+  // would race an upload still waiting for its confirm. 0 disables the sweep.
   MEDIA_ORPHAN_TTL_MS: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(86_400_000), // 24 h
-  // Sync tombstones (Stage 8) older than this are swept by the reaper. A
+  // Sync tombstones older than this are swept by the reaper. A
   // client whose delta cursor predates the horizon is told to full-resync
   // (resetRequired), so the TTL bounds table growth, not correctness.
   // 0 disables the sweep (rows kept forever).
@@ -232,19 +234,18 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(7_776_000_000), // 90 days
-  // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
+  // Fleet-wide full-resync lever: bump when server-side data
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.
   // 2: the places rework renames every canyon row and empties the tombstone
-  // log, so no pre-rework cursor can be resumed (plan §4 step 14).
+  // log, so no pre-rework cursor can be resumed.
   SYNC_EPOCH: z.coerce.number().int().positive().default(2),
 
   // Read at module load by services/prisma.ts (not via getEnv(), which would
   // run before boot.ts resolves DB credentials) — declared here so the values
   // are still validated at boot and appear in the var list. DATABASE_SSL is an
-  // exact-string compare against "disable": before this entry, a well-meant
-  // `DATABASE_SSL=DISABLED`/`false` silently left verified TLS on and the local
-  // worker died with an opaque pg_hba error. Now it fails loud at boot.
+  // exact-string compare against "disable" so invalid values fail loud at boot
+  // rather than silently leaving TLS enabled.
   DATABASE_SSL: z.enum(["disable"]).optional(),
   DATABASE_SSL_CA: z.string().optional(),
   // CI-only headroom for the global rate limiter (middleware/rateLimit.ts,
@@ -258,14 +259,11 @@ const baseSchema = z.object({
   RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
   // Same contract for the import limiter (bulkImportLimitMax).
   RATE_LIMIT_BULK_IMPORT_MAX: z.coerce.number().int().positive().optional(),
-  // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
-  // CLI entrypoint); unset in the API process.
-  GEO_PDF_JOB_ID: z.string().optional(),
   // Commit the image was built from, baked in by api/Dockerfile's GIT_SHA
   // build arg; GET /meta reports it so a deploy can prove what is serving.
   // Not a sha regex: a build without the arg bakes in "", and a malformed
-  // value must not stop the API booting. No dev value, so it is absent from
-  // the env.local Terraform template.
+  // value must not stop the API booting (env.unit.test.ts). No dev value, so
+  // it is absent from the env.local Terraform template.
   GIT_SHA: z.string().optional(),
 });
 
@@ -273,11 +271,14 @@ type Env = z.infer<typeof baseSchema> & {
   ECS_SUBNETS_LIST: string[];
   ECS_SECURITY_GROUPS_LIST: string[];
   CORS_ORIGIN_LIST: string[];
+  OIDC_AUDIENCE_LIST: string[];
 };
 
 const required = (key: keyof z.infer<typeof baseSchema>, val: unknown) =>
   val === undefined || val === "" ? key : null;
 
+// console.error, not logger: logger calls getEnv() as it loads, so it cannot
+// report getEnv's own failure.
 export function validateEnv(): Env {
   const parsed = baseSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -291,17 +292,34 @@ export function validateEnv(): Env {
   const env = parsed.data;
   const missing: string[] = [];
 
-  if (env.AUTH_MODE === "cognito") {
-    const c1 = required("COGNITO_REGION", env.COGNITO_REGION);
-    const c2 = required("COGNITO_USER_POOL_ID", env.COGNITO_USER_POOL_ID);
-    const c3 = required("COGNITO_CLIENT_ID", env.COGNITO_CLIENT_ID);
-    if (c1) missing.push(c1);
-    if (c2) missing.push(c2);
-    if (c3) missing.push(c3);
+  const audienceList = (env.OIDC_AUDIENCE ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (env.AUTH_MODE !== "fake") {
+    const issuer = required("OIDC_ISSUER", env.OIDC_ISSUER);
+    if (issuer) missing.push(issuer);
+    if (audienceList.length === 0) missing.push("OIDC_AUDIENCE");
+    if (
+      env.NODE_ENV === "production" &&
+      env.OIDC_ISSUER &&
+      !env.OIDC_ISSUER.startsWith("https://")
+    ) {
+      console.error("OIDC_ISSUER must be https:// in production.");
+      process.exit(1);
+    }
   }
 
   if (env.AUTH_MODE === "fake" && env.NODE_ENV === "production") {
     console.error("AUTH_MODE=fake is forbidden in production.");
+    process.exit(1);
+  }
+
+  // services/prisma.ts reads DATABASE_SSL at module load, before this runs;
+  // refusing here still stops a prod process that would talk plain to RDS.
+  if (env.DATABASE_SSL === "disable" && env.NODE_ENV === "production") {
+    console.error("DATABASE_SSL=disable is forbidden in production.");
     process.exit(1);
   }
 
@@ -358,6 +376,7 @@ export function validateEnv(): Env {
           .filter(Boolean)
       : [],
     CORS_ORIGIN_LIST: corsList,
+    OIDC_AUDIENCE_LIST: audienceList,
   };
 }
 

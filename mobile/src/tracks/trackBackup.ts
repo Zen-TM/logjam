@@ -2,18 +2,17 @@
 // serialised to GPX, the file is written into `RECORDED_TRACK_DIR`, and a media
 // row with `origin: "track"` carries it up through the ordinary three-phase
 // upload. That is what makes a recording survive a lost phone and show up on
-// the user's other devices — until now a track lived and died on the handset
-// that made it.
+// the user's other devices.
 //
 // THE LOCAL TABLES STAY. `track` + `track_point` are the recorder's own store
 // and remain the source of the map line and every stat; the media row is a copy
 // that syncs. `track.mediaId` is the join between them, so nothing has to show
 // one trip as two things.
 //
-// PRIVACY: the GPX IS precise location history — the most sensitive data the
-// app holds (tracksDb.ts's header). Nothing here logs a coordinate, a bbox, a
-// track name, a filename or a path; failures are reported as state, and the
-// error itself is handed to the caller rather than printed.
+// PRIVACY: the GPX IS precise location history — the most sensitive data
+// Logjam GPS holds (tracksDb.ts's header). Nothing here logs a coordinate, a
+// bbox, a track name, a filename or a path; failures are reported as state, and
+// the error itself is handed to the caller rather than printed.
 import * as FileSystem from "expo-file-system/legacy";
 import {
   GPX_MIME_TYPE,
@@ -179,11 +178,9 @@ export async function retryTrackBackup(
  * Register every finished recording that has no account copy yet.
  *
  * The finish-time backup can fail — a full disk, a write refused, a media row
- * the outbox would not take — and the alert it raises offers "Try again". A
- * user who taps "Not now" was, until this existed, the end of the story: that
- * recording was never backed up and nothing ever mentioned it again. A silent
- * hole exactly where the feature's whole promise is, which is not something a
- * dismissible dialog should be the only guard for.
+ * the outbox would not take — and the alert it raises offers "Try again". If a
+ * user taps "Not now", this sweep ensures the recording is backed up on the
+ * next cycle rather than silently remaining unbacked.
  *
  * NO METERED GATE HERE, deliberately. This writes a GPX and a mirror row; the
  * bytes leave the phone through the ordinary media outbox, which already checks

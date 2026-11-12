@@ -83,10 +83,11 @@ Guards:
   then.
 - **Negative:** Rewording a sentence is an API deploy, and a Logjam GPS build
   already in the field shows whatever the server it reaches sends.
-- **Neutral:** Logjam GPS builds released before this still tell an oversized
-  area from one outside NSW by the words "too large", so `AREA_TOO_LARGE` and
-  `CLIP_TOO_LARGE` in `api/src/lib/regionClip.ts` keep those words, pinned by
-  that file's unit test, until those builds are gone.
+- **Neutral (updated 2026-10-18):** the "too large" words that older Logjam GPS
+  builds searched a region-clip refusal for were kept in `AREA_TOO_LARGE` and
+  `CLIP_TOO_LARGE` (`api/src/lib/regionClip.ts`) until the endpoint was removed
+  ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). No API refusal
+  carries them now.
 - **Neutral:** An op parked on a phone before this holds a developer's
   message. `mobile/src/sync/parkedError.ts` reads only the new `sentence`, so
   such a row shows the client's fallback line.

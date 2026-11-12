@@ -1,31 +1,28 @@
 """Helpers both ECS worker entrypoints need, in one place.
 
 `worker.py` and `export_worker.py` are separate entrypoints that share a
-database, a notification table and a connection-string format, and each used to
-carry its own copy of these three functions under a "Mirrored in <the other
-file> — keep both copies in sync" comment. That comment is the anti-pattern
-this repo has a rule about (root CLAUDE.md: "two lists that must agree = one
-declaration + a test"), and it had already failed quietly: by 2026-08-29 the
-copies had drifted in three places — `str | None` vs `Optional[str]`, and two
-docstrings — with nothing to notice.
-
-None of that drift changed behaviour, which is exactly why it survived. One
-declaration removes the question.
+database, a notification table and a connection-string format.
 
 DELIBERATELY NOT HERE:
   - `update_status` — the two copies must differ. `topo_jobs` has an
     `updated_at` column and `topo_export_jobs` does not, so a shared version
-    would break every export status flip (review finding STP-008).
+    would break every export status flip.
   - `delete_s3_prefix_best_effort` — reads each worker's own module-level
     `BUCKET`, `s3` and `log`, so sharing it means threading three arguments
     through for two copies that differ only in a docstring. Guarded against
-    real drift by a test instead (`tests/test_worker_common.py`).
+    drift by a test instead (`tests/test_worker_common.py`).
 """
 
 import json
 import os
 from typing import Optional
 from urllib.parse import quote
+
+# What the owner of a job too big for the task's memory reads: from sharpen.py,
+# which refuses one in advance, and from worker.py, which maps an
+# out-of-memory kill of the job's own process to it. A kill of one of its
+# children (pdal, a pool worker) still reads as the generic failure.
+TOO_BIG = "This area was too big to process. Try a smaller one."
 
 
 def compose_database_url() -> str:
@@ -34,6 +31,12 @@ def compose_database_url() -> str:
     User and password are URL-quoted (safe="") because RDS-generated passwords
     contain characters like "!" that aren't valid unescaped in a URL. Fails
     loud, listing missing var NAMES only (never values).
+
+    A connect timeout and TCP keepalives are always set, so a replaced database
+    host does not leave a worker on a dead socket. DATABASE_SSL_CA (the path
+    the API's own client also reads) turns on `sslmode=verify-full` against that
+    file; unset, or with DATABASE_SSL=disable (local workers, ADR 0001), the
+    connection negotiates TLS as libpq does by default.
     """
     host = os.environ.get("DB_HOST")
     name = os.environ.get("DB_NAME")
@@ -56,9 +59,20 @@ def compose_database_url() -> str:
             f"Missing required environment variables for database connection: {', '.join(missing)}"
         )
 
+    params = [
+        "connect_timeout=10",
+        "keepalives=1",
+        "keepalives_idle=30",
+        "keepalives_interval=10",
+        "keepalives_count=3",
+    ]
+    ca = os.environ.get("DATABASE_SSL_CA")
+    if ca and os.environ.get("DATABASE_SSL") != "disable":
+        params += ["sslmode=verify-full", f"sslrootcert={quote(ca, safe='/')}"]
+
     return (
         f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{host}:{port}/{name}"
+        f"@{host}:{port}/{name}?{'&'.join(params)}"
     )
 
 

@@ -1,3 +1,4 @@
+import { coordinateEntry } from "@logjam/shared";
 import { FieldError } from "./FieldError";
 import {
   useId,
@@ -15,6 +16,7 @@ import {
   sanitizeDecimalInput,
   type NumericFieldConstraints,
 } from "../numberInput";
+import { FORM_REQUIRED } from "@logjam/shared";
 import classes from "./TextField.module.css";
 import { Icon } from "./Icon";
 
@@ -25,6 +27,12 @@ type FieldLabelling = {
    *  and read with the control, where a tooltip would be neither. */
   hint?: string;
   error?: string | null;
+  /** Draws "Required" beside the label. The input's own `required` is what
+   *  assistive technology reads; the mark is for the eye, and a form where
+   *  nearly everything is required (sign-in) leaves it off. */
+  requiredMark?: boolean;
+  /** Keeps the error line's height when empty, so a submit does not move the form. */
+  reserveError?: boolean;
 };
 
 /** The anatomy every labelled control shares: label, control, hint, error. */
@@ -34,6 +42,8 @@ function Field({
   hideLabel = false,
   hint,
   error,
+  requiredMark,
+  reserveError,
   className,
   children,
 }: FieldLabelling & {
@@ -43,19 +53,59 @@ function Field({
 }) {
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
-      <label
-        htmlFor={inputId}
-        className={hideLabel ? "visually-hidden" : classes.label}
-      >
-        {label}
-      </label>
+      {requiredMark && !hideLabel ? (
+        <div className={classes.labelRow}>
+          <label htmlFor={inputId} className={classes.label}>
+            {label}
+          </label>
+          <span className={classes.required} aria-hidden>
+            {FORM_REQUIRED}
+          </span>
+        </div>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className={hideLabel ? "visually-hidden" : classes.label}
+        >
+          {label}
+        </label>
+      )}
       {children}
       {hint && (
         <p id={`${inputId}-hint`} className={classes.hint}>
           {hint}
         </p>
       )}
-      <FieldError id={`${inputId}-error`} message={error ?? null} />
+      <FieldError
+        id={`${inputId}-error`}
+        message={error ?? null}
+        reserve={reserveError}
+      />
+    </div>
+  );
+}
+
+/** A control that sits beside text fields in a row (Select on map). Shaped like
+ *  a field, with an unseen label above it, so it lines up with the inputs
+ *  whatever the hint or error under them does. Rows using it align to the
+ *  top. */
+export function FieldBeside({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={[classes.field, classes.beside, className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span className={classes.label} aria-hidden>
+        {"\u00a0"}
+      </span>
+      {children}
     </div>
   );
 }
@@ -76,6 +126,8 @@ export function TextField({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   ref,
@@ -91,6 +143,8 @@ export function TextField({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <input
@@ -121,7 +175,12 @@ export function NumberField({
   onChange,
   constraints,
   showError = false,
+  emptyError,
+  invalidError,
+  explain,
+  leftError = null,
   onBlur,
+  coordinate,
   ...fieldProps
 }: Omit<
   ComponentProps<typeof TextField>,
@@ -131,21 +190,60 @@ export function NumberField({
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
   showError?: boolean;
+  /** A latitude or longitude: text is kept as typed (the error says what is
+   *  wrong with it) and a pasted "lat, lng" pair goes to both fields. */
+  coordinate?: {
+    axis: "latitude" | "longitude";
+    onPair: (pair: { latitude: string; longitude: string }) => void;
+  };
+  /** What an empty field says on a Save attempt (`showError`), never on blur:
+   *  tapping "Select on map" with the field focused must not flash it. */
+  emptyError?: string;
+  /** Replaces the range or format message (the caller's words, one voice for
+   *  both clients). */
+  invalidError?: string;
+  /** The words for a value that is not one, in place of `numericFieldError`'s
+   *  (an empty box can be refused too). One rule shared with the other client. */
+  explain?: (raw: string) => string | null;
+  /** Why the last value left in the box was refused, kept after it is put back. */
+  leftError?: string | null;
 }) {
   const [touched, setTouched] = useState(false);
-  const error = numericFieldError(value, constraints);
+  // A caller's `explain` owns the whole message (an empty box can be refused
+  // too, shown at once); otherwise the range error waits for blur or Save.
+  const rangeError = numericFieldError(value, constraints);
+  const error =
+    (explain
+      ? explain(value)
+      : value.trim() === ""
+        ? showError
+          ? (emptyError ?? null)
+          : null
+        : touched || showError
+          ? rangeError && (invalidError ?? rangeError)
+          : null) ?? leftError;
   return (
     <TextField
       {...fieldProps}
       type="text"
       inputMode={constraints.integer ? "numeric" : "decimal"}
       value={value}
-      onChange={(event) => onChange(sanitizeDecimalInput(event.target.value))}
+      onChange={(event) => {
+        const text = event.target.value;
+        if (!coordinate) return onChange(sanitizeDecimalInput(text));
+        const entry = coordinateEntry(text, coordinate.axis, value);
+        if (entry.latitude !== undefined && entry.longitude !== undefined)
+          coordinate.onPair({
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+          });
+        else onChange(text);
+      }}
       onBlur={(event) => {
         setTouched(true);
         onBlur?.(event);
       }}
-      error={touched || showError ? error : null}
+      error={error}
     />
   );
 }
@@ -163,20 +261,27 @@ export function NumberField({
  * boundary pushed — replaces the draft, unless the draft already MEANS that
  * number, so "45." is not rewritten under the cursor.
  *
- * It was written three times over (the style sheet's widths, the hillshade
- * angles, the slope boundaries) before it came here.
+ * Used for the style sheet's widths, the hillshade angles and the slope
+ * boundaries.
  */
 export function LiveNumberField({
   value,
   onCommit,
   constraints,
+  explain,
   ...fieldProps
-}: Omit<ComponentProps<typeof NumberField>, "value" | "onChange"> & {
+}: Omit<
+  ComponentProps<typeof NumberField>,
+  "value" | "onChange" | "leftError"
+> & {
   value: number;
   onCommit: (next: number) => void;
   constraints: NumericFieldConstraints;
 }) {
   const [draft, setDraft] = useState(() => String(value));
+  // Why a value was refused: put back on leaving, so it is told rather than
+  // snapped, and gone at the next keystroke.
+  const [refused, setRefused] = useState<string | null>(null);
   // A new value from outside replaces the draft, during render, unless the
   // draft already reads as it ("45." for 45). Object.is, as effect deps
   // compare: NaN equals itself here.
@@ -195,14 +300,23 @@ export function LiveNumberField({
       {...fieldProps}
       value={draft}
       constraints={constraints}
+      explain={explain}
+      leftError={refused}
       onChange={(next) => {
         setDraft(next);
+        setRefused(null);
         if (next.trim() !== "" && numericFieldError(next, constraints) === null)
           onCommit(Number(next));
       }}
       // Whatever is left that never committed (empty, "-", out of range) is
-      // not a value: the field goes back to what is drawn.
-      onBlur={() => setDraft(String(value))}
+      // not a value: the field goes back to what is drawn, saying why.
+      onBlur={() => {
+        setRefused(
+          (explain ? explain(draft) : numericFieldError(draft, constraints)) ??
+            null,
+        );
+        setDraft(String(value));
+      }}
     />
   );
 }
@@ -215,6 +329,8 @@ export function TextArea({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   minRows = 4,
@@ -237,6 +353,8 @@ export function TextArea({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <textarea
@@ -267,6 +385,8 @@ export function Select({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   ref,
@@ -283,6 +403,8 @@ export function Select({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <div className={classes.selectBox}>
@@ -335,78 +457,6 @@ export function SearchField({
         className={classes.searchInput}
         {...inputProps}
       />
-    </div>
-  );
-}
-
-/**
- * A bounded number chosen by feel: a native range input with its ENDS and its
- * reading written out — "0.5×" and "2×" flanking the track, the value itself at
- * the end of the label line.
- *
- * It is the kit's only slider, and it earns that by being the only value of its
- * kind: bounded on both sides, continuous, with no unit of its own and nothing
- * to compare it against except the map it is redrawing. A box to type in was
- * tried and put back (operator, 2026-09-18) — it asked for a precision nobody
- * has, and it showed neither the bounds nor that the number is a multiplier.
- * Native, so the arrows, Home/End and the announcement are the platform's.
- */
-export function RangeField({
-  label,
-  min,
-  max,
-  id,
-  className,
-  value,
-  format,
-  onChange,
-  ...inputProps
-}: Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  "type" | "value" | "onChange" | "min" | "max"
-> & {
-  label: string;
-  min: number;
-  max: number;
-  value: number;
-  /** What the value reads as, at the ends and to assistive tech ("1.2×"). */
-  format: (value: number) => string;
-  onChange: (next: number) => void;
-}) {
-  const autoId = useId();
-  const inputId = id ?? autoId;
-  // The filled part of the track, as the fraction the thumb sits at.
-  const fill = `${((value - min) / (max - min)) * 100}%`;
-  return (
-    <div className={[classes.rangeField, className].filter(Boolean).join(" ")}>
-      <div className={classes.rangeHead}>
-        <label htmlFor={inputId} className={classes.label}>
-          {label}
-        </label>
-        <output htmlFor={inputId} className={classes.rangeValue}>
-          {format(value)}
-        </output>
-      </div>
-      <div className={classes.range}>
-        <span className={classes.rangeEnd} aria-hidden>
-          {format(min)}
-        </span>
-        <input
-          id={inputId}
-          type="range"
-          className={classes.rangeInput}
-          min={min}
-          max={max}
-          value={value}
-          style={{ "--fill": fill } as CSSProperties}
-          aria-valuetext={format(value)}
-          onChange={(event) => onChange(Number(event.target.value))}
-          {...inputProps}
-        />
-        <span className={classes.rangeEnd} aria-hidden>
-          {format(max)}
-        </span>
-      </div>
     </div>
   );
 }

@@ -60,6 +60,20 @@
   background: transparent;
 }
 
+/* Forced colours drop the fill that says "selected"; Highlight puts it back. */
+@media (forced-colors: active) {
+  .active {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+
+  .active .glyph {
+    color: HighlightText;
+  }
+}
+
 .chip:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;
@@ -110,15 +124,22 @@
   line-height: inherit;
 }
 
-.pickerInput:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--color-accent);
-}
-
 .pickerHint {
   composes: detail from "../textRoles.generated.module.css";
   margin: 0;
   color: var(--color-text-muted);
+}
+
+/* ── Rails ──────────────────────────────────────────────────────────────
+   The band under a hero that holds a ChipRail; screens compose it, so every
+   panel's rail sits at one height. */
+
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--gutter);
 }
 
 /* ── Rail ──────────────────────────────────────────────────────────────── */
@@ -169,4 +190,14 @@
 .group {
   display: flex;
   gap: var(--space-1);
+}
+
+.rail[data-wrap="true"] .scroller {
+  overflow: visible;
+  mask-image: none;
+}
+
+.rail[data-wrap="true"] .group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }

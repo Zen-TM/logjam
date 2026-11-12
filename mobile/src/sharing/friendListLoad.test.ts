@@ -33,7 +33,7 @@ describe("friendListLoadKey", () => {
     );
   });
 
-  // MAPP-007 itself: after a failed load nothing else has moved — the list is
+  // After a failed load nothing else has moved — the list is
   // still null, the sheet is still open — so the retry is the only thing that
   // can make this key differ from the one that failed.
   it("changes on every retry, which is what makes the retry a retry", () => {

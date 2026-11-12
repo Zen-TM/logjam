@@ -1,5 +1,8 @@
 // A profile chart with a scrubber: some value against distance along a line.
 //
+// A series' x must start at 0: the first column sits at x = 0, so a series
+// that starts at epoch time draws flat, with no error.
+//
 // Elevation is what it was built for and still the main reader (a drawn
 // route's height profile), but a recorded track's SPEED is the same picture of
 // a different quantity, so the component takes a plain series plus a
@@ -10,16 +13,17 @@
 // Still built from plain Views rather than SVG: react-native-svg is a NATIVE
 // module, so adding it means a new dev-client build and a reinstall on every
 // test device — a heavy price for a chart this small. Contiguous columns under
-// a gradient read as an area chart at this size, which is what the web draws.
+// a gradient read as an area chart at this size, which is what Logjam Web draws.
 //
 // The scrubber is the part that makes it useful rather than decorative: drag
-// across and the readout follows your finger, which is how the web profile
+// across and the readout follows your finger, which is how Logjam Web's profile
 // behaves and the only way to answer "how high is it at the 3 km mark".
 //
 // Columns are scaled between the profile's own min and max, not from sea
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  profileSpan,
   sameSeries,
   type ProfilePoint,
   type ProfileSeries,
@@ -40,16 +44,18 @@ import {
   makeStyles,
   useTheme,
   muted,
+  veil,
+  wash,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
  *
- * 64 chunky columns read as a bar chart, which is what "still blocky" meant.
- * At one column per point the steps are a pixel or two wide and the silhouette
- * reads as a curve — the same trick a canvas area chart uses, just with the
- * rasterisation done by the layout engine.
+ * 64 chunky columns read as a bar chart. At one column per point the steps are
+ * a pixel or two wide and the silhouette reads as a curve — the same trick a
+ * canvas area chart uses, just with the rasterisation done by the layout
+ * engine.
  *
  * ponytail: ~360 Views for a chart. Measured fine on a sheet that is not
  * animating; the upgrade path if it ever bites is react-native-svg, which costs
@@ -81,8 +87,8 @@ type Column = { value: number | null; x: number };
 
 /**
  * Resample to `count` evenly spaced columns, INTERPOLATING between samples
- * rather than picking a nearest one. Nearest-sample resampling is what made the
- * outline staircase: neighbouring columns landed on the same sample and drew
+ * rather than picking a nearest one. Nearest-sample resampling would make the
+ * outline staircase: neighbouring columns land on the same sample and draw
  * the same height.
  */
 function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
@@ -141,7 +147,7 @@ const Columns = memo(
     return columns.map((column, index) => (
       // Non-interactive so the TOUCH lands on the container: locationX is
       // measured against whichever view received it, and a 16px-wide column
-      // reports a locationX near zero — which read as "you are at the start
+      // reports a locationX near zero — which reads as "you are at the start
       // of the route" wherever you actually pressed.
       <View key={index} style={styles.column} pointerEvents="none">
         {column.value == null ? null : (
@@ -209,17 +215,16 @@ export function ProfileChart({
   // scroll the panel. It claims on touch-down so a plain press still reads a
   // value, then hands the gesture back unless the drag has PROVEN horizontal.
   //
-  // The bias is the whole point. A first cut released only while |dy| > |dx|,
-  // which is a 45° line through a gesture nobody aims that precisely: a scroll
-  // begun with any sideways drift stayed with the chart and turned into a
-  // scrub. Scrolling is the common intent and scrubbing the deliberate one, so
-  // the chart now takes the gesture only inside ~34° of horizontal, and once it
-  // has, it keeps it — a scrub that wobbles vertically must not be stolen back
-  // mid-drag, which would be the same bug facing the other way.
+  // The bias is the whole point. Releasing only while |dy| > |dx| is a 45° line
+  // through a gesture nobody aims that precisely: a scroll begun with any
+  // sideways drift would stay with the chart and turn into a scrub. Scrolling
+  // is the common intent and scrubbing the deliberate one, so the chart takes
+  // the gesture only inside ~34° of horizontal, and once it has, it keeps it
+  // — a scrub that wobbles vertically must not be stolen back mid-drag.
   // ONE SWIPE, ONE PURPOSE, and it has to hold in both directions. Handing a
-  // vertical drag to the scroll was half of it; the other half is that the
+  // vertical drag to the scroll is half of it; the other half is that the
   // native ScrollView will intercept a drag that wanders vertically LATER in
-  // the gesture, which yanked a curving scrub away mid-read. So the moment this
+  // the gesture, yanking a curving scrub away mid-read. So the moment this
   // chart decides a touch is its own, it freezes the sheet's scroll until the
   // finger lifts — after that the direction of travel stops mattering.
   const scrollLock = useContext(SheetScrollLock);
@@ -258,7 +263,7 @@ export function ProfileChart({
       // parent ScrollView's `onInterceptTouchEvent` from ever firing, so the
       // scroll never asks and `onPanResponderTerminationRequest` is never
       // consulted. Angle arithmetic in JS cannot fix a scroll that was never
-      // offered the touch — which is why biasing the angle changed nothing.
+      // offered the touch — which is why biasing the angle alone would change nothing.
       // With this false, the native ScrollView intercepts a vertical drag past
       // its own touch slop and we get `onPanResponderTerminate`, while a
       // horizontal drag never trips its slop and stays ours.
@@ -284,7 +289,7 @@ export function ProfileChart({
   // already say the data had nothing here.
   if (min == null || max == null || series.points.length < 2) return null;
 
-  const span = Math.max(1, max - min);
+  const span = profileSpan(min, max);
   const scrubbed = scrubIndex == null ? null : columns[scrubIndex];
 
   return (
@@ -293,13 +298,12 @@ export function ProfileChart({
           appears under a finger. */}
       <View style={styles.readoutRow}>
         {scrubbed ? (
-          // VALUE FIRST, then where it is, joined by a word.
-          // "3.7 km · 51 m" was two bare numbers in the order of the axes, and
-          // reading it needed you to already know which axis was which — the
-          // units do not settle it, since a height and a distance are both
-          // metres. "51 m at 3.7 km" says the same thing in the order the
-          // question is asked, costs no extra line, and works unchanged for a
-          // speed against a clock ("4.2 km/h at 2:41 pm").
+          // VALUE FIRST, then where it is, joined by a word. Two bare numbers
+          // in the order of the axes would require already knowing which axis
+          // is which — the units do not settle it, since a height and a
+          // distance are both metres. "51 m at 3.7 km" says the same thing in
+          // the order the question is asked, costs no extra line, and works
+          // unchanged for a speed against a clock ("4.2 km/h at 2:41 pm").
           <Text style={styles.readout}>
             {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
             <Text style={styles.readoutAt}>{"  at  "}</Text>
@@ -333,7 +337,7 @@ export function ProfileChart({
         {/* Over the columns, not under: it fades their feet into the surface so
             the silhouette reads as one shape rather than a row of bars. */}
         <LinearGradient
-          colors={[withAlpha(theme.page, 0), withAlpha(theme.page, 0.55)]}
+          colors={[withAlpha(theme.page, 0), withAlpha(theme.page, veil.dim)]}
           style={styles.fade}
           pointerEvents="none"
         />
@@ -359,13 +363,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "flex-end",
     height: CHART_HEIGHT,
-    backgroundColor: withAlpha(theme.textMuted, 0.08),
+    backgroundColor: withAlpha(theme.textMuted, wash.subtle),
     borderRadius: radius.sm,
     overflow: "hidden",
   },
   // No gap: contiguous columns read as an area, which is what a profile is.
   column: { flex: 1, justifyContent: "flex-end" },
-  bar: { backgroundColor: withAlpha(theme.accent, 0.85) },
+  bar: { backgroundColor: theme.accent },
   scrubLine: {
     position: "absolute",
     top: 0,

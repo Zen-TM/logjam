@@ -1,27 +1,60 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { geocode, type GeocodeResult } from "@logjam/shared";
-import type { TPlace } from "../../placeUtils";
+import {
+  addRecentSearch,
+  COORDINATE_RESULT_KIND,
+  GAUGES,
+  parseCoordinates,
+  RECENT_SEARCHES_HEADING,
+  SEARCH_STATUS,
+  type RecentSearch,
+  type SearchPin,
+  searchPinAfter,
+  type SearchPoint,
+  gaugeDisplayName,
+  geocode,
+  GEOCODE_MIN_QUERY_LENGTH,
+  PLACE_REGISTRY_ATTRIBUTION,
+  PLACE_SEARCH_DEBOUNCE_MS,
+  PLACE_SEARCH_MIN_QUERY_LENGTH,
+  placeResultDetail,
+  searchLocationsLabel,
+  type Gauge,
+  type GeocodeResult,
+  type PlaceResult,
+  MAP_SEARCH_PLACEHOLDER,
+} from "@logjam/shared";
+import { searchPlaceRegistry, type TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
 import { Icon } from "../../ui";
+import { useGauges } from "../gauges/useGauges";
+import { loadRecentSearches, saveRecentSearches } from "../../recentSearches";
 
 const PLACE_RESULTS = 5;
-/** The geocoder wants a few characters to say anything useful. */
-const LOCATION_MIN_CHARS = 3;
+const GAUGE_RESULTS = 3;
+// Few enough that "Search locations for …" stays in view below them.
+const REGISTRY_RESULTS = 8;
 
 type Option =
   | { kind: "place"; id: string; place: TPlace; shared: boolean }
+  | { kind: "gauge"; id: string; gauge: Gauge; name: string }
+  | { kind: "registry"; id: string; result: PlaceResult }
   | { kind: "askLocations"; id: string }
-  | { kind: "location"; id: string; result: GeocodeResult };
+  | { kind: "location"; id: string; result: GeocodeResult }
+  | { kind: "coordinate"; id: string; point: SearchPoint }
+  | { kind: "recent"; id: string; recent: RecentSearch };
 
 /**
  * Search places and locations, top-left over the map; `/` focuses it.
  *
- * Your own places match as you type, locally. Locations (a town, a trailhead)
- * come from the public geocoder, and ONLY when asked for — the last option is
- * "Search locations for …". A search box that geocoded every keystroke would
- * send the name of every canyon a user looks up to a third party, and the
- * places on this list are exactly the ones not to publicise (root CLAUDE.md).
+ * Your own places match as you type, locally, and come first. Then river
+ * gauges, also matched here, from the public file, fetched while the box has
+ * focus whether or not the layer is on. Then the place registry, every named OpenStreetMap feature in NSW, through our API as you
+ * type (ADR 0034). Street addresses come from the public geocoder, and ONLY
+ * when asked for — the last option is "Search locations for …". A search box
+ * that geocoded every keystroke would send the name of every canyon a user
+ * looks up to a third party, and the places on this list are exactly the ones
+ * not to publicise (MapSearchBox.test.tsx).
  *
  * A WAI-ARIA combobox: arrows move through the options, Enter chooses, Escape
  * clears and then leaves.
@@ -30,23 +63,46 @@ export default function MapSearchBox({
   places,
   sharedPlaces,
   onSelectPlace,
+  onSelectGauge,
   onSelectLocation,
+  onSearchPin,
+  disabled = false,
 }: {
+  /** Off while an area is being selected: a fly-to would move the frame's map
+   *  from under the user, who pans instead. */
+  disabled?: boolean;
   places: TPlace[];
   sharedPlaces: TPlace[];
   onSelectPlace: (place: TPlace) => void;
+  onSelectGauge: (gauge: Gauge) => void;
   onSelectLocation: (lat: number, lon: number) => void;
+  /** The temporary pin for the searched location, or none (searchPinAfter). */
+  onSearchPin: (pin: SearchPin | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const { file: gaugeFile } = useGauges(focused);
+  // The highlighted option by id, not position, so it stays on the same row
+  // when an answer adds or removes rows around it.
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [locationQuery, setLocationQuery] = useState<string | null>(null);
   const [locations, setLocations] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The last answer and the query it answers, kept while the next is on its
+  // way so the list does not blink at every keystroke. `n` numbers the
+  // answers, so a highlight on an old answer's row never lands on a new one.
+  const [registry, setRegistry] = useState<{
+    q: string;
+    n: number;
+    results: PlaceResult[];
+    failure: string | null;
+  } | null>(null);
+  const answers = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
 
+  const [recents, setRecents] = useState(loadRecentSearches);
   const trimmed = query.trim();
 
   useEffect(() => {
@@ -59,9 +115,42 @@ export default function MapSearchBox({
       event.preventDefault();
       inputRef.current?.focus();
     };
+    if (disabled) return;
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [disabled]);
+
+  const registryQuery =
+    trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH ? trimmed : null;
+  // An answer still fits while the query only grows ("Kat" while typing
+  // "Kato"); a query that is not an extension of it is a different search.
+  const answer =
+    registry && registryQuery?.startsWith(registry.q) ? registry : null;
+  useEffect(() => {
+    if (registryQuery == null) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const settle = (results: PlaceResult[], failure: string | null) =>
+        setRegistry({
+          q: registryQuery,
+          n: ++answers.current,
+          results,
+          failure,
+        });
+      searchPlaceRegistry(registryQuery, REGISTRY_RESULTS, controller.signal)
+        .then(({ results }) => settle(results, null))
+        // A failure says so, in the API's own words; your places and the
+        // geocoder row stay.
+        .catch((err) => {
+          if (!controller.signal.aborted)
+            settle([], messageFromError(err, SEARCH_STATUS.searchFailed));
+        });
+    }, PLACE_SEARCH_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [registryQuery]);
 
   useEffect(() => {
     if (locationQuery == null) return;
@@ -71,7 +160,7 @@ export default function MapSearchBox({
       .catch((err) => {
         if (controller.signal.aborted) return;
         console.error(err);
-        setError(messageFromError(err, "Couldn't search locations."));
+        setError(messageFromError(err, SEARCH_STATUS.searchFailed));
         setLocations([]);
       })
       .finally(() => {
@@ -81,7 +170,12 @@ export default function MapSearchBox({
   }, [locationQuery]);
 
   const options = useMemo<Option[]>(() => {
-    if (trimmed === "") return [];
+    if (trimmed === "")
+      return recents.map((recent, index) => ({
+        kind: "recent" as const,
+        id: `h-${index}`,
+        recent,
+      }));
     const needle = trimmed.toLowerCase();
     const matches = (place: TPlace) =>
       place.name.toLowerCase().includes(needle) ||
@@ -100,10 +194,31 @@ export default function MapSearchBox({
         shared: true,
       })),
     ].slice(0, PLACE_RESULTS);
-    if (trimmed.length < LOCATION_MIN_CHARS) return placeOptions;
+    const gaugeOptions: Option[] = (gaugeFile?.gauges ?? [])
+      .flatMap((gauge) => {
+        const name = gaugeDisplayName(gauge.name);
+        return name.toLowerCase().includes(needle)
+          ? [{ kind: "gauge" as const, id: `g-${gauge.id}`, gauge, name }]
+          : [];
+      })
+      .slice(0, GAUGE_RESULTS);
+    const point = parseCoordinates(trimmed);
+    const ours: Option[] = [
+      ...(point
+        ? [{ kind: "coordinate" as const, id: "coordinate", point }]
+        : []),
+      ...placeOptions,
+      ...gaugeOptions,
+      ...(answer?.results ?? []).map((result, index) => ({
+        kind: "registry" as const,
+        id: `r${answer?.n}-${index}`,
+        result,
+      })),
+    ];
+    if (trimmed.length < GEOCODE_MIN_QUERY_LENGTH) return ours;
     if (locationQuery === trimmed) {
       return [
-        ...placeOptions,
+        ...ours,
         ...locations.map((result, index) => ({
           kind: "location" as const,
           id: `l-${index}`,
@@ -111,16 +226,36 @@ export default function MapSearchBox({
         })),
       ];
     }
-    return [...placeOptions, { kind: "askLocations" as const, id: "ask" }];
-  }, [trimmed, places, sharedPlaces, locationQuery, locations]);
+    return [...ours, { kind: "askLocations" as const, id: "ask" }];
+  }, [
+    trimmed,
+    places,
+    sharedPlaces,
+    gaugeFile,
+    recents,
+    answer,
+    locationQuery,
+    locations,
+  ]);
 
-  const open = focused && trimmed !== "";
+  const open = focused && (trimmed !== "" || options.length > 0);
+  const activeIndex = options.findIndex((option) => option.id === activeId);
+  const status = loading
+    ? SEARCH_STATUS.searching
+    : (error ??
+      answer?.failure ??
+      (options.length === 0
+        ? SEARCH_STATUS.noPlaces
+        : locationQuery === trimmed && locations.length === 0
+          ? SEARCH_STATUS.noLocations
+          : null));
 
   const reset = () => {
     setQuery("");
-    setActiveIndex(-1);
+    setActiveId(null);
     setLocationQuery(null);
     setLocations([]);
+    setRegistry(null);
     setError(null);
   };
 
@@ -133,8 +268,35 @@ export default function MapSearchBox({
       setError(null);
       return;
     }
+    // Places and gauges open their own panel and are found by typing again;
+    // recents are the picks that are just a point to fly to.
+    const point: SearchPoint | null =
+      option.kind === "recent"
+        ? option.recent
+        : option.kind === "coordinate"
+          ? option.point
+          : option.kind === "registry"
+            ? {
+                label: option.result.name,
+                lat: option.result.lat,
+                lon: option.result.lon,
+              }
+            : option.kind === "location"
+              ? {
+                  label: option.result.displayName,
+                  lat: option.result.lat,
+                  lon: option.result.lon,
+                }
+              : null;
     if (option.kind === "place") onSelectPlace(option.place);
-    else onSelectLocation(option.result.lat, option.result.lon);
+    else if (option.kind === "gauge") onSelectGauge(option.gauge);
+    else if (point) onSelectLocation(point.lat, point.lon);
+    onSearchPin(searchPinAfter({ pick: point }));
+    if (point) {
+      const next = addRecentSearch(recents, point);
+      setRecents(next);
+      saveRecentSearches(next);
+    }
     reset();
     inputRef.current?.blur();
   };
@@ -147,6 +309,7 @@ export default function MapSearchBox({
           ref={inputRef}
           className={classes.input}
           type="text"
+          disabled={disabled}
           role="combobox"
           aria-label="Search places and locations"
           aria-expanded={open}
@@ -157,21 +320,24 @@ export default function MapSearchBox({
               ? `${listId}-${options[activeIndex]?.id}`
               : undefined
           }
-          placeholder="Search places and locations"
+          placeholder={MAP_SEARCH_PLACEHOLDER}
           value={query}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(event) => {
             setQuery(event.target.value);
-            setActiveIndex(-1);
+            setActiveId(null);
+            if (!event.target.value.trim())
+              onSearchPin(searchPinAfter("clear"));
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               if (options.length === 0) return;
               event.preventDefault();
               const step = event.key === "ArrowDown" ? 1 : -1;
-              setActiveIndex(
-                (current) => (current + step + options.length) % options.length,
+              setActiveId(
+                options[(activeIndex + step + options.length) % options.length]
+                  .id,
               );
             } else if (event.key === "Enter") {
               const option =
@@ -182,8 +348,10 @@ export default function MapSearchBox({
                 choose(option);
               }
             } else if (event.key === "Escape") {
-              if (query) reset();
-              else inputRef.current?.blur();
+              if (query) {
+                reset();
+                onSearchPin(searchPinAfter("clear"));
+              } else inputRef.current?.blur();
             }
           }}
         />
@@ -195,6 +363,9 @@ export default function MapSearchBox({
       </div>
       {open && (
         <div className={classes.results}>
+          {trimmed === "" && (
+            <p className={classes.credit}>{RECENT_SEARCHES_HEADING}</p>
+          )}
           <ul
             id={listId}
             role="listbox"
@@ -207,18 +378,39 @@ export default function MapSearchBox({
                   ? option.shared
                     ? "friends"
                     : "place"
-                  : "map";
+                  : option.kind === "gauge"
+                    ? "gauge"
+                    : option.kind === "recent"
+                      ? "recent"
+                      : "map";
               const label =
                 option.kind === "place"
                   ? option.place.name
-                  : option.kind === "location"
-                    ? option.result.displayName
-                    : `Search locations for “${trimmed}”`;
+                  : option.kind === "gauge"
+                    ? option.name
+                    : option.kind === "registry"
+                      ? option.result.name
+                      : option.kind === "location"
+                        ? option.result.displayName
+                        : option.kind === "coordinate"
+                          ? option.point.label
+                          : option.kind === "recent"
+                            ? option.recent.label
+                            : searchLocationsLabel(trimmed);
+              const detail =
+                option.kind === "registry"
+                  ? placeResultDetail(option.result)
+                  : option.kind === "gauge"
+                    ? GAUGES.title
+                    : option.kind === "coordinate"
+                      ? COORDINATE_RESULT_KIND
+                      : null;
               return (
                 <li
                   key={option.id}
                   id={`${listId}-${option.id}`}
                   role="option"
+                  aria-label={detail ? `${label}, ${detail}` : undefined}
                   aria-selected={index === activeIndex}
                   className={classes.option}
                   // pointerdown, not click: the input would blur first and
@@ -233,22 +425,20 @@ export default function MapSearchBox({
                   {option.kind === "place" && option.shared && (
                     <span className={classes.optionMeta}>Shared</span>
                   )}
+                  {detail && (
+                    <span className={classes.optionMeta}>{detail}</span>
+                  )}
                 </li>
               );
             })}
           </ul>
-          {(loading ||
-            error ||
-            (locationQuery === trimmed && !loading && locations.length === 0) ||
-            options.length === 0) && (
+          {options.some(
+            (option) =>
+              option.kind === "registry" || option.kind === "location",
+          ) && <p className={classes.credit}>{PLACE_REGISTRY_ATTRIBUTION}</p>}
+          {status && (
             <p className={classes.status} role="status">
-              {loading
-                ? "Searching locations…"
-                : error
-                  ? error
-                  : options.length === 0
-                    ? "No places match."
-                    : "No locations found."}
+              {status}
             </p>
           )}
         </div>

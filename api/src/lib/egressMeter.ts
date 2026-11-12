@@ -37,7 +37,7 @@ import {
 const LOG_PREFIXES = ["media/", "topo-jobs/"] as const;
 
 /**
- * Resolve job-owned keys to their owners in three batched queries rather than
+ * Resolve job-owned keys to their owners in two batched queries rather than
  * one per record — a single log object routinely holds thousands of lines.
  */
 async function resolveOwners(
@@ -47,7 +47,6 @@ async function resolveOwners(
   const byTable = {
     topoJob: new Set<string>(),
     topoExportJob: new Set<string>(),
-    geoPdfJob: new Set<string>(),
   };
 
   for (const attribution of attributions) {
@@ -55,7 +54,7 @@ async function resolveOwners(
       byTable[attribution.table].add(attribution.jobId);
   }
 
-  const [topoJobs, exportJobs, geoPdfJobs] = await Promise.all([
+  const [topoJobs, exportJobs] = await Promise.all([
     byTable.topoJob.size
       ? prisma.topoJob.findMany({
           where: { id: { in: [...byTable.topoJob] } },
@@ -68,15 +67,9 @@ async function resolveOwners(
           select: { id: true, userId: true },
         })
       : [],
-    byTable.geoPdfJob.size
-      ? prisma.geoPdfJob.findMany({
-          where: { id: { in: [...byTable.geoPdfJob] } },
-          select: { id: true, userId: true },
-        })
-      : [],
   ]);
 
-  for (const row of [...topoJobs, ...exportJobs, ...geoPdfJobs]) {
+  for (const row of [...topoJobs, ...exportJobs]) {
     owners.set(row.id, row.userId);
   }
   return owners;
@@ -247,7 +240,6 @@ async function sweepPrefix(bucket: string, prefix: string, maxObjects: number) {
     update: { lastKey: keys[keys.length - 1] },
   });
 
-  // Notify against the freshly written totals.
   if (totals.size > 0) {
     const users = await prisma.user.findMany({
       where: { id: { in: [...totals.keys()] } },
@@ -296,8 +288,8 @@ export async function sweepEgress(): Promise<void> {
         );
       }
     } catch (err) {
-      // One prefix failing must not stop the other. No key or user id in the
-      // log line — this is an infrastructure error, not user data.
+      // No key or user id in the log line — this is an infrastructure error,
+      // not user data.
       logger.error(
         { prefix, err: safeErrorForLog(err) },
         "egress_sweep_failed",

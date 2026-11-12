@@ -57,10 +57,7 @@ describe("strandValuesOnTypeChange", () => {
     expect(result.foreignFields[0].type).toBe("integer");
   });
 
-  // THE ROUND TRIP. Retyping used to be a one-way door: the way out parked the
-  // values and the way back left them parked, beside a form with an empty rail
-  // for the very same key. Adopting them was refused (409, reserved key), so
-  // there was no way back at all.
+  // THE ROUND TRIP. Retyping both ways brings parked values back into fieldValues.
   it("brings a parked value home when the new type defines its key", async () => {
     const away = await strandValuesOnTypeChange({
       ownerId: "alice",
@@ -153,9 +150,7 @@ describe("strandValuesOnTypeChange", () => {
     expect(result.foreignFields).toHaveLength(1);
   });
 
-  // THE HEAL. A row stranded before the reconciliation ran both ways has no
-  // migration behind it; this is what brings those values back, on the next
-  // ordinary save of the place, with no retyping dance.
+  // THE HEAL. Brings parked values back on the next ordinary save of the place.
   it("brings a parked value home on a plain edit, when the type defines it", async () => {
     const result = await strandValuesOnTypeChange({
       ownerId: "alice",

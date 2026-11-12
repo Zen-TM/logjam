@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+ xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Placemark>
+  <name>Two legs, second one untimed</name>
+  <gx:MultiTrack>
+    <gx:Track>
+      <when>2026-01-01T00:00:00Z</when>
+      <when>2026-01-01T00:01:00Z</when>
+      <gx:coord>150.30 -33.60 800</gx:coord>
+      <gx:coord>150.31 -33.61 790</gx:coord>
+    </gx:Track>
+    <gx:Track>
+      <gx:coord>150.32 -33.62</gx:coord>
+      <gx:coord>150.33 -33.63</gx:coord>
+    </gx:Track>
+  </gx:MultiTrack>
+</Placemark>
+</kml>

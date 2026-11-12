@@ -8,8 +8,7 @@
 }
 
 .rails {
-  flex-shrink: 0;
-  padding: 10px var(--gutter) 8px;
+  composes: rails from "../../../ui/Chip.module.css";
 }
 
 .list {

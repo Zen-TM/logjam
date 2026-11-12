@@ -64,33 +64,67 @@ export function MapButtonGroup({
  * right now (filtered, generating, selected). An optional trailing action.
  * The same component as Logjam GPS's `Notice`: its words are `text`, centred IN
  * the notice; the intent is the glyph, and `tone="warning"` adds the edge.
+ * `tone="critical"` is for data being lost right now: the warning fill with
+ * `onFill` words, first in the stack. It always carries a glyph (accent and
+ * warning share a luminance), so `icon` is required by type.
  */
 export function Notice({
   icon,
   children,
   action,
   tone = "info",
+  controls,
+  twoLines = false,
   announce = false,
 }: {
-  icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
-  tone?: "info" | "warning";
   /**
    * Read out as it changes: for a notice that is the only answer to
    * something the user just did, after focus has gone back to the map.
    */
   announce?: boolean;
-}) {
+  /** Controls in a row under the words, for a notice that is a mode with
+   *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
+  controls?: ReactNode;
+  /** Words with a user's own title in them stop at two lines
+   *  (shared/DESIGN.md §9). */
+  twoLines?: boolean;
+} & (
+  | { tone?: "info" | "warning"; icon?: Glyph }
+  | { tone: "critical"; icon: Glyph }
+)) {
+  const line = (
+    <>
+      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
+      <span
+        className={[classes.noticeText, twoLines ? classes.twoLines : ""].join(
+          " ",
+        )}
+      >
+        {children}
+      </span>
+      {action}
+    </>
+  );
   return (
     <div
-      className={[classes.notice, action ? classes.withAction : ""].join(" ")}
+      className={[
+        classes.notice,
+        action ? classes.withAction : "",
+        controls ? classes.stacked : "",
+      ].join(" ")}
       data-tone={tone}
-      role={tone === "warning" ? "alert" : announce ? "status" : undefined}
+      role={tone !== "info" ? "alert" : announce ? "status" : undefined}
     >
-      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
-      <span className={classes.noticeText}>{children}</span>
-      {action}
+      {controls ? (
+        <>
+          <span className={classes.noticeLine}>{line}</span>
+          <span className={classes.noticeControls}>{controls}</span>
+        </>
+      ) : (
+        line
+      )}
     </div>
   );
 }

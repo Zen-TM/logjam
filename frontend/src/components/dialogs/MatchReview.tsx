@@ -3,11 +3,8 @@
 //
 // A card that ASKS A QUESTION is answered inside itself (DESIGN.md), so the options
 // live in the card rather than in a dialog raised from it. They are native
-// radios in a real `radiogroup` named by the incoming name: a set of exclusive
-// choices is what a radio group is, and the platform's arrow keys, Space and
-// announcement come free. The group had no accessible name before this — a
-// screen reader read six unrelated "Link to …" options with nothing saying
-// which name they were for.
+// radios in a real `radiogroup` labelled by the incoming name so a screen
+// reader announces which place each option refers to.
 import { useId } from "react";
 import { Button, StatusPill } from "../../ui";
 import classes from "./MatchReview.module.css";

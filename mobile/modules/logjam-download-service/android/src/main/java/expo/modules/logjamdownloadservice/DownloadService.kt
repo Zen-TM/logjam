@@ -26,6 +26,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -129,6 +130,7 @@ class DownloadService : Service() {
     const val EXTRA_TITLE = "title"
     const val EXTRA_TEXT = "text"
     const val EXTRA_PERCENT = "percent"
+    private const val TAP_URI = "logjam-ongoing://downloads"
     private const val CHANNEL_ID = "region-downloads"
     private const val NOTIFICATION_ID = 0x10D0
     /** Longer than one tile's whole retry ladder (~90 s), short enough to be cheap. */
@@ -171,7 +173,13 @@ class DownloadService : Service() {
         .setOngoing(true)
         .setOnlyAlertOnce(true)
       if (percent >= 0) builder.setProgress(100, percent.coerceAtMost(100), false)
+      // A tap opens the downloads, not wherever the app was left: the launch
+      // intent as a VIEW of the URI src/notifications/ongoingTap.ts reads (its
+      // test holds the two spellings together). React Native reports only a
+      // VIEW intent's data to JS.
       context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
+        launch.action = Intent.ACTION_VIEW
+        launch.data = Uri.parse(TAP_URI)
         builder.setContentIntent(
           PendingIntent.getActivity(
             context,

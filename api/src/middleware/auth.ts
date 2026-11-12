@@ -3,16 +3,24 @@ import jwksClient from "jwks-rsa";
 import jwt from "jsonwebtoken";
 import { say } from "@logjam/shared";
 import { AppError } from "../lib/appError";
+import { getEnv } from "../lib/env";
 
-// Fail fast at module load if AUTH_MODE=fake would bypass Cognito in a non-dev runtime.
-// Three independent signals — any one is sufficient to refuse:
+// Fail fast at module load if AUTH_MODE=fake would bypass real auth in a non-dev runtime.
+// These two guards read process.env, not getEnv(), on purpose: they are a
+// second lock beside validateEnv's own fake-in-production check, independent
+// of it, so a bug in either still fails closed.
+// Four independent signals — any one is sufficient to refuse:
 //   1. NODE_ENV is not "development" or "test"
 //   2. AWS runtime env vars present (ECS/EB inject these)
 //   3. DB_HOST points to a non-local host
+//   4. LOGJAM_RUNTIME=prod, which a host with no AWS-injected variables (a
+//      plain Docker Compose host) sets itself
+const isProdRuntime = process.env.LOGJAM_RUNTIME === "prod";
 if (process.env.AUTH_MODE === "fake") {
   const env = process.env.NODE_ENV;
   const looksProd = env !== "development" && env !== "test";
   const hasAwsRuntime =
+    isProdRuntime ||
     Boolean(process.env.AWS_EXECUTION_ENV) ||
     Boolean(process.env.ECS_CONTAINER_METADATA_URI_V4) ||
     Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -28,53 +36,68 @@ if (process.env.AUTH_MODE === "fake") {
   }
 }
 
-// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
-// MUST run cognito auth. This catches a misconfigured prod task even if the
-// AUTH_MODE=fake heuristics above were somehow all defeated.
+// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate),
+// or a host that declares LOGJAM_RUNTIME=prod, MUST run real auth ("oidc").
+// This catches a
+// misconfigured prod task even if the AUTH_MODE=fake heuristics above were
+// somehow all defeated. Guard: src/middleware/auth.unit.test.ts.
 if (
-  process.env.ECS_CONTAINER_METADATA_URI_V4 &&
-  process.env.AUTH_MODE !== "cognito"
+  (process.env.ECS_CONTAINER_METADATA_URI_V4 || isProdRuntime) &&
+  process.env.AUTH_MODE !== "oidc"
 ) {
   throw new Error(
-    `AUTH_MODE must be "cognito" in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
+    `AUTH_MODE must be "oidc" in a prod or AWS container runtime (got "${process.env.AUTH_MODE}").`,
   );
 }
 
 let client: jwksClient.JwksClient | null = null;
 
-function getClient() {
-  if (!client) {
-    client = jwksClient({
-      jwksUri: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
-    });
+// The jwks client is cached only once discovery has succeeded, so an issuer
+// outage rejects every request meanwhile and recovers without a restart.
+async function getClient(): Promise<jwksClient.JwksClient> {
+  if (client) return client;
+  const issuer = getEnv().OIDC_ISSUER!;
+  const res = await fetch(
+    `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`,
+    { signal: AbortSignal.timeout(5000) },
+  );
+  if (!res.ok) throw new Error(`OIDC discovery answered ${res.status}`);
+  const doc = (await res.json()) as { issuer?: unknown; jwks_uri?: unknown };
+  // A document naming another issuer would let that issuer's keys vouch for ours.
+  if (doc.issuer !== issuer) throw new Error("OIDC discovery issuer mismatch");
+  if (typeof doc.jwks_uri !== "string") {
+    throw new Error("OIDC discovery has no jwks_uri");
   }
+  client = jwksClient({ jwksUri: doc.jwks_uri });
   return client;
 }
 
 function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
-  getClient().getSigningKey(header.kid, (err, key) => {
-    if (err) return callback(err);
-    const signingKey = key?.getPublicKey();
-    callback(null, signingKey);
-  });
+  getClient().then(
+    (c) =>
+      c.getSigningKey(header.kid, (err, key) => {
+        if (err) return callback(err);
+        callback(null, key?.getPublicKey());
+      }),
+    (err) => callback(err),
+  );
 }
 
 export interface AuthenticatedRequest extends Request {
   user?: {
-    sub: string; // Cognito user ID
+    sub: string; // the provider's subject id
     email: string;
     emailVerified: boolean;
     username: string;
   };
 }
 
-// Dev-only fake actors, keyed by Cognito sub. Lets integration tests switch the
-// acting user per request via the `x-fake-sub` header WITHOUT restarting the API
-// (the old single-user limitation that made sharee/stranger perspectives
-// untestable — see SEC-001). Subs/usernames mirror api/prisma/seed.ts. This is
-// safe: the whole fake branch is unreachable outside AUTH_MODE=fake, which the
-// module-load guard above refuses in any non-dev runtime; the header is never
-// read in cognito mode.
+// Dev-only fake actors, keyed by sub. Lets integration tests switch the
+// acting user per request via the `x-fake-sub` header so sharee and stranger
+// perspectives are testable without restarting the API. Subs/usernames mirror
+// api/prisma/seed.ts. This is safe: the whole fake branch is unreachable outside
+// AUTH_MODE=fake, which the module-load guard above refuses in any non-dev
+// runtime; the header is never read in real-auth mode.
 const FAKE_ACTORS: Record<string, { email: string; username: string }> = {
   "fake-alice-sub": { email: "alice@local", username: "alice" },
   "fake-bob-sub": { email: "bob@local", username: "bob" },
@@ -96,15 +119,16 @@ export function requireAuth(
   res: Response,
   next: NextFunction,
 ) {
-  if (process.env.AUTH_MODE === "fake") {
+  const env = getEnv();
+  if (env.AUTH_MODE === "fake") {
     // Module-load guard above already refuses this in non-dev runtimes.
     // This per-request branch is defence-in-depth only.
     const headerSub = req.headers["x-fake-sub"];
     const sub =
       (typeof headerSub === "string" && headerSub) ||
-      process.env.FAKE_USER_SUB ||
+      env.FAKE_USER_SUB ||
       "fake-alice-sub";
-    // Known seed subs get a coherent identity; an unknown sub keeps the historical
+    // Known seed subs get a coherent identity; an unknown sub falls back to
     // alice defaults so behaviour is unchanged when no override is present.
     const actor = FAKE_ACTORS[sub] ?? {
       email: "alice@local",
@@ -133,10 +157,11 @@ export function requireAuth(
     token,
     getKey,
     {
-      issuer: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
-      // Cognito ID tokens carry aud=<app client id>. Asserting audience rejects
-      // tokens minted for a different app client in the same user pool.
-      audience: process.env.COGNITO_CLIENT_ID,
+      // Verbatim, trailing slash included: some providers' issuers have one.
+      issuer: env.OIDC_ISSUER,
+      // ID tokens carry aud=<client id>. Asserting it rejects tokens minted for
+      // another client, and Cognito access tokens, which carry no aud.
+      audience: env.OIDC_AUDIENCE_LIST as [string, ...string[]],
       algorithms: ["RS256"],
     },
     (err, decoded) => {
@@ -147,10 +172,9 @@ export function requireAuth(
 
       const payload = decoded as jwt.JwtPayload;
 
-      // Reject Cognito access tokens (token_use=access). They are signed by the
-      // same JWKS under the same issuer but lack identity claims (email,
-      // preferred_username). Only ID tokens establish identity here.
-      if (payload.token_use !== "id") {
+      // token_use is Cognito's: when present it must say "id" (access tokens
+      // lack the identity claims); a provider without it is judged on aud alone.
+      if (payload.token_use !== undefined && payload.token_use !== "id") {
         next(signInAgain("Invalid token type"));
         return;
       }
@@ -158,23 +182,23 @@ export function requireAuth(
       // Assert the identity claims this app relies on are present and typed.
       // A partially-populated req.user (undefined email) would otherwise reach
       // prisma.user.create and either crash or create an inconsistent row.
-      const username =
-        payload.preferred_username || payload["cognito:username"];
       if (
         typeof payload.sub !== "string" ||
-        typeof payload.email !== "string" ||
-        typeof username !== "string" ||
-        username.length === 0
+        typeof payload.email !== "string"
       ) {
         next(signInAgain("Token is missing required identity claims"));
         return;
       }
 
+      // Optional: not every provider sends one, and only a first login reads it
+      // (initialUsernameFor in routes/users.ts names the account without it).
+      const username =
+        payload.preferred_username || payload["cognito:username"];
       req.user = {
         sub: payload.sub,
         email: payload.email,
         emailVerified: payload.email_verified === true,
-        username,
+        username: typeof username === "string" ? username : "",
       };
 
       next();

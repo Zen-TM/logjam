@@ -2,13 +2,13 @@
 //
 // Three of the seven sources are renderings of the same NSW ground, and no icon
 // vocabulary can say how "SIX Maps Topo" differs from "SIX Maps Base Map" — a
-// 44pt square of each answers it instantly. Same idea as the web app's basemap
+// 44pt square of each answers it instantly. Same idea as Logjam Web's basemap
 // gallery, without the live mini-map.
 //
-// The tiles are BUNDLED, not fetched. Fetching them at display time meant the
-// list was blank offline (the one place a canyoner is most likely to be opening
-// it), cost a request every time the sheet opened, and could not include the
-// OSM-family sources at all: their servers answer an unattributed client with an
+// The tiles are BUNDLED, not fetched. Fetching them at display time would leave
+// the list blank offline (the one place a canyoner is most likely to be opening
+// it), cost a request every time the sheet opened, and would exclude the
+// OSM-family sources: their servers answer an unattributed client with an
 // "Access blocked" image, which is a worse icon than no icon. One committed
 // sample each — regenerate with `scripts/basemap-thumbs.sh` — is ~220 KB for the
 // set and works with the radio off.
@@ -30,7 +30,14 @@
 import { Image, View } from "react-native";
 
 import { Icon } from "../ui";
-import { radius, withAlpha, makeStyles, useHues, huesFor } from "../theme";
+import {
+  radius,
+  withAlpha,
+  makeStyles,
+  useHues,
+  huesFor,
+  wash,
+} from "../theme";
 import type { BasemapId } from "./sourceResolver";
 
 // The `require()` is what makes Metro bundle the file; a release build then
@@ -80,11 +87,25 @@ const THUMBS: Partial<Record<BasemapId, { drawable: string; asset: number }>> =
 export const BASEMAP_THUMB_CREDIT =
   "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).";
 
-export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
+export function BasemapThumb({
+  basemapId,
+  unavailable = false,
+}: {
+  basemapId: BasemapId;
+  /** The basemap's tile server is down: a warning where the sample would be. */
+  unavailable?: boolean;
+}) {
   const { assetHue } = useHues();
   const styles = useStyles();
 
   const thumb = THUMBS[basemapId];
+  if (unavailable) {
+    return (
+      <View style={[styles.tile, styles.glyphTile]}>
+        <Icon idea="warning" size={20} color={assetHue.region} />
+      </View>
+    );
+  }
   if (thumb === undefined) {
     return (
       <View style={[styles.tile, styles.glyphTile]}>
@@ -108,8 +129,8 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.md,
     // A hairline keeps a pale imagery tile from bleeding into the card.
     borderWidth: 1,
-    borderColor: withAlpha(huesFor(theme).assetHue.region, 0.35),
-    backgroundColor: withAlpha(huesFor(theme).assetHue.region, 0.16),
+    borderColor: huesFor(theme).assetHue.region,
+    backgroundColor: withAlpha(huesFor(theme).assetHue.region, wash.strong),
   },
   glyphTile: { alignItems: "center", justifyContent: "center" },
 }));

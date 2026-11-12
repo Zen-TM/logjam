@@ -67,10 +67,13 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { mobileBasemaps } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
@@ -88,9 +91,6 @@ import { TrackMapLayers } from "../tracks/TrackMapLayers";
 /** The selection ring's width, and the amount its radius has to exceed the
  *  thumb's for the two curves to sit concentric. */
 const THUMB_RING = 2;
-
-/** Matches `MapScreen`'s — the two maps must render the same vector basemap. */
-const PROTOMAPS_FLAVOR = "light" as const;
 
 /** Zoom for a picker opened on a coordinate someone already typed: close enough
  *  to see which side of the creek the point is on. */
@@ -128,6 +128,7 @@ export function PickPointScreen({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const regionIds = useRegions();
 
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is only honoured on the first render, and
@@ -250,14 +251,13 @@ export function PickPointScreen({
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
                   sourceID={sourceIdFor(resolved.key)}
-                  startIndex={1}
                 />
               ) : (
                 <Layer
                   key={`pick-basemap-${resolved.key}`}
                   type="raster"
                   id={`pick-basemap-${resolved.key}`}
-                  layerIndex={1}
+                  beforeId={BAND_MARKERS.land}
                   style={{ rasterOpacity: 1 }}
                 />
               )}
@@ -306,7 +306,7 @@ export function PickPointScreen({
       {/* Basemaps down the side the action column is NOT on, mirroring the map
           screen's own split so the two feel like the same map. */}
       <View style={[styles.basemaps, { top: insets.top + spacing(2) }]}>
-        {MOBILE_BASEMAPS.map((id) => (
+        {mobileBasemaps(regionIds).map((id) => (
           <Pressable
             key={id}
             accessibilityRole="button"
@@ -335,8 +335,8 @@ export function PickPointScreen({
 
       {/* NO `insets.bottom` here: this screen is pushed inside a tab stack, so
           the tab bar is already sitting below it and has already taken the
-          gesture inset. Adding it again floated the buttons a full navigation
-          bar's height above the tabs. */}
+          gesture inset. Adding it again would float the buttons a full
+          navigation bar's height above the tabs. */}
       <View style={styles.actions}>
         <View style={styles.action}>
           <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
@@ -350,6 +350,7 @@ export function PickPointScreen({
             // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
+            disabledReason="Tap the map to pick a point"
             onPress={() => picked && onConfirm(picked)}
           />
         </View>
@@ -372,7 +373,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // The ring has to be ROUNDER than the tile it wraps, by exactly its own
   // width, or its corners cut across the thumb's — a 4 px ring around an 8 px
-  // tile left a visible notch at each corner.
+  // tile would leave a visible notch at each corner.
   thumb: {
     borderRadius: radius.md + THUMB_RING,
     borderWidth: THUMB_RING,

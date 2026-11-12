@@ -21,8 +21,8 @@ class ExportTooLarge(RenderError):
     in both clients and in the email (shared/DESIGN.md §11)."""
 
     SENTENCE = (
-        "This export covers too large an area. Choose a smaller area, or split "
-        "it into smaller exports."
+        "This map covers too large an area. Choose a smaller area, or split "
+        "it into smaller maps."
     )
 
 

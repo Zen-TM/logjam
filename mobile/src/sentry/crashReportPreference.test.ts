@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // prefsDb reaches for expo-sqlite, which throws outside a native runtime. An
 // in-memory stand-in keeps this a pure test of the tri-state consent mechanism:
-// what the reporter does, and when the app is allowed to ask.
+// what the reporter does, and when Logjam GPS is allowed to ask.
 const store = new Map<string, string>();
 vi.mock("../prefsDb", () => ({
   readPref: (key: string) => store.get(key) ?? null,

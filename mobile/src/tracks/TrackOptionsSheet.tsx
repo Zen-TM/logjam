@@ -12,7 +12,7 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   climbFromProfile,
   messageFromError,
@@ -25,8 +25,16 @@ import {
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
-import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
+import {
+  BottomSheet,
+  closedSheet,
+  confirm,
+  RenameForm,
+  Row,
+  ColourField,
+} from "../ui";
 import { trackActions } from "../saved/assetActions";
+import { useMirrorLoggedTrackIds } from "../sync/useSyncQueries";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
@@ -100,13 +108,10 @@ export function TrackOptionsSheet({
   const online = useConnectivity() === "online";
   const [busy, setBusy] = useState(false);
 
-  // A closed sheet forgets its sub-mode: reopening on the next track must not
-  // land in a rename form carrying the last one's name.
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // shipped: the route sheet opened straight into its share panel, and the
-  // options list became unreachable.
+  // set would make the NEXT open land inside it (a rename form carrying the
+  // last track's name) instead of on the verb list.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -120,7 +125,7 @@ export function TrackOptionsSheet({
 
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for
-  // (mobile/CLAUDE.md, Battery).
+  // (mobile/AGENTS.md, Privacy and battery).
   const { detail, loading, line, gpsFixes } = useTrackDetail(
     track?.id ?? null,
     visible && showingStats && track != null,
@@ -153,7 +158,8 @@ export function TrackOptionsSheet({
       : null;
 
   const shareRowProps = useShareRowProps(online);
-  const actions = track ? trackActions(track) : null;
+  const loggedTrackIds = useMirrorLoggedTrackIds().data ?? undefined;
+  const actions = track ? trackActions(track, loggedTrackIds) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
   // other surface renders, with the wording the one non-revocable verb needs.
   const share = useSharePanel({
@@ -180,7 +186,7 @@ export function TrackOptionsSheet({
       if (!actions?.createRouteFrom)
         throw new Error("This track can't become a route.");
       // RDP always throws points away; saying how many survived is what stops
-      // the user concluding the app lost their recording.
+      // the user concluding Logjam GPS lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(placeId);
       onInfo(
         `Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
@@ -247,7 +253,7 @@ export function TrackOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a place"
+              ? "Link to a place"
               : track.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -323,8 +329,8 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          {/* The same verb, word and glyph as the web's, first among the verbs
-              after the one that goes to the line. */}
+          {/* The same verb, word and glyph as Logjam Web's, first among the
+              verbs after the one that goes to the line. */}
           {actions.logTrip ? (
             <Row
               title={wayVerbLabel("logTrip", "gps")}
@@ -338,6 +344,9 @@ export function TrackOptionsSheet({
             />
           ) : null}
           <ColourField
+            icon="colour"
+            hue={assetHue.track}
+            disabled={busy}
             label="Colour"
             palette={TRACK_COLORS}
             value={track.color}
@@ -381,7 +390,7 @@ export function TrackOptionsSheet({
                 close();
                 actions.createRouteFrom?.().then(
                   // RDP always throws points away; saying how many survived is
-                  // what stops the user concluding the app lost their track.
+                  // what stops the user concluding Logjam GPS lost their track.
                   ({ name, pointCount }) =>
                     onInfo(`Saved “${name}” — ${pointCount} points.`),
                   (err: unknown) => {
@@ -399,7 +408,7 @@ export function TrackOptionsSheet({
               picker says before the fact (routeSlot.ts's promise). */}
           {actions.createRouteFrom ? (
             <Row
-              title="Attach to a place"
+              title="Link to a place"
               subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}
@@ -442,22 +451,23 @@ export function TrackOptionsSheet({
             icon="delete"
             hue={theme.warning}
             disabled={busy}
-            onPress={() => {
+            onPress={async () => {
               close();
               if (!actions.delete) return;
               const removal = actions.delete;
-              Alert.alert(removal.confirmTitle, removal.confirmBody, [
-                { text: "Keep it", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () =>
-                    removal.run().catch((err: unknown) => {
-                      console.error(err);
-                      onError("Couldn't delete that track.");
-                    }),
-                },
-              ]);
+              if (
+                !(await confirm({
+                  confirmTitle: removal.confirmTitle,
+                  confirmBody: removal.confirmBody,
+                  confirmLabel: "Delete",
+                  tone: "destructive",
+                }))
+              )
+                return;
+              removal.run().catch((err: unknown) => {
+                console.error(err);
+                onError("Couldn't delete that track.");
+              });
             }}
           />
         </View>

@@ -1,7 +1,7 @@
 // Which columns of a place a SHAREE may see, stated as two lists that together
 // have to cover the model.
 //
-// The rule they enforce is the hybrid share model's (root CLAUDE.md): a
+// The rule they enforce is the hybrid share model's (root AGENTS.md): a
 // recipient sees the place RECORD, including its place-level notes and media,
 // while the owner's private annotations on it do not travel. The trap is that
 // this is a DENYLIST — the response spreads the row and removes what must not
@@ -9,7 +9,7 @@
 // added to `Place` reaches every sharee from the moment it exists until someone
 // remembers this file.
 //
-// That is the `_count` lesson in the root CLAUDE.md, one column lower down. So
+// That is the `_count` lesson in the root AGENTS.md, one column lower down. So
 // the denylist is paired with a completeness guard: `placeVisibility.unit.test`
 // reads the columns out of schema.prisma and fails when one appears that is
 // classified by neither list. A new column cannot leak by omission — it cannot
@@ -26,21 +26,26 @@
  * own responses; stripped from everything a sharee can reach.
  */
 export const OWNER_PRIVATE_PLACE_FIELDS: Record<string, string> = {
-  // §2.6. Holds what the SENDER's definitions said about values this owner has
+  // Holds what the SENDER's definitions said about values this owner has
   // no definition for. Re-emitting it down a share chain is the propagation
   // objection that got the "append it to notes" design rejected: B copies A's
   // place, B shares it with C, and C reads A's field labels and values. A
   // sharee gets `fieldDefsSnapshot` instead — derived live from the OWNER's
   // current definitions, so it says what THIS place's values mean and nothing
   // about anyone else's schema.
-  foreignFields:
-    "another user's field labels and values, carried in on a copy (§2.6)",
+  foreignFields: "another user's field labels and values, carried in on a copy",
   // The importer's idempotency keys. Not sensitive in themselves, but they are
   // the owner's filing system: `importKey` is derived from name+coords and
   // `importBatchId` groups one import run, so together they tell a recipient
   // how and when the owner bulk-loaded their data.
   importKey: "import idempotency key — the owner's filing, not the record",
   importBatchId: "groups one import run of the owner's",
+  // Plans. Null on any place a sharee can see, since only an owned
+  // place is shared; withheld anyway, as addedById names another user.
+  planId: "the plan holding the place, for plan members only",
+  addedById: "the plan member who added the place",
+  typeName: "a plan place's custom type name, for plan members only",
+  typeIconKey: "a plan place's custom type icon, for plan members only",
 };
 
 /**
@@ -63,6 +68,9 @@ export const SHAREE_VISIBLE_PLACE_FIELDS: readonly string[] = [
   // Place-level notes ARE shared (the hybrid model's central distinction —
   // per-TRIP notes are not).
   "notes",
+  // The owner's pick, shown beside the place with its current reading. It
+  // hints at the area, but a sharee already sees the exact coordinates.
+  "gaugeId",
   "fieldValues",
   "createdAt",
   "updatedAt",

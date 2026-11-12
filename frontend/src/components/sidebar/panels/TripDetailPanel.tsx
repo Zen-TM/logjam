@@ -3,18 +3,21 @@
 // A PANEL, NOT A DIALOG (DESIGN.md). Looking at something is not a task
 // with an end — you arrive at it, follow a place out of it, come back, leave
 // it open beside the map — so it is a page like a place's and a way's, and the
-// form that edits it is the dialog this page raises. It was a dialog until
-// 2026-09-19, which meant the only way to READ a trip put the whole app behind
-// a modal, and opening the place it linked had to close the trip first.
+// form that edits it is the dialog this page raises. Reading a trip in a dialog
+// would put Logjam Web behind a modal and require closing the trip to open
+// linked places.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   attributeRows,
   contractSectionKeys,
+  distinctGaugeIds,
   formatFieldValue,
   formatTripDate,
   mediaCategory,
+  navLabel,
   TRIP_PAGE,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripTypeLabel,
   tripTitle,
   tripVerbs,
@@ -29,7 +32,9 @@ import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import MediaGallery from "../../media/MediaGallery";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
+import { TripGaugeReading } from "../../gauges/TripGaugeReading";
 import { tripTypeLook } from "./tripTypeIcon";
 import {
   EmptyState,
@@ -121,12 +126,12 @@ function TripDetailPanel({
       setConfirmingDelete(false);
       onRefetchTripLogs();
       onQuotaChanged();
-      toast.success("Trip deleted.");
+      toast.done(tripDeleteDone(1));
       onAfterDelete();
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete this trip. Please try again."),
+        messageFromError(err, "Couldn't delete this trip. Try again."),
       );
     } finally {
       setDeleting(false);
@@ -136,12 +141,16 @@ function TripDetailPanel({
   if (!tripLog) {
     return (
       <div className={classes.root}>
-        <Hero title="Trip" onBack={onBack} backLabel="Back to Logs" />
+        <Hero
+          title="Trip"
+          onBack={onBack}
+          backLabel={`Back to ${navLabel("logs")}`}
+        />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
             title="No trip selected"
-            body="Pick one from Logs, or from the place it visited."
+            body={`Pick one from ${navLabel("logs")}, or from the place it visited.`}
           />
         </div>
       </div>
@@ -155,6 +164,9 @@ function TripDetailPanel({
   const trackCount = media.length - photoCount;
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
+  const gaugeIds = distinctGaugeIds(
+    trip.places.map((p) => places.find((x) => x.id === p.id)?.gaugeId),
+  );
 
   // A VERB is in the ⋯ (DESIGN.md), and which verbs, in what order and
   // under what words is `TRIP_VERBS`, the declaration the logbook's rows and
@@ -178,7 +190,7 @@ function TripDetailPanel({
       : [item];
   });
   const copy = TRIP_PAGE.copy;
-  const deleteCopy = tripDeleteConfirm(1);
+  const deleteCopy = tripDeleteConfirm({ title });
 
   // Exhaustive by type: a section the contract names and this page does not
   // draw, or the reverse, fails `tsc` (`TRIP_PAGE`, shared/src/contracts).
@@ -230,6 +242,16 @@ function TripDetailPanel({
       </section>
     ),
 
+    gauge: () => (
+      <TripGaugeReading
+        className={classes.section}
+        title={copy.gauge}
+        gaugeIds={gaugeIds}
+        dates={[trip.date]}
+        when="trip"
+      />
+    ),
+
     photos: () => (
       <section className={classes.section}>
         <SectionHeader title={copy.photos} count={photoCount || undefined} />
@@ -268,7 +290,7 @@ function TripDetailPanel({
       <section className={classes.section}>
         <SectionHeader title={copy.notes} />
         {trip.notes ? (
-          <p className={classes.notes}>{trip.notes}</p>
+          <NoteBody notes={trip.notes} />
         ) : (
           <p className={classes.muted}>{copy.notesEmpty}</p>
         )}
@@ -297,7 +319,7 @@ function TripDetailPanel({
         <Hero
           title={title}
           onBack={onBack}
-          backLabel="Back to Logs"
+          backLabel={`Back to ${navLabel("logs")}`}
           actions={
             <>
               <Menu
@@ -346,8 +368,7 @@ function TripDetailPanel({
 
       <ConfirmDialog
         open={confirmingDelete}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onClose={() => setConfirmingDelete(false)}

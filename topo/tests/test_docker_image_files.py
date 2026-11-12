@@ -1,16 +1,13 @@
-"""Every local module the workers import must be COPYed into the image (STP-006).
+"""Every local module the workers import must be COPYed into the image.
 
-`push_send.py` (added 2026-07-23) was never added to the Dockerfile's COPY
-list, so any freshly built image raised ModuleNotFoundError at worker.py's
-lazy `from push_send import send_push` — which fires AFTER the `complete`
-status flip has committed, taking the self-clean path that deletes the
-finished job's S3 outputs. The exact same defect had already happened once
-(743b1a3, "copy email_send.py into worker image").
+If an imported module is missing from the Dockerfile's COPY list, lazy
+imports (such as `push_send` or `email_send` in worker.py) raise
+ModuleNotFoundError at runtime after the status flip has committed.
 
 Two hand-kept lists that must agree — the modules the entrypoints import and
-the Dockerfile COPY list — so per CLAUDE.md they get a deriving test rather
-than a comment. This walks the import graph from the two ENTRYPOINT targets
-and fails if anything reachable is missing from the image.
+the Dockerfile COPY list — get a deriving test rather than a comment.
+This walks the import graph from the ECS task commands and fails if
+anything reachable is missing from the image.
 
 Pure AST + text parsing: no imports of the modules themselves, so it runs on
 the dev host with no GDAL/PDAL/psycopg2 (`python -m unittest discover -s tests`).
@@ -24,8 +21,19 @@ import unittest
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _DOCKERFILE = os.path.join(_ROOT, "Dockerfile")
 
-# The two commands the ECS task defs run (see the Dockerfile entrypoint note).
-_ENTRYPOINTS = ("worker.py", "export_worker.py")
+# The commands the ECS task defs run, and the script a RunTask command override
+# runs (see the Dockerfile entrypoint note).
+_ENTRYPOINTS = (
+    "worker.py",
+    # worker.py runs it as a subprocess, as it runs pipeline.py.
+    "sharpen.py",
+    "export_worker.py",
+    "build_place_registry.py",
+    "build_gauges.py",
+    "build_fire_history.py",
+    "build_coverage.py",
+    "build_nsw_dem.py",
+)
 
 
 def _local_module_path(name):
@@ -103,6 +111,16 @@ class TestDockerImageFiles(unittest.TestCase):
             "image — a fresh build raises ModuleNotFoundError at runtime: "
             f"{missing}. Add a COPY line to topo/Dockerfile.",
         )
+
+    # Mutation: turn the last line back into `ENTRYPOINT [...]` and a RunTask
+    # command override (the slope build) or `docker compose run topo python3 ...`
+    # hands its command to worker.py as arguments, which ignores them.
+    def test_the_image_starts_the_worker_as_a_cmd(self):
+        with open(_DOCKERFILE, encoding="utf-8") as fh:
+            lines = [ln.strip() for ln in fh if not ln.lstrip().startswith("#")]
+        self.assertEqual([ln for ln in lines if ln.startswith("ENTRYPOINT")], [])
+        cmds = [ln for ln in lines if ln.startswith("CMD")]
+        self.assertEqual(cmds[-1], 'CMD ["python3", "/app/worker.py"]')
 
     def test_walk_actually_reaches_the_lazy_imports(self):
         # Guards the guard: push_send/email_send are imported inside function

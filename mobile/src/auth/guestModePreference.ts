@@ -49,9 +49,9 @@ export function writeEntryChoice(
  *
  * Writing an empty string rather than deleting the row because `prefsDb` has no
  * delete, and `readEntryChoice` already treats any unrecognised value as
- * unchosen. Without this, signing out landed on the chooser but a cold start
- * afterwards showed the sign-in form — two different screens for one state, and
- * the "carry on without an account" option silently disappearing overnight.
+ * unchosen. Without this, signing out lands on the chooser but a cold start
+ * afterwards shows the sign-in form — two different screens for one state, and
+ * the "carry on without an account" option silently disappearing (Guard: guestModePreference.test.ts).
  */
 export function clearEntryChoice(): boolean {
   return writePref(GUEST_MODE_PREF_KEY, "");

@@ -6,7 +6,9 @@
 // already on, and (Logjam GPS only) Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let
 // go of rather than edited and deleted.
+import { LIDAR_JOB_COPY } from "../sharpen.js";
 import type { IconIdea } from "../icons.js";
+import type { ConfirmCopy } from "./confirm.js";
 import type { ContractPlatform } from "./types.js";
 
 export type PlaceVerbSurface = "row" | "page" | "pin";
@@ -24,6 +26,8 @@ type VerbDeclaration = {
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
   /** Destructive: the warning look, and a confirm that says what goes. */
   danger?: boolean;
   /** Below a rule, with the verbs that end the user's relationship with the
@@ -33,6 +37,9 @@ type VerbDeclaration = {
 
 const NO_MAP_FROM_A_PLACE =
   "Logjam GPS makes a map from an area framed on its map, not from a place.";
+
+const MAPS_MADE_AT_A_DESK =
+  "A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.";
 
 const OPENING_SHOWS_IT_ON_WEB =
   "On Logjam Web the map sits beside the page, and opening a place already flies it there.";
@@ -62,24 +69,31 @@ export const PLACE_VERBS = [
   {
     id: "makeTopo",
     icon: "lidar",
-    label: "Make a LiDAR topo here",
+    label: LIDAR_JOB_COPY.makeHere,
     for: "both",
     on: "web",
     reason: NO_MAP_FROM_A_PLACE,
   },
   {
     id: "makeGeoPdf",
-    icon: "geoPdf",
-    label: "Make a GeoPDF here",
+    icon: "export",
+    label: "Make a map here",
     for: "both",
     on: "web",
-    reason: NO_MAP_FROM_A_PLACE,
+    reason: MAPS_MADE_AT_A_DESK,
+  },
+  // Either kind of place: "friends can export it" (sharePromise) holds for a
+  // sharee too.
+  {
+    id: "exportPlace",
+    icon: "export",
+    label: "Export…",
+    for: "both",
   },
   {
     id: "share",
     icon: "shareFriend",
-    // Logjam Web's dialog also exports the place; Logjam GPS's panel shares.
-    label: { web: "Share or export…", gps: "Share" },
+    label: { web: "Share…", gps: "Share" },
     for: "owner",
     separated: true,
   },
@@ -96,7 +110,7 @@ export const PLACE_VERBS = [
   },
   {
     id: "remove",
-    icon: "unshare",
+    icon: "hide",
     label: "Remove from my account",
     for: "sharee",
     separated: true,
@@ -158,7 +172,10 @@ export function placeVerbs<P extends ContractPlatform>(
     }));
 }
 
-export type DeleteConfirmCopy = { confirmTitle: string; confirmBody: string };
+/** The done-toast after deleting places, from a page and a list alike. */
+export function placeDeleteDone(count: number): string {
+  return count === 1 ? "Place deleted." : `${count} places deleted.`;
+}
 
 /**
  * What deleting places costs, said once for every surface that offers Delete:
@@ -174,14 +191,14 @@ export type DeleteConfirmCopy = { confirmTitle: string; confirmBody: string };
 export function placeDeleteConfirm(
   target: { name: string } | { count: number },
   linkedTripCount?: number,
-): DeleteConfirmCopy {
+): ConfirmCopy {
   const one = "name" in target || target.count === 1;
   const trips =
     linkedTripCount == null
-      ? `Trips that link to ${one ? "it" : "them"} stay in your logbook, unlinked.`
+      ? `Trips that link to ${one ? "it" : "them"} stay, unlinked.`
       : linkedTripCount === 0
         ? null
-        : `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip stays" : "trips stay"} in your logbook, unlinked.`;
+        : `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip stays" : "trips stay"}, unlinked.`;
   return {
     confirmTitle:
       "name" in target
@@ -196,5 +213,7 @@ export function placeDeleteConfirm(
     ]
       .filter(Boolean)
       .join(" "),
+    confirmLabel: "Delete",
+    tone: "destructive",
   };
 }

@@ -1,10 +1,6 @@
 /**
- * The server's REST response shapes, as both clients see them.
- *
- * These lived twice — `frontend/src/placeUtils.ts` and `mobile/src/api/types.ts`
- * — as two hand-maintained copies of one contract kept in step by a comment.
- * They are declared here once; both clients re-export them from their old
- * homes, so every existing import keeps working and neither copy can drift.
+ * The server's REST response shapes, as both clients see them. Declared here
+ * so both clients share the wire contract and neither can drift.
  *
  * Wire shapes only: no logic, no client-specific fields. The SYNC protocol's
  * row shapes are a different contract and live in `sync.ts` — a mirror row is
@@ -15,6 +11,7 @@ import type { MediaItem } from "./media.js";
 import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type { SlopeBand } from "./topoSettings.js";
 
 export type TPlace = {
   id: string;
@@ -25,11 +22,11 @@ export type TPlace = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
-  /** Metres. Came in with the phase 1c waypoint fold — a canyon has never
-   *  carried one, a marker usually does. */
+  /** The river gauge the owner picked; absent from an older server. */
+  gaugeId?: string | null;
+  /** Metres. A canyon does not carry one; a marker usually does. */
   elevation: number | null;
-  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
-   *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
+  /** Type-specific values, keyed by CustomFieldDef.key. Internal `_`-prefixed
    *  keys (`_sources` today) are not user fields. */
   fieldValues: Record<string, unknown>;
   /** Values that came in on a copy keyed by definitions this owner does not
@@ -56,7 +53,7 @@ export type TPlace = {
   // Optional because on a place shared WITH you these counts are absent by
   // design, not zero: the trip tally is the owner's private trip-list
   // cardinality and `shares` is their fan-out to other people, so the API
-  // withholds both (see placeListInclude in api/src/routes/places.ts). Absent
+  // withholds both (see withPlaceListCounts in api/src/routes/places.ts). Absent
   // means "not yours to know" — so never coalesce it to 0 and present that as an
   // answer about a shared place. Gate every read on ownership.
   _count?: { tripLogLinks: number; shares: number };
@@ -69,8 +66,7 @@ export type TUser = {
   storageUsedBytes: number;
   storageQuotaBytes: number;
   /** Monthly worker allowance and usage, in credits (= vCPU-minutes). See
-   * computeCredits.ts. Replaced the tile quota, which only covered the topo
-   * worker and did not measure cost. */
+   * computeCredits.ts. */
   monthlyComputeCredits: number;
   monthlyComputeUsage: number;
   monthlyComputeResetAt: string;
@@ -80,14 +76,20 @@ export type TUser = {
   monthlyEgressUsedBytes: string;
   consentedAt: string | null;
   consentVersion: string | null;
+  /** The version PATCH /users/me accepts now; `consentVersion` is stale when
+   * it is null or older (see needsReconsent). Absent from a server that
+   * predates the field. */
+  currentConsentVersion?: string;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
     placeCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
-    autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
+    leaderboardOptIn?: boolean;
+    slopeBands?: SlopeBand[];
+    regions?: string[];
   } | null;
 };
 

@@ -6,17 +6,16 @@ import { getEnv } from "./env";
 import { logger } from "./logger";
 
 /**
- * Orphaned-upload sweep (SEC-003 cleanup half).
+ * Orphaned-upload sweep.
  *
  * A presigned PUT can succeed without /media/:id/confirm ever being called:
  * no Media row exists, no quota is charged, and the object would sit in the
- * media bucket forever (the bucket has no lifecycle rules — verified
- * 2026-06-11). The sweep lists `media/` objects, keeps anything whose
- * mediaId has a confirmed Media row or shows activity newer than
- * MEDIA_ORPHAN_TTL_MS, and deletes the rest. The DB-row check makes deleting
- * confirmed media impossible by construction, which is why this is a sweep
- * and not an S3 lifecycle rule (a tag-based rule could expire confirmed
- * objects if confirm's tag removal ever failed).
+ * media bucket forever (the bucket has no lifecycle rules). The sweep lists
+ * `media/` objects, keeps anything whose mediaId has a confirmed Media row or
+ * shows activity newer than MEDIA_ORPHAN_TTL_MS, and deletes the rest. The
+ * DB-row check makes deleting confirmed media impossible by construction,
+ * which is why this is a sweep and not an S3 lifecycle rule (a tag-based rule
+ * could expire confirmed objects if confirm's tag removal ever failed).
  */
 
 export interface MediaObjectListing {
@@ -26,7 +25,8 @@ export interface MediaObjectListing {
 
 // Keys are minted exclusively by mediaKeys() in lib/mediaKeys.ts as
 // media/<ownerId>/<mediaId>/<basename>. Anything else under the prefix is not
-// ours to delete — parse failures are skipped, never swept.
+// ours to delete — parse failures are skipped, never swept. Guard:
+// api/src/lib/mediaOrphanSweeper.unit.test.ts.
 const MEDIA_KEY_PATTERN = /^media\/[^/]+\/([^/]+)\/[^/]+$/;
 
 export function mediaIdFromKey(key: string): string | null {

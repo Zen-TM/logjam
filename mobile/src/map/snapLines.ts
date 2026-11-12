@@ -1,10 +1,8 @@
 // Where the map tools get their snapping geometry.
 //
-// Reads a Protomaps PMTiles archive directly (shared/src/snapTiles.ts), NOT
-// the rendered map. Asking the map what it had drawn tied snapping to the
-// active basemap and to being zoomed in far enough, and truncated any way that
-// continued off-screen — which is what made it refuse, and take silly routes,
-// depending on where you happened to be looking.
+// Reads a Protomaps PMTiles archive directly (`shared/src/snapTiles.ts`), NOT
+// the rendered map: querying the rendered map would tie snapping to the active
+// basemap and zoom level, and truncate ways continuing off-screen.
 //
 // OFFLINE: a downloaded basemap region IS a .pmtiles file in app-private
 // storage, so when the segment falls inside one, the same reader is pointed at

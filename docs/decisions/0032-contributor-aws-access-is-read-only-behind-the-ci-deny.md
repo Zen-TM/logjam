@@ -42,6 +42,14 @@ and the user directory out of CI.
   through the console.
 - Terraform does not manage the login profile. The maintainer sets and resets
   the password by hand.
+- **Update 2026-10-18: the state is readable through a PR.** A PR's plan job
+  now runs without the maintainer's approval
+  ([0035](0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)),
+  so a contributor who can push a branch can read the state through it. The
+  Deny on the state bucket still keeps it out of the console, but it is no
+  longer a boundary: what keeps the state harmless is that it holds no
+  secret a read-only identity cannot already read, and `plan-summary.mjs`
+  refuses a plan that adds one. Everything else above stands.
 
 Guard: the run `contributor_is_read_only_and_mfa_gated` in
 `infra/terraform/envs/prod/tests/guards.tftest.hcl` fails on a second

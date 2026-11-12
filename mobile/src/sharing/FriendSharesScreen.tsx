@@ -2,7 +2,7 @@
 // he let me see?"
 //
 // Sharing is AUTHORED per item, from that item's own sheet, so nothing else in
-// the app can answer the question from the person's side. Reached by tapping a
+// Logjam GPS can answer the question from the person's side. Reached by tapping a
 // friend on the Friends screen (a row in that friend's overflow sheet, not the
 // row itself: per-row actions live behind the sheet there precisely so a mis-tap
 // cannot revoke anything).
@@ -14,9 +14,8 @@
 // checkbox in the same 40pt box.
 //
 // THE TWO DIRECTIONS GET DIFFERENT VERBS, and `friendShareRows.ts` (shared) owns which
-// and why. Forward: share these with someone else (the existing bulk-share
-// sheet, unchanged) and unshare them. Received: save a copy of a place, and
-// remove my own access. There is NO delete anywhere on this screen, in the bar
+// and why. Forward: share these with someone else (the bulk-share sheet) and
+// unshare them. Received: save a copy of a place, and remove my own access. There is NO delete anywhere on this screen, in the bar
 // or in a sheet — every other verb here ends a RELATIONSHIP, while delete would
 // end the record for me and for everyone else I had shared it with, off a
 // screen scoped to one person. It belongs on Places and Saved, where a row
@@ -37,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 import {
   buildShareCards,
@@ -65,6 +64,7 @@ import {
   type FriendShares,
   type IconIdea,
   type SectionKeysOn,
+  friendSeesUnit,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -75,6 +75,7 @@ import { requestSync } from "../sync/syncEngine";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
+  confirm,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -89,6 +90,7 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { BulkShareButton, BulkShareSheet } from "./BulkShareSheet";
 import { CopySheet } from "./CopySheet";
@@ -102,14 +104,13 @@ import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 const copy = FRIEND_SHARES.copy;
 
 /**
- * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
- * the rest of the app draws for them.
+ * The idea per kind: a place, a route, a LiDAR topo — the same three
+ * the rest of Logjam GPS draws for them.
  */
 const SHARE_KIND_ICON = {
   place: "place",
   route: "route",
   topoJob: "lidar",
-  geoPdfJob: "geoPdf",
 } as const satisfies Record<FriendShareRow["entityType"], IconIdea>;
 
 const cardKey = (card: FriendShareCard) => card.key;
@@ -133,15 +134,18 @@ export function FriendSharesScreen({
   friendshipId,
   username,
   onBack,
+  backLabel,
   onOpenPlace,
 }: {
   friendshipId: string;
   username: string;
   onBack: () => void;
+  backLabel: string;
   /** Open a place's detail page. Pushed in the caller's stack, so Back returns here. */
   onOpenPlace: (placeId: string) => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -161,7 +165,7 @@ export function FriendSharesScreen({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") =>
+    (text: string, tone: ToastMessage["tone"] = "done") =>
       setToast({ text, tone, nonce: Date.now() }),
     [],
   );
@@ -255,35 +259,31 @@ export function FriendSharesScreen({
   );
 
   const runUnshare = useCallback(
-    (targets: FriendShareCard[]) => {
-      const confirm = unshareAllConfirm({
+    async (targets: FriendShareCard[]) => {
+      const ask = unshareAllConfirm({
         count: targets.length,
         friendName: username,
         includesPlace: targets.some((card) => card.row.entityType === "place"),
       });
-      Alert.alert(confirm.title, confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Unshare",
-          style: "destructive",
-          onPress: () => {
-            setBusy(true);
-            void unshareWithFriend(friendshipId, targets.map(shareCardItem))
-              .then(async ({ revokedCount }) => {
-                clearSelection();
-                notify(
-                  unshareOutcomeMessage({ revokedCount, friendName: username }),
-                );
-                await settle(true);
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify(copy.unshareFailed, "error");
-              })
-              .finally(() => setBusy(false));
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: ask.title,
+        confirmBody: ask.body,
+        confirmLabel: "Stop sharing",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      setBusy(true);
+      void unshareWithFriend(friendshipId, targets.map(shareCardItem))
+        .then(async ({ revokedCount }) => {
+          clearSelection();
+          notify(unshareOutcomeMessage({ revokedCount, friendName: username }));
+          await settle(true);
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify(copy.unshareFailed, "error");
+        })
+        .finally(() => setBusy(false));
     },
     [clearSelection, friendshipId, notify, settle, username],
   );
@@ -375,47 +375,40 @@ export function FriendSharesScreen({
    * leaves the screen now rather than on the next pull.
    */
   const runRemove = useCallback(
-    (targets: FriendShareCard[]) => {
-      const confirm = removeAllConfirm({
+    async (targets: FriendShareCard[]) => {
+      const ask = removeAllConfirm({
         count: targets.length,
         friendName: username,
         copyableCount: targets.filter((card) => card.copyable).length,
       });
-      Alert.alert(confirm.title, confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setBusy(true);
-            const failed: string[] = [];
-            let removed = 0;
-            void (async () => {
-              for (const card of targets) {
-                try {
-                  if (card.row.entityType === "place") {
-                    await removeSharedPlace(card.row.entityId);
-                  } else {
-                    await removeSharedEntity(
-                      card.row.entityType,
-                      card.row.entityId,
-                    );
-                  }
-                  removed += 1;
-                } catch (err) {
-                  console.error(err);
-                  failed.push(card.title);
-                }
-              }
-              clearSelection();
-              const report = removeOutcomeMessage({ removed, failed });
-              notify(report.text, report.tone);
-              await settle(false);
-              setBusy(false);
-            })();
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: ask.title,
+        confirmBody: ask.body,
+        confirmLabel: "Remove",
+        tone: "filled",
+      });
+      if (!ok) return;
+      setBusy(true);
+      const failed: string[] = [];
+      let removed = 0;
+      for (const card of targets) {
+        try {
+          if (card.row.entityType === "place") {
+            await removeSharedPlace(card.row.entityId);
+          } else {
+            await removeSharedEntity(card.row.entityType, card.row.entityId);
+          }
+          removed += 1;
+        } catch (err) {
+          console.error(err);
+          failed.push(card.title);
+        }
+      }
+      clearSelection();
+      const report = removeOutcomeMessage({ removed, failed });
+      notify(report.text, report.tone);
+      await settle(false);
+      setBusy(false);
     },
     [clearSelection, notify, settle, username],
   );
@@ -441,7 +434,7 @@ export function FriendSharesScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow="Sharing" title={username} onBack={onBack} />
+        <Hero title={username} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -471,13 +464,11 @@ export function FriendSharesScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow="Sharing"
         title={username}
         onBack={onBack}
+        backLabel={backLabel}
         value={String(theirCount)}
-        valueSuffix={
-          theirCount === 1 ? "item they can see" : "items they can see"
-        }
+        valueSuffix={friendSeesUnit(theirCount)}
       />
     ),
     directions: () => (
@@ -572,8 +563,9 @@ export function FriendSharesScreen({
           data={cards}
           keyExtractor={cardKey}
           renderItem={renderItem}
+          {...pull.scrollProps}
           refreshControl={
-            <RefreshControl
+            <pull.Refresh
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={theme.accent}
@@ -801,7 +793,7 @@ function ShareCardMenu({
           the glyph of the row directly above: these lists are scanned by
           glyph, and giving the irreversible verb the same one as the
           recoverable verb beside it is how a user taps the wrong one. Not
-          `download`, which everywhere else in this app means BYTES ONTO THIS
+          `download`, which everywhere else in Logjam GPS means BYTES ONTO THIS
           DEVICE (Save as GPX/KML, region downloads, the auto-download
           settings) — in the route sheet it would be the third `download` in
           one list, two rows under "Save as KML". Archiving is exactly this

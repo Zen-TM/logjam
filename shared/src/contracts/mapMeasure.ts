@@ -30,6 +30,8 @@ export const MAP_MEASURE = {
     distance: "Distance",
     ascent: PAIRED_STAT_LABELS.ascent,
     descent: PAIRED_STAT_LABELS.descent,
+    /** After the lowest–highest range: "412–655 m above sea level". */
+    aboveSeaLevel: "above sea level",
     readingTerrain: "Reading the terrain…",
     snap: "Snap to",
     fromHere: "Measure from here",
@@ -62,17 +64,20 @@ type MeasureVerbDeclaration = {
   label: string;
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
 };
 
 /** In the order each client draws them. */
 export const MAP_MEASURE_VERBS = [
   { id: "undo", icon: "undo", label: "Undo the last change" },
-  // Empties the points and stays in the tool.
-  { id: "clear", icon: "delete", label: "Clear" },
+  // Empties the points and stays in the tool; undoable. The trash glyph means
+  // this and only this on both clients.
+  { id: "clear", icon: "delete", label: "Clear all points" },
   {
     id: "leave",
-    icon: "delete",
-    label: "Clear the measurement and close the tool",
+    icon: "close",
+    label: "Close the tool",
     on: "gps",
     reason:
       "Logjam Web's tool is a page in the panel, and a page is left by the × its hero draws.",

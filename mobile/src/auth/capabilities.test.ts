@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
   capabilityRowProps,
+  changeEmailRowProps,
   capabilityScreenBlock,
   capabilityStatus,
   fieldDefsBlockedReason,
@@ -15,13 +17,12 @@ const ALL_CAPABILITIES: Capability[] = [
   "sharing",
   "friends",
   "inbox",
+  "plans",
   "lidarOverlays",
-  "accountGeoPdf",
-  "vectorRegionDownload",
+  "placeSearch",
   "serverPrefs",
   "pushNotifications",
   "syncNow",
-  "offlineSettings",
 ];
 
 describe("capabilityStatus", () => {
@@ -57,7 +58,7 @@ describe("capabilityStatus", () => {
 
   it("blocks connection-dependent capabilities for a linked user offline", () => {
     for (const capability of ALL_CAPABILITIES.filter(
-      (c) => c !== "inbox" && c !== "offlineSettings",
+      (c) => c !== "inbox" && c !== "plans",
     )) {
       expect(capabilityStatus(capability, "linked", false)).toEqual({
         status: "unavailable",
@@ -70,6 +71,15 @@ describe("capabilityStatus", () => {
   // offline still gets the last fetched notifications rather than a dead row.
   it("keeps the inbox available for a linked user offline", () => {
     expect(capabilityStatus("inbox", "linked", false)).toEqual({
+      status: "available",
+    });
+  });
+
+  // Plans read from the plans cache (src/plans/plansCache.ts), so a plan
+  // opened before still reads in a canyon. Mutation: set `plans: true` in
+  // NEEDS_CONNECTION.
+  it("keeps plans available for a linked user offline", () => {
+    expect(capabilityStatus("plans", "linked", false)).toEqual({
       status: "available",
     });
   });
@@ -185,9 +195,8 @@ describe("capabilityRowProps", () => {
 
 // Custom fields are deliberately NOT in the union above, on EITHER axis:
 // definitions are rows in the local mirror written through the outbox, so
-// nothing about them needs an account or a connection. This test is what stops
-// a gate quietly coming back — it used to block a linked user offline, when an
-// account's list lived on the user record and was shared with the web.
+// nothing about them needs an account or a connection. This test stops a
+// gate quietly coming back.
 describe("fieldDefsBlockedReason", () => {
   it("never blocks anyone, in any combination", () => {
     for (const accountState of ["guest", "linked"] as const) {
@@ -195,5 +204,40 @@ describe("fieldDefsBlockedReason", () => {
         expect(fieldDefsBlockedReason(accountState, online)).toBeUndefined();
       }
     }
+  });
+});
+
+// Guard: fake auth has no Cognito session, so change-email (a Cognito call)
+// is dimmed there with a reason. Drop the fake branch in changeEmailRowProps
+// and the first test goes red; widen it to Cognito and the second does.
+describe("changeEmailRowProps", () => {
+  it("dims the row with a reason under fake auth, online or not", () => {
+    for (const online of [true, false]) {
+      expect(changeEmailRowProps(online, "fake")).toEqual({
+        disabled: true,
+        subtitle: "Not available under fake sign-in.",
+      });
+    }
+  });
+
+  it("leaves a real-auth build to the ordinary connection gate", () => {
+    expect(changeEmailRowProps(true, "oidc")).toEqual({ disabled: false });
+    expect(changeEmailRowProps(false, "oidc")).toEqual({
+      disabled: true,
+      subtitle: "Needs a connection",
+    });
+  });
+});
+
+// Red when the email row stops using it: the row would be live under fake auth
+// and fail on press. To see it: swap the `changeEmailRowProps(online,
+// config.authMode)` spread in AccountScreen.tsx for `capabilityRowProps`.
+describe("the account screen's email row", () => {
+  it("takes its disabled state from changeEmailRowProps", () => {
+    const screen = readFileSync(
+      new URL("../screens/AccountScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(screen).toContain("changeEmailRowProps(online, config.authMode)");
   });
 });

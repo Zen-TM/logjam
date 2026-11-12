@@ -1,16 +1,15 @@
 /**
  * Cognito CustomEmailSender Lambda.
  *
- * Why this exists: the user pool was on `email_sending_account = COGNITO_DEFAULT`,
- * which mails verification codes from `no-reply@verificationemail.com` on AWS's
- * shared IP pool — no DKIM/DMARC alignment with logjamnsw.com, so Gmail spam-bins
- * every signup code. SES is unavailable (prod access denied; Resend replaced it).
- * Routing Cognito's emails through Resend (verified DKIM/SPF/DMARC on
- * notifications.logjamnsw.com) lands them in the inbox.
+ * Why this exists: Cognito's default email sending mails verification codes from
+ * `no-reply@verificationemail.com` on AWS's shared IP pool without DKIM/DMARC
+ * alignment with logjamnsw.com, so Gmail spam-bins signup codes. SES is
+ * unavailable. Routing Cognito's emails through Resend (verified
+ * DKIM/SPF/DMARC on notifications.logjamnsw.com) lands them in the inbox.
  *
- * Mechanism: enabling CustomEmailSender means Cognito no longer sends mail itself.
- * For every email trigger it encrypts the code with our KMS CMK and invokes this
- * function; we decrypt with the AWS Encryption SDK and send via Resend.
+ * Mechanism: with CustomEmailSender enabled, Cognito encrypts the code with our
+ * KMS CMK and invokes this function instead of sending mail directly; we
+ * decrypt with the AWS Encryption SDK and send via Resend.
  *
  * Privacy: never log the decrypted code or the recipient address (mirrors the
  * api/src/lib/logger.ts redaction discipline). Errors are logged by class only.

@@ -2,12 +2,9 @@
 // slot from its own options sheet: a route you drew, a recorded track, an
 // imported file.
 //
-// It was `routes/LinkPlaceSheet`, a sheet of its own that the route's options
-// sheet closed itself to open. Two more kinds wanted the same list, and three
-// near-copies of a place picker is how one of them ends up with a different
-// filter or a different warning. It returns `{ header, body }` — the shape
-// `useSharePanel` established — so the sheet that owns the verb renders it as a
-// SUB-MODE and never stacks a second sheet (DESIGN.md).
+// Returns `{ header, body }` so the sheet that owns the verb renders it as a
+// sub-mode and never stacks a second sheet. Sharing one panel ensures all route
+// slot sources use consistent place filtering and warnings.
 //
 // Reads places from the MIRROR, so it works with no signal: the link is an
 // outbox op like any other edit. Only places the user OWNS are offered — the
@@ -20,7 +17,9 @@ import { Text, View } from "react-native";
 import {
   TRACK_MIME_TYPES,
   messageFromError,
+  SHARE_SENTENCES,
   truncationHint,
+  WayRemovalError,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -66,7 +65,11 @@ export function usePlacePicker({
   /** Offered as the first row when the asset is already linked somewhere. */
   onUnlink?: () => Promise<unknown>;
   /** Write the new way into this place. The caller says what happened. */
-  attach: (placeId: string, placeName: string) => Promise<unknown>;
+  attach: (
+    placeId: string,
+    placeName: string,
+    replaces?: string,
+  ) => Promise<unknown>;
   /** Filled — leave the sub-mode. */
   onDone: () => void;
   onError: (message: string) => void;
@@ -108,7 +111,11 @@ export function usePlacePicker({
         // renders UNDER an open sheet (a Modal), so a failure reported with the
         // picker still up is a failure the user never sees.
         onDone();
-        onError(messageFromError(err, failure));
+        onError(
+          err instanceof WayRemovalError
+            ? err.message
+            : messageFromError(err, failure),
+        );
       })
       .finally(() => setBusy(false));
   };
@@ -126,11 +133,11 @@ export function usePlacePicker({
           placeName,
           source,
           occupant,
-          write: () => attach(placeId, placeName),
+          write: (replaces) => attach(placeId, placeName, replaces),
         }).then((filled) => {
           if (filled) onDone();
         }),
-      "Couldn't attach that to the place.",
+      "Couldn't link that to the place.",
     );
   };
 
@@ -141,9 +148,7 @@ export function usePlacePicker({
     header: (
       <View style={styles.header}>
         {promise ? <Text style={styles.hint}>{promise}</Text> : null}
-        <Text style={styles.hint}>
-          Anyone you share a place with can see linked routes.
-        </Text>
+        <Text style={styles.hint}>{SHARE_SENTENCES.linkedRoutes}</Text>
         <TextField label="Find a place" value={query} onChangeText={setQuery} />
       </View>
     ),

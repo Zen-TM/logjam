@@ -29,10 +29,7 @@ describe("parseCsv", () => {
     expect(rows[0]).toEqual({ name: "Only name", notes: "" });
   });
 
-  // FECO-002: PapaParse's own result.errors (unbalanced quotes, too-many-fields
-  // rows) used to be silently dropped — the caller had no way to know a row's
-  // fields had misaligned.
-  it("surfaces PapaParse row errors instead of discarding them (FECO-002)", async () => {
+  it("surfaces PapaParse row errors instead of discarding them", async () => {
     // Row 2 has an extra field ("B" has 3 commas where the header has 2).
     const { parseErrors } = await parseCsv(
       csvFile("name,notes\nA,fine\nB,too,many,fields"),
@@ -46,7 +43,7 @@ describe("parseCsv", () => {
     expect(parseErrors).toEqual([]);
   });
 
-  // FECO-002: PapaParse (5.5+) auto-renames a duplicate header rather than
+  // PapaParse (5.5+) auto-renames a duplicate header rather than
   // letting the second column overwrite the first's values — both columns'
   // data survives under distinct keys — but the rename is invisible unless
   // surfaced, so a user mapping columns sees an unexplained "lat_1" with no

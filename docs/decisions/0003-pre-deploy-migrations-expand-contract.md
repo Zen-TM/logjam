@@ -33,6 +33,16 @@ mid-swap or break the old image.
   1. **Expand:** add the new shape, both codes tolerate it, deploy;
   2. **Contract:** later, once no running code uses the old shape, remove it.
   A destructive single-step migration will error mid-swap or break the old image.
+- **Update 2026-10-24: one narrow exception, for usernames.** Migration
+  `20261024150000_username_unique_as_read` adds a unique index on
+  `lower(username)` in the same release as the API change that names it
+  (issue #360). It narrows what the previous image may write: a first login
+  whose name is a case variant of an existing one gets a P2002 that image
+  cannot name, so it answers 500 instead of creating the duplicate that was
+  the bug. This costs a failed first login during the swap window and for as
+  long as a rollback keeps the newer schema, and loses no row; PATCH is
+  unaffected because it already answers any P2002 with its 409, and reads keep
+  the exact index. Everything else above stands.
 
 ## Consequences
 
@@ -51,3 +61,8 @@ mid-swap or break the old image.
   old version still serving.
 - Destructive single-step migrations: rejected; errors mid-swap or breaks the old
   image during the swap window.
+- Splitting the username index from the API change that names it (2026-10-24):
+  rejected in favour of the exception above, because it would take two
+  releases to close issue #360 and leave the duplicate-case window open for
+  one of them; the accepted cost is a failed case-variant first login during a
+  swap or rollback, never data loss.

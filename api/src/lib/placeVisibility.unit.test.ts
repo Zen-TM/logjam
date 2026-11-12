@@ -28,7 +28,7 @@ const schema = readFileSync(
  * The SCALAR fields of `model Place` — the ones that reach a response.
  * Relations are excluded: they are not columns, and nothing spreads them onto
  * a place response (the includes that do carry them are separate decisions,
- * `placeListInclude` being the one with its own rule).
+ * `withPlaceListCounts` being the one with its own rule).
  */
 function placeScalarFields(): string[] {
   const body = /^model Place \{$([\s\S]*?)^\}$/m.exec(schema)?.[1];

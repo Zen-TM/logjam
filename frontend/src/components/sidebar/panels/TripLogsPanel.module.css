@@ -9,17 +9,12 @@
 }
 
 .rails {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gutter) 8px;
+  composes: rails from "../../../ui/Chip.module.css";
 }
 
-/* Selection keeps the view switch mounted but out of reach, so the list does
-   not jump when the activity rail becomes the bar. */
-.inert {
-  opacity: 0.4;
+.search {
+  flex-shrink: 0;
+  padding: 0 var(--gutter) var(--space-1);
 }
 
 .strip {
@@ -80,15 +75,6 @@
   display: inline-flex;
   align-items: center;
   padding: 0 2px;
-}
-
-.emptyArea {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 var(--gutter) 15%;
 }
 
 .loading {

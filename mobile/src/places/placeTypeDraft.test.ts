@@ -5,9 +5,8 @@ import { placeTypeFormKey } from "./placeTypeDraft";
 const cave = { id: "type-cave" };
 
 describe("the place type form's draft", () => {
-  // Add "Cave", then open "New type" again: the form still held Cave's name,
-  // icon and colour. The form is a hook that is never unmounted, and both
-  // opens were the one key "new".
+  // Opening "New type" after editing a type must not retain the previous
+  // type's name, icon and colour: the form is a hook that is never unmounted.
   // Mutation: a key that ignores `open`.
   it("starts over each time the form is opened", () => {
     expect(placeTypeFormKey(false, null)).not.toBe(

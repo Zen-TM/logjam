@@ -31,8 +31,7 @@ flowchart LR
   end
 
   subgraph vpc[VPC]
-    eb["API<br/>(Elastic Beanstalk)"]
-    rds[("RDS Postgres")]
+    brain["The brain<br/>(one EC2 instance:<br/>the API and Postgres)"]
   end
 
   frontend[("frontend<br/>bucket")]
@@ -45,10 +44,9 @@ flowchart LR
   cfweb -- "/master/* basemap tiles" --> data
   web -- "JWT" --> cfapi
   gps -- "JWT" --> cfapi
-  cfapi --> eb
-  eb -- "verify JWT" --> cognito
-  eb --> rds
-  eb -- "mint presigned URLs" --> data
+  cfapi --> brain
+  brain -- "verify JWT" --> cognito
+  brain -- "mint presigned URLs" --> data
   web -. "presigned GET/PUT" .-> data
   gps -. "presigned GET/PUT" .-> data
 ```
@@ -57,27 +55,27 @@ Work that outlives a request runs outside it:
 
 ```mermaid
 flowchart LR
-  eb["API<br/>(Elastic Beanstalk)"]
+  brain["The brain<br/>(the API)"]
   workers["Workers<br/>(ECS Fargate, one task per job)"]
-  rds[("RDS Postgres")]
+  pg[("Postgres<br/>(on the brain)")]
   data[("topo-jobs<br/>bucket")]
   cognito["Cognito"]
   lambda["Custom email<br/>sender Lambda"]
   resend["Resend<br/>(email)"]
   expo["Expo<br/>(push)"]
 
-  eb -- "RunTask / StopTask" --> workers
-  workers -- "claim job, write result" --> rds
+  brain -- "RunTask / StopTask" --> workers
+  workers -- "claim job, write result" --> pg
   workers -- "read input, write output" --> data
   workers -- "job done or failed" --> resend
   workers --> expo
-  eb -- "sweep results" --> resend
-  eb --> expo
+  brain -- "sweep results" --> resend
+  brain --> expo
   cognito -- "verification codes" --> lambda --> resend
 ```
 
 **Clients.** Logjam Web is a React SPA in `frontend/`; Logjam GPS is an
-Expo/React Native app in `mobile/`. Both sign in with Cognito and send its
+Expo/React Native app in `mobile/`. Both sign in through OIDC (Cognito in prod) and send its
 JWT to the API. They share logic through `shared/`, not through generated
 UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
 
@@ -87,22 +85,29 @@ UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
   SPA from the frontend bucket; `/master/*` serves the shared basemap tiles
   from the topo-jobs bucket. That is why the apps' topo CDN base URL
   (`terraform output topo_cdn_base_url`) is the site itself.
-- *api* serves `api.logjamnsw.com` and forwards everything, uncached, to
-  Elastic Beanstalk.
+- *api* serves `api.logjamnsw.com` and forwards everything, uncached, to the
+  brain.
 
 The API accepts only traffic that came through the *api* distribution. Two
-guards enforce this: the instance's security group admits port 80 only from
-CloudFront's address ranges (`envs/prod/eb.tf`), and CloudFront adds a secret
+guards enforce this: the brain's security group admits port 80 only from
+CloudFront's address ranges (`envs/prod/brain_network.tf`), and CloudFront adds a secret
 `X-Origin-Verify` header that the API checks (`envs/prod/origin_verify.tf`,
 `api/src/index.ts`).
 
-**API.** Node/Express in `api/`, one Docker container on a single-instance
-Elastic Beanstalk environment (no load balancer). The container also runs the
-periodic sweeps (`api/src/lib/topoJobReaper.ts`): it fails stuck jobs, expires
-old exports, queues auto-exports, removes orphaned media uploads and expired
-"Send a copy" files, and meters egress. A deploy briefly takes the API down.
-That is why deploys smoke-test and roll back on their own
-([below](#how-a-change-reaches-prod)).
+**The brain.** One EC2 instance (`envs/prod/brain_instance.tf`) running Docker
+Compose (`infra/brain/`): the API and Postgres, with the database on its own
+encrypted disk. It has no load balancer, no autoscaling and no SSH; the
+maintainer reaches it only through Session Manager
+([0047](decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md),
+[`operations/brain.md`](operations/brain.md)). A timer on the host makes the
+running API match a release pointer in a bucket.
+
+**API.** Node/Express in `api/`, one Docker container on the brain. The
+container also runs the periodic sweeps (`api/src/lib/topoJobReaper.ts`), in
+one process per database: it fails stuck jobs, expires old exports, removes
+orphaned media uploads and expired "Send a copy" files, and meters egress. A
+release recreates the container, a few seconds' gap. That is why deploys
+smoke-test and roll back on their own ([below](#how-a-change-reaches-prod)).
 
 **Workers.** On-demand ECS Fargate tasks, one per job, with no long-running
 service. The API launches them with `RunTask` through
@@ -113,42 +118,57 @@ definitions are in `envs/prod/ecs.tf`:
 | Task family | Image | Runs | Launched by |
 |---|---|---|---|
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
-| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: tiles → download file | `POST /topo-exports`, or the auto-export sweep (`EXPORT_JOB_ID`) |
-| `logjam-geo-pdf-worker` | API | `api/src/worker/geoPdfWorker.ts` | `POST /geo-pdf` (`GEO_PDF_JOB_ID`) |
+| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
+| `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
+| `logjam-gauges` | topo worker | `topo/build_gauges.py`: WaterNSW latest readings (every 2 hours) and BoM history (daily) → the public river gauge files under `master/gauges/` | an EventBridge schedule, every 2 hours |
+| `logjam-fire-history` | topo worker | `topo/build_fire_history.py`: NPWS's fire history map service → the most-recent-fire-year raster the vegetation layer reads, under `fire/`, and the public Fire history overlay archive under `master/fire/` | an EventBridge schedule, monthly |
+| `logjam-coverage` | topo worker | `topo/build_coverage.py`: the ACCC's mobile coverage maps on data.gov.au → the public Coverage overlay archive under `master/coverage/` | an EventBridge schedule, monthly |
+| `logjam-api-script` | API | a one-off maintainer script (`api/src/scripts/`); formerly the GeoPDF worker, [0043](decisions/0043-geopdfs-render-in-the-browser.md) | the maintainer, by hand ([announcements](operations/announcements.md#in-prod)) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
 The job workers write their results straight to Postgres and S3, then
-notify the user in the app, by push and by email.
+notify the user in Logjam Web and Logjam GPS, by push and by email.
 [`infra/scripts/pin-release.sh`](../infra/scripts/pin-release.sh) declares
 which family runs which image.
 
-**Data.** RDS Postgres is private to the VPC (not publicly accessible). The
-API and the migrate task connect as a least-privilege role over verified TLS
-([0001](decisions/0001-rds-tls-via-bundled-ca.md)). The app's S3 buckets are
-private. Clients read and write them only through short-lived presigned URLs,
+**Data.** Postgres runs on the brain and takes connections only from the
+workers' security group (and the API beside it). The API, the workers and the
+migrate task connect as a least-privilege role over TLS, verifying the brain's
+own certificate by name (bundled into the images). pgBackRest ships WAL every
+minute and a full backup every night to a bucket nobody can empty for 7 days,
+and a scheduled task restores the newest backup daily to prove it works. Until
+the teardown, Elastic Beanstalk and RDS still exist, idle and read-only, as the
+rollback. Logjam's S3 buckets are private. Clients read and write them only through short-lived presigned URLs,
 and CloudFront reads them through origin access control:
 
 | Bucket | Holds | `terraform output` |
 |---|---|---|
 | media | photos and other trip media; "Send a copy" files (expire after 8 days) | `s3_bucket_media` |
-| topo-jobs | LiDAR ZIP uploads, job outputs, exports and GeoPDFs, the `/master/*` basemap | `s3_bucket_topo` |
+| topo-jobs | LiDAR ZIP uploads, job outputs, exports, the `/master/*` basemap | `s3_bucket_topo` |
 | frontend | the Logjam Web build | `s3_bucket_frontend` |
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
+| brain backups | the database's WAL and full backups, object-locked for 7 days (`envs/prod/brain_s3.tf`) | none: `logjam-brain-backups-` plus the account id |
+| brain signals | the release pointer, the brain's status and the restore drill's verdict; no user data | none: `logjam-brain-signals-` plus the account id |
 
-**Auth.** One Cognito user pool. The API verifies each request's JWT against
+**Auth.** One Cognito user pool, with a hosted-pages domain and Logjam's
+branding (Managed Login, `envs/prod/cognito.tf`), which is the fallback when
+either client's own forms (ADR 0045) cannot finish a sign-in. Account deletion has the API call `AdminDeleteUser` on that pool (its
+IAM grant is `AdminGetUser` and `AdminDeleteUser`, `envs/prod/iam.tf`). The API verifies each request's JWT against
 the pool's public keys (`api/src/middleware/auth.ts`). Cognito does not send
 its own email: it hands each verification code, encrypted with a KMS key, to
 a custom email sender Lambda (`infra/lambda/cognito-email-sender`), which
 sends it through Resend (`envs/prod/lambda_cognito_email.tf`).
 
-**Email and push.** Job emails go through Resend (`api/src/services/email.ts`,
-`topo/email_send.py`); pushes go through Expo's push service
+**Email and push.** Job emails go over SMTP (`api/src/services/email.ts`,
+`topo/email_send.py`), to Resend's relay in prod and to Mailpit in local dev, so
+the provider is config; pushes go through Expo's push service
 (`api/src/services/push.ts`, `topo/push_send.py`). Both are best-effort. The
 in-app notification row is the record.
 
 **Monitoring.** CloudWatch alarms in `envs/prod/monitoring.tf` all publish to
-one SNS topic, which emails the maintainer.
+one SNS topic, which emails the maintainer. The brain also has an outside
+check, a Lambda every 5 minutes (`infra/lambda/brain-watchdog`).
 [`operations/alarms.md`](operations/alarms.md) lists each alarm and what to do
 first. A budget alarm (`envs/prod/budgets.tf`) and a nightly drift check
 (`terraform-drift.yml`, which plans `envs/prod` and `envs/github` and opens an
@@ -245,18 +265,21 @@ task. The worker claims the row by a guarded status change (`… WHERE status =
 or reaped while its task was starting is claimed by nobody, and the worker
 exits without doing anything. Apart from the worker, only the sweep and the
 owner deleting a job move it out of an in-progress state. The sweep's
-timeouts are the `TOPO_REAPER_*` and `GEO_PDF_*` variables in
+timeouts are the `TOPO_REAPER_*` variables in
 `api/src/lib/env.ts`. When the sweep fails a job, it stops the job's task by
 the task ARN saved on the row.
 
 ### Topo jobs
 
 A user uploads an ELVIS LiDAR ZIP straight to S3, then starts the job
-(`api/src/routes/topoJobs.ts`, `topo/worker.py`):
+(`api/src/routes/topoJobs.ts`, `topo/worker.py`). The ZIP goes as an S3
+multipart upload: the API signs URLs for its parts (`/parts`), Logjam Web
+sends them a few at a time, and the API joins them (`/complete`). After a
+failure, Logjam Web sends only the missing parts, to the same job.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> uploading: POST /topo-jobs<br/>(returns a presigned upload URL)
+  [*] --> uploading: POST /topo-jobs<br/>(opens the multipart upload)
   uploading --> pending: POST /topo-jobs/{id}/start<br/>(credits, quota, capacity checked)
   pending --> processing: worker claims the job
   pending --> failed: RunTask failed, or the sweep's<br/>pending timeout, or the owner deleted it
@@ -268,23 +291,24 @@ stateDiagram-v2
 
 While processing, the worker records progress, and the sweep fails the job
 only when that progress stops or the job passes an absolute ceiling. A slow
-job that is still advancing is left alone. Nothing fails a job left in
-`uploading`; its owner deletes it. Deleting a job that is still running fails
+job that is still advancing is left alone. The sweep deletes a job left in
+`uploading` for a day, with its ZIP and its parts; the topo bucket's lifecycle
+rule aborts any parts left behind two days after the upload began. Deleting a job that is still running fails
 it, stops its task and then removes the row. Deleting also fails the exports
 queued from the job, and is refused while one of its exports is running.
-When a job with auto-export turned on completes, the sweep queues its export.
 
-### Exports and GeoPDFs
+### Exports
 
-Topo exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`)
-and GeoPDFs (`api/src/routes/geoPdf.ts`, `api/src/worker/geoPdfWorker.ts`)
-share one state machine:
+Exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`) follow
+one state machine. A GeoPDF is not a job: Logjam Web renders it in the browser
+and nothing about it reaches the API
+([0043](decisions/0043-geopdfs-render-in-the-browser.md)).
 
 ```mermaid
 stateDiagram-v2
-  [*] --> queued: POST /topo-exports or /geo-pdf<br/>(or the auto-export sweep)
+  [*] --> queued: POST /topo-exports
   queued --> running: worker claims the job
-  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or (export) its source topo job was deleted
+  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or its source topo job was deleted
   running --> completed: file uploaded to the topo-jobs bucket
   running --> failed: worker error, or the sweep's running timeout
   completed --> [*]: the sweep deletes the file and the row<br/>after TOPO_EXPORT_TTL_MS
@@ -292,9 +316,15 @@ stateDiagram-v2
 ```
 
 A user can delete a `completed` or `failed` job, not a `queued` or `running`
-one. The topo-jobs bucket also expires `exports/` after 7 days as a
-backstop; the sweep's own expiry is the one that returns the user's storage
-quota.
+one. The topo-jobs bucket also expires `exports/` after 7 days as a backstop.
+
+A finished or failed export comes to the owner's Inbox (`topo_export_complete`,
+with its format and size) and, if they opted in, their email. Both link to
+`/?export=<id>`, which mints a fresh download URL and checks egress when it is
+opened: a presigned URL would be dead within hours. Logjam Web has no list of
+exports. An export is not charged to storage, because the owner can't see or
+delete it and it is gone in 7 days; its download is charged to egress. One user holds at most
+`MAX_LIVE_PER_USER` exports at a time (`topoExportLauncher.ts`).
 
 ## How a change reaches prod
 
@@ -303,12 +333,12 @@ releases Logjam GPS.
 
 | What changed | Workflow | What happens |
 |---|---|---|
-| `api/` | `deploy-api.yml`, after CI passes on `main` | Build and push the API image. Pin the API-image task definitions to it. Run the migrate task and stop if it fails. Swap Elastic Beanstalk to the new version. Smoke-test it, and roll back automatically if the smoke test fails. |
+| `api/` | `deploy-api.yml`, after CI passes on `main` | Build and push the API image. Pin the API-image task definitions to it. Run the migrate task and stop if it fails. Write the release pointer, which the brain's timer follows. Smoke-test it, and roll back automatically if the smoke test fails. |
 | `frontend/` | `deploy-frontend.yml`, after CI passes on `main` | Build, upload to the frontend bucket, switch `index.html`, invalidate the CloudFront cache. Smoke-test, and roll back automatically if it fails. |
 | `topo/` | `deploy-topo-worker.yml`, after CI passes on `main` | Build and push the worker image, then pin the topo task definitions to it. The next job runs it. |
 | `infra/terraform/envs/prod/` (and `modules/`), `infra/lambda/` | `terraform-plan.yml` (`plan-prod`) on the PR, `terraform-apply.yml` (`apply-prod`) on merge | The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0026](decisions/0026-plan-fingerprint-covers-planned-values.md)). |
 | `infra/terraform/envs/github/` | `terraform-plan.yml` (`plan-github`) on the PR, `terraform-apply.yml` (`apply-github`) on merge | The repository's own GitHub settings: rulesets, Environments, Actions variables, labels. The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0025](decisions/0025-github-settings-in-terraform.md)). |
-| Logjam GPS | `deploy-mobile.yml`, on a `mobile-v*` tag the maintainer pushes | EAS builds it; a release tag also submits a draft to Google Play. OTA updates are signed and published by hand. See [`operations/mobile-release.md`](operations/mobile-release.md). |
+| Logjam GPS | `deploy-mobile.yml`, on a `mobile-v*` tag the maintainer pushes | EAS builds it; a release tag also submits a draft to Google Play. An OTA hotfix publishes from `ota-hotfix.yml` when the maintainer merges a PR labelled `ota-hotfix`, signed in the `mobile-ota` Environment ([0046](decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)). See [`operations/mobile-release.md`](operations/mobile-release.md). |
 
 Migrations run before the new API version serves traffic, so every migration
 must also work with the release before it
@@ -325,8 +355,9 @@ roles, all in `envs/prod/iam.tf` and `envs/prod/iam_apply.tf`:
 | apply (`github_actions_apply_role_arn`) | `terraform-apply.yml`: `apply-prod`, and `apply-github` only to write its state; the `envs/github` drift run only to read it | the job runs in the `prod` Environment; a permission boundary denies it user data, the database, secrets and changes to itself |
 | plan (`github_actions_plan_role_arn`) | `terraform-plan.yml` and the `envs/prod` drift run; for `plan-github`, only to read its state | a pull request, or `main`; read-only, and denied user data and secret values |
 
-Logjam GPS releases use a separate `mobile-release` Environment and never
-touch AWS.
+Logjam GPS releases use a separate `mobile-release` Environment (`mobile-v*`
+tags only), and OTA hotfixes and rollbacks a `mobile-ota` Environment (`main`
+only, holding the signing key); neither touches AWS.
 
 `envs/github` changes GitHub, not AWS, so it reaches GitHub through two
 GitHub Apps installed on this repository only, mirroring the plan and apply
@@ -356,6 +387,9 @@ repeat it.
   builds: [0022](decisions/0022-mobile-builds-supported-three-months.md), with
   [0017](decisions/0017-inbox-edits-are-outbox-ops.md) and
   [0018](decisions/0018-foreign-fields.md).
+- **The brain's rules** (one instance, data on a disk Terraform cannot destroy,
+  backups nobody can empty, CI never has a shell on it):
+  [0047](decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md).
 - **Prod, and this repository's GitHub settings, change only through a
   merged PR**:
   [0026](decisions/0026-plan-fingerprint-covers-planned-values.md),
@@ -373,10 +407,11 @@ access (`terraform init` first). The output always beats any copy of a value.
 | Audit bucket | `terraform output audit_bucket` |
 | CloudFront distributions | `terraform output web_cloudfront_distribution_id`, `api_cloudfront_distribution_id` |
 | Topo CDN base URL | `terraform output topo_cdn_base_url` |
-| Elastic Beanstalk environment | `terraform output eb_environment_name`, `eb_environment_cname` |
+| The brain's stable name (the database's host name) | `terraform output brain_public_dns`; its instance id changes on every replacement, so find it by its `Name` tag (`operations/brain.md`) |
+| Elastic Beanstalk environment (idle until the teardown) | `terraform output eb_environment_name`, `eb_environment_cname` |
 | ECS cluster, worker subnets and security group | `terraform output ecs_cluster`, `ecs_subnets`, `ecs_security_groups` |
 | ECR repositories | `terraform output ecr_api_repository_url`, `ecr_topo_worker_repository_url` |
-| Database endpoint, name, master secret | `terraform output rds_endpoint`, `rds_db_name`, `db_secret_arn` |
+| RDS endpoint, name, master secret (idle until the teardown) | `terraform output rds_endpoint`, `rds_db_name`, `db_secret_arn` |
 | Cognito pool and app client | `terraform output cognito_user_pool_id`, `cognito_client_id`, `cognito_region` |
 | Cognito email sender Lambda | `terraform output cognito_email_sender_function_name` |
 | Alarm topic | `terraform output alerts_topic_arn` |
@@ -388,7 +423,7 @@ access (`terraform init` first). The output always beats any copy of a value.
 
 You need neither AWS nor these ids to work on Logjam. `make setup`, then
 `make dev`, runs the whole stack locally. Postgres runs in Docker; MiniStack
-stands in for S3 and ECS, so jobs run as local containers; and auth is faked
+stands in for S3 and ECS, so jobs run as local containers; Postgres is the same image the brain runs; and auth is faked
 as the seeded user alice. `envs/local` provisions it with the same storage
 module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
 
@@ -401,4 +436,4 @@ module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
   each package's rules and how its tests run.
 - [`decisions/`](decisions/README.md): why.
 - [`operations/`](operations/): alarms, rollback, drills, saved queries, mobile
-  releases.
+  releases, maintainer announcements, the legacy LiDAR job purge.

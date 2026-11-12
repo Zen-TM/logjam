@@ -1,35 +1,28 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Amplify } from "aws-amplify";
 import "./index.css";
 import App from "./components/App.tsx";
 import { ThemePreferencesProvider } from "./themePreferences";
 import { ToastProvider } from "./components/feedback/ToastProvider";
 import { RootErrorBoundary } from "./components/feedback/RootErrorBoundary";
-import { captureFriendInvite } from "./pendingFriendInvite";
+import { friendInvite, planInvite } from "./pendingInvite";
 
-// Before anything renders or signs in: see pendingFriendInvite.ts.
-captureFriendInvite();
+// Before anything renders or signs in: see pendingInvite.ts.
+friendInvite.capture();
+planInvite.capture();
 
-if (import.meta.env.VITE_AUTH_MODE !== "fake") {
-  Amplify.configure({
-    Auth: {
-      Cognito: {
-        userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
-        userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
-      },
-    },
-  });
-}
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RootErrorBoundary>
-      <ThemePreferencesProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </ThemePreferencesProvider>
-    </RootErrorBoundary>
-  </StrictMode>,
-);
+// No #root: browser-check.js replaced it with the "needs a newer
+// browser" page. Test: src/browserCheck.test.ts.
+const root = document.getElementById("root");
+if (root)
+  createRoot(root).render(
+    <StrictMode>
+      <RootErrorBoundary>
+        <ThemePreferencesProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemePreferencesProvider>
+      </RootErrorBoundary>
+    </StrictMode>,
+  );

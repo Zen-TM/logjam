@@ -1,15 +1,15 @@
 // Whether the position under the location arrow is still worth trusting.
 //
-// The arrow is the one thing on this map a person acts on directly, and until
-// this existed it looked exactly the same whether the fix behind it was two
+// The arrow is the one thing on this map a person acts on directly, and without
+// this check it looks exactly the same whether the fix behind it is two
 // seconds old or two hours: walking into a slot place takes the sky away, the
 // watcher simply stops being called, and the last fix stays drawn — confident,
 // coloured, and increasingly a lie. Losing a signal is the ABSENCE of an event,
 // so nothing but a clock can notice it; this module is the rule, and the ticker
 // that runs it lives in MapScreen next to the watcher it judges.
 //
-// RN-free and pure so the rule is testable, because the fault it exists to
-// catch cannot be reproduced at a desk: you have to lose the sky to see it.
+// RN-free and pure so the rule is testable (gpsSignal.test.ts), because the fault
+// it exists to catch cannot be reproduced at a desk: you have to lose the sky to see it.
 //
 // PRIVACY: takes a timestamp and an accuracy RADIUS. No coordinate enters this
 // module and none is published from it.
@@ -25,8 +25,8 @@
  * This is only answerable because the watcher no longer carries a
  * `distanceInterval`: Android ANDs it with `timeInterval`, so with one set a
  * phone standing still produces NO callbacks at all, and "standing still" and
- * "no signal" would be the same observation. The 5 m displacement filter moved
- * into JS (see the watcher) so the dot and camera behave as they always did.
+ * "no signal" would be the same observation. The 5 m displacement filter is
+ * handled in JS (see the watcher) so the dot and camera stay still while stationary.
  */
 export const FIX_STALE_MS = 20_000;
 
@@ -43,11 +43,11 @@ export const FIX_STALE_MS = 20_000;
 export const FIX_COARSE_M = 100;
 
 /**
- * The displacement filter the OS used to apply, now applied here.
+ * Displacement filter applied to location fixes in JS.
  *
- * Same 5 m as the `distanceInterval` it replaces, and for the same reason: GPS
- * wander alone would otherwise walk the dot around a stationary user and, in a
- * follow mode, drag the camera with it.
+ * Replaces `distanceInterval` with the same 5 m threshold: GPS wander alone
+ * would otherwise walk the dot around a stationary user and, in a follow mode,
+ * drag the camera with it.
  */
 export const FIX_MOVE_MIN_M = 5;
 
@@ -65,7 +65,7 @@ export type FixLiveness = {
    *  watcher does is apply `getLastKnownPositionAsync`, which indoors or after a
    *  drive with location off can be hours old and hundreds of km away). */
   atMs: number;
-  /** Metres, 68% confidence. Null when the platform didn't say. */
+  /** Metres, 68% confidence. Null when the platform does not report it. */
   accuracyM: number | null;
 };
 
@@ -81,4 +81,64 @@ export function fixQuality(fix: FixLiveness | null, nowMs: number): FixQuality {
   if (nowMs - fix.atMs > FIX_STALE_MS) return "stale";
   if (fix.accuracyM != null && fix.accuracyM > FIX_COARSE_M) return "coarse";
   return "live";
+}
+
+/**
+ * How old a fix is, for the figure that greys with it: "45 s ago", "2 min ago".
+ * A figure that has gone stale says so in these words rather than staying
+ * confident, which is what makes it safe to leave on screen.
+ */
+export function fixAgeLabel(ageMs: number): string {
+  const seconds = Math.max(0, Math.round(ageMs / 1000));
+  if (seconds < 60) return `${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.floor(minutes / 60)} h ago`;
+}
+
+/**
+ * The liveness a watcher delivery proves.
+ *
+ * A delivery arriving NOW is the evidence of a live signal, so it is stamped
+ * with our clock: `Location.timestamp` is the platform's (on Android, often the
+ * GNSS time), and a phone whose clock has drifted from it past FIX_STALE_MS
+ * would otherwise read as stale on every single fix. Only the OS's cached
+ * `getLastKnownPositionAsync` fix keeps its own timestamp, because its age is
+ * the point.
+ */
+export function deliveredFix(
+  accuracyM: number | null,
+  nowMs: number,
+): FixLiveness {
+  return { atMs: nowMs, accuracyM };
+}
+
+/**
+ * The liveness of a fix that just arrived, for the arrow and for every figure
+ * from the position: our clock for a live delivery, the platform's only for
+ * the OS's cached one (`deliveredFix`).
+ */
+export function arrivedFix(
+  accuracyM: number | null,
+  platformMs: number,
+  nowMs: number,
+  cached: boolean,
+): FixLiveness {
+  return cached
+    ? { atMs: platformMs, accuracyM }
+    : deliveredFix(accuracyM, nowMs);
+}
+
+/**
+ * Fold an arriving fix into the last one. A live delivery always wins; the OS's
+ * cached fix only fills an empty slot. No timestamps are compared: the cached
+ * fix keeps the platform's clock (often GNSS time) and live ones use ours, so
+ * comparing them would let a skewed device clock reject real fixes.
+ */
+export function nextFix(
+  previous: FixLiveness | null,
+  incoming: FixLiveness,
+  cached: boolean,
+): FixLiveness {
+  return cached && previous != null ? previous : incoming;
 }

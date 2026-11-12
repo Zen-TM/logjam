@@ -4,9 +4,7 @@
 // Shared, because both clients draw the same friend picker: Logjam GPS's share
 // sheet and Logjam Web's ShareDialog filter the same list, and an avatar has to
 // be the SAME colour and the same two letters on both, or a person changes
-// identity when you pick up the other device. It lived in `mobile/src/sharing/`
-// until Logjam Web's friends work (2026-09-18); it was already free of React
-// Native imports, which is what made it testable there and movable here.
+// identity when you pick up the other device.
 
 /** Case-insensitive substring match. An empty query matches everything. */
 export function friendMatches(username: string, query: string): boolean {
@@ -50,13 +48,12 @@ export function avatarHueIndex(username: string, paletteSize: number): number {
 }
 
 /**
- * The six hues an avatar is drawn in — mid-light, muted, NSW-derived, the same
+ * The five hues an avatar is drawn in — mid-light, muted, NSW-derived, the same
  * family as `assetHue`'s. Here rather than in either client because the hash
  * above only keeps a person one colour if both clients count the same slots in
- * the same order: a palette of five on one side would repaint everyone.
+ * the same order: a palette of a different size on one side would repaint everyone.
  */
 export const FRIEND_AVATAR_HUES = [
-  "#B79EC0", // heath flower
   "#C9B37B", // dry grass
   "#8FBFAE", // lichen
   "#D3A0A0", // waratah, muted

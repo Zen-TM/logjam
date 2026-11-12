@@ -15,7 +15,7 @@ function sources(dir: string): string[] {
 // Anything that opens OVER something else has a visible ×; a pushed page has a
 // back arrow; a root tab has neither (shared/DESIGN.md §3).
 describe("ways out", () => {
-  // Red when `BottomSheet` loses its ×: every sheet in the app would then have
+  // Red when `BottomSheet` loses its ×: every sheet in Logjam GPS would then have
   // only a gesture. To see it: delete the `icon="close"` line in BottomSheet.tsx.
   it("every sheet draws a visible ×", () => {
     const sheet = readFileSync(
@@ -26,13 +26,14 @@ describe("ways out", () => {
   });
 
   // Red when a new `<Modal` appears: each one must be reviewed for a ×, then
-  // added here. The three below draw one.
+  // added here. The ones below draw one; a confirm's way out is its Cancel.
   it("names every modal, so a new one is reviewed for its ×", () => {
     const modals = sources(SRC)
       .filter((path) => /<Modal\b/.test(readFileSync(path, "utf8")))
       .map((path) => relative(SRC, path))
       .sort();
     expect(modals).toEqual([
+      "ConfirmHost.tsx",
       "media/MediaViewer.tsx",
       "ui/BottomSheet.tsx",
       "ui/ColourField.tsx",

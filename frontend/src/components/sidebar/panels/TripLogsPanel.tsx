@@ -23,6 +23,7 @@ import {
   listSelectionLabel,
   sortTrips,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripFilterFieldDefs,
   tripsEmptyKind,
   tripsEmptyState,
@@ -34,6 +35,7 @@ import {
   tripTypeLabel,
   tripVerbs,
   type CustomFieldFilter,
+  type LoadState,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type TripSortKey,
@@ -58,13 +60,15 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   Icon,
-  LoadingState,
+  ListBody,
 } from "../../../ui";
 import { usePanelSheet } from "./usePanelSheet";
 import TripLogFilterSheet from "./TripLogFilterSheet";
@@ -82,16 +86,17 @@ const plural = (count: number, noun: string) =>
 
 /**
  * Logs: "what have I done?" (Logjam GPS's `LogsScreen`). The hero answers with
- * the trip count; one rail narrows by activity; search hides behind the hero's
- * icon and the date range in a sheet beside the list. The list runs newest
- * first in year sections. A row opens its trip; ⋯ opens, edits or deletes it;
+ * the trip count; one rail and the search bar under it narrow the list, and
+ * everything else is the sheet beside it. The list runs newest first in year
+ * sections. A row opens its trip; ⋯ opens, edits or deletes it;
  * its tile starts a selection that deletes in bulk.
  */
 function TripLogsPanel({
-  views,
+  onOpenStats,
   tripLogs,
   tripLogsTotal,
-  loaded,
+  state,
+  error,
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -105,14 +110,15 @@ function TripLogsPanel({
   onFiltersOpenChange,
   onExpandSheet,
 }: {
-  /** The Logs | Stats switch, drawn under the hero. */
-  views: React.ReactNode;
+  onOpenStats: () => void;
   tripLogs: TTripLog[];
   // True trip-log total before the server's list cap; null until known.
   tripLogsTotal: number | null;
   /** False until the first fetch settles — an empty list before then is not
    *  "no trips yet". */
-  loaded: boolean;
+  state: LoadState;
+  /** Our sentence for a first load that failed. */
+  error: string | null;
   onRefetchTripLogs: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -135,7 +141,7 @@ function TripLogsPanel({
   // Ephemeral filters — session-scoped, matching the place search. They survive
   // the panel's unmount-on-close (and a tab switch) so a mid-task filter isn't
   // retyped, but they're gone next session: a date range remembered for a month
-  // hides trips the user never asked to hide (UX finding 5).
+  // hides trips the user never asked to hide.
   const [search, setSearch] = useStoredState(
     "logjam.tripSearch",
     "",
@@ -170,7 +176,6 @@ function TripLogsPanel({
     "logjam.tripSort",
     "newest",
   );
-  const [searchOpen, setSearchOpen] = useState(search !== "");
   const { sheetOpen, openSheet } = usePanelSheet({
     onOpenChange: onFiltersOpenChange,
     onExpandSheet,
@@ -231,13 +236,13 @@ function TripLogsPanel({
   // A remembered type the logbook no longer has would narrow the list with no
   // chip lit to say so.
   useEffect(() => {
-    if (!loaded || typeFilter === ALL_TYPES) return;
+    if (state !== "ready" || typeFilter === ALL_TYPES) return;
     const exists =
       typeFilter === NO_TYPE_FILTER_VALUE
         ? anyUntyped
         : distinctTypes.includes(typeFilter);
     if (!exists) setTypeFilter(ALL_TYPES);
-  }, [loaded, typeFilter, anyUntyped, distinctTypes, setTypeFilter]);
+  }, [state, typeFilter, anyUntyped, distinctTypes, setTypeFilter]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
   // would I get if I pressed this" rather than "how many are showing now".
@@ -347,8 +352,8 @@ function TripLogsPanel({
     return () => root.removeEventListener("keydown", onKeyDown);
   }, [selecting, selectableIds, clearSelection]);
 
-  // A narrower axis can hide a picked row, and a group verb must not reach
-  // rows the user can no longer see.
+  // A narrower axis can hide a picked row. `selected` already leaves it out;
+  // clearing here also stops it coming back picked when the axis widens.
   const changeType = (next: string) => {
     clearSelection();
     setTypeFilter(next);
@@ -384,9 +389,7 @@ function TripLogsPanel({
     try {
       if (ids.length === 1) await deleteTripLog(ids[0]);
       else await bulkDeleteTripLogs(ids);
-      toast.success(
-        ids.length === 1 ? "Trip deleted." : `Deleted ${ids.length} trips.`,
-      );
+      toast.done(tripDeleteDone(ids.length));
       setPendingDelete(null);
       clearSelection();
     } catch (err) {
@@ -427,17 +430,20 @@ function TripLogsPanel({
     clearSheetFilters();
   };
 
-  const closeSearch = () => {
-    setSearch("");
-    setSearchOpen(false);
-  };
-
   // ── Render ───────────────────────────────────────────────────────────
-  const deleteCopy = tripDeleteConfirm(pendingDelete?.length ?? 1);
+  const pendingTrip =
+    pendingDelete?.length === 1
+      ? tripLogs.find((trip) => trip.id === pendingDelete[0])
+      : undefined;
+  const deleteCopy = tripDeleteConfirm(
+    pendingTrip
+      ? { title: tripTitle(pendingTrip) }
+      : { count: pendingDelete?.length ?? 1 },
+  );
   const rangeText = rangeSet
     ? dateRangeLabel(dateFrom || null, dateTo || null)
     : null;
-  const dateButton = (
+  const filterButton = (
     <IconButton
       icon="filter"
       label={
@@ -467,82 +473,47 @@ function TripLogsPanel({
     <Hero
       title={TRIPS_LIST.title}
       actions={
-        searchOpen ? (
-          <>
-            {dateButton}
-            <IconButton
-              icon="close"
-              label={copy.closeSearch}
-              onClick={closeSearch}
-            />
-          </>
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.search}
-              tone={search ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            {dateButton}
-            <Menu
-              label={TRIPS_ADD.copy.menu}
-              placement="bottom-end"
-              entries={contractSectionKeys(TRIPS_ADD, "web").map((key) => ({
-                id: key,
-                icon: TRIPS_ADD_ICON[key],
-                ...addEntries[key],
-              }))}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  {TRIPS_ADD.title}
-                </Button>
-              )}
-            />
-          </>
-        )
+        <>
+          <IconButton icon="stats" label={copy.stats} onClick={onOpenStats} />
+          {filterButton}
+          <Menu
+            label={TRIPS_ADD.copy.menu}
+            placement="bottom-end"
+            entries={contractSectionKeys(TRIPS_ADD, "web").map((key) => ({
+              id: key,
+              icon: TRIPS_ADD_ICON[key],
+              ...addEntries[key],
+            }))}
+            trigger={(props) => (
+              <Button
+                {...props}
+                compact
+                variant="filled"
+                icon="add"
+                trailingIcon="expand"
+              >
+                {TRIPS_ADD.title}
+              </Button>
+            )}
+          />
+        </>
       }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={search}
-          autoFocus
-          onChange={(event) => setSearch(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
-        />
-      )}
-    </Hero>
+    />
   );
 
   const typeRail = (
     <div className={classes.rails}>
-      <div className={selecting ? classes.inert : undefined} inert={selecting}>
-        {views}
-      </div>
       {selecting ? (
         <SelectionBar
           countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
-          <IconButton
-            icon="delete"
-            label="Delete"
-            tone="danger"
+          <SelectionVerb
+            danger
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
-          />
+          >
+            Delete
+          </SelectionVerb>
         </SelectionBar>
       ) : (
         tripLogs.length > 0 && (
@@ -622,7 +593,7 @@ function TripLogsPanel({
   };
 
   const emptyState =
-    loaded && visible.length === 0
+    state === "ready" && visible.length === 0
       ? tripsEmptyState(tripsEmptyKind({ total: tripLogs.length }), {
           platform: "web",
         })
@@ -650,49 +621,53 @@ function TripLogsPanel({
     </>
   );
 
-  const list = !loaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : emptyState ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon={emptyState.icon}
-        title={emptyState.title}
-        body={emptyState.body}
-        actions={
-          emptyState.action === "add" ? (
-            addTripButtons
-          ) : filtering ? (
-            <Button compact variant="outline" onClick={clearEverything}>
-              {copy.clearFilters}
-            </Button>
-          ) : undefined
-        }
-      />
-    </div>
-  ) : (
-    <div className={classes.list}>
-      {years.map((group) => {
-        const headingId = `${yearIdPrefix}-${group.year}`;
-        return (
-          <section
-            key={group.year}
-            className={classes.year}
-            aria-labelledby={headingId}
-          >
-            <SectionHeader
-              id={headingId}
-              title={`${group.year}`}
-              count={group.trips.length}
-              className={classes.yearHead}
-            />
-            {group.trips.map(renderRow)}
-          </section>
-        );
-      })}
-      <ListEnd>{addTripButtons}</ListEnd>
-    </div>
+  const list = (
+    <ListBody
+      state={state}
+      loadingLabel={copy.loading}
+      error={error}
+      onRetry={onRefetchTripLogs}
+      empty={
+        emptyState ? (
+          <EmptyState
+            icon={emptyState.icon}
+            title={emptyState.title}
+            body={emptyState.body}
+            actions={
+              emptyState.action === "add" ? (
+                addTripButtons
+              ) : filtering ? (
+                <Button compact variant="outline" onClick={clearEverything}>
+                  {copy.clearFilters}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null
+      }
+    >
+      <div className={classes.list}>
+        {years.map((group) => {
+          const headingId = `${yearIdPrefix}-${group.year}`;
+          return (
+            <section
+              key={group.year}
+              className={classes.year}
+              aria-labelledby={headingId}
+            >
+              <SectionHeader
+                id={headingId}
+                title={`${group.year}`}
+                count={group.trips.length}
+                className={classes.yearHead}
+              />
+              <RowList>{group.trips.map(renderRow)}</RowList>
+            </section>
+          );
+        })}
+        <ListEnd>{addTripButtons}</ListEnd>
+      </div>
+    </ListBody>
   );
 
   const sheet = sheetOpen && (
@@ -738,6 +713,21 @@ function TripLogsPanel({
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "web">, ReactNode> = {
     hero,
     typeRail,
+    search: tripLogs.length > 0 && (
+      <div className={classes.search}>
+        <SearchField
+          label={copy.search}
+          value={search}
+          disabled={selecting}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || search === "") return;
+            event.stopPropagation();
+            setSearch("");
+          }}
+        />
+      </div>
+    ),
     // The hidden filters, said out loud: the rail and the search box show
     // their own state where they stand, so this speaks only for what the
     // closed sheet is doing (DESIGN.md).
@@ -760,7 +750,7 @@ function TripLogsPanel({
     truncated: tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
       <p className={classes.note}>
         Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
-        Older ones aren&rsquo;t loaded.
+        Older ones aren't loaded.
       </p>
     ),
     list,
@@ -817,8 +807,7 @@ function TripLogsPanel({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}

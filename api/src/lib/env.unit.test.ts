@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 import { validateEnv } from "./env";
 
@@ -72,6 +74,29 @@ describe("validateEnv — valid configurations", () => {
   });
 });
 
+describe("the local template", () => {
+  // Mutation: deleting the DB_NAME line from env.local.tftpl, or adding a
+  // variable with no default to the schema and not to the template.
+  it("sets every variable the schema has no default for", () => {
+    setEnv({});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => validateEnv()).toThrow(/process\.exit/);
+    const report = String(errors.mock.calls[0]?.[0]);
+    errors.mockRestore();
+    const needed = [...report.matchAll(/^ {2}- (\w+):/gm)].map((m) => m[1]);
+    const template = readFileSync(
+      join(
+        import.meta.dirname,
+        "../../../infra/terraform/templates/env.local.tftpl",
+      ),
+      "utf8",
+    );
+    const set = [...template.matchAll(/^(\w+)=/gm)].map((m) => m[1]);
+    expect(needed).toContain("DB_NAME");
+    expect(needed.filter((key) => !set.includes(key))).toEqual([]);
+  });
+});
+
 describe("validateEnv — failure paths exit the process", () => {
   it("exits when DB_HOST is missing", () => {
     delete process.env.DB_HOST;
@@ -97,8 +122,8 @@ describe("validateEnv — failure paths exit the process", () => {
     expect(() => validateEnv()).toThrow(/process\.exit/);
   });
 
-  it("exits when AUTH_MODE=cognito is missing Cognito vars", () => {
-    process.env.AUTH_MODE = "cognito";
+  it("exits when AUTH_MODE=oidc is missing its provider vars", () => {
+    process.env.AUTH_MODE = "oidc";
     expect(() => validateEnv()).toThrow(/process\.exit/);
   });
 
@@ -133,19 +158,17 @@ describe("validateEnv — origin-verify", () => {
   });
 });
 
-// APIC-004: DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID were consumed but
-// absent from the schema, so nothing validated them. DATABASE_SSL is an exact
-// "disable" compare in services/prisma.ts — a near-miss value used to leave
+// DATABASE_SSL / DATABASE_SSL_CA are read outside getEnv() but
+// declared in the schema so boot validates them. DATABASE_SSL is an exact
+// "disable" compare in services/prisma.ts — a near-miss value would leave
 // verified TLS on and surface as an opaque pg_hba error.
-describe("TLS + worker env vars are in the schema", () => {
+describe("TLS env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
     process.env.DATABASE_SSL = "disable";
     process.env.DATABASE_SSL_CA = "/app/rds-ca.pem";
-    process.env.GEO_PDF_JOB_ID = "job-1";
     const env = validateEnv();
     expect(env.DATABASE_SSL).toBe("disable");
     expect(env.DATABASE_SSL_CA).toBe("/app/rds-ca.pem");
-    expect(env.GEO_PDF_JOB_ID).toBe("job-1");
   });
 
   it("rejects a near-miss DATABASE_SSL value instead of silently ignoring it", () => {
@@ -155,7 +178,100 @@ describe("TLS + worker env vars are in the schema", () => {
     }
   });
 
+  // Mutation: delete the DATABASE_SSL production check in validateEnv.
+  it("refuses DATABASE_SSL=disable in production, where it would drop RDS TLS", () => {
+    setEnv({
+      NODE_ENV: "production",
+      AUTH_MODE: "oidc",
+      OIDC_ISSUER: "https://idp.example.com",
+      OIDC_AUDIENCE: "c",
+      DB_HOST: "db",
+      DB_NAME: "db",
+      DB_USER: "u",
+      DB_PASSWORD: "p",
+      CORS_ORIGIN: "http://x",
+      S3_BUCKET_TOPO: "t",
+      S3_BUCKET_MEDIA: "m",
+      ECS_SUBNETS: "s",
+      ECS_SECURITY_GROUPS: "g",
+      TOPO_CDN_BASE_URL: "https://cdn.example.com",
+    });
+    expect(() => validateEnv()).not.toThrow();
+    process.env.DATABASE_SSL = "disable";
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("boots with any GIT_SHA, including the empty one a build without the arg bakes in", () => {
+    for (const sha of ["", "not-a-sha", "0123abc"]) {
+      process.env.GIT_SHA = sha;
+      expect(validateEnv().GIT_SHA).toBe(sha);
+    }
+  });
+
   it("leaves all three optional", () => {
     expect(validateEnv().DATABASE_SSL).toBeUndefined();
+  });
+});
+
+// Mutation: drop the OIDC_ISSUER / OIDC_AUDIENCE requirement or the https
+// check in validateEnv, and a real-auth process boots unable to verify (or
+// verifying over plain http in production).
+describe("OIDC token verification config", () => {
+  const base = {
+    NODE_ENV: "development",
+    DB_HOST: "localhost",
+    DB_NAME: "db",
+    DB_USER: "u",
+    DB_PASSWORD: "p",
+    OIDC_ISSUER: "http://localhost:9000",
+    OIDC_AUDIENCE: "a, b",
+  };
+
+  it("accepts AUTH_MODE=oidc and parses the audience list", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc" });
+    expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual(["a", "b"]);
+  });
+
+  it("requires the issuer", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_ISSUER: undefined });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("requires the audience", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_AUDIENCE: undefined });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("fails on an audience that is empty after parsing", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_AUDIENCE: " , ," });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("needs neither in fake mode", () => {
+    setEnv({
+      ...base,
+      AUTH_MODE: "fake",
+      OIDC_ISSUER: undefined,
+      OIDC_AUDIENCE: undefined,
+    });
+    expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual([]);
+  });
+
+  it("refuses an http issuer in production only", () => {
+    const prod = {
+      ...base,
+      AUTH_MODE: "oidc",
+      NODE_ENV: "production",
+      CORS_ORIGIN: "http://x",
+      S3_BUCKET_TOPO: "t",
+      S3_BUCKET_MEDIA: "m",
+      ECS_SUBNETS: "s",
+      ECS_SECURITY_GROUPS: "g",
+      TOPO_CDN_BASE_URL: "https://cdn.example.com",
+    };
+    setEnv(prod);
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+    setEnv({ ...prod, OIDC_ISSUER: "https://idp.example.com" });
+    expect(() => validateEnv()).not.toThrow();
   });
 });

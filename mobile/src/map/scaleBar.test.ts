@@ -1,48 +1,16 @@
+import { metersPerPixel } from "@logjam/shared";
 import { describe, it, expect } from "vitest";
-import {
-  chooseScaleStep,
-  degreesPerDp,
-  metersPerPixel,
-  tileMetersPerPixel,
-} from "./scaleBar";
-
-describe("metersPerPixel", () => {
-  it("matches MapLibre's 512-based resolution at the equator", () => {
-    // Half the familiar slippy-tile figures: MapLibre's zoom puts 512 points
-    // across a tile, so z0 is the whole world in 512, not 256 (see scaleBar.ts).
-    expect(metersPerPixel(0, 0)).toBeCloseTo(78271.51696, 3);
-    expect(metersPerPixel(0, 10)).toBeCloseTo(76.43702827, 5);
-  });
-
-  it("shrinks with latitude (NSW canyoning country is ~-33)", () => {
-    const equator = metersPerPixel(0, 14);
-    const nsw = metersPerPixel(-33.7, 14);
-    expect(nsw).toBeLessThan(equator);
-    expect(nsw).toBeCloseTo(equator * Math.cos((33.7 * Math.PI) / 180), 6);
-  });
-
-  it("is sign-agnostic about hemisphere", () => {
-    expect(metersPerPixel(-33.7, 12)).toBeCloseTo(metersPerPixel(33.7, 12), 9);
-  });
-
-  it("throws on out-of-range input rather than returning NaN", () => {
-    expect(() => metersPerPixel(91, 10)).toThrow(/latitude out of range/);
-    expect(() => metersPerPixel(Number.NaN, 10)).toThrow(
-      /latitude out of range/,
-    );
-    expect(() => metersPerPixel(0, -1)).toThrow(/zoom out of range/);
-  });
-});
+import { chooseScaleStep, degreesPerDp, tileMetersPerPixel } from "./scaleBar";
 
 describe("tileMetersPerPixel", () => {
   it("is exactly double metersPerPixel at the same latitude and zoom", () => {
     // The whole point of keeping two functions: a slippy-tile zoom (256-based)
     // and a MapLibre camera zoom (512-based) are off by exactly 2x at the same
-    // zoom number. MMO-001 was this ratio applied to the wrong convention.
-    // The two source constants (78271.51696 vs 156543.03392) are independently
-    // rounded literals, not one computed from the other, so the match is close
-    // but not bit-exact — precision 2 is well inside that rounding noise and
-    // still catches a wrong power-of-two or a swapped convention outright.
+    // zoom number. Applying this ratio to the wrong convention doubles or halves
+    // distances. The two source constants (78271.51696 vs 156543.03392) are
+    // independently rounded literals, not one computed from the other, so the
+    // match is close but not bit-exact — precision 2 is well inside that rounding
+    // noise and still catches a wrong power-of-two or a swapped convention outright.
     for (const zoom of [0, 8, 14, 20]) {
       expect(tileMetersPerPixel(-33.7, zoom)).toBeCloseTo(
         metersPerPixel(-33.7, zoom) * 2,
@@ -96,8 +64,8 @@ describe("chooseScaleStep", () => {
 
 describe("degreesPerDp", () => {
   it("uses the same 512-based world the scale bar does", () => {
-    // Not 256, and not divided by the display density: the anchor hit test
-    // did both, which left a 20 dp reach measuring under 15 dp.
+    // Not 256, and not divided by the display density: dividing by display
+    // density shrinks a 20 dp reach to under 15 dp.
     expect(degreesPerDp(0)).toBeCloseTo(360 / 512, 10);
     expect(degreesPerDp(1)).toBeCloseTo(degreesPerDp(0) / 2, 10);
   });

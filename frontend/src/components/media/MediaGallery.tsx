@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { mediaCategory, type MediaItem } from "@logjam/shared";
+import {
+  mediaCategory,
+  trackDisplayName,
+  type MediaItem,
+} from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
@@ -28,11 +32,11 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // FEUI-007: one-tap Trash2 permanently deletes the S3 object with no
+  // One-tap Trash2 permanently deletes the S3 object with no
   // recovery. Route through the same ConfirmDialog every other destructive
   // surface uses (e.g. the track-card delete in PlaceDetailPanel).
   const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);
-  // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
+  // Thumbnails that failed to load (e.g. a 404'd S3 object). Tracked
   // by id so a broken thumb shows a labelled fallback instead of the browser's
   // broken-image glyph.
   const [failedThumbIds, setFailedThumbIds] = useState<Set<string>>(new Set());
@@ -50,7 +54,7 @@ export default function MediaGallery({
       onDeleted(id);
       // Only close the confirm on success — an error leaves it open (with the
       // banner inside) so the user sees why and can retry, matching the
-      // track-card delete in PlaceDetailPanel.
+      // track-card delete in PlaceDetailPanel (MediaGallery.test.tsx).
       setPendingDelete(null);
     } catch (err) {
       console.error(err);
@@ -134,14 +138,14 @@ export default function MediaGallery({
                   <Icon idea="export" size={16} />
                 )
               }
-              title={m.filename}
+              title={trackDisplayName(m.filename)}
               href={m.displayUrl}
               download={m.filename}
               trailing={
                 canDelete && (
                   <Menu
-                    label={`Actions for ${m.filename}`}
-                    title={m.filename}
+                    label={`Actions for ${trackDisplayName(m.filename)}`}
+                    title={trackDisplayName(m.filename)}
                     placement="right-start"
                     entries={[
                       {
@@ -156,7 +160,7 @@ export default function MediaGallery({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${m.filename}`}
+                        label={`Actions for ${trackDisplayName(m.filename)}`}
                       />
                     )}
                   />
@@ -173,22 +177,24 @@ export default function MediaGallery({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title="Delete file?"
-        message={
-          <>
-            This permanently deletes <b>{pendingDelete?.filename}</b>. This
-            cannot be undone.
-            {/* Rendered inside the dialog (not the page behind it) — the
-                modal backdrop would otherwise hide a page-level ErrorBanner. */}
-            {error && (
-              <ErrorBanner message={error} onDismiss={() => setError(null)} />
-            )}
-          </>
+        copy={
+          pendingDelete && {
+            confirmTitle: `Delete ${pendingDelete.filename}?`,
+            confirmBody: "The file is deleted and can't be brought back.",
+            confirmLabel: "Delete",
+            tone: "destructive",
+          }
         }
         busy={deletingId === pendingDelete?.id}
         onConfirm={() => pendingDelete && void handleDelete(pendingDelete.id)}
         onClose={() => setPendingDelete(null)}
-      />
+      >
+        {/* Rendered inside the dialog (not the page behind it) — the
+            modal backdrop would otherwise hide a page-level ErrorBanner. */}
+        {error && (
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

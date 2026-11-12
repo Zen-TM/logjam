@@ -113,8 +113,8 @@ describe("resolvePatchedTripTypes — the four PATCH combinations", () => {
       expect(changed).toBe(true);
     });
 
-    // THE REGRESSION: "links any place" tagged a night at a campsite as
-    // canyoning, and the tag decides which trip attributes a trip is asked.
+    // Only canyon places tag a trip as canyoning; linking non-canyon places
+    // like campsites leaves an untagged trip untagged.
     it("linking a campsite leaves an untagged trip untagged", () => {
       const { types, changed } = resolvePatchedTripTypes({
         parsedTypes: undefined,
@@ -163,7 +163,7 @@ describe("resolvePatchedTripTypes — the four PATCH combinations", () => {
     });
 
     it("repairs a canyon-linked trip that predates enforcement", () => {
-      // e.g. PATCHing only `notes` on one of the 115 pre-existing trips.
+      // e.g. PATCHing only `notes` on a pre-existing untagged trip.
       const { types, changed } = resolvePatchedTripTypes({
         parsedTypes: undefined,
         storedTypes: [],

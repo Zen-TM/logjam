@@ -1,7 +1,5 @@
 // Place name normalization primitives (lowercase/strip + waterway-suffix
-// stripping). Consumed by the unified matcher in placeMatch.ts. The old
-// token-Jaccard nameMatchScore was retired once both the RopeWiki dedupe and
-// CSV import migrated to that single matcher.
+// stripping). Consumed by the unified matcher in placeMatch.ts.
 
 export const WATERWAY_SUFFIXES = [
   "canyon",

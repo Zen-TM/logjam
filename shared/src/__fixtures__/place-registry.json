@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "version": "2026-10-01",
+  "attribution": "© OpenStreetMap contributors",
+  "licence": "ODbL-1.0",
+  "coordScale": 100000,
+  "kinds": [
+    "place=town",
+    "place=locality",
+    "highway=primary",
+    "natural=valley",
+    "tourism=viewpoint",
+    "waterway=waterfall",
+    "amenity=cafe",
+    "highway=tertiary",
+    "natural=peak",
+    "highway=residential"
+  ],
+  "names": [
+    "Blackheath",
+    "Katoomba",
+    "The Gully",
+    "Castlereagh Highway",
+    "Devil's Hole",
+    "Echo Point Lookout",
+    "Govetts Leap",
+    "Katoomba Falls",
+    "Katoomba Falls Inn",
+    "Katoomba Falls Road",
+    "Mount Solitary",
+    "Newcastle Street",
+    "Ruined Castle",
+    "Station Street",
+    "Station Street"
+  ],
+  "kind": [0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 8, 9, 9],
+  "lon": [
+    15028500, 15031200, 15031600, 15015000, 15030000, 15031200, 15031000,
+    15030700, 15030600, 15030500, 15032000, 15031300, 15029000, 15028700,
+    15031100
+  ],
+  "lat": [
+    -3363300, -3371400, -3370800, -3348000, -3371500, -3373200, -3362800,
+    -3373000, -3372900, -3372500, -3376000, -3371600, -3374000, -3363200,
+    -3371200
+  ],
+  "near": [1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+  "alternates": [[6, ["Govett's Leap Lookout"]]]
+}

@@ -7,9 +7,7 @@ import {
   type ExistingPlaceForMerge,
 } from "./mergePlace.js";
 
-// The seven grade columns are field VALUES now, so the merge fixtures speak
-// field keys. Every invariant below is the one the column-shaped version
-// asserted — the vocabulary moved, the rules did not.
+// Grade fields are stored in fieldValues, so merge fixtures test field keys.
 const DEFS = [
   { key: "v_grade" },
   { key: "a_grade" },
@@ -164,9 +162,8 @@ describe("mergePlace (shared, per-field policy)", () => {
     expect(merged.fieldValues).toEqual({ terrain: "slot", water: "high" });
   });
 
-  // A new key landed even before the field was a policy entry. Locked in on
-  // both switch positions: the policy governs conflicts only, so it must not
-  // gate a key the existing place has never seen.
+  // The policy governs conflicts only, so it must not gate a key the existing
+  // place has never seen. Locked in on both switch positions.
   it("fills absent field keys from incoming under useIncoming too", () => {
     const merged = mergePlace(
       existingPlace({ fieldValues: { terrain: "slot" } }),
@@ -205,10 +202,10 @@ describe("mergePlace (shared, per-field policy)", () => {
     expect(merged.fieldValues.terrain).toBe("open");
   });
 
-  // Scoped out: clearing a value by blanking its cell is 23b's territory.
-  // isPresent("") is false, so a blank cell reads as "column absent for this
-  // row" and the existing value survives on BOTH switch positions. Asserted so
-  // the boundary is visible rather than assumed.
+  // Clearing a value by blanking its cell is not supported: isPresent("") is
+  // false, so a blank cell reads as "column absent for this row" and the
+  // existing value survives on BOTH switch positions. Asserted so the boundary
+  // is visible rather than assumed.
   it("does not clear a value from a blank cell, even under useIncoming", () => {
     const merged = mergePlace(
       existingPlace({ fieldValues: { terrain: "slot" } }),

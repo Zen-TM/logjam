@@ -4,15 +4,12 @@ import { SYNC_GIVE_UP_AFTER_MS } from "@logjam/shared";
 
 import { markNoResponse, markTransferCut } from "../api/noResponse";
 
-// Two head-of-line failures the flush engine used to have, both invisible to
-// the rest of the suite because they only appear when an op FAILS:
+// Head-of-line failures that only appear when an op fails:
 //
-//  - one unreadable photo aborted the whole media pass, every pass, so every
-//    other upload on the device was blocked forever by an op that never parked
-//    and so never appeared in Sync Issues either;
-//  - one structurally-bad op made the server refuse the ENVELOPE (400), which
-//    parked all fifty ops in the batch as fifty separate sync issues, telling
-//    the user the server rejected forty-nine edits it never saw.
+//  - one unreadable photo must not abort the whole media pass, blocking
+//    every other upload on the device;
+//  - one structurally-bad op where the server refuses the ENVELOPE (400)
+//    must not park all fifty ops in the batch as separate sync issues.
 //
 // The database is a recording stand-in (expo-sqlite has no native runtime
 // here); what matters is which rows end in which state.
@@ -37,7 +34,7 @@ let rows: Row[] = [];
 let poison = new Set<string>();
 let pushCalls: string[][] = [];
 /** Miscount the fake server applies to its results array (+1 = one extra
- * result, -1 = one missing). MSD-005. */
+ * result, -1 = one missing). */
 let resultCountDelta = 0;
 /** Media ops whose runner throws (a file the OS reclaimed). */
 let deadMedia = new Set<number>();
@@ -69,6 +66,18 @@ function mediaRow(seq: number, extra: Partial<Row> = {}): Row {
     attempts: 0,
     ...extra,
   };
+}
+
+function placeCreateRow(seq: number, id: string): Row {
+  return { ...pushRow(seq), entity: "place", op: "create", entity_id: id };
+}
+
+function linkRow(seq: number, mediaId: string, placeId: string): Row {
+  return mediaRow(seq, {
+    op: "link",
+    entity_id: mediaId,
+    fields_json: JSON.stringify({ placeId }),
+  });
 }
 
 function pushRow(seq: number): Row {
@@ -139,12 +148,40 @@ const db = {
     else run(sql, args);
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
-  getFirstAsync: (sql: string) =>
-    Promise.resolve({
+  getFirstAsync: (sql: string, ...args: unknown[]) => {
+    if (sql.includes("entity_id = ?")) {
+      // isLinkPending's counts, as flush.ts words them.
+      if (sql.includes("entity = 'media' AND op = 'create'")) {
+        const states = sql.includes("'blocked'")
+          ? ["queued", "inflight", "blocked"]
+          : ["queued", "inflight"];
+        return Promise.resolve({
+          n: rows.filter(
+            (row) =>
+              row.entity === "media" &&
+              row.op === "create" &&
+              row.entity_id === args[0] &&
+              states.includes(row.state),
+          ).length,
+        });
+      }
+      return Promise.resolve({
+        n: rows.filter(
+          (row) =>
+            row.entity !== "media" &&
+            row.entity_id === args[0] &&
+            (["queued", "inflight", "retrying"].includes(row.state) ||
+              (row.op === "create" &&
+                ["blocked", "deadRemote"].includes(row.state))),
+        ).length,
+      });
+    }
+    return Promise.resolve({
       n: sql.includes("'retrying'")
         ? rows.filter((row) => row.state === "retrying").length
         : 0,
-    }),
+    });
+  },
   getAllAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve(
       sql.includes("entity = 'media'")
@@ -181,6 +218,11 @@ vi.mock("./mediaUpload", () => ({
     if (mediaErrors.has(row.seq))
       return Promise.reject(mediaErrors.get(row.seq));
     if (deadMedia.has(row.seq)) return Promise.reject(new Error("file gone"));
+    rows = rows.filter((candidate) => candidate.seq !== row.seq);
+    return Promise.resolve("done");
+  },
+  runMediaLinkOp: (row: { seq: number }) => {
+    mediaRuns.push(row.seq);
     rows = rows.filter((candidate) => candidate.seq !== row.seq);
     return Promise.resolve("done");
   },
@@ -265,9 +307,9 @@ const NO_ANSWER: [string, () => unknown][] = [
 const GATEWAY_STATUSES = [502, 503, 504];
 
 describe("who owns a rejection", () => {
-  // The user's question, answered in the engine rather than on the screen: if
-  // pressing Try again might work, why didn't the app press it? It does now.
-  // Only a refusal a retry cannot fix reaches Sync issues.
+  // The user's question, answered in the engine rather than on the screen:
+  // if retrying might work, the app retries automatically. Only a refusal
+  // a retry cannot fix reaches Sync issues.
   it("retries a rejection the server may answer differently, without telling the user", async () => {
     rows = [pushRow(1)];
     rejections.set("op-1", { code: 503, message: "upstream unavailable" });
@@ -308,8 +350,8 @@ describe("who owns a rejection", () => {
 
   it("does not count requests that never got an answer against the op", async () => {
     // Four sends that timed out, then one the server refused for now. Counting
-    // sends parked this op on the first refusal after a bad stretch of signal.
-    // Mutation: park a refused op once its `attempts` reach
+    // sends would park this op on the first refusal after a bad stretch of
+    // signal. Mutation: park a refused op once its `attempts` reach
     // SYNC_GIVE_UP_FAILURES.
     rows = [{ ...pushRow(1), attempts: 4 }];
     rejections.set("op-1", { code: 503, message: "upstream unavailable" });
@@ -512,6 +554,26 @@ describe("a write the server applied whose reply was lost", () => {
     expect(shelved).toHaveLength(1);
   });
 
+  // Nothing was replaced, so there is nothing to keep: the user's text is
+  // simply saved. Mutation: drop the `!= null` filter on receipts in flush.ts.
+  it("does not shelve a receipt for a field that was empty on the account", async () => {
+    rows = [
+      {
+        ...pushRow(1),
+        fields_json: JSON.stringify({ notes: "mine" }),
+        base_fields_json: JSON.stringify({ notes: "before" }),
+      },
+    ];
+    answers.set("op-1", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "notes", serverValue: null }],
+    });
+
+    await flushOutbox();
+
+    expect(shelved).toEqual([]);
+  });
+
   it("still shelves a value another device wrote", async () => {
     rows = [
       {
@@ -533,9 +595,9 @@ describe("a write the server applied whose reply was lost", () => {
 
 describe("push result correlation", () => {
   // Positional results, one per op. A count mismatch is not a per-op verdict
-  // either way: an EXTRA result used to index past the batch and crash with an
-  // opaque TypeError ("Couldn't sync"), and a SHORT one left the trailing ops
-  // inflight with attempts already bumped, recovered only by the next cycle's
+  // either way: an EXTRA result would index past the batch and crash with an
+  // opaque TypeError ("Couldn't sync"), and a SHORT one would leave trailing ops
+  // inflight with attempts already bumped, recoverable only by the next cycle's
   // blanket reset.
   it("refuses a reply with more results than ops", async () => {
     rows = [pushRow(1), pushRow(2)];
@@ -553,6 +615,131 @@ describe("push result correlation", () => {
 });
 
 describe("media pass", () => {
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen. Mutation: drop the `sourceMediaId` wait from isLinkPending and
+  // the copy runs (and is parked by a 400) before its recording is up.
+  it("runs a trip's copy only after the recording it names has uploaded", async () => {
+    rows = [
+      mediaRow(1, {
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "t-1",
+          sourceMediaId: "media-2",
+        }),
+      }),
+      mediaRow(2),
+    ];
+
+    await flushOutbox();
+
+    // The copy was queued first but waited for the pass after its recording.
+    expect(mediaRuns).toEqual([2, 1]);
+  });
+
+  // A photo or a route file picked while a place is being made is queued
+  // against an id the server has not seen. Mutation: drop 'retrying' from
+  // isLinkPending's states and the upload runs against a place still being
+  // retried; drop the `link` branch and the file's link runs (and a 404 deletes
+  // it) before the place exists.
+  it("holds a photo until the create of its place has landed", async () => {
+    rows = [
+      placeCreateRow(1, "c-2"),
+      mediaRow(2),
+      mediaRow(3, {
+        fields_json: JSON.stringify({ linkedType: "place", linkedId: "c-9" }),
+      }),
+    ];
+    // The server cannot take the place yet: it is retried, not parked.
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    // Only the photo of a different, settled place went up.
+    expect(mediaRuns).toEqual([3]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("sends the photo once the place's create has been applied", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+    expect(rows).toEqual([]);
+  });
+
+  // The photo of a place whose create is parked would presign, 404 and park as
+  // an issue of its own, N of them from one bad place. Mutation: drop the
+  // `blocked`/`deadRemote` arm from isLinkPending and the photo runs.
+  it("holds a photo while its place's create is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => [row.seq, row.state])).toEqual([
+      [1, "blocked"],
+      [2, "queued"],
+    ]);
+  });
+
+  it("holds a route file's link while its place's create is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+  });
+
+  it("does not hold a photo for a parked EDIT of a place that exists", async () => {
+    rows = [{ ...placeCreateRow(1, "c-2"), op: "update" }, mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+  });
+
+  // A released link PATCHes a file the API never saw; the 404 is read as gone
+  // and the op deleted, so the way would never attach even after a Retry.
+  // Mutation: drop 'blocked' from the own-upload states.
+  it("holds a link while the upload of its file is parked", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1", state: "blocked" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("holds a route file's link until its place exists", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("holds a link until the file it moves has uploaded", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+    mediaErrors.set(1, httpError(503));
+
+    await expect(flushOutbox()).rejects.toBeDefined();
+
+    expect(mediaRuns).toEqual([1]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
   it("keeps going past a dead op instead of aborting the pass", async () => {
     rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
     deadMedia.add(1);
@@ -567,10 +754,10 @@ describe("media pass", () => {
   it.each(NO_ANSWER)(
     "stops the pass when the API gives no answer: %s",
     async (_, make) => {
-      // On a dead link every queued upload used to spend its own 15 s timeout
-      // before the cycle reached the delta pull. The first unanswered API call
-      // says the link is down for all of them. Mutation: `continue` instead
-      // of `break` after the requeue in flushMediaOps.
+      // On a dead link, letting every queued upload spend its own 15 s timeout
+      // would delay the cycle before reaching delta pull. The first unanswered
+      // API call says the link is down for all of them. Mutation: `continue`
+      // instead of `break` after the requeue in flushMediaOps.
       rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
       mediaErrors.set(1, make());
 
@@ -613,10 +800,10 @@ describe("media pass", () => {
   );
 
   it.each(NO_ANSWER)("never parks an upload over %s", async (_, make) => {
-    // What the field trip hit: the retry ladder starts at one second, so a
-    // minute of bad signal was five failed cycles, and five failures parked
-    // every queued photo and track as a sync issue. Mutation: tally a
-    // no-response failure in flushMediaOps and these park on pass five.
+    // The retry ladder starts at one second, so a minute of bad signal can
+    // mean five failed cycles; no-response failures must not park queued
+    // photos and tracks as sync issues. Mutation: tally a no-response
+    // failure in flushMediaOps and these park on pass five.
     rows = [mediaRow(1), mediaRow(2)];
     mediaErrors.set(1, make());
     mediaErrors.set(2, make());

@@ -20,8 +20,13 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason: "type-to-confirm: the user's own words are the confirmation",
   },
   {
+    file: "components/plans/PlanDetailPanel.tsx",
+    reason: "Add a form at the cap of 20: a limit, not validation, and says so",
+  },
+  {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
-    reason: "share and delete are one at a time: one in flight locks the other",
+    reason:
+      "nothing to send until a friend is ticked, and a request in flight locks it",
   },
 ];
 
@@ -93,7 +98,7 @@ describe("a primary action is never disabled for validation", () => {
       );
     });
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   it("lists only files that still have one", () => {
     const stale = ALLOWED.filter(

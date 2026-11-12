@@ -1,16 +1,20 @@
-// Elevation profiles, derived on demand from a point list plus the DEM.
+// Elevation from the DEM, derived on demand: a profile along a point list, or
+// the height and slope at one point.
 //
-// Deliberately stateless: nothing here reads or writes the database, and no
-// profile is ever persisted. Route geometry is the single source of truth —
-// a stored profile would go stale the instant a vertex moved. See
-// shared/src/elevation.ts.
+// Deliberately stateless: no profile is ever persisted. Route geometry is the
+// single source of truth — a stored profile would go stale the instant a
+// vertex moved. See shared/src/elevation.ts. The one read is which sharpened
+// areas the caller may see (`visibleSharpenedAreas`, ADR 0040): their heights
+// are finer than any public source's, and a stranger's never answer.
 //
 // Auth is required even though the endpoint owns no user data, because the
-// REQUEST is the sensitive part: the body is a wilderness route line. An
+// REQUEST is the sensitive part: the body is a wilderness route line, or a spot
+// on one. An
 // unauthenticated caller must not be able to use us as an elevation proxy.
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { malformed } from "../middleware/errorHandler";
+import { logger } from "../lib/logger";
 import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
@@ -19,11 +23,16 @@ import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   ELEVATION_TRACK_MAX_SAMPLES,
   MAX_ROUTE_POINTS,
+  parseElevationPoint,
   parseRoutePoints,
   ROUTE_ERRORS,
+  demSourcesFor,
+  type ElevationPoint,
   type RoutePoint,
 } from "@logjam/shared";
-import { sampleElevations } from "../services/elevation";
+import { resolveUser } from "../lib/resolveUser";
+import { sampleElevations, sampleSlope } from "../services/elevation";
+import { visibleSharpenedAreas } from "../services/sharpenedAreas";
 
 const router = Router();
 
@@ -74,15 +83,58 @@ router.post(
       typeof asked === "number" && Number.isInteger(asked) && asked >= 2
         ? Math.min(asked, ELEVATION_TRACK_MAX_SAMPLES)
         : ELEVATION_PROFILE_MAX_SAMPLES;
+    const user = await resolveUser(req.user!.sub);
+    const areas = await visibleSharpenedAreas(user.id);
     const positions = densifyLineSegments(segments, maxSamples);
     const profile = buildElevationProfile(
       positions,
-      await sampleElevations(positions),
+      await sampleElevations(positions, areas),
     );
 
     res.json({
       ...profile,
-      attribution: demCredits(profile.demSourceIds).join(" "),
+      attribution: demCredits(profile.demSourceIds, demSourcesFor(areas)).join(
+        " ",
+      ),
+    });
+  },
+);
+
+// ── POST /elevation/point ─────────────────────────────────────
+// Body: { point: [lon, lat] }. The height and slope at one spot, for the
+// point popover: one tap, one request. POST rather than GET so the position
+// is in the body and never in a URL the access log or a proxy would keep.
+router.post(
+  "/point",
+  requireAuth,
+  elevationLimiter,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const parsed = parseElevationPoint(req.body?.point);
+    if ("error" in parsed) throw malformed(parsed.error);
+    const { lon, lat } = parsed;
+
+    const user = await resolveUser(req.user!.sub);
+    const areas = await visibleSharpenedAreas(user.id);
+    const heights = await sampleElevations([{ lon, lat, distanceM: 0 }], areas);
+    // The height was read; a slope that could not be (its window reaches tiles
+    // the height never touched) must not take it down. Nothing of the error is
+    // logged; the line says only that a slope failed.
+    // Guard: elevation.unit.test.ts, "still answers the height it read".
+    const slope = await sampleSlope(lon, lat, areas).catch(() => {
+      logger.warn("DEM slope could not be read");
+      return null;
+    });
+    const demSourceIds = [heights.sourceIds[0], slope?.sourceId].filter(
+      (id, i, ids): id is string => id != null && ids.indexOf(id) === i,
+    );
+    const body: ElevationPoint = {
+      elevationM: heights.heights[0] ?? null,
+      slopeDegrees: slope?.slopeDegrees ?? null,
+      demSourceIds,
+    };
+    res.json({
+      ...body,
+      attribution: demCredits(demSourceIds, demSourcesFor(areas)).join(" "),
     });
   },
 );

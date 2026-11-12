@@ -1,13 +1,15 @@
 // Trip-log naming + trip-type vocabulary. A trip's title defaults to the
 // joined names of its linked places ("Claustral, Ranon and Whungee Whengee");
-// the join lives here so api and frontend can never drift. displayName, when
-// set, always overrides the derived name.
+// the join lives here so the API and clients can never drift. displayName,
+// when set, always overrides the derived name.
 
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 
 export const TRIP_NAME_MAX_LENGTH = 200;
 export const TRIP_TYPE_MAX_LENGTH = 40;
 export const MAX_PLACES_PER_TRIP = 20;
+/** Said where a tick would pass the cap, on both clients. */
+export const TRIP_PLACES_CAP_SENTENCE = `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`;
 export const MAX_TRIP_TYPES_PER_TRIP = 10;
 
 /**
@@ -33,6 +35,8 @@ export const TRIP_TYPE_SUGGESTIONS = [
  * Join place names into the default trip title: "A", "A and B",
  * "A, B and C". Returns null for an empty list — callers fall back to their
  * own placeholder ("Untitled trip"). Never inline this join elsewhere.
+ *
+ * test: shared/src/tripName.test.ts (formatTripPlaceNames)
  */
 export function formatTripPlaceNames(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -44,6 +48,8 @@ export function formatTripPlaceNames(names: string[]): string | null {
  * A trip's title: an explicit displayName always wins; otherwise the joined
  * names of its linked places; otherwise a generic fallback. Every display site
  * must use this, never inline the displayName fallback chain.
+ *
+ * test: shared/src/tripName.test.ts (tripTitle)
  */
 export function tripTitle(trip: {
   displayName?: string | null;
@@ -60,13 +66,13 @@ export function tripTitle(trip: {
  * Whether a trip linking places of these types is a canyoning trip: it links a
  * place of the system CANYON type.
  *
- * Bespoke to one type on purpose. It used to be "links any place", which was
- * right while every place was a canyon and wrong the day a campsite could be
- * linked — a night at a campsite tagged the trip canyoning, and the canyoning
- * tag is what decides which trip attributes a trip is asked. Canyon is already
- * special everywhere that counts (a system type with a pinned id, the reserved
- * grade keys, `isCanyoningTrip` in the analytics route), so this is the tag
- * catching up with the rest of the model rather than a new exception.
+ * Bespoke to one type on purpose: a night at a campsite shouldn't tag the
+ * trip as canyoning (the canyoning tag decides which trip attributes a trip
+ * is asked). Canyon is already special everywhere that counts (a system type
+ * with a pinned id, the reserved grade keys, `isCanyoningTrip` in the
+ * analytics route), so the tag reflects this.
+ *
+ * test: shared/src/tripName.test.ts (linksCanyon)
  */
 export function linksCanyon(linkedPlaceTypeIds: readonly string[]): boolean {
   return linkedPlaceTypeIds.includes(SYSTEM_PLACE_TYPE_IDS.canyon);
@@ -86,6 +92,8 @@ export function linksCanyon(linkedPlaceTypeIds: readonly string[]): boolean {
  *
  * Returns `types` unchanged (same reference) when it has nothing to add, so
  * callers can cheaply detect a no-op.
+ *
+ * test: shared/src/tripName.test.ts (enforceCanyoningTag)
  */
 export function enforceCanyoningTag(
   types: string[],
@@ -107,11 +115,11 @@ export function enforceCanyoningTag(
   //
   // The alternative — letting the system tag exceed the cap — is what makes
   // this a bug: storing 11 types means reopening the dialog PATCHes all 11
-  // back and the request 400s ("At most 10 types per trip"), so the trip
+  // back and the request is refused (413), so the trip
   // becomes uneditable. The system would have created a row its own validator
   // rejects. Do not turn this skip into a throw, and do not raise the cap:
   // `types` is a user-controlled unbounded String[] and the cap is a mandatory
-  // input bound (SEC-001), sibling to TRIP_NAME_MAX_LENGTH / MAX_PLACES_PER_TRIP.
+  // input bound, sibling to TRIP_NAME_MAX_LENGTH / MAX_PLACES_PER_TRIP.
   if (types.length >= MAX_TRIP_TYPES_PER_TRIP) return types;
   return [...types, CANYONING_TRIP_TYPE];
 }

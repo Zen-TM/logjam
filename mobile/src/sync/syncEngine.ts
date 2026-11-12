@@ -1,8 +1,7 @@
-// Sync cycle orchestration (stage8-sync.md §2, §8.3): cycle = push (outbox
-// flush — lands in the outbox phase of PR-5) then pull (delta). Triggers:
-// app foreground while online, connectivity regained, debounced after local
-// mutation, manual pull-to-refresh. NEVER a background timer — battery is a
-// field resource.
+// Sync cycle orchestration: cycle = push (outbox flush) then pull (delta).
+// Triggers: app foreground while online, connectivity regained, debounced after
+// local mutation, manual pull-to-refresh. NEVER a background timer — battery is
+// a field resource.
 import { AppState } from "react-native";
 import {
   ApiError,
@@ -32,19 +31,17 @@ import {
 /**
  * Why the last cycle failed. `unreachable` is the network — offline, a 5xx, an
  * expired token — and a retry is a real promise. `applyFailed` is the server
- * answering fine and THIS APP failing to apply what it sent: a retry re-fetches
+ * answering fine and Logjam GPS failing to apply what it sent: a retry re-fetches
  * the same page and fails identically, so the copy must not blame the link or
  * promise a retry, and the failure has to reach the screen built to list sync
  * problems instead of hiding behind a self-healing message.
  *
  * `unsupported` is the server not having the sync endpoints at all (404). Same
  * shape as `applyFailed` — a retry re-sends the same request to the same absent
- * route — but the cause is a server older than this app, so there is nothing on
- * the phone to repair and nothing for the user to decide. It exists because the
- * alternative was the backoff ladder retrying a 404 forever: 166 of the 284
- * requests one field day produced were `POST /sync/push` and `GET /sync/delta`
- * against routes the deployed API did not have, each one a radio wakeup, under
- * a status line promising a retry that could never work.
+ * route — but the cause is a server older than Logjam GPS, so there is nothing on
+ * the phone to repair and nothing for the user to decide. Without this, the
+ * backoff ladder would retry a 404 repeatedly, waking the radio under a status
+ * line promising a retry that cannot work.
  */
 export type SyncErrorKind = "unreachable" | "applyFailed" | "unsupported";
 
@@ -91,11 +88,10 @@ function setStatus(next: Partial<SyncStatus>): void {
 // The mirror needs the account's user id to shape share rows (direction /
 // counterpart). Persisted, so an offline cycle never blocks on /users/me — but
 // re-checked every cycle the server can answer (apiFetch caches the record for
-// a minute, so this is not a request per cycle). It used to be resolved once
-// and trusted forever, and an id that no longer matched the signed-in account
-// silently inverted every share: outgoing stored as 'in', incoming as 'out',
-// every counterpart the wrong person (found 2026-09-05 on a fake-auth Pixel,
-// where changing identity skips the sign-in wipe).
+// a minute, so this is not a request per cycle). An id that no longer matches
+// the signed-in account silently inverts every share: outgoing stored as 'in',
+// incoming as 'out', every counterpart the wrong person (for example where
+// changing identity skips the sign-in wipe).
 //
 // A mismatch rebuilds the MIRROR, which is derived from the id and re-pulls
 // from zero. The outbox stays: it is unsent work, and an account switch that
@@ -135,9 +131,9 @@ async function runCycleOnce(): Promise<void> {
   //
   // The pull runs even when the push failed. One unsendable op — a media file
   // the OS reclaimed, say, which throws with no HTTP status and so is never
-  // parked — used to abort the cycle before the pull and stop the mirror
-  // receiving ANY server change, for as long as that op sat in the outbox.
-  // Push failure is still a cycle failure; it just isn't a pull failure.
+  // parked — must not abort the cycle before the pull and stop the mirror
+  // receiving server changes. Push failure is still a cycle failure; it just
+  // isn't a pull failure.
   // BEFORE the flush, so anything it registers goes up in this same cycle
   // rather than waiting for the next one. Best-effort like the thumbnail cache
   // below: a recording that cannot be written to disk is not a reason to stop
@@ -157,7 +153,7 @@ async function runCycleOnce(): Promise<void> {
   else await clearUnanswered();
   await runDeltaPull(userId);
   if (flushError) throw flushError;
-  // Eager thumbnail cache (§7.3): best-effort — an offline-again failure
+  // Eager thumbnail cache: best-effort — an offline-again failure
   // must not mark the whole cycle failed (rows retry next pass).
   await syncThumbnailCache().catch(() => {});
   await clearSyncStateValue(APPLY_FAILED_KEY);
@@ -190,7 +186,7 @@ async function runCycleOnce(): Promise<void> {
 //
 // "Long enough" is a day of this phone calling itself online with Logjam GPS
 // in front of someone. Not wall time: a week in a canyon, or a week in a
-// drawer, is the app working as designed. And no timer measures it (ADR 0013):
+// drawer, is Logjam GPS working as designed. And no timer measures it (ADR 0013):
 // the only clock is the gap between two failed cycles, which the foreground
 // ladder keeps under five minutes, so a longer gap means the time between was
 // spent in the background or asleep and adds nothing.
@@ -221,7 +217,7 @@ async function noteUnanswered(): Promise<void> {
   const ms =
     (typeof stored.ms === "number" ? stored.ms : 0) +
     // A clock set back between two failures is a negative gap, and adding
-    // it took time off the count (syncEngine.test.ts).
+    // it would take time off the count (syncEngine.test.ts).
     (gap > 0 && gap <= UNANSWERED_GAP_MAX_MS ? gap : 0);
   const since =
     typeof stored.since === "string"
@@ -266,7 +262,7 @@ export function requestSync(): Promise<void> {
       if (err instanceof SyncApplyError) {
         // Nothing about waiting changes the outcome, so do not schedule a
         // retry the user is then told about. The recovery is a fresh mirror
-        // (or a new app version), offered from Sync issues.
+        // (or a new Logjam GPS version), offered from Sync issues.
         console.error("sync: delta page could not be applied", err.cause);
         await setSyncStateValue(
           APPLY_FAILED_KEY,
@@ -297,7 +293,7 @@ export function requestSync(): Promise<void> {
         return;
       }
       // Offline or server trouble: quiet failure — the mirror keeps serving.
-      // Exponential-backoff retry (§8.3, 1 s..5 min jitter) on top of the
+      // Exponential-backoff retry (1 s..5 min jitter) on top of the
       // event triggers, so a flaky link recovers without user action.
       setStatus({
         state: "error",
@@ -318,13 +314,12 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
 
 function scheduleBackoffRetry(): void {
-  // A cycle already in flight when the shell unmounted still lands here on
-  // failure, and used to install a fresh timer AFTER the cleanup ran — a
-  // self-sustaining loop issuing authenticated requests with no owner and no
-  // way to stop it short of a process restart.
+  // A cycle already in flight when the shell unmounts still lands here on
+  // failure; it must not install a fresh timer after cleanup has run (which
+  // would create a loop issuing authenticated requests with no owner).
   if (stopped || retryTimer) return;
   // The ladder is for a flaky link, not for a phone with no signal and a screen
-  // that has been off for six hours. A backgrounded app has two triggers that
+  // that has been off for six hours. A backgrounded client has two triggers that
   // already recover it — the foreground edge and the offline→online edge — so a
   // retry there can only wake the radio to fail again, and on a trip that is one
   // wakeup every few minutes for the whole day (the recorder's foreground
@@ -421,15 +416,14 @@ export function registerSyncTriggers(): () => void {
   followUpRequested = false;
 
   // Wire the post-enqueue trigger (outbox + media paths call it via the
-  // bridge), then run the one-time Stage 7 → Stage 8 promotion of legacy
-  // local-only waypoints into the synced mirror (best-effort; retried next
-  // launch on failure).
+  // bridge), then run the one-time promotion of legacy local-only waypoints
+  // into the synced mirror (best-effort; retried next launch on failure).
   setMutationSyncHandler(scheduleMutationSync);
   void import("./outbox")
     .then((outbox) => outbox.migrateLegacyWaypoints())
     .catch(() => {});
 
-  // App returns to foreground.
+  // Logjam GPS returns to foreground.
   const appStateSub = AppState.addEventListener("change", (state) => {
     if (state === "active") requestAutoSync();
   });

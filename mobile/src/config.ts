@@ -4,8 +4,8 @@ import { resolveAuthMode } from "./authMode";
 
 // Runtime config, read from EXPO_PUBLIC_* env at build time (parallels the web
 // VITE_* split: dev vs prod parity via separate env files / EAS profiles).
-// Non-secret values only — Cognito pool/client IDs are public by design; no
-// secrets belong here.
+// Non-secret values only — the OIDC issuer and client ID are public by design;
+// no secrets belong here.
 
 function required(name: string, value: string | undefined): string {
   if (!value) {
@@ -23,21 +23,24 @@ export const config = {
   // Which seeded user a fake-auth dev build acts as ("fake-bob-sub").
   // Unset = alice, the historical default. Ignored outside fake auth.
   fakeSub: process.env.EXPO_PUBLIC_FAKE_SUB ?? null,
-  cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
-  cognitoClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID,
+  oidcIssuer: process.env.EXPO_PUBLIC_OIDC_ISSUER,
+  oidcClientId: process.env.EXPO_PUBLIC_OIDC_CLIENT_ID,
   // CDN serving master topo tiles + (future) Protomaps basemap/glyphs —
   // parallels the web TOPO_CDN_BASE_URL.
   topoCdnBaseUrl:
     process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
   // Where Logjam Web lives: a friend invite link made here opens there.
-  // Required, with no default, so a dev build cannot hand out a link to prod.
+  // Required, with no default, so a dev build cannot hand out a link to prod
+  // (Guard: config.test.ts).
   webUrl: required("EXPO_PUBLIC_WEB_URL", process.env.EXPO_PUBLIC_WEB_URL),
 } as const;
 
-// Client-version discipline (Stage 0): every API request carries this header so
+// Client-version discipline: every API request carries this header so
 // the server can enforce a min-supported-version / forced-upgrade lever before
 // any stale build ships. package.json is the one declaration of the app version;
 // app.config.ts reads the same field (guard: versionAgreement.test.ts).
 export const CLIENT_VERSION_HEADER = "x-logjam-client";
 export const CLIENT_SEMVER: string = packageJson.version;
 export const CLIENT_VERSION = `mobile/${CLIENT_SEMVER}`;
+/** The version as a person reads it; `CLIENT_VERSION` is a header value. */
+export const CLIENT_VERSION_LABEL = `Logjam GPS ${CLIENT_SEMVER}`;

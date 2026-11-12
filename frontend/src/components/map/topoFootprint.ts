@@ -4,11 +4,10 @@ import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 /**
  * Collect every [lng, lat] position out of a GeoJSON geometry's `coordinates`,
  * regardless of nesting depth. A topo footprint is a Polygon for a contiguous
- * capture but a MultiPolygon for a disconnected one — the extra nesting level
- * meant a plain `.flat()` left rings (not positions), so Math.min(...) of arrays
- * produced NaN and fitBounds threw "Invalid LngLat object: (NaN, NaN)". Walking
- * to the numeric leaf pairs handles Polygon, MultiPolygon, and GeometryCollection
- * coordinate shapes alike.
+ * capture but a MultiPolygon for a disconnected one — a plain `.flat()`
+ * leaves coordinate rings rather than position pairs. Walking to the numeric
+ * leaf pairs handles Polygon, MultiPolygon, and GeometryCollection coordinate
+ * shapes alike.
  */
 export function collectLngLatPairs(node: unknown): [number, number][] {
   if (!Array.isArray(node)) return [];

@@ -14,7 +14,7 @@
 // ONCE PER TRIP THAT LINKED THE PLACE, not once per place. Doing a canyon three
 // times counts its pitches three times, which is the whole point.
 //
-// DATES ARE UTC. Trip dates are UTC-midnight date-only values (CH-001), so
+// DATES ARE UTC. Trip dates are UTC-midnight date-only values, so
 // every bucket, gap and weekday here reads UTC fields. A `now`-style instant
 // never enters this module — the caller resolves the range to date keys first
 // (mobile/src/ui/monthGrid.ts has the local-vs-UTC rules for that conversion).
@@ -42,6 +42,9 @@ export type StatsPlace = {
   name: string;
   placeTypeId: string;
   fieldValues: unknown;
+  /** False for a place shared with the user. Required, so a caller has to
+   *  answer it: see `computeLogbookStats`. */
+  owned: boolean;
 };
 
 export type StatsPlaceType = {
@@ -153,7 +156,7 @@ export type LogbookStats = {
   longestGapDays: number | null;
   /** Consecutive days out — a multi-day trip, which no per-trip count shows. */
   longestRunDays: number;
-  /** Trips falling on a Saturday or Sunday (UTC, per CH-001). */
+  /** Trips falling on a Saturday or Sunday (UTC). */
   weekendTrips: number;
   monthly: { year: number; month: number; count: number }[];
   yearly: { year: number; count: number }[];
@@ -197,7 +200,7 @@ export type LogbookStats = {
    * Place attributes, GROUPED BY THE TYPE OF PLACE THEY BELONG TO, most-visited
    * type first.
    *
-   * One flat list put a campsite's "Capacity" directly under a canyon's
+   * A flat list would put a campsite's "Capacity" directly under a canyon's
    * "Longest pitch", which is confusing but not wrong — a canyoning trip that
    * also stopped at a campsite legitimately carries both. The type is the
    * vocabulary that explains it, so the type does the grouping.
@@ -291,9 +294,9 @@ function summarizeField(
     }
     if (counts.size > VOCABULARY_MAX_DISTINCT) return null;
     // A single value repeated is a CONSTANT, not a distribution — there is
-    // nothing to compare it against. Four trips to one canyon made its permit
-    // number look like a vocabulary with one entry; a tally of one says less
-    // than no tally at all.
+    // nothing to compare it against. Repeated identical values across trips
+    // (such as a permit number) would look like a vocabulary with one entry; a
+    // tally of one says less than no tally at all.
     if (counts.size < 2) return null;
     return {
       ...head,
@@ -339,7 +342,11 @@ function summarizeField(
 }
 
 export function computeLogbookStats(input: StatsInput): LogbookStats {
-  const { trips, places, tripDefs, placeDefs, placeTypes } = input;
+  const { trips, tripDefs, placeDefs, placeTypes } = input;
+  // Own places only: a place shared with the user is someone else's ground,
+  // and counting it would inflate the completion meter and the place field
+  // stats with rows the user never chose to keep (logbookStats.test.ts).
+  const places = input.places.filter((place) => place.owned);
   const activity = input.activity ?? null;
   const placeById = new Map(places.map((place) => [place.id, place]));
 

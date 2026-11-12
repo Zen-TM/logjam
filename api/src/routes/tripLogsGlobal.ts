@@ -1,16 +1,15 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError, malformed } from "../middleware/errorHandler";
+import { accepted, AppError, malformed } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
   say,
   enforceCanyoningTag,
   linksCanyon,
   MAX_PLACES_PER_TRIP,
-  MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
-  TRIP_TYPE_MAX_LENGTH,
+  parseTripTypeList,
 } from "@logjam/shared";
 import { getParam } from "../lib/getParam";
 import { deleteTripsCascade } from "../lib/bulkDelete";
@@ -45,7 +44,7 @@ export function serializeTrip(trip: TripWithPlaces) {
 // Validates that every supplied placeId exists and is owned by the current
 // user. Returns the ordered id list to persist ([] when unassigned). The
 // error never echoes which ids failed — that would confirm foreign place
-// ids exist (SEC-001 anti-oracle).
+// ids exist.
 export async function resolveTripPlaceIds(
   userId: string,
   placeIds: unknown,
@@ -92,43 +91,12 @@ export async function placeTypeIdsOf(placeIds: string[]): Promise<string[]> {
   return rows.map((row) => row.placeTypeId);
 }
 
-// Normalizes an optional free-text trip-type list: an array of strings, each
-// trimmed and nonempty, deduped case-insensitively, order preserved, capped.
+// An optional trip-type list, by shared `parseTripTypeList`'s rules.
 // undefined → undefined (PATCH: leave unchanged); null → [] (clears the list).
 export function parseTripTypes(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (value === null) return [];
-  if (!Array.isArray(value))
-    throw malformed("types must be an array of strings or null");
-
-  const result: string[] = [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    if (typeof item !== "string")
-      throw malformed("types must be an array of strings");
-    const trimmed = item.trim();
-    if (trimmed.length === 0)
-      throw malformed("types entries must not be empty");
-    if (trimmed.length > TRIP_TYPE_MAX_LENGTH)
-      throw new AppError(
-        400,
-        say`A trip type can be up to ${TRIP_TYPE_MAX_LENGTH} characters.`,
-      );
-    const key = trimmed.toLowerCase();
-    if (seen.has(key))
-      throw new AppError(
-        400,
-        say`This trip has the same type twice. Remove one and save again.`,
-      );
-    seen.add(key);
-    result.push(trimmed);
-  }
-  if (result.length > MAX_TRIP_TYPES_PER_TRIP)
-    throw new AppError(
-      400,
-      say`A trip can have up to ${MAX_TRIP_TYPES_PER_TRIP} types.`,
-    );
-  return result;
+  return accepted(parseTripTypeList(value, "types"));
 }
 
 // Resolves the `types` array a PATCH should persist, enforcing the canyoning
@@ -170,7 +138,7 @@ export function resolvePatchedTripTypes(args: {
 
 // Normalizes an optional trip display name: trimmed, empty → null.
 // Returns undefined when the field was absent (PATCH: leave unchanged).
-// Exported for the sync push path (§8.1: validation parity with this route).
+// Exported for the sync push path (validation parity with this route).
 export function parseDisplayName(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -216,7 +184,7 @@ router.get(
     const dateToParsed = parseDateParam(dateTo, "dateTo");
 
     // Same owner-filtered where for the page and the count, so X-Total-Count
-    // reflects exactly the set being truncated by the cap (UX-001).
+    // reflects exactly the set being truncated by the cap.
     const where = {
       userId: user.id,
       ...(search
@@ -247,7 +215,7 @@ router.get(
 
     // Hard cap on the list; the body stays a bare array (consumers depend on
     // that shape) and the true total rides the X-Total-Count header so the UI
-    // can show "Showing N of TOTAL" without a response-shape change (UX-001).
+    // can show "Showing N of TOTAL" without a response-shape change.
     const TRIP_LIST_TAKE = 500;
     const [trips, total] = await Promise.all([
       prisma.tripLog.findMany({
@@ -278,7 +246,7 @@ router.get(
       include: tripPlacesInclude,
     });
     // Owner-private resource — 404 (not 403) for non-owners so the response
-    // is no existence oracle for trip IDs (SEC-001).
+    // is no existence oracle for trip IDs.
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, say`Couldn't find that trip.`);
 
@@ -313,7 +281,7 @@ router.post(
       linksCanyon(await placeTypeIdsOf(resolvedPlaceIds)),
     );
 
-    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // Optional client-minted id: own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
     const clientId = parseClientSuppliedId(req.body.id);
     if (clientId) {
@@ -402,7 +370,7 @@ router.patch(
         places: { select: { place: { select: { placeTypeId: true } } } },
       },
     });
-    // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
+    // Owner-private resource — 404 (not 403) for non-owners.
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, say`Couldn't find that trip.`);
 
@@ -452,7 +420,7 @@ router.patch(
           // Force-touch the watermark: a placeIds-only PATCH writes only
           // nested TripLogPlace rows, and Prisma's @updatedAt is not
           // guaranteed to bump the parent for nested-only writes. A trip whose
-          // links changed MUST move past the delta cursor (stage8 §3.1 trap).
+          // links changed MUST move past the delta cursor.
           updatedAt: new Date(),
         }),
       },
@@ -473,7 +441,7 @@ router.delete(
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({ where: { id } });
-    // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
+    // Owner-private resource — 404 (not 403) for non-owners.
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, say`Couldn't find that trip.`);
 

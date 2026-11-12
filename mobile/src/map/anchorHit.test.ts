@@ -6,6 +6,7 @@ import {
   anchorIndexAtPress,
   dragIsTap,
   pressIsOnAnchor,
+  pressIsOnFix,
 } from "./anchorHit";
 import { degreesPerDp } from "./scaleBar";
 
@@ -21,8 +22,8 @@ const ANCHORS: [number, number][] = [
 
 describe("pressIsOnAnchor", () => {
   it("catches the press that starts a drag", () => {
-    // The device repro: press-and-hold lands on an anchor, MLRN 11 forwards it
-    // to the map's onLongPress, and without this the map inserts a point there.
+    // Press-and-hold lands on an anchor: MLRN 11 forwards it to the map's
+    // onLongPress, and without this the map inserts a point there.
     expect(
       pressIsOnAnchor(ANCHORS, [150.4033, -33.5603], DEGREES_PER_PIXEL),
     ).toBe(true);
@@ -101,8 +102,8 @@ describe("dragIsTap", () => {
   const anchor = ANCHORS[0];
 
   it("reads a finger that wobbled a couple of DP as a TAP", () => {
-    // The operator's report: "they tap and accidentally drag a miniscule
-    // amount, so the delete option is never actually triggered."
+    // A minor wobble on tap must be treated as a tap rather than a drag, so
+    // the delete option is not suppressed.
     const wobble: [number, number] = [
       anchor[0] + DEGREES_PER_PIXEL * 2,
       anchor[1] - DEGREES_PER_PIXEL,
@@ -131,5 +132,22 @@ describe("dragIsTap", () => {
 
   it("is a tap when nothing moved at all", () => {
     expect(dragIsTap(anchor, [...anchor], DEGREES_PER_PIXEL)).toBe(true);
+  });
+});
+
+describe("pressIsOnFix", () => {
+  const drawn: [number, number] = [150.4033, -33.5603];
+  const near: [number, number] = [150.4033 + TOLERANCE / 2, -33.5603];
+  const far: [number, number] = [150.4033 + TOLERANCE * 2, -33.5603];
+
+  // Mutation: test the latest raw fix instead of the arrow as drawn, or drop
+  // the `suppressed` / `drawn !== null` checks: a press beside the arrow opens
+  // "Your position", a drawn tool or a double tap's second tap is hijacked, or
+  // a press with no arrow on the map reads as being on one.
+  it("is true on the drawn arrow only, with no tool armed", () => {
+    expect(pressIsOnFix(drawn, near, DEGREES_PER_PIXEL, false)).toBe(true);
+    expect(pressIsOnFix(drawn, far, DEGREES_PER_PIXEL, false)).toBe(false);
+    expect(pressIsOnFix(drawn, near, DEGREES_PER_PIXEL, true)).toBe(false);
+    expect(pressIsOnFix(null, near, DEGREES_PER_PIXEL, false)).toBe(false);
   });
 });

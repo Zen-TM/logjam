@@ -1,7 +1,7 @@
 // Standalone files: the account's own imports and recordings, which belong to
 // no place — and what happens when one is LINKED as a place's way.
 //
-// This is the boundary test the root CLAUDE.md requires for any new endpoint on
+// This is the boundary test the root AGENTS.md requires for any new endpoint on
 // shared places. The interesting cases are all about the second party: a
 // standalone file is owner-private, linking it to a shared place GRANTS a
 // sharee sight of it, and unlinking has to take that sight away again while the
@@ -212,8 +212,8 @@ describe("linking a standalone file as a place's way", () => {
       expect(
         revoked.body.media.some((m: { id: string }) => m.id === mediaId),
       ).toBe(false);
-      // ...and still the owner's. THIS is the change: displacing a place's way
-      // used to delete the file, because the place held a copy of it.
+      // ...and still the owner's: displacing a place's way unlinks rather
+      // than deleting the file.
       const mine = await request(API_URL)
         .get("/media/standalone")
         .set(as(ALICE_SUB));
@@ -242,6 +242,45 @@ describe("linking a standalone file as a place's way", () => {
       expect(rename.status).toBe(404);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
+    }
+  });
+
+  // The place page's "Add a way" offers a way to the place's owner only. The API
+  // is what holds that: a sharee sees the place and may own ways of their own,
+  // but neither a file nor a drawn route of theirs can be put on it.
+  // Mutation: drop `requirePlaceOwnerAccess` from `assertOwnsTarget`, or
+  // `resolveRoutePlaceId`'s owner count, and the matching call here turns 200.
+  it("refuses a sharee's own file (403) or route (400) onto the owner's place", async () => {
+    const mediaId = await createStandaloneImport(BOB_SUB);
+    let routeId: string | undefined;
+    try {
+      const file = await request(API_URL)
+        .patch(`/media/${mediaId}/link`)
+        .set(as(BOB_SUB))
+        .send({ linkedType: "place", linkedId: SHARED_PLACE_ID });
+      expect(file.status).toBe(403);
+
+      const created = await request(API_URL)
+        .post("/routes")
+        .set(as(BOB_SUB))
+        .send({
+          name: "Bob's line",
+          points: [
+            [150.3, -33.7],
+            [150.31, -33.71],
+          ],
+        });
+      expect(created.status).toBe(201);
+      routeId = created.body.id;
+      const route = await request(API_URL)
+        .patch(`/routes/${routeId}`)
+        .set(as(BOB_SUB))
+        .send({ placeId: SHARED_PLACE_ID });
+      expect(route.status).toBe(400);
+    } finally {
+      await deleteMedia(BOB_SUB, mediaId);
+      if (routeId)
+        await request(API_URL).delete(`/routes/${routeId}`).set(as(BOB_SUB));
     }
   });
 
@@ -331,12 +370,9 @@ describe("the delta pull carries standalone files", () => {
    * Drain the delta the way a client does — one page after another until
    * `hasMore` is false — and hand back the last cursor with the rows.
    *
-   * A single unpaged request is not the same thing: the budget is spent in the
-   * fixed entity order (§4.4), so media lands on page two the moment the
-   * account holds enough places, links and trips to fill page one. Asserting
-   * against ONE page passed only while the seed happened to be small, and it
-   * failed the day the seed grew — which is a fact about the fixture, not about
-   * the endpoint.
+   * A single unpaged request is not the same thing: the budget is spent in
+   * fixed entity order, so media lands on later pages if the account holds
+   * enough places, links and trips to fill earlier pages.
    */
   async function drainMedia(sub: string): Promise<{
     media: Record<string, unknown>[];
@@ -373,8 +409,8 @@ describe("the delta pull carries standalone files", () => {
       expect(row.metadata).toEqual(IMPORT_METADATA);
 
       // A cursor from AFTER the upload, then a link: the row must come back.
-      // It would not on a createdAt keyset, which is what this column change
-      // was for — the other device would show a stale parent forever.
+      // Keyset paging on updatedAt ensures the other device does not keep
+      // a stale parent forever.
       const cursor = first.cursor;
       await request(API_URL)
         .patch(`/media/${mediaId}/link`)

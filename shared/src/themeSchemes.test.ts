@@ -8,6 +8,10 @@ import {
   DEFAULT_THEME_SCHEME_ID,
   DEFAULT_NOTIFICATION_PREFERENCES,
   THEME_SCHEME_ORDER,
+  THEME_SCHEMES,
+  schemeForOs,
+  storedThemeSchemeId,
+  normalizeUserUiPreferencesKeepingNoPick,
 } from "./themeSchemes.js";
 
 describe("isThemeSchemeId", () => {
@@ -90,7 +94,7 @@ describe("normalizeUserUiPreferences", () => {
 
   // The direction of the default is the whole point: an account that predates
   // the field, or one whose stored value is junk, COPIES media. Not copying is
-  // the silent loss — the sharee's photos go, and on the phone so do the cached
+  // the silent loss — the sharee's photos go, and on Logjam GPS so do the cached
   // blobs — while copying fails loudly at the quota with a 507 they can read.
   it("defaults copyPlaceMedia to true, including for junk and absent values", () => {
     expect(normalizeUserUiPreferences(null).copyPlaceMedia).toBe(true);
@@ -157,7 +161,6 @@ describe("normalizeUserUiPreferences", () => {
     expect(result.notifications).toEqual({
       topoEmail: false,
       exportEmail: DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
-      geoPdfEmail: DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
       friendRequestInApp: DEFAULT_NOTIFICATION_PREFERENCES.friendRequestInApp,
       shareInApp: DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
     });
@@ -181,19 +184,16 @@ describe("normalizeImportMergePolicy", () => {
   });
 
   // A key the normalizer does not know has to survive the round trip: the
-  // policy is keyed by the user's own definition keys, and an earlier
-  // normalizer silently dropped anything it could not find in a field list it
-  // rebuilt from — losing the user's per-field "use file" choice.
+  // policy is keyed by the user's own definition keys; dropping unknown keys
+  // would lose the user's per-field "use file" choice.
   it("preserves an entry keyed by a definition it does not know", () => {
     expect(normalizeImportMergePolicy(POLICY)?.water_temp).toBe("useIncoming");
   });
 
-  // BEHAVIOUR CHANGE, deliberate. The policy used to be a fixed seven-entry
-  // union of grade columns, so demanding every entry was meaningful. Its keys
-  // are field KEYS now — an open set that differs per user and per place type —
-  // and rejecting a partial policy would silently revert every merge choice the
-  // user had made the moment they added or deleted a field. A missing entry
-  // already means keepExisting, which is the safe direction.
+  // The policy's keys are field keys — an open set that differs per user and
+  // per place type — so rejecting a partial policy would silently revert merge
+  // choices when a user adds or deletes a field. A missing entry defaults to
+  // keepExisting, which is the safe direction.
   it("accepts a partial policy instead of rejecting it", () => {
     expect(normalizeImportMergePolicy({ notes: "useIncoming" })).toEqual({
       notes: "useIncoming",
@@ -221,5 +221,41 @@ describe("normalizeImportMergePolicy", () => {
     expect(normalizeImportMergePolicy("nope")).toBeUndefined();
     expect(normalizeImportMergePolicy(null)).toBeUndefined();
     expect(normalizeImportMergePolicy(["a"])).toBeUndefined();
+  });
+});
+
+// Mutation: swap the two branches of `schemeForOs` and both lines go red.
+describe("schemeForOs", () => {
+  it("opens a dark OS in Sandstone and a light one in Ghost Gum", () => {
+    expect(schemeForOs(true)).toBe("sandstone");
+    expect(schemeForOs(false)).toBe("ghostGum");
+    expect(THEME_SCHEMES[schemeForOs(true)].mode).toBe("dark");
+    expect(THEME_SCHEMES[schemeForOs(false)].mode).toBe("light");
+  });
+});
+
+// Mutation: have `normalizeUserUiPreferencesKeepingNoPick` return
+// `normalizeUserUiPreferences` unchanged and the no-pick cases go red.
+describe("a scheme nobody picked", () => {
+  it("reads as no pick, not as the default", () => {
+    for (const none of [undefined, null, {}, { themeSchemeId: "nope" }]) {
+      expect(storedThemeSchemeId(none)).toBeNull();
+      expect(normalizeUserUiPreferencesKeepingNoPick(none)).not.toHaveProperty(
+        "themeSchemeId",
+      );
+    }
+    expect(normalizeUserUiPreferences({}).themeSchemeId).toBe(
+      DEFAULT_THEME_SCHEME_ID,
+    );
+  });
+
+  it("keeps a pick, and a retired id as the scheme it became", () => {
+    expect(
+      normalizeUserUiPreferencesKeepingNoPick({ themeSchemeId: "basalt" })
+        .themeSchemeId,
+    ).toBe("basalt");
+    expect(storedThemeSchemeId({ themeSchemeId: "ironbark" })).toBe(
+      "scribblyGum",
+    );
   });
 });

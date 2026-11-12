@@ -33,8 +33,8 @@ emit() {
 
 image_paths_for() {
   case "$1" in
-    api) echo '^(\.dockerignore|api/(Dockerfile|package[^/]*\.json|prisma\.config\.ts|prisma/|tsconfig\.json|src/|assets/)|shared/(package[^/]*\.json|tsconfig\.json|src/))' ;;
-    worker) echo '^topo/(Dockerfile|requirements\.txt|worker\.py|pipeline\.py|export_worker\.py|email_send\.py|push_send\.py|worker_common\.py|renderers/|icons/)' ;;
+    api) echo '^(\.dockerignore|infra/brain/brain-ca\.pem|api/(Dockerfile|package[^/]*\.json|prisma\.config\.ts|prisma/|tsconfig\.json|src/|assets/)|shared/(package[^/]*\.json|tsconfig\.json|src/))' ;;
+    worker) echo '^(infra/brain/brain-ca\.pem|topo/(Dockerfile|brain-ca\.pem|requirements\.txt|worker\.py|pipeline\.py|sharpen\.py|export_worker\.py|area_export\.py|email_send\.py|push_send\.py|worker_common\.py|build_place_registry\.py|build_gauges\.py|build_fire_history\.py|build_coverage\.py|gauges\.json|build_nsw_dem\.py|build_land_tenure\.py|renderers/|icons/))' ;;
     *) return 1 ;;
   esac
 }
@@ -90,12 +90,14 @@ self_test() {
   check "api: source"                     true  api    0 $'api/src/routes/a.ts'
   check "api: shared source"              true  api    0 $'shared/src/a.ts'
   check "api: build context ignore file"  true  api    0 $'.dockerignore'
+  check "api: the brain's certificate"    true  api    0 $'infra/brain/brain-ca.pem'
   check "api: docs only"                  false api    0 $'docs/x.md\nfrontend/src/a.ts'
   check "api: topo file"                  false api    0 $'topo/worker.py'
   check "worker: Dockerfile"              true  worker 0 $'topo/Dockerfile'
   check "worker: requirements"            true  worker 0 $'topo/requirements.txt'
   check "worker: source"                  true  worker 0 $'topo/worker.py'
   check "worker: renderer"                true  worker 0 $'topo/renderers/a.py'
+  check "worker: the brain's certificate" true  worker 0 $'infra/brain/brain-ca.pem'
   check "worker: tests only"              false worker 0 $'topo/tests/test_a.py'
   check "worker: api file"                false worker 0 $'api/src/a.ts'
   check "empty diff"                      false worker 0 ''

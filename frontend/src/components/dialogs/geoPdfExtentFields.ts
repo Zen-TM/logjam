@@ -1,11 +1,10 @@
-// Pure helpers for the GeoPdfDialog extent inputs (GEOPDF-1).
+// Pure helpers for the GeoPdfDialog extent inputs.
 //
 // The four extent fields are free-text numeric inputs whose displayed value
 // depends on the coord mode: WGS84 degrees in "latlon", MGA2020 metres in
-// "enNorthing". Previously a typed value was parseFloat'd and fed straight to
-// the degree-based apply*Change helpers (garbage in E/N mode), and an
-// inverted or non-numeric value was silently discarded on blur while the
-// input kept showing it. These helpers give the dialog:
+// "enNorthing". A typed value must be parsed in the active coord mode (rather
+// than fed straight to degree-based helpers), and inverted or non-numeric
+// values are surfaced inline with validation errors:
 //   - parseExtentField: raw string → WGS84 degrees honouring the coord mode
 //     (inverse MGA projection, paired with the same corner the display uses);
 //   - extentFieldErrors: per-field inline messages (number required, lat/lng
@@ -21,6 +20,11 @@ import {
 export type ExtentFieldKey = "n" | "s" | "e" | "w";
 export type ExtentFieldValues = Record<ExtentFieldKey, string>;
 export type ExtentFieldErrors = Record<ExtentFieldKey, string | null>;
+/** The edges and how they are typed: a GeoPDF's extent, or a free box. */
+type Edges = Pick<
+  ExtentState,
+  "north" | "south" | "east" | "west" | "coordMode"
+>;
 
 function rawToNumber(raw: string): number | null {
   const trimmed = raw.trim();
@@ -42,7 +46,7 @@ function rawToNumber(raw: string): number | null {
 export function parseExtentField(
   field: ExtentFieldKey,
   raw: string,
-  state: ExtentState,
+  state: Edges,
 ): number | null {
   const v = rawToNumber(raw);
   if (v === null) return null;
@@ -66,6 +70,24 @@ export function parseExtentField(
       return fromEastingNorthing(v, base.northing, base.zone).lon;
     }
   }
+}
+
+/**
+ * One field's text for the edges as they stand: degrees in "latlon", MGA2020
+ * metres in "enNorthing", at the corner `parseExtentField` pairs it with, so
+ * parsing the text gives the edge back (geoPdfExtentFields.test.ts).
+ */
+export function extentFieldText(field: ExtentFieldKey, state: Edges): string {
+  const [lat, lon] = {
+    n: [state.north, state.west],
+    s: [state.south, state.east],
+    e: [state.north, state.east],
+    w: [state.south, state.west],
+  }[field];
+  const latitude = field === "n" || field === "s";
+  if (state.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
+  const en = toEastingNorthing(lat, lon);
+  return (latitude ? en.northing : en.easting).toFixed(1);
 }
 
 const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
@@ -92,7 +114,7 @@ function rangeError(
  */
 export function extentFieldErrors(
   values: ExtentFieldValues,
-  state: ExtentState,
+  state: Edges,
 ): ExtentFieldErrors {
   const latlon = state.coordMode === "latlon";
   const errors: ExtentFieldErrors = { n: null, s: null, e: null, w: null };

@@ -23,17 +23,16 @@ describe("linkablePlaces", () => {
 
   it("filters case-insensitively on the query", () => {
     const { visible } = linkablePlaces(
-      [place("Claustral"), place("Ranon")],
-      "clau",
+      [place("Alpha Creek"), place("Beta Creek")],
+      "alp",
     );
-    expect(visible.map((c) => c.name)).toEqual(["Claustral"]);
+    expect(visible.map((c) => c.name)).toEqual(["Alpha Creek"]);
   });
 
   it("reports nothing hidden while under the cap", () => {
     expect(linkablePlaces(many(VISIBLE_PLACES), "").hiddenCount).toBe(0);
   });
 
-  // The bug: the list stopped at the cap and said nothing.
   it("caps the list and counts what it left out", () => {
     const result = linkablePlaces(many(VISIBLE_PLACES + 7), "");
     expect(result.visible).toHaveLength(VISIBLE_PLACES);

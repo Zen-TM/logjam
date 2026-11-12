@@ -2,7 +2,8 @@
 // binding lives in initSentry.ts).
 //
 // Mirrors api/src/lib/logger.ts: no place coordinates or names may leave the
-// device in a crash report (root CLAUDE.md privacy rule). Three layers:
+// device in a crash report (root AGENTS.md privacy rule; guard:
+// mobile/src/sentry/scrubEvent.test.ts). Three layers:
 //   1. redactTilePathPatterns semantics — strip URLs, decimal lat/lng pairs
 //      and z/x/y tile triples from every free-text field (a tile index at z18
 //      localises to ~150 m).
@@ -12,8 +13,8 @@
 //      in breadcrumb data, extra, or contexts (parallel to logger.ts
 //      redactPaths, but recursive because Sentry payloads are free-form).
 //
-// This module must ship BEFORE any Sentry init does (PROGRESS.md: reporter
-// without scrubber = build-breaker).
+// The scrubber guards crash reports before Sentry init runs (ADR 0004; guard:
+// mobile/src/sentry/scrubEvent.test.ts).
 
 // A decimal lat/lng pair in free text — "-33.5621, 150.4017", "[150.40,-33.56]"
 // and the GeoJSON-ish forms in between. Keyed redaction (SENSITIVE_KEYS) cannot
@@ -23,15 +24,25 @@
 //
 // Four decimal places (~11 m) is the floor: below that the false-positive rate
 // on ordinary numbers (timings, versions, ratios) costs more debuggability than
-// the ~1 km it would protect. Anything the app formats from a real GPS fix has
+// the ~1 km it would protect. Anything Logjam GPS formats from a real GPS fix has
 // more precision than that, not less.
 const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
 
 export function redactTilePathPatterns(message: string): string {
-  return message
-    .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
-    .replace(COORDINATE_PAIR, "[redacted-coords]")
-    .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
+  return (
+    message
+      .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+      // The sign-in redirect (`logjam://auth?code=...`) and any JWT: an ID,
+      // access or refresh token, or an authorization code, must not leave the
+      // phone in a crash report (Guard: scrubEvent.test.ts).
+      .replace(/\blogjam(?:dev)?:\/\/\S+/gi, "[redacted-url]")
+      // A file-system error embeds the URI it failed on, and an exported
+      // file's URI ends in the place's name (Guard: scrubEvent.test.ts).
+      .replace(/\b(?:content|file):\/\/\S+/gi, "[redacted-url]")
+      .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]*/g, "[redacted-token]")
+      .replace(COORDINATE_PAIR, "[redacted-coords]")
+      .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]")
+  );
 }
 
 /** Drop a rendered argument/object block from an error message (Prisma-style
@@ -51,6 +62,9 @@ export function scrubMessage(message: string): string {
 // Keys whose values could carry place coordinates or names. Mirrors the
 // intent of logger.ts redactPaths; matched case-insensitively at any depth.
 const SENSITIVE_KEYS = new Set([
+  // The token revoke call sends an opaque `token` (a Cognito refresh token has
+  // no `eyJ` prefix for the JWT pattern to catch).
+  "token",
   "latitude",
   "longitude",
   "lat",
@@ -61,6 +75,7 @@ const SENSITIVE_KEYS = new Set([
   "name",
   "altnames",
   "notes",
+  "gaugeid",
   // Generic free-text keys: a place, trip or media caption can reach a payload
   // under any of these. Tracing is off, so no span `description` is lost.
   "description",
@@ -69,8 +84,8 @@ const SENSITIVE_KEYS = new Set([
   "title",
   "displayname",
   // User-authored field LABELS and values ("permit number", "water level") are
-  // as sensitive as notes. `fieldvalues` also carries what used to be the seven
-  // grade columns, so this one key now covers everything a place records about
+  // as sensitive as notes. `fieldvalues` also carries the seven grade
+  // attributes, so this one key now covers everything a place records about
   // itself.
   "fieldvalues",
   "customfields",
@@ -81,8 +96,29 @@ const SENSITIVE_KEYS = new Set([
   // over-censoring is the safe direction for a crash report.
   "types",
   "triptypes",
+  // What the user typed into search: often the name of a place they would
+  // rather not publish (ADR 0034). `q` is the body of POST /places/search.
+  "q",
+  "query",
+  // A trip plan (`plans/plansCache.ts`): a section's text, a form's questions
+  // and labels, people's answers (phone numbers, medical notes), and a plan
+  // route's line, whose numbers no free-text pattern catches.
+  "body",
+  "questions",
+  "answers",
+  "points",
   "authorization",
   "cookie",
+  // Sign-in: tokens, the authorization code and its PKCE verifier.
+  "idtoken",
+  "accesstoken",
+  "refreshtoken",
+  "id_token",
+  "access_token",
+  "refresh_token",
+  "code",
+  "code_verifier",
+  "codeverifier",
 ]);
 
 const MAX_DEPTH = 8;

@@ -22,53 +22,36 @@ import prisma from "./services/prisma";
 import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
-import usersRouter from "./routes/users";
-import placesRouter from "./routes/places";
-import placeTypesRouter from "./routes/placeTypes";
-import tripLogsRouter from "./routes/tripLogs";
-import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
-import tripLogsBulkRouter from "./routes/tripLogsBulk";
-import placesBulkRouter from "./routes/placesBulk";
-import foreignFieldsRouter from "./routes/foreignFields";
-import sharingRouter from "./routes/sharing";
-import sharesRouter from "./routes/shares";
-import bulkShareRouter from "./routes/bulkShare";
-import fileSendsRouter from "./routes/fileSends";
-import friendsRouter from "./routes/friends";
-import friendInvitesRouter from "./routes/friendInvites";
-import notificationsRouter from "./routes/notifications";
-import ropewikiRouter from "./routes/ropewiki";
-import topoJobsRouter from "./routes/topoJobs";
-import mediaRouter from "./routes/media";
-import topoExportsRouter from "./routes/topoExports";
-import computeEstimateRouter from "./routes/computeEstimate";
-import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
-import topoTemplatesRouter from "./routes/topoTemplates";
-import vectorStyleRouter from "./routes/vectorStyle";
-import geoPdfRouter from "./routes/geoPdf";
-import customFieldsRouter from "./routes/customFields";
-import importsRouter from "./routes/imports";
-import metaRouter from "./routes/meta";
-import devicesRouter from "./routes/devices";
-import basemapRouter from "./routes/basemap";
-import routesRouter from "./routes/routes";
-import elevationRouter from "./routes/elevation";
-import flowNetworkRouter from "./routes/flowNetwork";
-import syncRouter from "./routes/sync";
+import { startPlaceRegistry } from "./services/placeRegistry";
+import { ROUTER_MOUNTS } from "./routes/mounts";
+import { createShutdown } from "./lib/shutdown";
 
 const env = getEnv();
 
 const app = express();
 
-// Behind CloudFront -> EB nginx (2 hops). Trust exactly those so `req.ip` is the
+// Trust exactly TRUST_PROXY_HOPS proxies (2 on Elastic Beanstalk: CloudFront ->
+// EB nginx; 1 with CloudFront straight to the container) so `req.ip` is the
 // real client for the IP-fallback rate-limit key (middleware/rateLimit.ts) and
 // request logs — NOT `true`, which would let clients spoof X-Forwarded-For and
-// forge their rate-limit bucket. Hop count must match the live proxy chain; if
-// the topology changes (e.g. an ALB is added), bump this. express-rate-limit's
-// validator fails loud on a wrong count.
-app.set("trust proxy", 2);
+// forge their rate-limit bucket. The count must match the live proxy chain; if
+// the topology changes (e.g. an ALB is added), change it. express-rate-limit's
+// validator fails loud on a wrong count. Guard: src/trustProxy.unit.test.ts.
+app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
-let shuttingDown = false;
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+// Declared first so its header covers every route, errors and /ready included.
+const lifecycle = createShutdown({
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+  stop: () => {
+    stopTopoJobReaper();
+    stopPlaceRegistry();
+  },
+  finish: () => prisma.$disconnect(),
+  exit: (code) => process.exit(code),
+});
+app.use(lifecycle.closeConnections);
 
 app.use(
   pinoHttp({
@@ -142,7 +125,7 @@ app.get("/health", (_req, res) => {
 
 // Readiness — checks DB; 503 during shutdown or DB outage
 app.get("/ready", async (_req, res) => {
-  if (shuttingDown) {
+  if (lifecycle.isShuttingDown()) {
     res.status(503).json({ status: "shutting_down" });
     return;
   }
@@ -199,46 +182,7 @@ if (env.ORIGIN_VERIFY_SECRET) {
 // IP otherwise. Per-route stricter limiters layered inside individual routers.
 app.use(globalLimiter);
 
-app.use("/meta", metaRouter);
-app.use("/users", usersRouter);
-app.use("/place-types", placeTypesRouter);
-app.use("/places", placesRouter);
-app.use("/places/:placeId/trips", tripLogsRouter);
-app.use("/trips/bulk", tripLogsBulkRouter);
-app.use("/places/bulk", placesBulkRouter);
-app.use("/imports", importsRouter);
-app.use("/trips", tripLogsGlobalRouter);
-app.use("/places", sharingRouter);
-// Mounted on /places too: the actions are per PLACE, and keeping them under
-// the place's own path is what makes "owner only, 404 otherwise" the same
-// answer the rest of that path gives.
-app.use("/places", foreignFieldsRouter);
-app.use("/shares", sharesRouter);
-// Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
-// file copies, which grant no Share row at all, and mounting it under the
-// direct-share router would say otherwise.
-app.use("/bulk-share", bulkShareRouter);
-app.use("/file-sends", fileSendsRouter);
-// Before /friends: its DELETE /:id would otherwise take DELETE /friends/invites.
-app.use("/friends/invites", friendInvitesRouter);
-app.use("/friends", friendsRouter);
-app.use("/notifications", notificationsRouter);
-app.use("/devices", devicesRouter);
-app.use("/basemap", basemapRouter);
-app.use("/ropewiki", ropewikiRouter);
-app.use("/topo-jobs", topoJobsRouter);
-app.use("/media", mediaRouter);
-app.use("/topo-exports", topoExportsRouter);
-app.use("/compute-estimate", computeEstimateRouter);
-app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
-app.use("/topo-templates", topoTemplatesRouter);
-app.use("/vector-style", vectorStyleRouter);
-app.use("/geo-pdf", geoPdfRouter);
-app.use("/custom-fields", customFieldsRouter);
-app.use("/routes", routesRouter);
-app.use("/elevation", elevationRouter);
-app.use("/flow-network", flowNetworkRouter);
-app.use("/sync", syncRouter);
+for (const [path, router] of ROUTER_MOUNTS) app.use(path, router);
 
 app.use(errorHandler);
 
@@ -247,39 +191,13 @@ const server = app.listen(env.PORT, () => {
 });
 
 // Periodic sweep that force-fails topo jobs stuck in pending/processing past a
-// timeout (ARCH-002). No-op when TOPO_REAPER_INTERVAL_MS=0.
+// timeout. No-op when TOPO_REAPER_INTERVAL_MS=0.
 const stopTopoJobReaper = startTopoJobReaper();
 
-const SHUTDOWN_TIMEOUT_MS = 25_000;
+// In the background: search answers 503 until the registry has loaded.
+const stopPlaceRegistry = startPlaceRegistry();
 
-function shutdown(signal: string) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  logger.info({ signal }, "shutdown_initiated");
-
-  stopTopoJobReaper();
-
-  const force = setTimeout(() => {
-    logger.error("shutdown_timeout_force_exit");
-    process.exit(1);
-  }, SHUTDOWN_TIMEOUT_MS);
-  force.unref();
-
-  server.close(async (err) => {
-    if (err) logger.error({ err: safeErrorForLog(err) }, "server_close_error");
-    try {
-      await prisma.$disconnect();
-      logger.info("shutdown_complete");
-      process.exit(0);
-    } catch (disconnectErr) {
-      logger.error(
-        { err: safeErrorForLog(disconnectErr) },
-        "prisma_disconnect_error",
-      );
-      process.exit(1);
-    }
-  });
-}
+const shutdown = (signal: string) => lifecycle.begin(server, signal);
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

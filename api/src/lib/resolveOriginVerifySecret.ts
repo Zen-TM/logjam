@@ -17,6 +17,10 @@ import {
 // yet boots normally with the check inert. Throws only on a real resolution
 // failure (id set but fetch/parse fails). Never logs the secret value; the
 // caller (boot) decides whether to exit.
+//
+// Reads process.env, not getEnv(), because it fills in what getEnv() would
+// refuse to parse. Its Secrets Manager client is its own: only boot needs
+// one, once, so it has no singleton in services/awsClients.ts.
 export async function resolveOriginVerifySecret(): Promise<void> {
   if (process.env.ORIGIN_VERIFY_SECRET) {
     return;

@@ -8,7 +8,7 @@
 // A module store rather than a navigation param, for the same reason
 // `lastCamera.ts` is one: react-navigation params are serialized into state
 // that persists and gets logged by devtools, and this is a place's position —
-// the most sensitive pair in the app (root CLAUDE.md). It is also simply
+// the most sensitive pair in Logjam (AGENTS.md, Privacy). It is also simply
 // simpler than routing a callback through a navigator, which react-navigation
 // warns about for non-serializable params.
 //

@@ -45,6 +45,27 @@
   background: var(--color-on-fill);
 }
 
+@media (forced-colors: active) {
+  .toggle {
+    forced-color-adjust: none;
+    background: Canvas;
+    border-color: ButtonText;
+  }
+
+  .thumb {
+    background: ButtonText;
+  }
+
+  .toggle[aria-checked="true"] {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .toggle[aria-checked="true"] .thumb {
+    background: HighlightText;
+  }
+}
+
 .toggle:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;
@@ -58,6 +79,9 @@
   gap: var(--space-1-5);
   /* A Row's 48: a control-sized tile and the space around it. */
   min-height: calc(var(--control-md) + 2 * var(--space-1));
+  /* In a scrolling flex column (Settings) a row would otherwise shrink to
+     that 48 and spill a two-line description over the next heading. */
+  flex-shrink: 0;
   box-sizing: border-box;
   padding: calc(var(--space-1) - 1px) var(--space-1);
   border: var(--hairline);
@@ -75,9 +99,14 @@
   outline-offset: 2px;
 }
 
+/* The reason replaces the description, so it stays at full strength; the title
+   and the switch dim (Row.module.css). */
 .row[data-disabled] {
-  opacity: var(--opacity-disabled);
   cursor: default;
+}
+
+.row[data-disabled] .title {
+  opacity: var(--opacity-disabled);
 }
 
 .text {

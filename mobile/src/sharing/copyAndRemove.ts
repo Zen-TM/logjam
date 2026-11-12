@@ -1,7 +1,7 @@
 // "Save a copy and remove" — ONE user action, three server-side steps, and the
 // order is the whole design.
 //
-// The recipient's remove is the one thing in this app that is irrecoverable by
+// The recipient's remove is the one thing in Logjam GPS that is irrecoverable by
 // the person doing it: only the owner can share it back. Bundling a copy in
 // front of it is what makes it safe, and that only holds if the copy is proven
 // to have landed BEFORE anything is given up. So:
@@ -13,7 +13,7 @@
 //      phone through delta sync; the removes apply their local cascade
 //      IMMEDIATELY (removeShare.ts says why). Removing first would blank the
 //      row on screen and bring the copy back seconds later as a different one,
-//      which reads as the app losing the place and then finding it.
+//      which reads as Logjam GPS losing the place and then finding it.
 //   3. REMOVE the ones that copied. A remove that fails leaves the user with a
 //      copy AND the share — untidy, recoverable, and reported as such, which is
 //      the right way round for the failure to fall.

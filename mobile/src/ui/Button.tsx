@@ -10,24 +10,20 @@ import {
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { showDisabledReason, type Disablable } from "./disabledReason";
+
+export type { Disablable };
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
 const COMPACT_SLOP = slopTo(controlSize.md);
 
-type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
+type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost" | "destructive";
 
 type ButtonProps = {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  disabled?: boolean;
-  /**
-   * Why it is disabled (UX §5): "Needs a connection", "Needs an account".
-   * Read by a screen reader as the hint, and what to show beside it. The button
-   * does not draw it — the screen puts the words where there is room.
-   */
-  disabledReason?: string;
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
   icon?: Glyph;
@@ -39,10 +35,12 @@ type ButtonProps = {
    * rather than as a pair of tags floating at the left edge.
    */
   grow?: boolean;
-};
+} & Disablable;
 
-// Mirrors the web button system (filled accent / outline accent / ghost —
-// MOBILE_DESIGN_BRIEF §7); other variants added as screens need them.
+// Mirrors Logjam Web's button system (filled accent / outline accent / ghost);
+// other variants added as screens need them. `destructive` is the verb of a
+// destructive confirm and nothing else: a warning fill with the ink label,
+// always wearing a glyph (`src/ConfirmHost.tsx`).
 // Buttons are pill-shaped: the one rounded family shared with chips and pills.
 export function Button({
   label,
@@ -50,6 +48,7 @@ export function Button({
   variant = "filledAccent",
   disabled = false,
   disabledReason,
+  reasonShown,
   loading = false,
   icon,
   compact = false,
@@ -58,17 +57,32 @@ export function Button({
   const theme = useTheme();
   const styles = useStyles();
 
-  const inactive = disabled || loading;
+  // A disabled button stays pressable and says why (shared/DESIGN.md §5): the
+  // press shows `disabledReason` as a toast. A loading one is working, and a
+  // press has nothing to say.
+  const inactive = loading;
   // Words are never an intent colour: an outline button's label is the text
   // colour and its EDGE is the accent, as on Logjam Web.
-  const tint = variant === "filledAccent" ? theme.onFill : theme.text;
+  const filled = variant === "filledAccent" || variant === "destructive";
+  const tint = filled ? theme.onFill : theme.text;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityHint={disabled ? disabledReason : undefined}
-      accessibilityState={{ disabled: inactive, busy: loading }}
-      onPress={onPress}
+      // Not `disabled` in the state: TalkBack may then refuse the double-tap
+      // that asks why, so the hint says it is unavailable instead.
+      accessibilityHint={
+        disabled ? `Unavailable. ${disabledReason}` : undefined
+      }
+      accessibilityState={{ disabled: loading, busy: loading }}
+      onPress={
+        disabled
+          ? () =>
+              disabledReason &&
+              !reasonShown &&
+              showDisabledReason(disabledReason)
+          : onPress
+      }
       disabled={inactive}
       hitSlop={compact ? COMPACT_SLOP : undefined}
       style={({ pressed }) => [
@@ -77,7 +91,8 @@ export function Button({
         grow && styles.grow,
         styles[variant],
         pressed &&
-          (variant === "filledAccent" ? styles.pressedFilled : styles.pressed),
+          !disabled &&
+          (filled ? styles.pressedFilled : styles.pressed),
         // A button that is loading is working, not unavailable: it keeps its
         // colour, as on Logjam Web.
         disabled && styles.disabled,
@@ -119,6 +134,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderWidth: 1,
     borderColor: theme.line,
     // A pill is never narrower than it is tall: a glyph-only button is a circle.
+    // Guard: pill.test.ts.
     minWidth: controlSize.lg,
   },
   compact: {
@@ -132,10 +148,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   // interactive); the one primary of a surface overrides it with the accent. The
   // outline's edge is the accent and its label stays the text colour.
   filledAccent: { backgroundColor: theme.accent, borderColor: theme.accent },
+  destructive: { backgroundColor: theme.warning, borderColor: theme.warning },
   outlineAccent: { borderColor: theme.accent },
   ghost: {},
   pressed: { backgroundColor: theme.cardPressed },
-  pressedFilled: { opacity: 0.85 },
+  pressedFilled: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.rowTitle },
   labelCompact: { ...textRole.control },

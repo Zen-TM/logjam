@@ -1,6 +1,6 @@
 // Multi-select over a list of cards — the "press and hold one, tap to toggle,
-// the rail becomes cancel / select-all / delete" interaction first shipped in
-// SavedScreen, now shared by Places and Logs (and any other card list).
+// the rail becomes cancel / select-all / delete" interaction used across
+// card lists (Saved, Places, Logs).
 //
 // The screen owns the DELETE (confirm copy + the actual mutation), because
 // what a delete costs differs per kind — this hook owns only the selection:
@@ -26,6 +26,8 @@ export function useBulkSelection<Item>({
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   const clearSelection = useCallback(() => setSelectedKeys([]), []);
+  /** Keep these and drop the rest: what a partly failed bulk action leaves. */
+  const selectOnly = useCallback((keys: string[]) => setSelectedKeys(keys), []);
 
   const toggleSelected = useCallback((key: string) => {
     setSelectedKeys((keys) =>
@@ -61,6 +63,7 @@ export function useBulkSelection<Item>({
   return {
     selectedKeys,
     clearSelection,
+    selectOnly,
     toggleSelected,
     selectItem,
     selectAll,

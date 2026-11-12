@@ -52,7 +52,7 @@ describe("batchFileActionMessage", () => {
   it("reports a clean run plainly, and says where the files went", () => {
     expect(
       batchFileActionMessage({ kind: "accept", done: 8, failed: 0, total: 8 }),
-    ).toEqual({ text: "Saved 8 files — find them in Saved.", tone: "info" });
+    ).toEqual({ text: "Saved 8 files — find them in Saved.", tone: "done" });
   });
 
   it("reports a PARTIAL run as an error, because the rest is the user's problem now", () => {
@@ -77,7 +77,7 @@ describe("batchFileActionMessage", () => {
     expect(
       batchFileActionMessage({ kind: "decline", done: 4, failed: 0, total: 4 })
         .text,
-    ).toBe("Turned down 4 files.");
+    ).toBe("Declined 4 files.");
   });
 
   it("says one file, not 1 files", () => {

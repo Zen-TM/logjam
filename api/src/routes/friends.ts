@@ -9,10 +9,19 @@ import { getParam } from "../lib/getParam";
 import {
   say,
   normalizeUserUiPreferences,
+  computeLeaderboard,
+  currentSeason,
+  isPodiumWeek,
+  medalFor,
+  previousSeason,
+  SYSTEM_PLACE_TYPE_IDS,
+  type LeaderboardResponse,
+  type Season,
   isSharableEntityType,
   type BulkShareItem,
   type FriendShareRow,
   type SharableEntityType,
+  USER_SEARCH_MIN_CHARS,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
@@ -28,7 +37,6 @@ import {
   revokeAllSharesBetween,
 } from "../lib/shareAccess";
 import { parseBulkShareItems } from "../lib/bulkShare";
-import { geoPdfTitle } from "../lib/geoPdfTitle";
 import {
   revokeDirectShares,
   syncedEntityType,
@@ -74,8 +82,8 @@ async function acceptFriendRequest(
       where: { id },
       data: { status: "accepted" },
     });
-    // Purge this user's own friend_request notification, mirroring decline
-    // (PRIV-003) — otherwise a stale actionable notification survives the
+    // Purge this user's own friend_request notification, mirroring decline:
+    // otherwise a stale actionable notification survives the
     // accept and later 400s from the Notifications panel.
     await tx.notification.deleteMany({
       where: {
@@ -85,7 +93,7 @@ async function acceptFriendRequest(
       },
     });
     if (notifyRequester) {
-      // Reference IDs only — username is resolved at read time (PRIV-005).
+      // Reference IDs only — username is resolved at read time.
       await tx.notification.create({
         data: {
           userId: requesterId,
@@ -155,7 +163,7 @@ async function requestOrAccept(userId: string, addresseeId: string) {
       },
     });
     if (notifyAddressee) {
-      // Reference IDs only — username is resolved at read time (PRIV-005).
+      // Reference IDs only — username is resolved at read time.
       await tx.notification.create({
         data: {
           userId: addresseeId,
@@ -217,6 +225,140 @@ router.get(
     res.json(friends);
   },
 );
+
+// ── GET /friends/leaderboard ──────────────────────────────────
+// The user and their friends who have joined, ranked by distinct canyons this
+// season (shared/src/leaderboard.ts). Someone who has not joined gets
+// `{ joined: false }` and nothing else: no peeking without taking part.
+router.get(
+  "/leaderboard",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    if (!normalizeUserUiPreferences(user.uiPreferences).leaderboardOptIn) {
+      res.json({ joined: false } satisfies LeaderboardResponse);
+      return;
+    }
+
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        status: "accepted",
+        OR: [{ requesterId: user.id }, { addresseeId: user.id }],
+      },
+      include: {
+        requester: {
+          select: { id: true, username: true, uiPreferences: true },
+        },
+        addressee: {
+          select: { id: true, username: true, uiPreferences: true },
+        },
+      },
+    });
+    const { participants, notJoined } = collectLeaderboardParticipants(
+      { id: user.id, username: user.username },
+      friendships,
+    );
+
+    const now = new Date();
+    const season = currentSeason(now);
+    const entries = await buildLeaderboard(participants, season);
+
+    let podium: Extract<LeaderboardResponse, { joined: true }>["podium"] = null;
+    if (isPodiumWeek(now)) {
+      const last = previousSeason(now);
+      const mine = (await buildLeaderboard(participants, last)).find(
+        (entry) => entry.userId === user.id,
+      );
+      if (mine && medalFor(mine, participants.size)) {
+        podium = {
+          season: last.label,
+          rank: mine.rank,
+          canyonCount: mine.canyonCount,
+        };
+      }
+    }
+
+    res.json({
+      joined: true,
+      season: season.label,
+      entries: entries.map((entry) => ({
+        ...entry,
+        isSelf: entry.userId === user.id,
+      })),
+      notJoined,
+      podium,
+    } satisfies LeaderboardResponse);
+  },
+);
+
+type LeaderboardParty = {
+  id: string;
+  username: string;
+  uiPreferences: unknown;
+};
+
+/**
+ * Who is on the board: the user and every accepted friend who has joined, as
+ * userId → username; the rest of their friends by username, for the nudge.
+ * Pure, so the consent boundary is unit-tested (leaderboard.unit.test.ts).
+ */
+export function collectLeaderboardParticipants(
+  self: { id: string; username: string },
+  friendships: {
+    requesterId: string;
+    requester: LeaderboardParty;
+    addressee: LeaderboardParty;
+  }[],
+): { participants: Map<string, string>; notJoined: string[] } {
+  const participants = new Map([[self.id, self.username]]);
+  const notJoined: string[] = [];
+  for (const f of friendships) {
+    const friend = f.requesterId === self.id ? f.addressee : f.requester;
+    if (normalizeUserUiPreferences(friend.uiPreferences).leaderboardOptIn) {
+      participants.set(friend.id, friend.username);
+    } else {
+      notJoined.push(friend.username);
+    }
+  }
+  return {
+    participants,
+    notJoined: notJoined.sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+/** One query for every participant's canyon links in the season. Only the
+ *  built-in Canyon type scores: a user's own types and campsites do not. */
+async function buildLeaderboard(
+  participants: Map<string, string>,
+  season: Season,
+) {
+  const trips = await prisma.tripLog.findMany({
+    where: {
+      userId: { in: [...participants.keys()] },
+      date: { gte: season.start, lt: season.end },
+    },
+    select: {
+      userId: true,
+      places: {
+        where: { place: { placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon } },
+        select: { placeId: true },
+      },
+    },
+  });
+  const placeIds = new Map<string, string[]>();
+  for (const trip of trips) {
+    const ids = placeIds.get(trip.userId) ?? [];
+    ids.push(...trip.places.map((link) => link.placeId));
+    placeIds.set(trip.userId, ids);
+  }
+  return computeLeaderboard(
+    [...participants].map(([userId, username]) => ({
+      userId,
+      username,
+      placeIds: placeIds.get(userId) ?? [],
+    })),
+  );
+}
 
 // ── GET /friends/requests ─────────────────────────────────────
 // Returns all pending friend requests received by the current user
@@ -337,7 +479,7 @@ router.patch(
       );
 
     // Delete the friendship and purge this user's own friend_request
-    // notification that referenced it (PRIV-003 — clean the row, don't rely on
+    // notification that referenced it (clean the row, don't rely on
     // the read-time filter alone). Both parties' mirrors must forget the edge
     // (sync tombstones, same transaction).
     await prisma.$transaction([
@@ -387,81 +529,73 @@ router.delete(
         ? friendship.addresseeId
         : friendship.requesterId;
 
-    // Collect the shares being revoked BEFORE deleting them, so we can also
-    // purge each recipient's place_shared notification for the now-unshared
-    // place (PRIV-001). Unfriend revokes shares in both directions, so the
-    // notification purge targets both users' recipient rows.
-    const revokedShares = await prisma.placeShare.findMany({
-      where: {
-        OR: [
-          { sharedById: user.id, sharedWithId: otherId },
-          { sharedById: otherId, sharedWithId: user.id },
-        ],
-      },
-      select: { id: true, placeId: true, sharedById: true, sharedWithId: true },
-    });
-
-    // Place-level media ids of every place whose share is being revoked —
-    // each sharee's mirror must forget the place AND its media (sync
-    // tombstone fan-out, written in the same transaction below).
-    const revokedPlaceIds = revokedShares.map((s) => s.placeId);
-    const revokedPlaceMedia =
-      revokedPlaceIds.length > 0
-        ? await prisma.media.findMany({
-            where: { linkedType: "place", linkedId: { in: revokedPlaceIds } },
-            select: { id: true, linkedType: true, linkedId: true },
-          })
-        : [];
-    const mediaIdsByPlace = new Map<string, string[]>();
-    for (const m of revokedPlaceMedia) {
-      const placeId = placeIdOfMedia(m);
-      if (placeId === null) continue;
-      const list = mediaIdsByPlace.get(placeId) ?? [];
-      list.push(m.id);
-      mediaIdsByPlace.set(placeId, list);
-    }
-    // A linked route rides with the shared place record, so unfriending
-    // revokes it too.
-    const revokedRoutes =
-      revokedPlaceIds.length > 0
-        ? await prisma.route.findMany({
-            where: { placeId: { in: revokedPlaceIds } },
-            select: { id: true, placeId: true },
-          })
-        : [];
-    const routeIdByPlace = new Map(
-      revokedRoutes.map((route) => [route.placeId!, route.id]),
-    );
-    const unfriendTombstones = [
-      ...friendshipDeleteTombstones({
-        friendshipId: id,
-        userIds: [friendship.requesterId, friendship.addresseeId],
-      }),
-      ...revokedShares.flatMap((s) =>
-        shareRevokeTombstones({
-          placeOwnerId: s.sharedById,
-          shareeId: s.sharedWithId,
-          shareId: s.id,
-          placeId: s.placeId,
-          placeMediaIds: mediaIdsByPlace.get(s.placeId) ?? [],
-          routeId: routeIdByPlace.get(s.placeId) ?? null,
-        }),
-      ),
-    ];
-
     await prisma.$transaction(async (tx) => {
+      // The place shares in both directions, taken from their delete: each one
+      // gets its tombstones and its recipient's place_shared purge below, and
+      // a share made after a separate read would get neither.
+      const revokedShares = await tx.$queryRaw<
+        {
+          id: string;
+          placeId: string;
+          sharedById: string;
+          sharedWithId: string;
+        }[]
+      >`DELETE FROM place_shares
+         WHERE (shared_by_id = ${user.id} AND shared_with_id = ${otherId})
+            OR (shared_by_id = ${otherId} AND shared_with_id = ${user.id})
+        RETURNING id, place_id AS "placeId", shared_by_id AS "sharedById",
+                  shared_with_id AS "sharedWithId"`;
+
+      // Place-level media ids of every place whose share is being revoked —
+      // each sharee's mirror must forget the place AND its media (sync
+      // tombstone fan-out, written in the same transaction below).
+      const revokedPlaceIds = revokedShares.map((s) => s.placeId);
+      const revokedPlaceMedia =
+        revokedPlaceIds.length > 0
+          ? await tx.media.findMany({
+              where: { linkedType: "place", linkedId: { in: revokedPlaceIds } },
+              select: { id: true, linkedType: true, linkedId: true },
+            })
+          : [];
+      const mediaIdsByPlace = new Map<string, string[]>();
+      for (const m of revokedPlaceMedia) {
+        const placeId = placeIdOfMedia(m);
+        if (placeId === null) continue;
+        const list = mediaIdsByPlace.get(placeId) ?? [];
+        list.push(m.id);
+        mediaIdsByPlace.set(placeId, list);
+      }
+      // A linked route rides with the shared place record, so unfriending
+      // revokes it too.
+      const revokedRoutes =
+        revokedPlaceIds.length > 0
+          ? await tx.route.findMany({
+              where: { placeId: { in: revokedPlaceIds } },
+              select: { id: true, placeId: true },
+            })
+          : [];
+      const routeIdByPlace = new Map(
+        revokedRoutes.map((route) => [route.placeId!, route.id]),
+      );
+      const unfriendTombstones = [
+        ...friendshipDeleteTombstones({
+          friendshipId: id,
+          userIds: [friendship.requesterId, friendship.addresseeId],
+        }),
+        ...revokedShares.flatMap((s) =>
+          shareRevokeTombstones({
+            placeOwnerId: s.sharedById,
+            shareeId: s.sharedWithId,
+            shareId: s.id,
+            placeId: s.placeId,
+            placeMediaIds: mediaIdsByPlace.get(s.placeId) ?? [],
+            routeId: routeIdByPlace.get(s.placeId) ?? null,
+          }),
+        ),
+      ];
       await writeTombstones(tx, unfriendTombstones);
-      // Revoke any places shared between these two users
-      await tx.placeShare.deleteMany({
-        where: {
-          OR: [
-            { sharedById: user.id, sharedWithId: otherId },
-            { sharedById: otherId, sharedWithId: user.id },
-          ],
-        },
-      });
       // Every OTHER share type between the two users: direct per-item Shares
-      // (waypoint / route / topo job / GeoPDF job) in both directions, plus
+      // (waypoint / route / topo job) in both directions, plus
       // file sends the recipient has not taken yet. Place shares are the
       // block above; this is the rest of the same promise — unfriending takes
       // back all live access, not just places.
@@ -481,6 +615,7 @@ router.delete(
       // referenced this friendship on either party's side.
       await tx.notification.deleteMany({
         where: {
+          userId: { in: [friendship.requesterId, friendship.addresseeId] },
           type: { in: ["friend_request", "friend_request_accepted"] },
           payload: { path: ["friendshipId"], equals: id },
         },
@@ -492,7 +627,7 @@ router.delete(
   },
 );
 
-// ── Sharing audit (fix 24) ────────────────────────────────────
+// ── Sharing audit ─────────────────────────────────────────────
 //
 // "What does Bob see, and how do I take it all back?" Sharing is authored
 // per-place, so the per-person view had no surface; these two routes are it.
@@ -542,7 +677,7 @@ type DirectShareRef = {
 };
 
 /**
- * Direct `Share` rows (waypoint / route / LiDAR topo / GeoPDF) that one person
+ * Direct `Share` rows (waypoint / route / LiDAR topo) that one person
  * can see and ANOTHER person owns — the non-place half of both directions.
  *
  * WHY IT IS NOT ONE WHERE CLAUSE, unlike the place pair above: `Share` is
@@ -612,8 +747,7 @@ async function directSharesBetween(args: {
  * Put a name on each direct-share row. One query per type present, and only
  * over the ids that survived the ownership filter.
  *
- * A name can come back null — a LiDAR topo saved without one, a GeoPDF whose
- * config carried no title. `shareRowTitle` (shared/src/sharing.ts) is what
+ * A name can come back null — a LiDAR topo saved without one. `shareRowTitle` (shared/src/sharing.ts) is what
  * turns that into words, on both clients, rather than each surface inventing
  * its own "Untitled".
  */
@@ -643,17 +777,6 @@ async function nameDirectShares(
 
   await Promise.all(
     [...idsByType].map(async ([entityType, ids]) => {
-      if (entityType === "geoPdfJob") {
-        // No `name` column at all — the label is buried in the render config.
-        const jobs = await prisma.geoPdfJob.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, config: true },
-        });
-        for (const job of jobs) {
-          nameById.set(key(entityType, job.id), geoPdfTitle(job.config));
-        }
-        return;
-      }
       const rows =
         entityType === "route"
           ? await prisma.route.findMany({
@@ -832,7 +955,7 @@ router.get(
 // Ids in the body authorize NOTHING. Both arms intersect the request with a set
 // derived from the caller's own ownership, so an id belonging to a stranger's
 // place is simply absent from that set — the response is a count, so it cannot
-// report back whether the id existed (SEC-001's anti-oracle rule).
+// report back whether the id existed (the anti-oracle rule).
 router.delete(
   "/:id/shares",
   requireAuth,
@@ -845,7 +968,7 @@ router.delete(
 
     const body = req.body ?? {};
     // Reuses the bulk-share parser: same vocabulary, same 200-item cap, same
-    // 413 (api/CLAUDE.md's bulk rule), and one place that decides what an item
+    // 413 (api/AGENTS.md's bulk rule), and one place that decides what an item
     // reference looks like on the wire.
     const requested =
       body.items === undefined || body.items === null
@@ -853,7 +976,7 @@ router.delete(
         : parseBulkShareItems(body.items);
 
     // Collect before deleting so each revoked place's residual place_shared
-    // notification can be purged too (PRIV-001), exactly as DELETE /friends/:id
+    // notification can be purged too, exactly as DELETE /friends/:id
     // does.
     const allPlaceShares = await prisma.placeShare.findMany({
       where: ownedSharesToFriendWhere(user.id, friendId),
@@ -937,7 +1060,7 @@ router.delete(
     }));
     const itemsRevokedCount = await revokeDirectShares(directRevocations);
 
-    // Counts only — never the names/coords of what was revoked (PRIV-005).
+    // Counts only — never the names/coords of what was revoked.
     logger.info(
       {
         userId: user.id,
@@ -969,8 +1092,11 @@ router.get(
     const user = await resolveUser(req.user!.sub);
 
     const { q } = req.query;
-    if (!q || typeof q !== "string" || q.length < 3) {
-      throw new AppError(400, say`Type at least 3 characters to search.`);
+    if (!q || typeof q !== "string" || q.length < USER_SEARCH_MIN_CHARS) {
+      throw new AppError(
+        400,
+        say`Type at least ${USER_SEARCH_MIN_CHARS} characters to search.`,
+      );
     }
 
     // Same where for the page and the count, so the total reveals nothing

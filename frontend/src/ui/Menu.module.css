@@ -52,7 +52,7 @@
   cursor: pointer;
 }
 
-.item:hover:not(:disabled),
+.item:hover:not(:disabled, [aria-disabled="true"]),
 .item:focus-visible {
   background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
@@ -63,7 +63,8 @@
   outline-offset: -2px;
 }
 
-.item:disabled {
+.item:disabled,
+.item[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
   cursor: default;
 }
@@ -133,6 +134,13 @@
 
 .fit .bar {
   margin-inline: calc(-1 * var(--space-1-5));
+}
+
+/* No × bar above the contents: the panel's own header (a title and its arrow
+   or ×, a card) gets the margin the bar would have given it, the same on every
+   panel. */
+.fit.bare {
+  padding-top: var(--space-1-5);
 }
 
 /* The way out: a × at the top right, above the content, so it never covers it. */

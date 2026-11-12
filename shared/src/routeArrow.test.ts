@@ -12,12 +12,8 @@ import { ARROW_FEATURE_KIND, arrowSegmentFeatures } from "./routeArrow.js";
  * The arrows sit ON the route line, and whether they do is a property of the
  * IMAGE: MapLibre centres a line-placed symbol on its image, so a mark drawn
  * off-centre inside that image is drawn off-centre on the line — and with
- * keep-upright off it rotates with the line, so the error SWAPS SIDES wherever
- * a route doubles back, which reads as jitter rather than as an offset. The `›`
- * glyph this replaced was 2.0px low at the 24px glyph em, half the width of the
- * line it rides on, and looked exactly that janky. Logjam GPS hit it first
- * (2026-08-30) and Logjam Web was still drawing the glyph until 2026-09-17,
- * which is why the arrowhead lives here now rather than in one client.
+ * keep-upright off it rotates with the line, so the error swaps sides wherever
+ * a route doubles back, which reads as jitter rather than as an offset.
  *
  * Two things are checked, because the image is generated and a generator can
  * drift from its output: that the committed data URI still decodes to a centred

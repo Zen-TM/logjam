@@ -3,10 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The two ways out of a lost value that WRITE something, plus the list that
 // decides which of them is offered.
 //
-// Both used to be one function that marked the shelf row instead of deleting
-// it, so a value the user had already dealt with stayed on the screen asking to
-// be dealt with again. The delete is the behaviour under test — a leftover row
-// is the bug, not a detail.
+// A resolved shelf value must be deleted rather than marked: otherwise a value
+// the user has already dealt with stays on the screen asking to be dealt with
+// again. The delete is the behaviour under test.
 //
 // getSyncDb reaches for expo-sqlite, which throws outside a native runtime, so
 // the DB is a recording stand-in and the assertions are on the SQL.
@@ -64,6 +63,17 @@ vi.mock("expo-file-system/legacy", () => ({
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000001",
 }));
+// What the mirror holds now; null = the mirror can't say.
+let livePlace: Record<string, unknown> | null = null;
+vi.mock("./mirrorStore", async () => {
+  const actual =
+    await vi.importActual<typeof import("./mirrorStore")>("./mirrorStore");
+  return {
+    ...actual,
+    getMirrorPlace: () => Promise.resolve(livePlace),
+    getMirrorTrip: () => Promise.resolve(null),
+  };
+});
 vi.mock("./outbox", async () => {
   const actual = await vi.importActual<typeof import("./outbox")>("./outbox");
   return {
@@ -111,13 +121,14 @@ beforeEach(() => {
   outboxRows.length = 0;
   runCalls.length = 0;
   writes.length = 0;
+  livePlace = null;
 });
 
 describe("the mergeable-field list", () => {
   it("only names fields a local update can actually write", () => {
     // Keep both writes through `updateEntityFieldLocal`, so a field only this
     // list knew about would throw from inside the transaction the user's tap
-    // opened. The two lists must agree (root CLAUDE.md).
+    // opened. The two lists must agree (root AGENTS.md).
     for (const field of mergeableTextFields()) {
       const writable = ["place", "tripLog", "waypoint", "route"].some(
         (entity) => canRestoreField(entity, field),
@@ -140,7 +151,7 @@ describe("listShelfEntries", () => {
     expect((await listShelfEntries())[0].canKeepBoth).toBe(true);
 
     shelfRows.length = 0;
-    // The other device CLEARED the field: there is no second value to keep.
+    // The account had nothing there: there is no second value to keep.
     shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
     expect((await listShelfEntries())[0].canKeepBoth).toBe(false);
 
@@ -157,8 +168,24 @@ describe("listShelfEntries", () => {
   });
 });
 
+describe("restoreBlock", () => {
+  it("is 'nothing' when the account held nothing, so Restore cannot clear the field", async () => {
+    shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
+    expect((await listShelfEntries())[0].restoreBlock).toBe("nothing");
+    await expect(restoreShelfValue(1)).rejects.toThrow(/Cannot write/);
+    expect(writes).toEqual([]);
+  });
+
+  it("is null when there is an earlier version to put back", async () => {
+    shelfRows.push(shelfRow());
+    expect((await listShelfEntries())[0].restoreBlock).toBeNull();
+  });
+});
+
 describe("restoreShelfValue", () => {
-  it("writes the value back and DELETES the row", async () => {
+  // Mutation: write `shelvedValue` instead — a no-op, since the account already
+  // holds the user's text (the later arrival wins, api syncPush.test.ts).
+  it("writes the EARLIER version back and DELETES the row", async () => {
     shelfRows.push(shelfRow());
     await restoreShelfValue(1);
     expect(writes).toEqual([
@@ -166,11 +193,11 @@ describe("restoreShelfValue", () => {
         entity: "place",
         id: "c1",
         field: "notes",
-        value: "Exit track overgrown past the second crossing.",
+        value: "Classic. Do it in summer.",
       },
     ]);
-    // The issue is dealt with. A row that stayed behind — which is what the
-    // `restored_at` marker did — asked the user to decide it a second time.
+    // The issue is dealt with. A row left behind would ask the user to decide
+    // it a second time.
     expect(
       runCalls.some((call) =>
         call.sql.startsWith("DELETE FROM conflict_shelf"),
@@ -180,12 +207,12 @@ describe("restoreShelfValue", () => {
 });
 
 describe("keepBothShelfValue", () => {
-  it("joins them with the KEPT value first, separated by a blank line", async () => {
+  it("joins them with the EARLIER value first, separated by a blank line", async () => {
     shelfRows.push(shelfRow());
     await keepBothShelfValue(1);
-    // Kept first because the sentence describing it has to be unambiguous —
-    // "your text is added below what's there now". Chronology can't supply an
-    // order: an offline edit can be typed after the value that beat it.
+    // Earlier first because the sentence describing it has to be unambiguous —
+    // "the earlier text is above yours". Chronology can't supply an order: an
+    // offline edit can be typed after the value it replaced.
     expect(writes[0].value).toBe(
       "Classic. Do it in summer.\n\nExit track overgrown past the second crossing.",
     );
@@ -198,8 +225,37 @@ describe("keepBothShelfValue", () => {
 
   it("refuses rather than writing 'null' into the field", async () => {
     shelfRows.push(shelfRow({ server_json: JSON.stringify(null) }));
+    await expect(keepBothShelfValue(1)).rejects.toThrow(/Cannot write/);
+    expect(writes).toEqual([]);
+  });
+
+  // Reaches the `canKeepBoth` check itself: the entry can be written, but a
+  // place name is not joinable. Mutation: delete the `!entry.canKeepBoth`
+  // throw in keepBothShelfValue — the name would be written as two lines.
+  it("refuses a field where joining makes nonsense", async () => {
+    shelfRows.push(
+      shelfRow({
+        field: "name",
+        shelved_json: JSON.stringify("Claustral"),
+        server_json: JSON.stringify("Claustral Canyon"),
+      }),
+    );
     await expect(keepBothShelfValue(1)).rejects.toThrow(/Cannot keep both/);
     expect(writes).toEqual([]);
+  });
+
+  // The text it joins is what the field holds NOW. Mutation: join
+  // `shelvedValue` — it would put back text the user has since replaced.
+  it("joins the earlier text to the live value, not the flush-time snapshot", async () => {
+    shelfRows.push(shelfRow());
+    livePlace = { notes: "Edited again on the phone." };
+    const [entry] = await listShelfEntries();
+    expect(entry.changedSince).toBe(true);
+    expect(entry.currentValue).toBe("Edited again on the phone.");
+    await keepBothShelfValue(1);
+    expect(writes[0].value).toBe(
+      "Classic. Do it in summer.\n\nEdited again on the phone.",
+    );
   });
 });
 

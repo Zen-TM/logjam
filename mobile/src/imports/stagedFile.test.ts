@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fileSizeBytes, stageIncomingFile } from "./stagedFile";
 
-// The bug this file exists for is an ORDER: both import paths measured the file
-// on the wrong side of the expensive step. The GeoPDF path copied it in full
-// and then checked (a 2 GB "PDF" filled the phone before being refused); the
-// vector path only checked in the picker flow, so the share sheet read an
-// unbounded file into one JS string and the app died before any guard ran.
-// So the assertions that matter are "did it throw" AND "was copyAsync called".
+// Guard against measuring file size after an expensive step: import paths must
+// check size before copying a large file or reading an unbounded stream into
+// memory. The assertions that matter are "did it throw" AND "was copyAsync
+// called".
 
 const getInfoAsync = vi.fn();
 const copyAsync = vi.fn(async (_options: unknown) => {});

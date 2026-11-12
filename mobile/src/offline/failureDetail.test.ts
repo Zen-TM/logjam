@@ -1,4 +1,4 @@
-// The failure message a download row now shows is text that came from an
+// The failure message a download row shows is text that comes from an
 // exception, so it goes on screen and into a screenshot. These assert the two
 // things that matter: it says something useful, and it cannot carry an area.
 import { describe, expect, it } from "vitest";

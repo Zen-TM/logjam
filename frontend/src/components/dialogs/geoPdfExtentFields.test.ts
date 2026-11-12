@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { toEastingNorthing, type ExtentState } from "@logjam/shared";
 import {
+  extentFieldText,
   parseExtentField,
   extentFieldErrors,
   hasExtentFieldError,
@@ -17,8 +18,6 @@ const baseState: ExtentState = {
   west: 150.2,
   scale: 25000,
   coordMode: "latlon",
-  lockMode: "scale",
-  pivot: "mc",
 };
 
 const values = (over: Partial<Record<"n" | "s" | "e" | "w", string>>) => ({
@@ -72,7 +71,7 @@ describe("extentFieldErrors", () => {
     expect(hasExtentFieldError(errors)).toBe(false);
   });
 
-  it("requires numbers (the UAT non-numeric case)", () => {
+  it("requires numbers", () => {
     const errors = extentFieldErrors(values({ n: "abc", w: "" }), baseState);
     expect(errors.n).toBe("Enter a number");
     expect(errors.w).toBe("Enter a number");
@@ -84,7 +83,7 @@ describe("extentFieldErrors", () => {
     expect(errors.e).toMatch(/-180 and 180/);
   });
 
-  it("flags an inverted North/South (the UAT GEOPDF-1 case)", () => {
+  it("flags an inverted North/South", () => {
     // North value south of South: -34 < -33.7.
     const errors = extentFieldErrors(values({ n: "-34" }), baseState);
     expect(errors.n).toBe("Must be north of the South value");
@@ -123,4 +122,25 @@ describe("scaleFieldError", () => {
     expect(scaleFieldError("0")).toBe("Must be at least 1");
     expect(scaleFieldError("-25000")).toBe("Must be at least 1");
   });
+});
+
+// The text a field shows must parse back to the edge it shows, in both coord
+// modes, or leaving a field untouched would move it. Mutation: pair an edge
+// with another corner in `extentFieldText` (say, N with the east edge).
+describe("extentFieldText", () => {
+  it.each(["latlon", "enNorthing"] as const)(
+    "parses back to the same edges in %s",
+    (coordMode) => {
+      const state = { ...baseState, coordMode };
+      const edge = { n: "north", s: "south", e: "east", w: "west" } as const;
+      for (const field of ["n", "s", "e", "w"] as const) {
+        const back = parseExtentField(
+          field,
+          extentFieldText(field, state),
+          state,
+        );
+        expect(back).toBeCloseTo(state[edge[field]], 5);
+      }
+    },
+  );
 });

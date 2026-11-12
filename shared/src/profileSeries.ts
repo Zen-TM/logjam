@@ -6,17 +6,24 @@
 // means, which heights are charted and the words around them are decided once
 // and each client only draws.
 import { MAP_MEASURE } from "./contracts/mapMeasure.js";
-import { GPS_CLIMB_SOURCE, NSW_5M, TERRARIUM } from "./demSources.js";
+import {
+  climbSourceOf,
+  GPS_CLIMB_SOURCE,
+  SHARPENED_CLIMB_SOURCE,
+  TERRARIUM,
+} from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
   formatDistanceM,
+  formatClockMs,
   formatDurationMs,
   formatSpeedMps,
   speedClockMs,
   type SpeedProfile,
   type TrackDetail,
 } from "./trackStats.js";
+import { NSW_REGION } from "./regions.js";
 
 export type ProfilePoint = { x: number; value: number | null };
 
@@ -31,6 +38,13 @@ export type ProfileSeries = {
   min: number | null;
   max: number | null;
 };
+
+/** What a chart scales a series' values over: its own range, however small,
+ *  so a river that moved 9 cm in a week still fills the chart. A series of one
+ *  value has no range, and a chart must not divide by it. */
+export function profileSpan(min: number, max: number): number {
+  return max - min || 1;
+}
 
 /** A DEM or GPS height profile over DISTANCE, scaled between its own ends. */
 export function elevationSeries(
@@ -133,12 +147,21 @@ export const TRACK_PROFILE_COPY = {
  * profileSeries.test.ts.
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
-  [NSW_5M.id]: "NSW 5 m terrain data",
+  [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
+  [NSW_REGION.terrain.heights.id]: "NSW 5 m terrain data",
   [TERRARIUM.id]: "30 m terrain data",
   [GPS_CLIMB_SOURCE]: "GPS heights",
 };
 /** A source this build does not know was written by a newer one. */
 const UNNAMED_SOURCE = "terrain data";
+
+/** The name of the one climb source a profile was read from, if just one. */
+function heightSourceName(sourceIds: readonly string[] | undefined): string {
+  const sources = new Set(sourceIds?.map(climbSourceOf));
+  return sources.size === 1
+    ? (HEIGHT_SOURCE_NAMES[[...sources][0]!] ?? UNNAMED_SOURCE)
+    : UNNAMED_SOURCE;
+}
 
 /**
  * The line under a finished recording's stored Ascent and Descent, saying
@@ -184,13 +207,10 @@ export function trackHeights(
     : dem?.filledFromGps
       ? "Terrain data covers part of this track — the rest is from GPS"
       : dem
-        ? // Named only when ONE source answered: a line read from two has no
-          // single name, and the credit beside it lists both.
-          `Heights from ${
-            (dem.demSourceIds?.length === 1
-              ? HEIGHT_SOURCE_NAMES[dem.demSourceIds[0]!]
-              : undefined) ?? UNNAMED_SOURCE
-          }`
+        ? // Named only when ONE source answered, counting every sharpened
+          // area as one (`lidar`), as a stored climb is: a line read from two
+          // has no single name, and the credit beside it lists both.
+          `Heights from ${heightSourceName(dem.demSourceIds)}`
         : demProfile
           ? "Terrain data incomplete — heights from GPS"
           : demLoading
@@ -237,11 +257,14 @@ export function trackStatRows(
   const rows: { label: string; value: string }[] = [];
   if (timed || elapsedMs != null) {
     rows.push({
-      label: "Time",
-      value: formatDurationMs(elapsedMs ?? detail.durationMs),
+      label: L.time,
+      value:
+        elapsedMs != null
+          ? formatClockMs(elapsedMs)
+          : formatDurationMs(detail.durationMs),
     });
   }
-  rows.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
+  rows.push({ label: L.distance, value: formatDistanceM(detail.distanceM) });
   if (detail.movingMs != null && detail.stoppedMs != null) {
     rows.push({ label: L.moving, value: formatDurationMs(detail.movingMs) });
     rows.push({ label: L.stopped, value: formatDurationMs(detail.stoppedMs) });
@@ -262,10 +285,8 @@ export function trackStatRows(
     });
   }
   // ONE condition for every height, deliberately. A series with a single
-  // altitude reading sets a min and a max — the same number twice — and
-  // shipped a "High point 27 m / Low point 27 m" pair directly above the line
-  // saying the track had no altitudes. A lone reading is not a height band and
-  // cannot be drawn, so it says nothing at all.
+  // altitude reading sets a min and a max — the same number twice — which is
+  // not a height band and cannot be drawn, so it says nothing at all.
   if (elevation && maxM != null && minM != null) {
     rows.push({ label: L.highPoint, value: formatElevationM(maxM) });
     rows.push({ label: L.lowPoint, value: formatElevationM(minM) });

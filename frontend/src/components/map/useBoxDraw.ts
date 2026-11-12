@@ -2,11 +2,7 @@
 // an area: the topo job's bbox, the place multi-select, and the Places
 // filter's area.
 //
-// ONE implementation. The first two shipped as two ~110-line copies that
-// differed only in what they did with the finished box — same anchor, same
-// overlay, same Escape handling, same teardown — so a fix to one (the overlay
-// tracking map pans, say) reached the other only if someone remembered.
-//
+
 // The gesture is click-anchor-click rather than press-drag-release because the
 // map owns press-drag for panning, and there is no modifier key that is safe
 // across platforms. Escape cancels an anchored box; the second click commits.

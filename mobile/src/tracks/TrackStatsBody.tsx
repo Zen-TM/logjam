@@ -100,10 +100,15 @@ export function TrackStatsBody({
   // list is `trackStatRows`, shared with that page for the same reason.
   const heights = trackHeights(detail, demProfile, demLoading ?? false);
   const { elevation, note: heightsNote } = heights;
+  // A live recording's clock and distance are read while walking: `instrument`.
   const stats: Stat[] = trackStatRows(detail, heights, {
     elapsedMs,
     storedClimb,
-  });
+  }).map((row) => ({
+    ...row,
+    instrument:
+      elapsedMs != null && (row.label === "Time" || row.label === "Distance"),
+  }));
 
   // The stored climb and the chart below can come from different sources
   // (`storedClimbCaption`), so each says its own: the climb's line sits

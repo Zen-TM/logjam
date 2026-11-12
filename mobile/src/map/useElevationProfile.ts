@@ -10,7 +10,7 @@
 //    user is drawing never leave the device. See api/src/services/elevation.ts.
 // 3. The public DEM tiles, fetched direct. The fallback: a guest has no
 //    account to authenticate the API call with, and a deployed API older than
-//    this app has no such route. It costs the privacy 2 was protecting, which
+//    Logjam GPS has no such route. It costs the privacy 2 was protecting, which
 //    is why it is last rather than first.
 //
 // All three read the same DEM sources at the same zoom (`sampleDem` in
@@ -25,7 +25,7 @@
 // would be one round trip per finger-press for a number the user reads once.
 //
 // GUESTS INCLUDED, via source 3. The tiles need no account, so a guest gets
-// elevation where before they got none.
+// elevation without an authenticated account.
 //
 // `allowNetwork: false` means "Simulating offline mode" — the map's offline-only
 // toggle. Source 1 still answers, because reading what is already on the phone
@@ -34,6 +34,7 @@
 // PRIVACY: the line is precise wilderness coordinates. Source 2 sends it to our
 // own API and nowhere else; source 3 sends only TILE INDICES (a ~4.9 km cell)
 // to AWS's public bucket, from the user's own connection. Never log either.
+// Guard: mobile/src/sentry/scrubEvent.test.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildTrackElevationProfile,
@@ -108,7 +109,7 @@ async function profileFromDem(
         body: { segments, ...(maxSamples ? { maxSamples } : {}) },
       });
     } catch {
-      // A deployed API older than this app has no such route, and a flaky link
+      // A deployed API older than Logjam GPS has no such route, and a flaky link
       // is a flaky link. Either way the tiles below can still answer, so this
       // is a fall-through rather than a failure. Not logged: the error could
       // carry the line.
@@ -140,11 +141,11 @@ export function useElevationProfile(
   const isGuest = useAccountState().accountState === "guest";
   // Identity of the geometry, so a re-render with the same points does not
   // re-request and a moved vertex does. A line needs at least two points
-  // across its segments, as before.
+  // across its segments.
   const totalPoints = segments.reduce((n, s) => n + s.length, 0);
   // Memoised: a live recording re-renders its panel every second, and the line
-  // only changes every few dozen points — serialising it per render was the
-  // single largest per-tick cost here.
+  // only changes every few dozen points — serialising it per render is an
+  // unnecessary per-tick cost.
   const geometryKey = useMemo(
     () => (totalPoints >= 2 ? JSON.stringify(segments) : null),
     [segments, totalPoints],

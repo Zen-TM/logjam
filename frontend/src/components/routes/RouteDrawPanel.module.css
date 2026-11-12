@@ -54,7 +54,7 @@
 /* Pinned: ending the mode must not require scrolling to find the button.
    TWO ROWS — the snap picker sits here with the other controls that change what
    the next click does, so the body above can be the same page a saved way
-   shows (operator, 2026-09-17). */
+   shows. */
 .actions {
   flex-shrink: 0;
   display: flex;

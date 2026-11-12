@@ -17,7 +17,8 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
   `useTheme().<role>`; an identity hue is `useHues()`. A function outside a
   component takes `theme` as an argument. `radius`, `spacing(n)` (8 × n, only
   the steps of `SPACE`) and `controlSize` are plain imports; a tint is
-  `withAlpha(token, a)`.
+  `withAlpha(token, wash.subtle | selected | strong)`, and a page-coloured
+  surface over the map is `veil.*`; a literal alpha is a lint error.
 - **A scheme change repaints the running app**, so nothing holds a colour at
   module scope (`logjam/no-launch-theme`). Text size still applies at the
   next launch, and its control says so.
@@ -43,13 +44,16 @@ anything text-shaped that is not a card; `sm` swatch.
 ```
 Hero            pinned · the answer + the one "add"
 filter rail     pinned · ChipRail, tallies on the chips
+search bar      pinned · `SearchField`, on a list you hunt through
 list            the only thing that scrolls
 BottomSheet     acquisition, per-item verbs, forms
 ```
 
 - **A screen with a hero sets `headerShown: false`**; `Hero` carries the top
-  inset and, on a pushed screen, the back arrow (`onBack`). A plain form or
-  settings list keeps `Screen`/`ScreenScroll` and the native header.
+  inset and, on a pushed screen, the back arrow (`onBack`). Every destination
+  under More, Settings and its pages included, leads with its `Hero`, so Back
+  reads the same on all of them; a plain form or list is `Screen`/`ScreenScroll`
+  under it.
 - **Body padding is `spacing(2)` across, `spacing(1)` between rows,
   `spacing(4)` at the bottom.**
 - **A control under the rail stays mounted** (dimmed and inert during a
@@ -64,7 +68,9 @@ BottomSheet     acquisition, per-item verbs, forms
   callbacks.
 - **A preference goes on the Settings page its storage lives on**: device
   (Display, Map, Offline and storage, Privacy and security) or account
-  (Notifications).
+  (Notifications). An account switch about a device page's subject goes on
+  that page, which says so in its header, and needs a connection there:
+  photos with copied places, the friends leaderboard.
 
 ## 3. The map
 
@@ -81,11 +87,27 @@ handler or a camera write, read
   offers what can go there.** The hold sheet and the Settings → Map
   long-press preference are one vocabulary.
 - **Only a one-finger drag stops following you.**
-- **A stale or coarse fix greys the location arrow** (`gpsSignal.ts`). No
-  accuracy halo.
-- **A running recording is a light**: the record button pulses, its numbers
-  are a sheet one tap away, and a recorder that is not saving points says so
-  on the map unasked.
+- **A figure from your position reads `fixQuality`** (`gpsSignal.ts`): the
+  arrow, the navigation readout, speed, anything new. Stale, it greys and says
+  its age ("2 min ago"); coarse, it says "about". It never shows a
+  fresh-looking number from an old fix. No accuracy halo. One constant,
+  `FIX_STALE_MS`, sets the cliff.
+- **A number read while moving is `instrument`** (28, bold, tabular):
+  distance, bearing and a recording's time (`m:ss`). The navigation readout
+  is `NavReadout`, first in the notice stack after a critical notice; a
+  place's name is its second line. Speed and elevation are a glance beside
+  the scale bar, a compact `control` chip, never a hero.
+- **A running recording is a light, on screen in every map mode**: the record
+  button pulses (a steady halo under Remove animations), its numbers are a
+  sheet one tap away, and a recorder that is not saving points says so on the
+  map unasked, as a `critical` notice. The button sits in the action column
+  under Locate, on the edge Settings → Map picks, so a thumb reaches it. While a
+  tool is armed an idle button is hidden, so a map tap cannot start a
+  recording; a running one stays. Pause, Resume and Finish are full size
+  (48), share the footer (`CardActions`) and are never compact.
+- **A press-and-hold that commits ticks once** (`holdTick`: finishing a
+  recording, dropping a point on the map, selecting a row). Nothing else
+  vibrates.
 - **A tool is a mode with a panel in the notice stack.** Measure and route
   draw are one implementation (`useRouteDraft`, `DraftToolPanel`); what a
   tool lacks is an absent prop. A question asked once (measure) draws dotted
@@ -106,11 +128,27 @@ handler or a camera write, read
   parks the target and opens it from `onClosed`**, or it never resolves.
 - **Content that can outgrow the sheet pins its primary action in
   `footer`.**
-- **`Alert` is for destructive confirms only**; a list of choices is a sheet.
+- **A confirm is raised only by `confirm()`** (`src/ui/confirm.ts`), which
+  `ConfirmHost` draws as a dialog in the current scheme, never a white OS
+  alert: Cancel on the left, the verb on the right, a warning fill and glyph
+  on a destructive one. It draws Cancel and the verb (`confirm.test.ts`), bar
+  the second step of removing a member who has files ("Keep files"). A list of
+  choices is a sheet; an error is a toast. Only the sign-out prompt in
+  `App.tsx` still calls `Alert.alert`, for its three choices.
+- **A form sheet guards its own exits.** `BottomSheet` takes `discard`
+  (`abandonConfirm`): while it is non-null, ×, the back gesture, the backdrop
+  and a drag all raise the confirm, and a drag springs back meanwhile. A
+  sub-mode passes null and backs out to its form (`formDiscard.test.ts`).
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
-- **A background job's toast is at the shell** (`BackgroundToast.tsx`),
-  never on the screen that started it.
+- **There is one toast host.** `<Toast>` draws nothing; `ToastHost` (mounted
+  once in `AppShell`) shows one toast at a time, centred above the tab bar,
+  and the rest wait in order (`toastStore.test.ts`): an error or an action is
+  never replaced, and a message already showing or waiting is not added
+  twice. Its place is fixed: centred, one max width, its bottom edge just
+  above the tab bar, on every screen, sheet and the map; nothing moves it
+  (`toastHost.test.ts`). A background job's toast is at the shell
+  (`BackgroundToast.tsx`), never on the screen that started it.
 - **Long work is a progress card, not a screen**, unless leaving would break
   it.
 
@@ -169,13 +207,19 @@ handler or a camera write, read
 Reads come from the on-device mirror and writes queue in the outbox.
 
 - **Offline is one muted `StatusPill` in the hero**; a second counts what is
-  waiting to sync (`SyncStatusPills`). Never a banner, never per row.
+  waiting to sync (`SyncStatusPills`). The map has no hero, so it says offline
+  as a `Notice` in its stack, only while true; the waiting count is not on the
+  map (a Saved row's up arrow says it). Never a banner on a hero screen.
+  A Saved row is marked only when its create has not reached the account.
 - **A network-only action is disabled with "Needs a connection" as its
-  subtitle.** These need a connection: downloading regions, topos and
-  GeoPDFs; sharing and reading who a place is shared with; adopting or
-  discarding a value from a copy; full-resolution media not yet on the
-  phone; notification preferences; username, email, deleting the account.
-  Everything else works offline.
+  subtitle.** These need a connection: downloading offline maps and sharpened areas and a
+  plan's files for the trip; sharing and reading who a place
+  is shared with; adopting or discarding a value from a copy;
+  full-resolution media not yet on the phone; notification preferences;
+  username, email, deleting the account; creating or changing a plan, its
+  sections or its people, and answering its forms (a plan is fetched and
+  cached, not synced); saving a copy of anything in a plan, the places
+  picked for a trip log from it included. Everything else works offline.
 - **`src/auth/capabilities.ts` owns the guest matrix and both strings.** A
   screen whose data needs an account gates itself with
   `capabilityScreenBlock`: hero and back arrow over an `EmptyState`, no

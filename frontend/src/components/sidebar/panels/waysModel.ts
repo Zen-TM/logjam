@@ -1,42 +1,26 @@
 // The Ways page's decisions, kept out of the component so they can be tested:
-// what a "way" is, which kinds exist, and how four sources become one list.
+// what a "way" is and how four sources become one list.
 //
 // Ways answers "what lines have I got?" — routes I drew, tracks I recorded,
 // files I imported (shared/DESIGN.md §2). Logjam GPS answers the same question on its
-// Saved tab, and its vocabulary is the one used here: `CATEGORY_META` in
-// `mobile/src/saved/savedKeys.ts` names them Routes, Tracks and Imports.
+// Saved tab, and its vocabulary is the one used here: `WAY_KIND_WORDS` in
+// `@logjam/shared` names them Routes, Tracks and Imports.
 //
 // A track on a place a FRIEND shared reaches this page through
 // `GET /places/tracks`, which is the only surface that carries it — it is not
 // one of the user's own files and appears nowhere else. It is an ordinary
-// Track or Import here, not a kind of its own: the endpoint now returns the
-// file's name and `origin` alongside its colour, so there is nothing left that
-// makes it a different sort of thing. It used to return a place id, a media id
-// and a colour, which is why Ways briefly had a fourth chip named for where a
-// file lived rather than for what it was (operator, 2026-09-17).
+// Track or Import here, not a kind of its own: the endpoint returns the
+// file's name and `origin` alongside its colour.
 import {
   mediaDisplayName,
+  type WayKind,
+  ROUTE_NAME_MAX_LENGTH,
   routeLengthM,
   type StandaloneFile,
 } from "@logjam/shared";
 import type { PlaceTrack, TRoute } from "../../../placeUtils";
 
-/**
- * The kinds of line, in the order the rail offers them. Routes first: they are
- * the only kind authored here, and the only one this page can create.
- */
-export const WAY_KINDS = ["route", "track", "import"] as const;
-
-export type WayKind = (typeof WAY_KINDS)[number];
-
-/** The rail's words — Logjam GPS's own (`CATEGORY_META`). Plural, because a
- *  chip labels a group. Each names what a thing IS; where it lives is a
- *  property of the row, never a category beside these. */
-export const WAY_KIND_LABELS: Record<WayKind, string> = {
-  route: "Routes",
-  track: "Tracks",
-  import: "Imports",
-};
+export type { WayKind };
 
 /** One row on the page, whatever it was built from. */
 export type WayItem = {
@@ -59,11 +43,16 @@ export type WayItem = {
    * The difference is what can be done about it: a directly-shared way has a
    * share row of its own and the user can drop it ("Remove"), while one seen
    * through a place has none — the only way to stop seeing it is to remove the
-   * PLACE, and offering Remove here would be a button that cannot work. Both
-   * surfaces used to re-derive this from `sharedPlaces`, and only the detail
-   * page got it right (operator, 2026-09-17).
+   * PLACE, and offering Remove here would be a button that cannot work.
    */
   viaPlace: boolean;
+  /**
+   * The file says what it is (a recording or an import). The edit and send-a-copy
+   * endpoints take only such files, so a file attached in a place's edit form,
+   * which has none, is downloaded and deleted but not renamed, recoloured or
+   * sent. A route has no file, so it is true.
+   */
+  hasOrigin: boolean;
   /** The place this way belongs to, where it belongs to one. */
   placeId: string | null;
   /**
@@ -80,10 +69,13 @@ export type WayItem = {
    * row already carries, so centring one costs no download.
    */
   bounds: [number, number, number, number] | null;
+  /** A trip has already been logged from this recording, so "Log a trip" is
+   *  not offered again. False for everything else. */
+  hasTrip: boolean;
 };
 
 /** The box around a line. Null for a line with no points to bound. */
-function boundsOfPoints(
+export function boundsOfPoints(
   points: readonly [number, number][],
 ): [number, number, number, number] | null {
   if (points.length === 0) return null;
@@ -132,11 +124,13 @@ export function wayFromRoute(
     distanceM: routeLengthM(route.points),
     color: route.color,
     shared,
+    hasOrigin: true,
     viaPlace:
       shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
     placeId: route.placeId,
     createdAt: route.createdAt,
     bounds: boundsOfPoints(route.points),
+    hasTrip: false,
   };
 }
 
@@ -146,6 +140,7 @@ export function buildWays({
   placeTracks,
   currentUserId,
   sharedPlaceIds,
+  ownPlaceIds,
 }: {
   routes: readonly TRoute[];
   standaloneFiles: readonly StandaloneFile[];
@@ -154,11 +149,13 @@ export function buildWays({
   /** Ids of the places shared WITH the user — what tells a route shared on its
    *  own from one seen through somebody's place (`WayItem.viaPlace`). */
   sharedPlaceIds: ReadonlySet<string>;
+  /** Ids of the places the user owns. A file on any other place is somebody
+   *  else's until this says otherwise, so a list still loading cannot show a
+   *  friend's file with the owner's verbs. */
+  ownPlaceIds: ReadonlySet<string>;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
-  // NEWEST FIRST, across every source — the list was routes, then files, then
-  // a friend's tracks, which is the order they were fetched in and means
-  // nothing to the reader (operator, 2026-09-17). A recording made this morning
+  // NEWEST FIRST, across every source: a recording made this morning
   // belongs at the top whatever produced it. Undated rows keep their relative
   // order at the bottom, which `Array.prototype.sort`'s stability guarantees.
   return sortNewestFirst([
@@ -180,9 +177,11 @@ export function buildWays({
         // scoped to the caller, and a friend's file arrives as a copy.
         shared: false,
         viaPlace: false,
+        hasOrigin: true,
         placeId: file.linkedPlaceId,
         createdAt: file.createdAt,
         bounds: file.metadata.bbox ?? null,
+        hasTrip: file.hasTrip,
       }),
     ),
     ...placeTracks
@@ -197,17 +196,21 @@ export function buildWays({
           title: mediaDisplayName(track),
           distanceM: track.metadata.distanceM ?? null,
           color: track.color,
-          // Everything left after the de-duplication above is a track on a
-          // place the user does not own — their own come back from
-          // `/media/standalone` as well, and that row wins.
-          shared: true,
+          // What is left after the de-duplication above is a file on a place:
+          // the user's own (an upload through the place's edit form has no
+          // `origin`, so `/media/standalone` never lists it) or one on a place
+          // shared with them. Own is proved by owning the place, never assumed
+          // from the place not being known to be shared.
+          shared: !ownPlaceIds.has(track.placeId),
           // `/places/tracks` is the place's endpoint: a file here has no share
           // row of its own, and the place's share is the only thing holding it.
-          viaPlace: true,
+          viaPlace: !ownPlaceIds.has(track.placeId),
+          hasOrigin: track.origin !== null,
           placeId: track.placeId,
           // `/places/tracks` carries no date; these sort last (see WayItem).
           createdAt: null,
           bounds: track.metadata.bbox ?? null,
+          hasTrip: false,
         }),
       ),
   ]);
@@ -242,4 +245,17 @@ export function wayKindCounts(
   const counts = { all: ways.length, route: 0, track: 0, import: 0 };
   for (const way of ways) counts[way.kind] += 1;
   return counts;
+}
+
+/**
+ * What is wrong with a way's name, as its forms say it: too long at once,
+ * blank once a save was asked for. The API checks the same before it stores
+ * one (`validateRoutePayload`), so a client that skips this reads a fault.
+ */
+export function wayNameError(name: string, saving: boolean): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length > ROUTE_NAME_MAX_LENGTH)
+    return `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`;
+  if (saving && trimmed.length === 0) return "Name is required";
+  return null;
 }

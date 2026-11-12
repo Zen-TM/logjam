@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Deleting an attachment whose upload never left the phone. Media ops bypass
-// the shared coalescing planner, so its delete-cancellation never applied
-// here: the flush ran the queued CREATE first (presign → PUT → confirm, the
-// whole file, possibly on metered data) and the delete op then removed it
-// server-side again. Correct end state, wasted radio — the exact resource the
-// outbox exists to conserve.
+// the shared coalescing planner, so its delete-cancellation does not apply
+// automatically here: without explicit cancellation, the flush would run the
+// queued CREATE first (presign → PUT → confirm, the whole file, possibly on
+// metered data) and the delete op would then remove it server-side again.
+// Correct end state, wasted radio — the exact resource the outbox exists to conserve.
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
 const unlinked: string[] = [];
 /** The queued, never-attempted create op, or null when the upload already ran. */
 let pendingCreate: { seq: number } | null = null;
+/** Every media create op still in the outbox. */
+let createOps: { seq: number; entity_id: string; fields_json: string }[] = [];
 
 const db = {
   runAsync: (sql: string, ...args: unknown[]) => {
@@ -23,7 +25,7 @@ const db = {
     if (sql.includes("FROM outbox")) return Promise.resolve(pendingCreate);
     return Promise.resolve(null);
   },
-  getAllAsync: () => Promise.resolve([]),
+  getAllAsync: () => Promise.resolve(createOps),
 };
 
 vi.mock("./syncDb", () => ({
@@ -39,9 +41,9 @@ vi.mock("../offline/localStores", () => ({
   MEDIA_CACHE_DIR: "file:///cache/",
 }));
 vi.mock("../api/apiFetch", () => ({ apiFetch: () => Promise.resolve() }));
-// MOT-006: mediaUpload.ts now imports networkPolicy.ts (NetInfo + prefsDb,
-// both native) for the metered-upload gate; deleteMediaLocal never reaches
-// it, so a bare stand-in is enough.
+// mediaUpload.ts imports networkPolicy.ts (NetInfo + prefsDb, both native)
+// for the metered-upload gate; deleteMediaLocal never reaches it, so a bare
+// stand-in is enough.
 vi.mock("../offline/networkPolicy", () => ({
   canRunNow: () => Promise.resolve(true),
 }));
@@ -88,6 +90,48 @@ describe("deleteMediaLocal", () => {
   beforeEach(() => {
     calls.length = 0;
     unlinked.length = 0;
+    createOps = [];
+  });
+
+  // A trip's copy that is still queued names its recording; the API refuses a
+  // name it no longer has. Mutation: drop the sourceMediaId loop from
+  // deleteMediaLocal and the copy still names the deleted recording.
+  it("forgets a deleted recording on the trip copies still queued for it", async () => {
+    pendingCreate = null;
+    createOps = [
+      {
+        seq: 3,
+        entity_id: "copy-1",
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "trip-1",
+          sourceMediaId: "media-1",
+        }),
+      },
+      {
+        seq: 4,
+        entity_id: "copy-2",
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "trip-1",
+          sourceMediaId: "another-recording",
+        }),
+      },
+    ];
+    await deleteMediaLocal(media);
+    const rewritten = calls.filter((call) =>
+      call.sql.includes("UPDATE outbox SET fields_json"),
+    );
+    expect(rewritten).toHaveLength(1);
+    expect(rewritten[0].args[1]).toBe(3);
+    expect(JSON.parse(rewritten[0].args[0] as string)).toEqual({
+      linkedType: "tripLog",
+      linkedId: "trip-1",
+    });
+    const cleared = calls.filter((call) =>
+      call.sql.includes("UPDATE media SET extra_json = NULL"),
+    );
+    expect(cleared.map((call) => call.args)).toEqual([["copy-1"]]);
   });
 
   it("cancels a never-sent create instead of uploading then deleting", async () => {

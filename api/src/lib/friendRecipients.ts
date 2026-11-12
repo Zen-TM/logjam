@@ -1,8 +1,7 @@
 // "These user ids are my accepted friends" — the recipient guard every
 // fan-out verb runs before it hands anything over.
 //
-// Extracted from routes/fileSends.ts when bulk sharing became a second caller.
-// The rule it enforces is one of the privacy constraints (root CLAUDE.md:
+// The rule it enforces is one of the privacy constraints (root AGENTS.md:
 // sharing is explicit, between authenticated users who have agreed to be
 // friends), so it must not exist twice and drift.
 //
@@ -13,7 +12,7 @@
 //
 // PRIVACY: the failure is 403 for both an unknown user id and an existing
 // non-friend, and the friendship is checked BEFORE any user-row lookup, so the
-// status cannot distinguish "no such user" from "not your friend" (PRIV-101).
+// status cannot distinguish "no such user" from "not your friend".
 import { type UserSentence } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";

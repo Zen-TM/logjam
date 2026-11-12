@@ -1,0 +1,38 @@
+diff --git a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt
+index 7db7762..8b63fc2 100644
+--- a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt
++++ b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt
+@@ -28,7 +28,12 @@ data class HeaderConfig(
+ )
+ 
+ class TransformRequestInterceptor : Interceptor {
+-    private val urlTransforms: LinkedHashMap<String, UrlTransformConfig> = LinkedHashMap()
++    // Logjam patch: copy-on-write. OkHttp threads iterate this map in
++    // intercept() while the UI thread adds and removes transforms; a plain
++    // LinkedHashMap throws ConcurrentModificationException mid-iteration.
++    // Each write swaps in a new map, so an iteration holds a snapshot.
++    @Volatile
++    private var urlTransforms: Map<String, UrlTransformConfig> = linkedMapOf()
+     private val urlSearchParams: LinkedHashMap<String, UrlSearchParamConfig> = LinkedHashMap()
+     private val headers: LinkedHashMap<String, HeaderConfig> = LinkedHashMap()
+ 
+@@ -53,15 +58,16 @@ class TransformRequestInterceptor : Interceptor {
+         find: String,
+         replace: String,
+     ) {
+-        urlTransforms[id] = UrlTransformConfig(match?.let { Regex(it) }, Regex(find), replace)
++        val config = UrlTransformConfig(match?.let { Regex(it) }, Regex(find), replace)
++        synchronized(this) { urlTransforms = LinkedHashMap(urlTransforms).apply { put(id, config) } }
+     }
+ 
+     fun removeUrlTransform(id: String) {
+-        urlTransforms.remove(id)
++        synchronized(this) { urlTransforms = LinkedHashMap(urlTransforms).apply { remove(id) } }
+     }
+ 
+     fun clearUrlTransforms() {
+-        urlTransforms.clear()
++        synchronized(this) { urlTransforms = linkedMapOf() }
+     }
+ 
+     fun addUrlSearchParam(

@@ -1,13 +1,11 @@
 // When is a region download "done with", and when may a screen let the user go?
 //
-// Two different questions, and the progress screen answered only the first.
-// `Done` was gated on every job being `ready` or `failed`, but the queue parks
-// jobs as `paused` for four reasons and deliberately auto-resumes only two of
-// them (`background`, `connectivity`). A job halted by a provider 403/429 parks
-// as `paused("provider-backoff")` and NOTHING will ever move it: Done stayed
-// disabled forever, Resume re-entered the same halt, and on a phone without a
-// hardware back gesture the screen was a dead end whose only exit deleted the
-// tiles.
+// `Done` is gated on jobs being settled, not just `ready` or `failed`: the queue
+// parks jobs as `paused` for four reasons and deliberately auto-resumes only two
+// of them (`background`, `connectivity`). A job halted by a provider 403/429 parks
+// as `paused("provider-backoff")` and will not auto-resume; leaving Done disabled
+// would trap the user on a dead end whose only exit deletes the tiles
+// (regionJobStatus.test.ts).
 //
 // The file is a lossless checkpoint and the region is offered again in the
 // layers sheet's Unfinished list, so leaving a stalled job is safe — it just
@@ -35,8 +33,9 @@ export function isJobStalled(job: RegionJob): boolean {
 /**
  * Is another attempt at this failure worth offering?
  *
- * `region-rejected` is the server refusing THIS AREA, and `source-unavailable`
- * an endpoint that will keep refusing until an operator fixes it — Resume on
+ * `region-rejected` is THIS AREA refused (outside the archive; a job that
+ * failed under the old API clip may also hold its over-the-cap refusal), and `source-unavailable` an archive that is missing or not served by
+ * range, which stays so until an operator fixes it — Resume on
  * either repeats the same failure and teaches the user the button is a lie.
  * Everything else (a dropped connection, a locked database, a batch of tiles
  * that wouldn't load) is worth another go against the partial file, which is a
@@ -47,9 +46,9 @@ export function isRetryableFailure(code: RegionFailureCode): boolean {
 }
 
 /**
- * Why the server refused this area: its own sentence, as it is (shared/DESIGN.md
- * §11). A job that failed before the phone kept that sentence holds one of two
- * codes instead, and a response with no sentence holds nothing.
+ * Why this area was refused: the old API clip's own sentence, as it is
+ * (shared/DESIGN.md §11), or one of two codes, which the phone's own clip
+ * uses and a job that failed before the phone kept the sentence holds.
  */
 export function regionRejectedLine(detail: string | undefined): string {
   if (detail === "too-large")
@@ -58,16 +57,27 @@ export function regionRejectedLine(detail: string | undefined): string {
   return detail;
 }
 
+/**
+ * Why a clip's archive couldn't be read. A sharpened area's (`detail`
+ * "sharpened-area") was read through a presigned URL that lasts 24 h, or the
+ * area was deleted: saving the area again fetches it while the account still
+ * lists it. Any other is an archive missing from the CDN, which no retry
+ * fixes.
+ */
+export function sourceUnavailableLine(detail: string | undefined): string {
+  return detail === "sharpened-area"
+    ? "This sharpened area's link expired, or the area was deleted. Saving the area again fetches it if it's still there."
+    : "Logjam couldn't prepare this map right now. Other maps still work.";
+}
+
 /** Nothing more will happen unless the user asks — the "may I leave?" gate. */
 export function isJobSettled(job: RegionJob): boolean {
   return isJobFinished(job) || isJobStalled(job);
 }
 
 /**
- * Pause can only be honoured on the tile-pyramid task: the vector clip is one
- * `expo-file-system` transfer with no mid-flight stop, so the button did
- * nothing — the bytes kept coming (up to 80 MB) and the row settled "ready"
- * while the UI said "Paused". An affordance that lies is worse than none.
+ * Pause is offered on the tile-pyramid task only: a clip's runner
+ * (regionDownloads.ts) stops for a cancel, not a pause (regionJobStatus.test.ts).
  */
 export function canPause(job: RegionJob): boolean {
   return job.spec.taskKind === "tile-pyramid";

@@ -3,13 +3,11 @@ import { describe, it, expect } from "vitest";
 import request from "supertest";
 
 // Coverage for routes/tripLogs.ts — the nested /places/:placeId/trips
-// router. The trip↔place m2m cutover removed every nested route except the
-// list GET (a filtered convenience view over the global /trips list); nested
-// POST/PATCH/DELETE and the nested single-trip GET no longer exist — a
-// request to any of them now 404s (Express's default no-route-matched
-// handler, since the router only registers `GET /`). Single-trip
-// fetch/create/update/delete now lives entirely on the global /trips surface
-// — see tripLogsGlobal.test.ts.
+// router. Only the list GET is registered here (a filtered convenience view
+// over the global /trips list); nested POST/PATCH/DELETE and the nested
+// single-trip GET do not exist and 404. Single-trip
+// fetch/create/update/delete lives entirely on the global /trips surface —
+// see tripLogsGlobal.test.ts.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
@@ -58,7 +56,7 @@ describe("GET /places/:placeId/trips (nested list, fake auth = alice)", () => {
       expect(trip!.places).toEqual([
         { id: placeId, name: "tripLogs nested list owner" },
       ]);
-      // Old single-place shape is fully gone from the wire.
+      // Wire shape exposes places array; singular place/placeId are absent.
       expect(trip!.place).toBeUndefined();
       expect(trip!.placeId).toBeUndefined();
     } finally {

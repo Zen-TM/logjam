@@ -40,9 +40,9 @@ terraform -chdir=infra/terraform/envs/github test
 ```
 
 The prod and GitHub-settings plans run on your PR (`terraform-plan.yml`, jobs
-`plan-prod` and `plan-github`) once the maintainer approves the run, and are
-posted as comments. A PR that changes no infra skips them
-([0027](../../docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md)). Merging applies those plans
+`plan-prod` and `plan-github`), and `terraform-plan-sign.yml` posts each as a
+comment once the run finishes. A PR that changes no infra skips them
+([0035](../../docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md)). Merging applies those plans
 ([0026](../../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
 [0025](../../docs/decisions/0025-github-settings-in-terraform.md)).
 
@@ -57,12 +57,13 @@ terraform init -input=false
 terraform output <name>
 ```
 
-Plan locally. Build the Cognito email Lambda first, because the plan hashes
-its bundle. Pass `-lock=false` so a read-only plan never holds the lock the
+Plan locally. Build the two Cognito Lambdas first, because the plan hashes
+their bundles. Pass `-lock=false` so a read-only plan never holds the lock the
 apply workflow needs:
 
 ```sh
 (cd infra/lambda/cognito-email-sender && npm ci && npm run build)
+(cd infra/lambda/cognito-pre-signup && npm ci && npm run build)
 terraform -chdir=infra/terraform/envs/prod plan -lock=false
 ```
 

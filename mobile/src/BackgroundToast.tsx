@@ -4,24 +4,33 @@
 // started it — the Saved tab's own toast would only fire if the user happened
 // to still be standing there when the job landed (DESIGN.md, the corollary).
 //
-// Two sources, one component: a GeoPDF import and a region download run. A
-// second mounted toast would let two of them overlap in the same dock, and the
-// user does not care which subsystem is talking.
+// Six sources, one component: a GeoPDF import, a region download run, a
+// plan's Download for the trip, a finished recording, a refused permission and
+// a blocked leave from route editing. A second mounted toast would let two of
+// them overlap, and the user does not care which subsystem is talking.
 //
-// It docks clear of the tab bar so an outcome doesn't land on top of the
-// navigation the user is about to use.
+// It draws nothing itself: `ToastHost` (ui/Toast.tsx) is the one place a toast
+// shows, centred above the tab bar, whichever screen or job raised it.
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 
 import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
+import { FINISH_ROUTE_FIRST, onRouteLeaveBlocked } from "./map/routeEditLock";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
-
-/** Bottom tab bar height plus a little air — the toast sits above both. */
-const TAB_BAR_CLEARANCE = 64;
+import { onPermissionToast } from "./permissionAlert";
+import { onPlanDownloadToast } from "./plans/planDownloads";
+import {
+  onLogTripRequest,
+  onRecordingToast,
+} from "./tracks/finishRecordingPrompt";
+import { LogTripFromTrackSheet } from "./tracks/LogTripFromTrackSheet";
+import type { TripTrackSource } from "./tracks/tripTrackSource";
 
 export function BackgroundToast() {
   const [message, setMessage] = useState<ToastMessage | null>(null);
+  // The finish toast's "Log a trip": the form opens here, over whatever screen
+  // the user is on, because the recorder's own sheet has gone by then.
+  const [logging, setLogging] = useState<TripTrackSource | null>(null);
 
   useEffect(() => {
     // The nonce is what re-runs the animation when the same text repeats.
@@ -30,6 +39,13 @@ export function BackgroundToast() {
     const unsubscribes = [
       onGeoPdfImportToast(show),
       onRegionDownloadToast(show),
+      onPlanDownloadToast(show),
+      onRecordingToast(show),
+      onPermissionToast(show),
+      onRouteLeaveBlocked(() =>
+        show({ text: FINISH_ROUTE_FIRST, tone: "error" }),
+      ),
+      onLogTripRequest(setLogging),
     ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
@@ -37,18 +53,20 @@ export function BackgroundToast() {
   }, []);
 
   return (
-    <View style={styles.dock} pointerEvents="box-none">
+    <>
       <Toast message={message} onDismissed={() => setMessage(null)} />
-    </View>
+      {/* Mounted only while open: it carries the whole trip form and its
+          mirror queries, which nothing else at the root needs. */}
+      {logging ? (
+        <LogTripFromTrackSheet
+          track={logging}
+          onClose={() => setLogging(null)}
+          onSaved={(text) => {
+            setLogging(null);
+            setMessage({ text, tone: "done", nonce: Date.now() });
+          }}
+        />
+      ) : null}
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  dock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: TAB_BAR_CLEARANCE,
-  },
-});

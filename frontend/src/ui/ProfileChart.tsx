@@ -12,7 +12,7 @@
 // `speedSeries` in `@logjam/shared`): the chart only places them and hands
 // them back to `formatX` and `formatValue` to be read out.
 import { useEffect, useRef, useState } from "react";
-import type { ProfileSeries } from "@logjam/shared";
+import { profileSpan, type ProfileSeries } from "@logjam/shared";
 import classes from "./ProfileChart.module.css";
 
 /** Viewbox units. The SVG scales to its container; these only set the aspect. */
@@ -61,9 +61,8 @@ export function ProfileChart({
   // A pointer emits moves far faster than the screen redraws, and each one
   // costs a scan of the samples, a re-render of this panel AND a GeoJSON write
   // to the map's hover source. Coalescing to one frame makes the cost per
-  // FRAME rather than per EVENT, which is what the drag was lagging on
-  // (operator, 2026-09-17). The pending position is a ref so a superseded move
-  // is dropped rather than queued.
+  // FRAME rather than per EVENT, preventing drag lag. The pending position is
+  // a ref so a superseded move is dropped rather than queued.
   //
   // ABOVE the early return below, with every other hook: a chart with too few
   // known values returns null, and a hook after that return runs on some
@@ -83,7 +82,7 @@ export function ProfileChart({
   const totalX = (points[points.length - 1]?.x ?? 0) - startX;
   // A flat line would divide by zero; give it a nominal band so the line
   // lands mid-plot rather than at an edge.
-  const span = (max ?? 0) - (min ?? 0) || 1;
+  const span = profileSpan(min ?? 0, max ?? 0);
   const plotHeight = HEIGHT - AXIS_HEIGHT;
   points.forEach((point, index) => {
     if (point.value == null || min == null) return;

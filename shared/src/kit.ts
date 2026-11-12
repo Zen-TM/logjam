@@ -51,6 +51,9 @@ export const KIT_COMPONENTS = {
   DateRangeFilter: gps(
     "a date range as two bounds that open the sheet's DatePicker; Logjam Web uses two date inputs in a FilterField",
   ),
+  DateRangeField: web(
+    "a date range in one calendar; Logjam GPS's DatePicker takes the same range",
+  ),
   FilterField: web(
     "a filter's label, summary and clear; Logjam GPS's sheet lays its own",
   ),
@@ -58,19 +61,21 @@ export const KIT_COMPONENTS = {
   // — rows, tiles and lists —
   Row: both,
   ListEnd: both,
+  RowList: web("a list of rows with arrow keys; touch has no arrow keys"),
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,
-  IconTile: web(
-    "Logjam GPS's Row draws the same tile from its icon and hue props",
-  ),
+  IconTile: both,
   TileCheckbox: web(
-    "a tile that ticks under a pointer; touch selects by press-and-hold",
+    "a card that ticks under a pointer; touch selects by press-and-hold",
   ),
   SelectionMark: gps(
     "the checkbox a row shows during a multi-select; Logjam Web uses TileCheckbox",
   ),
   SelectionBar: both,
+  SelectionVerb: web(
+    "a verb in the selection bar, in words; Logjam GPS's bar draws its own buttons",
+  ),
   SettingsRow: web(
     "a setting as a line with its control; Logjam GPS composes Row and Toggle",
   ),
@@ -80,18 +85,38 @@ export const KIT_COMPONENTS = {
   StatGrid: both,
   Meter: both,
   ActivitySpark: both,
+  ForecastRail: both,
   StatusPill: both,
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,
   Notice: both,
+  MapBanner: gps(
+    "a mode in the map's top row at the search button's height; Logjam Web's Notice column has room for the whole sentence",
+  ),
+  NavReadout: gps(
+    "the distance and bearing to a place as two figures at the head of the map's notice stack; Logjam Web is used at a desk and has no navigate-to-point (mapPoint contract)",
+  ),
+  CardActions: gps(
+    "a card footer's buttons share its width; Logjam Web's cards are wide enough that buttons keep their natural size (Row.module.css)",
+  ),
+  RequestRow: gps(
+    "a Row that answers a request with Accept and Decline in its card; Logjam Web's rows carry the same pair as footer Buttons (NotificationsPanel)",
+  ),
+  RequestAnswers: gps(
+    "the Accept and Decline pair inside a card; Logjam Web's rows carry the same pair as footer Buttons (NotificationsPanel)",
+  ),
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
+  ),
+
+  ToastHost: gps(
+    "the one place a toast shows; Logjam Web's ToastProvider is its host",
   ),
 
   // — form controls —
   TextField: both,
   Field: gps(
-    "a label, control, hint and error at the form rhythm; Logjam Web's TextField, Select and RangeField share one inside TextField.tsx",
+    "a label, control, hint and error at the form rhythm; Logjam Web's TextField and Select share one inside TextField.tsx",
   ),
   FormStack: gps(
     "a form's fields at the one field-to-field gap; Logjam Web's dialog body sets it in CSS",
@@ -100,18 +125,43 @@ export const KIT_COMPONENTS = {
   TextArea: web("Logjam GPS's TextField takes multiline"),
   NumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
   LiveNumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
-  RangeField: web("a slider; touch uses RangePills"),
-  SearchField: web("Logjam GPS's TextField with a search keyboard"),
+  FieldBeside: web(
+    "Logjam GPS stacks a button under the field instead of beside it",
+  ),
+  SearchField: both,
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),
   // One colour picker, a floating palette: Logjam GPS draws the closed-palette
   // mode (a `palette` prop); the free colour with opacity is a topo's cartography.
   ColourField: both,
-  DatePicker: gps("Logjam Web uses the browser's date input"),
+  DatePicker: gps(
+    "Logjam Web uses the browser's date input, and DateRangeField for a range",
+  ),
   RenameForm: gps("the phone's one-field rename sheet body"),
 
   // — surfaces —
   Hero: both,
+  HeroAdd: gps(
+    "a list hero's one add: labelled, then the glyph alone in the compact row",
+  ),
+  CollapsingHeader: gps(
+    "the floating header of a phone list that collapses: the hero and the rows pinned under it, over a list that scrolls beneath",
+  ),
+  CollapsingHero: gps(
+    "a phone list's pinned hero, folding to its title row on scroll; the desktop screen has room for the full one",
+  ),
+  HeroFlatList: gps(
+    "a FlatList under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
+  ),
+  HeroSectionList: gps(
+    "a SectionList under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
+  ),
+  HeroScrollView: gps(
+    "a ScrollView under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
+  ),
+  DataTable: web(
+    "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",
+  ),
   Dialog: web("a modal over the page; Logjam GPS's equivalent is BottomSheet"),
   SideSheet: web(
     "a sheet beside the list; Logjam GPS's equivalent is BottomSheet",
@@ -131,6 +181,7 @@ export const KIT_COMPONENTS = {
   EmptyState: both,
   LoadingState: both,
   ErrorState: both,
+  ListBody: both,
   ErrorBanner: both,
   FieldError: both,
 

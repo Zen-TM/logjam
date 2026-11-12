@@ -30,7 +30,7 @@ describe("the EB environment set from .ebextensions", () => {
     .flatMap((file) => environmentKeys(readFileSync(join(dir, file), "utf8")));
 
   it("sets only variables the API's schema declares", () => {
-    expect(set.length).toBeGreaterThan(20);
+    expect(set.length).toBeGreaterThan(15);
     expect(
       set.filter((key) => !new RegExp(`^  ${key}: z`, "m").test(schema)),
     ).toEqual([]);

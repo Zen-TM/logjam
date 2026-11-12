@@ -29,8 +29,11 @@ concurrency:
 jobs:
   release:
     name: Check tag, build and submit
-    # EXPO_TOKEN lives only in this Environment, whose deployment rule admits
-    # `mobile-v*` tags alone, so a workflow on any branch cannot read it.
+    # EXPO_TOKEN lives in this Environment, whose deployment rule admits
+    # `mobile-v*` tags alone, and in the main-only `mobile-ota` (OTA hotfixes),
+    # so a workflow on any other branch cannot read it. Guard: the
+    # releases_stay_the_maintainers and ota_updates_are_signed_on_main_only
+    # runs in infra/terraform/envs/github/tests/guards.tftest.hcl.
     environment: mobile-release
     runs-on: ubuntu-latest
     permissions:
@@ -87,9 +90,9 @@ jobs:
             echo "profile=production" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -100,7 +103,7 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # 9.0.0
+      - uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
         with:
           eas-version: 24.8.0
           token: ${{ secrets.EXPO_TOKEN }}
@@ -111,6 +114,7 @@ jobs:
           PROFILE: ${{ steps.tag.outputs.profile }}
         run: |
           set -euo pipefail
+          scripts/check-eas-env.sh "$PROFILE"
           submit=()
           if [ "$PROFILE" = production ]; then submit=(--auto-submit); fi
           eas build --platform android --profile "$PROFILE" "${submit[@]}" \

@@ -9,20 +9,14 @@
   flex-direction: column;
 }
 
-.typeRail,
-.statusRail {
+/* The kit's band, as on every other panel, so the chips sit at one height. */
+.typeRail {
+  composes: rails from "../../../ui/Chip.module.css";
+}
+
+.search {
   flex-shrink: 0;
-  padding: var(--space-1) var(--gutter) 0;
-}
-
-.statusRail {
-  padding-bottom: var(--space-1);
-}
-
-/* Selection keeps the type rail mounted but out of reach, so the list below
-   does not jump when the status rail becomes the bar. */
-.inert {
-  opacity: 0.4;
+  padding: 0 var(--gutter) var(--space-1);
 }
 
 .strip {
@@ -30,10 +24,10 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
   min-height: var(--control-md);
   box-sizing: border-box;
-  margin: 0 var(--gutter) 8px;
+  margin: 0 var(--gutter) var(--space-1);
   /* The end pad centres the round clear button in the pill's end cap. */
   padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
   border-radius: var(--radius-pill);
@@ -73,15 +67,6 @@
   gap: 6px;
   /* Room for each card's focus ring inside the scroller. */
   padding: 4px var(--gutter) var(--gutter);
-}
-
-.emptyArea {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 var(--gutter) 15%;
 }
 
 .loading {

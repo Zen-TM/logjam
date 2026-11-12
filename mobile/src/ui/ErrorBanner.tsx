@@ -1,11 +1,20 @@
 import { Pressable, Text, View } from "react-native";
 
-import { radius, spacing, makeStyles, useTheme, withAlpha } from "../theme";
+import {
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  withAlpha,
+  wash,
+} from "../theme";
 import { Icon } from "./Icon";
 
 type ErrorBannerProps = {
   message: string;
   onRetry?: () => void;
+  /** The retry action's words when "Try again" is not what it does. */
+  retryLabel?: string;
   onDismiss?: () => void;
 };
 
@@ -13,7 +22,12 @@ type ErrorBannerProps = {
 // same component as Logjam Web's `ErrorBanner` (never raw err.message; callers
 // pass output of messageFromError). The warning is the edge and the glyph; the
 // words are `text`.
-export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
+export function ErrorBanner({
+  message,
+  onRetry,
+  retryLabel = "Try again",
+  onDismiss,
+}: ErrorBannerProps) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -30,7 +44,7 @@ export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
                 accessibilityRole="button"
                 hitSlop={16}
               >
-                <Text style={styles.action}>Try again</Text>
+                <Text style={styles.action}>{retryLabel}</Text>
               </Pressable>
             ) : null}
             {onDismiss ? (
@@ -55,7 +69,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "flex-start",
     gap: spacing(1),
     // Warning hue at ~12%, so it tracks the active scheme.
-    backgroundColor: withAlpha(theme.warning, 0.12),
+    backgroundColor: withAlpha(theme.warning, wash.selected),
     borderWidth: 1,
     borderColor: theme.warning,
     borderRadius: radius.md,

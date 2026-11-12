@@ -1,11 +1,13 @@
-// Vector file import parsers (mobile Stage 5): GPX / KML / GeoJSON → GeoJSON
+// Vector file import parsers: GPX / KML / GeoJSON → GeoJSON
 // features for a MapLibre ShapeSource. Pure text-in → features-out; all file
 // and picker I/O (and KMZ unzipping) lives in the caller.
 //
 // PRIVACY: imported files are the user's own track/waypoint data — parse
 // errors are STATIC strings and must never echo file content or coordinate
-// values.
+// values (test: shared/src/vectorImport.test.ts).
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { messageFromError } from "./apiErrors.js";
+import { MEDIA_SIZE_CAPS } from "./media.js";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -62,13 +64,38 @@ export const IMPORT_ERRORS = {
   unsupportedExtension: "Unsupported file type — use GPX, KML, or GeoJSON",
 } as const;
 
+/**
+ * What each `IMPORT_ERRORS` message says to the user. The constants are for
+ * code and the corpus goldens; these are the sentences a client shows.
+ */
+export const IMPORT_SENTENCES: Record<keyof typeof IMPORT_ERRORS, string> = {
+  unparseable:
+    "We couldn't read that file. Check that it opens in another app.",
+  invalidCoordinates:
+    "That file has a point in an impossible place. Try exporting it again.",
+  noFeatures: "There's no line or point in that file to show on the map.",
+  tooManyPositions:
+    "That file has too many points. Try saving a shorter section.",
+  tooLarge: `That file is over ${MEDIA_SIZE_CAPS.track / 1024 / 1024} MB. Try saving a shorter section.`,
+  unsupportedExtension: "That file isn't a GPX, KML or GeoJSON file.",
+};
+
+/**
+ * What to tell the user when an import failed: the parser's own failures in
+ * `IMPORT_SENTENCES`, anything else through `messageFromError`.
+ */
+export function importFailureMessage(err: unknown, fallback: string): string {
+  const key = (
+    Object.keys(IMPORT_ERRORS) as (keyof typeof IMPORT_ERRORS)[]
+  ).find((each) => err instanceof Error && err.message === IMPORT_ERRORS[each]);
+  return key ? IMPORT_SENTENCES[key] : messageFromError(err, fallback);
+}
+
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 function assertValidPosition(position: ImportedPosition): void {
-  // A non-array reached this via a structurally bad GeoJSON geometry
-  // (`"coordinates": [150.1, -33.1]` on a LineString, or none at all) and
-  // escaped as a raw `TypeError: position is not iterable` from positionsOf,
-  // straight to the user. Errors out of this module are static IMPORT_ERRORS.
+  // Guard against structurally bad GeoJSON (e.g. non-array coordinates) escaping
+  // as a raw TypeError; errors out of this module are static IMPORT_ERRORS.
   if (!Array.isArray(position))
     throw new Error(IMPORT_ERRORS.invalidCoordinates);
   const [lon, lat] = position;
@@ -86,9 +113,9 @@ function assertValidPosition(position: ImportedPosition): void {
   }
 }
 
-/** Nesting depth is part of a GeoJSON geometry's validity, and nothing
- * checked it: a Polygon whose `coordinates` were a bare position made this
- * iterate a number and escape as a raw TypeError. */
+/** Nesting depth is part of a GeoJSON geometry's validity: prevents a Polygon
+ * whose coordinates are a bare position from iterating a number and escaping
+ * as a raw TypeError. */
 function asNested<T>(value: T[]): T[] {
   if (!Array.isArray(value)) throw new Error(IMPORT_ERRORS.invalidCoordinates);
   return value;
@@ -159,6 +186,9 @@ function asArray<T>(value: T | T[] | undefined): T[] {
 }
 
 function textOf(value: unknown): string | null {
+  // An element with attributes parses to an object holding its text as #text.
+  if (value && typeof value === "object" && "#text" in value)
+    value = (value as Record<string, unknown>)["#text"];
   if (typeof value === "string" && value.trim() !== "") return value.trim();
   if (typeof value === "number") return String(value);
   return null;
@@ -225,10 +255,9 @@ function gpxCoordTimes(pts: GpxPoint[]): string[] | undefined {
 
 /**
  * fast-xml-parser's XMLParser does NOT validate — it never throws on a
- * mismatched, unclosed or crossed tag, which made the try/catch around
- * `.parse()` near-dead code. A GPX truncated mid-download therefore imported
- * as a SUCCESSFUL shorter track: a route that stops in the middle of a place,
- * with nothing on screen to say so.
+ * mismatched, unclosed or crossed tag. Without explicit validation, a GPX
+ * truncated mid-download would parse as a shorter track: a route that stops
+ * in the middle of a place, with nothing on screen to say so.
  */
 function parseXmlStrict(text: string): Record<string, unknown> {
   if (XMLValidator.validate(text) !== true) {
@@ -311,8 +340,8 @@ function kmlCoordinates(text: string): ImportedPosition[] {
   for (const tuple of text.trim().split(/\s+/)) {
     if (tuple === "") continue;
     const rawParts = tuple.split(",");
-    // `Number("")` is 0, so "150.1,-33.1," fabricated an altitude of exactly
-    // sea level for a tuple that simply had a trailing comma.
+    // Number("") is 0; prevent a trailing comma from fabricating sea-level
+    // altitude.
     if (rawParts.some((part) => part.trim() === "")) {
       throw new Error(IMPORT_ERRORS.invalidCoordinates);
     }
@@ -328,23 +357,29 @@ function kmlCoordinates(text: string): ImportedPosition[] {
   return positions;
 }
 
-function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
-  const geometries: ImportedGeometry[] = [];
+type KmlShape = { geometry: ImportedGeometry; coordTimes?: string[] };
+
+/** A gx:Track's `<gx:coord>` texts ("lon lat [alt]") as KML tuples. */
+function gxCoordinates(coords: string[]): ImportedPosition[] {
+  return kmlCoordinates(coords.map((c) => c.split(/\s+/).join(",")).join(" "));
+}
+
+function kmlShapes(node: Record<string, unknown>): KmlShape[] {
+  const shapes: KmlShape[] = [];
   // An element that IS there and yields nothing is a dropped geometry, not an
-  // absent one. Skipping it quietly lost half a KML while still reporting
-  // success — `finalize` only complains when the whole file is empty, so the
-  // user saw an import that worked and a map missing features.
+  // absent one. Skipping it quietly would lose features while still reporting
+  // success (`finalize` only fails when the whole file is empty).
   const required = (coords: ImportedPosition[]): ImportedPosition[] => {
     if (coords.length === 0) throw new Error(IMPORT_ERRORS.invalidCoordinates);
     return coords;
   };
   for (const point of asArray(node.Point as Record<string, unknown>[])) {
     const coords = required(kmlCoordinates(textOf(point?.coordinates) ?? ""));
-    geometries.push({ type: "Point", coordinates: coords[0] });
+    shapes.push({ geometry: { type: "Point", coordinates: coords[0] } });
   }
   for (const line of asArray(node.LineString as Record<string, unknown>[])) {
     const coords = required(kmlCoordinates(textOf(line?.coordinates) ?? ""));
-    geometries.push({ type: "LineString", coordinates: coords });
+    shapes.push({ geometry: { type: "LineString", coordinates: coords } });
   }
   for (const polygon of asArray(node.Polygon as Record<string, unknown>[])) {
     const rings: ImportedPosition[][] = [];
@@ -364,14 +399,43 @@ function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
       if (ring.length > 0) rings.push(ring);
     }
     if (rings.length > 0)
-      geometries.push({ type: "Polygon", coordinates: rings });
+      shapes.push({ geometry: { type: "Polygon", coordinates: rings } });
+  }
+  // Google Earth's recorded tracks (gx:Track, alone or in gx:MultiTrack; the
+  // namespace prefix is stripped by the parser). Times are kept only when every
+  // vertex has one, as for GPX.
+  const tracks = [
+    ...asArray(node.Track as Record<string, unknown>[]),
+    ...asArray(node.MultiTrack as Record<string, unknown>[]).flatMap((m) =>
+      asArray(m?.Track as Record<string, unknown>[]),
+    ),
+  ];
+  for (const track of tracks) {
+    // An empty <gx:coord/> is a <when> with no fix: drop the pair, so the
+    // remaining times stay aligned with their vertices.
+    const raw = asArray(track?.coord).map(textOf);
+    const times = asArray(track?.when).map((w) => {
+      const t = Date.parse(textOf(w) ?? "");
+      return Number.isFinite(t) ? new Date(t).toISOString() : null;
+    });
+    const coordinates = required(
+      gxCoordinates(raw.filter((c): c is string => c != null)),
+    );
+    const whens =
+      times.length === raw.length ? times.filter((_, i) => raw[i] != null) : [];
+    const timed =
+      whens.length === coordinates.length && whens.every((w) => w != null);
+    shapes.push({
+      geometry: { type: "LineString", coordinates },
+      ...(timed ? { coordTimes: whens as string[] } : {}),
+    });
   }
   for (const multi of asArray(
     node.MultiGeometry as Record<string, unknown>[],
   )) {
-    geometries.push(...kmlGeometries(multi));
+    shapes.push(...kmlShapes(multi));
   }
-  return geometries;
+  return shapes;
 }
 
 function collectPlacemarks(
@@ -382,11 +446,14 @@ function collectPlacemarks(
     node.Placemark as Record<string, unknown>[],
   )) {
     const name = textOf(placemark.name);
-    for (const geometry of kmlGeometries(placemark)) {
+    for (const { geometry, coordTimes } of kmlShapes(placemark)) {
       features.push({
         type: "Feature",
         geometry,
-        properties: name ? { name } : {},
+        properties: {
+          ...(name ? { name } : {}),
+          ...(coordTimes ? { coordTimes } : {}),
+        },
       });
     }
   }

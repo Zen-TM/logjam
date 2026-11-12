@@ -1,8 +1,8 @@
 // "Get this out of my account" for something a friend shared WITH you — the
 // one control behind it on every web surface that lists shared things: places,
-// waypoints, routes, LiDAR topos and GeoPDFs.
+// waypoints, routes and LiDAR topos.
 //
-// It is NOT a delete and must never be styled or worded as one. The owner keeps
+// It is NOT a delete and must never be styled or worded as one (shared/src/sharing.test.ts). The owner keeps
 // their row; this drops the caller's own share (`DELETE .../me`, which both
 // share endpoints have always accepted), so the confirm comes from
 // `removeShareConfirm` in shared/src/sharing.ts rather than from five panels
@@ -56,7 +56,7 @@ export default function RemoveSharedButton({
     try {
       await remove();
       setConfirming(false);
-      toast.success(`${itemName} removed.`);
+      toast.done(`${itemName} removed.`);
       onRemoved();
     } catch (err) {
       console.error(err);
@@ -73,9 +73,8 @@ export default function RemoveSharedButton({
     <>
       {/* A caller that brings its own class is a panel not yet rebuilt onto the
           kit, and keeps the icon row or button it already styles. Everything
-          else gets the kit's own button: the bare `.btn btnGhost` default read
-          as a leftover from another app beside rebuilt controls (operator,
-          2026-09-17). */}
+          else gets the kit's own button: the bare `.btn btnGhost` styling looks
+          out of place beside rebuilt controls. */}
       {className ? (
         <button
           type="button"
@@ -86,7 +85,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <Icon idea="unshare" size={14} /> Remove
+              <Icon idea="hide" size={14} /> Remove
             </>
           )}
         </button>
@@ -94,7 +93,7 @@ export default function RemoveSharedButton({
         <Button
           compact
           variant="outline"
-          icon="unshare"
+          icon="hide"
           title={label}
           disabled={Boolean(off)}
           disabledReason={off ?? ""}
@@ -106,12 +105,14 @@ export default function RemoveSharedButton({
 
       <ConfirmDialog
         open={confirming}
-        title={confirm.title}
-        message={confirm.body}
-        confirmLabel="Remove"
-        // Not `error`: removing a share destroys nothing, and the red button
-        // the delete confirms use would say otherwise.
-        confirmColor="primary"
+        // Not destructive: removing a share destroys nothing, and the warning
+        // button the delete confirms use would say otherwise.
+        copy={{
+          confirmTitle: confirm.title,
+          confirmBody: confirm.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={() => void handleConfirm()}
         onClose={() => setConfirming(false)}

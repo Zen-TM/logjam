@@ -7,7 +7,7 @@
 //
 // ONE GeoJSONSource for the same reason as PlaceRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
-import { MAP_INK } from "@logjam/shared";
+import { MAP_INK, SAVED_ROUTE_MIN_ZOOM } from "@logjam/shared";
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
@@ -22,15 +22,10 @@ import {
 } from "./routeArrowStyle";
 import { stopSourcePress } from "./sourcePress";
 
-/**
- * Zoom floor for SAVED routes. Zoomed out past this a route is a few pixels of
- * line that says nothing about where it goes, and a state-wide view of every
- * route you have ever drawn is just ink over the map.
- *
- * Matches the web's ROUTE_MIN_ZOOM — roughly a 50 km view. The route being DRAWN is exempt (the draft
- * layer has no floor) — hiding what the user is working on would be absurd.
- */
-export const SAVED_ROUTE_MIN_ZOOM = 10;
+// The zoom floor for saved routes is SAVED_ROUTE_MIN_ZOOM in `@logjam/shared`
+// (`routeArrow.ts`): Logjam Web draws the same routes at the same floor, so the
+// two clients cannot show one at different scales. Why that zoom, and why the
+// route being drawn is exempt, is documented there.
 
 export const RoutesLayer = memo(function RoutesLayer({
   routes,
@@ -38,7 +33,10 @@ export const RoutesLayer = memo(function RoutesLayer({
   hiddenRouteId,
   onPressRoute,
 }: {
-  routes: readonly MirrorRoute[];
+  /** `muted`: drawn faint, beside a plan's ways on the map in plan mode. */
+  routes: readonly (Pick<MirrorRoute, "id" | "points" | "color"> & {
+    muted?: boolean;
+  })[];
   hiddenRouteId: string | null;
   /** Tapping a line opens its options sheet. Absent while a tool owns the
    *  map's taps. */
@@ -59,6 +57,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           const properties = {
             routeId: route.id,
             routeColor: route.color ?? unsyncedRouteColor,
+            muted: route.muted === true,
           };
           return [
             {
@@ -93,7 +92,7 @@ export const RoutesLayer = memo(function RoutesLayer({
       // A 3px line is far thinner than a fingertip; the hitbox is what makes
       // tapping one a reasonable thing to ask. MLRN's default is 44pt — the
       // platform minimum touch target, and the right number here for the same
-      // reason — so this no longer sets one.
+      // reason — so this does not set one.
       onPress={
         onPressRoute &&
         ((event) => {
@@ -116,7 +115,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineWidth: 6,
           lineCap: "round",
           lineJoin: "round",
-          lineOpacity: 0.7,
+          lineOpacity: ["case", ["get", "muted"], 0.25, 0.7],
         }}
       />
       <Layer
@@ -130,6 +129,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineWidth: 3,
           lineCap: "round",
           lineJoin: "round",
+          lineOpacity: ["case", ["get", "muted"], 0.4, 1],
         }}
       />
       <Layer

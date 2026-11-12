@@ -1,8 +1,8 @@
 // The friend-picker for SHARING — a live, read-only view of something the
 // owner keeps and can revoke at any time.
 //
-// One dialog for places and for the four direct-share types (waypoint, route,
-// topoJob, geoPdfJob), because "who can see this, and take it back" is one
+// One dialog for places and for the direct-share types (waypoint, route,
+// topoJob), because "who can see this, and take it back" is one
 // interaction. The endpoints differ — places keep /places/:id/share, the rest
 // use /shares — so the three calls arrive as props rather than being switched
 // on a type here.
@@ -14,21 +14,17 @@
 // PICKING A FRIEND SHARES, THERE AND THEN — no ticking, no Confirm. Logjam GPS
 // draws the same distinction in `SharePanel.tsx` and says why: a share is
 // revocable, so the press can be the whole action, while a copy is not and has
-// to wait behind a footer button. This dialog used to make you search, press
-// Add, watch a chip appear and then press Confirm Share — four presses for
-// something one press can undo, and no footer button in sight for the friends
-// already listed underneath.
+// to wait behind a footer button.
 //
-// PRIVACY: usernames only, never email. The friends endpoints are
-// username-only server-side (root CLAUDE.md) and this must not become the
-// surface that wants more.
+// PRIVACY: usernames only. `TFriend` has no email field because the friends
+// endpoints never send one (api src/__tests__/friends.test.ts).
 import { Fragment, type ReactNode } from "react";
 import {
   contractSectionKeys,
   noFriendsMessage,
   SHARE_SHEET,
   sharePromise,
-  type BulkShareItemType,
+  type SharePromiseKind,
   type SectionKeysOn,
 } from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -74,7 +70,7 @@ function ShareDialog({
   title: string;
   /** What is being shared: the promise to the recipient is the contract's, and a
    *  place share and a route share do not grant the same things. */
-  kind: BulkShareItemType;
+  kind: SharePromiseKind;
   friends: TFriend[];
   open: boolean;
   onClose: () => void;

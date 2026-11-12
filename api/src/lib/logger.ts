@@ -13,6 +13,7 @@ export const redactPaths = [
   "req.body.name",
   "req.body.altNames",
   "req.body.notes",
+  "req.body.gaugeId",
   "req.body.coords",
   "req.body.coordinates",
   "req.body.place.latitude",
@@ -34,8 +35,8 @@ export const redactPaths = [
   "req.body.rows[*].data.fieldValues",
   "req.body.places[*].fieldValues",
   // A definition's LABEL is the user's own words about a place, arriving on a
-  // different route: the mobile scrubber censors it and this file said it was
-  // as sensitive as `notes` in the comment above and then redacted neither.
+  // different route: the mobile scrubber censors it, as it is as sensitive as
+  // `notes`.
   "req.body.label",
   "req.body.field.label",
   // TRIP TYPES are user-authored tags ("Claustral recon", "with Dad") on the
@@ -51,6 +52,7 @@ export const redactPaths = [
   "req.body.ops[*].fields.name",
   "req.body.ops[*].fields.altNames",
   "req.body.ops[*].fields.notes",
+  "req.body.ops[*].fields.gaugeId",
   "req.body.ops[*].fields.latitude",
   "req.body.ops[*].fields.longitude",
   "req.body.ops[*].fields.fieldValues",
@@ -71,10 +73,11 @@ export const redactPaths = [
   // routes (placesBulk/tripLogsBulk/imports log nothing; pino-http omits the
   // body; errorHandler logs safeErrorForLog(err), not the body), but redacting
   // them belt-and-braces guards the mandatory privacy boundary if a future log
-  // site ever carries the payload. See PRIV-001 defence-in-depth.
+  // site ever carries the payload.
   "req.body.rows[*].data.name",
   "req.body.rows[*].data.altNames",
   "req.body.rows[*].data.notes",
+  "req.body.rows[*].data.gaugeId",
   "req.body.rows[*].data.latitude",
   "req.body.rows[*].data.longitude",
   "req.body.trips[*].name",
@@ -82,15 +85,25 @@ export const redactPaths = [
   "req.body.places[*].name",
   "req.body.places[*].altNames",
   "req.body.places[*].notes",
+  "req.body.places[*].gaugeId",
   "req.body.places[*].latitude",
   "req.body.places[*].longitude",
   "req.body.displayName",
-  // Region-clip endpoint (stage 4a): the bbox IS a place-area coordinate.
-  // Body-shaped only — the route design keeps bounds out of URLs entirely.
-  "req.body.west",
-  "req.body.south",
-  "req.body.east",
-  "req.body.north",
+  // Location search (POST /places/search): the typed text, often the name of
+  // a place the user would rather not publish. Body-shaped only, as above.
+  "req.body.q",
+  // PLANS: a plan's name and trip types are covered above. A section's title
+  // and text, a form's title and questions (their labels, hints and options),
+  // and every answer are the group's own words; an answer is often a safety
+  // contact, the details of someone who is not a Logjam user at all.
+  "req.body.title",
+  "req.body.body",
+  "req.body.questions",
+  "req.body.answers",
+  // A plan place's position and a plan route's line, as compare-and-set
+  // pairs ({ from, to }), which the coordinate wildcards above can't reach.
+  "req.body.position",
+  "req.body.geometry",
   // Authorization headers (never log credentials)
   "req.headers.authorization",
   'req.headers["x-fake-sub"]',
@@ -100,7 +113,7 @@ export const redactPaths = [
 /**
  * Strip tile URLs and z/x/y tile-index triples from a log message. A web-
  * mercator tile index at the zooms we render (up to z18) localises a map area
- * to ~150 m — an approximate coordinate, which the CLAUDE.md privacy rule
+ * to ~150 m — an approximate coordinate, which the root AGENTS.md privacy rule
  * forbids in logs. Pino redact paths cannot help with pre-interpolated
  * strings (e.g. fetch errors embedding the request URL), so coordinate-
  * bearing fragments are removed before the message is logged at all.
@@ -134,7 +147,8 @@ export function redactTilePathPatterns(message: string): string {
  * FULL query arguments — including place `name`, `latitude`, `longitude`,
  * `notes` — into `err.message` AND `err.stack`. Logging the raw `{ err }` (pino's
  * default Error serializer emits message + stack) would put place names/coords
- * in plaintext logs, violating the root CLAUDE.md privacy rule.
+ * in plaintext logs, violating the root AGENTS.md privacy rule. Guard:
+ * api/src/lib/logger.unit.test.ts.
  *
  * So: never log the raw Error. Log only the class name plus a scrubbed message
  * with any rendered argument block removed and URLs/tiles redacted. The stack is
@@ -170,8 +184,9 @@ export function safeErrorForLog(err: unknown): {
  * user-typed search terms (`GET /trips?search=` matches place NAMES,
  * `/friends/search?q=` usernames) and pino's `redact.paths` cannot reach inside
  * a URL string, so a full `req.url` would put place names in plaintext access
- * logs — the exact thing the root CLAUDE.md privacy rule forbids. Nothing
- * operational needs the query string. (PRIV-109)
+ * logs — the exact thing the root AGENTS.md privacy rule forbids. Nothing
+ * operational needs the query string. Guard:
+ * api/src/lib/logger.unit.test.ts.
  */
 export function serializeRequestForLog(req: {
   id?: unknown;

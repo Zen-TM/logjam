@@ -14,15 +14,16 @@ import {
   listSelectionLabel,
   numericFieldValue,
   passesPlaceFilters,
+  incomingLabel,
   PLACE_STATUS_LABELS,
-  PLACE_STATUS_ORDER,
   PLACES_ADD,
   PLACES_ADD_ICON,
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
+  placeDeleteDone,
   placeMatchesSearch,
-  placesCountLabel,
+  PLACE_EXPORT_FORMATS,
   placesEmptyKind,
   placeTypeHasTab,
   placesEmptyState,
@@ -31,20 +32,29 @@ import {
   placeStatus,
   placeSummary,
   qualityLabel,
+  ROPEWIKI_OFFER,
   type PlaceSortKey,
   type PlaceStatus,
+  type Region,
   type RegionBbox,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
+  LIDAR_JOB_COPY,
+  type LoadState,
 } from "@logjam/shared";
 import type {
   TFilters,
   TPlace,
   TPlaceType,
   RefreshResult,
+  TFriend,
 } from "../../../placeUtils";
-import { bulkDeletePlaces, refreshFromRopeWiki } from "../../../placeUtils";
-import { buildPlaceExport, type TExportFormat } from "../../../placeExport";
+import {
+  bulkDeletePlaces,
+  ownerUsername,
+  refreshFromRopeWiki,
+} from "../../../placeUtils";
+import { buildPlaceExport } from "../../../placeExport";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
 import type { PanelId } from "../panels";
@@ -62,17 +72,21 @@ import {
   IconButton,
   IconTile,
   ListEnd,
-  LoadingState,
+  ListBody,
   Menu,
   Row,
+  RowList,
   SearchField,
   SelectionBar,
+  SelectionVerb,
+  StatusPill,
   TileCheckbox,
   type Glyph,
   type MenuEntry,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
+import { NewPlaceTypeFlow } from "./PlaceTypeSection";
 import { usePanelSheet } from "./usePanelSheet";
 import {
   bucketOf,
@@ -80,9 +94,9 @@ import {
   idRange,
   normaliseBucket,
   placesBounds,
+  ropewikiAddEntries,
   sheetFilterCount,
   withBucket,
-  type StatusBucket,
 } from "./placesModel";
 import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import classes from "./PlacesPanel.module.css";
@@ -91,15 +105,12 @@ const { copy } = PLACES_LIST;
 
 export type MapKind = "topo" | "geopdf";
 
-const STATUS_ICON: Record<PlaceStatus, Glyph> = {
+// The tile says what a place IS (its type); a state is a pill beside it, never
+// a glyph in the tile that reads as a ticked checkbox. "Not visited" is the
+// ordinary case and gets no pill.
+const STATUS_PILL: Partial<Record<PlaceStatus, Glyph>> = {
   done: "success",
-  todo: "place",
   shared: "friends",
-};
-const STATUS_HUE: Record<PlaceStatus, string> = {
-  done: "var(--color-accent)",
-  todo: "var(--hue-todo)",
-  shared: "var(--hue-shared)",
 };
 
 const ANY_TYPE = "any";
@@ -120,18 +131,22 @@ function download(blob: Blob, filename: string) {
 
 /**
  * Places: a tick list. The hero answers "how far through my list am I?" over the
- * whole collection; two rails narrow the list (the user's own types, then the
- * status partition); everything else is the sheet beside it. Rows are cards
- * whose tile is their status, and whose ⋯ holds the same verbs a pin opens.
- * Selecting starts from a row's tile and swaps the status rail for the bar.
+ * whole collection; the type rail and the search bar under it narrow the list;
+ * everything else is the sheet beside it. Rows are cards whose tile is their
+ * status, and whose ⋯ holds the same verbs a pin opens. Selecting starts from a
+ * row's tile and swaps the type rail for the bar.
  */
 function PlacesPanel({
   places,
-  placesLoaded,
+  placesState,
+  placesError,
   placesTotal,
   sharedPlaces,
+  friends,
   placeTypes,
+  onPlaceTypesChange,
   placeCustomFieldDefs,
+  onPlaceCustomFieldDefsChange,
   filters,
   onChangeFilters,
   onAddPlace,
@@ -148,19 +163,27 @@ function PlacesPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
+  onExportPlaces,
   onPlaceVerb,
   onExpandSheet,
+  canyonRegions,
 }: {
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
    *  places yet", and saying so flashes a first-run screen at every user. */
-  placesLoaded: boolean;
+  placesState: LoadState;
+  /** Our sentence for a first load that failed. */
+  placesError: string | null;
   /** The true owned-place total before the server's list cap; null until known. */
   placesTotal: number | null;
   sharedPlaces: TPlace[];
+  /** Names the owner of each shared place. */
+  friends: TFriend[];
   /** Every type the user has. The rail shows only those with places. */
   placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   filters: TFilters;
   onChangeFilters: (next: TFilters) => void;
   onAddPlace: () => void;
@@ -182,16 +205,19 @@ function PlacesPanel({
   /** A pin was pressed while this list is open: scroll to its row. */
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
+  onExportPlaces: (ids: string[]) => void;
   /** A row's verb that needs the place's page (a form, a confirm): the row
    *  opens the page and the page runs it. */
   onPlaceVerb: (id: WebPlaceVerbId) => void;
   /** Narrow web: grow the bottom sheet to full. */
   onExpandSheet?: () => void;
+  /** The user's regions that have a canyon list: one import entry each. */
+  canyonRegions: readonly Region[];
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
   // Session-scoped like the filters: a search remembered for a month reads as
-  // "my places are missing" (UX finding 5). Sort is a preference and stays.
+  // "my places are missing". Sort is a preference and stays.
   const [query, setQuery] = useStoredState(
     "logjam.placeSearch",
     "",
@@ -201,18 +227,18 @@ function PlacesPanel({
     "logjam.placeSort",
     "name",
   );
-  const [searchOpen, setSearchOpen] = useState(query !== "");
   const { sheetOpen, openSheet } = usePanelSheet({
     onOpenChange: onFiltersOpenChange,
     onExpandSheet,
   });
+  const [addingType, setAddingType] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Status axes set by an older build that the rail cannot show are rewritten
+  // Status axes set by an older build that the sheet cannot show are rewritten
   // to the chip they are nearest, so nothing narrows the list with no chip lit.
   useEffect(() => {
     const normalised = normaliseBucket(filters);
@@ -265,22 +291,6 @@ function PlacesPanel({
       matching(filters).sort((a, b) => comparePlaces(a.place, b.place, sort)),
     [matching, filters, sort],
   );
-
-  // Tallies come from the OTHER axes only, so a chip's count answers "how many
-  // would I get if I pressed this" rather than restating the current view.
-  const statusCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = {
-      all: 0,
-      done: 0,
-      todo: 0,
-      shared: 0,
-    };
-    for (const { status } of matching(withBucket(filters, "all"))) {
-      counts[status] += 1;
-      counts.all += 1;
-    }
-    return counts;
-  }, [matching, filters]);
 
   const typeCounts = useMemo(() => {
     const withoutType = matching({ ...filters, placeTypeId: null });
@@ -376,28 +386,21 @@ function PlacesPanel({
     return [
       {
         id: "topo",
-        label: "LiDAR topo",
+        label: LIDAR_JOB_COPY.make,
         icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
-        id: "geopdf",
-        label: "GeoPDF",
-        icon: "geoPdf",
+        id: "export",
+        label: "Make a map",
+        icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
     ];
   };
 
   const exportEntries = (targets: TPlace[]): MenuEntry[] =>
-    (
-      [
-        ["gpx", "GPX"],
-        ["kml", "KML"],
-        ["geojson", "GeoJSON"],
-        ["csv", "CSV"],
-      ] as [TExportFormat, string][]
-    ).map(([format, label]) => ({
+    PLACE_EXPORT_FORMATS.map(({ value: format, label }) => ({
       id: format,
       label,
       onSelect: () => {
@@ -405,6 +408,7 @@ function PlacesPanel({
           targets,
           format,
           placeCustomFieldDefs,
+          placeTypes,
         );
         download(blob, filename);
       },
@@ -430,7 +434,8 @@ function PlacesPanel({
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),
       makeGeoPdf: makeMap("geopdf"),
-      share: () => onSharePlaces([place.id]),
+      exportPlace: () => onExportPlaces([place.id]),
+      share: handOff("share"),
       copy: handOff("copy"),
       copyAndRemove: handOff("copyAndRemove"),
       remove: handOff("remove"),
@@ -445,7 +450,7 @@ function PlacesPanel({
     setDeleting(true);
     try {
       await bulkDeletePlaces(pendingDelete);
-      toast.success(`Deleted ${placesCountLabel(count)}.`);
+      toast.done(placeDeleteDone(count));
       setPendingDelete(null);
       clearSelection();
       onQuotaChanged();
@@ -472,17 +477,19 @@ function PlacesPanel({
     null,
   );
   const [reviewOpen, setReviewOpen] = useState(false);
+  // The region the confirm was opened for, then the one refreshed and reviewed.
+  const [importRegion, setImportRegion] = useState<Region | null>(null);
 
-  async function importFromRopeWiki() {
+  async function importFromRopeWiki(region: Region) {
     setConfirmRefresh(false);
     setRefreshing(true);
     try {
-      const result = await refreshFromRopeWiki();
+      const result = await refreshFromRopeWiki(region.id);
       setRefreshResult(result);
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
       // Summarise what happened automatically, and flag what still needs review,
-      // so the import isn't silent (IMPORT-3). The corpus is a hand-refreshed
+      // so the import isn't silent. The corpus is a hand-refreshed
       // snapshot, so date it (RopeWiki blocks server-side fetches).
       const done = [
         result.added > 0 ? `${result.added} added` : null,
@@ -496,7 +503,7 @@ function PlacesPanel({
       const source = result.sourceUpdatedAt
         ? ` · source ${new Date(result.sourceUpdatedAt).toLocaleDateString()}`
         : "";
-      toast.success(
+      toast.done(
         `RopeWiki import: ${done.length > 0 ? done.join(", ") : "no new places"}${review}${source}`,
       );
     } catch (err) {
@@ -527,13 +534,8 @@ function PlacesPanel({
     />
   );
 
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
-
   const addEntries: Record<
-    SectionKeysOn<typeof PLACES_ADD, "web">,
+    Exclude<SectionKeysOn<typeof PLACES_ADD, "web">, "importRopewiki">,
     { label: string; onSelect: () => void; disabled?: boolean }
   > = {
     add: { label: PLACES_ADD.copy.add, onSelect: onAddPlace },
@@ -541,84 +543,93 @@ function PlacesPanel({
       label: PLACES_ADD.copy.importFile,
       onSelect: onOpenUnifiedImport,
     },
-    importRopewiki: {
-      label: refreshing
-        ? PLACES_ADD.copy.importingRopewiki
-        : PLACES_ADD.copy.importRopewiki,
-      disabled: refreshing,
-      onSelect: () => setConfirmRefresh(true),
-    },
   };
 
-  // No meter: the status rail's counts already say how many are visited, not
-  // visited and shared, and the bar beside them was the same numbers again.
+  const ropewikiEntries = ropewikiAddEntries(
+    canyonRegions,
+    refreshing ? (importRegion?.id ?? null) : null,
+  ).map(({ region, ...entry }) => ({
+    ...entry,
+    icon: PLACES_ADD_ICON.importRopewiki,
+    onSelect: () => {
+      setImportRegion(region);
+      setConfirmRefresh(true);
+    },
+  }));
+
   const hero = (
     <Hero
       title={PLACES_LIST.title}
       actions={
-        searchOpen ? (
-          <>
-            {filterButton}
-            <IconButton
-              icon="close"
-              label={copy.closeSearch}
-              onClick={closeSearch}
-            />
-          </>
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.search}
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            {filterButton}
-            <Menu
-              label={PLACES_ADD.copy.menu}
-              placement="bottom-end"
-              entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
-                id: key,
-                icon: PLACES_ADD_ICON[key],
-                ...addEntries[key],
-              }))}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  {PLACES_ADD.title}
-                </Button>
-              )}
-            />
-          </>
-        )
+        <>
+          {filterButton}
+          <Menu
+            label={PLACES_ADD.copy.menu}
+            placement="bottom-end"
+            entries={contractSectionKeys(PLACES_ADD, "web").flatMap<MenuEntry>(
+              (key) =>
+                key === "importRopewiki"
+                  ? ropewikiEntries
+                  : [
+                      {
+                        id: key,
+                        icon: PLACES_ADD_ICON[key],
+                        ...addEntries[key],
+                      },
+                    ],
+            )}
+            trigger={(props) => (
+              <Button
+                {...props}
+                compact
+                variant="filled"
+                icon="add"
+                trailingIcon="expand"
+              >
+                {PLACES_ADD.title}
+              </Button>
+            )}
+          />
+        </>
       }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
-        />
-      )}
-    </Hero>
+    />
   );
 
   const typeRail = (
     <div className={classes.typeRail}>
-      <div className={selecting ? classes.inert : undefined} inert={selecting}>
+      {selecting ? (
+        <SelectionBar
+          countLabel={listSelectionLabel(selected.length)}
+          onClear={clearSelection}
+        >
+          {/* One word each, and the trash stays a glyph: "Make a map" and a
+              fourth word ran the count off the bar at 380px. */}
+          <Menu
+            label="Make a map"
+            entries={makeMapEntries(selected)}
+            trigger={(props) => <SelectionVerb {...props}>Map</SelectionVerb>}
+          />
+          <SelectionVerb
+            onClick={() => onSharePlaces(selected.map((place) => place.id))}
+          >
+            Share
+          </SelectionVerb>
+          <Menu
+            label="Export as"
+            placement="bottom-end"
+            entries={exportEntries(selected)}
+            trigger={(props) => (
+              <SelectionVerb {...props}>Export</SelectionVerb>
+            )}
+          />
+          <IconButton
+            icon="delete"
+            label="Delete"
+            tone="danger"
+            onClick={() => setPendingDelete(selected.map((place) => place.id))}
+          />
+        </SelectionBar>
+      ) : (
         <ChipRail
           label={copy.typeRail}
           options={[
@@ -647,220 +658,180 @@ function PlacesPanel({
               label={copy.newType}
               icon="add"
               dashed
-              onClick={() => setActivePanel("settings")}
+              onClick={() => setAddingType(true)}
             />
           }
-        />
-      </div>
-    </div>
-  );
-
-  const statusRail = (
-    <div className={classes.statusRail}>
-      {selecting ? (
-        <SelectionBar
-          countLabel={listSelectionLabel(selected.length)}
-          onClear={clearSelection}
-        >
-          {/* An icon like its siblings: as a labelled filled button the bar ran
-              past one line at 380px. The menu it opens says LiDAR topo or GeoPDF. */}
-          <Menu
-            label="Make a map"
-            entries={makeMapEntries(selected)}
-            trigger={(props) => (
-              <IconButton {...props} icon="template" label="Make a map" />
-            )}
-          />
-          <IconButton
-            icon="shareFriend"
-            label="Share or export"
-            onClick={() => onSharePlaces(selected.map((place) => place.id))}
-          />
-          <Menu
-            label="Export as"
-            placement="bottom-end"
-            entries={exportEntries(selected)}
-            trigger={(props) => (
-              <IconButton {...props} icon="export" label="Export" />
-            )}
-          />
-          <IconButton
-            icon="delete"
-            label="Delete"
-            tone="danger"
-            onClick={() => setPendingDelete(selected.map((place) => place.id))}
-          />
-        </SelectionBar>
-      ) : (
-        <ChipRail
-          label={copy.statusRail}
-          options={[
-            { value: "all", label: copy.allStatuses, count: statusCounts.all },
-            ...PLACE_STATUS_ORDER.map((status) => ({
-              value: status,
-              label: PLACE_STATUS_LABELS[status],
-              count: statusCounts[status],
-              icon: STATUS_ICON[status],
-              hue: STATUS_HUE[status],
-              disabled: statusCounts[status] === 0 && bucket !== status,
-            })),
-          ]}
-          value={bucket}
-          onChange={(next) => onChangeFilters(withBucket(filters, next))}
         />
       )}
     </div>
   );
 
   const empty =
-    placesLoaded && visible.length === 0
-      ? placesEmptyKind({
-          total: collection.length,
-          filtering: query.trim() !== "" || sheetCount > 0,
-          bucket,
-        })
+    placesState === "ready" && visible.length === 0
+      ? placesEmptyKind({ total: collection.length })
       : null;
   const emptyState = empty && placesEmptyState(empty, { platform: "web" });
 
   // The same button is the empty state's and the end of the list's.
   const addPlaceButton = (
-    <Button compact variant="filled" icon="add" onClick={onAddPlace}>
+    <Button
+      compact
+      variant="filled"
+      icon={PLACES_ADD_ICON.add}
+      onClick={onAddPlace}
+    >
       {PLACES_ADD.copy.add}
     </Button>
   );
 
-  const list = !placesLoaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : empty && emptyState ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon={emptyState.icon}
-        title={emptyState.title}
-        body={emptyState.body}
-        actions={
-          emptyState.action === "clear" ? (
-            <Button compact variant="outline" onClick={clearEverything}>
-              {copy.clearFilters}
-            </Button>
-          ) : emptyState.action === "add" ? (
-            <>
-              {addPlaceButton}
-              {empty === "firstRun" && (
-                <Button
-                  compact
-                  variant="outline"
-                  icon={PLACES_ADD_ICON.importFile}
-                  onClick={onOpenUnifiedImport}
-                >
-                  {PLACES_ADD.copy.importFile}
+  const list = (
+    <ListBody
+      state={placesState}
+      loadingLabel={copy.loading}
+      error={placesError}
+      onRetry={onRefetch}
+      empty={
+        empty && emptyState ? (
+          <EmptyState
+            icon={emptyState.icon}
+            title={emptyState.title}
+            body={emptyState.body}
+            actions={
+              emptyState.action === "clear" ? (
+                <Button compact variant="outline" onClick={clearEverything}>
+                  {copy.clearFilters}
                 </Button>
-              )}
-            </>
-          ) : undefined
-        }
-      />
-    </div>
-  ) : (
-    <div className={classes.list}>
-      {visible.map((row) => {
-        const { place, owned, status } = row;
-        const isSelected = selectedIds.includes(place.id);
-        const type = typeById.get(place.placeTypeId);
-        const subtitle = [
-          filters.placeTypeId == null ? type?.name : null,
-          placeSummary(place),
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const quality = qualityLabel(
-          numericFieldValue(place.fieldValues, "quality"),
-        );
-        const shareCount = owned ? (place._count?.shares ?? 0) : 0;
-        const tile = (
-          <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} />
-        );
-        return (
-          <Row
-            key={`${owned ? "o" : "s"}-${place.id}`}
-            data-place-id={place.id}
-            title={place.name}
-            subtitle={subtitle || undefined}
-            description={PLACE_STATUS_LABELS[status]}
-            selected={isSelected}
-            disabled={selecting && !owned}
-            onOpen={() => openPlace(place)}
-            onPointerEnter={() => onHoverPlace(place.id)}
-            onPointerLeave={() => onHoverPlace(null)}
-            leading={
-              owned ? (
-                <TileCheckbox
-                  tile={tile}
-                  label={`Select ${place.name}`}
-                  checked={isSelected}
-                  selecting={selecting}
-                  onToggle={(extendRange) =>
-                    toggleSelected(place.id, extendRange)
-                  }
-                />
               ) : (
-                <IconTile
-                  icon={STATUS_ICON[status]}
-                  hue={STATUS_HUE[status]}
-                  label={PLACE_STATUS_LABELS[status]}
-                />
+                <>
+                  {addPlaceButton}
+                  {empty === "firstRun" && (
+                    <Button
+                      compact
+                      variant="outline"
+                      icon={PLACES_ADD_ICON.importFile}
+                      onClick={onOpenUnifiedImport}
+                    >
+                      {PLACES_ADD.copy.importFile}
+                    </Button>
+                  )}
+                </>
               )
             }
-            trailing={
-              <>
-                {quality && (
-                  <span
-                    className={classes.meta}
-                    aria-label={`Rated ${quality.replace("★ ", "")}`}
-                  >
-                    <Icon idea="favourite" size={12} aria-hidden />
-                    {quality.replace("★ ", "")}
-                  </span>
-                )}
-                {shareCount > 0 && (
-                  <span
-                    className={classes.meta}
-                    title={`Shared with ${plural(shareCount, "friend")}`}
-                    aria-label={`Shared with ${plural(shareCount, "friend")}`}
-                  >
-                    <Icon idea="friends" size={12} aria-hidden />
-                    {shareCount}
-                  </span>
-                )}
-                {!selecting && (
-                  <Menu
-                    label={`Actions for ${place.name}`}
-                    title={place.name}
-                    placement="right-start"
-                    entries={rowEntries(row)}
-                    trigger={(props) => (
-                      <IconButton
-                        {...props}
-                        icon="overflow"
-                        label={`Actions for ${place.name}`}
-                      />
-                    )}
-                  />
-                )}
-              </>
-            }
           />
-        );
-      })}
-      <ListEnd>{addPlaceButton}</ListEnd>
-    </div>
+        ) : null
+      }
+    >
+      <RowList className={classes.list}>
+        {visible.map((row) => {
+          const { place, owned, status } = row;
+          const isSelected = selectedIds.includes(place.id);
+          const type = typeById.get(place.placeTypeId);
+          const subtitle = [
+            filters.placeTypeId == null ? type?.name : null,
+            placeSummary(place),
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const quality = qualityLabel(
+            numericFieldValue(place.fieldValues, "quality"),
+          );
+          const shareCount = owned ? (place._count?.shares ?? 0) : 0;
+          const tile = (
+            <IconTile
+              icon={type ? placeTypeLucideIcon(type.iconKey) : "place"}
+              hue={type?.color ?? "var(--hue-todo)"}
+            />
+          );
+          return (
+            <Row
+              key={`${owned ? "o" : "s"}-${place.id}`}
+              data-place-id={place.id}
+              title={place.name}
+              subtitle={subtitle || undefined}
+              selected={isSelected}
+              disabled={selecting && !owned}
+              disabledReason="Shared with you, so you can't select it"
+              onOpen={() => openPlace(place)}
+              onPointerEnter={() => onHoverPlace(place.id)}
+              onPointerLeave={() => onHoverPlace(null)}
+              leading={
+                owned ? (
+                  <TileCheckbox
+                    tile={tile}
+                    label={`Select ${place.name}`}
+                    checked={isSelected}
+                    selecting={selecting}
+                    onToggle={(extendRange) =>
+                      toggleSelected(place.id, extendRange)
+                    }
+                  />
+                ) : (
+                  tile
+                )
+              }
+              trailing={
+                <>
+                  {STATUS_PILL[status] && (
+                    <StatusPill
+                      label={
+                        owned
+                          ? PLACE_STATUS_LABELS[status]
+                          : incomingLabel(ownerUsername(friends, place.ownerId))
+                      }
+                      icon={STATUS_PILL[status]}
+                      tone={status === "done" ? "accent" : "outline"}
+                    />
+                  )}
+                  {quality && (
+                    <span
+                      className={classes.meta}
+                      aria-label={`Rated ${quality.replace("★ ", "")}`}
+                    >
+                      <Icon idea="favourite" size={12} aria-hidden />
+                      {quality.replace("★ ", "")}
+                    </span>
+                  )}
+                  {shareCount > 0 && (
+                    <span
+                      className={classes.meta}
+                      title={`Shared with ${plural(shareCount, "friend")}`}
+                      aria-label={`Shared with ${plural(shareCount, "friend")}`}
+                    >
+                      <Icon idea="friends" size={12} aria-hidden />
+                      {shareCount}
+                    </span>
+                  )}
+                  {!selecting && (
+                    <Menu
+                      label={`Actions for ${place.name}`}
+                      title={place.name}
+                      placement="right-start"
+                      entries={rowEntries(row)}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon="overflow"
+                          label={`Actions for ${place.name}`}
+                        />
+                      )}
+                    />
+                  )}
+                </>
+              }
+            />
+          );
+        })}
+        <ListEnd>{addPlaceButton}</ListEnd>
+      </RowList>
+    </ListBody>
   );
 
   const sheet = sheetOpen && (
     <PlaceFilterSheet
       filters={filters}
       onChangeFilters={onChangeFilters}
+      status={bucket}
+      onChangeStatus={(next) => onChangeFilters(withBucket(filters, next))}
       sort={sort}
       onChangeSort={setSort}
       placeCustomFieldDefs={placeCustomFieldDefs}
@@ -884,7 +855,21 @@ function PlacesPanel({
   > = {
     hero,
     typeRail,
-    statusRail,
+    search: collection.length > 0 && (
+      <div className={classes.search}>
+        <SearchField
+          label={copy.search}
+          value={query}
+          disabled={selecting}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || query === "") return;
+            event.stopPropagation();
+            setQuery("");
+          }}
+        />
+      </div>
+    ),
     filterNote: sheetCount > 0 && !sheetOpen && !selecting && (
       <div className={classes.strip}>
         <span className={classes.stripText}>{note}</span>
@@ -912,13 +897,21 @@ function PlacesPanel({
     truncated: placesTotal != null && placesTotal > places.length && (
       <p className={classes.note}>
         Showing your {places.length} most recent places of {placesTotal}. Older
-        ones aren&rsquo;t loaded.
+        ones aren't loaded.
       </p>
     ),
     list,
   };
 
-  const deleteCopy = placeDeleteConfirm({ count: pendingDelete?.length ?? 0 });
+  const pendingPlace =
+    pendingDelete?.length === 1
+      ? places.find((place) => place.id === pendingDelete[0])
+      : undefined;
+  const deleteCopy = placeDeleteConfirm(
+    pendingPlace
+      ? { name: pendingPlace.name }
+      : { count: pendingDelete?.length ?? 0 },
+  );
 
   return (
     <div ref={rootRef} className={classes.root}>
@@ -933,29 +926,40 @@ function PlacesPanel({
         </>
       )}
 
+      {addingType && (
+        <NewPlaceTypeFlow
+          types={placeTypes}
+          onTypesChange={onPlaceTypesChange}
+          placeDefs={placeCustomFieldDefs}
+          onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+          onClose={() => setAddingType(false)}
+        />
+      )}
       <ConfirmDialog
         open={pendingDelete != null}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel="Delete"
-        confirmColor="error"
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}
       />
       <ConfirmDialog
         open={confirmRefresh}
-        title="Import from RopeWiki?"
-        message="This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
-        confirmLabel="Fetch from RopeWiki"
-        confirmColor="secondary"
+        copy={{
+          confirmTitle: "Import from RopeWiki?",
+          confirmBody: importRegion
+            ? ROPEWIKI_OFFER.confirmBody(importRegion)
+            : "",
+          confirmLabel: "Fetch from RopeWiki",
+          tone: "filled",
+        }}
         busy={refreshing}
-        onConfirm={() => void importFromRopeWiki()}
+        onConfirm={() => importRegion && void importFromRopeWiki(importRegion)}
         onClose={() => setConfirmRefresh(false)}
       />
-      {refreshResult && (
+      {refreshResult && importRegion && (
         <RopeWikiReviewDialog
           open={reviewOpen}
+          regionId={importRegion.id}
           review={refreshResult.review}
           autoImported={{
             added: refreshResult.added,

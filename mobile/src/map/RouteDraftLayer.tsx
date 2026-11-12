@@ -22,6 +22,7 @@ import {
   moveAnchor,
   type RouteDraft,
   type RoutePoint,
+  DRAFT_LINE,
   MAP_INK,
 } from "@logjam/shared";
 
@@ -33,7 +34,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { touchTargetMin, useTheme, withAlpha } from "../theme";
+import { touchTargetMin, useTheme, withAlpha, veil } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -44,8 +45,8 @@ import { touchTargetMin, useTheme, withAlpha } from "../theme";
  * reasons — a native layer declared AFTER the line always paints above it, and
  * its styling is data-driven, so an anchor that stops being the last one
  * changes appearance immediately. A ViewAnnotation's child view does neither:
- * MLRN rasterises it once, so the old last-anchor kept its dark fill until the
- * draft was reopened.
+ * MLRN rasterises it once, so the old last-anchor would keep its dark fill until
+ * the draft was reopened.
  *
  * SELECTION rides in the same expression for the same reason: a selected anchor
  * is a bigger dot with a light ring, driven by a `selected` property per
@@ -134,9 +135,9 @@ export function RouteDraftLayer({
   /**
    * The anchor being dragged, held HERE rather than in the screen's state.
    *
-   * Routing every drag frame up to MapScreen re-rendered the whole map screen
-   * per frame, and the line visibly lagged the finger. Keeping it local means
-   * only this component re-renders, so the geometry keeps up.
+   * Routing every drag frame up to MapScreen would re-render the whole map
+   * screen per frame, visibly lagging the finger. Keeping it local means only
+   * this component re-renders, so the geometry keeps up.
    */
   const [drag, setDrag] = useState<{ index: number; point: RoutePoint } | null>(
     null,
@@ -146,12 +147,12 @@ export function RouteDraftLayer({
    * Whether the gesture in progress has travelled far enough to BE a drag.
    *
    * A tap on a draggable annotation arrives as a drag of a pixel or two, and
-   * committing that moved the anchor a metre or two and selected nothing —
-   * which is what made deleting a point feel impossible. Below the slop the
-   * gesture is forwarded as a PRESS instead and the anchor does not move at
-   * all. Once past the slop it stays a drag for the rest of the gesture, so a
-   * finger that wanders out and comes back still commits (the alternative
-   * leaves the preview showing a move nothing wrote).
+   * committing that would move the anchor a metre or two and select nothing
+   * (making deleting a point feel impossible). Below the slop the gesture is
+   * forwarded as a PRESS instead and the anchor does not move at all. Once
+   * past the slop it stays a drag for the rest of the gesture, so a finger
+   * that wanders out and comes back still commits (the alternative leaves the
+   * preview showing a move nothing wrote).
    *
    * A ref, not state: it must be readable in the same event that sets it, and
    * nothing draws from it.
@@ -162,10 +163,10 @@ export function RouteDraftLayer({
   // applied through `moveAnchor` — the SAME helper the drop commits through, so
   // the preview cannot disagree with the result.
   //
-  // Passing the real draft matters: an earlier version built a throwaway draft
-  // with no filler, which straightened the WHOLE route while one anchor moved.
-  // moveAnchor clears only the two runs either side of the anchor, which is
-  // exactly the pair that gets re-snapped on the drop.
+  // Passing the real draft matters: a throwaway draft with no filler would
+  // straighten the WHOLE route while one anchor moved. moveAnchor clears only
+  // the two runs either side of the anchor, which is exactly the pair that gets
+  // re-snapped on the drop.
   const preview = useMemo(
     () => (drag ? moveAnchor(draft, drag.index, drag.point) : draft),
     [draft, drag],
@@ -207,16 +208,33 @@ export function RouteDraftLayer({
     <>
       <GeoJSONSource id={`${idPrefix}-line`} data={lineData}>
         <Layer
+          key={`${idPrefix}-line-casing`}
+          type="line"
+          id={`${idPrefix}-line-casing`}
+          filter={ROUTE_LAYER_FILTER}
+          style={{
+            lineColor: DRAFT_LINE.casingColor,
+            lineCap: "round",
+            lineJoin: "round",
+            ...(dotted
+              ? {
+                  lineWidth: DRAFT_LINE.measureCasingWidth,
+                  lineDasharray: [...DRAFT_LINE.measureCasingDash],
+                }
+              : { lineWidth: DRAFT_LINE.casingWidth }),
+          }}
+        />
+        <Layer
           key={`${idPrefix}-line-stroke`}
           type="line"
           id={`${idPrefix}-line-stroke`}
           filter={ROUTE_LAYER_FILTER}
           style={{
             lineColor: color,
-            lineWidth: 3,
+            lineWidth: DRAFT_LINE.coreWidth,
             lineCap: "round",
             lineJoin: "round",
-            ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
+            ...(dotted ? { lineDasharray: [...DRAFT_LINE.measureDash] } : {}),
           }}
         />
         <Layer
@@ -283,7 +301,7 @@ export function RouteDraftLayer({
 
       {/* One INVISIBLE handle per anchor — never per point. A snapped run is
           geometry the tool produced, not vertices the user placed, so dotting
-          every one of them made 500 m of creek look like twenty-two decisions.
+          every one of them would make 500 m of creek look like twenty-two decisions.
           ViewAnnotation is the only thing in the wrapper that can be dragged;
           it carries no visuals now, just the touch target. */}
       {draft.anchors.map((anchor, index) => (
@@ -330,8 +348,8 @@ export function RouteDraftLayer({
           // `onPress`, NOT `onSelect`: the native side fires onSelect only on
           // the false->true transition and then leaves the annotation selected
           // (nothing here ever deselects it), so a second tap on the same
-          // anchor fired nothing at all — one of the reasons the delete verb
-          // was unreachable. onPress fires on every tap
+          // anchor would fire nothing at all (leaving the delete verb
+          // unreachable). onPress fires on every tap
           // (MLRNPointAnnotation.kt).
           onPress={(event: NativeSyntheticEvent<ViewAnnotationEvent>) =>
             onAnchorPress(index, event.nativeEvent.point?.[0] ?? null)
@@ -357,6 +375,6 @@ const styles = StyleSheet.create({
     width: touchTargetMin,
     height: touchTargetMin,
     borderRadius: touchTargetMin / 2,
-    backgroundColor: withAlpha(MAP_INK.ring, 0.01),
+    backgroundColor: withAlpha(MAP_INK.ring, veil.hit),
   },
 });

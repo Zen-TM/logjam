@@ -4,7 +4,7 @@ import prisma from "../services/prisma";
 import { malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 
-// Device push-token registry (Stage 3 mobile). Tokens are Expo push tokens —
+// Device push-token registry. Tokens are Expo push tokens —
 // opaque, client-generated, not secrets, but bound to the signed-in user so
 // fan-out targets only that user's devices.
 const router = Router();

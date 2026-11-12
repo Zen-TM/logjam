@@ -1,8 +1,7 @@
-// Single deterministic place name + location matcher. Shared by CSV place
-// import, trip-place matching, and RopeWiki dedup. Replaced the two divergent
-// matchers (the retired token-Jaccard nameMatchScore, and the frontend
-// exact->stripped->fuzzy chain). Rules are deterministic edit-distance
-// + normalization; no machine learning.
+// Single deterministic place name + location matcher, shared by CSV place
+// import, trip-place matching, and RopeWiki dedup so matching decisions
+// do not diverge. Rules are deterministic edit-distance + normalization;
+// no machine learning.
 //
 // The 19 real-world failure examples the owner collected all reduce to a small
 // set of normalization rules (despace, type-word/noise-word stripping,
@@ -12,8 +11,7 @@
 import { norm, WATERWAY_SUFFIXES } from "./placeNameMatch.js";
 import { haversineMeters, withinBbox } from "./placeGeo.js";
 
-// Distance thresholds (moved here from api/src/services/ropewikiDedupe.ts so
-// every matching surface shares one source of truth; re-exported there).
+// Distance thresholds shared across matching surfaces.
 export const AUTO_LINK_DIST_M = 250; // typo-tier auto-link radius (coords must corroborate a weak name signal)
 // Exact-name auto-link radius. An exact normalized name is a strong signal on
 // its own; the coordinate check only exists to rule out a far same-name twin.
@@ -110,7 +108,7 @@ function canonicalQualifier(token: string): string | null {
   return QUALIFIER_CANONICAL[token] ?? null;
 }
 
-// 8-step normalization pipeline (see plan §5a).
+// 8-step normalization pipeline.
 export function normalizePlaceName(raw: string): NormalizedName {
   // 1. lowercase, trim, remove apostrophes, normalize "&" -> "and".
   let working = norm(raw).replace(/&/g, " and ");
@@ -315,7 +313,7 @@ function bestNameTier(
 }
 
 // Match an incoming place/trip name (optionally with coords) against a list of
-// existing places. See plan §5a for the decision procedure.
+// existing places.
 export function matchPlace(
   input: MatchInput,
   candidates: MatchCandidate[],
@@ -378,6 +376,48 @@ export function matchPlace(
 
   const confidence = decideConfidence(best, ranked, inputHasCoords);
   return { confidence, best, candidates: ranked };
+}
+
+// Whole-word prefix of a longer name: "Wollangambe" for "Wollangambe One".
+// nameTier refuses this on purpose (a bare name cannot say which numbered place
+// it means), so it is a separate step that only ever offers candidates: always
+// "review", never "auto", and `best` is set only when exactly one place fits.
+function isTokenPrefix(input: NormalizedName, other: NormalizedName): boolean {
+  return (
+    input.base.length >= 4 &&
+    input.tokens.length < other.tokens.length &&
+    input.tokens.every((token, i) => token === other.tokens[i]) &&
+    setsEqual(input.qualifiers, other.qualifiers)
+  );
+}
+
+// matchPlace for a logbook row, which carries a name and nothing else: when no
+// place matches, offer the places whose name starts with the row's name.
+export function matchTripPlace(
+  name: string,
+  candidates: MatchCandidate[],
+): MatchResult {
+  const result = matchPlace({ name }, candidates);
+  if (result.confidence !== "none") return result;
+  const inputNorm = normalizePlaceName(name);
+  const fits = candidates
+    .filter((candidate) =>
+      [candidate.name, ...candidate.altNames].some((n) =>
+        isTokenPrefix(inputNorm, normalizePlaceName(n)),
+      ),
+    )
+    // Names are the only order a reviewer can read the cut by when more than
+    // TOP_CANDIDATES fit.
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (fits.length === 0) return result;
+  const scored: ScoredCandidate[] = fits
+    .slice(0, TOP_CANDIDATES)
+    .map((candidate) => ({ candidate, tier: "typo", distanceMeters: null }));
+  return {
+    confidence: "review",
+    best: fits.length === 1 ? scored[0] : null,
+    candidates: scored,
+  };
 }
 
 // Should a surfaced (confidence "review") place-import row start on "merge into

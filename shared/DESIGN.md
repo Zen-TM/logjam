@@ -15,13 +15,16 @@ token, a kit prop, a contract or a test can hold lives there and is not
 written here. Prose is only for what code cannot hold. Before adding a line,
 try to make it code; when you convert a rule to code, delete its line.
 
-| Decision | Declared in |
-|---|---|
-| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes | `designTokens.ts`, `themeSchemes.ts` |
-| Which glyph stands for an idea | `icons.ts` |
-| Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
-| A shared screen's sections, order, words, verbs and empty states | `contracts/` |
-| Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
+| Decision                                                                                                                    | Declared in                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes                                     | `designTokens.ts`, `themeSchemes.ts`                                             |
+| Which glyph stands for an idea                                                                                              | `icons.ts`                                                                       |
+| Which components the kit has, on which client                                                                               | `KIT_COMPONENTS` in `kit.ts`                                                     |
+| A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
+| The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
+| Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
+| A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
+| How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
@@ -41,30 +44,73 @@ renumber.
 
 ## 1. The field comes first
 
-- **Readable in full sun.** Ghost Gum is the sunlight scheme: every text pair
-  at 7:1 or more. The dark schemes hold AA: 4.5:1 for text, 3:1 for a glyph,
-  an edge or a control. A new foreground/background pair joins
+- **Readable in full sun.** Ghost Gum is the sunlight scheme: its text and
+  muted text clear 7:1. A label on a fill clears 4.5:1 in every scheme, since
+  Ghost Gum's intent colours sit in the narrow band where they clear 4.5:1
+  under the dark `onFill` and 3:1 on its pale page. The dark schemes hold AA:
+  4.5:1 for text, 3:1 for a glyph, an edge or a control. A surface is told
+  from the one under it by its fill and its edge. A new pair joins
   `scripts/wcag-contrast.mjs`, measured on the surface it renders on; its
   known-failures list only shrinks.
 - **A touch target is 48×48 dp**, even when drawn smaller. A mouse target is
-  never under 24px.
+  never under 24px. A link inside running text is exempt, as in WCAG 2.5.8.
 - **On the map, chrome is the least it can be**: no permanent labels, no
   pinned cards, a badge only while what it says is true. A running job is one
   glyph, its numbers one press away.
 - **Offline is normal, not an error.** The UI answers three questions, once
   each: am I offline, is my work safe, what can't I do right now (§5).
-- **Anything that loses data takes two steps**: the verb, then a confirm
-  (§9). The confirm's button is the only place the warning fill appears.
+- **A confirm is for what can't come back**: losing data, spending something
+  (mobile data, credits), or ending something that is running. A step you can
+  undo where you are never confirms; it offers Undo. Nothing else asks.
+  Guards: `mobile/src/ui/confirm.test.ts` (Logjam GPS asks only through
+  `confirm()`, bar the sign-out prompt in `App.tsx`, listed in the test's
+  `BASELINE`), `shared/src/contracts/contracts.test.ts` (a delete confirm
+  names its thing and says it can't be undone), and
+  `frontend/src/components/routes/useRouteDraft.test.ts` (Logjam Web: Clear
+  can be undone). Whether a given step can come back is for review.
+- **The warning fill has three uses**: a destructive confirm's button, the
+  recording light, and a notice about data being lost right now. It is told
+  from the accent by its glyph, never by its luminance: the two share one.
+  Guards: on Logjam Web a destructive `Button` requires an `icon` by type, and
+  on both clients a critical `Notice` does (`tsc -b` fails without one);
+  `Notice.test.tsx` (Logjam Web's critical fill) and
+  `frontend/e2e/confirms.spec.ts` (a destructive confirm keeps its glyph).
 
 ## 2. A screen answers one question
 
 - **Lead with the question the user opened the screen to answer, and answer
   it before any list.** The answer is the hero, usually one line. A screen
   with no question (Settings) has no hero; the map is its own answer.
+  On Logjam GPS the hero says the answer and the page's name is its eyebrow;
+  on Logjam Web the hero is the page's name, because the chips under it carry
+  the counts (`ScreenContract.title`).
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
-- **One pinned filter axis per screen.** Finer filters are one press away and
-  say so while active ("3 filters active").
+  On every top-level list of Logjam GPS (Places, Trips, Saved, Inbox, Plans,
+  Friends, Leaderboard) the full hero pins at the top and hands over to
+  `Hero compact` once the list scrolls: one row, "Name · count", its add
+  reduced to the glyph. It returns at the top, and when the list is too short
+  to scroll. The rail and the search stay pinned. A detail page (a place, a
+  trip, a plan) does not collapse: its header is the item itself, and there is
+  no list to give the screen back to. The collapse follows the scroll offset
+  frame by frame (`CollapsingHeader`, `useHeroCollapse`): the header floats
+  over the list and slides, fades and cross-fades on the UI thread, nothing
+  re-lays-out, and a list let go halfway settles to the nearer end. With
+  reduced motion it swaps in one step instead. Guard: `heroCollapse.test.ts`,
+  which fails for a screen that draws a `Hero` and is on neither of its lists.
+- **Between the hero and the list, only what narrows the list** (the rail, a
+  search bar, a selection bar). A way elsewhere is a hero action; a number it carries is its
+  badge.
+- **One pinned filter axis per screen.** Finer filters are one press away, in
+  the sheet behind the hero's filter button, and say so while active ("3
+  filters active"). The rail is the axis people arrive with.
+- **A list you hunt through by name has a search bar under the rail**, always
+  there, not behind an icon. It is hidden with nothing to search and stays
+  mounted but disabled during a selection.
+- **Sort persists, per list and per device; filters and search clear when
+  the user leaves the list**, and Reset leaves the sort alone.
+- **A page's add button wears what it adds**, not a bare plus: `addPlace`,
+  `addTrip`, `addSaved`. A menu of several ways in keeps the plus.
 - **A list that grows without limit never shares a scroller with one that
   does not.** Give each a tab, with its count on the tab.
 - **The space above a section header is bigger than the gap between the rows
@@ -81,8 +127,10 @@ renumber.
   comes from the few steps and from weight and colour, not from a size of its
   own.
 - **A title does not repeat a count the screen already shows.**
-- **A pair is drawn on one line** (ascent and descent, highest and lowest);
-  a figure with no partner takes the whole line. Pairs: `statPairs.ts`.
+- **A pair is drawn on one line** (ascent and descent, highest and lowest,
+  level and flow, time and distance); among more figures, the ones that match
+  up still share a line, and a figure with no partner takes the whole line.
+  Pairs: `statPairs.ts`.
 
 ## 3. Getting around and getting out
 
@@ -92,13 +140,26 @@ renumber.
   close. A form has Cancel beside its submit; on Logjam GPS a form in a sheet
   is left by the sheet's ×, and its footer holds only the submit. A root tab
   on Logjam GPS has neither. Never leave only a gesture, a system button or a
-  second press on a nav icon.
+  second press on a nav icon. One exemption: a map point panel on Logjam Web
+  (a click opens its facts, a right-click opens it on Options) has no ×; a press
+  on the map outside it closes it and asks about no new point, and Escape
+  undoes one layer of it.
+- **A dialog that asks nothing of the reader (a message, a rules list, a
+  summary) closes by its × and by a Close button** in its footer.
 - **A tab opens at its root**, not the sub-page the user was last on.
+- **Where a user can go is declared once**: the tabs, the rail and More, in
+  order and in words, are `NAV` in `contracts/nav.ts`. A client draws it and
+  never lists it again, so a rename or a reorder is one edit. Guards:
+  `contracts/nav.test.ts` writes out each client's order, and
+  `navItems.test.ts` (Logjam Web) and `navTabs.test.ts` (Logjam GPS) hold the
+  rail and the tabs to it.
 - **The way out undoes one layer.** A sub-view inside a sheet or dialog backs
   out to its parent, and the title names the step. Escape, the back gesture
   and × each undo exactly one layer.
 - **A page fills a phone**; it is left by its back arrow or the tab bar. A
-  sheet over the map is for choosing and acting, never for a page.
+  sheet over the map is for choosing and acting, never for a page. (Logjam Web
+  on a phone draws its pages as sheets over the map, so it has no Map tab: a
+  page closes by its ×, or by swiping it down.)
 - **Opening a place, a way or a topo fits the map to it**, in the one
   function that opens it, never per caller. So where the map sits beside the
   page (Logjam Web) there is no "Show on map" verb; where the page covers the
@@ -114,16 +175,24 @@ renumber.
   Exempt: text fields, switches, the surfaces themselves and the map's chrome.
 - **Small things follow it.** A button wears the card fill; a surface's one
   primary action wears the accent. A status pill is read, so it has no fill:
-  words with a dot or a glyph. A selected chip looks like neither. A badge on
+  words with a dot or a glyph. A selected chip looks like neither: its fill
+  shows it, with no check, so selecting never changes its width. A badge on
   something pressable (an unread count, a chip's tally) keeps its fill.
 - **A pill is never narrower than it is tall.**
 - **Things that look alike behave alike**; a thing that behaves differently
   looks different.
 - **A pressable thing answers the press at once** (pressed or hover state),
-  and nothing else answers a pointer: a chart or a read-only row stays still.
+  in one way: a glyph-only control or a fill dims to `OPACITY.pressed`, and
+  anything on a card takes the `cardPressed` fill. Nothing else answers a
+  pointer: a chart or a read-only row stays still.
+  Decoration nobody could take for a control is the exception: the rain on
+  Logjam Web's sign-in terrain.
 - **A control a hover reveals is always visible on a coarse pointer.**
 - **A press with a non-obvious effect says so on the thing**: a copyable
   value carries a copy glyph; a file's row says "Click to download".
+- **The coordinates are the copy control, never a separate button** (Logjam
+  Web: `Stat onCopy`; Logjam GPS: a pressable `Row`). Guard:
+  `shared/src/coordinatesCopyRule.test.ts`.
 
 ## 5. Absent, disabled, or there
 
@@ -131,7 +200,12 @@ renumber.
   shared).
 - **Disabled when it could apply but not now, and it says why** where the
   control is: "Needs a connection", "Needs an account", "Nothing to mark as
-  read". The reason reaches a screen reader.
+  read". The reason reaches a screen reader. A disabled button stays
+  pressable, and the press shows the reason (a toast on Logjam GPS, the
+  tooltip on Logjam Web, where a touch screen never hovers); `disabledReason`
+  is required by type. A reason already printed beside the control is not
+  shown a second time on a press (`reasonShown`). A disabled row dims its tile, title and controls, and
+  its reason line stays at full strength.
 - **"Needs an account" outranks "Needs a connection".**
 - **Submit is never disabled for validation**: pressing it is how the user
   learns what is missing. Disable it only while saving, for a capability the
@@ -145,6 +219,9 @@ renumber.
 
 - **An idea keeps its glyph everywhere, and a glyph never means two ideas.**
   Draw `<Icon idea=…>`; a new idea joins `icons.ts`.
+- **Ending a share is three ideas, each with its own glyph**: `unshare` (the
+  owner stops sharing), `hide` (a friend removes it from their account) and
+  `removeFriend` (end a friendship, drop someone from a plan).
 - **An icon-only control has a label**, which is its accessible name and its
   tooltip. If the glyph needs a sentence, the glyph is wrong.
 - **A menu item is a glyph and a verb.** A bulk bar may be glyphs alone.
@@ -159,10 +236,23 @@ renumber.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.
+- **A selected chip's fill is `chipFill(hue, scheme)`, not the hue**: the hue
+  moved just far enough to stand 3:1 off the unselected chip beside it and off
+  the page behind a lone chip, since the fill is all that shows it is
+  selected. Tiles, avatars and map marks keep the hue as declared. Guard: `shared/src/chipFill.test.ts` walks every scheme
+  and hue.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
-  a shape. Selected is an accent edge and a check, not a tint.
+  a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
-  mark with a ring.
+  mark with a person badge at its upper-right edge.
+- **A visited place wears a tick badge in `VISITED_PLACE_COLOR`**, also
+  reserved. A place is never both visited and shared (`placeStatus`), so a pin
+  has at most one badge. A badge is a glyph in a coloured disc, not a ring:
+  colour alone told people nothing, and the glyph is what says it. The images
+  and their size and offset are `shared/src/placeBadge.ts`, so both clients
+  draw the same thing. Guards: `placeBadge.test.ts` (disc colours, glyphs,
+  generator in step), `placeTypes.test.ts` (the colours are reserved),
+  `placeStatus.test.ts` (never both).
 - **Controls over a photo are black and white on a scrim**, not theme
   colours: words and glyphs on a `SCRIM` are `ON_SCRIM`.
 
@@ -170,7 +260,8 @@ renumber.
 
 - **Anything with kinds takes a glyph and a hue per kind from one map**, used
   wherever the kind appears: row tile, active chip, map mark, "add" menu,
-  notification. A notification borrows the hue of the thing it is about.
+  notification. A notification borrows the hue of the thing it is about; one
+  about Logjam itself (a maintainer message) has no thing and takes the accent.
 - **A menu of destinations is not a set of kinds**: Inbox, Friends and
   Settings share one look.
 - **An open vocabulary hashes its hue from the label**, so it survives
@@ -184,10 +275,14 @@ renumber.
 
 - **`Row` is the only list row.** The body opens; the ⋯ acts. Trailing
   order: metric, status, ⋯. A row that asks a question (accept or decline)
-  answers it in its footer.
+  answers it in its footer. A maintainer message's footer says Read
+  message, since nothing else says its row opens one. On Logjam GPS the
+  buttons in a card's footer share its full width equally (`CardActions`: two
+  get half each, one takes it all, three or more stack); Logjam Web's wider cards keep natural-size
+  compact buttons.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
-  a LiDAR topo) opens on the map. A thing with nowhere to open does its one
+  a sharpened area) opens on the map. A thing with nowhere to open does its one
   job (a file downloads), which is also first in its ⋯. A row with nothing to
   do is not pressable and has no fill.
 - **A thing offers the same verbs on its row, its page and its pin**, minus
@@ -215,8 +310,9 @@ renumber.
   with both, never neither ("Save a copy and remove").
 - **Visibility belongs to the layer**, not a switch on each thing's page.
 - **A subtitle says something the user cannot already see**: not the active
-  filter, the heading or the pill beside it. A navigation row's subtitle is
-  live state ("3 unread"), never a description.
+  filter, the heading or the pill beside it. A navigation row's count is
+  its badge, never its subtitle; its subtitle is live state that is not a
+  count, or absent.
 - **Two facts get two looks**: "shared with you" and "you shared this with 3"
   are never one word apart in the same slot.
 - **Labels wrap, never ellipsise**; a user's own title stops at two lines.
@@ -226,14 +322,24 @@ renumber.
 ## 10. Surfaces
 
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
-  for looking.** Never the only way to read something.
+  for looking.** Never the only way to read something, except a maintainer
+  message, which has no page.
+- **A sheet spaces what it stacks**: `BottomSheet` sets the gap between its
+  children, so a list in a sheet needs no wrapper to keep its rows apart.
+- **A kit container spaces what it stacks.** Any component that takes
+  `children` and can hold more than one (`ListEnd`, `FormStack`, a sheet) sets
+  the gap itself; components carry no outer margin, and a screen never adds a
+  gap around a kit container's children.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title
   and submit label. A shortcut ("Log a trip here") opens the real form,
   pre-filled.
 - **Abandoning a new thing confirms losing it; abandoning an edit confirms
-  losing the changes; an untouched form asks nothing.**
+  losing the changes; an untouched form asks nothing.** The form surface asks
+  (`discard` on `Dialog` and `BottomSheet`), so every way out is covered: ×,
+  Cancel, Escape, the back gesture, the backdrop, a drag. A form's footer is
+  Cancel and the submit verb; there is no "Discard" button.
 - **Rename in a form, never in a live field on the row.**
 - **A long errand done once elsewhere is a sub-view one press away**
   ("Haven't got one?"), not instructions above the form.
@@ -248,6 +354,10 @@ renumber.
 
 - **Loading is not empty, and failed is neither.** A first load says it is
   loading; a failed one says so, with Try again.
+  A list's data is a `LoadState` and `ListBody` draws it on both clients; a
+  failed first load never counts as loaded, so it never reads as "add your
+  first place" (`loadStateOf`). A refetch that fails under a list already
+  shown leaves the list and toasts.
 - **An empty screen says what would be here and offers the way in.** A
   filtered-empty list offers Clear filters.
 - **An error has one place**: under its field; above the submit of a form
@@ -260,6 +370,17 @@ renumber.
 - **A requirement shows on submit; a limit shows live.** An error clears when
   its field is edited.
 - **A toast reports an outcome and goes on its own**; errors stay longer.
+  It has two tones, `done` and `error`, stays `TOAST_MS` (a toast with an
+  action stays as long as an error), and offers at most one action ("Undo",
+  "Open"). It floats clear of the map's scale bar and credits. An action with
+  no other sign (Mark all as read) says so in a `done` toast; one the user
+  watches happen (copying coordinates) swaps its glyph in place instead.
+  A check means an outcome that worked: a toast that reports none (an
+  instruction, a notice such as a fallback basemap) stays `done` but wears the
+  info glyph (`toastGlyph`).
+- **A toast reports an event; a condition that lasts is shown while it is
+  true** (no fix, points not being saved), by a notice or by the figure it
+  affects.
 - **Say what is true, not what is hopeful**: a queued upload offline is
   "Waiting", not "Uploading…".
 - **A preview shows the result as it will be made**: framing a map's area
@@ -277,27 +398,44 @@ renumber.
 ## 12. Copy and helper text
 
 - **Name the surface: Logjam Web or Logjam GPS.**
+- **One thing, one word.** The word for each thing, and the words never
+  used for it, are `COPY_RULES`; a failing test prints what to say.
 - **A button is a verb** ("Make a map", not "Map").
+- **"Export" produces a file; a map is made.** "Export as GPX" is a file; a
+  GeoPDF or GIS map is "Make a map" (`export-is-a-file` in `COPY_RULES`), and
+  a LiDAR job is "Sharpen an area".
 - **Helper text is the exception.** Where a label and an icon are not enough:
   one plain sentence saying what the setting means, an example over a rule
   ("315° is what most maps use"). A label that says it gets no hint.
 - **A screen used daily spends no prose.** A screen visited once when
   confused may explain itself, if every line changes what the user does next.
+- **An explanation opens on request, never as a section of the page.** A
+  control's is its hint. How a screen or feature works is behind a `help`
+  button in the hero, or beside what it explains where there is no hero. An
+  empty state may explain.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
   another type").
-- **Name what failed** ("Download didn't finish").
-- **A sentence about what someone else can see or do is checked against the
-  API** before it ships.
+- **Name what failed**: "Couldn't save this place.", "Download didn't
+  finish". Never "Please", "That didn't work" or "item".
+- **A sentence about what someone else can see or do is declared once**, in
+  `contracts/share.ts` (`sharePromise`, `SHARE_SENTENCES`), and read by both
+  clients; `shareSentences.test.ts` in each fails on one that types its own.
+  On the owner's place page a section a friend sees says so in its title
+  (`placeSectionTitle`). The sentence is checked against the API before it
+  ships.
+- **A caller's words beat a status's.** `messageFromError` returns the
+  API's sentence, then the caller's fallback; only 401, 429, 5xx and a lost
+  connection are worded by status.
 
 ## 13. Privacy in the UI
 
 - **A coordinate belongs on a thing's own page, never in a list**: lists end
   up in screenshots. An area is its size ("18 × 11 km"), never its corners.
   No "distance from me" column.
-- **Search matches places locally.** Asking a public geocoder is a separate,
-  explicit choice.
+- **Search matches your places locally**, then the place registry as you
+  type (ADR 0034). Asking a public geocoder is a separate, explicit choice.
 - **Failure copy never carries a place name, coordinate, tag or field.**
 - Root `AGENTS.md` → Privacy holds the rest.
 
@@ -308,6 +446,9 @@ renumber.
   the job it serves only happens on the other client (a GeoPDF is made to be
   printed, so it is made on Logjam Web). "Not built yet" is a gap to log, not
   a reason.
+- **A contract's `reason` is about the medium.** A feature not built yet on
+  one client is its `gap`, so the parity debt is one search
+  (`contracts.test.ts` refuses a gap written as a reason).
 - **One look, one component.** Extend a kit component with a prop before
   adding a file; the kit does looks, a screen does layout.
 - **The kit is presentation only.** A component that owns permissions, file
@@ -318,11 +459,36 @@ renumber.
 - **Two edges, two jobs.** The action edge: layers, tools, locate. The
   instrument edge: compass and scale, nothing that changes the app.
 - **Tools share one button whose tray opens sideways**; arming one closes
-  it. A tool a client lacks is absent, not disabled. A tool's own settings
+  it. Each tool is a pill with its label from `MAP_TOOLS` and no
+  description line. The first slides out from under the +, the rest fall out from
+  under the one above, staggered, 200 ms in all; it closes in a 100 ms
+  fade, and neither moves under reduced motion. Anything else touched closes
+  the tray (leaving the map does too). A tap or long-press on the map that
+  does so does nothing more, one on a control (a tab, another map button)
+  still acts, and a pan, pinch or drag carries on. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
-- **Notices sit in one stack** and say only what is true right now.
-- **Overlays divide by what a thing is** (Places, Ways, LiDAR topos). Whose
-  it is lives on the thing: the shared ring, the shared row mark.
+- **Notices sit in one stack** and say only what is true right now. A notice
+  about data being lost right now is `tone="critical"` (the warning fill,
+  `onFill` words, a glyph by type) and comes first.
+- **A mode with a way out is a `MapBanner`**: a pill in the search row,
+  the search button's height and colour, inset so an open search bar covers
+  it, the X last. Its label is one line, cut with an ellipsis, and never
+  widens the pill; pressing it opens what it is about or shows the whole text,
+  which a screen reader says too. A sentence or buttons are a `Notice`.
+- **Overlays divide by what a thing is** (Places, Ways). Whose
+  it is lives on the thing: the shared badge, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.
-- **Offline, the map is blank outside saved regions.**
+- **A point mark is a hue fill, a `MAP_INK.casing` ring and a white halo**, the
+  same on both clients, so it reads on light land and on satellite. Guard:
+  `shared/src/mapPin.test.ts` and the checker's mark pairs.
+- **Pin stacking differs on purpose**: Logjam Web draws a shared pin over your own,
+  Logjam GPS your own over a shared one, and each halo sits under its pin.
+  Guards: the halo-order tests in the two `mapMarks.test.ts`.
+- **A control over the map is a card**: the `card` fill and a `line` edge, its
+  shape kept per medium (circles on Logjam GPS, rounded squares on Logjam Web).
+  Guards: `mobile/src/map/mapMarks.test.ts`,
+  `frontend/src/components/map/mapMarks.test.ts`.
+- **Map label sizes are `MAP_LABEL_SIZE`**, read by both clients. Logjam GPS's pin
+  names follow the text size up to 1.5x. Guards: the same two tests.
+- **Offline, the map is blank outside offline maps.**

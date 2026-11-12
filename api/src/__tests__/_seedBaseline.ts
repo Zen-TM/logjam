@@ -3,7 +3,7 @@
 //
 // WHY a sweep and not per-test tracking: a test that forgets to record what it
 // created leaks it, and a failed test never reaches its own cleanup, which is
-// how a mutation run poisoned the next run (#278). A sweep needs no
+// how a mutation run poisoned the next run. A sweep needs no
 // cooperation, covers every table the schema has today or gains later (the
 // table list and primary keys come from Postgres, not a list here), and
 // still runs when a test throws.
@@ -15,7 +15,7 @@
 // from the baseline anywhere, naming the table: a sweep that missed a table
 // or kind of row is red, not silent.
 //
-// Not covered: S3 objects in MiniStack (media, sends, GeoPDFs, topo outputs)
+// Not covered: S3 objects in MiniStack (media, sends, topo outputs)
 // and ECS tasks. They are orphaned by the row sweep and harmless to a rerun,
 // since nothing lists a bucket; MiniStack's volume is wiped by `make reset`.
 
@@ -131,7 +131,8 @@ export function describeSeedMismatch(seed: Snapshot | null, live: Snapshot) {
   if (!diff.length) return null;
   return (
     `The database is not as the seed left it (${diff.length} row(s)): a ` +
-    "run killed before its cleanup, or local use of the app, leaves rows " +
+    "run killed before its cleanup, or local use of the app (a local e2e " +
+    "run included: its Undo leaves sync tombstones), leaves rows " +
     `the suite would adopt as seed.\n${describeDrift(diff)}\n${fix}`
   );
 }
@@ -152,11 +153,19 @@ export function seededDrift(base: Snapshot, now: Snapshot): Drift[] {
 
 /** Delete every row absent from the baseline. Foreign keys make the order
  *  matter and the schema does not say it, so retry the refused tables until a
- *  pass deletes nothing more. */
+ *  pass deletes nothing more. A delete trigger (the compute carry-over) can
+ *  write into a table an earlier pass already swept, so repeat until a whole
+ *  sweep deletes nothing. */
 export async function sweepToBaseline(base: Snapshot): Promise<void> {
+  while (await sweepOnce(base));
+}
+
+/** One sweep of every table; whether it deleted anything. */
+async function sweepOnce(base: Snapshot): Promise<boolean> {
   const prisma = await appDb();
   const defs = await tables(prisma);
   let pending = defs;
+  let deleted = false;
   for (let pass = 0; pass < defs.length + 1 && pending.length; pass++) {
     const refused: TableDef[] = [];
     let progressed = false;
@@ -167,7 +176,7 @@ export async function sweepToBaseline(base: Snapshot): Promise<void> {
           `DELETE FROM "${def.table}" t WHERE NOT (${def.keyExpr} = ANY($1::text[]))`,
           known,
         );
-        if (n > 0) progressed = true;
+        if (n > 0) progressed = deleted = true;
       } catch {
         refused.push(def);
       }
@@ -175,6 +184,7 @@ export async function sweepToBaseline(base: Snapshot): Promise<void> {
     if (!progressed && refused.length === pending.length) break;
     pending = refused;
   }
+  return deleted;
 }
 
 /** Pure: rows present now that the baseline lacks. */

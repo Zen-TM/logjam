@@ -24,8 +24,7 @@ import {
 
 import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
 
-// Place types and the field definitions scoped to them — the mandatory guards
-// from the places-rework plan §7.4, §7.6 and §7.7.
+// Place types and the field definitions scoped to them.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Run `make seed` first: this suite creates and deletes types, and the seed is
@@ -152,7 +151,7 @@ describe("GET /place-types", () => {
   });
 });
 
-// §7.7 — system types and definitions are UNDELETABLE. Not a nicety: RopeWiki
+// System types and definitions are UNDELETABLE. Not a nicety: RopeWiki
 // import writes reserved field keys into the Canyon type, so a deletable Canyon
 // type would let import write values nothing can render.
 describe("system types and definitions cannot be removed", () => {
@@ -183,7 +182,7 @@ describe("system types and definitions cannot be removed", () => {
     expect(res.status).toBe(404);
   });
 
-  // §7.7, THE PATH THE PHONE USES. The REST case below covers the web; a delete
+  // The path the phone uses. The REST case below covers the web; a delete
   // arriving as a PUSH OP answered `alreadyApplied` — success — while the row
   // stayed put, which is how a client that had already stripped the values off
   // its own rows was told everything went fine.
@@ -238,7 +237,7 @@ describe("system types and definitions cannot be removed", () => {
     );
   });
 
-  // The other half of §7.7: RopeWiki import writes keys that EXIST. A key it
+  // RopeWiki import writes keys that EXIST. A key it
   // writes with no definition behind it is a value no form renders and no
   // filter finds.
   it("has a definition for every key RopeWiki writes", async () => {
@@ -260,7 +259,7 @@ describe("system types and definitions cannot be removed", () => {
   });
 });
 
-// §7.6 — a user field whose label slugs to a reserved key is REFUSED, with a
+// A user field whose label slugs to a reserved key is REFUSED, with a
 // suggestion. "V grade" on someone's own Campsite type slugs to `v_grade`,
 // which is the key RopeWiki import writes into Canyon: two writers, one key.
 describe("reserved keys are refused", () => {
@@ -327,7 +326,7 @@ describe("reserved keys are refused", () => {
   });
 });
 
-// §7.4 — `appliesToAllTypes` is a FLAG, not join rows for the types that exist
+// `appliesToAllTypes` is a FLAG, not join rows for the types that exist
 // today. Join rows would silently fail to apply to a type created tomorrow, and
 // the user who ticked "All" would never find out.
 describe("appliesToAllTypes", () => {
@@ -443,9 +442,9 @@ describe("place type lifecycle", () => {
     expect(again.status).toBe(409);
   });
 
-  // The database's unique index is exact, so "cave" beside "Cave" used to be
-  // two tabs with one name. Mutation: drop `settlePlaceTypeName` from
-  // `createPlaceType`.
+  // The database's unique index is exact: case and spacing normalization
+  // prevents two tabs with the same name. Mutation: drop `settlePlaceTypeName`
+  // from `createPlaceType`.
   it("refuses a name that only differs in case or spacing", async () => {
     const stamp = Date.now();
     await makeType(ALICE_SUB, `Rock Pool ${stamp}`);

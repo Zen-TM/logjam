@@ -5,12 +5,11 @@ Two more cannot be shared and stay duplicated:
 
   - `update_status` — MUST differ: `topo_jobs` has an `updated_at` column and
     `topo_export_jobs` does not, so one shared version would break every export
-    status flip (STP-008). Not checked here.
+    status flip. Not checked here.
   - `delete_s3_prefix_best_effort` — reads each module's own `BUCKET`, `s3` and
     `log` globals, so sharing it means threading three arguments through for no
     behavioural gain. It IS meant to stay identical, so it gets this guard
-    instead of a "keep both copies in sync" comment — the comment had already
-    failed silently once (three drifted spots by 2026-08-29).
+    instead of a comment.
 
 Docstrings are excluded: each copy names its own job type ("reaped-job" vs
 "reaped-export"), which is deliberate.

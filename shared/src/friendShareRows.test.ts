@@ -67,7 +67,7 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([false, false]);
   });
 
-  // Both ROW kinds copy into the account now (`isCopyableSharedRow`); the two
+  // Both row kinds copy into the account (`isCopyableSharedRow`); the two
   // job kinds do not, because their copy is the device download.
   it("offers copy on a received place and a received route", () => {
     const cards = buildShareCards([PLACE, ROUTE], {
@@ -79,12 +79,12 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([true, true]);
   });
 
-  it("withholds copy from a received topo and GeoPDF", () => {
-    const cards = buildShareCards(
-      [row("topoJob", "j1", "Kanangra"), row("geoPdfJob", "g1", "Sheet 1")],
-      { direction: "youSee", friendName: FRIEND },
-    );
-    expect(cards.map((card) => card.copyable)).toEqual([false, false]);
+  it("withholds copy from a received topo", () => {
+    const cards = buildShareCards([row("topoJob", "j1", "Kanangra")], {
+      direction: "youSee",
+      friendName: FRIEND,
+    });
+    expect(cards.map((card) => card.copyable)).toEqual([false]);
   });
 
   // THE TRAP: a route shared directly AND linked to a place this friend
@@ -127,8 +127,8 @@ describe("shareSelectionCountLabel", () => {
   });
 
   it("tallies the copyable subset when it differs from the total", () => {
-    // A topo is the uncopyable kind now that routes copy — its keep is the
-    // device download, not an account copy.
+    // A topo is uncopyable — its keep is the device download, not an
+    // account copy.
     expect(shareSelectionCountLabel(received([PLACE, TOPO]), "youSee")).toBe(
       "2 selected · 1 copyable",
     );
@@ -159,7 +159,7 @@ describe("unshareAllConfirm", () => {
       friendName: FRIEND,
       includesPlace: false,
     });
-    expect(confirm.title).toBe("Unshare 3 items from bob?");
+    expect(confirm.title).toBe("Stop sharing 3 items with bob?");
     expect(confirm.body).toContain("You stay friends");
     expect(confirm.body).toContain("no undo");
     // Never claims it recalls what the friend already copied.
@@ -179,7 +179,7 @@ describe("unshareAllConfirm", () => {
     expect(
       unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: false })
         .title,
-    ).toBe("Unshare 1 item from bob?");
+    ).toBe("Stop sharing 1 item with bob?");
   });
 });
 
@@ -197,7 +197,7 @@ describe("removeAllConfirm", () => {
     expect(confirm.body).not.toContain("permanently");
   });
 
-  // "1 item are removed" shipped to the device and read as a bug in the app.
+  // Verb agrees with the count.
   it("agrees its verb with the count", () => {
     expect(
       removeAllConfirm({ count: 1, friendName: FRIEND, copyableCount: 0 }).body,
@@ -211,8 +211,7 @@ describe("removeAllConfirm", () => {
     ).toContain("bob keeps the original.");
   });
 
-  // "1 of them" needs a THEM: with one row selected there is nothing to be one
-  // OF, and the sentence read as a counting error on the device.
+  // With one row selected there is nothing to be one of; omit "of them".
   it('does not say "1 of them" about a single row', () => {
     const body = removeAllConfirm({
       count: 1,
@@ -241,7 +240,7 @@ describe("outcome messages", () => {
   it("reports a clean copy run as info", () => {
     expect(copyOutcomeMessage({ copied: 2, failed: [] })).toEqual({
       text: "Saved 2 copies.",
-      tone: "info",
+      tone: "done",
     });
   });
 
@@ -322,9 +321,8 @@ describe("copyConfirm", () => {
     expect(confirm.body).toContain("stay if bob stops sharing");
   });
 
-  // FOUND ON THE EMULATOR. The item sheets know no username, and passing the
-  // literal "the owner" put a lower-case word at the start of a sentence:
-  // "…stops sharing. the owner's original is untouched."
+  // When item sheets know no username, "the owner" starts a sentence and must
+  // be capitalised: "The owner's original is untouched."
   it("capitalises the unnamed owner where it starts a sentence", () => {
     const body = copyConfirm({
       count: 1,
@@ -353,7 +351,7 @@ describe("copyAndRemoveOutcomeMessage", () => {
       copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] }),
     ).toEqual({
       text: "Saved 1 copy and removed the shared one.",
-      tone: "info",
+      tone: "done",
     });
   });
 
@@ -401,8 +399,7 @@ describe("copyAndRemoveOutcomeMessage", () => {
   });
 });
 
-// A subtitle under a verb states the consequence. It used to be the confirm's
-// own TITLE — a question sitting under the button that asks it.
+// A subtitle under a verb states the consequence as a statement, not a question.
 describe("removeRowSubtitle", () => {
   it("is a statement, not a question", () => {
     const subtitle = removeRowSubtitle({

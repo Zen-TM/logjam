@@ -1,7 +1,13 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
+import { sendPushToUser } from "../services/push";
+import { retract, send } from "../scripts/announce";
 import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
+
+// The announce script runs in this process; its pushes would reach the
+// seeded device tokens.
+vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Each test creates its own notification rows directly via Prisma (the API
@@ -52,11 +58,8 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  // "Live" means a live SHARE, not merely a live place (APIR-012/PRIV-103).
-  // This fixture used to own the place as ALICE and create no PlaceShare at
-  // all — an impossible state that only resolved because the old read-time
-  // fallback checked place existence. Bob owns it and shares it, as the
-  // notification claims.
+  // "Live" means a live SHARE, not merely a live place: bob owns it and
+  // shares it, as the notification claims.
   it("resolves placeName and sharedByUsername for a live place_shared notification", async () => {
     const place = await prisma.place.create({
       data: {
@@ -149,6 +152,86 @@ describe("GET /notifications (fake auth = alice)", () => {
   });
 });
 
+// Mutations that turn this red: stop resolving title/body, or keep a row
+// whose announcement was deleted (a retracted message would linger, untitled);
+// in the script, store more than the id in the payload, or drop retract's
+// notification deleteMany or misspell its path key (the unread badge would
+// keep counting rows the list no longer shows).
+describe("GET /notifications — announcements (fake auth = alice)", () => {
+  it("sends one id-only row per user, and retract removes every one", async () => {
+    const title = "Made-up integration announcement";
+    const where = (id: string) => ({
+      type: "announcement",
+      payload: { path: ["announcementId"], equals: id },
+    });
+    const unread = async () =>
+      (await request(API_URL).get("/notifications/unread-count").set(AUTH)).body
+        .count as number;
+    const before = await unread();
+
+    expect(await send(`# ${title}\n\nMade-up *body*.`, true)).toBe(0);
+    const announcement = await prisma.announcement.findFirstOrThrow({
+      where: { title },
+    });
+    try {
+      const rows = await prisma.notification.findMany({
+        where: where(announcement.id),
+      });
+      expect(rows).toHaveLength(await prisma.user.count());
+      const alices = rows.find((n) => n.userId === ALICE_ID)!;
+      expect(alices.payload).toEqual({ announcementId: announcement.id });
+      expect(await unread()).toBe(before + 1);
+      expect(sendPushToUser).toHaveBeenCalledWith(ALICE_ID, {
+        type: "announcement",
+        announcementId: announcement.id,
+      });
+
+      expect(await retract(announcement.id)).toBe(0);
+      expect(
+        await prisma.notification.count({ where: where(announcement.id) }),
+      ).toBe(0);
+      expect(await unread()).toBe(before);
+    } finally {
+      await prisma.notification.deleteMany({ where: where(announcement.id) });
+      await prisma.announcement.deleteMany({ where: { id: announcement.id } });
+    }
+  });
+
+  it("resolves the title and body, and drops the row once the announcement is gone", async () => {
+    const announcement = await prisma.announcement.create({
+      data: { title: "Made-up title", body: "Made-up **body**" },
+    });
+    const notification = await prisma.notification.create({
+      data: {
+        userId: ALICE_ID,
+        type: "announcement",
+        payload: { announcementId: announcement.id },
+      },
+    });
+    try {
+      const res = await request(API_URL).get("/notifications").set(AUTH);
+      expect(res.status).toBe(200);
+      const row = res.body.find(
+        (n: { id: string }) => n.id === notification.id,
+      );
+      expect(row.payload).toEqual({
+        announcementId: announcement.id,
+        title: "Made-up title",
+        body: "Made-up **body**",
+      });
+
+      await prisma.announcement.delete({ where: { id: announcement.id } });
+      const after = await request(API_URL).get("/notifications").set(AUTH);
+      expect(
+        after.body.some((n: { id: string }) => n.id === notification.id),
+      ).toBe(false);
+    } finally {
+      await prisma.notification.deleteMany({ where: { id: notification.id } });
+      await prisma.announcement.deleteMany({ where: { id: announcement.id } });
+    }
+  });
+});
+
 describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth = alice)", () => {
   it("404s for a non-existent notification id", async () => {
     const patchRes = await request(API_URL)
@@ -162,9 +245,9 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
     expect(deleteRes.status).toBe(404);
   });
 
-  // 404, not 403 (APIR-013/PRIV-105): a foreign notification id must be
-  // indistinguishable from one that does not exist, or the status confirms the
-  // id is real to someone who cannot see it.
+  // 404, not 403: a foreign notification id must be indistinguishable from
+  // one that does not exist, or the status confirms the id is real to someone
+  // who cannot see it.
   it("404s when the notification belongs to another user", async () => {
     const bobNotification = await prisma.notification.create({
       data: {
@@ -221,7 +304,7 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       expect(unreadRes.status).toBe(200);
       expect(unreadRes.body.read).toBe(false);
 
-      // Anything but a boolean false still marks it read, as the bodyless call always did.
+      // Anything but a boolean false still marks it read.
       const junkRes = await request(API_URL)
         .patch(`/notifications/${notification.id}/read`)
         .set(AUTH)

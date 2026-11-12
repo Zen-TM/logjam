@@ -1,11 +1,12 @@
-// Downloads registry (map-sources.md §4.2 + stage4a §5.1): one SQLite DB is
+// Downloads registry: one SQLite DB is
 // the single source of truth for "what offline map data is on disk". The
 // downloads manager writes it; the map resolver only reads it.
 //
 // PRIVACY: rows carry region bboxes — place-area coordinates. The DB lives
 // in app-private storage (expo-sqlite's default dir, under the app sandbox,
-// covered by allowBackup=false), is surfaced only behind the Stage 4 app
-// lock, and its contents must never reach logs, telemetry, or crash reports.
+// covered by allowBackup=false), is surfaced only behind the app
+// lock, and its contents must never reach logs, telemetry, or crash reports
+// (mobile/src/sentry/scrubEvent.test.ts).
 import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 
@@ -79,6 +80,7 @@ type ArtifactRow = {
   label: string | null;
   groupId: string | null;
   groupLabel: string | null;
+  firstSavedAt: string | null;
 };
 
 function rowToArtifact(row: ArtifactRow): MapArtifact {
@@ -103,6 +105,7 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     label: row.label,
     groupId: row.groupId,
     groupLabel: row.groupLabel,
+    firstSavedAt: row.firstSavedAt,
   };
 }
 
@@ -120,8 +123,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, label, groupId, groupLabel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, label, groupId, groupLabel, firstSavedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -139,6 +142,20 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.label ?? null,
     artifact.groupId ?? null,
     artifact.groupLabel ?? null,
+    artifact.firstSavedAt ?? null,
+  );
+  notifyChanged();
+}
+
+export async function setArtifactFirstSaved(
+  id: string,
+  firstSavedAt: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE map_artifact SET firstSavedAt = ? WHERE id = ?",
+    firstSavedAt,
+    id,
   );
   notifyChanged();
 }
@@ -194,42 +211,12 @@ export async function renameArtifactGroup(
   notifyChanged();
 }
 
-// Persisted topo-overlay visibility set. Survives cold launch so a downloaded
-// overlay renders offline without the online completed-overlays list (which has
-// no persistence). Keys are "<jobId>/<layer>" — opaque id + generic layer name,
-// same app-private, backup-excluded, app-lock-gated store; never logged.
-export async function listEnabledOverlayKeys(): Promise<string[]> {
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ overlayKey: string }>(
-    "SELECT overlayKey FROM overlay_enabled",
-  );
-  return rows.map((row) => row.overlayKey);
-}
-
-export async function setOverlayEnabled(
-  overlayKey: string,
-  enabled: boolean,
-): Promise<void> {
-  const db = await getDb();
-  if (enabled) {
-    await db.runAsync(
-      "INSERT OR IGNORE INTO overlay_enabled (overlayKey) VALUES (?)",
-      overlayKey,
-    );
-  } else {
-    await db.runAsync(
-      "DELETE FROM overlay_enabled WHERE overlayKey = ?",
-      overlayKey,
-    );
-  }
-}
-
 /**
  * Delete every file in `dir` ending in `extension` whose id (the filename
  * minus that extension) has no row in the registry and is not in `liveIds`
  * (a download this process is writing right now).
  *
- * MOT-002: unlike a tile-pyramid MBTiles, which checkpoints IN the file and
+ * Unlike a tile-pyramid MBTiles, which checkpoints IN the file and
  * is discovered by `listUnfinishedRegions`, a single-file pmtiles writer
  * (regionDownloads.ts, overlayDownloads.ts) has no resumable state at all —
  * an app kill mid-transfer leaves it with nothing pointing at it and nothing

@@ -15,14 +15,11 @@
 // The caller supplies the candidate lines and therefore decides what is
 // snappable — trails, waterways, or both. Nothing here knows about OSM kinds.
 //
-// WHAT THE SPIKE FOUND (2026-08-06, Protomaps NSW extract at z15, 3x3 tile
-// block over Claustral Canyon): 47 line features, 36 streams and 11 paths, so
-// coverage in canyoning country is real. But the features do NOT arrive
-// pre-connected — of the endpoint pairs belonging to different features within
-// 50 m of each other, only 4 were exactly coincident, with genuine junctions
-// sitting 3-15 m apart. Vector tiles also repeat a feature into neighbouring
-// tiles' buffers. Both are handled by welding vertices onto a shared spatial
-// hash: duplicates collapse onto the same node, and near-misses join.
+// Vector tile features do not arrive pre-connected — genuine junctions often
+// sit 3-15 m apart rather than sharing an exact coordinate, and vector tiles
+// repeat features into neighbouring tiles' buffers. Both are handled by
+// welding vertices onto a shared spatial hash: duplicates collapse onto the
+// same node, and near-misses join.
 //
 // PRIVACY: the inputs are wilderness coordinates. Nothing here logs.
 
@@ -32,12 +29,11 @@ import type { RoutePoint } from "./routeValidation.js";
 /**
  * Vertices within this distance of each other become one graph node.
  *
- * ponytail: 12 m is a calibrated guess from the spike above, not a
- * measurement. Too small and real junctions stay disconnected so nothing
- * snaps; too large and a creek welds to a track that merely passes overhead,
- * inventing a junction that does not exist on the ground. This is the first
- * knob to turn if snapping either misses obvious junctions or invents silly
- * ones.
+ * ponytail: 12 m is a calibrated guess, not a measurement. Too small and
+ * real junctions stay disconnected so nothing snaps; too large and a creek
+ * welds to a track that merely passes overhead, inventing a junction that
+ * does not exist on the ground. This is the first knob to turn if snapping
+ * either misses obvious junctions or invents silly ones.
  */
 export const SNAP_WELD_TOLERANCE_M = 12;
 
@@ -194,12 +190,9 @@ function projectOntoSegment(
  * that meet end-to-end without sharing an exact coordinate.
  *
  * Pass 2 NODES THE NETWORK: a node lying within tolerance of another way's
- * segment is spliced into that segment. Without it the graph is unusable — on
- * the real Protomaps extract around Mount Hay, pass 1 alone produced 764 nodes
- * in 23 disconnected components, and two taps on the same named trail landed
- * in different components so nothing ever snapped. The reason is that a side
- * track meets a main track partway ALONG it, not at one of its vertices, and
- * vertex-to-vertex welding cannot see that junction at any tolerance that
+ * segment is spliced into that segment. Without it the graph is unusable: a
+ * side track meets a main track partway ALONG it, not at one of its vertices,
+ * and vertex-to-vertex welding cannot see that junction at any tolerance that
  * doesn't also fuse genuinely separate ways.
  */
 export function buildSnapGraph(
@@ -291,8 +284,8 @@ export function nearestNode(
 ): number | null {
   // Widen the ring to cover maxDistanceM. The "+ 1" is not slack: two points d
   // apart can differ by floor(d / cellSize) + 1 cell indices when they straddle
-  // a boundary, so ceil(d / cellSize) alone misses a node sitting just past the
-  // last ring — which showed up as nothing snapping at 50 m while 40 m worked.
+  // a boundary, so ceil(d / cellSize) alone would miss a node sitting just past
+  // the last ring.
   const rings = Math.ceil(maxDistanceM / graph.cellSizeM) + 1;
   const { cellX, cellY } = cellOf(point[0], point[1], graph.cellSizeM);
   let best: number | null = null;

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Creates a topo job as Logjam Web does (POST /topo-jobs, a PUT to the
+# presigned URL, POST /topo-jobs/:id/start) and prints its id. /start calls
+# ECS RunTask. Run from the repo root, with the API on :8080.
+# Usage: start-job.sh <job name> <ELVIS ZIP> [vegetation]
+set -euo pipefail
+
+name=$1
+zip=$2
+ticked=$([ "${3:-}" = vegetation ] && echo true || echo false)
+api=http://localhost:8080
+
+# Logjam Web sends the default settings with vegetation off, unless the
+# user ticks it (frontend sharpenJob.ts).
+settings=$(cd shared && node --input-type=module -e \
+  "import { RASTER_TEMPLATE_DEFAULTS as d } from './dist/topoSettings.js'; console.log(JSON.stringify({ ...d, vegetation: { ...d.vegetation, enabled: $ticked } }))")
+created=$(jq -n --arg name "$name" --argjson settings "$settings" \
+    '{jobName: $name, tileCount: 1, settings: $settings}' \
+  | curl -sf -X POST "$api/topo-jobs" -H 'content-type: application/json' -d @-)
+id=$(jq -r .jobId <<<"$created")
+curl -sf -X PUT -H 'content-type: application/zip' --upload-file "$zip" "$(jq -r .uploadUrl <<<"$created")"
+curl -sf -X POST "$api/topo-jobs/$id/start" | jq -e '.status == "pending"' >&2
+echo "$id"

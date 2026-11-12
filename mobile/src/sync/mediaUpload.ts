@@ -1,4 +1,4 @@
-// Offline media capture → upload (stage8-sync.md §7.1). An "attach photo"
+// Offline media capture → upload. An "attach photo"
 // copies the full-res image + a client-generated JPEG thumbnail into
 // app-private storage, writes a pendingUpload mirror row, and enqueues one
 // media.create outbox op. The flush engine (flush.ts) runs the three-phase
@@ -80,19 +80,25 @@ async function fileSize(uri: string): Promise<number> {
 }
 
 /**
- * MOT-005/D6: a picker/camera source is safe (and, since nothing else
- * declares or wipes it, necessary) to delete once `attachMediaLocal` has
- * copied it. A path under one of OUR declared stores is not that — it's an
- * asset whose lifecycle is governed elsewhere, e.g. a vector import's
- * `sourcePath` reused by `saved/assetActions.ts`'s "attach to place" (the
- * app's only kept original of a lossy GPX/KML derivation — see mobile/
- * CLAUDE.md "Imports keep their ORIGINAL BYTES"). `localStores.test.ts`
- * guarantees nothing outside `localStores.ts` names a filesystem root, so
- * anything NOT under one of these prefixes can only be a native module's own
- * cache path.
+ * A picker/camera source is safe (and, since nothing else declares or wipes
+ * it, necessary) to delete once `attachMediaLocal` has copied it. A path under
+ * one of OUR declared stores is not that — it's an asset whose lifecycle is
+ * governed elsewhere, e.g. a vector import's `sourcePath` reused by
+ * `saved/assetActions.ts`'s "attach to place" (the app's only kept original of
+ * a lossy GPX/KML derivation — see mobile/AGENTS.md "Imports keep their
+ * ORIGINAL BYTES"). `localStores.test.ts` guarantees nothing outside
+ * `localStores.ts` names a filesystem root, so anything NOT under one of
+ * these prefixes can only be a native module's own cache path.
  */
 function isOwnedStorePath(uri: string): boolean {
   return WIPED_DIRS.some((dir) => uri.startsWith(dir));
+}
+
+/** Drop a picked or captured file that was never attached (a cancelled form,
+ *  a removed pick). A path under one of our stores is not a picker's to drop. */
+export async function discardPickedFile(uri: string): Promise<void> {
+  if (isOwnedStorePath(uri)) return;
+  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
 }
 
 function mintUuid(): string {
@@ -117,6 +123,9 @@ export async function attachMediaLocal(
   linkedType: "place" | "tripLog",
   linkedId: string,
   file: PickedFile,
+  /** A trip's copy of a recording: the recording's media id. The API refuses
+   *  it on anything else and on an id that is not the caller's recording. */
+  sourceMediaId?: string,
 ): Promise<string> {
   await ensureCacheDir();
   const mediaId = mintUuid();
@@ -160,11 +169,11 @@ export async function attachMediaLocal(
       }
     }
 
-    // MOT-005/D6: the source has now been fully copied (display) and read
-    // (thumbnail extraction, if any) — delete it unless it's a path this app
-    // already owns the lifecycle of elsewhere (see isOwnedStorePath). A
-    // picker/camera source left alive here lives outside every declared
-    // store and outside the account-transition wipe until now.
+    // The source has been fully copied (display) and read (thumbnail
+    // extraction, if any) — delete it unless it's a path this app already owns
+    // the lifecycle of elsewhere (see isOwnedStorePath). A picker/camera source
+    // left alive here would live outside every declared store and outside the
+    // account-transition wipe.
     if (!isOwnedStorePath(file.uri)) {
       await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(
         () => {},
@@ -182,7 +191,7 @@ export async function attachMediaLocal(
            (id, linked_type, linked_id, media_type, filename, file_size_bytes,
             color, created_at, extra_json, sync_state, local_display_path,
             local_thumb_path)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'pendingUpload', ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'pendingUpload', ?, ?)`,
         mediaId,
         linkedType,
         linkedId,
@@ -190,6 +199,10 @@ export async function attachMediaLocal(
         filename,
         String(sizeBytes),
         new Date().toISOString(),
+        // Where the mirror keeps it until the delta brings the synced row
+        // (listLoggedTrackIds), so the recording stops offering "Log a trip"
+        // at once, offline.
+        sourceMediaId ? JSON.stringify({ sourceMediaId }) : null,
         displayPath,
         thumbPath,
       );
@@ -204,6 +217,7 @@ export async function attachMediaLocal(
         JSON.stringify({
           linkedType,
           linkedId,
+          ...(sourceMediaId && { sourceMediaId }),
           filename,
           mediaType,
           sizeBytes,
@@ -215,11 +229,11 @@ export async function attachMediaLocal(
       );
     });
   } catch (err) {
-    // Anything between the first copy and the committed row (a manipulator
-    // failure, an unreadable video, a rejected insert) used to strand the
-    // bytes on disk: nothing sweeps MEDIA_CACHE_DIR except the
-    // account-transition wipe, so an orphaned full-res photo lived for the
-    // life of the install.
+    // Clean up partial files: anything between the first copy and the
+    // committed row (a manipulator failure, an unreadable video, a rejected
+    // insert) would strand the bytes on disk. Nothing sweeps MEDIA_CACHE_DIR
+    // except the account-transition wipe, so an orphaned full-res photo would
+    // live for the life of the install.
     await FileSystem.deleteAsync(displayPath, { idempotent: true }).catch(
       () => {},
     );
@@ -464,6 +478,11 @@ export async function reclimbStandaloneMediaLocal(
 export async function linkStandaloneMediaLocal(
   mediaId: string,
   placeId: string | null,
+  /** The file uploaded onto that place that this one takes over from. The API
+   *  deletes it in the same step as the move, so a link that is refused leaves
+   *  it on the place. The mirror keeps showing it until the delta that follows
+   *  the swap drops it: hiding it here would strand it if the link never lands. */
+  replaces?: string,
 ): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
@@ -485,7 +504,7 @@ export async function linkStandaloneMediaLocal(
        VALUES (?, 'media', 'link', ?, ?, 'queued', 0, ?)`,
       mintUuid(),
       mediaId,
-      JSON.stringify({ placeId } satisfies LinkFields),
+      JSON.stringify({ placeId, replaces } satisfies LinkFields),
       new Date().toISOString(),
     );
   });
@@ -493,7 +512,7 @@ export async function linkStandaloneMediaLocal(
   scheduleMutationSync();
 }
 
-// ── flush-side: the three-phase resumable flow (§7.1) ───────────────────────
+// ── flush-side: the three-phase resumable flow ─────────────────────────────
 
 export type MediaOpRow = {
   seq: number;
@@ -514,6 +533,8 @@ type MediaFields = {
   linkedType: "place" | "tripLog" | "none";
   /** Null on a standalone file — it belongs to no place or trip. */
   linkedId: string | null;
+  /** A trip's copy of a recording: where it was copied from. */
+  sourceMediaId?: string;
   filename: string;
   mediaType: string;
   sizeBytes: number;
@@ -538,7 +559,7 @@ type ClimbFields = TrackClimb;
 type RenameFields = { displayName: string | null };
 
 /** Fields of a link/unlink op (`op = 'link'`). */
-type LinkFields = { placeId: string | null };
+type LinkFields = { placeId: string | null; replaces?: string };
 
 /** The first of the op's local blobs that has gone missing, or null. */
 async function firstMissingFile(fields: MediaFields): Promise<string | null> {
@@ -555,13 +576,11 @@ async function putFile(
   fileUri: string,
   contentType: string,
 ): Promise<void> {
-  // Guarded, not bare: `uploadAsync` has no timeout, so the Pixel-9
-  // connect()-hang this helper exists for parked a media op forever with the
-  // sync pump waiting on it (MAPP-006 — the finding fixed the Send-a-copy and
-  // GeoPDF legs; these media legs are the same call on a sibling surface, and
-  // mobile/CLAUDE.md's rule is that a second caller inherits the first's
-  // guards). A first-byte timeout throws, so the op fails and retries like any
-  // other transient error instead of hanging.
+  // Guarded, not bare: `uploadAsync` has no timeout, so without one the
+  // Pixel-9 connect()-hang would park a media op forever with the sync pump
+  // waiting on it (mobile/AGENTS.md's rule is that a second caller inherits the
+  // first's guards). A first-byte timeout throws, so the op fails and retries
+  // like any other transient error instead of hanging.
   //
   // A throw from the task is the transfer dying without an answer from S3 (the
   // file itself was checked in phase 0), so it is marked as the link's failure;
@@ -584,7 +603,7 @@ async function finalizeConfirmed(
   mediaId: string,
   confirmed: ConfirmedMedia,
 ): Promise<void> {
-  // The uploaded local files become the offline cache blobs (§7.3).
+  // The uploaded local files become the offline cache blobs.
   // The server owns the colour: it picks the next one avoiding collisions
   // across every device, which this phone cannot see. The local row carried a
   // guess so the line drew immediately, and this is where the two reconcile —
@@ -622,7 +641,21 @@ export async function runMediaCreateOp(
   row: MediaOpRow,
 ): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
-  const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+  let fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+  // A trip's copy names its recording only as a convenience: if the API
+  // refuses that name (the recording is gone), the attachment goes up
+  // unlinked, once, rather than parking over a link. Guard: "uploads a trip's
+  // copy unlinked…" in mediaUpload.test.ts.
+  const unlinkOn400 = async <T>(send: () => Promise<T>): Promise<T> => {
+    try {
+      return await send();
+    } catch (err) {
+      if ((err as { status?: number }).status !== 400 || !fields.sourceMediaId)
+        throw err;
+      fields = await dropSourceLink(db, row.seq, row.entity_id, fields);
+      return send();
+    }
+  };
 
   // Phase 0: the bytes still have to be here. If the OS reclaimed the cache
   // dir — or a sibling op's discard unlinked them — `uploadAsync` throws a
@@ -645,9 +678,8 @@ export async function runMediaCreateOp(
   // Phase 1: presign. Quota (507) / track-slot (409) → park blocked.
   let presign: PresignResponse | ConfirmedMedia;
   try {
-    presign = await apiFetch<PresignResponse | ConfirmedMedia>(
-      "/media/presign",
-      {
+    presign = await unlinkOn400(() =>
+      apiFetch<PresignResponse | ConfirmedMedia>("/media/presign", {
         method: "POST",
         body: {
           mediaId: row.entity_id,
@@ -657,17 +689,15 @@ export async function runMediaCreateOp(
           sizeBytes: fields.sizeBytes,
           thumbnailSizeBytes: fields.thumbnailSizeBytes,
         },
-      },
+      }),
     );
   } catch (err) {
     const status = (err as { status?: number }).status;
     // Park only what a retry can never fix; rethrow the rest for the engine's
-    // backoff. The old test was `>= 400 && < 600 && !== 500`, which swept in
-    // 502/503/504 (an API deploy), 429 (rate limit) and 401 (an expired
-    // token) — so six photos attached in a place became six sync issues
-    // needing six manual Retry taps the moment the user hit a mid-deploy API.
-    // flush.ts classifies those same statuses as transient; this is the copy
-    // that disagreed.
+    // backoff. Checking broad 4xx/5xx ranges would sweep in 502/503/504 (an
+    // API deploy), 429 (rate limit) and 401 (an expired token) — creating
+    // unnecessary sync issues needing manual Retry taps. Classification aligns
+    // with isTransientSyncError in flush.ts.
     if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
@@ -685,7 +715,7 @@ export async function runMediaCreateOp(
     return "done";
   }
 
-  // MOT-006: presign above is a few hundred bytes of JSON, fine on the
+  // Presign above is a few hundred bytes of JSON, fine on the
   // `sync` allowance it always rode; the PUTs below are the actual media
   // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
   // metered gate instead. Not allowed right now is not a failure — undo
@@ -719,16 +749,15 @@ export async function runMediaCreateOp(
   );
 
   // Phase 3: confirm (idempotent) → canonical row.
-  const confirmed = await apiFetch<ConfirmedMedia>(
-    `/media/${row.entity_id}/confirm`,
-    {
+  const confirmed = await unlinkOn400(() =>
+    apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/confirm`, {
       method: "POST",
       body: {
         ...linkBody(fields),
         filename: fields.filename,
         mediaType: fields.mediaType,
       },
-    },
+    }),
   );
   await finalizeConfirmed(db, row.seq, row.entity_id, confirmed);
   return "done";
@@ -745,7 +774,11 @@ export async function runMediaCreateOp(
  */
 function linkBody(fields: MediaFields): Record<string, unknown> {
   if (fields.linkedType !== "none") {
-    return { linkedType: fields.linkedType, linkedId: fields.linkedId };
+    return {
+      linkedType: fields.linkedType,
+      linkedId: fields.linkedId,
+      sourceMediaId: fields.sourceMediaId,
+    };
   }
   return {
     linkedType: "none",
@@ -826,7 +859,7 @@ export async function runMediaReclimbOp(
 /**
  * Link a standalone file to a place as its way, or unlink it.
  *
- * This is what replaced uploading a COPY of an import into a place. The local
+ * Links or unlinks a standalone file without uploading a duplicate copy. The local
  * mirror row has already moved (the UI showed the change immediately), so a
  * success needs no further write; a 404 means the file is gone and the op has
  * nothing left to do. A 409 is the place's track slot being taken by
@@ -836,14 +869,28 @@ export async function runMediaReclimbOp(
 export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   const fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
-  try {
-    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
+  const send = (replaces: string | undefined) =>
+    apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
       method: "PATCH",
       body:
         fields.placeId === null
           ? { linkedType: "none" }
-          : { linkedType: "place", linkedId: fields.placeId },
+          : { linkedType: "place", linkedId: fields.placeId, replaces },
     });
+  try {
+    try {
+      await send(fields.replaces);
+    } catch (err) {
+      // The file this one was to replace may have gone (deleted on another
+      // device), and the API refuses the name with a 400. Send the link once
+      // more without it, in memory only: the op keeps `replaces`, so if that
+      // fails too (the 400 had another cause) the op parks as it was and a
+      // manual retry can still swap. Guard: "keeps `replaces` on the op…" in
+      // mediaUpload.test.ts.
+      if ((err as { status?: number }).status !== 400 || !fields.replaces)
+        throw err;
+      await send(undefined);
+    }
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status === 404) {
@@ -899,14 +946,54 @@ function messageForBlock(status: number): string {
   return "The server rejected this upload.";
 }
 
+/**
+ * Forget the recording a queued trip copy names, on its outbox op and its
+ * mirror row, and return the op's fields without it.
+ */
+async function dropSourceLink(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  seq: number,
+  mediaId: string,
+  fields: MediaFields,
+): Promise<MediaFields> {
+  const unlinked = { ...fields };
+  delete unlinked.sourceMediaId;
+  await db.runAsync(
+    "UPDATE outbox SET fields_json = ? WHERE seq = ?",
+    JSON.stringify(unlinked),
+    seq,
+  );
+  // A queued copy's extra_json holds nothing but the link.
+  await db.runAsync("UPDATE media SET extra_json = NULL WHERE id = ?", mediaId);
+  return unlinked;
+}
+
 /** Enqueue a media delete (used by the detail UI). */
 export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   const db = await getSyncDb();
   const cancelled = await withSyncTransaction(db, async () => {
-    // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation never
-    // ran here: deleting a photo whose upload was still queued uploaded the
-    // whole file (presign → PUT → confirm, possibly on metered data) and then
-    // deleted it server-side again. Same "never sent" test the planner uses —
+    // A trip copy still waiting to upload must not name this recording: the
+    // API would refuse the name once the delete lands. Guard: "forgets a
+    // deleted recording…" in mediaUpload.test.ts.
+    const queued = await db.getAllAsync<{
+      seq: number;
+      entity_id: string;
+      fields_json: string | null;
+    }>(
+      `SELECT seq, entity_id, fields_json FROM outbox
+       WHERE entity = 'media' AND op = 'create'`,
+    );
+    for (const op of queued) {
+      const fields = JSON.parse(op.fields_json ?? "{}") as MediaFields;
+      if (fields.sourceMediaId === media.id) {
+        await dropSourceLink(db, op.seq, op.entity_id, fields);
+      }
+    }
+    // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation does
+    // not run automatically here: without explicit cancellation, deleting a
+    // photo whose upload is still queued would upload the whole file
+    // (presign → PUT → confirm, possibly on metered data) and then delete it
+    // server-side again. Same "never sent" test the planner uses —
     // queued, no attempt, no phase started — and the server has nothing to
     // delete, so the local row and its blobs go straight away.
     const pendingCreate = await db.getFirstAsync<{ seq: number }>(

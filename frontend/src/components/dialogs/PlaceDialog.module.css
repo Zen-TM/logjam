@@ -1,6 +1,5 @@
 /* Layout only; the kit does the look (DESIGN.md). The values here match
-   TripLogDialog's — the two forms are the same shape and were drifting apart
-   is what the shared sub-components exist to prevent. */
+   TripLogDialog's to keep the two forms consistent. */
 .form {
   display: flex;
   flex-direction: column;
@@ -32,7 +31,6 @@
   color: var(--color-text-muted);
 }
 
-.coordinates,
 .attribute,
 .source {
   display: flex;
@@ -45,6 +43,7 @@
    the bin belongs to it. */
 .attribute {
   flex-wrap: nowrap;
+  align-items: flex-start;
 }
 
 .grow {
@@ -52,10 +51,14 @@
   min-width: 120px;
 }
 
-/* Sits on the baseline of the two coordinate boxes, whose own hint line makes
-   them taller than the button. */
-.pickButton {
-  margin-bottom: calc(var(--font-xs) + 8px);
+/* From the top, so the button stays on the input line whatever the error
+   line under the inputs does. */
+.coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  container-type: inline-size;
 }
 
 .addAttribute {

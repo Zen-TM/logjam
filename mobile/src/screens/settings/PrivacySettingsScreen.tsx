@@ -1,11 +1,21 @@
 // Settings → Privacy and security: what guards this phone's copy of the data,
 // and what leaves it.
 //
-// Both switches are device-scoped and both work as a guest with no signal. The
+// The guard switches are device-scoped and work as a guest with no signal. The
 // asymmetry on the app lock is the load-bearing part: turning it OFF goes
 // through the device authenticator and a cancelled prompt springs the switch
 // back on (DESIGN.md, `appLockPreference.ts`, fail-closed). Without that,
 // the switch is a one-tap bypass of the thing it controls.
+//
+// TWO ROWS HERE ARE ACCOUNT-SCOPED, because the server reads them. The friends
+// leaderboard (`uiPreferences.leaderboardOptIn`) decides who sees whose count;
+// it is on THIS page because what it decides is what leaves for friends to
+// see, and it is where someone goes to turn that off. "Copy photos too"
+// (`uiPreferences.copyPlaceMedia`) is the fallback when a copy request does not
+// say, so Logjam Web follows a choice made here; it decides whether a shared
+// place's photos are duplicated into this account's quota. Unlike their
+// neighbours both are dead with "Needs an account" for a guest, who could link
+// one, and with "Needs a connection" offline (shared/DESIGN.md §5).
 //
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
@@ -14,6 +24,22 @@
 // (shared/DESIGN.md §13).
 import { useCallback, useState } from "react";
 import { Text } from "react-native";
+import {
+  COPY_MEDIA_SETTING,
+  LEADERBOARD_SETTING,
+  messageFromError,
+  SETTINGS,
+} from "@logjam/shared";
+
+import { apiFetch } from "../../api/apiFetch";
+import { fetchCurrentUser, useApiQuery } from "../../api/queries";
+import type { TUser } from "../../api/types";
+import { useAccountState } from "../../auth/AccountStateContext";
+import {
+  capabilityStatus,
+  unavailableReasonText,
+} from "../../auth/capabilities";
+import { useConnectivity } from "../../map/connectivity";
 
 import {
   isAppLockEnabled,
@@ -41,7 +67,7 @@ export function PrivacySettingsScreen() {
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -74,6 +100,9 @@ export function PrivacySettingsScreen() {
       return;
     }
     setCrashReportsState(next);
+    // The hint has room for the promise, not the timing: Sentry starts once,
+    // at launch (initSentry.ts).
+    notify("Applies the next time Logjam GPS opens.");
   }, [crashReports, notify]);
 
   // Off by default — see galleryPreference.ts for why that default is a
@@ -88,7 +117,91 @@ export function PrivacySettingsScreen() {
       return;
     }
     setSaveToGalleryState(next);
+    // Where the copies go, said once as the switch turns on; the hint keeps
+    // the part that matters every time it is read.
+    if (next)
+      notify("Copies go to your camera roll, where other apps can see them.");
   }, [saveToGallery, notify]);
+
+  // ── The one account-scoped row (see the header) ──────────────────────────
+  const { accountState } = useAccountState();
+  const isGuest = accountState === "guest";
+  const online = useConnectivity() === "online";
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your settings.",
+    !isGuest,
+  );
+  // Re-seeded on the VALUE, as on Offline and storage, so a change made on
+  // another device and pulled in by a refetch is not dropped.
+  const [leaderboard, setLeaderboard] = useState<boolean | null>(null);
+  const serverLeaderboard = userQuery.data
+    ? userQuery.data.uiPreferences?.leaderboardOptIn === true
+    : null;
+  const [seededFor, setSeededFor] = useState<boolean | null>(null);
+  if (serverLeaderboard !== seededFor) {
+    setSeededFor(serverLeaderboard);
+    if (serverLeaderboard !== null) setLeaderboard(serverLeaderboard);
+  }
+  const [savingLeaderboard, setSavingLeaderboard] = useState(false);
+  // Optimistic with rollback. The PATCH's answer refreshes the cached user
+  // record (`api/apiFetch.ts`), which is what Friends reads its row from.
+  const toggleLeaderboard = useCallback(() => {
+    if (leaderboard === null) return;
+    const next = !leaderboard;
+    setLeaderboard(next);
+    setSavingLeaderboard(true);
+    apiFetch<TUser>("/users/me", {
+      method: "PATCH",
+      body: { leaderboardOptIn: next },
+    })
+      .then(() =>
+        notify(next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left),
+      )
+      .catch((err: unknown) => {
+        console.error(err);
+        setLeaderboard(!next);
+        notify(messageFromError(err, LEADERBOARD_SETTING.saveFailed), "error");
+      })
+      .finally(() => setSavingLeaderboard(false));
+  }, [leaderboard, notify]);
+
+  // Same shape as the leaderboard: optimistic, re-seeded on the VALUE. On
+  // unless the account says otherwise, as the server reads it.
+  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
+  const serverCopyMedia = userQuery.data
+    ? (userQuery.data.uiPreferences?.copyPlaceMedia ?? true)
+    : null;
+  const [seededCopyFor, setSeededCopyFor] = useState<boolean | null>(null);
+  if (serverCopyMedia !== seededCopyFor) {
+    setSeededCopyFor(serverCopyMedia);
+    if (serverCopyMedia !== null) setCopyMedia(serverCopyMedia);
+  }
+  const [savingCopyMedia, setSavingCopyMedia] = useState(false);
+  const toggleCopyMedia = useCallback(() => {
+    if (copyMedia === null) return;
+    const next = !copyMedia;
+    setCopyMedia(next);
+    setSavingCopyMedia(true);
+    apiFetch<TUser>("/users/me", {
+      method: "PATCH",
+      body: { copyPlaceMedia: next },
+    })
+      .catch((err: unknown) => {
+        console.error(err);
+        setCopyMedia(!next);
+        notify(messageFromError(err, COPY_MEDIA_SETTING.saveFailed), "error");
+      })
+      .finally(() => setSavingCopyMedia(false));
+  }, [copyMedia, notify]);
+  // Both account rows are dead for the same reasons (guest, offline, no answer).
+  const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
+  const leaderboardBlocked: string | undefined =
+    serverPrefs.status === "unavailable"
+      ? unavailableReasonText(serverPrefs.reason)
+      : userQuery.error
+        ? "Couldn't reach your account"
+        : undefined;
 
   return (
     <>
@@ -98,9 +211,9 @@ export function PrivacySettingsScreen() {
           icon="private"
           title="App lock"
           // No trailing pill beside the switch: the switch is already the
-          // trailing element, and a pill next to it was what forced this
+          // trailing element, and a pill next to it would force this
           // sentence to ellipsise.
-          subtitle="Asks for your fingerprint or PIN each time Logjam GPS opens."
+          subtitle="Fingerprint or PIN to open."
           value={appLockEnabled}
           ready
           onToggle={() => void toggleAppLock()}
@@ -110,8 +223,9 @@ export function PrivacySettingsScreen() {
           title="Send crash reports"
           // Names what is scrubbed, because "anonymous" alone is a claim the
           // user has no way to check and this app's whole premise is that
-          // place locations don't leave it (scrubEvent.ts does the work).
-          subtitle="Place names and coordinates are removed before sending. Takes effect next launch."
+          // place locations don't leave it (scrubEvent.ts does the work,
+          // guard: `mobile/src/sentry/scrubEvent.test.ts`).
+          subtitle="No place names or coordinates."
           value={crashReports}
           ready
           onToggle={toggleCrashReports}
@@ -124,15 +238,43 @@ export function PrivacySettingsScreen() {
         <SectionHeader title="Photos and videos" />
         <PreferenceRow
           icon="photo"
-          title="Save photos to your gallery"
-          // Says the consequence, which is the part a switch label can't: the
-          // copy is out of Logjam's storage and its backup exclusion, and
-          // nothing here can take it back.
-          subtitle="A copy of anything you shoot in Logjam GPS goes to your camera roll."
-          subtitleNumberOfLines={2}
+          title="Save to gallery"
+          // The consequence, which a switch label can't say: the copy leaves
+          // Logjam's storage for one other apps read. Where it goes is the
+          // toast on turning it on.
+          subtitle="Other apps can see the copies."
           value={saveToGallery}
           ready
           onToggle={toggleSaveToGallery}
+        />
+
+        <SectionHeader title={SETTINGS.copy.copying} />
+        <PreferenceRow
+          icon="photo"
+          title={COPY_MEDIA_SETTING.label}
+          subtitle={leaderboardBlocked ?? COPY_MEDIA_SETTING.hint}
+          subtitleNumberOfLines={2}
+          value={copyMedia ?? true}
+          ready={
+            leaderboardBlocked === undefined &&
+            copyMedia !== null &&
+            !savingCopyMedia
+          }
+          onToggle={toggleCopyMedia}
+        />
+
+        <SectionHeader title={SETTINGS.copy.friends} />
+        <PreferenceRow
+          icon="leaderboard"
+          title={LEADERBOARD_SETTING.label}
+          subtitle={leaderboardBlocked ?? LEADERBOARD_SETTING.hint}
+          value={leaderboard ?? false}
+          ready={
+            leaderboardBlocked === undefined &&
+            leaderboard !== null &&
+            !savingLeaderboard
+          }
+          onToggle={toggleLeaderboard}
         />
 
         <SectionHeader title="What's on this phone" />

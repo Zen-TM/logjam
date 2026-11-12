@@ -1,5 +1,17 @@
-import { Button, IconButton, Notice } from "../../ui";
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  Notice,
+  takeDismissingPress,
+} from "../../ui";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -11,18 +23,51 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 setWorkerUrl(maplibreWorkerUrl);
 import { PMTiles, Protocol } from "pmtiles";
 import {
-  INK,
   MAP_INK,
+  mgaGrid,
+  MGA_GRID_STYLE,
+  MAP_LABEL_MIN_ZOOM,
+  MAP_LABEL_SIZE,
+  PIN_CASING_COLOR,
+  PIN_CASING_WIDTH,
+  PIN_HALO_COLOR,
+  pinHaloRadius,
+  CONTOUR_LABELS_MIN_ZOOM,
+  CONTOURS_MIN_ZOOM,
+  CONTOURS_MINOR_MIN_ZOOM,
+  GAUGES_MIN_ZOOM,
+  SLOPE_MIN_ZOOM,
+  zoomFadeIn,
   PLACE_TYPE_COLORS,
-  SHARED_PLACE_COLOR,
   MAP_POINT,
   mapPointUpstreamNotice,
+  PLACE_BADGE_OFFSET,
+  PLACE_BADGE_PIN_RADIUS,
+  PLACE_BADGE_SHARED_IMAGE,
+  PLACE_BADGE_SIZE,
+  PLACE_BADGE_URIS,
+  PLACE_BADGE_VISITED_IMAGE,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
+  gaugeDisplayName,
+  latestGaugeReading,
+  LAND_EDGE_LINES,
+  LAND_EDGE_MINZOOM,
+  landColor,
+  landEdgeOpacity,
   nswContourStyle,
+  NSW_REGION,
+  COVERAGE_HATCH_PIXEL_RATIO,
+  COVERAGE_HATCH_URIS,
+  coverageFilter,
+  type CarrierId,
+  TERRAIN_LAYER_KEYS,
+  type SharpenedOverlay,
+  type TerrainLayerKey,
 } from "@logjam/shared";
-import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
+import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import { readCssVar } from "./cssVar";
@@ -34,11 +79,29 @@ import {
   showUpstream,
 } from "./flowNetworkLayers";
 import { UpstreamHover } from "./UpstreamHover";
+import GaugePopover from "../gauges/GaugePopover";
+import { sheetCoverPx } from "../sidebar/sheetSnap";
+import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
+import { useGauges } from "../gauges/useGauges";
+import {
+  GAUGE_BELOW,
+  GAUGE_LABELS,
+  GAUGE_LAYER,
+  GRID_LABELS,
+  GRID_LINES,
+  LAND_EDGE_LAYER,
+  COVERAGE_FILL_LAYER,
+  LAND_FILL_LAYER,
+  PRESSABLE_LAYERS,
+  pressClosedGauge,
+  pressedGaugeId,
+} from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   arrowSegmentFeatures,
+  DRAFT_LINE,
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
@@ -47,10 +110,14 @@ import {
   nearestSegment,
   snapSegment,
   ARROW_FEATURE_KIND,
+  GAUGE_ICON_IMAGE,
+  GAUGE_ICON_SDF_URI,
+  GAUGE_ICON_SIZE,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
+  SAVED_ROUTE_MIN_ZOOM,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -61,10 +128,12 @@ export type { SnapMode };
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
+// The Terrain group's tiles once the user can see a sharpened area.
+maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
 
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
-// blip we should let MapLibre retry (LAYERS-1). MapLibre fires "error" for ANY
+// blip we should let MapLibre retry. MapLibre fires "error" for ANY
 // per-tile/source load failure — including one-off network drops — so treating
 // the first error as terminal would kill a healthy overlay for the session.
 //
@@ -92,10 +161,22 @@ function isTerminalTopoSourceError(error: unknown): boolean {
 }
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
-import MapChrome, { type MapTool } from "./MapChrome";
+import MapChrome from "./MapChrome";
+import { type MapToolActions, webMapTools } from "./mapToolList";
 import { collectLngLatPairs } from "./topoFootprint";
+import {
+  afterEase,
+  type FramePick,
+  keepScale,
+  keptFrameSizePx,
+  keptScaleOnEntry,
+  letGo,
+  scaleNow,
+  unmovedPick,
+} from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
+import { collapseCreditsOnce } from "./collapseCredits";
 import type {
   TPlace,
   TFilters,
@@ -112,25 +193,34 @@ import {
 } from "../../placeUtils";
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
+import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
+import { coverageLayerSpec } from "./coverageLayers";
+import { fireLayerSpecs } from "./fireLayers";
+import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
+import {
+  TERRAIN_PROTOCOL,
+  areasKey,
+  isAbsentTerrainTile,
+  terrainTile,
+} from "./terrainRouter";
 import { messageFromError } from "../../errors/messageFromError";
+import { BASE_LAYERS } from "./baseLayers";
 import {
   BASEMAP_CATALOG,
+  BASEMAP_FAIL_AFTER,
+  isServerFault,
   extentFromCentreAndSize,
-  OSM_LINE_FEATURE_KEYS,
-  OSM_POINT_FEATURE_KEYS,
-  OSM_POINT_ICON,
-  OSM_POINT_ICON_NATURAL_PX,
-  iconTargetPx,
   rgbaCssFromHex,
   contourWidthStops,
-  featureLineWidthStops,
   TERRARIUM,
+  slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
-  type OsmFeatureKey,
-  type OsmPointFeatureKey,
-  type OsmFeatureStyle,
+  type SearchPin,
+  searchPinAfter,
+  type SlopeBand,
   type VectorStyleSettings,
+  metersPerPixel,
 } from "@logjam/shared";
 
 // How long after touching a vertex handle the map ignores its own click. Long
@@ -141,15 +231,10 @@ const HANDLE_CLICK_SUPPRESS_MS = 400;
 /** Movement below this is a click, not a drag, so it inserts nothing. */
 const DRAG_INSERT_MIN_PIXELS = 6;
 
-/**
- * Zoom below which saved routes stop drawing. 7 is where the route line-width
- * ramp starts and is the app's initial zoom, so a first load still shows them
- * while a state- or continent-wide view isn't hazed over with lines.
- */
-// Saved routes vanish below this. z7 is most of NSW — a threshold you had to
-// go looking for — where z10 is roughly a 50 km view, past the point a few
-// kilometres of route says anything about where it goes.
-const ROUTE_MIN_ZOOM = 10;
+// Saved routes vanish below SAVED_ROUTE_MIN_ZOOM, which lives in
+// `@logjam/shared` (`routeArrow.ts`): Logjam GPS draws the same routes at the
+// same floor, and why that zoom (and why the route being drawn is exempt) is
+// documented there.
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 
@@ -163,6 +248,23 @@ const PRESSABLE = [
   "standalone-tracks-hit",
 ];
 const INITIAL_ZOOM = 7;
+const NOTHING_MUTED: ReadonlySet<string> = new Set();
+
+/** Below this the pin's dot is under 13px across, no bigger than its badge. */
+const PLACE_BADGE_MIN_ZOOM = 10;
+
+/** A pin's circle radius by zoom, `grow` applied to each end (the halo's). */
+function pinRadius(
+  grow: (r: number) => number = (r) => r,
+): maplibregl.ExpressionSpecification {
+  return ["interpolate", ["linear"], ["zoom"], 7, grow(4), 14, grow(10)];
+}
+
+/** A layer's opacity, lowered on a feature stamped `muted`: the user's own
+ *  things beside an open plan's (`mutedIds`). */
+function dimmed(opacity: number): maplibregl.ExpressionSpecification {
+  return ["case", ["boolean", ["get", "muted"], false], 0.4, opacity];
+}
 
 /**
  * Fits the map to a [west, south, east, north] box: a way's extent or the
@@ -174,10 +276,11 @@ const INITIAL_ZOOM = 7;
 function fitToBox(
   map: maplibregl.Map,
   [west, south, east, north]: readonly [number, number, number, number],
+  padding: number | maplibregl.PaddingOptions = 80,
 ) {
   if ([west, south, east, north].every((value) => Number.isFinite(value))) {
     map.fitBounds([west, south, east, north], {
-      padding: 80,
+      padding,
       duration: 1200,
       maxZoom: 16,
     });
@@ -190,8 +293,7 @@ function fitToBox(
 function applyPlaceThemePaint(map: maplibregl.Map) {
   // A place whose type has not loaded wears the palette's first colour.
   const fallback = PLACE_TYPE_COLORS[0];
-  const shared = SHARED_PLACE_COLOR;
-  const ink = INK;
+  const ink = PIN_CASING_COLOR;
   // The accent is the scheme's own colour and follows it onto the map; a
   // label and its halo are drawn on the basemap, so they do not (MAP_INK).
   const accent = readCssVar("--color-accent", "#deb188");
@@ -207,7 +309,11 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
+    map.setPaintProperty(
+      "place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   // A shared pin is the SAME pin as your own, with a thin ring set apart from
   // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
@@ -218,28 +324,26 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
-  }
-  if (map.getLayer("shared-place-halos")) {
-    map.setPaintProperty("shared-place-halos", "circle-stroke-color", shared);
+    map.setPaintProperty(
+      "shared-place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
     map.setPaintProperty(id, "circle-color", accent);
     map.setPaintProperty(id, "circle-stroke-color", accent);
   }
-  if (map.getLayer("place-labels")) {
-    map.setPaintProperty("place-labels", "text-color", label);
-    map.setPaintProperty("place-labels", "text-halo-color", halo);
-  }
-  if (map.getLayer("shared-place-labels")) {
-    map.setPaintProperty("shared-place-labels", "text-color", label);
-    map.setPaintProperty("shared-place-labels", "text-halo-color", halo);
+  for (const id of ["place-labels", "shared-place-labels", GAUGE_LABELS]) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, "text-color", label);
+    map.setPaintProperty(id, "text-halo-color", halo);
   }
 }
 
-// Protomaps glyph + sprite assets. Mobile vendors these into the app bundle
-// because offline regions must render labels with zero network; the web map
+// Protomaps glyph + sprite assets. Logjam GPS vendors these into its bundle
+// because offline regions must render labels with zero network; Logjam Web
 // has no offline requirement, so it reads them from the upstream host (CSP
 // allowlisted). No user data rides these requests — they are keyed by font
 // stack and codepoint range only.
@@ -253,31 +357,6 @@ const BASEMAP_ASSETS_BASE_URL = "https://protomaps.github.io/basemaps-assets";
 const PROTOMAPS_LAYER_PREFIX = "pm-";
 const PROTOMAPS_SOURCE_ID = "protomaps";
 
-// Derived from the canonical shared basemap catalog (map-sources.md D2) —
-// same ids, order, URLs, and zoom caps as before the consolidation. The
-// interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
-// while the GeoPDF renderer keeps fetching its native 20).
-//
-// `kind` rides along because the two entry kinds are not interchangeable
-// downstream: raster entries are XYZ templates the GeoPDF renderer can fetch,
-// the vector entry is a PMTiles archive it cannot.
-//
-// The raster "osm" entry ("Default") is left out: the vector basemap draws the
-// same OpenStreetMap cartography and is the default, so offering both put two
-// renderings of one map side by side. Logjam GPS dropped it the same way.
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.id !== "osm",
-).map((entry) => ({
-  id: entry.id,
-  name: entry.name,
-  kind: entry.kind,
-  // Vector has no XYZ template — `tiles` stays empty and the picker falls back
-  // to a captioned placeholder instead of a tile thumbnail.
-  tiles: entry.kind === "raster" ? [entry.urlTemplate] : [],
-  maxzoom: entry.displayMaxZoom,
-  attribution: entry.attributionHtml,
-}));
-
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
  * generated @protomaps/basemaps layer set.
@@ -288,25 +367,9 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
  * merged into one camelCase object). Same package, same pinned version — see
  * scripts/basemap/package.json; bump both together or neither.
  *
- * Light flavor only: the web app has no dark theme (index.css carries a single
+ * Light flavor only: Logjam Web has no dark theme (index.css carries a single
  * prefers-color-scheme rule that inverts icons, nothing more).
  */
-/**
- * The entry of `topoLayers` that is the statewide contours, not a topo area's
- * layer. No dash, and it contains "contours": this file splits a layer id at
- * its first dash and styles an entry as contours by that word.
- */
-export const NSW_CONTOURS_ENTRY_ID = "nswcontours";
-
-/** The statewide contours have their own fixed look (shared nswContours.ts). */
-function paintStyleFor(
-  entryId: string,
-  style: VectorStyleSettings,
-  basemapId: string,
-): VectorStyleSettings {
-  return entryId === NSW_CONTOURS_ENTRY_ID ? nswContourStyle(basemapId) : style;
-}
-
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",
@@ -376,13 +439,6 @@ function rgbaCss(hex: string): string {
   return rgbaCssFromHex(hex);
 }
 
-// Pixel width interpolate(z12 → z18) for line features. widthZ18 is the
-// reference width in pixels at the maximum-detail zoom.
-function lineWidthInterp(widthZ18: number): maplibregl.ExpressionSpecification {
-  const { z12, z18 } = featureLineWidthStops(widthZ18);
-  return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
-}
-
 // Contour width is specified in ground metres by the user; convert to a pixel
 // width via the shared stops (default 18 m → ≈2.25 px, default 8 m → ≈1 px).
 function contourPixelWidth(widthM: number): maplibregl.ExpressionSpecification {
@@ -390,23 +446,9 @@ function contourPixelWidth(widthM: number): maplibregl.ExpressionSpecification {
   return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
 }
 
-// icon-size for a point category: scale the 24×24 source PNG so its on-screen
-// edge ≈ iconTargetPx (mirrors the Python/MBTiles sizing) across z12→z18.
-function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    12,
-    iconTargetPx(sizeZ18, 12) / OSM_POINT_ICON_NATURAL_PX,
-    18,
-    iconTargetPx(sizeZ18, 18) / OSM_POINT_ICON_NATURAL_PX,
-  ];
-}
-
 // Place map labels: ellipsize a name past this length so a pathological
 // long name (e.g. a 250-char single token that can't line-wrap) can't render
-// as one full-map-width label (PLACE-7). The detail-panel header truncates
+// as one full-map-width label. The detail-panel header truncates
 // separately via CSS.
 const MAX_LABEL_CHARS = 40;
 const PLACE_LABEL_FIELD: maplibregl.ExpressionSpecification = [
@@ -415,42 +457,6 @@ const PLACE_LABEL_FIELD: maplibregl.ExpressionSpecification = [
   ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
   ["get", "name"],
 ];
-
-// Fallback when vectorStyle has not yet loaded — keeps the legacy default look
-// rather than rendering invisible layers.
-const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
-  contours: {
-    majorColour: "#503c28dc",
-    minorColour: "#785a3ca0",
-    majorWidthM: 18,
-    minorWidthM: 8,
-  },
-  features: {
-    waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
-    track: { enabled: true, colour: "#a0641edc", widthZ18: 2 },
-    road: { enabled: true, colour: "#505050e6", widthZ18: 4 },
-    building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
-    power: { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
-    campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
-    peak: { enabled: true, colour: "#503214f0", widthZ18: 12 },
-    spring: { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
-    gate: { enabled: true, colour: "#464646dc", widthZ18: 10 },
-    cave: { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
-    bridge: { enabled: false, colour: "#403028e6", widthZ18: 3 },
-    ford: { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
-    waterfall: { enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
-    trailhead: { enabled: false, colour: "#a04020e6", widthZ18: 12 },
-    viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
-    hut: { enabled: false, colour: "#503820e6", widthZ18: 12 },
-  },
-  labelScale: 1,
-};
-
-const OSM_LINE_KEY_SET = new Set<OsmFeatureKey>(OSM_LINE_FEATURE_KEYS);
-
-function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
-  return vs.features[key];
-}
 
 // Base label-size bump for the live map, independent of the user's labelScale
 // slider. Topo labels read too small at the bare 9→12px ramp; 1.75 lifts them to
@@ -463,20 +469,26 @@ const WEB_LABEL_BASE_SCALE = 1.75;
 // labelScale and the web base bump. Single source for every topo label layer.
 function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
   const s = scale * WEB_LABEL_BASE_SCALE;
-  return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
+  const [zFrom, sizeFrom] = MAP_LABEL_SIZE.rampFrom;
+  const [zTo, sizeTo] = MAP_LABEL_SIZE.rampTo;
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    zFrom,
+    sizeFrom * s,
+    zTo,
+    sizeTo * s,
+  ];
 }
 
-// Apply every user-controllable colour/width to one topo entry's vector layers
-// in place via setPaintProperty. This is the single source of the style→paint
-// mapping: it's called both when layers are first created (structural effect)
-// and on every live VectorStyleSettings change (paint effect), so colour/width
-// edits never require dropping and recreating layers. Each set is guarded by
-// getLayer, so it's a no-op for a layer that doesn't exist (disabled category,
-// raster entry, or not yet created).
-function applyVectorPaint(
+// Paint the statewide contours in place via setPaintProperty. Called when the
+// layers are first created and again when the basemap changes, so neither
+// recreates them. Each set is guarded by getLayer, so it's a no-op for a layer
+// that doesn't exist yet.
+function applyContourPaint(
   map: maplibregl.Map,
   entryId: string,
-  isContours: boolean,
   vs: VectorStyleSettings,
 ): void {
   const setPaint = (
@@ -499,76 +511,37 @@ function applyVectorPaint(
     if (map.getLayer(lid)) map.setLayoutProperty(lid, "text-size", sizeExpr);
   };
 
-  if (isContours) {
-    setPaint(
-      `topo-${entryId}-minor`,
-      "line-color",
-      rgbaCss(vs.contours.minorColour),
-    );
-    setPaint(
-      `topo-${entryId}-minor`,
-      "line-width",
-      contourPixelWidth(vs.contours.minorWidthM),
-    );
-    setPaint(
-      `topo-${entryId}-major`,
-      "line-color",
-      rgbaCss(vs.contours.majorColour),
-    );
-    setPaint(
-      `topo-${entryId}-major`,
-      "line-width",
-      contourPixelWidth(vs.contours.majorWidthM),
-    );
-    setPaint(
-      `topo-${entryId}-labels`,
-      "text-color",
-      rgbaCss(vs.contours.majorColour),
-    );
-    setPaint(
-      `topo-${entryId}-labels`,
-      "text-halo-color",
-      contourLabelHalo(vs.contours.majorColour),
-    );
-    setLabelSize(`topo-${entryId}-labels`);
-    return;
-  }
-
-  // Line features with name labels — label text follows the line colour.
-  for (const key of ["waterway", "track", "road"] as const) {
-    const colour = rgbaCss(feat(vs, key).colour);
-    setPaint(`topo-${entryId}-${key}`, "line-color", colour);
-    setPaint(
-      `topo-${entryId}-${key}`,
-      "line-width",
-      lineWidthInterp(feat(vs, key).widthZ18),
-    );
-    setPaint(`topo-${entryId}-${key}-label`, "text-color", colour);
-    setLabelSize(`topo-${entryId}-${key}-label`);
-  }
-
-  // Power lines: raw pixel width (no zoom interpolation), no labels.
   setPaint(
-    `topo-${entryId}-power`,
+    `topo-${entryId}-minor`,
     "line-color",
-    rgbaCss(feat(vs, "power").colour),
+    rgbaCss(vs.contours.minorColour),
   );
-  setPaint(`topo-${entryId}-power`, "line-width", feat(vs, "power").widthZ18);
-
-  // Buildings: translucent fill + matching outline, no width control.
-  const buildingColour = rgbaCss(feat(vs, "building").colour);
-  setPaint(`topo-${entryId}-building`, "fill-color", buildingColour);
-  setPaint(`topo-${entryId}-building`, "fill-outline-color", buildingColour);
-
-  // Point feature name labels follow the category colour (icons are fixed PNGs).
-  for (const key of OSM_POINT_FEATURE_KEYS) {
-    setPaint(
-      `topo-${entryId}-${key}-label`,
-      "text-color",
-      rgbaCss(feat(vs, key).colour),
-    );
-    setLabelSize(`topo-${entryId}-${key}-label`);
-  }
+  setPaint(
+    `topo-${entryId}-minor`,
+    "line-width",
+    contourPixelWidth(vs.contours.minorWidthM),
+  );
+  setPaint(
+    `topo-${entryId}-major`,
+    "line-color",
+    rgbaCss(vs.contours.majorColour),
+  );
+  setPaint(
+    `topo-${entryId}-major`,
+    "line-width",
+    contourPixelWidth(vs.contours.majorWidthM),
+  );
+  setPaint(
+    `topo-${entryId}-labels`,
+    "text-color",
+    rgbaCss(vs.contours.majorColour),
+  );
+  setPaint(
+    `topo-${entryId}-labels`,
+    "text-halo-color",
+    contourLabelHalo(vs.contours.majorColour),
+  );
+  setLabelSize(`topo-${entryId}-labels`);
 }
 
 /**
@@ -639,6 +612,9 @@ function Map({
   onCancelPickCoords,
   showPlaces,
   showWays,
+  showGauges,
+  onShowGauges,
+  showMgaGrid,
   placeTracks,
   standaloneTracks,
   routes,
@@ -646,6 +622,7 @@ function Map({
   selectTrack,
   onAddPlaceAt,
   onMeasureFrom,
+  onDrawRouteFrom,
   routeHover,
   drawingRoute,
   measuring,
@@ -662,10 +639,14 @@ function Map({
   onDrawPointMove,
   selectingBbox,
   onBboxSelected,
+  onBboxCancelled,
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
-  vectorStyle,
+  sharpenedAreas,
+  onBasemapHealth,
+  slopeBands,
+  coverageCarrier = null,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -680,6 +661,8 @@ function Map({
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToPlace,
+  mutedIds = NOTHING_MUTED,
+  searchSelects = true,
   onFlyToPlaceConsumed,
   flyToBounds,
   onFlyToBoundsConsumed,
@@ -688,7 +671,7 @@ function Map({
   placeHighlight,
   placeTypes,
   layersButton,
-  mapTools,
+  mapToolActions,
   notices,
   onTopoSourceUnavailable,
 }: {
@@ -707,6 +690,10 @@ function Map({
   /** Every line: routes, imported and recorded files, and the tracks on places
    *  friends shared. */
   showWays: boolean;
+  /** The river gauge drops, an optional layer (off until asked for). */
+  showGauges: boolean;
+  onShowGauges: () => void;
+  showMgaGrid: boolean;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -720,6 +707,7 @@ function Map({
   /** "What is here?" verbs: each hands the point to the flow that exists. */
   onAddPlaceAt: (point: MapPointCoord) => void;
   onMeasureFrom: (point: MapPointCoord) => void;
+  onDrawRouteFrom: (point: MapPointCoord) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -757,16 +745,35 @@ function Map({
   onDrawPointInsert: (segmentIndex: number, lngLat: [number, number]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
+  /** Given, the box tool has a Cancel that leaves it undrawn. */
+  onBboxCancelled?: () => void;
   /** The Places filter's "area on map" mode — the third box-draw on this map. */
   selectingFilterArea?: boolean;
   onFilterAreaSelected?: (bbox: TBbox) => void;
   topoLayers?: {
     id: string;
     pmtilesUrl: string;
-    format?: "raster" | "vector";
+    /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
+    format?:
+      | "raster"
+      | "vector"
+      | "slope"
+      | "hillshade"
+      | "land"
+      | "fire"
+      | "coverage";
     attribution?: string;
+    /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
+    tiles?: RoutedTiles;
   }[];
-  vectorStyle?: VectorStyleSettings | null;
+  /** The sharpened areas the user can see: 3D terrain reads them too. */
+  sharpenedAreas?: readonly SharpenedOverlay[];
+  /** A basemap's tiles keep failing on a server fault (`down`), or load again. */
+  onBasemapHealth?: (id: string, down: boolean) => void;
+  /** The bands every `slope` entry is coloured in. */
+  slopeBands?: SlopeBand[];
+  /** The carrier a `coverage` entry draws. */
+  coverageCarrier?: CarrierId | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -779,7 +786,7 @@ function Map({
    * The visible bounds, on load and after every pan/zoom. Separate from
    * `onMapViewChange` because its consumer keeps the answer in a ref: "filter
    * to the current view" needs the bounds only at the moment the button is
-   * pressed, and routing them through state would re-render the app on every
+   * pressed, and routing them through state would re-render Logjam Web on every
    * frame of a pan for a value nothing renders.
    */
   onMapBoundsChange?: (bounds: TBbox) => void;
@@ -802,6 +809,12 @@ function Map({
   topoFlyTarget?: GeoJsonPolygonal | null;
   onTopoFlyConsumed?: () => void;
   flyToPlace?: { lat: number; lng: number } | null;
+  /** Ids of places, routes and files drawn dimmed: the user's own beside an
+   *  open plan's, which look different because they behave differently. */
+  mutedIds?: ReadonlySet<string>;
+  /** A search hit on a place selects it, as a press on its pin does; false
+   *  (an open plan, where a press means Add a place or way) and it only flies. */
+  searchSelects?: boolean;
   onFlyToPlaceConsumed?: () => void;
   /**
    * Fit the map to a way's extent: opening one centres it, and so does arming
@@ -821,12 +834,12 @@ function Map({
   placeTypes: TPlaceType[];
   /** The Layers control, owned by App because App owns what it toggles. */
   layersButton?: ReactNode;
-  mapTools: readonly MapTool[];
+  mapToolActions: MapToolActions;
   /** Pinned notices about what the map shows right now. */
   notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
-  // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
+  // removed so MapLibre stops retrying; App surfaces the failure.
   onTopoSourceUnavailable?: (entryId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -846,22 +859,14 @@ function Map({
   const [is3D, setIs3D] = useState(false);
   const toast = useToast();
   // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
-  // copy in the map-pick banners (MOBILE-12a). Pointer capability, not
+  // copy in the map-pick banners. Pointer capability, not
   // viewport width: a touch laptop at desktop width still gets "Tap".
   const isTouchInput = useMediaQuery("(pointer: coarse)");
   const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
-  const prevEnabledKeyRef = useRef<string>("");
 
-  // Live vector style read by the structural topo effect without being a dep
-  // (so colour/width edits don't recreate layers — the paint effect handles
-  // those). The structural effect re-runs only when `enabledKey` flips.
-  const vectorStyleRef = useRef(vectorStyle);
-  const enabledKey = vectorStyle
-    ? Object.values(vectorStyle.features)
-        .map((f) => (f.enabled ? "1" : "0"))
-        .join("")
-    : "";
+  const slopeBandsRef = useRef(slopeBands);
+  const coverageCarrierRef = useRef(coverageCarrier);
 
   // Keep refs up to date for use inside event handlers
   const selectPlaceRef = useRef(selectPlace);
@@ -913,16 +918,26 @@ function Map({
   const [asked, setAsked] = useState<{
     point: MapPointCoord;
     from: MapPointCoord | null;
+    /** A right-click: the panel opens on Options. */
+    startAt?: "options";
   } | null>(null);
   // The latest fix, in memory only: it feeds the distance and bearing in that
   // panel and goes nowhere else (see the GeolocateControl note below).
   const userFixRef = useRef<MapPointCoord | null>(null);
-  // When the panel last closed, so the press that closed it (a click elsewhere
-  // on the map) is not also read as a new question.
-  const askedClosedAt = useRef(0);
-  const closeAsked = useCallback(() => {
-    askedClosedAt.current = Date.now();
-    setAsked(null);
+  // The press that closes the panel (a click elsewhere on the map) is not also
+  // read as a new question: the panel marks it (`takeDismissingPress`), and the
+  // click handler below skips it. A route, place or gauge under it still acts.
+  const closeAsked = useCallback(() => setAsked(null), []);
+  // The river gauge pressed, if any; the drops come from the public file.
+  const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
+  const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
+  if (!showGauges && gaugeId) setGaugeId(null);
+  const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
+  const closedGaugeRef = useRef<{ id: string; at: number } | null>(null);
+  const closeGauge = useCallback((id: string) => {
+    closedGaugeRef.current = { id, at: performance.now() };
+    setGaugeId(null);
   }, []);
   // The creeks upstream of a point, asked for from that point's panel. They
   // outlive the panel, which closes as soon as the map moves to fit them, and
@@ -1103,19 +1118,32 @@ function Map({
   // Topo overlay entries whose PMTiles source already failed this session.
   // Read by the once-on-load error handler (dedupe) and by the structural topo
   // effect (never re-add a known-missing source — stops the per-load retry
-  // spam of LAYERS-1).
+  // spam).
   const failedTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Consecutive failed tile loads per basemap; a tile that loads resets it.
+  const baseFailsRef = useRef<Record<string, number>>({});
+  const onBasemapHealthRef = useRef(onBasemapHealth);
+  useEffect(() => {
+    onBasemapHealthRef.current = onBasemapHealth;
+  }, [onBasemapHealth]);
   // Topo entries whose transient (non-terminal) load error was already logged
   // this session — one console line per source, not one per flaky tile.
   const transientTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Where each Terrain source reads from: the statewide archive, or the router
+  // for one set of sharpened areas. A change rebuilds the source.
+  const terrainSourceFromRef = useRef(new globalThis.Map<string, string>());
   const onTopoSourceUnavailableRef = useRef(onTopoSourceUnavailable);
   useEffect(() => {
     onTopoSourceUnavailableRef.current = onTopoSourceUnavailable;
   }, [onTopoSourceUnavailable]);
 
   useEffect(() => {
-    vectorStyleRef.current = vectorStyle;
-  }, [vectorStyle]);
+    slopeBandsRef.current = slopeBands;
+  }, [slopeBands]);
+
+  useEffect(() => {
+    coverageCarrierRef.current = coverageCarrier;
+  }, [coverageCarrier]);
 
   // Initialise map once
   useEffect(() => {
@@ -1154,8 +1182,6 @@ function Map({
     // Privacy: this is entirely browser-native. MapLibre reads the position via
     // navigator.geolocation and renders it as a map marker in this page — the
     // position is never sent to the API, and no analytics/telemetry observes it.
-    // Keep it that way: do not wire the `geolocate` event to anything that
-    // persists or transmits the coordinates.
     const geolocate = new maplibregl.GeolocateControl({
       // High accuracy: the difference between the right side of a creek and
       // the wrong one. Costs battery, which is the correct trade for a
@@ -1183,12 +1209,14 @@ function Map({
     geolocate.on("trackuserlocationend", () => {
       userFixRef.current = null;
     });
-    // Compact: it collapses to an (i) once the map is moved, which OSMF's
-    // attribution guideline allows while the credit stays one press away.
+    // Compact: the credit is an (i) that opens on a press, which OSMF's
+    // attribution guideline allows while it stays one press away.
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+    if (credits) collapseCreditsOnce(credits);
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
@@ -1198,15 +1226,40 @@ function Map({
     );
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
-    // tile request, silently renders nothing, and retries each load (LAYERS-1).
+    // tile request, silently renders nothing, and retries each load.
     // Source errors propagated through MapLibre's Style carry the sourceId. Only
     // a DEFINITIVELY-missing archive (404/403) is terminal — tear its
     // layers/source down (stops the retries) and notify App so the Layers panel
     // can flag it. A transient error (network blip, 5xx, per-tile miss) is left
     // in place so MapLibre retries; one blip must not blacklist a healthy
     // overlay for the whole session.
+    map.on("data", (event) => {
+      const { sourceId, tile } = event as { sourceId?: string; tile?: unknown };
+      if (tile && sourceId && baseFailsRef.current[sourceId]) {
+        baseFailsRef.current[sourceId] = 0;
+        onBasemapHealthRef.current?.(sourceId, false);
+      }
+    });
     map.on("error", (event) => {
       const { sourceId } = event as { sourceId?: unknown };
+      // The router's way of saying "draw the parent": not an error at all,
+      // for a Terrain layer and for the 3D terrain source alike.
+      if (isAbsentTerrainTile(event.error)) return;
+      if (
+        typeof sourceId === "string" &&
+        BASE_LAYERS.some((layer) => layer.id === sourceId)
+      ) {
+        // A device with no signal is the offline notice's business, not an
+        // outage of this server.
+        const status = (event.error as { status?: number } | undefined)?.status;
+        if (navigator.onLine && isServerFault(status)) {
+          const fails = (baseFailsRef.current[sourceId] ?? 0) + 1;
+          baseFailsRef.current[sourceId] = fails;
+          if (fails >= BASEMAP_FAIL_AFTER)
+            onBasemapHealthRef.current?.(sourceId, true);
+        }
+        return;
+      }
       if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
         // Not ours — keep MapLibre's default behaviour of printing the error
         // (binding any "error" listener suppresses it otherwise).
@@ -1215,7 +1268,6 @@ function Map({
       }
       const entryId = sourceId.slice("topo-src-".length);
       if (failedTopoSourcesRef.current.has(entryId)) return;
-
       if (!isTerminalTopoSourceError(event.error)) {
         // Non-terminal: do NOT tear down or blacklist — retrying is correct.
         // Log once per source (no URLs — only the source id) so a flaky
@@ -1273,7 +1325,6 @@ function Map({
         });
       });
 
-      // 3D Terrain - Soruce DEM for 3d Terrain
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
         // The worldwide source in shared/src/demSources.ts. The NSW one is
@@ -1283,7 +1334,6 @@ function Map({
         attribution: TERRARIUM.creditHtml,
       });
 
-      // Owned place GeoJSON source (starts empty)
       map.addSource("places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1325,7 +1375,7 @@ function Map({
             readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
 
@@ -1358,7 +1408,7 @@ function Map({
             readCssVar("--color-accent", "#3b82f6"),
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
 
@@ -1383,14 +1433,14 @@ function Map({
       // never tint it.
       // Saved routes are local detail — a state-wide view of them is a smear of
       // lines, not information — so every routes-* layer drops out below zoom
-      // ROUTE_MIN_ZOOM. The hit target carries the same floor as the line it
+      // SAVED_ROUTE_MIN_ZOOM. The hit target carries the same floor as the line
       // targets: a clickable line you cannot see is a click that does nothing.
       // The route being drawn/edited lives on route-draft and is never hidden.
       map.addLayer({
         id: "routes-hit",
         type: "line",
         source: "routes",
-        minzoom: ROUTE_MIN_ZOOM,
+        minzoom: SAVED_ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1402,7 +1452,7 @@ function Map({
         id: "routes-lines",
         type: "line",
         source: "routes",
-        minzoom: ROUTE_MIN_ZOOM,
+        minzoom: SAVED_ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1411,7 +1461,7 @@ function Map({
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
-          "line-opacity": 0.9,
+          "line-opacity": dimmed(0.9),
         },
       });
       // Direction of travel, as arrowheads riding the line itself. Symbol
@@ -1419,14 +1469,13 @@ function Map({
       // would have to be recomputed on every pan. Spaced generously so a
       // screenful of routes doesn't turn into a hedge.
       //
-      // An SDF IMAGE, not a glyph. This drew `›` until 2026-09-17, and that
-      // glyph's ink sits low in its own advance box: MapLibre centres a
-      // line-placed symbol on the BOX, so the arrow rode below the line, and
-      // with keep-upright off the error swapped sides wherever a route doubled
-      // back — which reads as arrows wobbling rather than as an offset
-      // (operator). Logjam GPS hit this first and fixed it the same way; the
-      // arrowhead and its centring test now live in @logjam/shared so one
-      // client cannot quietly keep the broken one.
+      // An SDF image, not a glyph. A font glyph's ink sits low in its advance
+      // box: MapLibre centres a line-placed symbol on the box, so the arrow
+      // would ride below the line, and with keep-upright off the error swaps
+      // sides wherever a route doubles back — which reads as arrows wobbling
+      // rather than as an offset. Logjam GPS and Logjam Web share the
+      // arrowhead and its centring test in @logjam/shared
+      // (shared/src/routeArrow.test.ts).
       map.addLayer({
         id: "routes-direction",
         type: "symbol",
@@ -1448,7 +1497,7 @@ function Map({
           "icon-color": ["get", "color"],
           "icon-halo-color": "#ffffff",
           "icon-halo-width": 1,
-          "icon-opacity": 0.9,
+          "icon-opacity": dimmed(0.9),
         },
       });
 
@@ -1463,6 +1512,17 @@ function Map({
       // SOLID. A route is a thing you are making; the measure tool's dotted
       // line is a thing you are asking (the `measuring` effect below).
       map.addLayer({
+        id: "route-draft-casing",
+        type: "line",
+        source: "route-draft",
+        filter: ["!=", ["get", "kind"], ARROW_FEATURE_KIND],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": DRAFT_LINE.casingColor,
+          "line-width": DRAFT_LINE.casingWidth,
+        },
+      });
+      map.addLayer({
         id: "route-draft-line",
         type: "line",
         source: "route-draft",
@@ -1473,7 +1533,7 @@ function Map({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": initialDraftColor,
-          "line-width": 3,
+          "line-width": DRAFT_LINE.coreWidth,
         },
       });
       map.addLayer({
@@ -1521,7 +1581,6 @@ function Map({
         },
       });
 
-      // Shared place GeoJSON source (starts empty)
       map.addSource("shared-places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1555,66 +1614,112 @@ function Map({
         });
       }
 
-      // Owned place circle markers
+      // The white halo round each pin's casing, under both pins so a shared
+      // pin's halo never cuts into your own (mapPin.ts).
+      for (const [id, source] of [
+        ["place-halo", "places"],
+        ["shared-place-halo", "shared-places"],
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source,
+          paint: {
+            "circle-radius": pinRadius(pinHaloRadius),
+            "circle-color": PIN_HALO_COLOR,
+            ...(source === "places" ? { "circle-opacity": dimmed(1) } : {}),
+          },
+        });
+      }
+
       map.addLayer({
         id: "place-circles",
         type: "circle",
         source: "places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": PLACE_TYPE_COLORS[0],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
+          "circle-opacity": dimmed(1),
+          "circle-stroke-opacity": dimmed(1),
         },
       });
 
-      // The ring around a shared place, 2px clear of its pin. Also what keeps a
-      // shared place reachable: your own copy of it sits on the SAME coordinate
-      // and draws on top, so without the ring nothing of it shows or takes a
-      // click. Transparent fill, so it adds no mass of its own.
-      map.addLayer({
-        id: "shared-place-halos",
-        type: "circle",
-        source: "shared-places",
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            7,
-            7.5,
-            14,
-            13.5,
-          ],
-          "circle-opacity": 0,
-          "circle-stroke-color": SHARED_PLACE_COLOR,
-          "circle-stroke-width": 1.5,
-        },
-      });
-
-      // Shared place circle markers
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
         source: "shared-places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": readCssVar("--color-accent", "#3b82f6"),
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
         },
       });
 
-      // Owned place name labels visible at zoom 9+
+      // The status badge on a pin's upper-right rim: a person for a shared
+      // place, a tick for a visited one (never both, placeStatus). It sticks
+      // out past the dot, so it is still seen and pressed when your own copy
+      // of a shared place sits on the same coordinate and covers the dot. It
+      // scales with the pin (icon-size and its offset follow the dot's radius)
+      // and is hidden below PLACE_BADGE_MIN_ZOOM, where it would be no
+      // smaller than the pin it labels.
+      const badges: [
+        string,
+        string,
+        string,
+        maplibregl.FilterSpecification | undefined,
+      ][] = [
+        [
+          "shared-place-badges",
+          "shared-places",
+          PLACE_BADGE_SHARED_IMAGE,
+          undefined,
+        ],
+        [
+          "visited-place-badges",
+          "places",
+          PLACE_BADGE_VISITED_IMAGE,
+          ["==", ["get", "done"], true],
+        ],
+      ];
+      for (const [id, source, image, filter] of badges) {
+        map.addLayer({
+          id,
+          type: "symbol",
+          source,
+          minzoom: PLACE_BADGE_MIN_ZOOM,
+          ...(filter ? { filter } : {}),
+          layout: {
+            "icon-image": image,
+            "icon-size": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7,
+              (PLACE_BADGE_SIZE * 4) / PLACE_BADGE_PIN_RADIUS,
+              14,
+              (PLACE_BADGE_SIZE * 10) / PLACE_BADGE_PIN_RADIUS,
+            ],
+            "icon-offset": PLACE_BADGE_OFFSET,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint:
+            id === "visited-place-badges" ? { "icon-opacity": dimmed(1) } : {},
+        });
+      }
+
       map.addLayer({
         id: "place-labels",
         type: "symbol",
         source: "places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1622,19 +1727,19 @@ function Map({
           "text-color": MAP_INK.label,
           "text-halo-color": MAP_INK.casing,
           "text-halo-width": 1.5,
+          "text-opacity": dimmed(1),
         },
       });
 
-      // Shared place name labels visible at zoom 9+
       map.addLayer({
         id: "shared-place-labels",
         type: "symbol",
         source: "shared-places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1647,8 +1752,126 @@ function Map({
 
       applyPlaceThemePaint(map);
 
-      // Click to select place
-      map.on("click", "place-circles", (e) => {
+      map.addSource("mga-grid", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer(
+        {
+          id: GRID_LINES,
+          type: "line",
+          source: "mga-grid",
+          layout: { visibility: "none" },
+          paint: {
+            "line-color": MAP_INK.grid,
+            "line-width": MGA_GRID_STYLE.lineWidth,
+            "line-opacity": MGA_GRID_STYLE.lineOpacity,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.addLayer(
+        {
+          id: GRID_LABELS,
+          type: "symbol",
+          source: "mga-grid",
+          layout: {
+            visibility: "none",
+            "symbol-placement": "line",
+            "symbol-spacing": MGA_GRID_STYLE.labelSpacing,
+            "text-rotation-alignment": "viewport",
+            "text-field": ["get", "text"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": MAP_LABEL_SIZE.pin,
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+
+      map.addSource("gauges", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // One colour for every gauge: a drop says where a gauge is, never what
+      // it read. A gauge with no recent reading is only fainter.
+      map.addLayer(
+        {
+          id: GAUGE_LAYER,
+          type: "symbol",
+          source: "gauges",
+          minzoom: GAUGES_MIN_ZOOM,
+          layout: {
+            visibility: "none",
+            "icon-image": GAUGE_ICON_IMAGE,
+            "icon-size": GAUGE_ICON_SIZE,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: {
+            "icon-color": MAP_INK.gauge,
+            "icon-opacity": zoomFadeIn(GAUGES_MIN_ZOOM, [
+              "case",
+              ["get", "recent"],
+              1,
+              0.35,
+            ]) as maplibregl.ExpressionSpecification,
+            "icon-halo-color": MAP_INK.ring,
+            "icon-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      // Under the pins, so a place's own name wins any collision with one.
+      map.addLayer(
+        {
+          id: GAUGE_LABELS,
+          type: "symbol",
+          source: "gauges",
+          minzoom: MAP_LABEL_MIN_ZOOM,
+          layout: {
+            visibility: "none",
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": MAP_LABEL_SIZE.pin,
+            "text-max-width": 10,
+            "text-offset": [0, 1.2],
+            "text-anchor": "top",
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+            "text-opacity": zoomFadeIn(
+              MAP_LABEL_MIN_ZOOM,
+            ) as maplibregl.ExpressionSpecification,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.on("click", GAUGE_LAYER, (e) => {
+        if (pickModeRef.current || drawingRouteRef.current) return;
+        const id = pressedGaugeId(map, [e.point.x, e.point.y]);
+        if (
+          id &&
+          !pressClosedGauge(id, closedGaugeRef.current, performance.now())
+        )
+          setGaugeId(id);
+      });
+      map.on("mouseenter", GAUGE_LAYER, () => {
+        if (pickModeRef.current) return;
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", GAUGE_LAYER, () => {
+        map.getCanvas().style.cursor = "";
+      });
+
+      // The status badges are part of the pin they sit on.
+      map.on("click", ["place-circles", "visited-place-badges"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1659,7 +1882,7 @@ function Map({
 
       // One registration over both layers, so a press on the pin (which is
       // inside the ring) selects once rather than once per layer.
-      map.on("click", ["shared-place-halos", "shared-place-circles"], (e) => {
+      map.on("click", ["shared-place-badges", "shared-place-circles"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1668,16 +1891,16 @@ function Map({
         selectPlaceRef.current(id);
       });
 
-      map.on("mouseenter", "place-circles", () => {
+      map.on("mouseenter", ["place-circles", "visited-place-badges"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "place-circles", () => {
+      map.on("mouseleave", ["place-circles", "visited-place-badges"], () => {
         map.getCanvas().style.cursor = "";
       });
       map.on(
         "mouseenter",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           if (pickModeRef.current) return;
           map.getCanvas().style.cursor = "pointer";
@@ -1685,7 +1908,7 @@ function Map({
       );
       map.on(
         "mouseleave",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           map.getCanvas().style.cursor = "";
         },
@@ -1774,6 +1997,7 @@ function Map({
           name: c.name,
           done: isPlaceDoneByViewer(c, isOwned),
           color: typeColor.get(c.placeTypeId) ?? null,
+          muted: mutedIds.has(c.id),
         },
       })),
     });
@@ -1801,7 +2025,7 @@ function Map({
         ),
       );
     }
-  }, [places, sharedPlaces, filters, mapLoaded, placeTypes]);
+  }, [places, sharedPlaces, filters, mapLoaded, placeTypes, mutedIds]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1819,7 +2043,7 @@ function Map({
   // Keyed by mediaId. Plain object (not a JS Map) — `Map` is this component's name.
   // The cache holds PROMISES, not resolved values, so overlapping effect runs
   // (StrictMode double-invoke, rapid toggles) share one in-flight request
-  // instead of each firing its own fetch (LAYERS-2 duplicate fetch). Failures
+  // instead of each firing its own fetch (preventing duplicate fetches). Failures
   // resolve to null and stay cached, so a missing track file is fetched once
   // per session instead of retried on every load/toggle.
   //
@@ -1836,7 +2060,7 @@ function Map({
     >
   >({});
   // Media ids whose load failure was already surfaced — one toast per track
-  // per session, not one per re-render (LAYERS-2 silent-404 fix).
+  // per session, not one per re-render.
   const failedTrackToastedRef = useRef<Set<string>>(new Set());
 
   // Fetch + parse a set of track files into features for one of the track
@@ -1862,7 +2086,7 @@ function Map({
           const cacheKey = trackGeoCacheKey(entry);
           let cached = cache[cacheKey];
           // Discard a cached entry whose presigned URL has rotated so the fresh
-          // URL retries; same-URL failures stay cached (LAYERS-2).
+          // URL retries; same-URL failures stay cached.
           if (!cached || cached.url !== entry.displayUrl) {
             const promise = fetchTrackGeoJSON(
               entry.mediaId,
@@ -1870,10 +2094,9 @@ function Map({
               entry.color,
               entry.stamp,
             ).catch((err: unknown) => {
-              // One bad track must not blank the whole layer. The thrown error
-              // carries only the HTTP status — never log the presigned URL,
-              // whose place-name-derived filename must stay out of logs
-              // (privacy rule).
+              // One bad track blanks only itself. Safe to log: the thrown
+              // error carries the HTTP status, not the presigned URL whose
+              // filename is the place's name (trackGeo.test.ts).
               console.error(err);
               if (!failedTrackToastedRef.current.has(entry.mediaId)) {
                 failedTrackToastedRef.current.add(entry.mediaId);
@@ -1890,6 +2113,20 @@ function Map({
       return collections.flatMap((fc) => (fc ? fc.features : []));
     },
     [toast],
+  );
+  /** A loaded track's feature, stamped muted when its `key` id is. */
+  const muteBy = useCallback(
+    (
+      feature: GeoJSON.Feature,
+      key: "placeId" | "mediaId",
+    ): GeoJSON.Feature => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        muted: mutedIds.has(String(feature.properties?.[key] ?? "")),
+      },
+    }),
+    [mutedIds],
   );
 
   useEffect(() => {
@@ -1909,12 +2146,15 @@ function Map({
       const source = mapRef.current?.getSource("place-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
-      source?.setData({ type: "FeatureCollection", features });
+      source?.setData({
+        type: "FeatureCollection",
+        features: features.map((feature) => muteBy(feature, "placeId")),
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [showWays, placeTracks, mapLoaded, loadTrackSource]);
+  }, [showWays, placeTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // Standalone files. The list is the visibility: whatever the user has toggled
   // on is what gets fetched and drawn.
@@ -1935,17 +2175,22 @@ function Map({
       const source = mapRef.current?.getSource("standalone-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
-      source?.setData({ type: "FeatureCollection", features });
+      source?.setData({
+        type: "FeatureCollection",
+        features: features.map((feature) => muteBy(feature, "mediaId")),
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [standaloneTracks, mapLoaded, loadTrackSource]);
+  }, [standaloneTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
-  // or feature under it), a right-click asks wherever it lands, and Enter on
-  // the focused map asks about the middle of what is visible. The panel is
-  // drawn by `MapPointPopover`; this only decides when it is asked.
+  // or feature under it), and Enter on the focused map asks about the middle of
+  // what is visible. The panel is drawn by `MapPointPopover`; this only decides
+  // when it is asked. A right-click, or an Android long-press (the browser's
+  // `contextmenu`; iOS Safari sends none), asks the same panel and opens it on
+  // Options, wherever it lands.
   //
   // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
   // here writes anything: its verbs hand off to flows that confirm for
@@ -1953,28 +2198,29 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
+    // Everything on the map that has a press of its own.
+    const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
-    // Pressing the panel's own dismissal and the map in one gesture.
-    const JUST_CLOSED_MS = 300;
     let pending: ReturnType<typeof setTimeout> | null = null;
     const cancel = () => {
       if (pending) clearTimeout(pending);
       pending = null;
     };
     const armed = () => pickModeRef.current || drawingRouteRef.current;
-    const ask = (latitude: number, longitude: number) => {
+    const ask = (latitude: number, longitude: number, startAt?: "options") => {
       // A new question puts away the creeks drawn for the last one.
       clearUpstreamOverlay();
       setAsked({
         point: { latitude, longitude },
         from: userFixRef.current,
+        ...(startAt ? { startAt } : {}),
       });
     };
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (armed() || Date.now() - askedClosedAt.current < JUST_CLOSED_MS)
-        return;
+      // Taken first: it is spent by the click it belongs to, armed or not.
+      if (takeDismissingPress() || armed()) return;
       const layers = PRESSABLE.filter((id) => map.getLayer(id));
       if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
       cancel();
@@ -1988,7 +2234,7 @@ function Map({
       if (armed()) return;
       e.originalEvent.preventDefault();
       cancel();
-      ask(e.lngLat.lat, e.lngLat.lng);
+      ask(e.lngLat.lat, e.lngLat.lng, "options");
     };
     // Enter on the focused map is a press on the middle of it: it asks what is
     // there, or, with a drawing tool armed, places the next point there. With
@@ -2059,8 +2305,15 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const vis = (show: boolean) => (show ? "visible" : "none");
+    for (const id of ["place-halo", "shared-place-halo"])
+      mapRef.current.setLayoutProperty(id, "visibility", vis(showPlaces));
     mapRef.current.setLayoutProperty(
       "place-circles",
+      "visibility",
+      vis(showPlaces),
+    );
+    mapRef.current.setLayoutProperty(
+      "visited-place-badges",
       "visibility",
       vis(showPlaces),
     );
@@ -2070,7 +2323,7 @@ function Map({
       vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "shared-place-halos",
+      "shared-place-badges",
       "visibility",
       vis(showPlaces),
     );
@@ -2085,12 +2338,9 @@ function Map({
       vis(showPlaces),
     );
     // "Ways" draws EVERY line, wherever it came from: routes drawn here, files
-    // imported or recorded, and the tracks on places friends shared. Those
-    // files used to have no toggle at all — the list of them WAS their
-    // visibility, set one at a time by a switch on each file's own detail page,
-    // which is a control you had to open a page to find (operator,
-    // 2026-09-17). One toggle for all of them, because they are one kind of
-    // thing; whose each one is shows on the line, not in the legend.
+    // imported or recorded, and the tracks on places friends shared. One
+    // toggle for all of them, because they are one kind of thing; whose each
+    // one is shows on the line, not in the legend.
     //
     // The route being drawn stays visible even with the layer off — hiding your
     // own in-progress work would read as the tool being broken.
@@ -2111,6 +2361,55 @@ function Map({
     }
   }, [showPlaces, showWays, drawingRoute, measuring, mapLoaded]);
 
+  // The river gauge drops, drawn from the file while the layer is on.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    for (const id of [GAUGE_LAYER, GAUGE_LABELS])
+      map.setLayoutProperty(id, "visibility", showGauges ? "visible" : "none");
+    const now = Date.now();
+    (map.getSource("gauges") as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: (gaugeFile?.gauges ?? []).map((g) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [g.lon, g.lat] },
+        properties: {
+          id: g.id,
+          name: gaugeDisplayName(g.name),
+          recent: latestGaugeReading(g, now) !== null,
+        },
+      })),
+    });
+  }, [showGauges, gaugeFile, mapLoaded]);
+
+  // The MGA grid, rebuilt for the view each time the camera settles.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    const vis = showMgaGrid ? "visible" : "none";
+    for (const id of [GRID_LINES, GRID_LABELS])
+      map.setLayoutProperty(id, "visibility", vis);
+    if (!showMgaGrid) return;
+    const draw = () => {
+      const b = map.getBounds();
+      const grid = mgaGrid(
+        {
+          west: b.getWest(),
+          south: b.getSouth(),
+          east: b.getEast(),
+          north: b.getNorth(),
+        },
+        map.getZoom(),
+      );
+      (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
+    };
+    draw();
+    map.on("moveend", draw);
+    return () => {
+      map.off("moveend", draw);
+    };
+  }, [showMgaGrid, mapLoaded]);
+
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2126,7 +2425,12 @@ function Map({
       features: drawn.map((route) => ({
         type: "Feature" as const,
         geometry: { type: "LineString" as const, coordinates: route.points },
-        properties: { id: route.id, name: route.name, color: route.color },
+        properties: {
+          id: route.id,
+          name: route.name,
+          color: route.color,
+          muted: mutedIds.has(route.id),
+        },
       })),
     });
 
@@ -2142,7 +2446,7 @@ function Map({
           }) as GeoJSON.Feature[],
       ),
     });
-  }, [routes, mapLoaded, editingRouteId]);
+  }, [routes, mapLoaded, editingRouteId, mutedIds]);
 
   // Draw/edit mode: click appends a vertex. Follows the coord-pick idiom
   // (crosshair cursor, handler torn down on exit), except the listener is
@@ -2183,9 +2487,9 @@ function Map({
     );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
 
-  // A measurement is the same draft drawn DOTTED and without direction arrows:
-  // a route is a thing you are making, a measurement a thing you are asking,
-  // and it has no way it runs.
+  // A measurement is the same draft drawn DOTTED, arrows and all, as on Logjam
+  // GPS: a route is a thing you are making, a measurement a thing you are
+  // asking.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -2193,13 +2497,17 @@ function Map({
     map.setPaintProperty(
       "route-draft-line",
       "line-dasharray",
-      // Round caps turn a near-zero dash into a dot.
-      measuring ? [0.1, 2] : undefined,
+      measuring ? [...DRAFT_LINE.measureDash] : undefined,
     );
-    map.setLayoutProperty(
-      "route-draft-direction",
-      "visibility",
-      measuring ? "none" : "visible",
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-dasharray",
+      measuring ? [...DRAFT_LINE.measureCasingDash] : undefined,
+    );
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-width",
+      measuring ? DRAFT_LINE.measureCasingWidth : DRAFT_LINE.casingWidth,
     );
   }, [measuring, mapLoaded]);
 
@@ -2237,7 +2545,7 @@ function Map({
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
   // this only has to keep one marker per vertex alive and report the drop.
   const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
-  // FEUI-001: `snapBetweenRef` requests are fire-and-forget network reads. If
+  // `snapBetweenRef` requests are fire-and-forget network reads. If
   // one lands while the user is mid-drag of a handle, drawPoints/drawAnchorIndices
   // change and this effect's deps fire — tearing every marker down (including
   // the one under the user's finger) kills the native drag before `dragend`
@@ -2543,6 +2851,27 @@ function Map({
     };
   }, [routeHover, mapLoaded]);
 
+  // The pin for a searched location. A DOM marker, so it sits over every pin
+  // layer, and pointer-events: none (Map.module.css) so a click goes through
+  // to the map, which is what removes it (searchPinAfter).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !searchPin) return;
+    const map = mapRef.current;
+    const element = document.createElement("div");
+    element.className = classes.searchPin;
+    element.innerHTML =
+      '<svg viewBox="0 0 24 32" width="24" height="32" aria-hidden="true"><path d="M12 31C12 31 2 19.5 2 12a10 10 0 0 1 20 0c0 7.5-10 19-10 19z" fill="currentColor" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#fff"/></svg>';
+    const marker = new maplibregl.Marker({ element, anchor: "bottom" })
+      .setLngLat([searchPin.lon, searchPin.lat])
+      .addTo(map);
+    const onClick = () => setSearchPin(searchPinAfter("tap"));
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+      marker.remove();
+    };
+  }, [searchPin, mapLoaded]);
+
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2577,20 +2906,44 @@ function Map({
     onBox: (bbox) => onFilterAreaSelected?.(bbox),
   });
 
-  // Lazily register point-feature icons. MapLibre fires `styleimagemissing`
-  // when a symbol layer references an icon-image that isn't loaded yet; we load
-  // the PNG from /topo-icons and addImage it, then MapLibre re-renders. This
-  // avoids any ordering coupling with the topo-layer effect below.
+  // Lazily register the route arrowhead. MapLibre fires `styleimagemissing`
+  // when a symbol layer references an icon-image that isn't loaded yet; this
+  // avoids any ordering coupling with the route layers.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    const PREFIX = "topo-icon-";
     const onMissing = (e: { id: string }) => {
       const id = e.id;
       // The route arrowhead. Registered as an SDF, which is what lets ONE image
       // take each route's own colour through `icon-color` — a plain bitmap
       // ignores the tint and every route would share one arrow colour.
-      if (id === ROUTE_ARROW_IMAGE) {
+      const sdfUri =
+        id === ROUTE_ARROW_IMAGE
+          ? ROUTE_ARROW_SDF_URI
+          : id === GAUGE_ICON_IMAGE
+            ? GAUGE_ICON_SDF_URI
+            : null;
+      // Badges are plain bitmaps, two colours and a rim, so there is no tint
+      // to protect and MapLibre can take the decoded element itself. So are
+      // the Coverage hatches, which are drawn at 2x.
+      const hatchUri = (COVERAGE_HATCH_URIS as Record<string, string>)[id];
+      const bitmapUri =
+        (PLACE_BADGE_URIS as Record<string, string>)[id] ?? hatchUri;
+      if (bitmapUri) {
+        if (map.hasImage(id)) return;
+        const bitmap = new Image();
+        bitmap.onload = () => {
+          if (map.hasImage(id)) return;
+          map.addImage(
+            id,
+            bitmap,
+            hatchUri ? { pixelRatio: COVERAGE_HATCH_PIXEL_RATIO } : {},
+          );
+        };
+        bitmap.src = bitmapUri;
+        return;
+      }
+      if (sdfUri) {
         if (map.hasImage(id)) return;
         const arrow = new Image();
         arrow.onload = () => {
@@ -2598,9 +2951,9 @@ function Map({
           // Decode to raw RGBA here rather than handing MapLibre the element.
           // An SDF carries its distance field in the ALPHA channel and the
           // shader thresholds it; passing an HTMLImageElement leaves that
-          // decode to the browser's image pipeline, and the arrows rendered as
-          // plain white triangles with the route line showing through their
-          // soft edge — i.e. the tint was never applied (seen 2026-09-17).
+          // decode to the browser's image pipeline, so the arrows would render
+          // as plain white triangles with the route line showing through their
+          // soft edge without applying the tint.
           const canvas = document.createElement("canvas");
           canvas.width = arrow.naturalWidth;
           canvas.height = arrow.naturalHeight;
@@ -2619,21 +2972,9 @@ function Map({
             { sdf: true },
           );
         };
-        arrow.src = ROUTE_ARROW_SDF_URI;
+        arrow.src = sdfUri;
         return;
       }
-      if (!id || !id.startsWith(PREFIX) || map.hasImage(id)) return;
-      const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
-      const meta = OSM_POINT_ICON[key];
-      if (!meta) return;
-      const img = new Image(
-        OSM_POINT_ICON_NATURAL_PX,
-        OSM_POINT_ICON_NATURAL_PX,
-      );
-      img.onload = () => {
-        if (!map.hasImage(id)) map.addImage(id, img);
-      };
-      img.src = `/topo-icons/${meta.file}`;
     };
     map.on("styleimagemissing", onMissing);
     return () => {
@@ -2641,24 +2982,23 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Topo overlay layers (PMTiles — raster and vector). STRUCTURAL pass: adds and
-  // removes sources/layers when the layer set or a per-category `enabled` flag
-  // changes. Colour/width are NOT applied here — they come from the paint pass
-  // below — so colour-picker drags never recreate layers. Reads the style from a
-  // ref so colour/width edits don't retrigger this effect; it re-runs only when
-  // `enabledKey` flips.
+  // Topo overlay layers (PMTiles — raster and vector): adds and removes
+  // sources/layers when the layer set changes.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
-    const vs = vectorStyleRef.current ?? VECTOR_STYLE_FALLBACK;
+    const vs = nswContourStyle(activeLayerId);
 
-    // Skip if the layer set and enabled flags are unchanged (avoids flicker from
+    // Skip if the layer set is unchanged (avoids flicker from
     // new array references with identical contents).
+    // Over the vector basemap the Terrain group goes inside it, under its roads
+    // and labels (shared TERRAIN_BASEMAP_ANCHORS). Every other topo layer, and
+    // the group over a raster basemap, stacks over the basemap, under the routes.
+    const inBasemap =
+      BASE_LAYERS.find((b) => b.id === activeLayerId)?.kind === "vector";
     const topoKey =
-      layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") +
-      "::" +
-      enabledKey;
+      layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") + "::" + inBasemap;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -2668,8 +3008,7 @@ function Map({
     // Recoverable blacklist: when a failed entry's toggle turns off it leaves
     // `layers`, so drop it from the failed/transient sets. Re-enabling it should
     // RETRY the source (a genuinely-missing archive will just fail terminally
-    // again) rather than stay permanently blacklisted from a past error
-    // (LAYERS-1).
+    // again) rather than stay permanently blacklisted from a past error.
     for (const failedId of [...failedTopoSourcesRef.current]) {
       if (!activeIds.has(failedId))
         failedTopoSourcesRef.current.delete(failedId);
@@ -2687,13 +3026,7 @@ function Map({
         .layers.map((l) => l.id)
         .filter((lid) => lid.startsWith(`topo-${entryId}-`));
 
-    // Remove layers/sources no longer in topoLayers. Additionally, when an
-    // enable/disable toggle changed, drop every feature layer so they're
-    // re-created below per the current `enabled` flags (sources stay — only
-    // layers rebuild, no PMTiles refetch). Contour and raster layers persist;
-    // their look updates via the paint pass.
-    const structureChanged = prevEnabledKeyRef.current !== enabledKey;
-    prevEnabledKeyRef.current = enabledKey;
+    // Remove layers/sources no longer in topoLayers.
     const allTopoLayerIds = map
       .getStyle()
       .layers.map((l) => l.id)
@@ -2704,14 +3037,7 @@ function Map({
       const dashIdx = withoutPrefix.indexOf("-");
       if (dashIdx < 0) continue;
       const entryId = withoutPrefix.slice(0, dashIdx);
-      const isContourChild =
-        lid.endsWith("-minor") ||
-        lid.endsWith("-major") ||
-        lid.endsWith("-labels");
-      const isFeatureChild = !lid.endsWith("-raster") && !isContourChild;
-      const drop =
-        !activeIds.has(entryId) || (structureChanged && isFeatureChild);
-      if (drop && map.getLayer(lid)) map.removeLayer(lid);
+      if (!activeIds.has(entryId) && map.getLayer(lid)) map.removeLayer(lid);
     }
     // Remove orphaned sources
     for (const entryId of [
@@ -2726,12 +3052,67 @@ function Map({
     }
 
     // Add sources + layers for new entries
-    layers.forEach(({ id, pmtilesUrl, format, attribution }) => {
+    layers.forEach(({ id, pmtilesUrl, format, attribution, tiles }) => {
       // Known-missing source (PMTiles load already failed this session) — do
-      // not re-add it on layer toggles, or the 404 retry spam returns (LAYERS-1).
+      // not re-add it on layer toggles, or the 404 retry spam returns.
       if (failedTopoSourcesRef.current.has(id)) return;
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
+      // A Terrain source made for another set of areas (or for none) has the
+      // wrong zooms and holds tiles from the wrong archives: rebuild it.
+      if (TERRAIN_LAYER_KEYS.some((key) => TERRAIN_ENTRIES[key].id === id)) {
+        const reads = tiles?.template ?? pmtilesUrl;
+        const before = terrainSourceFromRef.current.get(srcId);
+        if (before !== undefined && before !== reads && map.getSource(srcId)) {
+          for (const lid of ownedLayerIds(id))
+            if (map.getLayer(lid)) map.removeLayer(lid);
+          map.removeSource(srcId);
+        }
+        terrainSourceFromRef.current.set(srcId, reads);
+      }
+      // An archive's own TileJSON, or the router's tiles with its zooms.
+      const from = tiles
+        ? {
+            tiles: [tiles.template],
+            minzoom: tiles.minzoom,
+            maxzoom: tiles.maxzoom,
+            bounds: [...tiles.bounds] as [number, number, number, number],
+          }
+        : { url: `pmtiles://${pmtilesUrl}` };
+
+      if (fmt === "slope" || fmt === "hillshade") {
+        if (!map.getSource(srcId)) {
+          map.addSource(srcId, {
+            type: "raster-dem",
+            ...from,
+            tileSize: 256,
+            encoding: "terrarium",
+            attribution,
+          });
+        }
+        const layerId = `topo-${id}-dem`;
+        if (!map.getLayer(layerId)) {
+          map.addLayer(
+            fmt === "slope"
+              ? {
+                  id: layerId,
+                  type: "color-relief",
+                  source: srcId,
+                  minzoom: SLOPE_MIN_ZOOM,
+                  paint: {
+                    "color-relief-opacity": zoomFadeIn(
+                      SLOPE_MIN_ZOOM,
+                    ) as maplibregl.ExpressionSpecification,
+                    "color-relief-color": slopeReliefColor(
+                      slopeBandsRef.current ?? [],
+                    ) as maplibregl.ExpressionSpecification,
+                  },
+                }
+              : { id: layerId, type: "hillshade", source: srcId },
+          );
+        }
+        return;
+      }
 
       if (!map.getSource(srcId)) {
         if (fmt === "raster") {
@@ -2744,10 +3125,60 @@ function Map({
         } else {
           map.addSource(srcId, {
             type: "vector",
-            url: `pmtiles://${pmtilesUrl}`,
+            ...from,
             attribution,
           });
         }
+      }
+
+      if (fmt === "coverage") {
+        const carrier = coverageCarrierRef.current;
+        if (!carrier) return;
+        const layer = coverageLayerSpec(srcId, carrier);
+        if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
+      }
+
+      if (fmt === "fire") {
+        // The tint ages by the month: a map left open for weeks is at most
+        // that stale.
+        for (const layer of fireLayerSpecs(srcId, new Date()))
+          if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
+      }
+
+      if (fmt === "land") {
+        if (!map.getLayer(LAND_FILL_LAYER)) {
+          map.addLayer({
+            id: LAND_FILL_LAYER,
+            type: "fill",
+            source: srcId,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            minzoom: LAND_EDGE_MINZOOM,
+            // Unseen: it is what a tap reads, since a line has no inside.
+            paint: { "fill-opacity": 0 },
+          });
+        }
+        LAND_EDGE_LINES.forEach(({ width, offset, blur, opacity }, i) => {
+          if (map.getLayer(`${LAND_EDGE_LAYER}-${i}`)) return;
+          map.addLayer({
+            id: `${LAND_EDGE_LAYER}-${i}`,
+            type: "line",
+            source: srcId,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            minzoom: LAND_EDGE_MINZOOM,
+            paint: {
+              "line-color": landColor() as maplibregl.ExpressionSpecification,
+              "line-width": width,
+              "line-offset": offset,
+              "line-blur": blur,
+              "line-opacity": landEdgeOpacity(
+                opacity,
+              ) as maplibregl.ExpressionSpecification,
+            },
+          });
+        });
+        return;
       }
 
       if (fmt === "raster") {
@@ -2761,327 +3192,136 @@ function Map({
           });
         }
       } else {
-        // Vector layers — detect source type by id suffix
-        const isContours = id.includes("contours");
-        if (isContours) {
-          // Minor contours (5m + 10m): elevation not divisible by 50
-          const minorId = `topo-${id}-minor`;
-          if (!map.getLayer(minorId)) {
-            map.addLayer({
-              id: minorId,
-              type: "line",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 14,
-            });
-          }
-          // Major contours (50m): elevation divisible by 50
-          const majorId = `topo-${id}-major`;
-          if (!map.getLayer(majorId)) {
-            map.addLayer({
-              id: majorId,
-              type: "line",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            });
-          }
-          // Elevation labels on major contours at z12+
-          const labelsId = `topo-${id}-labels`;
-          if (!map.getLayer(labelsId)) {
-            map.addLayer({
-              id: labelsId,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 12,
-              layout: {
-                "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
-                "text-font": ["Noto Sans Medium"],
-                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                "symbol-placement": "line",
-                // LAZ-derived contours are VERY knobbly — even 90° left few
-                // placement spots until z18, then labels flooded in at once. The
-                // real fix is smoothing the geometry in the topo pipeline; until
-                // then 150° lets labels place along the wiggly runs at low zoom
-                // (they follow the curve, so they read a little jagged). Bump the
-                // pipeline-side smoothing if this looks too messy.
-                "text-max-angle": 150,
-              },
-              paint: {
-                "text-halo-color": "rgba(255, 255, 255, 0.8)",
-                "text-halo-width": 1.5,
-              },
-            });
-          }
-        } else {
-          // OSM features vector source — one layer per category. Per-category
-          // `enabled` skips the addLayer call entirely, so toggling a category
-          // off removes it from the map on the next structural run. Only static
-          // paint (dasharrays) is set here; colour and width are applied by
-          // applyVectorPaint so live edits don't recreate layers.
-          type FeatureLayerSpec = {
-            key: OsmFeatureKey;
-            suffix: string;
-            filter: maplibregl.ExpressionSpecification;
-            style: object;
-          };
-          const featureLayers: FeatureLayerSpec[] = [
-            {
-              key: "waterway",
-              suffix: "waterway",
-              filter: ["==", ["get", "_category"], "waterway"],
-              style: { type: "line" },
+        // The only vector entry is the statewide contours.
+        // Minor contours (5m + 10m): elevation not divisible by 50
+        const minorId = `topo-${id}-minor`;
+        if (!map.getLayer(minorId)) {
+          map.addLayer({
+            id: minorId,
+            type: "line",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: CONTOURS_MINOR_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MINOR_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
             },
-            {
-              key: "track",
-              suffix: "track",
-              filter: ["==", ["get", "_category"], "track"],
-              style: {
-                type: "line",
-                paint: { "line-dasharray": [4, 2] },
-              },
+          });
+        }
+        // Major contours (50m): elevation divisible by 50
+        const majorId = `topo-${id}-major`;
+        if (!map.getLayer(majorId)) {
+          map.addLayer({
+            id: majorId,
+            type: "line",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: CONTOURS_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
             },
-            {
-              key: "road",
-              suffix: "road",
-              filter: ["==", ["get", "_category"], "road"],
-              style: { type: "line" },
+          });
+        }
+        // Elevation labels on major contours
+        const labelsId = `topo-${id}-labels`;
+        if (!map.getLayer(labelsId)) {
+          map.addLayer({
+            id: labelsId,
+            type: "symbol",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: CONTOUR_LABELS_MIN_ZOOM,
+            layout: {
+              "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
+              "text-font": ["Noto Sans Medium"],
+              "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
+              "symbol-placement": "line",
+              // LAZ-derived contours are VERY knobbly — even 90° left few
+              // placement spots until z18, then labels flooded in at once. The
+              // real fix is smoothing the geometry in the topo pipeline; until
+              // then 150° lets labels place along the wiggly runs at low zoom
+              // (they follow the curve, so they read a little jagged). Bump the
+              // pipeline-side smoothing if this looks too messy.
+              "text-max-angle": 150,
             },
-            {
-              key: "building",
-              // Buildings get a translucent fill of the configured colour and a
-              // matching outline (both applied by applyVectorPaint).
-              suffix: "building",
-              filter: ["==", ["get", "_category"], "building"],
-              style: { type: "fill" },
+            paint: {
+              "text-halo-color": "rgba(255, 255, 255, 0.8)",
+              "text-halo-width": 1.5,
+              "text-opacity": zoomFadeIn(
+                CONTOUR_LABELS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
             },
-            {
-              key: "power",
-              suffix: "power",
-              filter: ["==", ["get", "_category"], "power"],
-              style: {
-                type: "line",
-                paint: { "line-dasharray": [3, 4] },
-              },
-            },
-          ];
-          for (const { key, suffix, filter, style } of featureLayers) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${suffix}`;
-            if (!map.getLayer(lid)) {
-              map.addLayer({
-                id: lid,
-                source: srcId,
-                "source-layer": "features",
-                filter,
-                ...style,
-              } as maplibregl.LayerSpecification);
-            }
-          }
-          void OSM_LINE_KEY_SET; // silence unused-import warning until line widths use it.
-
-          // Feature name labels for line categories (waterway, track, road).
-          // Label colour follows the line colour from VectorStyleSettings so a
-          // user re-tinting "tracks" gets matching label text without a second
-          // colour picker.
-          const featureLabelLayers: {
-            key: OsmFeatureKey;
-            suffix: string;
-            filter: maplibregl.ExpressionSpecification;
-          }[] = [
-            {
-              key: "waterway",
-              suffix: "waterway-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "waterway"],
-                ["has", "name"],
-              ],
-            },
-            {
-              key: "track",
-              suffix: "track-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "track"],
-                ["has", "name"],
-              ],
-            },
-            {
-              key: "road",
-              suffix: "road-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "road"],
-                ["any", ["has", "name"], ["has", "ref"]],
-              ],
-            },
-          ];
-          for (const { key, suffix, filter } of featureLabelLayers) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${suffix}`;
-            if (!map.getLayer(lid)) {
-              map.addLayer({
-                id: lid,
-                type: "symbol",
-                source: srcId,
-                "source-layer": "features",
-                filter,
-                minzoom: 12,
-                layout: {
-                  "text-field": [
-                    "coalesce",
-                    ["get", "name"],
-                    ["get", "ref"],
-                    "",
-                  ],
-                  "text-font": ["Noto Sans Medium"],
-                  "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                  "symbol-placement": "line",
-                  // Looser bend tolerance (was 30) so curvy creeks/tracks still
-                  // get a label instead of only their straight stretches.
-                  "text-max-angle": 60,
-                },
-                paint: {
-                  "text-halo-color": "rgba(255,255,255,0.8)",
-                  "text-halo-width": 1.5,
-                },
-              });
-            }
-          }
-
-          // Point features → fixed PNG icons (one symbol layer per enabled
-          // category). Icons aren't user-recolourable; size mirrors the Python
-          // pipeline so they match the MBTiles export. Missing images are loaded
-          // lazily via the `styleimagemissing` handler above.
-          for (const key of OSM_POINT_FEATURE_KEYS) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${key}`;
-            if (map.getLayer(lid)) continue;
-            map.addLayer({
-              id: lid,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "features",
-              filter: ["==", ["get", "_category"], key],
-              minzoom: key === "gate" ? 12 : 10,
-              layout: {
-                "icon-image": `topo-icon-${key}`,
-                "icon-size": iconSizeInterp(OSM_POINT_ICON[key].sizeZ18),
-                "icon-allow-overlap": true,
-              },
-            });
-          }
-
-          // Name labels for point features at z12+. Peaks also show elevation.
-          // Label colour follows the category colour from VectorStyleSettings.
-          for (const key of OSM_POINT_FEATURE_KEYS) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${key}-label`;
-            if (map.getLayer(lid)) continue;
-            const textField: maplibregl.ExpressionSpecification =
-              key === "peak"
-                ? [
-                    "case",
-                    ["all", ["has", "name"], ["has", "ele"]],
-                    [
-                      "concat",
-                      ["get", "name"],
-                      "\n",
-                      ["to-string", ["get", "ele"]],
-                      " m",
-                    ],
-                    ["has", "name"],
-                    ["get", "name"],
-                    ["has", "ele"],
-                    ["concat", ["to-string", ["get", "ele"]], " m"],
-                    "",
-                  ]
-                : ["coalesce", ["get", "name"], ""];
-            map.addLayer({
-              id: lid,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "features",
-              filter: ["==", ["get", "_category"], key],
-              minzoom: 12,
-              layout: {
-                "text-field": textField,
-                "text-font": ["Noto Sans Medium"],
-                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                "text-anchor": "top",
-                "text-offset": [0, 0.8],
-                "text-optional": true,
-              },
-              paint: {
-                "text-halo-color": "rgba(255,255,255,0.85)",
-                "text-halo-width": 1.5,
-              },
-            });
-          }
+          });
         }
       }
     });
 
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
-    for (const { id } of layers) {
-      applyVectorPaint(
+    if (layers.some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
+      applyContourPaint(map, TERRAIN_ENTRIES.contours.id, vs);
+
+    // In the topoLayers order, each entry's layers as a group.
+    stackTopoLayers(
+      map,
+      layers.map(({ id }) => ownedLayerIds(id)),
+    );
+    if (inBasemap)
+      moveTerrainIntoBasemap(
         map,
-        id,
-        id.includes("contours"),
-        paintStyleFor(id, vs, activeLayerIdRef.current),
+        Object.fromEntries(
+          TERRAIN_LAYER_KEYS.map((key) => [
+            key,
+            ownedLayerIds(TERRAIN_ENTRIES[key].id),
+          ]),
+        ) as Record<TerrainLayerKey, string[]>,
+        PROTOMAPS_LAYER_PREFIX,
       );
-    }
+  }, [topoLayers, mapLoaded, activeLayerId]);
 
-    // Reorder: ensure layers appear in the order specified by topoLayers array.
-    // Each entry may own multiple MapLibre layers — move them all as a group.
-    let afterLayerId: string | undefined = undefined;
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const owned = ownedLayerIds(layers[i].id);
-      for (const lid of owned) {
-        if (map.getLayer(lid)) {
-          map.moveLayer(lid, afterLayerId);
-        }
-      }
-      if (owned.length > 0) afterLayerId = owned[0];
-    }
+  // The contours' look follows the basemap: a paint change, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    if ((topoLayers ?? []).some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
+      applyContourPaint(
+        mapRef.current,
+        TERRAIN_ENTRIES.contours.id,
+        nswContourStyle(activeLayerId),
+      );
+  }, [topoLayers, mapLoaded, activeLayerId]);
 
-    // Move place marker layers above all topo layers so they remain visible
-    const placeLayers = [
-      "place-circles",
-      "shared-place-halos",
-      "shared-place-circles",
-      "place-labels",
-      "shared-place-labels",
-    ];
-    for (const cid of placeLayers) {
-      if (map.getLayer(cid)) {
-        map.moveLayer(cid);
-      }
-    }
-  }, [topoLayers, enabledKey, mapLoaded]);
-
-  // PAINT pass: apply live colour/width to existing topo layers in place. Runs on
-  // every vectorStyle change (including colour-picker drags) without recreating
-  // layers — so editing is smooth and triggers no PMTiles refetch. setPaintProperty
-  // calls are no-ops for layers that don't exist (guarded inside applyVectorPaint).
+  // The slope bands, live, the same way: a paint change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
-    for (const { id } of topoLayers ?? []) {
-      applyVectorPaint(
-        map,
-        id,
-        id.includes("contours"),
-        paintStyleFor(id, vs, activeLayerId),
-      );
+    for (const { id, format } of topoLayers ?? []) {
+      const layerId = `topo-${id}-dem`;
+      if (format === "slope" && map.getLayer(layerId))
+        map.setPaintProperty(
+          layerId,
+          "color-relief-color",
+          slopeReliefColor(
+            slopeBands ?? [],
+          ) as maplibregl.ExpressionSpecification,
+        );
     }
-  }, [topoLayers, vectorStyle, mapLoaded, activeLayerId]);
+  }, [topoLayers, slopeBands, mapLoaded]);
+
+  // The carrier, live, the same way: a filter change, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+      mapRef.current.setFilter(
+        COVERAGE_FILL_LAYER,
+        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+      );
+  }, [topoLayers, coverageCarrier, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3118,6 +3358,13 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
+  // A fit (a way, a plan) keeps its extent in the strip above the narrow
+  // sheet, however thin, and 80 px from the edge on wide.
+  const fitBottom = () => {
+    const cover = sheetCoverPx(window.innerHeight, 80 + 24, 96);
+    return cover > 0 ? cover + 24 : 80;
+  };
+
   const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
   useEffect(() => {
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
@@ -3126,7 +3373,12 @@ function Map({
   // A way's extent (`fitToBox`).
   useEffect(() => {
     if (!flyToBounds || !mapLoaded || !mapRef.current) return;
-    fitToBox(mapRef.current, flyToBounds);
+    fitToBox(mapRef.current, flyToBounds, {
+      top: 80,
+      left: 80,
+      right: 80,
+      bottom: fitBottom(),
+    });
     onFlyToBoundsConsumedRef.current?.();
   }, [flyToBounds, mapLoaded]);
 
@@ -3137,22 +3389,26 @@ function Map({
 
   useEffect(() => {
     if (!flyToPlace || !mapLoaded || !mapRef.current) return;
-    // Defensive guard (PLACE-1): an out-of-range record must not crash the app.
+    // Defensive guard: an out-of-range record must not crash Logjam Web.
     // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
-    // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
-    // and made the record unmanageable — you couldn't even open it to fix or
+    // lng outside [-180,180]), which would escape to the RootErrorBoundary
+    // and make the record unmanageable — you couldn't even open it to fix or
     // delete it. Skip the fly-to (still selecting the place) so the detail
-    // panel opens and the record can be edited/deleted. Validation now blocks
-    // such records at creation; this covers any that already exist.
+    // panel opens and the record can be edited/deleted. Validation blocks
+    // such records at creation (@logjam/shared placeValidation.test.ts); this
+    // covers any that already exist.
     if (isValidLatitude(flyToPlace.lat) && isValidLongitude(flyToPlace.lng)) {
       mapRef.current.flyTo({
         center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
+        // Centred in what the narrow sheet leaves, not behind it. An offset,
+        // not `padding`: MapLibre keeps a flyTo's padding on the camera, and
+        // every later fit would start from it.
+        offset: [0, -sheetCoverPx(window.innerHeight) / 2],
       });
     } else {
-      // Don't log the coordinates themselves (privacy rule: no place coords in
-      // logs/errors) — just note the fly-to was skipped.
+      // The warning names no coordinate: they are the place's.
       console.warn("Skipping fly-to: place coordinates out of range");
     }
     onFlyToPlaceConsumedRef.current?.();
@@ -3174,6 +3430,27 @@ function Map({
   const geoPdfUserPannedRef = useRef(false);
   const geoPdfUserZoomedRef = useRef(false);
 
+  // Set once the opening fit has landed the frame where its CSS size and the
+  // kept scale agree, or once Keep is ticked (it keeps the scale of the frame
+  // as it is); from then on a kept scale sizes it. Sizing during the opening
+  // ease would pop the frame to the old zoom's size and shrink it back.
+  const geoPdfFrameMeasuredRef = useRef(false);
+
+  // The scale the frame is held at, so zooming changes how big the frame
+  // looks and not the scale; or null, when the frame stays put on screen and
+  // zooming changes the scale (geoPdfFrame.ts).
+  const [geoPdfKeptScale, setGeoPdfKeptScale] = useState<number | null>(null);
+  const [geoPdfKeptScaleFor, setGeoPdfKeptScaleFor] = useState(false);
+  if ((selectingGeoPdfExtent ?? false) !== geoPdfKeptScaleFor) {
+    setGeoPdfKeptScaleFor(selectingGeoPdfExtent ?? false);
+    if (selectingGeoPdfExtent)
+      setGeoPdfKeptScale(keptScaleOnEntry(geoPdfInitialScale));
+  }
+  // The scale read out on the Keep checkbox. Written on every map move, so
+  // straight to the DOM: through state it would re-render this whole
+  // component each frame (frontend/DESIGN.md, Performance).
+  const geoPdfScaleTextRef = useRef<HTMLSpanElement>(null);
+
   // When extent selection activates: position the map so the on-screen frame
   // visually matches the initial extent (or scale × paper) — that way the
   // dashed rectangle the user sees is exactly the geographic area they'll get.
@@ -3181,6 +3458,7 @@ function Map({
     if (!selectingGeoPdfExtent) {
       geoPdfInitialExtentRef.current = undefined;
       geoPdfFitBoundsSettledRef.current = false;
+      geoPdfFrameMeasuredRef.current = false;
       geoPdfUserPannedRef.current = false;
       geoPdfUserZoomedRef.current = false;
       return;
@@ -3193,12 +3471,14 @@ function Map({
       h: 297,
     };
     geoPdfFitBoundsSettledRef.current = false;
+    geoPdfFrameMeasuredRef.current = false;
     geoPdfUserPannedRef.current = false;
     geoPdfUserZoomedRef.current = false;
 
     const map = mapRef.current;
     if (!map) {
       geoPdfFitBoundsSettledRef.current = true;
+      geoPdfFrameMeasuredRef.current = true;
       return;
     }
 
@@ -3220,50 +3500,51 @@ function Map({
       targetWidthM = geoPdfInitialScale * (geoPdfPaperDimensions.w / 1000);
     } else {
       geoPdfFitBoundsSettledRef.current = true;
+      geoPdfFrameMeasuredRef.current = true;
       return;
     }
 
     // Wait one frame so the frame element is in the DOM and measurable.
+    let stopWaiting = () => {};
     const rafId = requestAnimationFrame(() => {
       const frameEl = geoPdfFrameRef.current;
       const m = mapRef.current;
       if (!frameEl || !m) {
         geoPdfFitBoundsSettledRef.current = true;
+        geoPdfFrameMeasuredRef.current = true;
         return;
       }
       const framePxW = frameEl.getBoundingClientRect().width;
       if (framePxW <= 0) {
         geoPdfFitBoundsSettledRef.current = true;
+        geoPdfFrameMeasuredRef.current = true;
         return;
       }
 
-      // Solve for zoom: at zoom z and latitude lat,
-      //   metres_per_pixel = 78271.52 × cos(lat) / 2^z
-      // MapLibre GL uses 512px tiles, so its zoom resolution constant is
-      // earthCircumference / 512 = 78271.52 (NOT the 256-tile 156543.03 used by
-      // Leaflet/Google and by the server's XYZ tile-zoom math). Using the 256
-      // constant here over-zooms by exactly one level — the dashed frame then
-      // shows half the intended ground width, which both shrinks the on-screen
-      // frame and halves the scale when the extent is re-derived on Confirm.
-      // We want metres_per_pixel × framePxW = targetWidthM.
-      const cosLat = Math.cos((targetCenter[1] * Math.PI) / 180);
-      const metresPerPixel = targetWidthM / framePxW;
-      const targetZoom = Math.log2((78271.52 * cosLat) / metresPerPixel);
+      // The zoom at which metersPerPixel × framePxW = targetWidthM.
+      const targetZoom = Math.log2(
+        metersPerPixel(targetCenter[1], 0) / (targetWidthM / framePxW),
+      );
 
+      // North-up and flat too: this ease replaces the one that flattens the
+      // map for the selection (`flattenForSelection`).
       m.easeTo({
         center: targetCenter,
         zoom: targetZoom,
+        bearing: 0,
+        pitch: 0,
         duration: 600,
       });
 
-      const onSettled = () => {
+      stopWaiting = afterEase(m, () => {
         geoPdfFitBoundsSettledRef.current = true;
-      };
-      m.once("moveend", onSettled);
+        geoPdfFrameMeasuredRef.current = true;
+      });
     });
 
     return () => {
       cancelAnimationFrame(rafId);
+      stopWaiting();
     };
   }, [
     selectingGeoPdfExtent,
@@ -3301,21 +3582,93 @@ function Map({
     onGeoPdfExtentConfirmedRef.current = onGeoPdfExtentConfirmed;
   }, [onGeoPdfExtentConfirmed]);
 
+  const geoPdfPick = useCallback(
+    (): FramePick => ({
+      kept: geoPdfKeptScale,
+      initialScale: geoPdfInitialScaleRef.current,
+      initialExtent: geoPdfInitialExtentRef.current,
+      zoomed: geoPdfUserZoomedRef.current,
+    }),
+    [geoPdfKeptScale],
+  );
+
+  // The frame's ground width at its vertical centre, over the paper's width.
+  const measureGeoPdfScale = useCallback((): number | null => {
+    const map = mapRef.current;
+    const frame = geoPdfFrameRef.current;
+    const container = containerRef.current;
+    if (!map || !frame || !container) return null;
+    const mapRect = container.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    const centerY = (frameRect.top + frameRect.bottom) / 2 - mapRect.top;
+    const leftMid = map.unproject([frameRect.left - mapRect.left, centerY]);
+    const rightMid = map.unproject([frameRect.right - mapRect.left, centerY]);
+    const METERS_PER_DEG_LON_EQUATOR = 111320;
+    const geoWidthM =
+      (rightMid.lng - leftMid.lng) *
+      METERS_PER_DEG_LON_EQUATOR *
+      Math.cos(((leftMid.lat + rightMid.lat) / 2) * (Math.PI / 180));
+    return geoWidthM / (geoPdfPaperDimensionsRef.current.w / 1000);
+  }, []);
+
+  // While a scale is kept, the frame is sized from it on every move, once
+  // geoPdfFrameMeasuredRef allows. Unkept, the frame keeps whatever size it has, so letting go
+  // of the scale never jumps the frame.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!selectingGeoPdfExtent || !map) return;
+    const update = () => {
+      const frame = geoPdfFrameRef.current;
+      if (frame && geoPdfKeptScale !== null && geoPdfFrameMeasuredRef.current) {
+        const px = keptFrameSizePx(
+          geoPdfKeptScale,
+          geoPdfPaperDimensionsRef.current,
+          map.getZoom(),
+          map.getCenter().lat,
+        );
+        frame.style.width = `${px.w}px`;
+        frame.style.height = `${px.h}px`;
+      }
+      const scale = scaleNow(geoPdfPick(), measureGeoPdfScale);
+      if (geoPdfScaleTextRef.current && scale !== null)
+        geoPdfScaleTextRef.current.textContent =
+          Math.round(scale).toLocaleString();
+    };
+    update();
+    map.on("move", update);
+    return () => {
+      map.off("move", update);
+    };
+  }, [selectingGeoPdfExtent, geoPdfKeptScale, geoPdfPick, measureGeoPdfScale]);
+
+  const setGeoPdfKeepScale = (keep: boolean) => {
+    const pick = geoPdfPick();
+    if (keep) {
+      const scale = keepScale(pick, measureGeoPdfScale);
+      if (scale === null) return;
+      geoPdfFrameMeasuredRef.current = true;
+      setGeoPdfKeptScale(scale);
+      return;
+    }
+    if (pick.kept === null) return;
+    const next = letGo(
+      { ...pick, kept: pick.kept },
+      mapRef.current?.isZooming() ?? false,
+    );
+    geoPdfInitialScaleRef.current = next.initialScale;
+    geoPdfInitialExtentRef.current = next.initialExtent;
+    geoPdfUserZoomedRef.current = next.zoomed;
+    setGeoPdfKeptScale(null);
+  };
+
   const handleConfirmGeoPdfExtent = useCallback(() => {
     if (!mapRef.current || !geoPdfFrameRef.current || !containerRef.current)
       return;
 
-    // If the user hasn't moved the map at all, return the exact initial values.
-    if (
-      geoPdfInitialExtentRef.current &&
-      geoPdfInitialScaleRef.current &&
-      !geoPdfUserPannedRef.current &&
-      !geoPdfUserZoomedRef.current
-    ) {
-      onGeoPdfExtentConfirmedRef.current?.(
-        geoPdfInitialExtentRef.current,
-        geoPdfInitialScaleRef.current,
-      );
+    const pick = geoPdfPick();
+    const unmoved = unmovedPick(pick, geoPdfUserPannedRef.current);
+    if (unmoved) {
+      onGeoPdfExtentConfirmedRef.current?.(unmoved.extent, unmoved.scale);
       return;
     }
 
@@ -3329,27 +3682,8 @@ function Map({
     const centerX = (frameRect.left + frameRect.right) / 2 - mapRect.left;
     const centerY = (frameRect.top + frameRect.bottom) / 2 - mapRect.top;
     const center = map.unproject([centerX, centerY]);
-
-    let scale: number;
-    if (!geoPdfUserZoomedRef.current && geoPdfInitialScaleRef.current) {
-      // User panned but didn't zoom — preserve the exact scale.
-      scale = geoPdfInitialScaleRef.current;
-    } else {
-      // User zoomed — derive scale from the frame's geographic width.
-      // Unproject the left and right midpoints of the frame to measure
-      // the true geographic width at the frame's vertical center.
-      const leftMid = map.unproject([frameRect.left - mapRect.left, centerY]);
-      const rightMid = map.unproject([frameRect.right - mapRect.left, centerY]);
-      const DEG_TO_RAD = Math.PI / 180;
-      const METERS_PER_DEG_LON_EQUATOR = 111320;
-      const midLat = center.lat;
-      const geoWidthM =
-        (rightMid.lng - leftMid.lng) *
-        METERS_PER_DEG_LON_EQUATOR *
-        Math.cos(midLat * DEG_TO_RAD);
-      const paperWidthM = geoPdfPaperDimensionsRef.current.w / 1000;
-      scale = geoWidthM / paperWidthM;
-    }
+    const scale = scaleNow(pick, measureGeoPdfScale);
+    if (scale === null) return;
 
     // Compute a consistent extent from center + scale + paper dimensions.
     const paper = geoPdfPaperDimensionsRef.current;
@@ -3363,7 +3697,7 @@ function Map({
     );
 
     onGeoPdfExtentConfirmedRef.current?.(bounds, scale);
-  }, []);
+  }, [geoPdfPick, measureGeoPdfScale]);
 
   // Toggle 3d Terrain
   // Choosing the terrain source is asynchronous, and the answer applies only
@@ -3371,49 +3705,72 @@ function Map({
   // then on again looks the same to a flag, and an answer from the first "on"
   // would replace the terrain the second one chose somewhere else.
   const terrainToggleRef = useRef(0);
-  const toggleTerrain = () => {
+  const sharpenedAreasRef = useRef(sharpenedAreas ?? []);
+  useEffect(() => {
+    sharpenedAreasRef.current = sharpenedAreas ?? [];
+  }, [sharpenedAreas]);
+  // Set on switching 3D on, cleared when the tilt runs, so a change of areas
+  // before the map goes idle still tilts.
+  const pendingTiltRef = useRef(false);
+  const applyTerrainNow = (map: maplibregl.Map, toggle: number) => {
+    const tilt = pendingTiltRef.current
+      ? () => {
+          pendingTiltRef.current = false;
+          map.easeTo({ pitch: 30, duration: 1200 });
+        }
+      : undefined;
+    void applyTerrain(
+      map,
+      sharpenedAreasRef.current,
+      async (url) => {
+        const archive = new PMTiles(url);
+        await archive.getHeader();
+        // Hand the opened archive to the protocol, so it is not opened twice.
+        pmtilesProtocol.add(archive);
+      },
+      window.location.origin,
+      // The map may have been removed, or 3D toggled, while this waited.
+      () => toggle === terrainToggleRef.current && mapRef.current === map,
+      tilt,
+    );
+  };
+  // A change of areas while 3D is on draws terrain again from the new set:
+  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
+  // ("applyTerrain": the new source, the old one removed).
+  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
+    const map = mapRef.current;
+    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+  });
+  const toggleTerrain = () => setTerrainOn(!is3D);
+  const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
     if (!map) return;
     const toggle = ++terrainToggleRef.current;
-    if (is3D) {
+    if (!on) {
       // Turning off — nothing to wait for, flatten immediately
+      pendingTiltRef.current = false;
       map.setTerrain(null);
       map.setMaxPitch(0);
       map.touchPitch.disable();
       map.easeTo({ pitch: 0, duration: 1000 });
     } else {
       // Toast to inform user about movement controls in 3D mode
-      if (window.matchMedia("(pointer: coarse)").matches) {
-        toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
+      if (quiet) {
+        // Coming back after an area selection: they have seen it.
+      } else if (window.matchMedia("(pointer: coarse)").matches) {
+        toast.done("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
-        toast.info(
+        toast.done(
           "Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.",
         );
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
-      void terrainSourceFor(
-        map,
-        async (url) => {
-          const archive = new PMTiles(url);
-          await archive.getHeader();
-          // Hand the opened archive to the protocol, so it is not opened twice.
-          pmtilesProtocol.add(archive);
-        },
-        window.location.origin,
-      ).then((source) => {
-        // The second test: the map may have been removed while this waited.
-        if (toggle !== terrainToggleRef.current || mapRef.current !== map)
-          return;
-        // Turning on — wait for the terrain tiles to actually load before tilting
-        map.setTerrain({ source, exaggeration: 1.5 });
-        map.once("idle", () => {
-          map.easeTo({ pitch: 30, duration: 1200 });
-        });
-      });
+      pendingTiltRef.current = true;
+      applyTerrainNow(map, toggle);
     }
 
-    setIs3D(!is3D);
+    setIs3D(on);
   };
 
   const upstreamNotice = upstream && (
@@ -3448,6 +3805,33 @@ function Map({
         : mapPointUpstreamNotice(upstream)}
     </Notice>
   );
+  // Picking an area turns the map north-up and flat: its extent is north, south, east and
+  // west (geoPdfExtent.ts, useBoxDraw) and the GeoPDF prints a north-up page,
+  // so a turned or tilted frame would get something other than what it framed.
+  // 3D comes back when the selection ends.
+  const selectingArea =
+    (selectingBbox ?? false) ||
+    (selectingGeoPdfExtent ?? false) ||
+    (selectingFilterArea ?? false);
+  const flattenForSelection = useEffectEvent(() => {
+    const map = mapRef.current;
+    if (!map) return () => {};
+    const was3D = is3D;
+    if (was3D) setTerrainOn(false);
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+    map.easeTo({ bearing: 0, pitch: 0, duration: 600 });
+    return () => {
+      map.dragRotate.enable();
+      map.touchZoomRotate.enableRotation();
+      map.keyboard.enableRotation();
+      if (was3D && mapRef.current === map) setTerrainOn(true, true);
+    };
+  });
+  useEffect(() => {
+    if (selectingArea && mapLoaded) return flattenForSelection();
+  }, [selectingArea, mapLoaded]);
 
   return (
     <div
@@ -3463,7 +3847,8 @@ function Map({
         is3D={is3D}
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
-        tools={mapTools}
+        tools={webMapTools(mapToolActions)}
+        selectingArea={selectingArea}
         notices={
           notices || upstreamNotice ? (
             <>
@@ -3473,12 +3858,30 @@ function Map({
           ) : undefined
         }
         search={
-          // Always available, including during pick modes for a quick fly-to.
+          // Live during a point pick or a route draw (a quick fly-to), off
+          // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
+            disabled={selectingArea}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
-              selectPlaceRef.current(place.id);
+              if (searchSelects) selectPlaceRef.current(place.id);
+              else
+                mapRef.current?.flyTo({
+                  center: [place.longitude, place.latitude],
+                  zoom: 13,
+                  duration: 1200,
+                });
+            }}
+            onSelectGauge={(gauge) => {
+              onShowGauges();
+              // After the flight: a gauge's panel closes when the map moves.
+              mapRef.current?.once("moveend", () => setGaugeId(gauge.id));
+              mapRef.current?.flyTo({
+                center: [gauge.lon, gauge.lat],
+                zoom: 13,
+                duration: 1200,
+              });
             }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({
@@ -3487,6 +3890,7 @@ function Map({
                 duration: 1200,
               })
             }
+            onSearchPin={setSearchPin}
           />
         }
       />
@@ -3506,15 +3910,39 @@ function Map({
       )}
       {asked && drawableMap && (
         <MapPointPopover
+          key={`${asked.point.latitude},${asked.point.longitude},${asked.startAt ?? ""}`}
           map={drawableMap}
           point={asked.point}
           from={asked.from}
+          coverageCarrier={coverageCarrier}
+          {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
+          onDrawRoute={onDrawRouteFrom}
           onShowUpstream={showUpstreamFrom}
         />
       )}
+      {openGauge && gaugeFile && drawableMap && showGauges && (
+        <GaugePopover
+          key={`${openGauge.id}:${gaugeFile.generatedAt}`}
+          map={drawableMap}
+          gauge={openGauge}
+          attribution={gaugeFile.attribution}
+          generatedAt={gaugeFile.generatedAt}
+          onClose={closeGauge}
+        />
+      )}
+      <GaugeLoadNotice
+        failed={gaugesFailed}
+        modeActive={
+          pickingCoords ||
+          selectingBbox ||
+          selectingGeoPdfExtent ||
+          drawingRoute
+        }
+        className={classes.pickBanner}
+      />
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>
@@ -3529,14 +3957,23 @@ function Map({
         <div className={classes.pickBanner}>
           <Notice>
             {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
-            define the topo area
+            define the area
           </Notice>
+        </div>
+      )}
+      {selectingBbox && onBboxCancelled && (
+        <div className={classes.geoPdfConfirmBar}>
+          <Button onClick={onBboxCancelled}>Cancel</Button>
         </div>
       )}
       {selectingGeoPdfExtent && (
         <>
           <div className={classes.pickBanner}>
-            <Notice>Pan and zoom the map to position the export area</Notice>
+            <Notice>
+              {geoPdfKeptScale !== null
+                ? "Drag the map to place the area"
+                : "Pan and zoom the map to fit the area"}
+            </Notice>
           </div>
           <div
             ref={geoPdfFrameRef}
@@ -3544,8 +3981,19 @@ function Map({
             style={{ aspectRatio: `${geoPdfPaperAspect ?? 210 / 297}` }}
           />
           <div className={classes.geoPdfConfirmBar}>
+            <Checkbox
+              card
+              label={
+                <>
+                  Keep 1:
+                  <span ref={geoPdfScaleTextRef} />
+                </>
+              }
+              checked={geoPdfKeptScale !== null}
+              onChange={setGeoPdfKeepScale}
+            />
             <Button variant="filled" onClick={handleConfirmGeoPdfExtent}>
-              Confirm extent
+              Confirm area
             </Button>
             <Button onClick={onGeoPdfExtentCancelled}>Cancel</Button>
           </div>

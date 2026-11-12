@@ -1,0 +1,33 @@
+diff --git a/node_modules/@react-navigation/bottom-tabs/lib/module/views/BottomTabView.js b/node_modules/@react-navigation/bottom-tabs/lib/module/views/BottomTabView.js
+index c9496b2..ae864c6 100644
+--- a/node_modules/@react-navigation/bottom-tabs/lib/module/views/BottomTabView.js
++++ b/node_modules/@react-navigation/bottom-tabs/lib/module/views/BottomTabView.js
+@@ -257,9 +257,11 @@ const TabScene = /*#__PURE__*/React.memo(function TabScene({
+   : animationEnabled && isAnimatingRoute ? STATE_TRANSITIONING_OR_BELOW_TOP // screen visible during transition
+   : STATE_INACTIVE;
+   return /*#__PURE__*/_jsx(MaybeScreen, {
+-    style: [StyleSheet.absoluteFill, {
+-      zIndex: isFocused ? 0 : -1
+-    }],
++    // LOGJAM PATCH (patches/@react-navigation+bottom-tabs+*.patch): no zIndex.
++    // Flipping it re-orders the sibling scenes, which Fabric mounts as a REMOVE
++    // and INSERT of each moved tab's native tree, the map included. An inactive
++    // scene is display:none, so it needs no layering.
++    style: StyleSheet.absoluteFill,
+     active: activityState,
+     enabled: detachInactiveScreens,
+     freezeOnBlur: freezeOnBlur,
+diff --git a/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabView.tsx b/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabView.tsx
+index 009b05c..42f904e 100644
+--- a/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabView.tsx
++++ b/node_modules/@react-navigation/bottom-tabs/src/views/BottomTabView.tsx
+@@ -382,7 +382,8 @@ const TabScene = React.memo(function TabScene({
+ 
+   return (
+     <MaybeScreen
+-      style={[StyleSheet.absoluteFill, { zIndex: isFocused ? 0 : -1 }]}
++      // LOGJAM PATCH: no zIndex, see lib/module/views/BottomTabView.js
++      style={StyleSheet.absoluteFill}
+       active={activityState}
+       enabled={detachInactiveScreens}
+       freezeOnBlur={freezeOnBlur}

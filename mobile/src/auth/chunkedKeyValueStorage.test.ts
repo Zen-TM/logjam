@@ -170,10 +170,8 @@ describe("createChunkedKeyValueStorage", () => {
   });
 
   // A torn write — process death after some chunks and before the header —
-  // used to strand JWT fragments in the Keystore that neither removeItem nor
-  // clear() could ever name again: removeKey read the (absent) header, and
-  // clear() iterated an index the key had not been added to yet. Cognito token
-  // material surviving sign-out on a shared phone is the privacy line.
+  // must not strand JWT fragments in the Keystore. Cognito token material
+  // surviving sign-out on a shared phone is the privacy line.
   it("clear() collects chunks stranded by a torn write", async () => {
     const backend = makeMemoryBackend();
     const kv = createChunkedKeyValueStorage(backend, 10);

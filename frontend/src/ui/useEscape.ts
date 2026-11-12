@@ -5,21 +5,27 @@ import { useEffect, useEffectEvent, type RefObject } from "react";
  *
  *  ONE LAYER PER PRESS: the innermost layer handles it and the press goes no
  *  further. A popover's DOM lives inside whatever opened it, so without this a
- *  colour picker's Escape bubbled on to the side sheet holding it and closed
+ *  colour picker's Escape bubbles on to the side sheet holding it and closes
  *  both, with focus left nowhere (DESIGN.md, "Escape at every layer"). */
 export function useEscape(
   ref: RefObject<HTMLElement | null> | null,
-  onEscape: () => void,
+  /** Returning `false` declines the press: nothing is prevented or stopped, so
+   *  it reaches whatever sits outside this layer. */
+  onEscape: () => void | false,
 ) {
   const handleEscape = useEffectEvent(onEscape);
   useEffect(() => {
     const element = ref?.current;
     if (!element) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      // An inner layer that handled the press (a selection that cleared, a
+      // tooltip) only prevents it; it is that layer's, and goes no further.
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An open menu inside this layer is the innermost one: it closes itself.
+      if ((event.target as Element).closest('[role="menu"]')) return;
+      if (handleEscape() === false) return;
       event.preventDefault();
       event.stopPropagation();
-      handleEscape();
     };
     element.addEventListener("keydown", onKeyDown);
     return () => element.removeEventListener("keydown", onKeyDown);

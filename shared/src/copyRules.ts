@@ -1,5 +1,5 @@
-// The copy rules of shared/DESIGN.md §12 that a machine can check, declared
-// once for both clients. `copyRules.test.ts` holds every string in
+// The copy rules of shared/DESIGN.md §12 that a machine can check (the
+// glossary and the error register among them), declared once for both clients. `copyRules.test.ts` holds every string in
 // `contracts/` and in each client's JSX to them; a hit is fixed, or listed in
 // the test's allow-list with the reason it is legitimate.
 import type * as TypeScript from "typescript";
@@ -37,6 +37,95 @@ export const COPY_RULES: readonly CopyRule[] = [
     id: "the-server",
     pattern: /\bthe server\b/i,
     say: 'Say what failed in our words ("Couldn\'t reach Logjam"), not where it ran.',
+  },
+  {
+    id: "please",
+    pattern: /\bplease\b/i,
+    say: 'Name what failed: "Couldn\'t save this place." Add "Try again." only where it can help; never "Please".',
+  },
+  {
+    id: "cannot",
+    pattern: /\bcannot\b/i,
+    say: 'Contractions: "can\'t".',
+  },
+  {
+    id: "that-didnt-work",
+    pattern: /\bthat (?:action )?didn['’]t work\b/i,
+    say: 'Name what failed: "Couldn\'t {verb} {the thing}."',
+  },
+  {
+    id: "curly-apostrophe",
+    pattern: /[’‘]|&[lr]squo;/,
+    say: "A straight apostrophe: '.",
+  },
+  { id: "waypoint", pattern: /\bwaypoints?\b/i, say: 'Say "place".' },
+  {
+    id: "custom-field",
+    pattern: /\bcustom fields?\b/i,
+    say: 'Say "attribute".',
+  },
+  {
+    id: "logbook",
+    pattern: /\blog ?books?\b/i,
+    say: 'Say "trips" or "your trips".',
+  },
+  {
+    id: "trip-log",
+    pattern: /\btrip logs?\b/i,
+    say: 'Say "trip"; the verb is "Log a trip".',
+  },
+  {
+    id: "logs-tab",
+    pattern: /\bLogs\b/,
+    say: 'The trips tab is "Trips".',
+  },
+  { id: "activity", pattern: /\bactivit(?:y|ies)\b/i, say: 'Say "trip type".' },
+  {
+    id: "lidar-topo",
+    pattern:
+      /\bLiDAR (?:topos?|overlays?)\b|(?<!\b(?:OSM|Cycle|Maps) )\btopos?\b/i,
+    say: 'A sharpen job\'s result is a "sharpened area"; "LiDAR map" where either kind is meant.',
+  },
+  {
+    // A region is where someone canyons (regions.ts), never an offline save.
+    id: "region",
+    pattern:
+      /\bmap regions?\b|\b(?:offline|saved|downloaded) regions?\b|\bregions? (?:download|saved)|\bRegion \d/i,
+    say: 'An offline save is an "offline map"; the verb is "Save an offline map". A region is where you canyon.',
+  },
+  {
+    id: "offline-map",
+    // The old spellings of one act. Not "Download the map as a PDF" or "Save
+    // map style", which are other acts.
+    pattern:
+      /\bsave (?:maps? (?:offline|for offline)|offline maps|maps)\b|\bsave map\b(?! \w)|\bdownload (?:the |a )?maps? (?:for|of) (?:this )?(?:area|trip)\b|\bdownload maps\b|\bmap downloaded\b/i,
+    say: 'One verb for it: "Save an offline map"; once saved, "Offline map saved".',
+  },
+  {
+    id: "unshare",
+    pattern: /\bunshar(?:e|es|ed|ing)\b/i,
+    say: 'The owner "Stop sharing"; a sharee "Remove from my account"; a friend "Remove friend".',
+  },
+  {
+    id: "recipients",
+    pattern: /\brecipients?\b/i,
+    say: 'Say "friends you pick" (sharePromise).',
+  },
+  {
+    id: "turn-down",
+    pattern: /\bturn(?:ed)? down\b|\blet(?:s|ting)? (?:in\b|you in(?:to)?\b)/i,
+    say: 'Answer an offer "Accept" or "Decline" (a plan invite: "Join" or "Decline").',
+  },
+  {
+    id: "export-is-a-file",
+    pattern:
+      /\bexport (?:an|this|the) area\b|\barea exports?\b|\b(?:that|this|your|the|an?) exports?\b(?! (?:of|as)\b)|\bexports (?:are|already|at a time)\b|\bsmaller exports\b/i,
+    say: '"Export" is for producing a file (Export as GPX). A map is made ("Make a map") and an area sharpened ("Sharpen an area").',
+  },
+  {
+    id: "attach-to-place",
+    pattern: /\battach(?:ed)? to (?:a|this) place\b/i,
+    say: 'Say "Link to a place" / "Unlink from this place".',
   },
 ];
 
@@ -141,13 +230,15 @@ const COPY_PROPS = new Set([
   "emptyBody",
   "body",
   "note",
+  "confirmTitle",
+  "confirmBody",
   "caption",
 ]);
 
 /**
  * The strings in a source file that a user reads: JSX text, a JSX attribute
  * named in `COPY_PROPS`, and an object property named in it. A template's
- * `${}` holes are left out. Not every user-facing string is one of these (a
+ * `${}` holes' own strings are read, their code is not. Not every user-facing string is one of these (a
  * `throw new Error("…")` reaches the user through a screen that may reword it),
  * which is why the net is words, not files: a miss is a gap in the net, never a
  * licence.
@@ -168,32 +259,88 @@ export function userFacingStrings(
     fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const found: { line: number; text: string }[] = [];
-  const stringOf = (node: TypeScript.Node): string | null => {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
-      return node.text;
-    if (ts.isTemplateExpression(node))
-      return (
-        node.head.text + node.templateSpans.map((s) => s.literal.text).join("")
-      );
-    return null;
+  // Every string literal and template part anywhere under the value: a `??`
+  // fallback, a ternary branch, a `+` and a `${}` hole's own strings are all
+  // read by the user, so none may hide from the net. A call's arguments are
+  // not: `friendShareVerb("unshare")` passes an id, and the words it returns
+  // are declared where the call's callee is.
+  const stringsOf = (node: TypeScript.Node): string[] => {
+    const parts: string[] = [];
+    const collect = (n: TypeScript.Node): void => {
+      if (ts.isCallExpression(n)) return;
+      if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
+        parts.push(n.text);
+      else if (
+        ts.isTemplateHead(n) ||
+        ts.isTemplateMiddle(n) ||
+        ts.isTemplateTail(n)
+      )
+        parts.push(n.text);
+      ts.forEachChild(n, collect);
+    };
+    collect(node);
+    return parts.filter((part) => part.trim() !== "");
   };
   const visit = (node: TypeScript.Node): void => {
-    let text: string | null = null;
-    if (ts.isJsxText(node)) text = node.text.trim();
+    let texts: string[] = [];
+    if (ts.isJsxText(node)) texts = [node.text.trim()];
     else if (
       ts.isJsxAttribute(node) &&
       node.initializer &&
       COPY_PROPS.has(node.name.getText())
     ) {
       const init = node.initializer;
-      text = stringOf(
+      texts = stringsOf(
         ts.isJsxExpression(init) && init.expression ? init.expression : init,
       );
     } else if (
       ts.isPropertyAssignment(node) &&
       COPY_PROPS.has(node.name.getText().replace(/["']/g, ""))
     )
-      text = stringOf(node.initializer);
+      texts = stringsOf(node.initializer);
+    for (const text of texts)
+      if (text)
+        found.push({
+          line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          text,
+        });
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return found;
+}
+
+/**
+ * Every string a source file spells: a literal, a template (its text pieces)
+ * and JSX text, wherever it sits. For a rule about a sentence that must be
+ * declared in one place, where the net of `userFacingStrings` (words by
+ * property name) would miss a const or a call's argument.
+ */
+export function allStrings(
+  tsModule: unknown,
+  fileName: string,
+  source: string,
+): { line: number; text: string }[] {
+  const ts = tsModule as typeof TypeScript;
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const found: { line: number; text: string }[] = [];
+  const visit = (node: TypeScript.Node): void => {
+    let text: string | null = null;
+    if (ts.isJsxText(node)) text = node.text.trim();
+    else if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node)
+    )
+      text = node.text;
+    else if (ts.isTemplateExpression(node))
+      text =
+        node.head.text + node.templateSpans.map((s) => s.literal.text).join("");
     if (text)
       found.push({
         line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,

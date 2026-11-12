@@ -20,11 +20,10 @@ TEMP_DB="logjam_snapshot_sanitize"
 
 mkdir -p "$SNAPSHOTS_DIR"
 
-# INF-011: set -e means a failure between the dump and the final `rm` below
-# (e.g. the sanitize psql block) previously left the raw, unsanitized prod
-# dump (real emails, Cognito ids) sitting unencrypted on disk indefinitely.
-# Trap covers every exit path, not just the happy one; -f makes it a no-op
-# once the happy-path rm below already removed the file.
+# Trap covers every exit path, not just the happy one: without it, a failure
+# between the dump and the final `rm` (e.g. during sanitization) would leave
+# the raw, unsanitized dump on disk. -f makes the trap a no-op once the
+# happy-path rm below removes the file.
 trap 'rm -f "$SNAPSHOTS_DIR/raw.sql"' EXIT
 
 echo "Dumping prod DB..."
@@ -35,8 +34,8 @@ createdb "$TEMP_DB" 2>/dev/null || true
 psql "$TEMP_DB" < "$SNAPSHOTS_DIR/raw.sql" > /dev/null
 
 echo "Sanitizing PII..."
-# -f, not a heredoc: a heredoc lets psql exit 0 after a statement error, which
-# is how this scrub silently failed open. The file sets ON_ERROR_STOP itself.
+# -f, not a heredoc: a heredoc lets psql exit 0 after a statement error.
+# The file sets ON_ERROR_STOP itself.
 psql "$TEMP_DB" -f "$SCRIPT_DIR/snapshot-scrub.sql"
 
 echo "Exporting sanitized snapshot..."

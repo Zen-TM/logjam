@@ -1,4 +1,4 @@
-// First-launch installer for the bundled glyph/sprite assets (stage 4a §8.3).
+// First-launch installer for the bundled glyph/sprite assets.
 //
 // assets/basemap/basemap-assets.zip (vendored by scripts/basemap/fetch-assets.sh,
 // pinned to a protomaps/basemaps-assets commit) is extracted once into
@@ -56,10 +56,10 @@ async function installBasemapAssets(): Promise<string> {
     if (!dir.exists) dir.create({ intermediates: true });
   }
   for (const p of filePaths) {
-    new File(root, p).write(entries[p]);
+    new File(root, p).writeSync(entries[p]);
   }
 
-  marker.write(BASEMAP_ASSETS_COMMIT);
+  marker.writeSync(BASEMAP_ASSETS_COMMIT);
   return root.uri;
 }
 

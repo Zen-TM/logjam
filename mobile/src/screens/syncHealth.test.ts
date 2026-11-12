@@ -186,10 +186,9 @@ describe("syncHealth", () => {
   });
 
   describe("a failure the network is not to blame for", () => {
-    // Observed on device: the server answered 200 to every request while the
-    // app failed to apply the page locally, and the hero said "Can't reach your
-    // account … It will keep retrying." Both halves were false, and the true
-    // one — that nothing new will ever arrive until this is fixed — was nowhere.
+    // When the server answers 200 to every request while applying the page
+    // locally fails, attributing the problem to the connection or promising
+    // retry is false; nothing new can arrive until this is fixed.
     it("does not blame the connection", () => {
       const health = syncHealth(
         input({ state: "error", errorKind: "applyFailed" }),
@@ -281,7 +280,8 @@ describe("syncHealth", () => {
       );
       expect(health.headline).toBe("Saved on this phone");
       expect(health.detail).toContain("nothing is uploaded or backed up");
-      expect(health.tone).toBe("ok");
+      // Mutation: tone "ok" brings back the success check on a risk.
+      expect(health.tone).toBe("info");
     });
 
     it("says the same thing offline", () => {
@@ -305,6 +305,16 @@ describe("syncHealth", () => {
       expect(health.headline).toBe("Uploading 847 changes…");
       expect(health.detail).toContain("take a while");
       expect(health.tone).toBe("pending");
+    });
+
+    // Mutation: compare `pendingCount` (things) to the threshold instead of
+    // the op count: 3 things made of 60 ops would read as ordinary.
+    it("measures the backlog in queued ops, not the things they make up", () => {
+      const health = syncHealth(
+        input({ state: "syncing", pendingCount: 3, pendingOpCount: 60 }),
+      );
+      expect(health.headline).toBe("Uploading 3 changes…");
+      expect(health.detail).toContain("take a while");
     });
 
     it("keeps the ordinary wording below the threshold", () => {
@@ -342,7 +352,12 @@ describe("syncIssuesSubtitle", () => {
 
 describe("syncIssuesTitle", () => {
   it("says changes need the user when some do", () => {
-    expect(syncIssuesTitle(1)).toBe("Some changes need you");
+    expect(syncIssuesTitle(2)).toBe("Some changes need you");
+  });
+
+  it("is singular for one change", () => {
+    // Mutation: return the plural for every count above zero.
+    expect(syncIssuesTitle(1)).toBe("A change needs you");
   });
 
   it("says the same as More's row when the list is empty", () => {

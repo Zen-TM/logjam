@@ -2,9 +2,7 @@
 //
 // The problem the whole module exists for: a copied place carries values keyed
 // by the SENDER's field definitions, which the recipient may not have. Four
-// ways of dealing with that were rejected before this one (plan §2.6) — and
-// each rejection is a rule here, so re-litigating it would show up as a failing
-// test rather than as a discussion:
+// alternatives were considered and rejected:
 //
 //   * Auto-creating the missing definitions on the recipient's type would let a
 //     per-PLACE action mutate a per-USER schema: copying one campsite would
@@ -40,10 +38,10 @@ import type { TripLogCustomFieldDef } from "./tripLogFields.js";
  * Split an incoming place's values into what the recipient can hold and what
  * has to be parked.
  *
- * Rule 3 of §2.6: an incoming key that exists on the recipient WITH THE SAME
- * TYPE is reused, and the value lands in the right field silently. Anything
- * else goes to `foreignFields`, described by the SENDER's definition so it can
- * be rendered — and adopted — without it.
+ * An incoming key that exists on the recipient WITH THE SAME TYPE is reused,
+ * and the value lands in the right field silently. Anything else goes to
+ * `foreignFields`, described by the SENDER's definition so it can be rendered
+ * — and adopted — without it.
  *
  * The type check is not fussiness. A key match alone would drop the sender's
  * `"3"` into the recipient's integer field, where every numeric filter and
@@ -108,12 +106,12 @@ export function reconcileCopiedFieldValues(args: {
 /**
  * The recipient's type for a copy, by NAME.
  *
- * Rule 1 of §2.6, and the ordering is the whole point: a sender's own type
- * called "Campsite" must land on the recipient's SYSTEM Campsite rather than
- * creating a second, user-owned one beside it. Branching on the sender's type
- * KIND instead would do exactly that, and the recipient would end up with two
- * Campsite tabs — while the zero-places self-heal never fires, because the copy
- * just put a place in the new one.
+ * The ordering is the whole point: a sender's own type called "Campsite"
+ * must land on the recipient's SYSTEM Campsite rather than creating a second,
+ * user-owned one beside it. Branching on the sender's type KIND instead would
+ * do exactly that, and the recipient would end up with two Campsite tabs —
+ * while the zero-places self-heal never fires, because the copy just put a
+ * place in the new one.
  *
  * Returns null when nothing matches, which the caller reads as "create a user
  * type named after the sender's". Case-insensitive, because "campsite" and

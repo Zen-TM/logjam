@@ -6,12 +6,16 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRIENDS } from "@logjam/shared";
+import { FRIENDS, LEADERBOARD_SETTING } from "@logjam/shared";
 
-import { sendFriendRequest } from "../../../placeUtils";
-import { AddFriendDialog, InviteLink } from "./FriendsPanel";
+import {
+  declineFriendRequest,
+  getLeaderboard,
+  sendFriendRequest,
+} from "../../../placeUtils";
+import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
@@ -21,13 +25,31 @@ vi.mock("../../../placeUtils", async (importOriginal) => ({
     total: 1,
   })),
   sendFriendRequest: vi.fn(),
+  declineFriendRequest: vi.fn(async () => {}),
+  getLeaderboard: vi.fn(async () => ({
+    joined: true,
+    season: "2026–27",
+    entries: [
+      { userId: "a", username: "alice", canyonCount: 4, rank: 2, isSelf: true },
+      { userId: "b", username: "bob", canyonCount: 6, rank: 1, isSelf: false },
+    ],
+    notJoined: [],
+    podium: null,
+  })),
   createFriendInvite: vi.fn(async () => ({
     token: "A".repeat(43),
     expiresAt: "2026-10-19T00:00:00.000Z",
   })),
 }));
 
-// jsdom has no modal dialogs.
+// jsdom has no modal dialogs, ResizeObserver or scrollIntoView. Assigned, not
+// stubbed: `unstubAllGlobals` runs after every test.
+Element.prototype.scrollIntoView = () => {};
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 HTMLDialogElement.prototype.showModal = function () {
   this.setAttribute("open", "");
 };
@@ -76,7 +98,7 @@ describe("the invite link in the Add dialog", () => {
     );
 
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
+      expect(toast.done).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
     );
     expect(screen.queryByText(/A{43}/)).toBeNull();
   });
@@ -111,7 +133,7 @@ describe("sending a request from the Add dialog", () => {
 
     expect(await screen.findByText(FRIENDS.copy.pillFriend)).toBeTruthy();
     expect(screen.queryByText(FRIENDS.copy.pillRequested)).toBeNull();
-    expect(toast.success).toHaveBeenCalledWith("carol is now a friend.");
+    expect(toast.done).toHaveBeenCalledWith("carol is now a friend.");
     // Their request's prompt has gone from the inbox.
     expect(onFriended).toHaveBeenCalled();
   });
@@ -121,6 +143,123 @@ describe("sending a request from the Add dialog", () => {
 
     expect(await screen.findByText(FRIENDS.copy.pillRequested)).toBeTruthy();
     expect(onFriended).not.toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.done).not.toHaveBeenCalled();
+  });
+});
+
+// Off, the feature is invisible: nothing on Friends mentions it, and it asks
+// the server nothing. Mutation: draw the button whatever the switch says.
+describe("the leaderboard button on Friends", () => {
+  function show(leaderboardOptIn: boolean, friends: object[] = []) {
+    render(
+      <FriendsPanel
+        leaderboardOptIn={leaderboardOptIn}
+        friends={friends as never}
+        friendRequests={[]}
+        onRefetchFriends={() => {}}
+        onRefetchShared={() => {}}
+        onRefetchNotifications={() => {}}
+      />,
+    );
+  }
+
+  it("is absent for someone who has not joined", () => {
+    show(false);
+    expect(screen.queryByRole("button", { name: /Leaderboard/ })).toBeNull();
+    expect(getLeaderboard).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the line, or draw it for someone on the board.
+  it("is offered in a line to someone with friends who has not joined", async () => {
+    show(false, [{ friendshipId: "f1", userId: "b", username: "bob" }]);
+    expect(screen.getByText(LEADERBOARD_SETTING.offer)).toBeTruthy();
+  });
+
+  it("offers no line to someone on the board", async () => {
+    show(true, [{ friendshipId: "f1", userId: "b", username: "bob" }]);
+    await screen.findByRole("button", { name: /Leaderboard/ });
+    expect(screen.queryByText(LEADERBOARD_SETTING.offer)).toBeNull();
+  });
+
+  // Mutation: trust the cached preference over the server's `false`.
+  it("goes when the server says the user left on another device", async () => {
+    vi.mocked(getLeaderboard).mockResolvedValueOnce({ joined: false });
+    show(true);
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Leaderboard/ })).toBeNull(),
+    );
+  });
+
+  // Mutation: drop the rank from the button's name, and the badge says it to
+  // no one using a screen reader.
+  it("wears a joined user's rank and opens the board in place", async () => {
+    show(true);
+    const button = await screen.findByRole("button", {
+      name: "Leaderboard, you're #2 of 2",
+    });
+    expect(button.textContent).toBe("#2");
+
+    fireEvent.click(button);
+    expect(
+      await screen.findByRole("heading", { name: "Leaderboard" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/^#2 of 2 · /)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: FRIENDS.title })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to friends" }));
+    expect(screen.getByRole("heading", { name: FRIENDS.title })).toBeTruthy();
+  });
+});
+
+// Mutation that turns this red: show `searchHint` while the field is empty (it
+// says "Keep typing" to someone who has not typed).
+describe("the Add dialog's search hint", () => {
+  it("waits for a keystroke", () => {
+    render(
+      <AddFriendDialog
+        open
+        friends={[]}
+        onClose={() => {}}
+        onSent={() => {}}
+        onFriended={() => {}}
+      />,
+    );
+    expect(screen.queryByText(FRIENDS.copy.searchHint)).toBeNull();
+    fireEvent.change(screen.getByLabelText(FRIENDS.copy.searchField), {
+      target: { value: "ca" },
+    });
+    expect(screen.getByText(FRIENDS.copy.searchHint)).toBeTruthy();
+  });
+});
+
+// ADR 0016: every decline confirms, the friend request's included. Mutation:
+// run the decline straight from the button, as before.
+describe("declining a friend request on Friends", () => {
+  it("asks first, and declines only on confirm", async () => {
+    render(
+      <FriendsPanel
+        leaderboardOptIn={false}
+        friends={[]}
+        friendRequests={
+          [
+            { id: "q1", requester: { id: "c", username: "carol" } },
+          ] as unknown as React.ComponentProps<
+            typeof FriendsPanel
+          >["friendRequests"]
+        }
+        onRefetchFriends={() => {}}
+        onRefetchShared={() => {}}
+        onRefetchNotifications={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    expect(declineFriendRequest).not.toHaveBeenCalled();
+    expect(await screen.findByText("Decline carol's request?")).toBeTruthy();
+    // The dialog's confirm is the second Decline on the page.
+    fireEvent.click(screen.getAllByRole("button", { name: "Decline" })[1]);
+    await waitFor(() =>
+      expect(declineFriendRequest).toHaveBeenCalledWith("q1"),
+    );
   });
 });

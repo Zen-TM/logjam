@@ -72,15 +72,16 @@ export async function resolvePlaceTypeId(
  *
  * The flag is why this is a union rather than a join: scoping "all" as join
  * rows for the types that exist today would silently fail to apply to a type
- * created tomorrow, which is the parallel-list drift the root CLAUDE.md rule
+ * created tomorrow, which is the parallel-list drift the root AGENTS.md rule
  * targets. A newly created type inherits every `All` definition for free,
  * because there is nothing to add it to.
  *
  * System definitions (ownerId null) are visible to everyone, so they are
- * included alongside the user's own.
+ * included alongside the user's own. A null `userId` (a plan's place, which
+ * belongs to no one) gets the system definitions alone.
  */
 export async function defsForPlaceType(
-  userId: string,
+  userId: string | null,
   placeTypeId: string,
   entity: CustomFieldEntity = "place",
 ): Promise<TripLogCustomFieldDef[]> {
@@ -100,13 +101,86 @@ export async function defsForPlaceType(
     select: { key: true, label: true, type: true, min: true, max: true },
     orderBy: [{ position: "asc" }, { key: "asc" }],
   });
-  return rows.map((row) => ({
+  return rows.map(toDef);
+}
+
+function toDef(row: {
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+}): TripLogCustomFieldDef {
+  return {
     key: row.key,
     label: row.label,
     type: row.type as TripLogCustomFieldDef["type"],
     ...(row.min !== null ? { min: row.min } : {}),
     ...(row.max !== null ? { max: row.max } : {}),
-  }));
+  };
+}
+
+/**
+ * `defsForPlaceType` for several foreign types in two queries, for the sync
+ * delta: the same rows and order, per type, as one call each with that type's
+ * owner (guarded by placeTypeDefs.test.ts). System types (ownerId null) are omitted: the recipient holds them.
+ */
+export async function defsForForeignPlaceTypes(
+  typeIds: string[],
+): Promise<Map<string, TripLogCustomFieldDef[]>> {
+  const out = new Map<string, TripLogCustomFieldDef[]>();
+  if (typeIds.length === 0) return out;
+  const types = await prisma.placeType.findMany({
+    where: { id: { in: typeIds }, ownerId: { not: null } },
+    select: { id: true, ownerId: true },
+  });
+  if (types.length === 0) return out;
+  const rows = await prisma.customFieldDef.findMany({
+    where: {
+      entity: "place",
+      OR: [
+        { ownerId: null },
+        { ownerId: { in: types.map((t) => t.ownerId!) } },
+      ],
+      AND: [
+        {
+          OR: [
+            { appliesToAllTypes: true },
+            {
+              placeTypes: {
+                some: { placeTypeId: { in: types.map((t) => t.id) } },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    select: {
+      key: true,
+      label: true,
+      type: true,
+      min: true,
+      max: true,
+      ownerId: true,
+      appliesToAllTypes: true,
+      placeTypes: { select: { placeTypeId: true } },
+    },
+    orderBy: [{ position: "asc" }, { key: "asc" }],
+  });
+  for (const t of types) {
+    out.set(
+      t.id,
+      rows
+        .filter(
+          (r) =>
+            (r.ownerId === null || r.ownerId === t.ownerId) &&
+            (r.appliesToAllTypes ||
+              r.placeTypes.some((j) => j.placeTypeId === t.id)),
+        )
+        .map(toDef),
+    );
+  }
+  return out;
 }
 
 // ── lifecycle ───────────────────────────────────────────────────────────────
@@ -313,7 +387,8 @@ export type DeletePlaceTypeResult =
  *
  * BLOCKED while any place still uses it — the caller offers a reassign rather
  * than this cascading places away. A type is a category, and deleting a
- * category must never delete what is in it.
+ * category must never delete what is in it. Guard:
+ * api/src/__tests__/placeTypes.test.ts.
  *
  * An empty type takes with it the definitions scoped ONLY to it: a def left
  * behind would apply to nothing, be invisible in every form, and still occupy
@@ -322,8 +397,8 @@ export type DeletePlaceTypeResult =
  * types as well, and `appliesToAllTypes` ones, lose only the scoping row.
  *
  * Done SERVER-SIDE, in one transaction, for the reason the sync protocol
- * comment already gives for customFieldDef deletes: a phone can only reach the
- * rows in its own mirror, so anything stripped client-side resurfaces.
+ * comment already gives for customFieldDef deletes: Logjam GPS can only reach
+ * the rows in its own mirror, so anything stripped client-side resurfaces.
  */
 export async function deletePlaceType(
   userId: string,

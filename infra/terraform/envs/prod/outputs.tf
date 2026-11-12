@@ -26,7 +26,7 @@ output "ecs_subnets" {
 }
 
 output "ecs_security_groups" {
-  description = "Value for ECS_SECURITY_GROUPS — the dedicated Fargate worker SG (CP-003; was the VPC default SG)."
+  description = "Value for ECS_SECURITY_GROUPS — the dedicated Fargate worker SG."
   value       = aws_security_group.worker.id
 }
 

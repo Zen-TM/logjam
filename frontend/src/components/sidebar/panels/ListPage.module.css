@@ -40,6 +40,12 @@
   gap: 12px;
 }
 
+/* A field's label, like TextField's, for a control the kit has no field for. */
+.fieldLabel {
+  composes: detail from "../../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
 /* The curated icons, as a grid of equal cells — the same shape as the phone's,
    which is what makes "pick one of these" read at a glance. */
 .iconGrid {

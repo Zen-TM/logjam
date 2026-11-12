@@ -71,4 +71,16 @@ describe("webTokensCss", () => {
     const coarse = css.slice(css.indexOf("@media (pointer: coarse)"));
     expect(blockOf(coarse, ":root").get("--control-lg")).toBe("48px");
   });
+
+  // Mutation: drop the `FONT.gps` spread in `webTokensCss` and the coarse
+  // lines go red.
+  it("gives a coarse pointer Logjam GPS's type scale and a mouse the web one", () => {
+    const coarse = css.slice(css.indexOf("@media (pointer: coarse)"));
+    const coarseRoot = blockOf(coarse, ":root");
+    expect(coarseRoot.get("--font-base")).toBe("1rem");
+    expect(coarseRoot.get("--font-xl")).toBe("1.5rem");
+    const root = blockOf(css, ":root");
+    expect(root.get("--font-base")).toBe("0.875rem");
+    expect(root.get("--font-xl")).toBe("1.375rem");
+  });
 });

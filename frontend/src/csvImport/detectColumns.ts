@@ -10,15 +10,16 @@ export type ColumnRole =
   | "appendNotes"
   | "discard";
 
-const NAME_ALIASES = new Set([
+export const NAME_ALIASES = new Set([
   "name",
   "place",
   "place name",
   "location",
   "place",
   "site",
+  "canyon",
 ]);
-const DATE_ALIASES = new Set([
+export const DATE_ALIASES = new Set([
   "date",
   "trip date",
   "trip date",
@@ -36,11 +37,12 @@ const NOTES_ALIASES = new Set([
   "details",
   "remarks",
 ]);
+const PARTY_ALIASES = new Set(["party", "partners", "companions", "who"]);
 const TYPE_ALIASES = new Set(["type", "activity", "trip type"]);
 
 function normalize(s: string): string {
   // Split camelCase / letter-digit runs before lowercasing so camelCase headers
-  // and custom-field labels collapse to the same spaced tokens (IMPORT-4).
+  // and custom-field labels collapse to the same spaced tokens.
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
@@ -61,6 +63,8 @@ export function detectColumns(
       result[header] = "date";
     } else if (NOTES_ALIASES.has(n)) {
       result[header] = "notes";
+    } else if (PARTY_ALIASES.has(n)) {
+      result[header] = "appendNotes";
     } else if (TYPE_ALIASES.has(n)) {
       result[header] = "type";
     } else {

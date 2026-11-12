@@ -1,16 +1,26 @@
 import { useEffect, useState } from "react";
-import { Alert, AppState, Linking, Platform, Text } from "react-native";
+import {
+  Alert,
+  AppState,
+  Linking,
+  Platform,
+  StatusBar,
+  Text,
+} from "react-native";
 import Constants from "expo-constants";
-// SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
-// android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
-// navigation bar needs light icons too — expo-status-bar only styles the status
-// bar, which left the gesture area a black strip below the tab bar.
-import { SystemBars } from "react-native-edge-to-edge";
+import { NavigationBar } from "@zoontek/react-native-navigation-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+
+import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED } from "@logjam/shared";
 
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { storeListingUrl } from "./src/version";
+import {
+  assertCanSignOutEverywhere,
+  signOutEverywhereAtProvider,
+} from "./src/auth/oidcSession";
+import { runSignOut } from "./src/auth/signOutSequence";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
 import { requestSync } from "./src/sync/syncEngine";
 import { isReachableNow } from "./src/map/connectivity";
@@ -22,17 +32,16 @@ import {
 } from "./src/offline/signOutConfirm";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
-import { AuthFlow } from "./src/screens/AuthFlow";
 import { LandingScreen } from "./src/screens/LandingScreen";
 import { CrashReportConsent } from "./src/screens/CrashReportConsent";
-import { AppShell } from "./src/AppShell";
+import { AppShell, dropPendingNotificationTap } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { Button, LoadingState } from "./src/ui";
 import { makeStyles, muted, spacing, useThemeMode } from "./src/theme";
 
-// The blocked build's only way out (MAPP-001). The rule itself — Android only,
+// The blocked build's only way out. The rule itself — Android only,
 // from app.json's package id, https so it resolves without the Play app — is
 // `storeListingUrl` in ./src/version, pure and tested, because mobile/ has no
 // React Native test environment and a rule inside a component is a rule nothing
@@ -73,11 +82,12 @@ function askSignOut(confirm: SignOutConfirm): Promise<SignOutChoice> {
  * True when the user has settled it: nothing to lose, or they chose Sign out.
  * "Sync first" runs a sync and asks again with the counts as they now are.
  */
-async function confirmSignOut(): Promise<boolean> {
+async function confirmSignOut(everywhere: boolean): Promise<boolean> {
   for (;;) {
     const confirm = signOutConfirm(
       await countSignOutLosses(),
       await isReachableNow(),
+      everywhere,
     );
     if (!confirm) return true;
     const choice = await askSignOut(confirm);
@@ -89,10 +99,27 @@ async function confirmSignOut(): Promise<boolean> {
   }
 }
 
+// React Native's edge-to-edge (edgeToEdgeEnabled, which the prebuild template sets)
+// draws the app behind BOTH system bars, so each needs light icons on a dark
+// theme: StatusBar only styles the top one, which left the gesture area a
+// black strip below the tab bar.
+function SystemBars({
+  barStyle,
+}: {
+  barStyle: "light-content" | "dark-content";
+}) {
+  return (
+    <>
+      <StatusBar barStyle={barStyle} />
+      <NavigationBar barStyle={barStyle} />
+    </>
+  );
+}
+
 export default function App() {
   const styles = useStyles();
-  // Light icons on a dark page, dark icons on a light one.
-  const systemBarStyle = useThemeMode() === "dark" ? "light" : "dark";
+  const systemBarStyle =
+    useThemeMode() === "dark" ? "light-content" : "dark-content";
 
   const minVersionGate = useMinVersionGate();
   const auth = useAuth();
@@ -106,7 +133,7 @@ export default function App() {
     void excludeLocalDataFromBackup().catch(console.error);
   }, []);
 
-  // MAPP-002: the hard block is for a build that is too old AND on a
+  // The hard block is for a build that is too old AND on a
   // connection where the update is free and to hand. Everything else shows the
   // same screen with a way past it and keeps working — a dead app in a place
   // holds the user's offline maps and their in-progress track hostage to a Play
@@ -144,7 +171,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
-          <SystemBars style={systemBarStyle} />
+          <SystemBars barStyle={systemBarStyle} />
           <Text style={styles.blockingTitle}>Update required</Text>
           {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
               "connect to Wi-Fi to install it", because the update is perfectly
@@ -176,8 +203,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SystemBars style={systemBarStyle} />
-      {/* App lock (Stage 4): active once offline map data exists on-device. */}
+      <SystemBars barStyle={systemBarStyle} />
+      {/* App lock: active once offline map data exists on-device. */}
       <AppLockGate>
         {auth.state === "loading" ? (
           <LoadingState />
@@ -189,40 +216,52 @@ export default function App() {
             <CrashReportConsent />
             <AppShell
               accountState={auth.accountState}
+              newAccount={auth.newAccount}
+              onNewAccountDone={auth.finishNewAccount}
               onLinkAccount={auth.linkAccount}
-              onSignOut={async (options) => {
+              onSignOut={(options) =>
                 // Sign-out wipes this phone's data, and what the account does
                 // not have goes with it: ask once, saying what goes and what
                 // stays (offline/wipedStores.ts declares what that can be).
-                if (!options?.accountDeleted && !(await confirmSignOut())) {
-                  return;
-                }
-                // Unregister the push token BEFORE tokens are cleared (the DELETE
-                // needs an authenticated request); best-effort inside.
-                await unregisterPushNotifications();
-                const wiped = await wipeAllLocalData();
-                if (wiped.failed.length > 0) {
-                  // The privacy line held only partly. Say so — the next person to
-                  // use this phone would otherwise inherit the remains silently.
-                  Alert.alert(
-                    "Some data couldn't be removed",
-                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
-                  );
-                }
-                await auth.signOut();
-              }}
+                runSignOut({
+                  everywhere: options?.everywhere === true,
+                  accountDeleted: options?.accountDeleted === true,
+                  assertCanSignOutEverywhere,
+                  confirm: () => confirmSignOut(options?.everywhere === true),
+                  signOutEverywhereAtProvider,
+                  // A phone that can't reach the provider can't end the other
+                  // sessions, and must stay signed in with its data.
+                  reportEverywhereFailed: (err) => {
+                    console.error(err);
+                    Alert.alert(
+                      ACCOUNT.copy.signOutEverywhere,
+                      SIGN_OUT_EVERYWHERE_FAILED,
+                    );
+                  },
+                  // Unregister the push token BEFORE tokens are cleared (the
+                  // DELETE needs an authenticated request); best-effort inside.
+                  unregisterPush: unregisterPushNotifications,
+                  dropNotificationTap: dropPendingNotificationTap,
+                  wipe: wipeAllLocalData,
+                  // The privacy line held only partly. Say so — the next person
+                  // to use this phone would otherwise inherit the remains
+                  // silently.
+                  reportWipeIncomplete: (failed) =>
+                    Alert.alert(
+                      "Some data couldn't be removed",
+                      `This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
+                    ),
+                  finish: () => auth.signOut(),
+                })
+              }
             />
           </>
-        ) : auth.state === "chooser" || auth.state === "signIn" ? (
-          // One screen for both: the landing screen IS the sign-in screen, and
-          // the only thing the two states change is whether "continue without an
-          // account" is on offer.
+        ) : (
+          // One screen for chooser and signIn: the landing screen IS the
+          // sign-in screen, and the only thing the two states change is whether
+          // "continue without an account" is on offer.
           <SafeAreaView style={styles.authSafeArea}>
             <LandingScreen auth={auth} />
-          </SafeAreaView>
-        ) : (
-          <SafeAreaView style={styles.authSafeArea}>
-            <AuthFlow auth={auth} />
           </SafeAreaView>
         )}
       </AppLockGate>

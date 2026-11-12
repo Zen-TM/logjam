@@ -5,7 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 
 // All helpers accept an optional Prisma client so callers inside an
 // interactive `prisma.$transaction(async (tx) => …)` can pass `tx` and make
-// the quota mutation atomic with the row write it accounts for (Design Q).
+// the quota mutation atomic with the row write it accounts for.
 // The default keeps standalone call sites unchanged.
 export type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -27,23 +27,28 @@ export async function getStorageUsage(userId: string, db: DbClient = prisma) {
  * check covers a declared upcoming upload (`used + pendingBytes > quota`);
  * without it the legacy "already at/over quota" semantics apply. The
  * authoritative charge still happens at confirm against the real S3 size.
+ * `freedBytes` is credited first: a write that deletes a file as it lands.
  */
 export async function assertHasStorageQuota(
   userId: string,
   pendingBytes = 0n,
   db: DbClient = prisma,
+  /** Bytes the same write frees first (a file it replaces). */
+  freedBytes = 0n,
 ) {
-  const { used, quota } = await getStorageUsage(userId, db);
-  if (used >= quota || used + pendingBytes > quota) {
-    throw new AppError(
-      507,
-      say`Your storage is full. Delete something to make room.`,
-      {
-        used: used.toString(),
-        quota: quota.toString(),
-      },
-    );
-  }
+  const { used: charged, quota } = await getStorageUsage(userId, db);
+  const used = charged - freedBytes;
+  if (used >= quota || used + pendingBytes > quota)
+    throw storageFull(charged, quota);
+}
+
+/** The 507 a write past the storage quota answers with. */
+export function storageFull(used: bigint, quota: bigint): AppError {
+  return new AppError(
+    507,
+    say`Your storage is full. Delete something to make room.`,
+    { used: used.toString(), quota: quota.toString() },
+  );
 }
 
 export async function decrementStorageUsed(
@@ -70,4 +75,20 @@ export async function incrementStorageUsed(
     SET storage_used_bytes = storage_used_bytes + ${bytes}
     WHERE id = ${userId}
   `;
+}
+
+/**
+ * Apply several users' storage changes (bytes, plus or minus) in user id
+ * order, so two transactions changing the same users' storage lock their
+ * rows in the same order and can't deadlock.
+ * Guard: storageQuota.unit.test.ts ("in user id order").
+ */
+export async function applyStorageChanges(
+  changes: Map<string, bigint>,
+  db: DbClient = prisma,
+): Promise<void> {
+  const ordered = [...changes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [userId, bytes] of ordered)
+    if (bytes < 0n) await decrementStorageUsed(userId, -bytes, db);
+    else await incrementStorageUsed(userId, bytes, db);
 }

@@ -55,7 +55,8 @@ created after `insertGeoPdfImport`, so a kill mid-copy leaves a row with no file
 (which the resume path reports and the user can discard) rather than a full-size
 orphan PDF nothing sweeps.
 
-Every entry point (picker, account GeoPDF, share sheet, Wi-Fi auto-download)
+Every entry point (picker, share sheet) (updated 2026-10-29: the account
+GeoPDF and the Wi-Fi auto-download are gone, [0043](0043-geopdfs-render-in-the-browser.md))
 goes through `runGeoPdfImport` in `src/geopdf/importRunner.ts`, which is also the
 "one import at a time" guard — two at once would fight over the single native
 executor and, for the same file, over the same directory. See DESIGN.md §6 for

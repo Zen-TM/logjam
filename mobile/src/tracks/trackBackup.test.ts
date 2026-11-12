@@ -237,9 +237,9 @@ describe("a failure leaves the recording alone", () => {
   });
 });
 
-// The hole this closes: the finish-time backup can fail, and its alert offers
-// "Try again". A user who taps "Not now" used to be the end of it — that
-// recording was never backed up and nothing mentioned it again.
+// The finish-time backup can fail, and its alert offers "Try again". If a
+// user taps "Not now", the sweep ensures that recording is still backed up
+// on the next sync cycle.
 describe("the backup sweep", () => {
   it("registers every finished recording that has no account copy", async () => {
     listTracksNeedingBackup.mockResolvedValue([

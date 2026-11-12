@@ -1,14 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { FRIENDS, INBOX, PLACES_LIST, TRIPS_LIST } from "@logjam/shared";
+import {
+  FRIENDS,
+  INBOX,
+  PLACES_LIST,
+  TRIPS_LIST,
+  TRIP_PLANS_LIST,
+} from "@logjam/shared";
 import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
   NAV_ITEMS_FOR_TEST,
   type NavItem,
   type NavItemId,
 } from "./navItems";
+import { PANEL_TITLES, type PanelId } from "./panels";
 
 const { ALL_ITEMS, PAGE_ITEMS, PERSONAL_ITEMS } = NAV_ITEMS_FOR_TEST;
 
@@ -21,11 +27,11 @@ describe("partitionNavItems", () => {
       "places",
       "logs",
       "ways",
-      "maps",
+      "plans",
       "friends",
       "inbox",
-      "account",
       "settings",
+      "account",
     ]);
     expect(moreItems).toEqual([]);
   });
@@ -38,15 +44,16 @@ describe("partitionNavItems", () => {
     expect(railItems[spacerAfterIndex! + 1].id).toBe(PERSONAL_ITEMS[0].id);
   });
 
-  it("gives narrow web Logjam GPS's tabs: Places, Logs, Ways between Map and More", () => {
+  // Mutation: put a Map entry back in `NAV`'s tabs, or drop Plans from them.
+  it("gives narrow web Places, Trips, Ways and Plans before More, and no Map", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(true);
-    expect(ids(railItems)).toEqual(["places", "logs", "ways"]);
+    expect(ids(railItems)).toEqual(["places", "logs", "ways", "plans"]);
     expect(spacerAfterIndex).toBeNull();
   });
 
   it("fits five 72px tabs in a 390px viewport", () => {
     const { railItems } = partitionNavItems(true);
-    expect((railItems.length + 2) * 72).toBeLessThanOrEqual(390); // + Map and More
+    expect((railItems.length + 1) * 72).toBeLessThanOrEqual(390); // + More
   });
 
   it("partitions narrow items exhaustively and without overlap", () => {
@@ -58,6 +65,27 @@ describe("partitionNavItems", () => {
 
   it("puts the badged item first in More", () => {
     expect(partitionNavItems(true).moreItems[0].id).toBe("inbox");
+  });
+});
+
+// `NavItemId` is a hand-kept `Exclude` of `PanelId`. Mutation: add a panel to
+// `PanelId` and `PANEL_TITLES` without giving it a rail entry, a More entry, or
+// a place in `NavItemId`'s exclusion list.
+describe("every panel is either a nav item or programmatic", () => {
+  const PROGRAMMATIC: PanelId[] = [
+    "place-detail",
+    "trip-detail",
+    "way-detail",
+    "plan-detail",
+    "way-draw",
+    "measure",
+  ];
+
+  it("accounts for exactly the panels PanelId declares", () => {
+    const navIds: PanelId[] = ids(ALL_ITEMS);
+    expect([...navIds, ...PROGRAMMATIC].sort()).toEqual(
+      (Object.keys(PANEL_TITLES) as PanelId[]).sort(),
+    );
   });
 });
 
@@ -100,13 +128,6 @@ describe("isPanelInMore", () => {
   });
 });
 
-describe("labelWithBadge", () => {
-  it("names the count so the visual badge can be hidden from assistive tech", () => {
-    expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
-    expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
-  });
-});
-
 // Logjam Web's panel title is the panel's name, never a count its chips already
 // show. Red when a contract's `title` drifts from the rail's word for it (or a
 // panel goes back to `placesHeroTitle(n)`).
@@ -116,6 +137,7 @@ describe("a panel's title is the nav rail's word", () => {
     ["logs", TRIPS_LIST.title],
     ["friends", FRIENDS.title],
     ["inbox", INBOX.title],
+    ["plans", TRIP_PLANS_LIST.title],
   ] as const)("%s", (id, title) => {
     expect(ALL_ITEMS.find((item) => item.id === id)?.label).toBe(title);
   });

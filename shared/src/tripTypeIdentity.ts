@@ -24,7 +24,7 @@ import { ASSET_HUES, TRIP_TYPE_OPEN_HUES } from "./designTokens.js";
  */
 
 /** Every glyph a trip type can wear. Guarded on the web by
- *  `frontend/src/tripTypeIcons.test.ts`; Feather's type checks the phone. */
+ *  `frontend/src/ui/icons.test.ts`; Feather's type checks the phone. */
 export const TRIP_TYPE_ICON_KEYS = [
   "droplet",
   "sun",
@@ -49,7 +49,6 @@ const SEEDED: Record<string, TripTypeIdentity> = {
 
 const OPEN_HUES = Object.values(TRIP_TYPE_OPEN_HUES);
 
-/** A trip with no type at all. */
 const UNTYPED: TripTypeIdentity = { icon: "bookmark", hue: "untyped" };
 
 function hashLabel(label: string): number {
@@ -85,7 +84,7 @@ export function primaryTripType(types: string[]): string | null {
  * Display casing for a trip type. Stored values are the user's own text (and
  * the canonical `canyoning` is lowercase by convention), so capitalisation is
  * presentation only — never write this back, or a case-variant duplicate is
- * exactly what the API rejects.
+ * exactly what the API rejects (test: api/src/__tests__/tripLogsGlobal.test.ts).
  */
 export function tripTypeLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);

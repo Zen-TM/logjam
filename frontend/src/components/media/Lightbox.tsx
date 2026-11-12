@@ -16,7 +16,7 @@ export default function Lightbox({
   const containerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerBeforeRef = useRef<HTMLElement | null>(null);
-  // Failed to load (e.g. a 404'd S3 object) — MOBILE-5. Without this the
+  // Failed to load (e.g. a 404'd S3 object). Without this the
   // browser's broken-image glyph sits alone on the black backdrop.
   const [failed, setFailed] = useState(false);
 
@@ -94,7 +94,7 @@ export default function Lightbox({
         {failed ? (
           <div className={classes.lightboxFallback}>
             <Icon idea="missingMedia" size={32} />
-            <span>Couldn&rsquo;t load {item.filename}.</span>
+            <span>Couldn't load {item.filename}.</span>
           </div>
         ) : mediaCategory(item.mediaType) === "video" ? (
           <video

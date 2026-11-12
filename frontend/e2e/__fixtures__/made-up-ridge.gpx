@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="made up">
+  <trk>
+    <name>Made-up ridge</name>
+    <trkseg>
+      <trkpt lat="-33.6000" lon="150.3000"/>
+      <trkpt lat="-33.6050" lon="150.3040"/>
+      <trkpt lat="-33.6100" lon="150.3100"/>
+    </trkseg>
+  </trk>
+</gpx>

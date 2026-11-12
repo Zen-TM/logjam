@@ -6,9 +6,9 @@ import {
   hasSpaceFor,
 } from "./freeSpace";
 
-// Four writers had no space check at all — the vector clip (up to 80 MB), the
-// overlay bundle, the GeoPDF pyramid and both unattended auto-downloaders — so
-// a full phone failed mid-write and reported "That didn't finish. Try again."
+// Space checks protect writers — the vector clip (up to 80 MB), the
+// overlay bundle, the GeoPDF pyramid and unattended auto-downloaders — from
+// failing mid-write when the phone is full.
 
 const getFreeDiskStorageAsync = vi.fn();
 vi.mock("expo-file-system/legacy", () => ({

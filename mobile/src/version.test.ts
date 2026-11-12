@@ -38,7 +38,7 @@ describe("isVersionBelowMinimum", () => {
 
 describe("upgradeEnforcement", () => {
   it.each([
-    // belowMinimum, metered, outcome — every cell of the MAPP-002 table.
+    // belowMinimum, metered, outcome — every cell of the upgrade enforcement matrix.
     [false, false, "none"],
     [false, true, "none"],
     [false, null, "none"],
@@ -65,7 +65,7 @@ describe("storeListingUrl", () => {
   });
 
   it.each([
-    // The one that matters (MAPP-001): iOS HAS a bundleIdentifier and no
+    // The one that matters: iOS HAS a bundleIdentifier and no
     // listing, so a package id present there must still yield no link — the
     // block screen's text is all it gets until there is a listing.
     ["ios", "com.logjamnsw.mobile"],

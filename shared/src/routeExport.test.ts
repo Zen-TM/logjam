@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { routeToGpx, routeToKml, exportFilename } from "./routeExport.js";
+import {
+  routeToGpx,
+  routeToKml,
+  exportFilename,
+  trackDisplayName,
+} from "./routeExport.js";
 import { parseVectorImport } from "./vectorImport.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -16,8 +21,8 @@ describe("routeToGpx", () => {
     const gpx = routeToGpx("Approach", LINE);
     expect(gpx).toContain("<rte>");
     expect(gpx).not.toContain("<trk>");
-    // The old export stamped every point 1970-01-01, which reads as a real
-    // recording in every other GPX tool.
+    // Points have no timestamps: dummy timestamps would read as a real
+    // recording in other GPX tools.
     expect(gpx).not.toContain("<time>");
   });
 
@@ -67,5 +72,20 @@ describe("exportFilename", () => {
 
   it("keeps ordinary names intact", () => {
     expect(exportFilename("Claustral exit", "gpx")).toBe("Claustral exit.gpx");
+  });
+});
+
+describe("trackDisplayName", () => {
+  // Mutation: return `filename` unchanged and Logjam Web's list reads
+  // "Track 3 Nov 2026.gpx" again.
+  it("drops the file extension a list row has no use for", () => {
+    expect(trackDisplayName("Track 3 Nov 2026.gpx")).toBe("Track 3 Nov 2026");
+    expect(trackDisplayName("Descent.KML")).toBe("Descent");
+    expect(trackDisplayName("Loop.geojson")).toBe("Loop");
+  });
+
+  it("leaves a name that is not a track file alone", () => {
+    expect(trackDisplayName("photo.jpg")).toBe("photo.jpg");
+    expect(trackDisplayName(".gpx")).toBe(".gpx");
   });
 });

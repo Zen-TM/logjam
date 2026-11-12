@@ -1,4 +1,4 @@
-# Stage 1 browse flow — fake-auth local dev (EXPO_PUBLIC_AUTH_MODE=fake in
+# Browse flow — fake-auth local dev (EXPO_PUBLIC_AUTH_MODE=fake in
 # mobile/.env, local API running as seeded alice). Verifies the authed shell:
 # tabs render, place list loads from the API, detail opens, inbox + account
 # reachable. Run: maestro test e2e/browse.yaml (emulator + Metro running;
@@ -10,14 +10,14 @@ appId: com.logjamnsw.mobile
     visible: "Places"
     timeout: 30000
 # The shell lands on the Map tab; the list lives on the Places tab. (The map
-# also labels places now, so assert/tap only after switching tabs.)
+# also labels places, so assert/tap only after switching tabs.)
 - tapOn: "Places"
 # Place list loaded from the seeded API — alice owns Claustral Canyon.
 - extendedWaitUntil:
     visible: "Claustral Canyon"
     timeout: 15000
-# The type rail: one tab per place type the account actually uses, which is
-# what replaced the old Canyons/Waypoints tab split. "All" is always first.
+# The type rail: one tab per place type the account actually uses. "All" is
+# always first.
 - assertVisible: "All"
 - assertVisible: "Canyon"
 - tapOn: "Claustral Canyon"

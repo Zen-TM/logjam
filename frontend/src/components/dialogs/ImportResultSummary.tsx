@@ -2,11 +2,9 @@
 // back?"
 //
 // The tallies are a StatGrid — a label over its value is how every other
-// figure in this app is read, and the comma sentence it replaces ("3 created,
-// 26 merged, 2 skipped.") made the reader parse prose to find one number.
-// Nothing is behind a disclosure: the merge list used to sit in a closed
-// accordion, which is the shape DESIGN.md rules out twice over — the answer
-// the reader came for cannot be a click away.
+// figure in Logjam Web is read, without having to parse prose to find a
+// number. Nothing is behind a disclosure (DESIGN.md): the answer the reader
+// came for cannot be a click away.
 import { Button, SectionHeader, StatGrid, type Stat } from "../../ui";
 import classes from "./ImportResultSummary.module.css";
 
@@ -40,13 +38,16 @@ export type ImportResultSummaryProps = {
    */
   detailsLabel?: string;
 
+  /** Rows dropped before the import, one line each ("Row 4: … — skipped"). */
+  skippedRows?: string[];
+
   /** Errors that occurred during import. */
   errors?: string[];
 
   /**
    * Non-fatal per-row/per-field coercion notices (e.g. a non-numeric value that
    * was left empty). Shown, but styled as advisories rather than errors — the
-   * rows they refer to were still imported (IMPORT-5).
+   * rows they refer to were still imported.
    */
   warnings?: string[];
 
@@ -80,6 +81,7 @@ function ImportResultSummary({
   detailsLabel = "Details",
   errors,
   warnings,
+  skippedRows,
   onUndo,
   undoing,
 }: ImportResultSummaryProps): React.JSX.Element {
@@ -88,6 +90,7 @@ function ImportResultSummary({
     (section) => section.items.length > 0,
   );
   const hasErrors = errors !== undefined && errors.length > 0;
+  const hasSkipped = skippedRows !== undefined && skippedRows.length > 0;
   const hasWarnings = warnings !== undefined && warnings.length > 0;
 
   return (
@@ -96,6 +99,20 @@ function ImportResultSummary({
         <StatGrid stats={stats} />
       ) : (
         <p className={classes.nothing}>No changes made.</p>
+      )}
+
+      {hasSkipped && (
+        <section className={classes.section}>
+          <SectionHeader title="Skipped rows" count={skippedRows!.length} />
+          <ul className={`${classes.detailList} ${classes.warningList}`}>
+            {skippedRows!.map((line, i) => (
+              <li key={i} className={classes.detailItem}>
+                <span className={classes.detailBullet} />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {hasWarnings && (

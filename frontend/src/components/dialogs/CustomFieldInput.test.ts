@@ -29,7 +29,7 @@ describe("customFieldValueError", () => {
   it("returns null for non-numeric field types", () => {
     expect(customFieldValueError(stringField, "anything")).toBeNull();
   });
-  it("flags a decimal typed into an integer field (TRIP-1)", () => {
+  it("flags a decimal typed into an integer field", () => {
     expect(customFieldValueError(intField, "5.5")).toBe("Whole numbers only");
     expect(customFieldValueError(intField, "5")).toBeNull();
   });
@@ -37,7 +37,7 @@ describe("customFieldValueError", () => {
     expect(customFieldValueError(floatField, "-3.2")).toBeNull();
     expect(customFieldValueError(intField, "-3")).toBeNull();
   });
-  it("enforces declared bounds (TRIP-2)", () => {
+  it("enforces declared bounds", () => {
     expect(customFieldValueError(boundedInt, "6")).toBe(
       "Must be between 1 and 5",
     );

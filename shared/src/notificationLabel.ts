@@ -1,17 +1,33 @@
 // Pure label derivation for the notifications inbox, read by Logjam GPS and
 // Logjam Web alike so the two inboxes cannot word the same event differently.
-// Kept as data (text + optional warning subline) so it is testable and
+// Kept as data (text + optional detail subline) so it is testable and
 // reusable by push handling. A new notification type is a branch here; unknown
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
+import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatBytes } from "./format.js";
+import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
 export type NotificationLabel = {
   text: string;
-  warning?: string;
+  detail?: string;
 };
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** The longest a person's name runs in a row's sentence. A longer one is cut
+ *  with an ellipsis, so the verb after it (a row clamps its lines) still shows.
+ *  Guard: notificationLabel.test.ts ("a long username"). */
+export const NOTIFICATION_NAME_MAX = 16;
+
+function who(value: unknown, fallback: string): string {
+  const name = str(value);
+  if (!name) return fallback;
+  return name.length > NOTIFICATION_NAME_MAX
+    ? `${name.slice(0, NOTIFICATION_NAME_MAX - 1)}…`
+    : name;
 }
 
 /**
@@ -24,18 +40,81 @@ function str(value: unknown): string | null {
  * than render a raw enum name.
  */
 const SHARED_ITEM_NOUN: Record<string, string> = {
-  waypoint: "a waypoint",
+  waypoint: "a place",
   route: "a route",
-  topoJob: "a LiDAR topo",
-  geoPdfJob: "a GeoPDF",
+  topoJob: "a LiDAR map",
 };
+
+/**
+ * Every type a Notification row is stored with, one declaration. The labels
+ * below branch on them, the dev seed writes one row of each
+ * (api/src/lib/seedCoverage.unit.test.ts), and the label test checks each has a
+ * branch. `bulk_shared` is a push-only title and never a row.
+ */
+export const NOTIFICATION_TYPES = [
+  "friend_request",
+  "friend_request_accepted",
+  "place_shared",
+  "item_shared",
+  "file_sent",
+  "topo_complete",
+  "topo_failed",
+  "topo_export_complete",
+  "topo_export_skipped",
+  "egress_quota_warning",
+  "egress_quota_exceeded",
+  "announcement",
+  "plan_invited",
+  "plan_join_request",
+  "plan_join_approved",
+  "plan_member_joined",
+  "plan_access_ended",
+] as const;
+
+/**
+ * What opening a notification's row goes to, per type, one declaration. A type
+ * with no entry does not compile, so a new type cannot ship opening nothing by
+ * accident; each client's test holds its own router to this table.
+ *
+ *  - `place` / `plan`: the place or plan the payload names
+ *  - `friends`: the Friends screen
+ *  - `item`: the shared route or LiDAR map, by its `entityType`
+ *  - `topo`: the finished map (Logjam Web: Sharpened areas; Logjam GPS: Saved)
+ *  - `file`: Saved once an accepted send is kept, Logjam GPS only; Logjam Web
+ *    has no Saved
+ *  - `message`: the announcement's own dialog, not a destination
+ *  - `none`: nothing exists to look at (a failure, a quota, an export, a send
+ *    still waiting)
+ */
+export const NOTIFICATION_DESTINATIONS = {
+  friend_request: "friends",
+  friend_request_accepted: "friends",
+  place_shared: "place",
+  item_shared: "item",
+  file_sent: "file",
+  topo_complete: "topo",
+  topo_failed: "none",
+  topo_export_complete: "none",
+  topo_export_skipped: "none",
+  egress_quota_warning: "none",
+  egress_quota_exceeded: "none",
+  announcement: "message",
+  plan_invited: "plan",
+  plan_join_request: "plan",
+  plan_join_approved: "plan",
+  plan_member_joined: "plan",
+  plan_access_ended: "none",
+} as const satisfies Record<
+  (typeof NOTIFICATION_TYPES)[number],
+  "place" | "plan" | "friends" | "item" | "topo" | "file" | "message" | "none"
+>;
 
 export function notificationLabel(n: TNotification): NotificationLabel {
   const p = n.payload;
   switch (n.type) {
     case "friend_request":
       return {
-        text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request`,
+        text: `${who(p.requesterUsername, "Someone")} sent you a friend request`,
       };
     case "friend_request_accepted":
       // An invite link redeemed writes this type too, flagged, because the
@@ -43,12 +122,12 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return {
         text:
           p.viaInvite === true
-            ? `${str(p.acceptedByUsername) ?? "Someone"} used your invite link and is now a friend`
-            : `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
+            ? `${who(p.acceptedByUsername, "Someone")} used your invite link and is now a friend`
+            : `${who(p.acceptedByUsername, "Someone")} accepted your friend request`,
       };
     case "place_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.placeName) ?? "a place"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${str(p.placeName) ?? "a place"} with you`,
       };
     // A directly-shared saved item. The payload carries the entity's TYPE and
     // its id, and deliberately no name: the recipient already holds the row
@@ -59,7 +138,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // what shows which one.
     case "item_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
       };
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
@@ -67,14 +146,14 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // read time — rendered here, never logged.
     case "file_sent":
       return {
-        text: `${str(p.sentByUsername) ?? "Someone"} sent you ${str(p.filename) ?? "a file"}`,
+        text: `${who(p.sentByUsername, "Someone")} sent you ${str(p.filename) ?? "a file"}`,
         // A send that lapsed before it was saved keeps its row and loses its
         // buttons, so the row has to say why it can no longer be answered —
         // otherwise the offer just disappears and the user is left looking for
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          warning: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+          detail: `This file expired. Ask ${who(p.sentByUsername, "them")} to send it again.`,
         }),
       };
     case "topo_complete":
@@ -82,9 +161,6 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: str(p.jobName)
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
-        ...(p.osmFailed === true && {
-          warning: "Roads and labels didn't download. Try again.",
-        }),
       };
     case "topo_failed":
       return {
@@ -93,39 +169,76 @@ export function notificationLabel(n: TNotification): NotificationLabel {
           : "LiDAR map failed",
       };
     case "topo_export_complete": {
-      const format = String(p.format ?? "Topo").toUpperCase();
+      const format =
+        EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
+        (p.format ? String(p.format).toUpperCase() : null);
+      const map = format ? `${format} map` : "Map";
       if (p.status === "failed") {
         return {
-          text: `${format} export failed`,
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
+          text: `${map} failed`,
+          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
-        text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        text: `${map}${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        // Older ones carry no size.
+        ...(typeof p.resultBytes === "number" &&
+          p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),
       };
     }
+    // No longer sent (auto-export is gone); older ones stay in the inbox.
     case "topo_export_skipped":
       return {
         text: "Auto-export didn't run",
-        ...(str(p.reason) && { warning: str(p.reason)! }),
+        ...(str(p.reason) && { detail: str(p.reason)! }),
       };
-    case "geo_pdf_complete":
-      if (p.status === "failed") {
-        return {
-          text: "Couldn't create GeoPDF",
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
-        };
-      }
-      return { text: "GeoPDF ready" };
-    // Egress has no meter in the app - the allowance sits far above real use,
-    // so these two rows are its entire user-facing surface.
+    // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
+    // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
       return { text: "Approaching your monthly download limit" };
     case "egress_quota_exceeded":
       return {
         text: "Monthly download limit reached",
-        warning: "Downloads resume when the limit resets next month.",
+        detail: "Downloads resume when the limit resets next month.",
       };
+    // The maintainer's own title, resolved at read time. The push carries a
+    // fixed title instead (Guard: api/src/services/push.unit.test.ts).
+    // The subline says who it is from, which the title alone does not.
+    case "announcement": {
+      const title = str(p.title);
+      return title
+        ? { text: title, detail: ANNOUNCEMENT.from }
+        : { text: ANNOUNCEMENT.untitled };
+    }
+    // Plans. The plan's name is resolved at read time like a place's, except
+    // in plan_access_ended, which carries it: the plan is gone, or gone for
+    // this person, and they are owed which one (api/src/routes/notifications.ts).
+    case "plan_invited":
+      return {
+        text: `${who(p.invitedByUsername, "Someone")} invited you to ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_join_request":
+      return {
+        text: `${who(p.requesterUsername, "Someone")} asked to join ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_join_approved":
+      return {
+        text: `${who(p.approvedByUsername, "A leader")} accepted you into ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_member_joined":
+      return {
+        text: `${who(p.memberUsername, "Someone")} joined ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_access_ended": {
+      const plan = str(p.planName);
+      if (p.reason === "declined")
+        return {
+          text: `Your request to join ${plan ?? "a trip plan"} was declined`,
+        };
+      if (p.reason === "deleted")
+        return { text: `${plan ?? "A trip plan"} was deleted` };
+      return { text: `You're no longer in ${plan ?? "a trip plan"}` };
+    }
     default:
       return { text: "Notification" };
   }
@@ -142,13 +255,13 @@ export function notificationLabel(n: TNotification): NotificationLabel {
  */
 export function notificationHaystack(n: TNotification): string {
   const label = notificationLabel(n);
-  return `${label.text} ${label.warning ?? ""}`.toLowerCase();
+  return `${label.text} ${label.detail ?? ""}`.toLowerCase();
 }
 
 // ── Identity: the kind ───────────────────────────────────────────────────────
 //
 // Notifications are a genuine open-ended vocabulary of KINDS, so they get a
-// glyph and a hue each (both DESIGN.md files, §3). Which kind a notification is
+// glyph and a hue each (shared/DESIGN.md §8). Which kind a notification is
 // is decided here; each client draws the kind in its own icon family and in
 // the hue of the thing the notification is about.
 
@@ -158,7 +271,8 @@ export type NotificationKind =
   | "people"
   | "topo"
   | "export"
-  | "geoPdf"
+  | "message"
+  | "plan"
   | "problem";
 
 /**
@@ -180,6 +294,9 @@ export function notificationKind(n: TNotification): NotificationKind {
     case "friend_request":
     case "friend_request_accepted":
       return "people";
+    // Not "people": a friends glyph would read as a friend event.
+    case "announcement":
+      return "message";
     case "topo_failed":
       return "problem";
     case "topo_complete":
@@ -189,11 +306,15 @@ export function notificationKind(n: TNotification): NotificationKind {
       return failed ? "problem" : "export";
     case "topo_export_skipped":
       return "problem";
-    case "geo_pdf_complete":
-      return failed ? "problem" : "geoPdf";
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
+    case "plan_invited":
+    case "plan_join_request":
+    case "plan_join_approved":
+    case "plan_member_joined":
+    case "plan_access_ended":
+      return "plan";
     default:
       return "people";
   }
@@ -212,6 +333,62 @@ export function notificationPlaceId(n: TNotification): string | null {
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
 }
 
+/**
+ * The way (a route) a notification is ABOUT, as its id: the id an `item_shared`
+ * names when what was shared is a route. Null for every other notification, and
+ * for a share whose payload names no entity.
+ *
+ * PRIVACY: an id only, resolved against the signed-in user's own Ways, where a
+ * share since revoked is simply absent. Guard: notificationLabel.test.ts.
+ */
+export function notificationWayTarget(n: TNotification): string | null {
+  if (n.type !== "item_shared" || n.payload.entityType !== "route") return null;
+  return str(n.payload.entityId);
+}
+
+/**
+ * The maintainer announcement a notification carries, as `GET /notifications`
+ * resolved it: null for any other type, or one whose announcement is gone.
+ * `body` is Markdown source, drawn through `parseMessageMarkdown`, never as
+ * HTML.
+ */
+export function notificationAnnouncement(
+  n: TNotification,
+): { id: string; title: string; body: string } | null {
+  const p = n.payload;
+  if (n.type !== "announcement") return null;
+  const id = str(p.announcementId);
+  if (!id || typeof p.body !== "string") return null;
+  return { id, title: str(p.title) ?? ANNOUNCEMENT.untitled, body: p.body };
+}
+
+/** Where a plan notification opens: its plan, on People for a join request
+ *  (where it is answered), and as a preview for an invite (the reader is not
+ *  in the plan yet). */
+export type NotificationPlanTarget = {
+  planId: string;
+  view?: "people";
+  invited: boolean;
+};
+
+/** The plan this notification is about, if any. An id only, resolved
+ *  against the authed API, which 404s a plan the reader is no longer in. */
+export function notificationPlanTarget(
+  n: TNotification,
+): NotificationPlanTarget | null {
+  const planId = n.payload.planId;
+  if (
+    !n.type.startsWith("plan_") ||
+    n.type === "plan_access_ended" ||
+    typeof planId !== "string" ||
+    planId.length === 0
+  )
+    return null;
+  return n.type === "plan_join_request"
+    ? { planId, view: "people", invited: false }
+    : { planId, invited: n.type === "plan_invited" };
+}
+
 // ── The list: its cap, order and day grouping ────────────────────────────────
 
 /** `GET /notifications` returns at most this many rows, and the true total in
@@ -221,11 +398,10 @@ export const NOTIFICATIONS_LIST_CAP = 500;
 /**
  * Whether the server's cap cut the inbox short, from the total it reported.
  *
- * NOT `total > notifications.length`, which both clients used to test: the
- * total counts every stored row, and the endpoint then drops the rows it can no
- * longer resolve (a revoked share, a removed friendship — PRIV-001/003). So an
- * inbox of 13 rows showing 7 said "Showing 7 of 13. Older ones aren't loaded"
- * with nothing older at all. Only a total past the cap means a row was left out.
+ * The total counts every stored row, and the endpoint drops rows it can no
+ * longer resolve (a revoked share, a removed friendship). Comparing against
+ * `notifications.length` would make an inbox with dropped rows claim older
+ * ones are not loaded. Only a total past the cap means a row was left out.
  */
 export function notificationsTruncated(total: number | null): boolean {
   return total !== null && total > NOTIFICATIONS_LIST_CAP;
@@ -233,15 +409,14 @@ export function notificationsTruncated(total: number | null): boolean {
 
 /**
  * NEWEST FIRST, and never re-sorted by read state. The server returns
- * `read: asc` then `createdAt: desc`, which made acting on a row teleport it
+ * `read: asc` then `createdAt: desc`, but acting on a row must not teleport it
  * to the bottom of the list mid-gesture — and, because the day grouping runs
- * over whatever order it is handed, it could also emit "Today" twice with a
- * week in between. A list ordered by time stays put while you work down it.
+ * over whatever order it is handed, re-sorting by read state could emit "Today"
+ * twice with a week in between. A list ordered by time stays put while you work
+ * down it.
  *
- * Both inboxes read this. Logjam GPS learned it first; Logjam Web kept the
- * server's order until 2026-09-14, and marking a row read there moved it below
- * every unread one. An unparseable timestamp sorts last rather than poisoning
- * the comparison.
+ * Both inboxes read this. An unparseable timestamp sorts last rather than
+ * poisoning the comparison.
  */
 export function newestNotificationsFirst(
   notifications: readonly TNotification[],
@@ -264,7 +439,7 @@ export type NotificationDay = {
 /**
  * A LOCAL calendar day key. `createdAt` is a true instant (not a date-only
  * value), and the day it belongs to is the user's day: reading it in UTC files
- * the first hours of every AEST morning under yesterday (§11).
+ * the first hours of every AEST morning under yesterday.
  */
 function localDayKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");

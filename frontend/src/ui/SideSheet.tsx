@@ -9,9 +9,8 @@ import classes from "./SideSheet.module.css";
  * Logs' date range. The list it acts on stays visible and live next to it,
  * which a modal over the list could not do.
  *
- * It places ITSELF (docked beside the page, or taking its place on narrow web):
- * each page used to say where its own sheet went, in identical CSS, and one of
- * the two drifted (operator, 2026-09-16).
+ * It places itself (docked beside the page, or taking its place on narrow web)
+ * so every sheet is the same width and in the same place.
  *
  * Focus moves to its heading on open and back to whatever opened it on close;
  * Escape closes it.

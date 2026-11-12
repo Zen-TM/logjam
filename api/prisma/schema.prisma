@@ -9,7 +9,9 @@ datasource db {
 
 model User {
   id                      String              @id @default(uuid())
-  cognitoId               String              @unique @map("cognito_id")
+  // The identity provider's `sub`; each deployment accepts one issuer, so it
+  // alone identifies a user.
+  subject                 String              @unique @map("subject")
   username                String              @unique
   email                   String              @unique
   uiPreferences           Json                @default("{}") @map("ui_preferences")
@@ -32,28 +34,37 @@ model User {
   createdAt               DateTime            @default(now()) @map("created_at")
   sharedBy                PlaceShare[]        @relation("sharedBy")
   sharedWith              PlaceShare[]        @relation("sharedWith")
-  places                  Place[]
+  places                  Place[]             @relation("PlaceOwner")
   placeTypes              PlaceType[]
   receivedFriendships     Friendship[]        @relation("addressee")
   sentFriendships         Friendship[]        @relation("requester")
   friendInvites           FriendInvite[]
-  media                   Media[]
+  media                   Media[]             @relation("MediaOwner")
   notifications           Notification[]
   topoJobs                TopoJob[]
   topoExportJobs          TopoExportJob[]
-  geoPdfJobs              GeoPdfJob[]
+  computeUsageCarryover   ComputeUsageCarryover[]
   tripLogs                TripLog[]
-  geoPdfTemplates         GeoPdfTemplate[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
   placeLinks              PlaceLink[]
-  routes                  Route[]
+  routes                  Route[]             @relation("RouteOwner")
   syncTombstones          SyncTombstone[]
   directSharesSent        Share[]             @relation("directSharedBy")
   directSharesReceived    Share[]             @relation("directSharedWith")
   fileSends               FileSend[]
   fileSendsReceived       FileSendRecipient[]
   customFieldDefs         CustomFieldDef[]
+  importSnapshots         ImportSnapshot[]
+  placesAdded             Place[]             @relation("PlaceAddedBy")
+  routesAdded             Route[]             @relation("RouteAddedBy")
+  mediaAdded              Media[]             @relation("MediaAddedBy")
+  mediaCharged            Media[]             @relation("MediaChargedTo")
+  tripPlansCreated        TripPlan[]
+  tripPlanMemberships     TripPlanMember[]    @relation("TripPlanMemberUser")
+  tripPlanMembersInvited  TripPlanMember[]    @relation("TripPlanMemberInvitedBy")
+  tripPlanInvites         TripPlanInvite[]
+  tripPlanAnswers         TripPlanAnswer[]
 
   @@map("users")
 }
@@ -189,11 +200,22 @@ model CustomFieldDefPlaceType {
 }
 
 model Place {
-  id               String         @id @default(uuid())
-  ownerId          String         @map("owner_id")
-  placeTypeId      String         @map("place_type_id")
+  id               String           @id @default(uuid())
+  /// Exactly one of ownerId and planId is set: a CHECK in
+  /// 20261101120000_trip_plans, which Prisma cannot declare. A plan-owned row
+  /// is nobody's, so every `ownerId: user.id` query skips it.
+  ownerId          String?          @map("owner_id")
+  planId           String?          @map("plan_id")
+  /// Who copied it into the plan; null on an owned row.
+  addedById        String?          @map("added_by_id")
+  placeTypeId      String           @map("place_type_id")
+  /// A plan place only: the name and icon of the adder's custom type, which
+  /// the row itself cannot point at (a plan holds system types, or the
+  /// adder's account delete would fail). Null for a system type.
+  typeName         String?          @map("type_name")
+  typeIconKey      String?          @map("type_icon_key")
   name             String
-  altNames         String[]       @default([])
+  altNames         String[]         @default([])
   latitude         Float
   longitude        Float
   /// STRUCTURAL, not a field definition — every point on earth has one, so it
@@ -201,6 +223,9 @@ model Place {
   /// waypoint surface today; dropping it in the fold would be silent data loss.
   elevation        Float?
   notes            String?
+  /// A river gauge the owner picked (`GaugeRecord.id`). Not checked against
+  /// the registry: the list changes. Hints at the area; a sharee sees it too, as they see the coordinates.
+  gaugeId          String?        @map("gauge_id")
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested
   /// at `attributes.customFields[key]` are HOISTED to the top level here — see
@@ -208,29 +233,32 @@ model Place {
   /// `field_values.customFields.<key>` where nothing reads.
   /// Keys starting with `_` are internal (`_sources` today) and cannot
   /// collide with a user key: `makeCustomFieldKey` never produces one.
-  fieldValues      Json           @default("{}") @map("field_values")
+  fieldValues      Json             @default("{}") @map("field_values")
   /// Values that arrived on a COPY keyed by defs this owner does not have, or
   /// were stranded by a type change. Rendered read-only, per-item adoptable.
   /// OWNER-PRIVATE: never emitted on a delta row with syncRole "shared", and
   /// absent from the push allowlist — only copy and type-change write it.
-  foreignFields    Json?          @map("foreign_fields")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  forkedFromId     String?        @map("forked_from_id")
-  ropeWikiId       Int?           @map("ropewiki_id")
-  ropeWikiSnapshot Json?          @map("ropewiki_snapshot")
-  importKey        String?        @map("import_key")
-  importBatchId    String?        @map("import_batch_id")
-  placeType        PlaceType      @relation(fields: [placeTypeId], references: [id])
+  foreignFields    Json?            @map("foreign_fields")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  forkedFromId     String?          @map("forked_from_id")
+  ropeWikiId       Int?             @map("ropewiki_id")
+  ropeWikiSnapshot Json?            @map("ropewiki_snapshot")
+  importKey        String?          @map("import_key")
+  importBatchId    String?          @map("import_batch_id")
+  placeType        PlaceType        @relation(fields: [placeTypeId], references: [id])
   shares           PlaceShare[]
-  forkedFrom       Place?         @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Place[]        @relation("PlaceForks")
-  owner            User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  forkedFrom       Place?           @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Place[]          @relation("PlaceForks")
+  owner            User?            @relation("PlaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan             TripPlan?        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy          User?            @relation("PlaceAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
   tripLogLinks     TripLogPlace[]
-  linksA           PlaceLink[]    @relation("PlaceLinkA")
-  linksB           PlaceLink[]    @relation("PlaceLinkB")
+  linksA           PlaceLink[]      @relation("PlaceLinkA")
+  linksB           PlaceLink[]      @relation("PlaceLinkB")
   // At most one — the place's route slot. See Route.placeId.
   route            Route?
+  importSnapshots  ImportSnapshot[]
 
   @@unique([ownerId, ropeWikiId])
   /// TYPE-SCOPED, deliberately. `placeImportKey()` derives from name + rounded
@@ -244,7 +272,32 @@ model Place {
   @@index([placeTypeId])
   @@index([forkedFromId])
   @@index([ownerId, importBatchId])
+  @@index([planId])
+  @@index([addedById])
   @@map("places")
+}
+
+/// What one import changed on a place or trip it did not create: the fields it
+/// wrote, with their values before and after, so Undo can put them back
+/// (routes/imports.ts, lib/importSnapshot.ts). `placeId` or `tripLogId` names
+/// the row; the snapshot goes with it when the row is deleted.
+model ImportSnapshot {
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_id")
+  batchId   String   @map("batch_id")
+  placeId   String?  @map("place_id")
+  tripLogId String?  @map("trip_log_id")
+  before    Json
+  after     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  place     Place?   @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  tripLog   TripLog? @relation(fields: [tripLogId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, batchId])
+  @@index([placeId])
+  @@index([tripLogId])
+  @@map("import_snapshots")
 }
 
 model Notification {
@@ -258,6 +311,20 @@ model Notification {
 
   @@index([userId])
   @@map("notifications")
+}
+
+/// A message the maintainer sent every user (src/scripts/announce.ts). Each
+/// user's copy is a Notification of type "announcement" naming this row's id;
+/// GET /notifications reads the title and body from here, so deleting the row
+/// retracts it everywhere. The maintainer's own text, never a user's.
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  /// Markdown source, drawn through @logjam/shared's parseMessageMarkdown.
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("announcements")
 }
 
 model TripLog {
@@ -275,6 +342,7 @@ model TripLog {
   importBatchId String?        @map("import_batch_id")
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   places        TripLogPlace[]
+  importSnapshots ImportSnapshot[]
 
   @@unique([userId, importKey])
   @@index([userId])
@@ -312,21 +380,27 @@ model TripLogPlace {
 // standalone way rather than destroying it (the Route.placeId SetNull rule,
 // which this now matches deliberately).
 model Media {
-  id             String   @id @default(uuid())
-  ownerId        String   @map("owner_id")
+  id             String    @id @default(uuid())
+  // Exactly one of ownerId and planId: see Place.ownerId.
+  ownerId        String?   @map("owner_id")
+  planId         String?   @map("plan_id")
+  addedById      String?   @map("added_by_id")
+  // Whose storage quota a plan-owned file counts against, and who is refunded
+  // when it goes. An owned file counts against its owner; this stays null.
+  chargedToId    String?   @map("charged_to_id")
   // Polymorphic link to a Place or TripLog, or "none". Deliberately NO
   // database foreign key on linkedId: a single column cannot FK two tables (the
   // previous schema declared FKs to both places and trip_logs, which made
   // every insert fail). Integrity is enforced in the route layer (ownership
   // checks on attach) and cleaned up explicitly on place/trip/account deletion.
-  linkedType     String   @map("linked_type")
+  linkedType     String    @map("linked_type")
   // Null exactly when linkedType is "none".
-  linkedId       String?  @map("linked_id")
-  s3KeyThumbnail String?  @map("s3_key_thumbnail")
-  s3KeyDisplay   String   @map("s3_key_display")
-  mediaType      String   @map("media_type")
+  linkedId       String?   @map("linked_id")
+  s3KeyThumbnail String?   @map("s3_key_thumbnail")
+  s3KeyDisplay   String    @map("s3_key_display")
+  mediaType      String    @map("media_type")
   filename       String
-  fileSizeBytes  BigInt   @map("file_size_bytes")
+  fileSizeBytes  BigInt    @map("file_size_bytes")
   // Assigned only for track (GPX/KML/GeoJSON) media from the shared TRACK_COLORS
   // palette; null for image/video. Drives the track card icon tint and map track layer.
   color          String?
@@ -343,21 +417,36 @@ model Media {
   // by a rename thereafter; null falls back to the filename. Same shape as
   // TripLog.displayName. Null for place/trip attachments — a photo is
   // labelled by what it hangs off.
-  displayName    String?  @map("display_name")
+  displayName    String?   @map("display_name")
   // Row-level stats (bbox, distance, duration, counts) so another device can
   // LIST the file without downloading the blob. Shape is enforced by
   // parseMediaMetadata (shared/src/mediaMetadata.ts), not by the column — see
   // that file. Always {} when origin is null.
-  metadata       Json     @default("{}")
-  createdAt      DateTime @default(now()) @map("created_at")
+  metadata       Json      @default("{}")
+  // On a trip's attachment made by "Log a trip": the recorded track (a media
+  // row with origin "track") it was copied from, so the track stops offering
+  // "Log a trip". Null on everything else. Deliberately no foreign key, as with
+  // linkedId: the route layer checks the source is the caller's own recording
+  // when the copy is made (guard: src/__tests__/tripTrackLink.test.ts), and a
+  // copy outliving its source is harmless (the id
+  // just matches nothing). A SetNull FK would clear the column without
+  // bumping updatedAt, so the delta would never tell the phone.
+  sourceMediaId  String?   @map("source_media_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
   // Delta-sync watermark. Backfilled from created_at by migration. A media row
   // used to be immutable, so the delta keyset ran on created_at; link/unlink
   // makes rows mutable and a created_at keyset would never redeliver one.
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
-  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+  owner          User?     @relation("MediaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan           TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy        User?     @relation("MediaAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  chargedTo      User?     @relation("MediaChargedTo", fields: [chargedToId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([linkedType, linkedId])
+  @@index([planId])
+  @@index([addedById])
+  @@index([chargedToId])
   @@map("media")
 }
 
@@ -427,15 +516,16 @@ model TopoJob {
   estimatedSeconds    Int?      @map("estimated_seconds")
   layerOptions        Json?     @map("layer_options")
   vectorStyleSnapshot Json?     @map("vector_style_snapshot")
-  // Auto-export config captured at submit (AutoExportSettings). When enabled,
-  // the reaper queues a TopoExportJob once this job reaches "complete".
+  // Auto-export, removed: no longer written or read. Dropped by a later
+  // contract migration (ADR 0003).
   autoExport          Json?     @map("auto_export")
-  // Set by the reaper when it has handled the auto-export (queued it or
-  // recorded why it couldn't). Dedup marker: a non-null value means "don't
-  // auto-export again", so overlapping sweeps can't double-queue.
   autoExportedAt      DateTime? @map("auto_exported_at")
   s3InputKey          String?   @map("s3_input_key")
   s3OutputKeys        Json?     @map("s3_output_keys")
+  // /start writes { v: 1, vegetation } to mark a job to
+  // sharpen (topo/sharpen.py), and the worker replaces the mark with its
+  // result: { v, zmax, tiles15, coverage, ground, extracted, keys, vegetation }.
+  sharpen             Json?
   // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
   // Raster layers (hillshade/vegetation/slope): cogKey set, pmtilesKey set (for in-app display).
   // Vector layers (contours/features): cogKey null, pmtilesKey set.
@@ -463,7 +553,7 @@ model TopoJob {
   // status guard means a job can never re-enter /start; kept for forensics
   // and a possible future bounded re-launch).
   attemptCount        Int       @default(0) @map("attempt_count")
-  // ARN of the Fargate task launched for this job (Design L2). Lets the
+  // ARN of the Fargate task launched for this job. Lets the
   // reaper and DELETE handler issue a best-effort ECS StopTask instead of
   // letting an orphaned task run to completion. Null until RunTask succeeds.
   ecsTaskArn          String?   @map("ecs_task_arn")
@@ -487,12 +577,19 @@ model TopoExportJob {
   sourceJobIds        String[]  @map("source_job_ids")
   // Single-element array for now; multi-job composites are a Stage 3 stretch.
   layers              String[]
-  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features).
+  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features), or
+  // of AREA_EXPORT_LAYERS for an export of an area.
   format              String
   // "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx" (kmz deferred)
   bundling            String
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  // An export of an area: {west, south, east, north} in degrees, and no
+  // source job. Null for an export of a LiDAR job. Never logged, as it is a
+  // place: the request logger keeps no body (src/lib/logger.unit.test.ts, "is
+  // not in what the request logger keeps of the request"), and the worker
+  // logs no box (topo/tests/test_export_worker_helpers.py).
+  bbox                Json?
   // Snapshot of the source job's input tileCount at export creation. The
   // source TopoJob is deletable, so this can't be re-derived by join later —
   // it feeds the adaptive runtime estimator (aggregate size only, no place
@@ -509,7 +606,7 @@ model TopoExportJob {
   // Set when the export worker transitions the row to "running" — anchors the
   // reaper's running-timeout (mirrors topo_jobs.started_at).
   startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this export (Design L2) — see
+  // ARN of the Fargate task launched for this export — see
   // TopoJob.ecsTaskArn.
   ecsTaskArn          String?   @map("ecs_task_arn")
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -520,50 +617,27 @@ model TopoExportJob {
   @@map("topo_export_jobs")
 }
 
-// Async GeoPDF generation (mirrors TopoExportJob). Submitted via POST
-// /geo-pdf, rendered by ECS task `logjam-geo-pdf-worker`
-// (api/src/worker/geoPdfWorker.ts), uploaded to
-// s3://BUCKET/exports/geo-pdf/{id}/logjam-export.pdf.
-model GeoPdfJob {
-  id                  String    @id @default(uuid())
-  userId              String    @map("user_id")
-  config              Json
-  vectorStyleSnapshot Json      @map("vector_style_snapshot")
-  // Adaptive processing-time estimate computed at create from past completed
-  // GeoPDFs (size scalar recomputed from each row's retained config) —
-  // mirrors topo_jobs.estimated_seconds.
-  estimatedSeconds    Int?      @map("estimated_seconds")
-  status              String    @default("queued")
-  // queued | running | completed | failed
-  resultKey           String?   @map("result_key")
-  resultBytes         BigInt?   @map("result_bytes")
-  errorMessage        String?   @map("error_message")
-  // Set when the worker transitions the row to "running" — anchors the
-  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
-  startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this job (Design L2) — see
-  // TopoExportJob.ecsTaskArn.
-  ecsTaskArn          String?   @map("ecs_task_arn")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  completedAt         DateTime? @map("completed_at")
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+// What deleting a finished job would erase of this month's compute usage: a
+// trigger on topo_jobs and topo_export_jobs adds the deleted row's credits
+// here (migration 20261110000000_compute_usage_carryover). Usage of rows that
+// exist stays derived (lib/computeCredits.ts). monthStart is the Sydney month
+// the job started in, as a UTC instant.
+model ComputeUsageCarryover {
+  userId     String   @map("user_id")
+  monthStart DateTime @map("month_start")
+  credits    BigInt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
-  @@map("geo_pdf_jobs")
+  @@id([userId, monthStart])
+  @@map("compute_usage_carryover")
 }
 
-model GeoPdfTemplate {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  config    Json
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+// The same, for the site-wide pool, with no owner: it outlives the account.
+model SiteComputeCarryover {
+  monthStart DateTime @id @map("month_start")
+  credits    BigInt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("geo_pdf_templates")
+  @@map("site_compute_carryover")
 }
 
 model TopoTemplate {
@@ -571,6 +645,7 @@ model TopoTemplate {
   userId     String   @map("user_id")
   name       String
   config     Json
+  // Auto-export, removed: no longer written or read (see TopoJob.autoExport).
   autoExport Json?    @map("auto_export")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -663,14 +738,17 @@ model PlaceLink {
 // shared place is part of that shared record (sharees may view and export,
 // never edit); an unlinked route is owner-private.
 model Route {
-  id        String   @id @default(uuid())
-  ownerId   String   @map("owner_id")
+  id        String    @id @default(uuid())
+  // Exactly one of ownerId and planId: see Place.ownerId.
+  ownerId   String?   @map("owner_id")
+  planId    String?   @map("plan_id")
+  addedById String?   @map("added_by_id")
   // The place's single route slot. @unique enforces one-route-per-place in
   // the DB rather than app code (many NULLs are allowed, so unlinked routes
   // are unconstrained). Linking to an occupied place UNLINKS the incumbent,
   // which survives standalone — a link never destroys anything. SetNull keeps
   // routes alive when a place dies.
-  placeId   String?  @unique @map("place_id")
+  placeId   String?   @unique @map("place_id")
   name      String
   // From TRACK_COLORS (shared/src/media.ts), so routes and legacy track media
   // share one palette on the map. Assigned server-side.
@@ -688,12 +766,16 @@ model Route {
   // user's. Kept as indices rather than a second coordinate list so `points`
   // stays the single geometric truth and the two cannot disagree.
   anchors   Json?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  place     Place?   @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  owner     User?     @relation("RouteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan      TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  addedBy   User?     @relation("RouteAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  place     Place?    @relation(fields: [placeId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
+  @@index([planId])
+  @@index([addedById])
   @@map("routes")
 }
 
@@ -737,7 +819,7 @@ model DeviceToken {
 }
 
 // Direct, per-item sharing for the things that are not places: waypoints,
-// routes, LiDAR topo jobs, GeoPDF jobs. A row is a LIVE, REVOCABLE view of a
+// routes, LiDAR topo jobs. A row is a LIVE, REVOCABLE view of a
 // record the sender still owns — contrast FileSend below, which hands over a
 // copy and cannot be taken back.
 //
@@ -773,6 +855,8 @@ model Share {
   @@index([sharedWithId, entityType])
   // "Who can see this" — the owner's recipient list, and revoke-all on delete.
   @@index([entityType, entityId])
+  // The sharer's list, and the cascade when they delete their account.
+  @@index([sharedById])
   @@map("shares")
 }
 
@@ -850,4 +934,127 @@ model EgressLogCursor {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("egress_log_cursors")
+}
+
+// Plans: a shared space where a group plans a trip. A plan is a second
+// kind of owner: its places, routes and files are rows in the usual
+// tables with planId set instead of their owner column. Deleting a plan
+// cascades to everything in it. Role, status and visibleTo are strings from
+// shared/src/tripPlans.ts.
+model TripPlan {
+  id          String            @id @default(uuid())
+  // SetNull: a plan outlives its creator's account, since other members may
+  // be relying on it.
+  createdById String?           @map("created_by_id")
+  name        String
+  // Calendar days, no time zone. Nullable so a plan can exist before its
+  // dates are fixed.
+  startDate   DateTime?         @map("start_date") @db.Date
+  endDate     DateTime?         @map("end_date") @db.Date
+  tripTypes   String[]          @default([]) @map("trip_types")
+  archivedAt  DateTime?         @map("archived_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  // The Plans poll's watermark. Children live in other tables, so every write
+  // inside the plan moves it through touchPlan (src/lib/planAccess.ts).
+  // Guard: src/__tests__/plans.test.ts ("touches the plan").
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  members     TripPlanMember[]
+  invites     TripPlanInvite[]
+  sections    TripPlanSection[]
+  forms       TripPlanForm[]
+  places      Place[]
+  routes      Route[]
+  media       Media[]
+
+  @@index([createdById])
+  @@map("trip_plans")
+}
+
+// A membership goes with its user; what they added stays in the plan.
+model TripPlanMember {
+  id          String   @id @default(uuid())
+  planId      String   @map("plan_id")
+  userId      String   @map("user_id")
+  role        String
+  status      String
+  invitedById String?  @map("invited_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  plan        TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user        User     @relation("TripPlanMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy   User?    @relation("TripPlanMemberInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([planId, userId])
+  @@index([userId])
+  @@index([invitedById])
+  @@map("trip_plan_members")
+}
+
+// A link that lets whoever opens it, signed in, ask to join. Unlike
+// FriendInvite it is multi-use, since it grants only a request a leader
+// approves; revoking deletes the row. Only the token's hash is kept, as for
+// FriendInvite.
+model TripPlanInvite {
+  id          String   @id @default(uuid())
+  planId      String   @map("plan_id")
+  tokenHash   String   @unique @map("token_hash")
+  expiresAt   DateTime @map("expires_at")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  plan        TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+  @@index([createdById])
+  @@map("trip_plan_invites")
+}
+
+model TripPlanSection {
+  id        String   @id @default(uuid())
+  planId    String   @map("plan_id")
+  title     String
+  body      String   @default("")
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  plan      TripPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, position])
+  @@map("trip_plan_sections")
+}
+
+model TripPlanForm {
+  id             String           @id @default(uuid())
+  planId         String           @map("plan_id")
+  title          String
+  questions      Json             @default("[]")
+  // Which preset the form was built from, if any. Not validated yet: the
+  // preset list lands with the form routes (#439).
+  preset         String?
+  visibleTo      String           @map("visible_to")
+  position       Int
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  plan           TripPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  answers        TripPlanAnswer[]
+
+  @@index([planId, position])
+  @@map("trip_plan_forms")
+}
+
+// One member's answers to one form. Goes with the form and with the member:
+// safety contacts are details of people who are not Logjam users.
+model TripPlanAnswer {
+  id        String       @id @default(uuid())
+  formId    String       @map("form_id")
+  userId    String       @map("user_id")
+  answers   Json
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  form      TripPlanForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, userId])
+  @@index([userId])
+  @@map("trip_plan_answers")
 }

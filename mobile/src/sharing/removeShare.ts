@@ -1,10 +1,10 @@
 // Getting rid of something a friend shared WITH you — the phone's half of the
-// recipient-side revoke both share endpoints have always accepted
+// recipient-side revoke both share endpoints accept
 // (`DELETE …/me`). The web's twin is frontend/src/components/common/
 // RemoveSharedButton.tsx; the wording both of them use comes from
 // `removeShareConfirm` in shared/src/sharing.ts.
 //
-// ONLINE-ONLY, exactly like granting a share (api/shares.ts says why): the
+// ONLINE-ONLY, exactly like granting a share (../api/shares.ts says why): the
 // outbox carries entity mutations, not permission changes, and a queued
 // "forget this for me" would leave the row on screen for an unbounded time
 // while claiming it had gone.
@@ -54,15 +54,15 @@ export async function removeSharedPlace(placeId: string): Promise<void> {
 }
 
 /**
- * Stop seeing a waypoint, route, LiDAR topo or GeoPDF shared with you directly.
+ * Stop seeing a waypoint, route or LiDAR topo shared with you directly.
  *
  * Only ever called where `sharedRowVisibility` says "direct": a waypoint or
  * route that is on this phone because it is LINKED to a shared place has no
  * share row of its own, and the server would answer 404. Those are removed by
  * removing the place, which is what the sheets point at instead.
  *
- * Topo and GeoPDF jobs are not delta-synced entities, so there is nothing in
- * the mirror to drop — their lists refetch.
+ * A topo job is not a delta-synced entity, so there is nothing in
+ * the mirror to drop — its list refetches.
  */
 export async function removeSharedEntity(
   entityType: SharableEntityType,

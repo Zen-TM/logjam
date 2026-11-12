@@ -1,10 +1,10 @@
 // Friends — "who can I share a place with, and who is waiting on me?"
 //
 // The page answers with a count and owns the one acquisition action: Add, which
-// opens the username search in a dialog rather than sitting above the list. The
-// old panel led with that search box, so the first thing on the page was a way
-// to look for people who are not on it (shared/DESIGN.md §2, and Logjam GPS's
-// FriendsScreen, which settled this shape).
+// opens the username search in a dialog rather than sitting above the list: the
+// first thing on the page would otherwise be a way to look for people who are
+// not on it (shared/DESIGN.md §2, and Logjam GPS's FriendsScreen, which settled
+// this shape).
 //
 // One pinned rail partitions All / Friends / Requests — a true partition,
 // because a pending request is not a friendship yet — over one flat list.
@@ -14,19 +14,23 @@
 // the menu. A request has nowhere to open to, so it carries Accept and Decline
 // on the card's own footer line.
 //
-// FILES SENT TO YOU used to have a section here as well. They are the Inbox's,
-// and always were — every send writes the recipient a notification and both
-// verbs resolve it (api/src/routes/fileSends.ts) — so this page held a second,
-// separately-fetched copy of a list the Inbox draws better.
+// Files sent to you belong in the Inbox (api/src/routes/fileSends.ts): every
+// send writes the recipient a notification and both verbs resolve it,
+// avoiding a second, separately-fetched copy of a list the Inbox draws better.
+//
+// The leaderboard button is drawn only for someone who has joined it; anyone
+// else with friends gets one line pointing at the switch in Settings
+// (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
 //
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
-// `/friends/search` never return an email (root CLAUDE.md), and nothing here
+// `/friends/search` never return an email (api/src/__tests__/friends.test.ts), and nothing here
 // would have somewhere to put one.
+import { useUserSearch } from "../../../useUserSearch";
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -34,6 +38,7 @@ import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
+  friendRequestAnswers,
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
@@ -46,10 +51,18 @@ import {
   type FriendsBucket,
   type SectionKeysOn,
   friendSearchHint,
+  LEADERBOARD,
+  LEADERBOARD_SETTING,
+  leaderboardBadge,
+  leaderboardButtonLabel,
+  selfStanding,
+  type LeaderboardResponse,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useConfirm } from "./useConfirm";
 import FriendSharingSection from "./FriendSharingSection";
+import LeaderboardPage from "./LeaderboardPage";
 import { useRowSelection } from "./useRowSelection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -61,11 +74,12 @@ import {
   EmptyState,
   Hero,
   IconButton,
-  ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   StatusPill,
   type ChipOption,
@@ -75,27 +89,26 @@ import {
   createFriendInvite,
   getFriendInvites,
   revokeFriendInvites,
-  searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  getLeaderboard,
 } from "../../../placeUtils";
-
-/** Shorter than this and the server has nothing useful to match on. */
-const SEARCH_MIN_CHARS = 3;
 
 type Bucket = FriendsBucket;
 
 const copy = FRIENDS.copy;
 
 function FriendsPanel({
+  leaderboardOptIn,
   friends,
   friendRequests,
   onRefetchFriends,
   onRefetchShared,
   onRefetchNotifications,
 }: {
+  leaderboardOptIn: boolean;
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
@@ -111,14 +124,43 @@ function FriendsPanel({
   // Non-null = the sharing audit for that friend replaces the list: at 380px
   // there is no room for both, and the audit is a page you go and read.
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
+  // The same, for the leaderboard. Its board is fetched here, so the row's
+  // subtitle and the page read one answer.
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const [boardError, setBoardError] = useState<string | null>(null);
+
+  const fetchBoard = useCallback(() => {
+    getLeaderboard()
+      .then((next) => {
+        setBoard(next);
+        setBoardError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        setBoardError(messageFromError(err, LEADERBOARD.copy.loadFailed));
+      });
+  }, []);
+
+  useEffect(() => {
+    if (leaderboardOptIn) fetchBoard();
+  }, [leaderboardOptIn, fetchBoard]);
+
+  /** A reload the user asked for: Try again, or opening the page. */
+  const loadBoard = () => {
+    setBoardError(null);
+    fetchBoard();
+  };
 
   // Refetch on every panel open — friends and requests are otherwise fetched
-  // once at app boot (FRIEND-3), so a request that arrives mid-session stays
+  // once at app boot, so a request that arrives mid-session stays
   // invisible until a full reload.
   useEffect(() => {
     onRefetchFriends();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const { ask: askDecline, dialog: declineDialog } = useConfirm();
 
   async function runAction(
     id: string,
@@ -129,7 +171,7 @@ function FriendsPanel({
     setBusyId(id);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       onRefetchFriends();
     } catch (err) {
       console.error(err);
@@ -162,7 +204,7 @@ function FriendsPanel({
         await removeFriend(friend.friendshipId);
         removed += 1;
       }
-      toast.success(friendsRemovedMessage(removed));
+      toast.done(friendsRemovedMessage(removed));
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.removeFailed));
@@ -184,6 +226,17 @@ function FriendsPanel({
     );
     setRemoving(null);
     onRefetchShared();
+  }
+
+  if (leaderboardOpen && leaderboardOptIn) {
+    return (
+      <LeaderboardPage
+        board={board}
+        error={boardError}
+        onRetry={loadBoard}
+        onBack={() => setLeaderboardOpen(false)}
+      />
+    );
   }
 
   if (openFriend) {
@@ -221,7 +274,8 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
-  // The same button is the empty state's and the end of the list's.
+  // The hero's add, offered again where the page has nothing else; a list of
+  // friends does not end with a third.
   const addFriendButton = (
     <Button variant="filled" icon="addFriend" onClick={() => setAddOpen(true)}>
       {copy.addTitle}
@@ -234,6 +288,26 @@ function FriendsPanel({
     bucket,
   });
 
+  // `false` from the server outranks the cached preference: the user left
+  // on another device since this session fetched it.
+  const joinedBoard = leaderboardOptIn && board?.joined !== false;
+
+  function leaderboardButton() {
+    if (!joinedBoard) return null;
+    const standing = board?.joined ? selfStanding(board) : null;
+    return (
+      <IconButton
+        icon="leaderboard"
+        label={leaderboardButtonLabel(standing)}
+        badge={standing && leaderboardBadge(standing.rank, standing.size)}
+        onClick={() => {
+          loadBoard();
+          setLeaderboardOpen(true);
+        }}
+      />
+    );
+  }
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
@@ -241,14 +315,17 @@ function FriendsPanel({
       <Hero
         title={FRIENDS.title}
         actions={
-          <Button
-            compact
-            variant="outline"
-            icon="addFriend"
-            onClick={() => setAddOpen(true)}
-          >
-            {copy.add}
-          </Button>
+          <>
+            {leaderboardButton()}
+            <Button
+              compact
+              variant="filled"
+              icon="addFriend"
+              onClick={() => setAddOpen(true)}
+            >
+              {copy.addTitle}
+            </Button>
+          </>
         }
       />
     ),
@@ -261,12 +338,9 @@ function FriendsPanel({
             countLabel={`${selectedFriends.length} selected`}
             onClear={clear}
           >
-            <IconButton
-              icon={friendVerb("remove").icon}
-              label={friendVerb("remove").label}
-              tone="danger"
-              onClick={() => setRemovingSelected(true)}
-            />
+            <SelectionVerb danger onClick={() => setRemovingSelected(true)}>
+              {friendVerb("remove").label}
+            </SelectionVerb>
           </SelectionBar>
         ) : (
           <ChipRail
@@ -291,112 +365,136 @@ function FriendsPanel({
           </div>
         ) : emptyKind === "noRequests" ? (
           <div className={classes.emptyArea}>
-            <EmptyState icon="friends" title={copy.noRequestsTitle} />
+            <EmptyState
+              icon="friends"
+              title={copy.noRequestsTitle}
+              body={copy.noRequestsBody}
+            />
           </div>
         ) : (
-          <div className={classes.list}>
-            {showRequests &&
-              friendRequests.map((request) => (
-                <Row
-                  key={request.id}
-                  leading={<Avatar username={request.requester.username} />}
-                  title={request.requester.username}
-                  subtitle={copy.requestSubtitle}
-                  disabled={busyId === request.id}
-                  accentEdge
-                  footer={
-                    <>
-                      <Button
-                        compact
-                        variant="filled"
-                        busy={busyId === request.id}
-                        onClick={() =>
-                          void runAction(
-                            request.id,
-                            () => acceptFriendRequest(request.id),
-                            copy.acceptFailed,
-                            friendAcceptedMessage(request.requester.username),
-                          ).then(onRefetchNotifications)
-                        }
-                      >
-                        {friendVerb("accept").label}
-                      </Button>
-                      <Button
-                        compact
-                        variant="outline"
-                        disabled={busyId === request.id}
-                        disabledReason="Replying…"
-                        onClick={() =>
-                          void runAction(
-                            request.id,
-                            () => declineFriendRequest(request.id),
-                            copy.declineFailed,
-                            copy.declined,
-                          )
-                        }
-                      >
-                        {friendVerb("decline").label}
-                      </Button>
-                    </>
-                  }
-                />
-              ))}
+          <>
+            <RowList className={classes.list}>
+              {showRequests &&
+                friendRequests.map((request) => (
+                  <Row
+                    key={request.id}
+                    leading={<Avatar username={request.requester.username} />}
+                    title={request.requester.username}
+                    subtitle={copy.requestSubtitle}
+                    disabled={busyId === request.id}
+                    accentEdge
+                    footer={
+                      <>
+                        <Button
+                          compact
+                          variant="filled"
+                          busy={busyId === request.id}
+                          onClick={() =>
+                            void runAction(
+                              request.id,
+                              () => acceptFriendRequest(request.id),
+                              friendRequestAnswers(
+                                request.requester.username,
+                              )[0].failure,
+                              friendRequestAnswers(
+                                request.requester.username,
+                              )[0].success,
+                            ).then(onRefetchNotifications)
+                          }
+                        >
+                          {friendVerb("accept").label}
+                        </Button>
+                        <Button
+                          compact
+                          variant="outline"
+                          disabled={busyId === request.id}
+                          disabledReason="Replying…"
+                          onClick={() => {
+                            const decline = friendRequestAnswers(
+                              request.requester.username,
+                            )[1];
+                            askDecline({
+                              copy: {
+                                confirmTitle: decline.confirm!.title,
+                                confirmBody: decline.confirm!.body,
+                                confirmLabel: decline.confirm!.confirmLabel,
+                                tone: "destructive",
+                              },
+                              run: () =>
+                                runAction(
+                                  request.id,
+                                  () => declineFriendRequest(request.id),
+                                  decline.failure,
+                                  decline.success,
+                                ),
+                            });
+                          }}
+                        >
+                          {friendVerb("decline").label}
+                        </Button>
+                      </>
+                    }
+                  />
+                ))}
 
-            {showFriends &&
-              friends.map((friend) => (
-                <Row
-                  key={friend.friendshipId}
-                  leading={
-                    <TileCheckbox
-                      tile={<Avatar username={friend.username} />}
-                      label={`Select ${friend.username}`}
-                      checked={selectedIds.includes(friend.friendshipId)}
-                      selecting={selecting}
-                      onToggle={(extendRange) =>
-                        toggle(friend.friendshipId, extendRange)
-                      }
-                    />
-                  }
-                  selected={selectedIds.includes(friend.friendshipId)}
-                  title={friend.username}
-                  description="Opens what you share with each other"
-                  disabled={busyId === friend.friendshipId}
-                  onOpen={() => setOpenFriend(friend)}
-                  trailing={
-                    selecting ? undefined : (
-                      <Menu
-                        label={`Actions for ${friend.username}`}
-                        title={friend.username}
-                        placement="bottom-end"
-                        entries={[
-                          {
-                            id: "shares",
-                            label: friendVerb("shares").label,
-                            icon: "shareFriend",
-                            onSelect: () => setOpenFriend(friend),
-                          },
-                          {
-                            id: "remove",
-                            label: friendVerb("remove").label,
-                            icon: "unshare",
-                            danger: true,
-                            onSelect: () => setRemoving(friend),
-                          },
-                        ]}
-                        trigger={(props) => (
-                          <IconButton
-                            {...props}
-                            icon="overflow"
-                            label={`Actions for ${friend.username}`}
-                          />
-                        )}
+              {showFriends &&
+                friends.map((friend) => (
+                  <Row
+                    key={friend.friendshipId}
+                    leading={
+                      <TileCheckbox
+                        tile={<Avatar username={friend.username} />}
+                        label={`Select ${friend.username}`}
+                        checked={selectedIds.includes(friend.friendshipId)}
+                        selecting={selecting}
+                        onToggle={(extendRange) =>
+                          toggle(friend.friendshipId, extendRange)
+                        }
                       />
-                    )
-                  }
-                />
-              ))}
-            <ListEnd>{addFriendButton}</ListEnd>
-          </div>
+                    }
+                    selected={selectedIds.includes(friend.friendshipId)}
+                    title={friend.username}
+                    description="Opens what you share with each other"
+                    disabled={busyId === friend.friendshipId}
+                    onOpen={() => setOpenFriend(friend)}
+                    trailing={
+                      selecting ? undefined : (
+                        <Menu
+                          label={`Actions for ${friend.username}`}
+                          title={friend.username}
+                          placement="bottom-end"
+                          entries={[
+                            {
+                              id: "shares",
+                              label: friendVerb("shares").label,
+                              icon: "shareFriend",
+                              onSelect: () => setOpenFriend(friend),
+                            },
+                            {
+                              id: "remove",
+                              label: friendVerb("remove").label,
+                              icon: friendVerb("remove").icon,
+                              danger: true,
+                              onSelect: () => setRemoving(friend),
+                            },
+                          ]}
+                          trigger={(props) => (
+                            <IconButton
+                              {...props}
+                              icon="overflow"
+                              label={`Actions for ${friend.username}`}
+                            />
+                          )}
+                        />
+                      )
+                    }
+                  />
+                ))}
+            </RowList>
+            {friends.length > 0 && !joinedBoard && (
+              <p className={classes.note}>{LEADERBOARD_SETTING.offer}</p>
+            )}
+          </>
         )}
       </>
     ),
@@ -416,24 +514,29 @@ function FriendsPanel({
         onFriended={onRefetchNotifications}
       />
 
+      {declineDialog}
       <ConfirmDialog
         open={removing != null}
-        title={
-          removing ? friendRemoveConfirm(removing.username).confirmTitle : ""
+        copy={
+          removing && {
+            ...friendRemoveConfirm(removing.username),
+            confirmLabel: "Remove",
+            tone: "destructive",
+            icon: "unshare",
+          }
         }
-        message={
-          removing ? friendRemoveConfirm(removing.username).confirmBody : null
-        }
-        confirmLabel="Remove"
         busy={busyId != null}
         onConfirm={() => removing && void handleRemove(removing)}
         onClose={() => setRemoving(null)}
       />
       <ConfirmDialog
         open={removingSelected}
-        title={friendsRemoveConfirm(selectedFriends.length).confirmTitle}
-        message={friendsRemoveConfirm(selectedFriends.length).confirmBody}
-        confirmLabel="Remove"
+        copy={{
+          ...friendsRemoveConfirm(selectedFriends.length),
+          confirmLabel: "Remove",
+          tone: "destructive",
+          icon: "unshare",
+        }}
         busy={busyId != null}
         onConfirm={() => void handleRemoveSelected()}
         onClose={() => setRemovingSelected(false)}
@@ -463,15 +566,17 @@ export function AddFriendDialog({
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<TSearchUser[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
+  const { short, results, total } = useUserSearch(
+    query,
+    open,
+    copy.searchFailed,
+  );
   const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
   // Made a friend by sending, shown until the refetched list says so itself.
   const [friendedIds, setFriendedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Closing clears the search, during render.
   const [wasOpen, setWasOpen] = useState(open);
@@ -479,44 +584,10 @@ export function AddFriendDialog({
     setWasOpen(open);
     if (!open) {
       setQuery("");
-      setResults([]);
       setSentIds(new Set());
       setFriendedIds(new Set());
     }
   }
-
-  // Too short a query (or a closed dialog) shows no results, also during
-  // render; the effect's cleanup drops any response still on its way.
-  const searches = open && query.trim().length >= SEARCH_MIN_CHARS;
-  if (!searches && results.length > 0) setResults([]);
-
-  useEffect(() => {
-    if (!searches) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    // FEUI-008: guards a stale response landing after a newer query's already
-    // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
-    // its results must not overwrite "abelin"'s). `searchUsers`/`apiFetch` take
-    // no signal, so this is the cancelled-flag form of the same guard.
-    let cancelled = false;
-    timerRef.current = setTimeout(() => {
-      searchUsers(query.trim())
-        .then(({ data, total: all }) => {
-          if (!cancelled) {
-            setResults(data);
-            setTotal(all);
-          }
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          console.error(err);
-          toast.error(messageFromError(err, copy.searchFailed));
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [searches, query, toast]);
 
   async function handleSend(user: TSearchUser) {
     setSendingId(user.id);
@@ -530,7 +601,7 @@ export function AddFriendDialog({
         new Set(prev).add(user.id),
       );
       if (friended) {
-        toast.success(friendAcceptedMessage(user.username));
+        toast.done(friendAcceptedMessage(user.username));
         onFriended();
       }
       onSent();
@@ -546,7 +617,6 @@ export function AddFriendDialog({
     ...friends.map((friend) => friend.id),
     ...friendedIds,
   ]);
-  const typed = query.trim();
 
   return (
     <Dialog
@@ -564,8 +634,11 @@ export function AddFriendDialog({
           data-autofocus
           onChange={(event) => setQuery(event.target.value)}
         />
-        {typed.length < SEARCH_MIN_CHARS ? (
-          <p className={classes.note}>{copy.searchHint}</p>
+        {short ? (
+          // An empty field has nothing to keep typing: the hint waits for a key.
+          query.trim() !== "" && (
+            <p className={classes.note}>{copy.searchHint}</p>
+          )
         ) : results.length === 0 ? (
           <p className={classes.note}>{copy.searchEmpty}</p>
         ) : (
@@ -652,7 +725,7 @@ export function InviteLink({ open }: { open: boolean }) {
     // (FriendsPanel.render.test.tsx).
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(copy.inviteCopied);
+      toast.done(copy.inviteCopied);
     } catch (err) {
       console.error(err);
       setLink(url);
@@ -668,7 +741,7 @@ export function InviteLink({ open }: { open: boolean }) {
       await revokeFriendInvites();
       setLink(null);
       setLive(0);
-      toast.success(copy.inviteRevoked);
+      toast.done(copy.inviteRevoked);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.inviteRevokeFailed));

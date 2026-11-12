@@ -1,9 +1,8 @@
 // "Place routes" — every route attachment on the account, drawn at once.
 //
-// Web parity (its map has a place-tracks layer); mobile until now could only
-// show one route at a time, transiently, from a place's own screen. This is the
-// standing layer version, and it lives behind a toggle in the layers sheet
-// because it is a lot of ink to add to a map unasked.
+// Logjam Web parity (its map has a place-tracks layer): this standing layer
+// version lives behind a toggle in the layers sheet because it is a lot of
+// ink to add to a map unasked.
 //
 // ONE GeoJSONSource, not one per route: each parsed file's features are merged into
 // a single collection carrying a `routeColor` property, and the line layers read
@@ -23,6 +22,7 @@ import {
   parseVectorImport,
 } from "@logjam/shared";
 
+import { PLAN_DIM } from "../plans/planMap";
 import { ROUTES_FLOOR } from "./layerOrder";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { useMirrorPlaceTracks } from "../sync/useSyncQueries";
@@ -36,10 +36,13 @@ const ROUTE_COLOR = ASSET_HUES.route;
 
 export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
   onStatus,
+  dim = false,
 }: {
   /** Drawn/unavailable counts, so the map can say when it is showing less than
    *  everything (shared/DESIGN.md §11: a map that hides things says so). */
   onStatus: (status: PlaceRoutesStatus) => void;
+  /** Faint, under a plan on the map. */
+  dim?: boolean;
 }) {
   const tracks = useMirrorPlaceTracks(TRACK_MIME_TYPES);
   const [collection, setCollection] =
@@ -76,7 +79,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
           }
           drawn += 1;
         } catch (err) {
-          // A single unreadable file must not empty the whole layer.
+          // Counted and skipped: the rest of the layer still draws.
           console.error(err);
           unavailable += 1;
         }
@@ -109,7 +112,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         style={{
           lineColor: MAP_INK.casing,
           lineWidth: 5,
-          lineOpacity: 0.6,
+          lineOpacity: dim ? PLAN_DIM * 0.6 : 0.6,
           lineCap: "round",
           lineJoin: "round",
         }}
@@ -122,7 +125,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         style={{
           lineColor: ["get", "routeColor"] as unknown as string,
           lineWidth: 2.5,
-          lineOpacity: 0.95,
+          lineOpacity: dim ? PLAN_DIM : 0.95,
           lineCap: "round",
           lineJoin: "round",
         }}
@@ -138,6 +141,8 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
           circleColor: ["get", "routeColor"] as unknown as string,
           circleStrokeWidth: 1,
           circleStrokeColor: MAP_INK.casing,
+          circleOpacity: dim ? PLAN_DIM : 1,
+          circleStrokeOpacity: dim ? PLAN_DIM : 1,
         }}
       />
     </GeoJSONSource>

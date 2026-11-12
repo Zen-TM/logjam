@@ -20,12 +20,13 @@ import {
  * Vertices kept for a DEM sample. The DEM is read along the straight lines
  * between them, so the fewer there are the more a long track's line cuts
  * across the gullies and spurs the walked line went around: at 200 a 20 km
- * day had a vertex every 100 m.
+ * day has a vertex every 100 m.
  *
  * Short of what `POST /elevation/profile` takes (`MAX_ROUTE_POINTS`) on
  * purpose: every segment keeps at least two vertices whatever its share, so a
  * track with many short segments runs over this figure, and a line the API
- * refuses is one the public tiles get asked about instead.
+ * refuses is one the public tiles get asked about instead
+ * (test: shared/src/trackLine.test.ts).
  */
 export const MAX_ELEVATION_VERTICES = Math.floor(MAX_ROUTE_POINTS * 0.8);
 
@@ -38,7 +39,8 @@ function segmentRuns(
   let currentSegment: number | null = null;
   for (const point of points) {
     if (currentSegment !== null && point.segment !== currentSegment) {
-      // A single-point segment carries no distance and no teleport — drop it.
+      // A single-point segment carries no distance and no teleport — drop it
+      // (test: shared/src/trackLine.test.ts).
       if (current.length >= 2) runs.push(current);
       current = [];
     }
@@ -51,7 +53,7 @@ function segmentRuns(
 
 /**
  * Stride-sample to at most `MAX_ELEVATION_VERTICES`, keeping the first and last
- * so the sampled line spans the whole track.
+ * so the sampled line spans the whole track (test: shared/src/trackLine.test.ts).
  *
  * Straight-line between kept vertices, which loses switchbacks — acceptable
  * here and only here: this line is used to ask "how high is the ground along
@@ -60,7 +62,8 @@ function segmentRuns(
  *
  * Returns one sub-line PER SEGMENT so the DEM sampler (`densifyLineSegments`)
  * never draws a teleport line across a pause gap or the join between two
- * imported lines. A single-segment track returns one segment.
+ * imported lines (test: shared/src/trackLine.test.ts). A single-segment track
+ * returns one segment.
  *
  * The vertex budget is split BETWEEN segments in proportion to their point
  * counts rather than strided across the flattened series: a short segment
@@ -75,9 +78,10 @@ export function toElevationLine(
   return strided(points).map(({ run, kept }) => {
     // The positions distance is measured along (`computeTrackDetail`), not
     // the raw fixes: a fix that jitters sideways up a gorge wall reads the
-    // wall's height, and the DEM counts it as climb. Measured on a recorded
-    // canyon day with a true net fall of 846 m: raw fixes read 725 m up and
-    // 1,576 m down at this vertex budget, averaged ones 96 m and 943 m.
+    // wall's height, and the DEM counts it as climb
+    // (test: shared/src/trackLine.test.ts). Measured on a recorded canyon day
+    // with a true net fall of 846 m: raw fixes read 725 m up and 1,576 m down
+    // at this vertex budget, averaged ones 96 m and 943 m.
     // ponytail: a five-fix mean, the same stopgap distance uses. A properly
     // cleaned line replaces both.
     const lons = movingMean(
@@ -96,9 +100,9 @@ export function toElevationLine(
  * Every fix's GPS height, placed among the vertices `toElevationLine` keeps:
  * what fills the stretches no saved terrain covers (`fillDemFromGps` in
  * shared/src/trackStats.ts). ALL the fixes, not only the kept ones, so a
- * filled stretch's climb is summed from everything the phone recorded.
- * Median-smoothed per segment the way the track's own GPS climb is. A fix
- * that carried no height is left out.
+ * filled stretch's climb is summed from everything the phone recorded
+ * (test: shared/src/trackLine.test.ts). Median-smoothed per segment the way
+ * the track's own GPS climb is. A fix that carried no height is left out.
  */
 export function toElevationGpsFixes(
   points: readonly TrackSeriesPoint[],

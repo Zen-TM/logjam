@@ -7,6 +7,12 @@ import { Prisma } from "@prisma/client";
 import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
+import {
+  diffFields,
+  snapshotWrites,
+  tripFields,
+  type Change,
+} from "../lib/importSnapshot";
 import { parseTripTypes, parseDisplayName } from "./tripLogsGlobal";
 import {
   MALFORMED_REQUEST_SENTENCE,
@@ -20,7 +26,8 @@ const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
 // unbounded IN-list lookup + multi-chunk write transaction (the import path does
 // per-element work proportional to length). Mirrors BULK_DELETE_LIMIT; the 1 MB
-// body cap and 300/min limiter are the other ceilings. See SEC-001.
+// body cap and 300/min limiter are the other ceilings. Guarded in
+// src/__tests__/tripLogsBulk.test.ts.
 const BULK_IMPORT_LIMIT = 2000;
 const CHUNK_SIZE = 200;
 
@@ -187,23 +194,37 @@ router.post(
 
     // Look up existing trips by importKey for upsert.
     const allImportKeys = keyAssignments.map((k) => k.importKey);
-    const existingByKey = new Map<string, { id: string }>();
-    if (allImportKeys.length > 0) {
-      const existing = await prisma.tripLog.findMany({
-        where: { userId: user.id, importKey: { in: allImportKeys } },
-        select: { id: true, importKey: true },
-      });
-      for (const row of existing) {
-        if (row.importKey) existingByKey.set(row.importKey, { id: row.id });
-      }
-    }
+    const existingTrips =
+      allImportKeys.length > 0
+        ? await prisma.tripLog.findMany({
+            where: { userId: user.id, importKey: { in: allImportKeys } },
+            select: {
+              id: true,
+              importKey: true,
+              importBatchId: true,
+              displayName: true,
+              types: true,
+              date: true,
+              notes: true,
+              customFields: true,
+              places: { select: { placeId: true, position: true } },
+            },
+          })
+        : [];
+    const existingByKey = new Map(
+      existingTrips.map((row) => [row.importKey, row]),
+    );
 
     // ---- Phase 3: Build create/update operations ----
     // Creates use `.create()` (not `createMany`) because attaching the place
     // join row is a nested write, which `createMany` cannot do — one place
     // per CSV row, linked via TripLogPlace at position 0.
     type CreateOp = { data: Prisma.TripLogCreateInput };
-    type UpdateOp = { id: string; data: Prisma.TripLogUpdateInput };
+    type UpdateOp = {
+      id: string;
+      data: Prisma.TripLogUpdateInput;
+      change: Change | null;
+    };
 
     const creates: CreateOp[] = [];
     const updates: UpdateOp[] = [];
@@ -220,8 +241,22 @@ router.post(
       if (existing) {
         // Update in place — re-apply resolution outputs (place link,
         // displayName, types) and fully replace the place join (single row,
-        // or none).
+        // or none). The change is what Undo restores, unless this batch
+        // created the trip, which Undo deletes.
+        const stored = tripFields(existing);
         updates.push({
+          change:
+            existing.importBatchId === body.importBatchId
+              ? null
+              : diffFields(stored, {
+                  ...stored,
+                  displayName: trip.displayName,
+                  types: trip.types,
+                  date: trip.date.toISOString(),
+                  notes: trip.notes,
+                  customFields: trip.customFields,
+                  placeIds: trip.placeId ? [trip.placeId] : [],
+                }),
           id: existing.id,
           data: {
             displayName: trip.displayName,
@@ -260,14 +295,23 @@ router.post(
 
     for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
       const chunk = updates.slice(i, i + CHUNK_SIZE);
-      await prisma.$transaction(
-        chunk.map((op) =>
+      const changes = new Map(
+        chunk.flatMap((op) => (op.change ? [[op.id, op.change] as const] : [])),
+      );
+      await prisma.$transaction([
+        ...chunk.map((op) =>
           prisma.tripLog.update({
             where: { id: op.id },
             data: op.data,
           }),
         ),
-      );
+        ...(await snapshotWrites(
+          user.id,
+          body.importBatchId,
+          "tripLogId",
+          changes,
+        )),
+      ]);
     }
 
     res.json({

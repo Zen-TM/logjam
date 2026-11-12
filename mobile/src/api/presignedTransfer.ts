@@ -1,5 +1,6 @@
 // The presigned-S3 legs of the three-phase flows: the "Send a copy" upload,
-// the received-file download, and the GeoPDF download. They deliberately do
+// the received-file download, and the downloads of media and the place
+// registry. They deliberately do
 // NOT go through apiFetch — the URL is signed, so an Authorization header on it
 // is both pointless and a token where none is needed — which also means
 // apiFetch's 15 s abort ("observed on hardware (Pixel 9, airplane mode) where a
@@ -37,9 +38,9 @@ export class TransferTimeoutError extends Error {
  * no bytes by the deadline. Once `hasMoved()` is true the deadline lapses and
  * the transfer runs to completion on its own.
  *
- * ponytail: first byte only — a transfer that starts and then stalls forever
- * still hangs. Make it a rolling stall timeout if that shows up in the field,
- * but note the progress callback is suppressed while the app is backgrounded,
+ * First byte only — a transfer that starts and then stalls forever still
+ * hangs. Make it a rolling stall timeout if that shows up in the field, but
+ * note the progress callback is suppressed while Logjam GPS is backgrounded,
  * so a rolling one would have to ignore time spent out of the foreground.
  */
 async function awaitStart<T>(
@@ -97,10 +98,12 @@ export async function uploadToPresignedUrl(
   );
 }
 
-/** Download a presigned URL to `fileUri`. The directory must already exist. */
+/** Download a presigned URL to `fileUri`. The directory must already exist.
+ *  `onBytes` hears the bytes written so far, for a progress row. */
 export async function downloadFromPresignedUrl(
   downloadUrl: string,
   fileUri: string,
+  onBytes?: (written: number) => void,
 ): Promise<FileSystem.FileSystemDownloadResult> {
   let moved = false;
   const task = FileSystem.createDownloadResumable(
@@ -109,6 +112,7 @@ export async function downloadFromPresignedUrl(
     {},
     ({ totalBytesWritten }) => {
       if (totalBytesWritten > 0) moved = true;
+      onBytes?.(totalBytesWritten);
     },
   );
   return awaitStart(

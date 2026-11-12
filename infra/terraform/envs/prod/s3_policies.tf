@@ -1,18 +1,19 @@
 # S3 bucket policies granting the web CloudFront distribution (OAC) read access:
 # frontend bucket (whole SPA) and topo-jobs master/* tiles. These reference the
-# distribution by ARN, so they're managed here now that the distribution is a
-# Terraform resource.
+# distribution by ARN, so they are managed alongside the CloudFront distribution.
 
 # Every bucket refuses plain-HTTP requests. A bucket policy is one document per
 # bucket, so each policy below (and audit's, in audit.tf) appends this statement.
 locals {
   deny_insecure_transport = {
     for name, arn in {
-      frontend    = module.frontend.bucket_arn
-      topo_jobs   = module.topo_jobs.bucket_arn
-      access_logs = module.access_logs.bucket_arn
-      media       = module.media.bucket_arn
-      audit       = aws_s3_bucket.audit.arn
+      frontend      = module.frontend.bucket_arn
+      topo_jobs     = module.topo_jobs.bucket_arn
+      access_logs   = module.access_logs.bucket_arn
+      media         = module.media.bucket_arn
+      audit         = aws_s3_bucket.audit.arn
+      brain_backups = aws_s3_bucket.brain_backups.arn
+      brain_signals = aws_s3_bucket.brain_signals.arn
       } : name => {
       Sid       = "DenyInsecureTransport"
       Effect    = "Deny"

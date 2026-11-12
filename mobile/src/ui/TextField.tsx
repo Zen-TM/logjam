@@ -1,7 +1,18 @@
 import { useState } from "react";
-import { TextInput, View, type TextInputProps } from "react-native";
+import {
+  TextInput,
+  View,
+  type TextInputInstance,
+  type TextInputProps,
+} from "react-native";
 
-import { radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  radius,
+  spacing,
+  makeStyles,
+  placeholderColor,
+  useTheme,
+} from "../theme";
 import { Field } from "./Field";
 
 type TextFieldProps = {
@@ -13,13 +24,18 @@ type TextFieldProps = {
   error?: string | null;
   /** One plain sentence under the input saying what it means or takes. */
   hint?: string;
+  /** Marks the field "Required" beside its label. */
+  requiredMark?: boolean;
+  /** Keeps the error line's height when it is empty, so a submit that lights
+   *  the errors does not move the form. */
+  reserveError?: boolean;
   /**
    * Handle on the underlying input. `autoFocus` is unreliable for a field that
    * mounts inside an animating modal — the window isn't focusable yet, so the
    * keyboard never comes up. Callers in that situation keep a ref and call
    * `.focus()` once the animation has settled.
    */
-  inputRef?: React.Ref<TextInput>;
+  inputRef?: React.Ref<TextInputInstance>;
   /** Drawn beside the input box, centred on IT rather than on the label above
    *  — e.g. a remove button. */
   accessory?: React.ReactNode;
@@ -36,6 +52,7 @@ type TextFieldProps = {
   | "textContentType"
   | "autoFocus"
   | "onSubmitEditing"
+  | "onBlur"
   | "returnKeyType"
   | "multiline"
   | "editable"
@@ -48,9 +65,12 @@ export function TextField({
   onChangeText,
   error,
   hint,
+  requiredMark,
+  reserveError,
   multiline,
   inputRef,
   accessory,
+  onBlur,
   ...inputProps
 }: TextFieldProps) {
   const theme = useTheme();
@@ -77,17 +97,27 @@ export function TextField({
       ]}
       value={value}
       onChangeText={onChangeText}
-      placeholderTextColor={theme.textMuted}
+      placeholderTextColor={placeholderColor(theme)}
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       multiline={multiline}
       {...inputProps}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onBlur={(event) => {
+        setFocused(false);
+        onBlur?.(event);
+      }}
     />
   );
   return (
-    <Field label={label} hint={hint} error={error} disabled={disabled}>
+    <Field
+      label={label}
+      hint={hint}
+      error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
+      disabled={disabled}
+    >
       {accessory != null ? (
         <View style={styles.inputRow}>
           {input}

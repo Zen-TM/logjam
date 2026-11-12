@@ -27,7 +27,7 @@ beforeEach(() => {
   findUnique.mockReset();
 });
 
-// These tests encode the access boundary of the sharing-audit surface (fix 24).
+// These tests encode the access boundary of the sharing-audit surface.
 // The invariant they defend: you can only ever see or revoke shares on places
 // YOU OWN, and only for a friendship you are actually a member of.
 

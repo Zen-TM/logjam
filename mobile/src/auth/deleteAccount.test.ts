@@ -1,12 +1,10 @@
-// Guard: deleting an account from Logjam GPS removes the Cognito sign-in too.
-// Dropping the `deleteUser()` call from deleteAccount.ts turns the first test
-// red; calling it before the API delete turns the second red.
+// Guard: deleting an account from Logjam GPS is the API call alone; the server
+// ends the sign-in. Re-adding a client-side identity delete (Amplify's
+// deleteUser) turns the first test red, since the call list gains an entry.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const calls: string[] = [];
 const apiFetchMock = vi.fn();
-const deleteUserMock = vi.fn();
-const config = { authMode: "cognito" };
 
 vi.mock("../api/apiFetch", () => ({
   apiFetch: (path: string, init: { method: string }) => {
@@ -16,41 +14,25 @@ vi.mock("../api/apiFetch", () => ({
 }));
 vi.mock("aws-amplify/auth", () => ({
   deleteUser: () => {
-    calls.push("cognito deleteUser");
-    return deleteUserMock();
+    calls.push("client deleteUser");
   },
 }));
-vi.mock("../config", () => ({ config }));
 
 const { deleteAccountEverywhere } = await import("./deleteAccount");
 
 beforeEach(() => {
   calls.length = 0;
   apiFetchMock.mockReset().mockResolvedValue(undefined);
-  deleteUserMock.mockReset().mockResolvedValue(undefined);
-  config.authMode = "cognito";
 });
 
 describe("deleteAccountEverywhere", () => {
-  it("deletes the account row, then the Cognito sign-in", async () => {
+  it("only asks the API to delete the account", async () => {
     await deleteAccountEverywhere();
-    expect(calls).toEqual(["DELETE /users/me", "cognito deleteUser"]);
+    expect(calls).toEqual(["DELETE /users/me"]);
   });
 
-  it("keeps the sign-in when the account row could not be deleted", async () => {
+  it("reports a failed delete rather than claiming success", async () => {
     apiFetchMock.mockRejectedValue(new Error("offline"));
     await expect(deleteAccountEverywhere()).rejects.toThrow("offline");
-    expect(calls).toEqual(["DELETE /users/me"]);
-  });
-
-  it("reports a failed Cognito delete rather than claiming success", async () => {
-    deleteUserMock.mockRejectedValue(new Error("expired"));
-    await expect(deleteAccountEverywhere()).rejects.toThrow("expired");
-  });
-
-  it("skips Cognito under fake auth, which has none", async () => {
-    config.authMode = "fake";
-    await deleteAccountEverywhere();
-    expect(calls).toEqual(["DELETE /users/me"]);
   });
 });

@@ -1,5 +1,5 @@
 // The verb list for ONE notification — the sheet the inbox's ⋯ opens
-// (DESIGN.md: per-item actions live in an overflow sheet, titled with the
+// (mobile/DESIGN.md: per-item actions live in an overflow sheet, titled with the
 // item, so rows stay clean and a mis-tap can't destroy anything).
 //
 // Four verbs, and no more. "Open" is the row's own tap, repeated here because
@@ -9,8 +9,11 @@
 // Saved" / "View in Friends" is the SAME idea for a notification whose subject
 // lives in a tab rather than on a screen of its own — where that is, and
 // whether there is one at all, is `notificationDestination.ts`; the two never
-// both appear, because a place share is the only kind with an Open. Read/
-// unread is ONE row whose direction follows the notification's current state.
+// both appear, because a place share is the only kind with an Open. A
+// maintainer announcement has no verb of its own: its message is a sheet, a
+// sheet never opens another (mobile/DESIGN.md), and the row's tap opens it.
+// Read/unread is ONE row whose direction follows the notification's current
+// state.
 // Delete is last and warning-hued, as everywhere else.
 //
 // Accept / Turn down are deliberately NOT here: they already sit in the row, and
@@ -19,7 +22,8 @@
 //
 // PRIVACY: the sheet's title is the row's own label, which may carry a place
 // name or a filename — user text, rendered and never logged (shared/DESIGN.md §13).
-import { Alert, StyleSheet, View } from "react-native";
+// Guard: mobile/src/sentry/scrubEvent.test.ts.
+import { StyleSheet, View } from "react-native";
 
 import type { TNotification } from "../api/types";
 import {
@@ -27,11 +31,12 @@ import {
   type NotificationDestination,
 } from "./notificationDestination";
 import { spacing, useTheme } from "../theme";
-import { BottomSheet, closedSheet, Row } from "../ui";
+import { BottomSheet, confirm, Row } from "../ui";
 import {
   notificationDeleteConfirm,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
   notificationVerb,
 } from "@logjam/shared";
 
@@ -39,6 +44,7 @@ export function NotificationOptionsSheet({
   notification,
   visible,
   onClose,
+  onClosed,
   onOpen,
   onView,
   onSetRead,
@@ -47,6 +53,7 @@ export function NotificationOptionsSheet({
   notification: TNotification | null;
   visible: boolean;
   onClose: () => void;
+  onClosed?: () => void;
   /** Follow the notification through to the thing it is about. */
   onOpen: (notification: TNotification) => void;
   /** Go to the tab its subject lives in, with that row pulsed on arrival. */
@@ -59,10 +66,24 @@ export function NotificationOptionsSheet({
 }) {
   const theme = useTheme();
 
-  if (!notification) return closedSheet;
+  // Not `closedSheet`: the owner clears the subject as it closes the sheet,
+  // and `onClosed` has to outlive that render to fire at the end of the slide.
+  if (!notification) {
+    return (
+      <BottomSheet
+        visible={false}
+        onClose={onClose}
+        onClosed={onClosed}
+        title=""
+      >
+        {null}
+      </BottomSheet>
+    );
+  }
 
   const label = notificationLabel(notification);
   const openable = notificationPlaceId(notification) !== null;
+  const plan = notificationPlanTarget(notification) !== null;
   const destination = notificationDestination(notification);
 
   const act = (run: () => void) => {
@@ -70,32 +91,42 @@ export function NotificationOptionsSheet({
     run();
   };
 
+  // One notification, so the sentence is short — but it is still a dialog,
+  // because a delete is not undoable and there is no trash to fish it out
+  // of (mobile/DESIGN.md).
   const confirmDelete = () =>
-    act(() =>
-      // One notification, so the sentence is short — but it is still a dialog,
-      // because a delete is not undoable and there is no trash to fish it out
-      // of (DESIGN.md).
-      Alert.alert(
-        notificationDeleteConfirm(1).confirmTitle,
-        notificationDeleteConfirm(1).confirmBody,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => onDelete(notification),
-          },
-        ],
-      ),
-    );
+    act(() => {
+      void (async () => {
+        if (
+          await confirm({
+            ...notificationDeleteConfirm(1),
+            confirmLabel: "Delete",
+            tone: "destructive",
+          })
+        )
+          onDelete(notification);
+      })();
+    });
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={label.text}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      onClosed={onClosed}
+      title={label.text}
+    >
       <View style={styles.body}>
         {openable ? (
           <Row
             icon={notificationVerb("open").icon}
             title={notificationVerb("open").label}
+            onPress={() => act(() => onOpen(notification))}
+          />
+        ) : null}
+        {plan ? (
+          <Row
+            icon={notificationVerb("openPlan").icon}
+            title={notificationVerb("openPlan").label}
             onPress={() => act(() => onOpen(notification))}
           />
         ) : null}

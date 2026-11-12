@@ -2,7 +2,9 @@ import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   ACCOUNT,
   contractSectionKeys,
-  formatCredits,
+  formatCreditsOf,
+  SIGN_OUT_EVERYWHERE_BODY,
+  SIGN_OUT_EVERYWHERE_FAILED,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -11,7 +13,8 @@ import {
   exportUserData,
   type TUser,
 } from "../../../placeUtils";
-import { useAuth } from "../../../useAuth";
+import { signOut, signOutEverywhere } from "../../../useAuth";
+import { hasCognitoAccount } from "../../../auth/oidc";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import { useToast } from "../../feedback/ToastProvider";
@@ -55,7 +58,7 @@ function percentUsed(used: number, quota: number): number {
  * the section order comes from.
  *
  * PRIVACY: username, email and byte counts. The email appears here and nowhere
- * else — friend search and lists are username-only (root CLAUDE.md).
+ * else — friend search and lists are username-only (api/src/__tests__/friends.test.ts).
  */
 const copy = ACCOUNT.copy;
 
@@ -71,7 +74,6 @@ function AccountPanel({
   error: string | null;
   onRetry: () => void;
 }) {
-  const { signOut } = useAuth();
   const toast = useToast();
   const [username, setUsername] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -79,6 +81,8 @@ function AccountPanel({
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [signOutEverywhereOpen, setSignOutEverywhereOpen] = useState(false);
+  const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -89,6 +93,18 @@ function AccountPanel({
     if (currentUser) {
       setUsername(currentUser.username);
       setEmail(currentUser.email);
+    }
+  }
+
+  async function handleSignOutEverywhere() {
+    setSigningOutEverywhere(true);
+    try {
+      await signOutEverywhere();
+    } catch (err) {
+      console.error(err);
+      toast.error(SIGN_OUT_EVERYWHERE_FAILED);
+      setSigningOutEverywhere(false);
+      setSignOutEverywhereOpen(false);
     }
   }
 
@@ -104,10 +120,13 @@ function AccountPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      toast.done(
+        "Your data was downloaded as a JSON file. Photos and videos aren't in it.",
+      );
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't download your data. Please try again."),
+        messageFromError(err, "Couldn't download your data. Try again."),
       );
     } finally {
       setExporting(false);
@@ -171,8 +190,10 @@ function AccountPanel({
             )}
           />
           <p className={classes.meterLabel}>
-            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
-            {formatCredits(currentUser.monthlyComputeCredits)}
+            {formatCreditsOf(
+              currentUser.monthlyComputeUsage,
+              currentUser.monthlyComputeCredits,
+            )}
             {creditsResetLabel && (
               <span className={classes.meterHint}>
                 {" "}
@@ -196,11 +217,15 @@ function AccountPanel({
             title={copy.email}
             subtitle={email ?? undefined}
             trailing={
-              <IconButton
-                icon="edit"
-                label={copy.changeEmail}
-                onClick={() => setChangeEmailOpen(true)}
-              />
+              // Cognito's own call; other providers manage the address on
+              // their own page.
+              hasCognitoAccount() ? (
+                <IconButton
+                  icon="edit"
+                  label={copy.changeEmail}
+                  onClick={() => setChangeEmailOpen(true)}
+                />
+              ) : undefined
             }
           />
         </>
@@ -211,12 +236,16 @@ function AccountPanel({
           <SectionHeader title={copy.yourData} />
           <Button
             variant="outline"
-            icon="export"
+            icon="download"
             busy={exporting}
             onClick={handleExport}
           >
             Download my data
           </Button>
+          <p className={classes.state}>
+            A JSON file of your places, trips and shares for this account.
+            Photos and videos aren't in it, so it isn't a full backup.
+          </p>
         </>
       ) : null,
     leaving: () =>
@@ -226,8 +255,17 @@ function AccountPanel({
           <Button variant="outline" icon="signOut" onClick={signOut}>
             {copy.signOut}
           </Button>
+          {hasCognitoAccount() && (
+            <Button
+              variant="outline"
+              icon="signOut"
+              onClick={() => setSignOutEverywhereOpen(true)}
+            >
+              {copy.signOutEverywhere}
+            </Button>
+          )}
           <Row
-            leading={<IconTile icon="delete" hue="var(--color-warning)" />}
+            leading={<IconTile icon="delete" hue="var(--color-accent)" />}
             title={copy.deleteAccount}
             onOpen={() => setDeleteAccountOpen(true)}
           />
@@ -275,6 +313,32 @@ function AccountPanel({
           />
         </>
       )}
+      <Dialog
+        open={signOutEverywhereOpen}
+        title={copy.signOutEverywhere}
+        onClose={() => setSignOutEverywhereOpen(false)}
+        dismissible={!signingOutEverywhere}
+        footer={
+          <>
+            <Button
+              onClick={() => setSignOutEverywhereOpen(false)}
+              disabled={signingOutEverywhere}
+              disabledReason="Signing out…"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="filled"
+              busy={signingOutEverywhere}
+              onClick={handleSignOutEverywhere}
+            >
+              {copy.signOutEverywhere}
+            </Button>
+          </>
+        }
+      >
+        {SIGN_OUT_EVERYWHERE_BODY}
+      </Dialog>
       <ChangeEmailDialog
         open={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}

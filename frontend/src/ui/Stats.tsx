@@ -75,10 +75,11 @@ export type Stat = {
    * Take the whole row rather than one column. For the figure that is the
    * headline among its neighbours — a route's distance, with climb and descent
    * paired beneath it, because those two are one fact about the line and
-   * reading them side by side is what makes them comparable (operator,
-   * 2026-09-17).
+   * reading them side by side is what makes them comparable.
    */
   span?: boolean;
+  /** Under the value, muted: why there is no figure. */
+  note?: string;
   /** Makes the cell copy its value on press, and draws a copy glyph beside the
    *  value so the press can be found. The cell is on the card colour only then:
    *  the fill means "press me" (UX §4), a read-out sits on the page. */
@@ -122,6 +123,7 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
             ) : (
               stat.value
             )}
+            {stat.note && <span className={classes.statNote}>{stat.note}</span>}
           </dd>
         </div>
       ))}

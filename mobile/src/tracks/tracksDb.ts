@@ -1,12 +1,12 @@
-// Track + waypoint storage (Stage 7): recorded GPS tracks and dropped
-// waypoints, in the same app-private SQLite DB as the offline registry (one
-// store, one backup-exclusion posture, one app-lock trigger).
+// Track + waypoint storage: recorded GPS tracks and dropped waypoints, in the
+// same app-private SQLite DB as the offline registry (one store, one
+// backup-exclusion posture, one app-lock trigger).
 //
-// PRIVACY: a recorded track is precise user location history in a place —
-// the most sensitive data the app holds. Rows are app-private,
-// backup-excluded, arm the Stage 4 app lock, stay local until Stage 8's
-// explicit sync, and never reach logs, telemetry or crash reports. Logging
-// around this module is state transitions and counts only.
+// PRIVACY: a recorded track is precise user location history in a place — the
+// most sensitive data Logjam GPS holds. Rows are app-private, backup-excluded,
+// arm the app lock, stay local until explicit sync, and never reach logs,
+// telemetry or crash reports. Logging around this module is state transitions
+// and counts only.
 import type {
   CandidateFix,
   FixRejection,
@@ -16,6 +16,7 @@ import type {
 } from "@logjam/shared";
 
 import { getOfflineDb } from "../offline/registryDb";
+import { withSyncTransaction } from "../sync/syncDb";
 
 /** recording/paused = the single active track; done = saved. */
 export type TrackState = "recording" | "paused" | "done";
@@ -28,7 +29,7 @@ export type Track = {
   visible: boolean;
   /** Increments on resume so the polyline breaks across pause gaps. */
   currentSegment: number;
-  /** Cached stats — recomputed while the app is in the foreground and on
+  /** Cached stats — recomputed while Logjam GPS is in the foreground and on
    *  finish, never in the background (see trackRecorder.refreshTrackStats). */
   distanceM: number;
   durationMs: number;
@@ -68,8 +69,7 @@ export type Waypoint = {
   lat: number;
   createdAt: string;
   /** Marker hue as the GPX file gave it. Optional — a file that names no
-   *  colour still renders. (It used to be derived from the old waypoint tags by
-   *  map/waypointSymbol.ts; both are gone.) */
+   *  colour still renders. */
   color?: string;
 };
 
@@ -348,10 +348,10 @@ export async function updateTrack(
 
 export async function deleteTrack(id: string): Promise<void> {
   const db = await getOfflineDb();
-  // MOT-003: all three or none — a crash between them used to leave orphaned
+  // All three or none — a crash between them must not leave orphaned
   // track_point / track_point_rejected rows (location history) with no track
-  // row to ever delete them again.
-  await db.withTransactionAsync(async () => {
+  // row to delete them.
+  await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
     await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
     await db.runAsync("DELETE FROM track WHERE id = ?", id);
@@ -413,8 +413,8 @@ export type RejectedFix = CandidateFix & {
  * and cannot see this table, so a bug here cannot corrupt a recording.
  *
  * Deliberately does NOT `notifyChanged()`: no screen observes rejected fixes,
- * and a notify per batch on a path nothing reads is how the `useTracks` storm
- * (885379d) happened the first time.
+ * and a notify per batch on a path nothing reads would trigger unnecessary
+ * listener renders.
  *
  * Failure is swallowed by the caller, not here — see `handleLocationBatch`.
  */
@@ -424,7 +424,7 @@ export async function appendRejectedFixes(
 ): Promise<void> {
   if (fixes.length === 0) return;
   const db = await getOfflineDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
       "SELECT MAX(seq) AS maxSeq FROM track_point_rejected WHERE trackId = ?",
       trackId,
@@ -457,11 +457,9 @@ export async function appendRejectedFixes(
  * Append a batch in one transaction. Seq continues from the stored max.
  *
  * It carries `pointCount` and `updatedAt` with it, in the SAME transaction.
- * That used to ride on the stats write that followed every batch, and the stats
- * write is now a foreground-only job (see `refreshTrackStats`) — so without this
- * a recording made with the screen off would grow its points while the row went
- * on claiming it had none, and the map layer, which reloads on `pointCount`,
- * would never draw them.
+ * The stats write is a foreground-only job (see `refreshTrackStats`), so
+ * updating pointCount here ensures a recording made with the screen off
+ * keeps the row count accurate so the map layer reloads and draws them.
  */
 export async function appendTrackPoints(
   trackId: string,
@@ -469,7 +467,7 @@ export async function appendTrackPoints(
 ): Promise<void> {
   if (points.length === 0) return;
   const db = await getOfflineDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
       "SELECT MAX(seq) AS maxSeq FROM track_point WHERE trackId = ?",
       trackId,
@@ -546,6 +544,6 @@ export async function addTrackPointSuppression(
 
 // --- Waypoints ---
 //
-// The local-only `waypoint` table is gone (Stage 8 made waypoints a synced
-// entity; `migrateLegacyWaypoints` drains and drops it). The `Waypoint` SHAPE
-// survives as the map layer's contract — mirror rows are mapped into it.
+// Waypoints are synced entities; `migrateLegacyWaypoints` drains and drops any
+// legacy local-only table. The `Waypoint` shape serves as the map layer's
+// contract — mirror rows are mapped into it.

@@ -1,10 +1,11 @@
 /**
  * Pure calendar math for `DatePicker`. Kept RN-free so it is unit-testable.
  *
- * Everything is UTC. Trip dates are stored as UTC-midnight date-only values
- * (CH-001), so a picker that built its grid in local time would hand back the
- * previous day for every AEST user.
+ * Everything is UTC. Trip dates are stored as UTC-midnight date-only values,
+ * so a picker that built its grid in local time would hand back the previous
+ * day for every AEST user.
  */
+import type { DayRange } from "@logjam/shared";
 
 /** "YYYY-MM-DD" for a Date, read in UTC. */
 export function toDateKey(date: Date): string {
@@ -89,3 +90,5 @@ export function formatMonthLabel({ year, month }: YearMonth): string {
     timeZone: "UTC",
   });
 }
+
+export type DateRange = DayRange;

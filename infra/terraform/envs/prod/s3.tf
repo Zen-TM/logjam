@@ -1,8 +1,5 @@
-# Prod S3 buckets, via the same storage module the local root uses. CloudFront
-# OAC bucket policies (topo-jobs master/*, frontend /*) are NOT managed here —
-# they reference the CloudFront distribution and are owned by the CDN config in
-# M5 once that distribution is a Terraform resource. Leaving them undeclared
-# means Terraform does not touch the live policies.
+# Prod S3 buckets, via the same storage module the local root uses. Bucket
+# policies are declared in s3_policies.tf.
 
 # S3 server access logs for the two buckets users can pull bytes out of. This
 # is the ONLY source of real egress volume: the API hands out presigned GET
@@ -84,12 +81,11 @@ module "media" {
   }]
 }
 
-# Topo job inputs/outputs + CDN-served master tiles. All four PAB flags true
-# (CP-004): the CloudFront OAC bucket policy grants read to the
-# cloudfront.amazonaws.com SERVICE principal under an AWS:SourceArn condition —
-# S3 does not classify that as "public", so block_public_policy /
-# restrict_public_buckets do not affect OAC tile serving (verify with a
-# CloudFront tile fetch after apply).
+# Topo job inputs/outputs + CDN-served master tiles. All four PAB flags true:
+# the CloudFront OAC bucket policy grants read to the cloudfront.amazonaws.com
+# SERVICE principal under an AWS:SourceArn condition — S3 does not classify that
+# as "public", so block_public_policy / restrict_public_buckets do not affect
+# OAC tile serving (verify with a CloudFront tile fetch after apply).
 module "topo_jobs" {
   source                 = "../../modules/storage"
   bucket_name            = "logjam-topo-jobs"
@@ -115,15 +111,26 @@ module "topo_jobs" {
     expose_headers  = ["ETag", "Content-Range", "Accept-Ranges", "Content-Length"]
   }]
 
-  lifecycle_rules = [{
-    id              = "expire-exports"
-    prefix          = "exports/"
-    expiration_days = 7
-  }]
+  # A LiDAR ZIP arrives as a multipart upload; one that never completes keeps
+  # its parts (billed, invisible to a prefix delete) until aborted. The API
+  # aborts it with its job (lib/topoJobReaper.ts sweeps an abandoned one after
+  # a day); this rule, a day later, catches an abort that failed.
+  lifecycle_rules = [
+    {
+      id              = "expire-exports"
+      prefix          = "exports/"
+      expiration_days = 7
+    },
+    {
+      id                              = "abort-incomplete-uploads"
+      prefix                          = "inputs/"
+      abort_incomplete_multipart_days = 2
+    },
+  ]
 }
 
 # Frontend SPA bundle, served via CloudFront OAC. Private bucket; the OAC
-# bucket policy (managed in M5) is the only read grant.
+# bucket policy (s3_policies.tf) is the only read grant.
 module "frontend" {
   source                 = "../../modules/storage"
   bucket_name            = "logjam-frontend-620853681701-ap-southeast-2-an"
@@ -138,7 +145,7 @@ module "frontend" {
   }
 }
 
-# Account-level S3 Block Public Access backstop (CP-003). Per-bucket PAB above
+# Account-level S3 Block Public Access backstop. Per-bucket PAB above
 # only covers buckets Terraform manages; this catches every bucket in the
 # account — including the AWS-managed Elastic Beanstalk deploy bucket
 # (elasticbeanstalk-ap-southeast-2-620853681701, created without PAB by default)

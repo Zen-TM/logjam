@@ -18,7 +18,7 @@ describe("parseWithFormat", () => {
     expect(parseWithFormat("2023/06/15", "DD/MM/YYYY")).toBeNull();
   });
 
-  it("rejects an impossible date instead of letting it roll forward (FECO-007)", () => {
+  it("rejects an impossible date instead of letting it roll forward", () => {
     // JS Date silently normalizes 30/02 into Mar 2 rather than failing — the
     // regex matches, but the round-trip check must catch the rollover and
     // return null instead of a wrong-but-valid-looking Date.
@@ -89,6 +89,31 @@ describe("detectDateFormat", () => {
     expect(detectDateFormat(["2023-06-15", "2022-12-01"])).toEqual({
       format: "YYYY-MM-DD",
       ambiguous: false,
+    });
+  });
+});
+
+// Mutation that turns it red: requiring every sample to read again (the stray
+// note flips ISO to the default), or putting MM/DD/YYYY before DD/MM/YYYY in
+// the tie order (the last case then reads month-first).
+describe("detectDateFormat on mixed and month-first samples", () => {
+  it("keeps ISO when a stray non-date sits among the samples", () => {
+    expect(
+      detectDateFormat(["2021-02-06", "sometime in March", "2021-04-10"]),
+    ).toEqual({ format: "YYYY-MM-DD", ambiguous: false });
+  });
+
+  it("reads month-first when a day above 12 only fits there", () => {
+    expect(detectDateFormat(["02/03/2020", "12/25/2020"])).toEqual({
+      format: "MM/DD/YYYY",
+      ambiguous: false,
+    });
+  });
+
+  it("flags day-first or month-first when every sample reads both ways", () => {
+    expect(detectDateFormat(["02/03/2020", "01/10/2020"])).toEqual({
+      format: "DD/MM/YYYY",
+      ambiguous: true,
     });
   });
 });

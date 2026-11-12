@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildWays,
-  WAY_KIND_LABELS,
-  WAY_KINDS,
   wayKindCounts,
   wayMatchesSearch,
   type WayItem,
@@ -40,6 +38,7 @@ const file = (over: Partial<StandaloneFile> = {}): StandaloneFile => ({
   origin: "import",
   metadata: {},
   linkedPlaceId: null,
+  hasTrip: false,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   ...over,
@@ -64,6 +63,7 @@ const build = (args: {
   placeTracks?: PlaceTrack[];
   currentUserId?: string | null;
   sharedPlaceIds?: string[];
+  ownPlaceIds?: string[];
 }): WayItem[] =>
   buildWays({
     routes: args.routes ?? [],
@@ -71,21 +71,8 @@ const build = (args: {
     placeTracks: args.placeTracks ?? [],
     currentUserId: args.currentUserId === undefined ? ME : args.currentUserId,
     sharedPlaceIds: new Set(args.sharedPlaceIds ?? []),
+    ownPlaceIds: new Set(args.ownPlaceIds ?? []),
   });
-
-describe("WAY_KINDS", () => {
-  // Two lists that must agree: a kind with no word for it would render a blank
-  // chip rather than fail.
-  it("labels every kind", () => {
-    expect(Object.keys(WAY_KIND_LABELS).sort()).toEqual([...WAY_KINDS].sort());
-  });
-
-  // Where a way lives is a property of the row. It was briefly a fourth chip,
-  // which put "what a thing is" and "where it lives" on one axis.
-  it("names only what a way IS", () => {
-    expect([...WAY_KINDS]).toEqual(["route", "track", "import"]);
-  });
-});
 
 describe("buildWays", () => {
   it("takes a file's kind from its own origin", () => {
@@ -96,6 +83,18 @@ describe("buildWays", () => {
       ],
     });
     expect(ways.map((way) => way.kind)).toEqual(["track", "import"]);
+  });
+
+  // Mutation: hard-code hasTrip to false in buildWays, and the recording the
+  // API says has a trip is offered "Log a trip" again.
+  it("carries whether a trip was logged from a recording", () => {
+    const ways = build({
+      standaloneFiles: [
+        file({ id: "a", origin: "track", hasTrip: true }),
+        file({ id: "b", origin: "track" }),
+      ],
+    });
+    expect(ways.map((way) => way.hasTrip)).toEqual([true, false]);
   });
 
   it("measures a route from its geometry", () => {
@@ -154,6 +153,7 @@ describe("buildWays", () => {
   // and titled by its own name — not a kind named for where it lives.
   it("sorts a place's track by its origin and titles it by its name", () => {
     const ways = build({
+      sharedPlaceIds: ["p1"],
       placeTracks: [
         placeTrack({
           mediaId: "a",
@@ -201,6 +201,7 @@ describe("buildWays", () => {
   it("keeps a track on a place a friend shared", () => {
     const ways = build({
       standaloneFiles: [file({ id: "mine" })],
+      sharedPlaceIds: ["p1"],
       placeTracks: [placeTrack({ mediaId: "theirs" })],
     });
     expect(ways.map((way) => way.shared)).toEqual([false, true]);
@@ -242,14 +243,40 @@ describe("buildWays", () => {
 
   // `/places/tracks` IS the place's endpoint: nothing it returns has a share
   // row of its own.
-  it("reaches every one of a place's tracks through that place", () => {
+  it("reaches a track on a shared place through that place", () => {
+    const [way] = build({
+      sharedPlaceIds: ["p1"],
+      placeTracks: [placeTrack()],
+    });
+    expect(way).toMatchObject({ shared: true, viaPlace: true });
+  });
+
+  // A file attached in the place's edit form has no `origin`, so only
+  // `/places/tracks` returns it. Red when `shared` goes back to true for every
+  // row from that endpoint: the owner then sees their own upload as someone
+  // else's, with no Download or Delete.
+  it("calls a track on a place the user owns their own", () => {
+    const [way] = build({
+      ownPlaceIds: ["p1"],
+      placeTracks: [placeTrack({ origin: null })],
+    });
+    expect(way).toMatchObject({
+      shared: false,
+      viaPlace: false,
+      hasOrigin: false,
+      placeId: "p1",
+    });
+  });
+
+  // Ownership is proved, not assumed: a place in neither list (the shared list
+  // still loading, or a share revoked) must not show its files with the
+  // owner's verbs. Red when `shared` is derived from `sharedPlaceIds`.
+  it("keeps a track on a place the user is not known to own as shared", () => {
     const [way] = build({ placeTracks: [placeTrack()] });
     expect(way).toMatchObject({ shared: true, viaPlace: true });
   });
 
-  // The list used to be routes, then files, then a friend's tracks — the order
-  // the three fetches happened to be written in, which means nothing to the
-  // reader: a track recorded this morning sat below a route drawn last year.
+  // Routes, files, and tracks are ordered together newest first.
   it("orders every kind together, newest first", () => {
     const ways = build({
       routes: [

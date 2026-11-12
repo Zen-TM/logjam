@@ -55,8 +55,7 @@ describe("buildSnapGraph", () => {
   });
 
   it("joins two ways whose ends are near but not identical", () => {
-    // The spike's central finding: real junctions sit metres apart, not on the
-    // same coordinate.
+    // Real junctions sit metres apart, not on the same coordinate.
     const first = eastward(3, 50);
     const last = first.coords[first.coords.length - 1]!;
     const second: SnapLine = {
@@ -218,7 +217,7 @@ describe("snapSegment", () => {
   });
 
   it("stays fast on a graph the size of a real tile block", () => {
-    // The spike saw ~47 features per 3x3 z15 block; this is well past that.
+    // A typical 3x3 z15 block has ~47 features; 200 is well past that.
     const lines: SnapLine[] = [];
     for (let i = 0; i < 200; i++) lines.push(eastward(40, 25, i * 30));
     const started = Date.now();

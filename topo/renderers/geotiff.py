@@ -3,8 +3,7 @@
 Per-layer is a direct copy of the stored COG (cheap, no rendering needed).
 Composite mosaics the per-layer COGs via gdal.Warp using alpha-respecting
 blending — vectors are baked into the composite via the tile compositor and
-then translated back to a COG. Vector-only selections are rejected upstream
-in the API validator (EXPORT_FORMAT_RULES.geotiff.allowVector = false).
+then translated back to a COG. Vector layers are skipped.
 """
 
 from __future__ import annotations

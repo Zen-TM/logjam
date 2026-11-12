@@ -6,15 +6,10 @@ import {
 // The import template for ONE place type, generated from that type's own field
 // definitions.
 //
-// It used to be a static file (`public/templates/canyon-import-template.csv`)
-// with the seven canyon grades hardcoded in its header. That file is a promise
-// about what a place has, and it stopped being true the moment a place could be
-// a campsite: a user importing campsites downloaded a template asking for a
-// V grade and offering no column for capacity.
-//
-// Generated per type, the promise holds by construction — the header IS the
-// form. The logbook template stays a static file, because a trip's columns do
-// not depend on a place type.
+// Generated per type, the import template reflects that type's actual fields
+// (e.g. a campsite template offers capacity rather than canyon grades). The
+// logbook template stays a static file, because a trip's columns do not depend
+// on a place type.
 //
 // The header names must be what the column matcher recognises: structural
 // columns by their fixed aliases, type-specific ones by their field LABEL,
@@ -68,9 +63,7 @@ export function placeImportTemplateCsv(
     `Sample notes about the ${typeName.toLowerCase()}`,
     ...defs.map(exampleValue),
   ];
-  // The canyon template shipped with grade examples filled in, and losing them
-  // would make the generated file worse than the static one it replaces for
-  // the type most people import.
+  // Provide canyon example values for standard grades and stats.
   if (isCanyon) {
     for (const [index, def] of defs.entries()) {
       const filled: Record<string, string> = {

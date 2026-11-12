@@ -2,13 +2,10 @@
  * Where along a line the elevation cursor is, so the map can mark the same spot.
  *
  * NOT React state, for the reason `placeHighlight.ts` is not: a pointer dragged
- * across a chart emits many times a second, and as App state every one of those
- * re-rendered App, the map component and the panel — so the dot the user is
- * dragging waited behind a render of everything else, which is what an operator
- * reports as a laggy graph (2026-09-17, still laggy after the chart itself was
- * coalesced to one frame: the coalescing capped how OFTEN it happened, not how
- * much each one cost). The panel writes here, the map subscribes and sets a
- * GeoJSON source, and nothing renders.
+ * across a chart emits many times a second; keeping it in React state would
+ * re-render App, Map and the panel on every movement and cause the dot to lag.
+ * The panel writes here, the map subscribes and sets a GeoJSON source, avoiding
+ * React re-renders on hover.
  *
  * It carries the COLOUR as well as the position because the writer always knows
  * it — a route's own colour, or the draft's — and sending it along the same

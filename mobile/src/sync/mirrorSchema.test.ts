@@ -10,14 +10,12 @@ import {
 } from "./mirrorSchema";
 import { OUTBOX_ENTITIES, outboxMirrorTable } from "./outboxTables";
 
-// The regression this file exists for: a tombstone cascade wrote
-// `waypoints.place_id`, a column the schema had stopped declaring. Nothing
-// caught it — typecheck can't see inside a SQL string, and no test ever opened
-// the real database — so the first place delete an account saw rolled back the
-// delta transaction, took the cursor write with it, and froze sync forever on
-// every fresh install. The suite was green throughout.
+// Guards SQL statements against schema drift: SQL strings are invisible to the
+// typechecker. If a statement references a column the schema does not declare,
+// a tombstone cascade or query would roll back the delta transaction, lose
+// the cursor write, and break sync.
 //
-// So: read the SQL, and check every column it names against the one schema
+// So: read the SQL, and check every column it names against the schema
 // declaration. Cheap, and it fails on the day someone renames a column.
 
 const SYNC_DIR = __dirname;
@@ -190,9 +188,9 @@ describe("mirror SQL vs the schema declaration", () => {
 
 describe("the wipe derives from the schema", () => {
   it("holds every mirror table, routes included", () => {
-    // `routes` was added to the schema and never to the wipe list, so sign-out
-    // and account-switch left the previous user's route geometry — their
-    // coordinates through places — on the phone for the next user's map.
+    // The wipe must include `routes`: otherwise sign-out and account-switch
+    // would leave the previous user's route geometry — their coordinates
+    // through places — on the phone for the next user's map.
     const names = MIRROR_TABLES.map((table) => table.name);
     expect(names).toContain("routes");
     expect(names).toContain("place_links");
@@ -229,9 +227,9 @@ describe("the wipe derives from the schema", () => {
   });
 });
 
-// The SCOPING columns, which arrived with the delta that carries them (mirror
-// version 8). A definition the phone cannot place is a definition it renders on
-// every form or on none — and the pair of columns is what makes the choice.
+// Custom field definitions carry scoping columns. A definition the phone
+// cannot place is a definition it renders on every form or on none — and the
+// pair of columns is what makes the choice.
 describe("custom field definitions carry their scoping", () => {
   it("has both columns, so a def can be placed on the right form", () => {
     const table = MIRROR_TABLES.find((t) => t.name === "custom_field_defs");

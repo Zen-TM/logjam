@@ -9,7 +9,7 @@
 /**
  * Which off-device sources this lookup may use.
  *
- * Pure so the rule has a test: the combination that matters is a guest in
+ * Pure so the rule has a test (elevationSources.test.ts): the combination that matters is a guest in
  * offline-only mode, where getting it wrong either leaks a request the user
  * asked us not to make or silently drops the only source they have.
  */

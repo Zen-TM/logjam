@@ -60,9 +60,18 @@
   margin-left: -5px;
 }
 
-.name {
+.label {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
+  padding: var(--space-1) 0;
+}
+
+/* "light" or "dark": what the name alone does not say. */
+.mode {
+  composes: detail from "../../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
 }
 
 .tick {

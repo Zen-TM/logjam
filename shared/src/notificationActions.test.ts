@@ -4,8 +4,10 @@ import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
 import {
   isResolvedElsewhereError,
-  notificationActions,
+  notificationActions as actionsFor,
 } from "./notificationActions.js";
+
+const notificationActions = (n: TNotification) => actionsFor(n, "gps");
 
 function notification(
   type: string,
@@ -47,7 +49,41 @@ describe("notificationActions", () => {
     expect(actions?.actions.map((a) => a.kind)).toEqual(["accept", "decline"]);
   });
 
-  it("offers save + turn down on a pending file send", () => {
+  // Mutation: return null for either plan kind, or give the join request the
+  // invite's words (the leader would read "You joined the plan.").
+  it("offers accept + decline on a plan invite and on a join request", () => {
+    const invite = notificationActions(
+      notification("plan_invited", { planId: "p1" }),
+    );
+    expect(invite?.type).toBe("plan_invite");
+    expect(invite?.targetId).toBe("p1");
+    expect(invite?.actions.map((a) => [a.kind, a.label])).toEqual([
+      ["accept", "Accept"],
+      ["decline", "Decline"],
+    ]);
+    expect(invite?.actions[0]?.success).toBe("You joined the plan.");
+
+    const request = notificationActions(
+      notification("plan_join_request", {
+        planId: "p1",
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    );
+    expect(request?.type).toBe("plan_join_request");
+    expect([request?.targetId, request?.requesterId]).toEqual(["p1", "u2"]);
+    expect(request?.actions[0]?.success).toBe("carol is in.");
+    expect(request?.actions[1]?.confirm?.title).toBe("Decline carol?");
+  });
+
+  it("offers nothing on a plan notification missing the ids its calls need", () => {
+    expect(notificationActions(notification("plan_invited", {}))).toBeNull();
+    expect(
+      notificationActions(notification("plan_join_request", { planId: "p1" })),
+    ).toBeNull();
+  });
+
+  it("offers save + decline on a pending file send", () => {
     const actions = notificationActions(
       notification("file_sent", {
         fileSendId: "s1",
@@ -58,30 +94,63 @@ describe("notificationActions", () => {
     );
     expect(actions?.type).toBe("file_sent");
     expect(actions?.targetId).toBe("s1");
-    expect(actions?.actions.map((a) => a.label)).toEqual([
-      "Save a copy",
-      "Turn down",
-    ]);
+    expect(actions?.actions.map((a) => a.label)).toEqual(["Accept", "Decline"]);
     expect(actions?.pill).toBeNull();
   });
 
-  // `accepted` means the URL was issued, not that the bytes landed, so the
-  // retry survives and there is nothing left to decline.
-  it("keeps the download on offer once accepted, and drops decline", () => {
-    const actions = notificationActions(
-      notification("file_sent", {
-        fileSendId: "s1",
-        filename: "Claustral.gpx",
-        fileSendStatus: "accepted",
-      }),
-    );
-    expect(actions?.actions.map((a) => a.kind)).toEqual(["accept"]);
-    expect(actions?.actions[0].label).toBe("Download again");
-    expect(actions?.pill).toBe("Saved");
+  // Mutation: return "Accept" on web too, and a download reads as an offer.
+  it("calls accepting a sent file a download on Logjam Web", () => {
+    const sent = notification("file_sent", {
+      fileSendId: "s1",
+      filename: "Claustral.gpx",
+      fileSendStatus: "pending",
+    });
+    expect(actionsFor(sent, "web")?.actions.map((a) => a.label)).toEqual([
+      "Download",
+      "Decline",
+    ]);
   });
 
-  // Every decline is a dialog: side by side in a row there is no overflow sheet
-  // left to keep "no" away from "yes".
+  // Mutation: return the phone's pill or failure on web, and Logjam Web says
+  // "Saved" or "Couldn't save" about a button called Download.
+  it("words Logjam Web's accepted pill and failure as a download", () => {
+    for (const fileSendStatus of ["pending", "accepted"]) {
+      const web = actionsFor(
+        notification("file_sent", {
+          fileSendId: "s1",
+          filename: "Claustral.gpx",
+          fileSendStatus,
+        }),
+        "web",
+      );
+      expect(web?.actions[0].failure).toBe("Couldn't download that file.");
+      expect(web?.pill).toBe(
+        fileSendStatus === "accepted" ? "Downloaded" : null,
+      );
+    }
+  });
+
+  // `accepted` means the URL was issued, not that the bytes landed, and a
+  // client cannot always tell they did not (a cancelled browser download, a
+  // GeoPDF kept only on another device). Mutation that turns it red: return
+  // `actions: []` for an accepted send, as it did when only an in-session
+  // failure offered a retry.
+  it("still offers a quiet fetch once a send is accepted", () => {
+    const accepted = notification("file_sent", {
+      fileSendId: "s1",
+      filename: "Claustral.gpx",
+      fileSendStatus: "accepted",
+    });
+    const target = notificationActions(accepted);
+    expect(target?.pill).toBe("Saved");
+    expect(
+      target?.actions.map((a) => [a.kind, a.label, a.quiet, a.confirm]),
+    ).toEqual([["accept", "Download again", true, null]]);
+  });
+
+  // Every decline is a dialog, the friend request's included (ADR 0016), and
+  // no accept is. Mutation that turns it red: take the confirm off the friend
+  // decline in `friendRequestAnswers`.
   it("confirms every decline and no accept", () => {
     for (const n of [
       notification("friend_request", {
@@ -93,8 +162,7 @@ describe("notificationActions", () => {
         filename: "Claustral.gpx",
       }),
     ]) {
-      const actions = notificationActions(n);
-      for (const action of actions!.actions) {
+      for (const action of notificationActions(n)!.actions) {
         expect(Boolean(action.confirm)).toBe(action.kind === "decline");
       }
     }
@@ -149,10 +217,9 @@ describe("notificationActions", () => {
     expect(body).toContain("bob");
   });
 
-  // The invariant that replaced "the notification query and the inbox endpoint
-  // use one filter": expired sends are deliberately KEPT by the server so the
-  // row can explain itself, and it is this that stops them offering a button
-  // the endpoint would refuse.
+  // Expired sends are deliberately kept by the server so the row can explain
+  // itself, and this stops them offering a button the inbox endpoint would
+  // refuse.
   it("offers nothing at all once the send has expired", () => {
     expect(
       notificationActions(

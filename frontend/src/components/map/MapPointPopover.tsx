@@ -1,23 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import * as maplibregl from "maplibre-gl";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
+  WEATHER,
   mapPointCatchment,
   mapPointCatchmentNote,
   mapPointFacts,
+  mapPointPosition,
+  mapPointStepBack,
   mapPointVerbs,
+  type MapPointView,
+  type CarrierId,
   type MapPointCatchment,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
-import { useElevationProfile, useFlowNetworkLookup } from "../../placeUtils";
+import { useElevationPoint, useFlowNetworkLookup } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
+import { WeatherView } from "../weather/WeatherView";
+import { useOnline, useWeather } from "../weather/useWeather";
 import {
+  IconButton,
   IconTile,
-  MapPointDot,
   Popover,
   Row,
   StatGrid,
@@ -26,36 +32,48 @@ import {
 import { readCssVar } from "./cssVar";
 import { CreekPointMarker } from "./CreekPointMarker";
 import { clearSnap, showSnap } from "./flowNetworkLayers";
+import { coverageAt, fireAt, landClassAt } from "./layerOrder";
+import { PointAnchor } from "./PointAnchor";
 import classes from "./MapPointPopover.module.css";
 
 /**
  * "What is here?": the panel a press on empty map opens, anchored at the point
- * it asked about, with a dot left there (`MAP_POINT`, shared/contracts).
+ * it asked about, with a dot left there (`MAP_POINT`, shared/contracts). It
+ * shows the facts and one Options row; Options holds the verbs, and the weather
+ * opens from there. The coordinates copy where they are pressed.
  *
  * Mounted only while a point is being asked about, so the elevation and
  * catchment requests are tied to the panel being open and never fire for a
  * stale point.
  *
- * PRIVACY (shared/DESIGN.md §13): the coordinate is on this panel and the
- * clipboard when the user presses Copy, and nowhere else: not in a toast, a
- * log or an error. `from` is the browser's own fix, which this never asks for.
+ * PRIVACY (shared/DESIGN.md §13): the coordinate goes to this panel, and to
+ * the clipboard when the user presses it; the toasts are fixed sentences.
+ * `from` is the browser's own fix, which this never asks for.
  */
 export default function MapPointPopover({
   map,
   point,
   from,
+  coverageCarrier,
+  startAt,
   onClose,
   onAddPlace,
   onMeasure,
+  onDrawRoute,
   onShowUpstream,
 }: {
   map: maplibregl.Map;
   point: MapPointCoord;
   /** The viewer's fix if the browser already has one, else null. */
   from: MapPointCoord | null;
+  /** The carrier the Coverage overlay draws, or null before one is picked. */
+  coverageCarrier: CarrierId | null;
+  /** A right-click opens the panel on Options, with no facts to go back to. */
+  startAt?: "options";
   onClose: () => void;
   onAddPlace: (point: MapPointCoord) => void;
   onMeasure: (point: MapPointCoord) => void;
+  onDrawRoute: (point: MapPointCoord) => void;
   /** Draws the creeks upstream of the point; they outlive this panel. */
   onShowUpstream: (point: MapPointCoord) => void;
 }) {
@@ -64,32 +82,54 @@ export default function MapPointPopover({
   // the point would cover it (and sit too close to its buttons to press): it
   // opens above the point there instead.
   const narrow = useIsMobile();
-  // The element the dot is drawn into, and the popover's anchor: a marker, so
-  // it stays on the point while the map moves under it.
+  // The element the dot is drawn into, and the popover's anchor.
   const [anchorEl] = useState(() => document.createElement("div"));
   const anchorRef = useRef<HTMLElement | null>(anchorEl);
 
-  useEffect(() => {
-    const marker = new maplibregl.Marker({ element: anchorEl })
-      .setLngLat([point.longitude, point.latitude])
-      .addTo(map);
-    // The point stays put while the map moves, so the popover would be left
-    // beside nothing: moving the map is looking away.
-    map.on("movestart", onClose);
-    return () => {
-      map.off("movestart", onClose);
-      marker.remove();
+  // One request for the height and the slope.
+  const { reading, loading } = useElevationPoint(
+    point.longitude,
+    point.latitude,
+  );
+  const metres = reading?.elevationM ?? null;
+  const [{ land, fire, coverage }] = useState(() => {
+    const { x, y } = map.project([point.longitude, point.latitude]);
+    return {
+      land: landClassAt(map, [x, y]),
+      fire: fireAt(map, [x, y]),
+      coverage:
+        coverageCarrier &&
+        coverageAt(
+          map,
+          [x, y],
+          [point.longitude, point.latitude],
+          coverageCarrier,
+        ),
     };
-  }, [map, point, anchorEl, onClose]);
+  });
 
-  // The elevation endpoint profiles a LINE, and the shortest legal one is two
-  // points: the second is nudged east by ~1 m, inside the DEM's own cell size
-  // (Logjam GPS does the same).
-  const profile = useElevationProfile([
-    [point.longitude, point.latitude],
-    [point.longitude + 0.00001, point.latitude],
-  ]);
-  const metres = profile.profile?.samples[0]?.elevationM ?? null;
+  // Options and the weather swap the body in place and back out one step
+  // (shared/DESIGN.md §10). The press is what fetches the weather.
+  const [view, setView] = useState<MapPointView>(startAt ?? "point");
+  const online = useOnline();
+  const weather = useWeather(point, metres);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const previousView = useRef(view);
+  // The pressed control is unmounted by the swap: focus goes to the arrow on
+  // the way in and to the row that was opened on the way out
+  // (frontend/DESIGN.md §2).
+  useEffect(() => {
+    const was = previousView.current;
+    previousView.current = view;
+    if (was === view) return;
+    const deeper = view === "weather" || was === "point";
+    if (deeper) backRef.current?.focus();
+    else
+      bodyRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-verb="${was}"] button`)
+        ?.focus();
+  }, [view]);
 
   const flow = useFlowNetworkLookup(point, MAP_POINT.copy.catchmentFailed);
   const catchment: MapPointCatchment = flow.lookup
@@ -108,21 +148,37 @@ export default function MapPointPopover({
     return () => clearSnap(map);
   }, [map, point, snapped]);
 
+  // Pressed too soon, the weather would be asked without a height and answer
+  // for the cell's own DEM, which in canyon country can be far from the spot.
+  const checkingHeight = loading;
+
+  const copyPosition = () => {
+    void navigator.clipboard
+      .writeText(mapPointPosition(point))
+      .then(() => toast.done(MAP_POINT.copy.coordinatesCopied))
+      .catch(() => toast.error("Couldn't copy the coordinates."));
+  };
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
       metres != null
         ? { state: "known", metres }
-        : profile.loading || (!profile.error && profile.profile === null)
+        : loading
           ? { state: "checking" }
           : { state: "unavailable" },
     from,
+    slopeDegrees: reading?.slopeDegrees ?? null,
     catchment,
+    land,
+    fire,
+    coverage,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
+    ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
     ...(fact.tag ? { tag: fact.tag } : {}),
+    ...(fact.copyable ? { onCopy: copyPosition } : {}),
   }));
 
   const close = () => {
@@ -134,25 +190,30 @@ export default function MapPointPopover({
   const catchmentNote = mapPointCatchmentNote(catchment);
 
   const run: Record<
-    Extract<MapPointVerbId, "addPlace" | "measure" | "copy" | "upstream">,
+    Extract<
+      MapPointVerbId,
+      "drawRoute" | "addPlace" | "measure" | "upstream" | "weather"
+    >,
     () => void
   > = {
+    drawRoute: () => onDrawRoute(point),
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
     upstream: () => onShowUpstream(point),
-    copy: () => {
-      void navigator.clipboard
-        .writeText(
-          `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`,
-        )
-        .then(() => toast.success(MAP_POINT.copy.coordinatesCopied))
-        .catch(() => toast.error("Couldn't copy the coordinates."));
+    weather: () => {
+      setView("weather");
+      weather.load();
     },
   };
 
   return (
     <>
-      {createPortal(<MapPointDot />, anchorEl)}
+      <PointAnchor
+        map={map}
+        point={point}
+        element={anchorEl}
+        onClose={onClose}
+      />
       {snapped && (
         <CreekPointMarker
           map={map}
@@ -168,32 +229,90 @@ export default function MapPointPopover({
         placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
+        suppressAskWithin={map.getContainer()}
+        // Escape undoes one layer: the forecast, then Options, then the panel.
+        onEscape={() => {
+          const back =
+            view === "options" && startAt ? null : mapPointStepBack(view);
+          if (back) setView(back);
+          else close();
+        }}
+        closeButton={false}
       >
-        <div className={classes.body}>
-          <StatGrid stats={stats} />
-          {catchmentNote && <p className={classes.note}>{catchmentNote}</p>}
-          {from === null && (
-            <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
-          )}
-          <div className={classes.verbs}>
-            {mapPointVerbs("web", {
-              creekFound: catchment.state === "found",
-            }).map((verb) => (
+        <div className={classes.body} ref={bodyRef}>
+          {view === "point" ? (
+            <>
+              <StatGrid stats={stats} />
+              {catchmentNote && <p className={classes.note}>{catchmentNote}</p>}
+              {from === null && (
+                <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
+              )}
               <Row
-                key={verb.id}
-                title={verb.label}
-                leading={
-                  <IconTile icon={verb.icon} hue="var(--color-accent)" />
-                }
-                onOpen={() => {
-                  run[verb.id as keyof typeof run]();
-                  // Copy leaves the panel where it is; the others go on to a
-                  // flow of their own.
-                  if (verb.id !== "copy") close();
-                }}
+                title={MAP_POINT.copy.options}
+                leading={<IconTile icon="overflow" hue="var(--color-accent)" />}
+                data-verb="options"
+                onOpen={() => setView("options")}
               />
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              <div className={classes.viewHeader}>
+                {!(view === "options" && startAt) && (
+                  <IconButton
+                    ref={backRef}
+                    icon="back"
+                    label={
+                      view === "weather"
+                        ? "Back to options"
+                        : MAP_POINT.copy.backToPoint
+                    }
+                    onClick={() => setView(mapPointStepBack(view) ?? "point")}
+                  />
+                )}
+                <span className={classes.viewTitle}>
+                  {view === "weather" ? WEATHER.title : MAP_POINT.copy.options}
+                </span>
+              </div>
+              {view === "weather" ? (
+                <WeatherView
+                  state={weather.state}
+                  online={online}
+                  onLoad={weather.load}
+                  model={weather.model}
+                  onModel={weather.chooseModel}
+                />
+              ) : (
+                <div className={classes.verbs}>
+                  {mapPointVerbs("web", false, {
+                    creekFound: catchment.state === "found",
+                  }).map((verb) => (
+                    <Row
+                      key={verb.id}
+                      title={verb.label}
+                      leading={
+                        <IconTile icon={verb.icon} hue="var(--color-accent)" />
+                      }
+                      data-verb={verb.id}
+                      {...(verb.id === "weather" && (!online || checkingHeight)
+                        ? {
+                            disabled: true,
+                            subtitle: online
+                              ? MAP_POINT.copy.elevationChecking
+                              : WEATHER.copy.needsConnection,
+                          }
+                        : {})}
+                      onOpen={() => {
+                        run[verb.id as keyof typeof run]();
+                        // The weather stays in the panel; the others go on to
+                        // a flow of their own.
+                        if (verb.id !== "weather") close();
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </Popover>
     </>

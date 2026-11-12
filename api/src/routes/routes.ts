@@ -10,7 +10,7 @@
 //   - directly shared route    → visible to each Share recipient.
 // Either way a non-owner is read-only (view + export, never edit).
 // Non-owned ids are 404, never 403, so a status can't confirm a route exists
-// to someone who can't see it (SEC-001 anti-oracle). A SHAREE attempting a
+// to someone who can't see it (the anti-oracle rule). A SHAREE attempting a
 // mutation gets 403 — they legitimately see the route, they just can't change
 // it — matching requirePlaceOwnerAccess's split.
 import { Router, Response } from "express";
@@ -43,6 +43,7 @@ import {
   directShareeIds,
   directlySharedIds,
   getRouteRole,
+  sharedPlaceIdsFor,
   requireShareAccess,
   requireShareOwner,
 } from "../lib/shareAccess";
@@ -53,7 +54,7 @@ import {
 
 const router = Router();
 
-// Hard cap on the list; true total rides X-Total-Count (UX-001 — matches
+// Hard cap on the list; true total rides X-Total-Count (matches
 // /places, /trips and /waypoints).
 const LIST_TAKE = 500;
 
@@ -85,7 +86,7 @@ router.get(
     const where: Prisma.RouteWhereInput = {
       OR: [
         { ownerId: user.id },
-        { place: { shares: { some: { sharedWithId: user.id } } } },
+        { placeId: { in: await sharedPlaceIdsFor(user.id) } },
         { id: { in: await directlySharedIds(user.id, "route") } },
       ],
     };
@@ -133,7 +134,7 @@ router.post(
 
     const placeId = (await resolveRoutePlaceId(user.id, body.placeId)) ?? null;
 
-    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // Optional client-minted id: own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
     const clientId = parseClientSuppliedId(body.id);
     if (clientId) {
@@ -171,7 +172,7 @@ router.post(
             placeId: null,
             name: (body.name as string).trim(),
             // The client may choose from the shared palette; when it doesn't,
-            // the server picks avoiding collisions. Mobile picks at draw time so the line
+            // the server picks avoiding collisions. Logjam GPS picks at draw time so the line
             // is its final colour from the first frame rather than changing under
             // the user when the create op comes back.
             color: assignedColor,
@@ -237,33 +238,7 @@ router.post(
     if (!source) throw new AppError(404, NOT_FOUND);
     requireShareAccess(await getRouteRole(user.id, source), "route");
 
-    const copy = await prisma.$transaction(async (tx) => {
-      // A fresh colour from the COPIER's palette, not the source's: the owner's
-      // choice was made to keep their own lines apart, and carrying it over is
-      // how two routes end up the same colour on the copier's map.
-      const existingRoutes = await tx.route.findMany({
-        where: { ownerId: user.id },
-        select: { color: true },
-      });
-      return tx.route.create({
-        data: {
-          ownerId: user.id,
-          placeId: null,
-          name: source.name,
-          color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
-          points: source.points as Prisma.InputJsonValue,
-          // Carried as-is: anchors are INDICES into `points`, and the points are
-          // copied verbatim, so the two cannot fall out of step. Null stays null
-          // — "every vertex is the user's" is the honest reading of a route drawn
-          // before anchors existed, and inventing one here would claim otherwise.
-          anchors:
-            source.anchors === null
-              ? Prisma.DbNull
-              : (source.anchors as Prisma.InputJsonValue),
-        },
-      });
-    });
-
+    const copy = await copyRouteFor(user.id, source);
     res.status(201).json(copy);
   },
 );
@@ -365,3 +340,40 @@ router.delete(
 );
 
 export default router;
+
+/**
+ * An unlinked copy of `source` owned by `userId`: the body of POST
+ * /routes/:id/copy, and of Save a copy on a plan's route
+ * (routes/planItems.ts). The caller has already decided the user may see it.
+ */
+export async function copyRouteFor(
+  userId: string,
+  source: { name: string; points: Prisma.JsonValue; anchors: Prisma.JsonValue },
+) {
+  return prisma.$transaction(async (tx) => {
+    // A fresh colour from the COPIER's palette, not the source's: the owner's
+    // choice was made to keep their own lines apart, and carrying it over is
+    // how two routes end up the same colour on the copier's map.
+    const existingRoutes = await tx.route.findMany({
+      where: { ownerId: userId },
+      select: { color: true },
+    });
+    return tx.route.create({
+      data: {
+        ownerId: userId,
+        placeId: null,
+        name: source.name,
+        color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
+        points: source.points as Prisma.InputJsonValue,
+        // Carried as-is: anchors are INDICES into `points`, and the points are
+        // copied verbatim, so the two cannot fall out of step. Null stays null
+        // — "every vertex is the user's" is the honest reading of a route drawn
+        // before anchors existed, and inventing one here would claim otherwise.
+        anchors:
+          source.anchors === null
+            ? Prisma.DbNull
+            : (source.anchors as Prisma.InputJsonValue),
+      },
+    });
+  });
+}

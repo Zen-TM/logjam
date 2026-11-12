@@ -1,21 +1,17 @@
 // Erase everything this device holds for the departing user — the single
 // function every account-transition path routes through.
 //
-// It exists because there was more than one of those paths and they disagreed.
-// Sign-out called `wipeAllSyncData()` and stopped there, which left
-// `logjam-offline.db` (map artifacts, vector and GeoPDF imports, recorded
-// tracks and their points, local waypoints), the downloaded MBTiles regions,
-// the overlay bundles, the imported files and the media blob cache sitting on
-// disk for whoever signed in next. The different-user branch in `useAuth`
-// wiped nothing at all — it carried a "Stage 4+: wipe local stores here" TODO
-// while the mirror it should have been clearing filled up.
+// Every account-transition path (sign out, switching users, account deletion)
+// must clear all user data so a departing user leaves no traces on disk for
+// the next user.
 //
-// Guest mode is what forced the issue: far more data now lives locally, and a
-// guest who links, signs out and hands the phone to a friend must not leave a
-// season of place coordinates behind. One guard in one place, rather than a
-// wipe in each caller that drifts apart again.
+// Guest mode especially relies on this: local data includes place coordinates,
+// recorded tracks, downloaded map regions, imports, and sync mirrors. A single
+// entry point prevents account transition paths from drifting apart.
 //
-// **Deliberately not wiped:** device preferences (`logjam-prefs.db`). Theme,
+// **Deliberately not wiped:** device preferences (`logjam-prefs.db`), bar the
+// recent map searches, which are place names, and the chosen regions, which
+// are the account's. Theme,
 // app-lock and crash-report choices are statements about this handset, not
 // about the account, and clearing them would silently disarm a lock the owner
 // turned on. The guest-mode preference is cleared by the caller that knows the
@@ -25,11 +21,8 @@
 // `localStores.ts`, mirror tables from `sync/mirrorSchema.ts` and this
 // database's tables from `wipedStores.ts`, which also says which of them hold
 // what the sign-out confirmation must name — the same declarations the
-// producers are built from, because a list kept beside the wipe is a list that
-// drifts out of it. That drift is the whole defect class:
-// `routes` was added to the schema and not the wipe, GPX exports were written
-// to a cache directory nobody had declared, and MapLibre's ambient tile cache
-// was never anyone's store at all.
+// producers are built from, because a list kept beside the wipe would drift
+// out of sync as new tables or caches are introduced.
 //
 // PRIVACY: this IS the privacy boundary between two users of one phone. A
 // failure to delete is worth surfacing, so per-store failures are collected and
@@ -40,11 +33,19 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
-import { wipeAllSyncData } from "../sync/syncDb";
+import { forgetSlopeBandsEdit } from "../map/slopeBandsPreference";
+import { clearRecentSearches } from "../map/recentSearches";
+import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
+import { forgetRegions } from "../regionsPreference";
+import { stopPlansForWipe } from "../plans/plansCache";
+import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
+import { stopGaugesForWipe } from "../gauges/gaugeStorage";
+import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
+import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 import { OFFLINE_TABLES } from "./wipedStores";
 
@@ -83,10 +84,22 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // A live track recording is a producer too: its foreground service keeps
   // delivering fixes into a `track` row this wipe is about to delete, and its
   // in-memory point series is the departing user's location history.
+  //
+  // The sharpened areas the map still has on screen: MLRN's request
+  // transforms hold each one's presigned URL, and the map, mounted until the
+  // wipe ends, would write their tile ranges into TileJSONs and the area list
+  // again. Stopped first, so the area list's pending write sees it
+  // (wipeLocalData.test.ts, "moves the sharpened areas' epoch before it
+  // forgets the area list").
+  stopSharpenedAreasForWipe();
   const stopped = await Promise.all([
     stoppedInTime(cancelAllRegionDownloads()),
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
+    stoppedInTime(stopWeatherForWipe()),
+    stoppedInTime(stopGaugesForWipe()),
+    stoppedInTime(forgetSharpenedAreas()),
+    stoppedInTime(stopPlansForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
 
@@ -99,6 +112,17 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // a minute to stop eight screens re-fetching it; a minute is long enough for
   // the next account to read the departing one's name off a settings screen.
   invalidateCurrentUser();
+
+  // A slope-band edit not yet sent belongs to the account that made it.
+  forgetSlopeBandsEdit();
+
+  // The chosen regions are the departing account's: the next one is offered
+  // the default until its own arrive.
+  forgetRegions();
+
+  // Recent map searches are place names in the device prefs store, which the
+  // wipe otherwise leaves alone.
+  clearRecentSearches();
 
   // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
   // previous user browsed is in there keyed by z/x/y — which IS the area they
@@ -127,13 +151,13 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
 
   try {
     const db = await getOfflineDb();
-    await db.withTransactionAsync(async () => {
+    await withSyncTransaction(db, async () => {
       for (const table of OFFLINE_TABLES) {
         await db.runAsync(`DELETE FROM ${table}`);
       }
-      // Stage 7 leftovers on a device that never completed the promotion —
-      // coordinates, so they go with everything else. IF EXISTS, because the
-      // normal case is that the table is long gone.
+      // Legacy waypoint leftovers on a device that never completed the
+      // promotion — coordinates, so they go with everything else. IF EXISTS,
+      // because the normal case is that the table is long gone.
       await db.runAsync("DROP TABLE IF EXISTS waypoint");
     });
     notifyRegistryChanged();
@@ -153,18 +177,18 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     }
   }
 
-  // Then everything else in the app's cache directory (MOT-005). The OS
-  // pickers copy each attachment into a subdirectory of their own before
-  // handing us a URI; the attach path deletes its copy, but files left there by
-  // earlier builds outlive sign-out — confirmed on a handset after a full wipe.
+  // Then everything else in the app's cache directory. The OS pickers copy
+  // each attachment into a subdirectory of their own before handing us a URI;
+  // the attach path deletes its copy, but files left there by earlier builds
+  // outlive sign-out — confirmed on a handset after a full wipe.
   //
-  // This is deliberately NOT a list of expo-image-picker's paths (decision D6):
-  // those mirror a third-party native module's internals and drift on upgrade.
-  // "Empty the cache directory" names nothing that can drift and catches
-  // pre-existing files as well as future ones. It is safe by contract — on
-  // Android `cacheDir` is app-private scratch space the OS may delete at any
-  // moment to reclaim storage, so nothing durable is allowed to live there, and
-  // every store this app keeps is under `documentDirectory` (localStores.ts).
+  // This is deliberately NOT a list of expo-image-picker's paths: those mirror
+  // a third-party native module's internals and drift on upgrade. "Empty the
+  // cache directory" names nothing that can drift and catches pre-existing
+  // files as well as future ones. It is safe by contract — on Android `cacheDir`
+  // is app-private scratch space the OS may delete at any moment to reclaim
+  // storage, so nothing durable is allowed to live there, and every store
+  // Logjam GPS keeps is under `documentDirectory` (localStores.ts).
   //
   // Last, and non-fatal: the privacy-critical stores above are already gone by
   // the time this runs, so a cache that will not empty is reported like any

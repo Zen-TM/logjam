@@ -4,9 +4,9 @@ import { routeArrowStyle } from "./routeArrowStyle";
 
 /**
  * The arrowhead image, its centring and the segment split are asserted in
- * `@logjam/shared` (`routeArrow.test.ts`), because both clients draw them and
- * the centring rule is the whole reason the image exists. What is left here is
- * the MLRN-shaped style this module builds on top of them.
+ * `@logjam/shared` (`shared/src/routeArrow.test.ts`), because both clients draw
+ * them and the centring rule is the whole reason the image exists. What is left
+ * here is the MLRN-shaped style this module builds on top of them.
  */
 describe("routeArrowStyle", () => {
   it("draws the shared arrow image, tinted per route", () => {

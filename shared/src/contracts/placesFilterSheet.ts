@@ -1,10 +1,12 @@
 // Places → Sort and filter: the sheet behind the list's filter button, on
 // Logjam Web (`PlaceFilterSheet.tsx`) and Logjam GPS (`places/PlaceFilterSheet.tsx`).
-//
-// Visited, not visited and shared are NOT sections: they are the list's status
-// rail, and a second copy here could disagree with it.
 import type { TripLogCustomFieldDef } from "../tripLogFields.js";
 import { filterPillStops } from "../placeFilterOptions.js";
+import {
+  PLACE_STATUS_LABELS,
+  PLACE_STATUS_ORDER,
+  type PlaceStatus,
+} from "../placeStatus.js";
 import { regionEdgesKm } from "../mapRegionEstimate.js";
 import type { RegionBbox } from "../mapRegionEstimate.js";
 import type { ScreenContract } from "./types.js";
@@ -15,6 +17,8 @@ export const PLACES_FILTER_SHEET = {
   sections: [
     // The options are `PLACE_SORT_OPTIONS`.
     { key: "sort" },
+    // The options are `PLACE_STATUS_FILTER_OPTIONS`.
+    { key: "status" },
     // One row per definition in force for the type rail's selection, each
     // drawn by `attributeFilterShape`, never by its key: a canyon's grades are
     // ordinary attributes. The include-missing switch closes the section,
@@ -34,13 +38,16 @@ export const PLACES_FILTER_SHEET = {
   copy: {
     // A section's title is the copy under its own key.
     sort: "Sort",
+    status: "Status",
     attributes: "Attributes",
     location: "Location",
     source: "Source",
     dates: "Dates",
     onMap: "On the map",
 
-    includeMissing: "Include places missing this info",
+    allStatuses: "All",
+    includeMissing: "Include if not set",
+    includeMissingHint: "Also show ones with no value",
     drawArea: "Draw on map",
     /** Logjam Web only: the map is in view beside the sheet. */
     areaToView: "This view",
@@ -50,11 +57,26 @@ export const PLACES_FILTER_SHEET = {
     updated: "Updated",
     dateFrom: "From",
     dateTo: "To",
-    showOnMap: "Show filtered places on the map",
+    showOnMap: "Only filtered places",
     reset: "Reset",
     done: "Done",
   },
 } as const satisfies ScreenContract;
+
+/** The status filter's value: every status, or one of them. */
+export type PlaceStatusFilterValue = "all" | PlaceStatus;
+
+/** The status filter's options: every place is exactly one of these. */
+export const PLACE_STATUS_FILTER_OPTIONS: readonly {
+  value: PlaceStatusFilterValue;
+  label: string;
+}[] = [
+  { value: "all", label: PLACES_FILTER_SHEET.copy.allStatuses },
+  ...PLACE_STATUS_ORDER.map((status) => ({
+    value: status,
+    label: PLACE_STATUS_LABELS[status],
+  })),
+];
 
 /**
  * The control an attribute's filter row is, decided by the definition's SHAPE

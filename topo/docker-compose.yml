@@ -8,7 +8,7 @@ services:
 
     # ── Volume mounts ────────────────────────────────────────
     # Place your ELVIS ZIP at ./input/elvis.zip before running.
-    # Finished MBTiles will appear in ./output/
+    # vegetation.mbtiles will appear in ./output/
     volumes:
       - ./input:/input:ro
       - ./output:/output:rw
@@ -26,13 +26,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
 
-    # ── Command override ─────────────────────────────────────
-    # Default (no override): processes /input/elvis.zip
-    #
-    # To customise, uncomment and edit:
-    # command: [
-    #   "/input/my_lidar.zip",
-    #   "--output", "/output",
-    #   "--workers", "8",
-    #   "--keep-work"
-    # ]
+    # ── Command ──────────────────────────────────────────────
+    # The image starts the job worker by default, which needs a database, so
+    # this runs the vegetation pass directly on /input/elvis.zip. To customise,
+    # edit it (flags: topo/README.md, "The vegetation pass"), or override at
+    # runtime:
+    #   docker compose run topo python3 /app/pipeline.py /input/my_lidar.zip \
+    #     --output /output --workers 8 --keep-work
+    command:
+      - python3
+      - /app/pipeline.py
+      - /input/elvis.zip
+      - --output
+      - /output

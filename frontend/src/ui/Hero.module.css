@@ -5,7 +5,7 @@
   /* ONE height on every page and every view of a page, so swapping Logs | Stats
      moves neither the rail under it nor the list under that. A hero carrying
      actions is as tall as a --control-md button; a title-only one is its text,
-     which is shorter — measured 57 vs 55 (operator, 2026-09-16). Stated on the
+     which is shorter (57px vs 55px). Stated on the
      border box: the two addends are this rule's own padding and its border. */
   min-height: calc(var(--control-md) + 2 * var(--space-1-5) + 1px);
   box-sizing: border-box;
@@ -20,12 +20,24 @@
   padding-left: calc(var(--gutter) / 2);
 }
 
+/* The arrow's 2px focus ring needs air before the title. */
+.hero[data-back] .title {
+  margin-inline-start: var(--space-0-5);
+}
+
 .title {
   composes: title from "../textRoles.generated.module.css";
   flex: 1;
   min-width: 0;
   margin: 0;
   color: var(--color-text);
+  /* A long name stops at two lines (shared/DESIGN.md §9); the full text is
+     the heading's content and its tooltip. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .meter {

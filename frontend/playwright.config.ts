@@ -27,7 +27,7 @@ export default defineConfig({
   // Flake policy: 2 retries in CI, 0 locally. In CI, retries are paired with
   // the github reporter so any test that fails then passes is surfaced as a
   // flake annotation rather than silently passing. Trace is captured on first
-  // retry and screenshot on failure. Revisit after 30 days of CI history.
+  // retry and screenshot on failure.
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   use: {
@@ -39,9 +39,26 @@ export default defineConfig({
     channel: "chrome",
   },
   projects: [
+    // An account with no scheme pick follows the OS, so the OS is part of the
+    // test: dark opens Sandstone (the whole suite), light opens Ghost Gum (the
+    // accessibility audit again, where a pair that only fails on a light page
+    // shows up).
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "dark",
+      },
+    },
+    {
+      name: "chromium-light",
+      testMatch: /a11y\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "light",
+      },
     },
   ],
   // Only auto-boot the frontend when targeting local; for prod we hit the
@@ -49,17 +66,23 @@ export default defineConfig({
   webServer: isLocal
     ? [
         {
-          command: "npm run dev",
-          url: "http://localhost:5173",
+          command: `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
+          url: baseURL,
           reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "fake" },
           timeout: 60_000,
         },
         {
-          command: "npm run dev -- --port 5199 --strictPort",
+          command: `npm run dev -- --port ${new URL(SIGN_IN_URL).port} --strictPort`,
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
-          env: { VITE_AUTH_MODE: "cognito" },
+          // A Cognito-shaped issuer draws Logjam Web's own forms. The pool does
+          // not exist: nothing here is submitted.
+          env: {
+            VITE_AUTH_MODE: "oidc",
+            VITE_OIDC_ISSUER:
+              "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_e2e",
+          },
           timeout: 60_000,
         },
       ]

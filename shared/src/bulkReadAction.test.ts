@@ -31,9 +31,9 @@ describe("bulkReadAction — one button, both directions", () => {
   });
 
   it("touches ONLY the unread rows of a mixed selection", () => {
-    // The mixed case is the one the operator asked about: it behaves as
-    // all-unread does, so the read rows are left exactly as they are rather
-    // than being re-marked (which would be a no-op op per row in the outbox).
+    // A mixed selection behaves as all-unread does, so the read rows are
+    // left exactly as they are rather than being re-marked (which would be
+    // a no-op op per row in the outbox).
     const action = bulkReadAction([
       read("a"),
       unread("b"),

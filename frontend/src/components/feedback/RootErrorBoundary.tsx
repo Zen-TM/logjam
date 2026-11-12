@@ -1,6 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { signOut } from "aws-amplify/auth";
-import { clearTripDraft } from "../../tripDraft";
+import { signOut } from "../../useAuth";
 import BrandMark from "../brand/BrandMark";
 import { Button } from "../../ui";
 import classes from "./RootErrorBoundary.module.css";
@@ -14,9 +13,8 @@ interface State {
 }
 
 // Top-level safety net. React unmounts the entire component tree on an uncaught
-// render/lifecycle error (a blank white screen — what the toast render loop
-// produced); this renders a recoverable fallback instead. It catches only
-// render and lifecycle throws, NOT event handlers or async rejections, which
+// render/lifecycle error (a blank white screen); this renders a recoverable
+// fallback instead. It catches only render and lifecycle throws, NOT event handlers or async rejections, which
 // still need local try/catch. It is a backstop, not a fix — the underlying
 // cause should still be addressed. It sits above the theme/auth providers, so
 // the fallback styles itself from the static design tokens in index.css rather
@@ -37,20 +35,10 @@ export class RootErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
-  private handleSignOut = async (): Promise<void> => {
-    // Best-effort: clear the session in case a corrupt auth state caused the
-    // crash, then reload to a clean sign-in. Reload regardless of outcome
-    // (signOut throws in fake-auth dev, where Amplify isn't configured).
-    // This is a second sign-out path that bypasses useAuth, so it repeats the
-    // draft clear — a draft must not outlive the session down *any* exit.
-    clearTripDraft();
-    try {
-      await signOut();
-    } catch (err) {
-      console.error(err);
-    }
-    window.location.reload();
-  };
+  // The app's own sign-out (draft and tile cache cleared, provider session
+  // ended, reload as the fallback), so a corrupt auth state cannot leave a
+  // second path behind. It never rejects.
+  private handleSignOut = (): Promise<void> => signOut();
 
   render(): ReactNode {
     if (!this.state.hasError) return this.props.children;

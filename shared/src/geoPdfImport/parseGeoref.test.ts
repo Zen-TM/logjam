@@ -412,3 +412,13 @@ function shiftViewport(
     })),
   };
 }
+
+describe("GeoPdfParseError", () => {
+  // Mutation: put `detail` back into the message.
+  it("keeps the file-derived detail out of its message, which is what a log prints", () => {
+    const err = new GeoPdfParseError("MALFORMED_GEOREF", "Secret Creek.pdf");
+    expect(err.message).toBe("MALFORMED_GEOREF");
+    expect(String(err)).not.toContain("Secret Creek");
+    expect(err.detail).toBe("Secret Creek.pdf");
+  });
+});

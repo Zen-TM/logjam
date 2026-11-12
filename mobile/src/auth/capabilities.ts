@@ -1,11 +1,11 @@
 // What a given install can actually do right now — the single source of the
 // guest-mode gating matrix.
 //
-// The app runs in one of two account states. A **guest** has no Logjam account:
+// Logjam GPS runs in one of two account states. A **guest** has no Logjam account:
 // places, trips, waypoints, tracks and photos live only in the on-device
 // SQLite stores, the sync engine is never started, and everything that needs a
 // server is visibly disabled. A **linked** install has a Cognito account and
-// behaves as the app always has.
+// behaves as Logjam GPS always has.
 //
 // Two axes gate a feature, and they are not the same thing:
 //  - `needs-account`: no amount of signal will help; the user has to create or
@@ -34,9 +34,11 @@ export type AccountState = "guest" | "linked";
  * works for a guest — places, trip logs, waypoints, media capture, tracks,
  * local GeoPDF import, measure, compass, raster offline regions and the user's
  * own custom fields are all fully local and must never be routed through here.
+ * So is the Offline & Storage tab: it holds device settings a guest needs, and
+ * sorts its own rows (`screens/settings/offlineRows.ts`).
  */
 export type Capability =
-  /** Sharing a place, waypoint, route, topo or GeoPDF with another user. */
+  /** Sharing a place, waypoint, route or topo with another user. */
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
@@ -47,24 +49,23 @@ export type Capability =
    * the capability itself does not need a connection.
    */
   | "inbox"
+  /**
+   * Trip plans. Read from the plans cache once linked, so the list and a plan
+   * opened before READ offline; every write in a plan is online-only and dims
+   * itself where it is drawn (`plans/`).
+   */
+  | "plans"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
-  /** GeoPDFs generated on the user's web account. A LOCAL pdf import is not this. */
-  | "accountGeoPdf"
-  /** The Protomaps vector clip (POST /basemap/region-clip). Raster regions are NOT this. */
-  | "vectorRegionDownload"
+  /** Location search through our API (POST /places/search), for a phone
+   *  without the place registry. Searching the phone's own copy is not this. */
+  | "placeSearch"
   /** Preferences stored on the user record (PATCH /users/me). */
   | "serverPrefs"
   /** Push-token registration (POST /devices). */
   | "pushNotifications"
   /** Manually running a sync cycle. */
-  | "syncNow"
-  /**
-   * The Offline & Storage settings tab. The switches are device prefs, but they
-   * govern account-backed downloads (finished GeoPDFs, LiDAR topos) and sync —
-   * none of which a guest has — so the whole tab is account-gated.
-   */
-  | "offlineSettings";
+  | "syncNow";
 
 export type CapabilityStatus =
   | { status: "available" }
@@ -89,13 +90,12 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   sharing: true,
   friends: true,
   inbox: false,
+  plans: false,
   lidarOverlays: true,
-  accountGeoPdf: true,
-  vectorRegionDownload: true,
+  placeSearch: true,
   serverPrefs: true,
   pushNotifications: true,
   syncNow: true,
-  offlineSettings: false,
 };
 
 export function capabilityStatus(
@@ -136,13 +136,12 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   sharing: "Sharing",
   friends: "Friends",
   inbox: "The inbox",
+  plans: "Plans",
   lidarOverlays: "LiDAR overlays",
-  accountGeoPdf: "Account GeoPDFs",
-  vectorRegionDownload: "The vector map download",
+  placeSearch: "Location search",
   serverPrefs: "This preference",
   pushNotifications: "Push notifications",
   syncNow: "Syncing",
-  offlineSettings: "Offline and storage settings",
 };
 
 /**
@@ -180,6 +179,20 @@ export function capabilityRowProps(
   online: boolean,
 ): { disabled: boolean; subtitle?: string } {
   return statusRowProps(capabilityStatus(capability, accountState, online));
+}
+
+/**
+ * The change-email row. Fake auth (dev only) has no Cognito session to call
+ * with, so the row says why it is dimmed instead of failing on press.
+ */
+export function changeEmailRowProps(
+  online: boolean,
+  authMode: "oidc" | "fake",
+): { disabled: boolean; subtitle?: string } {
+  if (authMode === "fake") {
+    return { disabled: true, subtitle: "Not available under fake sign-in." };
+  }
+  return capabilityRowProps("serverPrefs", "linked", online);
 }
 
 /**
@@ -239,12 +252,6 @@ export function shareCapabilityStatus(
  * and deleting a field works with no account and with no signal. There is
  * therefore nothing left for this function to return, and it is kept only so
  * the decision has a place to be stated and a test to pin it.
- *
- * It used to return "Needs a connection" for a linked user, because the
- * definitions then lived on the user record and were shared with the web — a
- * list two surfaces could edit at once, with no per-field grain to merge on.
- * Moving them to rows is what removed that constraint.
- *
  * Undefined means "go ahead", to match `capabilityRowProps`' subtitle contract.
  */
 export function fieldDefsBlockedReason(

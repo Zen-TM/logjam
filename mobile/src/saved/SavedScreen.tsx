@@ -32,38 +32,39 @@
 // see the comment on its `enabledOverlays` effect).
 //
 // PRIVACY: nothing here renders coordinates or bboxes — rows show generic
-// labels ("Offline map region"), user-supplied names (renames, GeoPDF/track
+// labels ("Offline map"), user-supplied names (renames, GeoPDF/track
 // titles, topo job names), and sizes/dates only. "Show on map" passes a bbox
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
-  NSW_5M,
+  NSW_REGION,
+  SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  importFailureMessage,
+  WAY_IMPORT,
+  WAY_KIND_WORDS,
   wayVerbIcon,
   wayVerbLabel,
   type IconIdea,
   type SharableEntityType,
+  type SharePromiseKind,
+  lidarJobSharePromise,
   type TopoLayerFormat,
   type TopoLayerName,
+  MAP_TERRAIN,
+  type ToastAction,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -75,14 +76,10 @@ import {
 } from "./savedKeys";
 import { shareMark, sharedWithLabel } from "./shareMark";
 import { formatBytes, formatMinutes } from "../format";
-import {
-  getGeoPdfJob,
-  listGeoPdfJobs,
-  type GeoPdfJobView,
-} from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
+  useMirrorLoggedTrackIds,
   useMirrorRoutes,
   usePendingCreateIds,
   usePendingSyncCount,
@@ -100,9 +97,12 @@ import {
   BottomSheet,
   Button,
   Meter,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroScrollView,
+  compactHeroTitle,
   Hero,
   IconButton,
-  ListEnd,
   RenameForm,
   Row,
   SectionHeader,
@@ -111,18 +111,19 @@ import {
   SelectionMark,
   StatusPill,
   SyncStatusPills,
-  TextField,
+  SearchField,
   Toast,
   type MeterSegment,
   type ChipOption,
   type ToastMessage,
   Icon,
   EmptyState,
+  confirm,
+  useHeroCollapse,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
   importGeoPdfFromPicker,
-  importGeoPdfFromUrl,
   resumeGeoPdfImport,
 } from "../geopdf/importPipeline";
 import {
@@ -137,7 +138,11 @@ import { showsGeoPdfRunCard } from "./geoPdfRunCard";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
+import {
+  capabilityRowProps,
+  capabilityStatus,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import type { BasemapId, MapArtifact } from "../map/sourceResolver";
 import {
@@ -146,14 +151,25 @@ import {
 } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
-import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
+import { renameArtifact } from "../offline/registryDb";
+import { canUpdateRegion, startRegionUpdate } from "../offline/regionUpdate";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
+  cardDates,
   groupArtifacts,
+  isBundledRegionMember,
+  isRegionArtifact,
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
-import { groupRegionJobs } from "../offline/regionDownloadGroups";
+import {
+  groupRegionJobs,
+  isGroupBusy,
+  regionGroupStatusLine,
+  retryableJobs,
+  updateProgressLine,
+  type RegionDownloadGroup,
+} from "../offline/regionDownloadGroups";
 import {
   groupUnfinishedRegions,
   type UnfinishedRegionGroup,
@@ -164,8 +180,10 @@ import {
   type UnfinishedRegion,
 } from "../offline/regionMbtiles";
 import {
-  cancelRegionDownload,
+  resumeRegionDownload,
   enqueueRegionDownloads,
+  renameRegionGroup,
+  stopRegionGroup,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
@@ -173,6 +191,7 @@ import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
+  deleteLabel,
   geoPdfActions,
   remoteTrackActions,
   trackActions,
@@ -187,7 +206,7 @@ import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
-import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
+import { bulkDeleteConfirmBody, bulkDeleteCounts } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
@@ -210,9 +229,16 @@ function basemapName(logicalKey: string): string {
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
+  // A sharpened area's clip, labelled when saved (offline/sharpenedClips.ts).
+  if (artifact.logicalKey.startsWith(SHARPENED_SOURCE_PREFIX))
+    return artifact.label ?? "Sharpened area";
   if (artifact.kind === "contours-region") return "Contours";
+  if (artifact.kind === "slope-region") return "Slope";
+  if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
+  if (artifact.kind === "fire-region") return MAP_TERRAIN.copy.fire;
+  if (artifact.kind === "coverage-region") return MAP_TERRAIN.copy.coverage;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return artifact.logicalKey === NSW_5M.id
+  return artifact.logicalKey === NSW_REGION.terrain.heights.id
     ? "Elevation data, NSW 5 m"
     : "Elevation data";
 }
@@ -254,25 +280,20 @@ const CATEGORY_META: Record<
     icon: IconIdea;
   }
 > = {
-  region: { label: "Region", plural: "Regions", icon: "map" },
-  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "lidar" },
+  region: { label: "Offline map", plural: "Offline maps", icon: "map" },
+  overlay: {
+    label: "Sharpened area",
+    plural: "Sharpened areas",
+    icon: "lidar",
+  },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
-  // Routes you drew, as opposed to files you brought in. Kept a separate
-  // category rather than folded into "import": a route is editable in place and
-  // an import is an opaque file, and a list that mixes them would need to
-  // explain which rows can be edited. (Both sync now — that used to be the
-  // other half of the distinction, and is not any more.)
-  route: { label: "Route", plural: "Routes", icon: "route" },
-  // Marked points. Like routes they are records rather than files, and they are
-  // the one kind here that can be SEARCHED and filtered by tag — see the
-  // waypoint filter rail below.
-  // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
-  // here is a whole FILE the user brought in from another app, and it may hold
-  // points and polygons as readily as lines. "Files" alone was rejected as too
-  // vague — everything in this tab is a file — so the distinguishing word is
-  // the one that survives.
-  import: { label: "Import", plural: "Imports", icon: "importedFile" },
-  track: { label: "Track", plural: "Tracks", icon: "track" },
+  // The three kinds of line are `WAY_KIND_WORDS`, shared with Logjam Web's Ways
+  // page. Route stays a category of its own beside import: a route is editable
+  // in place and an import is an opaque file, and a list that mixed them would
+  // need to explain which rows can be edited.
+  route: WAY_KIND_WORDS.route,
+  import: WAY_KIND_WORDS.import,
+  track: WAY_KIND_WORDS.track,
 };
 
 // Reading order for the filter rail, the capacity meter and the "add to this
@@ -317,6 +338,8 @@ type SavedItem = {
    * builder — see the note where it is applied.
    */
   backedUp?: boolean;
+  /** This row syncs, and its create has not reached the account yet. */
+  waitingToSync?: boolean;
   /**
    * The id the OUTBOX would name for this row, when that is not `key`.
    *
@@ -340,6 +363,15 @@ type SavedItem = {
   focusBasemapId?: BasemapId;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
+  /** A saved area downloaded again over itself. `busy` while a run of this
+   *  card is in the queue; `savedOn` is when its files were saved. */
+  update?: {
+    savedLine: string;
+    busy: boolean;
+    run: () => Promise<string | null>;
+    /** The card's run, while one is going or has stopped short. */
+    running?: RegionDownloadGroup;
+  };
   /** Persist a new display name. Absent on a shared route or waypoint, which
    *  is read-only — see `AssetActions.rename`. */
   rename?: (name: string) => Promise<unknown>;
@@ -354,7 +386,8 @@ type SavedItem = {
     id: string;
     title: string;
     sizeBytes: number;
-    delete: () => Promise<unknown>;
+    /** Absent on a file the area brings itself (`isBundledRegionMember`). */
+    delete?: () => Promise<unknown>;
   }[];
   /** Someone else owns it — see `AssetActions.sharedWithYou`. Drives the
    *  read-only hint, and is why the write verbs below are missing. */
@@ -372,6 +405,7 @@ type SavedItem = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    synced: boolean;
     run: () => Promise<unknown>;
   };
   /** Present on an editable route — the map's draw tool reopens this id. */
@@ -379,7 +413,12 @@ type SavedItem = {
   /** Present on an editable route: flip vertex order (direction is semantic). */
   reverse?: () => Promise<unknown>;
   /** Present on an OWNED, server-backed asset — see `AssetActions.share`. */
-  share?: { entityType: SharableEntityType; entityId: string };
+  share?: {
+    entityType: SharableEntityType;
+    entityId: string;
+    /** What the share promises a friend, when the entity type alone can't say. */
+    promise?: SharePromiseKind;
+  };
   /**
    * Present on an asset that exists as a FILE this device can hand over — an
    * import with its original bytes, a recording that serialises to GPX, a
@@ -413,8 +452,7 @@ export function SavedScreen({
    * spelled — and `nonce` is what makes following the same pointer twice pulse
    * twice, since this tab stays mounted.
    *
-   * A key that matches nothing (an item deleted since, a GeoPDF job already
-   * imported under a local id) simply does not pulse: the filter beside it is
+   * A key that matches nothing (an item deleted since) simply does not pulse: the filter beside it is
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
@@ -453,7 +491,6 @@ export function SavedScreen({
    *  belongs to no place until the user says otherwise. */
   onDrawRoute: () => void;
   /**
-  /**
    * Open a place's detail screen. Used by the route sheet for
    * ONE case: a row that is on this phone because it is linked to a place
    * shared with the user has no share of its own to hand back, so the sheet
@@ -482,12 +519,12 @@ export function SavedScreen({
   // and stay in the same sheet — the point being that "Add to this device"
   // still does something useful without an account.
   const { accountState } = useAccountState();
-  const lidarReady =
-    capabilityStatus("lidarOverlays", accountState, online).status ===
-    "available";
-  const accountGeoPdfReady =
-    capabilityStatus("accountGeoPdf", accountState, online).status ===
-    "available";
+  const lidarStatus = capabilityStatus("lidarOverlays", accountState, online);
+  const lidarReady = lidarStatus.status === "available";
+  const lidarWhyNot =
+    lidarStatus.status === "available"
+      ? "Another download is running"
+      : unavailableReasonText(lidarStatus.reason);
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
 
@@ -501,9 +538,9 @@ export function SavedScreen({
     null,
   );
   const toastNonce = useRef(0);
-  const info = useCallback((text: string) => {
+  const info = useCallback((text: string, action?: ToastAction) => {
     toastNonce.current += 1;
-    setToast({ text, tone: "info", nonce: toastNonce.current });
+    setToast({ text, tone: "done", action, nonce: toastNonce.current });
   }, []);
   const fail = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -521,7 +558,7 @@ export function SavedScreen({
   const [filter, setFilter] = useState<Category | "all">(
     initialFilter?.category ?? "all",
   );
-  // One search field for every tab (item 8).
+  // One search field for every tab.
   const [searchQuery, setSearchQuery] = useState("");
   // A later arrival re-selects, even for the same category — this tab stays
   // mounted, so the pointer has to work every time it is followed.
@@ -541,19 +578,18 @@ export function SavedScreen({
   const highlightNonce = initialHighlight?.nonce ?? 0;
   const [pulsingKey, setPulsingKey] = useState<string | null>(null);
   const [pulse] = useState(() => new Animated.Value(1));
-  const scrollRef = useRef<ScrollView>(null);
+  const heroCollapse = useHeroCollapse();
+  const { scrollToRow } = heroCollapse;
   /** One scroll per arrival — `onLayout` fires again on every relayout. */
   const scrolledForNonce = useRef<number | null>(null);
   const scrollToPulse = useCallback(
     (y: number) => {
       if (scrolledForNonce.current === highlightNonce) return;
-      scrolledForNonce.current = highlightNonce;
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, y - spacing(2)),
-        animated: true,
-      });
+      // Not until the list is padded for the header: the row lays out again
+      // after that, and this is called again with the offset that counts.
+      if (scrollToRow(y, spacing(2))) scrolledForNonce.current = highlightNonce;
     },
-    [highlightNonce],
+    [highlightNonce, scrollToRow],
   );
 
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -642,9 +678,9 @@ export function SavedScreen({
   // import / one overlay download at a time), so one row above the list
   // carries label and progress for whichever is running.
   //
-  // GeoPDF imports are NOT one of them any more — they take the whole screen
-  // (see geoPdfOp below), because their opening phases block the JS thread and
-  // a progress row on a frozen list is a worse lie than no row.
+  // GeoPDF imports are not included here — they take the whole screen (see
+  // geoPdfOp below), because their opening phases block the JS thread and a
+  // progress row on a frozen list is a worse lie than no row.
   const [activeOp, setActiveOp] = useState<{
     label: string;
     category: Category;
@@ -656,12 +692,7 @@ export function SavedScreen({
   // The DEM saved with a run belongs to that run's card: its bytes are part of
   // what the area cost, and deleting the area has to take it with it. It is not
   // one of the "maps", though — see `basemapMembers`.
-  const regionArtifacts = artifacts.filter(
-    (a) =>
-      a.kind === "basemap-region" ||
-      a.kind === "dem-region" ||
-      a.kind === "contours-region",
-  );
+  const regionArtifacts = artifacts.filter(isRegionArtifact);
 
   // A region download in flight, as one card per run at the top of the Regions
   // filter. It is background work — the queue keeps running while the user is
@@ -669,18 +700,25 @@ export function SavedScreen({
   // same shape as the GeoPDF import card below. A run whose every job is saved
   // drops off: its artifacts are in the list underneath by then.
   const regionJobs = useRegionDownloads();
-  const downloadGroups = groupRegionJobs(regionJobs).filter(
-    (group) => !group.done,
+  const liveGroups = groupRegionJobs(regionJobs).filter((group) => !group.done);
+  // An update runs on the saved card itself, which stays in the list as the
+  // map it is; only a run with no card of its own gets a card of its own.
+  const cardKeys = new Set(regionArtifacts.map(regionGroupKey));
+  const updatingCards = new Map(
+    liveGroups
+      .filter((group) => group.update && cardKeys.has(group.groupId))
+      .map((group) => [group.groupId, group]),
+  );
+  const downloadGroups = liveGroups.filter(
+    (group) => !updatingCards.has(group.groupId),
   );
 
   // Half-written regions with NO job in the queue — a download the app was
   // killed during. The queue is memory only, so after a relaunch the file on
   // disk is the sole evidence it ever started (regionMbtiles.ts).
   //
-  // This used to live in the map's layers sheet, which was a strange place to
-  // look for it and, worse, opened every region file to do the scan — racing
-  // the queue for the same SQLite lock and failing the very download it was
-  // offering to resume. Recovery belongs beside the runs it recovers.
+  // Recovery lives beside the runs it recovers rather than in the map's layers
+  // sheet, avoiding lock contention with the active queue.
   const [orphans, setOrphans] = useState<UnfinishedRegion[]>([]);
   const queuedIds = regionJobs.map((job) => job.spec.id).join(",");
   const refreshOrphans = useCallback(() => {
@@ -719,23 +757,17 @@ export function SavedScreen({
     setOrphans((current) => current.filter((row) => !resumed.has(row.id)));
   }, []);
 
-  const discardOrphan = useCallback((group: UnfinishedRegionGroup) => {
-    Alert.alert(
-      "Discard this download?",
-      "The download so far will be deleted from this phone.",
-      [
-        { text: "Keep it", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            const gone = new Set(group.regions.map((region) => region.id));
-            for (const id of gone) void deleteRegionFile(id);
-            setOrphans((current) => current.filter((row) => !gone.has(row.id)));
-          },
-        },
-      ],
-    );
+  const discardOrphan = useCallback(async (group: UnfinishedRegionGroup) => {
+    const ok = await confirm({
+      confirmTitle: `Discard ${group.label}?`,
+      confirmBody: "The download so far will be deleted from this phone.",
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    const gone = new Set(group.regions.map((region) => region.id));
+    for (const id of gone) void deleteRegionFile(id);
+    setOrphans((current) => current.filter((row) => !gone.has(row.id)));
   }, []);
   // Per-job detail (which basemap, pause/resume/stop, failure copy) lives in
   // the card's ⋯ sheet rather than expanded under it: four states' worth of
@@ -747,29 +779,25 @@ export function SavedScreen({
   const [downloadSheetId, setDownloadSheetId] = useState<string | null>(null);
   const downloadSheetGroup =
     downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
-  const confirmStopGroup = useCallback(
-    (group: { label: string; jobs: { spec: { id: string } }[] }) => {
-      Alert.alert(
-        "Stop saving these maps?",
-        "The download so far will be deleted from this phone.",
-        [
-          { text: "Keep going", style: "cancel" },
-          {
-            text: "Stop",
-            style: "destructive",
-            onPress: () => {
-              for (const job of group.jobs) cancelRegionDownload(job.spec.id);
-            },
-          },
-        ],
-      );
-    },
-    [],
-  );
+  const confirmStopGroup = useCallback(async (group: RegionDownloadGroup) => {
+    const ok = await confirm({
+      confirmTitle: group.update
+        ? "Stop updating?"
+        : group.label
+          ? `Stop saving ${group.label}?`
+          : "Stop saving these maps?",
+      confirmBody: group.update
+        ? "Maps already updated stay. The rest keep the version you have."
+        : "The download so far will be deleted from this phone.",
+      confirmLabel: "Stop",
+      tone: "destructive",
+    });
+    if (ok) stopRegionGroup(group);
+  }, []);
 
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
@@ -783,7 +811,7 @@ export function SavedScreen({
   const downloadableJobs = mergedOverlays.jobs
     .map((job) => ({
       jobId: job.jobId,
-      label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      label: job.name ?? `LiDAR map ${job.jobId.slice(0, 8)}`,
       bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
@@ -797,22 +825,17 @@ export function SavedScreen({
     }))
     .filter((job) => job.missing.length > 0);
 
-  // Wi-Fi-only download default (stage4a §5.6 policy) — same confirm as the
+  // Wi-Fi-only download default — same confirm as the
   // map's "download current area", recreated here since overlay saves are
   // viewport-independent asset management, not a map-viewport action.
   const confirmCellularOk = useCallback(async (): Promise<boolean> => {
     const netState = await NetInfo.fetch();
     if (netState.type !== "cellular") return true;
-    return new Promise((resolve) => {
-      Alert.alert(
-        "Use mobile data?",
-        "You're not on Wi-Fi. Download over mobile data?",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Download", onPress: () => resolve(true) },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) },
-      );
+    return confirm({
+      confirmTitle: "Use mobile data?",
+      confirmBody: "You're not on Wi-Fi. Download over mobile data?",
+      confirmLabel: "Download",
+      tone: "filled",
     });
   }, []);
 
@@ -889,7 +912,15 @@ export function SavedScreen({
       });
       const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
-        info("File imported.");
+        const { record } = outcome;
+        info(WAY_IMPORT.saved(record.name), {
+          label: "Open",
+          onPress: () =>
+            onOpenMap(record.bbox, undefined, {
+              category: "import",
+              key: record.id,
+            }),
+        });
         // Land on the tab holding what was just added, so the new row is
         // visible instead of buried in a size-sorted "All".
         setFilter("import");
@@ -897,12 +928,12 @@ export function SavedScreen({
       }
     } catch (err) {
       console.error(err);
-      fail(messageFromError(err, "Couldn't import that file."));
+      fail(importFailureMessage(err, WAY_IMPORT.failed));
     } finally {
       setImportBusy(false);
       setActiveOp(null);
     }
-  }, [fail, info, refreshFreeSpace]);
+  }, [fail, info, onOpenMap, refreshFreeSpace]);
 
   // --- GeoPDF imports ---
   const { geoPdfImports } = useGeoPdfImports();
@@ -948,58 +979,11 @@ export function SavedScreen({
     );
   }, []);
 
-  // Import your own server-generated GeoPDFs: list the account's completed
-  // jobs on demand (online-only), then stream a chosen one's presigned bytes
-  // into the same on-device pipeline. Loaded lazily on a tap, not on mount.
-  const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
-  const [accountJobsLoading, setAccountJobsLoading] = useState(false);
-
-  // The caller raises `accountJobsLoading` first: the tap below, or the render
-  // that sees a notification's arrival (see "An arrival that NAMES a row").
-  const fetchAccountGeoPdfs = useCallback(
-    () =>
-      listGeoPdfJobs()
-        .then((jobs) => {
-          const completed = jobs.filter((job) => job.status === "completed");
-          setAccountJobs(completed);
-          setFilter("geoPdf");
-          if (completed.length === 0)
-            info("No generated GeoPDFs on your account yet.");
-        })
-        .catch((err: unknown) => {
-          console.error(err);
-          fail(messageFromError(err, "Couldn't load your GeoPDFs."));
-        })
-        .finally(() => setAccountJobsLoading(false)),
-    [fail, info],
-  );
-  const loadAccountGeoPdfs = useCallback(() => {
-    setAccountJobsLoading(true);
-    void fetchAccountGeoPdfs();
-  }, [fetchAccountGeoPdfs]);
-
-  const handleImportAccountGeoPdf = useCallback((job: GeoPdfJobView) => {
-    const label = job.title ?? "GeoPDF";
-    void runGeoPdfImport(label, async (onProgress, token) => {
-      // Re-presign right before download — the listed URL may have expired
-      // while this list was open.
-      const fresh = await getGeoPdfJob(job.id);
-      if (!fresh.downloadUrl)
-        throw new Error("This GeoPDF isn't ready to download.");
-      return importGeoPdfFromUrl(
-        fresh.title ?? "Logjam GeoPDF",
-        fresh.downloadUrl,
-        onProgress,
-        token,
-      );
-    });
-    setFilter("geoPdf");
-  }, []);
-
   // --- Tracks ---
   const { tracks } = useTracks();
   const savedTracks = tracks.filter((track) => track.state === "done");
   const remoteTracks = useStandaloneTrackMedia();
+  const loggedTrackIds = useMirrorLoggedTrackIds().data ?? undefined;
 
   // --- Unified on-device item list ---
   // Not memoised, nor is anything derived from it below: most of its inputs
@@ -1008,24 +992,41 @@ export function SavedScreen({
   const items = ((): SavedItem[] => {
     const rows: SavedItem[] = [];
 
-    // ONE card per saved AREA, not per basemap: a "Save maps offline" run
-    // downloads a file per selected map and used to land as that many unrelated
-    // rows, so deleting "the region" meant finding all of them. Legacy rows
+    // ONE card per saved AREA, not per basemap: a "Save an offline map" run
+    // downloads a file per selected map; grouping by area prevents separate
+    // unrelated rows so the whole region can be deleted together. Legacy rows
     // (no groupId) group under their own id and stand alone, unchanged.
-    for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
+    // A card sits where it was first saved (the oldest of its files), so an
+    // update, which writes newer files, does not move it.
+    const regionCards = groupArtifacts(regionArtifacts, regionGroupKey)
+      .map((group) => ({ group, dates: cardDates(group.members) }))
+      .sort((a, b) => b.dates.savedAt.localeCompare(a.dates.savedAt));
+    for (const { group, dates } of regionCards) {
+      // A run still on screen as its card is one row, not two: its saved
+      // layers appear under the card's ⋯ and become this row when it is done.
+      if (downloadGroups.some((run) => run.groupId === group.key)) continue;
       const first = group.members[0];
+      const title = group.label ?? "Offline map";
+      const savedLine = `${formatDay(dates.savedAt)}${
+        dates.updatedAt ? ` · updated ${formatDay(dates.updatedAt)}` : ""
+      }`;
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
-      // when they picked two. Nor are the contours, drawn with one of them.
+      // when they picked two. Nor are the contours or the slope, drawn over
+      // one of them.
       const basemapMembers = group.members.filter(
         (a) => a.kind === "basemap-region",
       );
       rows.push({
         key: savedRegionKey(group.key),
         category: "region",
-        title: group.label ?? "Offline map region",
-        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
+        title,
+        subtitle: updatingCards.has(group.key)
+          ? updateProgressLine(
+              updatingCards.get(group.key) as RegionDownloadGroup,
+            )
+          : `${countOf(group.members.length, "layer")} · saved ${savedLine}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
@@ -1035,17 +1036,29 @@ export function SavedScreen({
         // A rename is the name of the AREA, so it reaches every row of the run.
         rename: (name) =>
           first.groupId
-            ? renameArtifactGroup(first.groupId, name)
+            ? renameRegionGroup(first.groupId, name)
             : renameArtifact(first.id, name),
+        update: canUpdateRegion(group.members)
+          ? {
+              savedLine,
+              busy: isGroupBusy(regionJobs, group.key),
+              running: updatingCards.get(group.key),
+              run: () =>
+                startRegionUpdate(group.members, group.label ?? "Offline map"),
+            }
+          : undefined,
         members: group.members.map((artifact) => ({
           id: artifact.id,
           title: regionMemberName(artifact),
           sizeBytes: artifact.sizeBytes,
-          delete: () => deleteDownloadedArtifact(artifact.id),
+          ...(isBundledRegionMember(artifact)
+            ? {}
+            : { delete: () => deleteDownloadedArtifact(artifact.id) }),
         })),
         delete: {
-          confirmTitle: "Delete this region?",
-          confirmBody: `The offline tiles for this area (${countOf(basemapMembers.length, "map")}) are removed from the device.`,
+          confirmTitle: `Delete ${title}?`,
+          synced: false,
+          confirmBody: `The map data for this area (${countOf(group.members.length, "layer")}) is removed from the device.`,
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -1060,10 +1073,12 @@ export function SavedScreen({
       const job = mergedOverlays.jobs.find(
         (candidate) => candidate.jobId === group.key,
       );
+      const title =
+        group.label ?? job?.name ?? `LiDAR map ${group.key.slice(0, 8)}`;
       rows.push({
         key: savedOverlayKey(group.key),
         category: "overlay",
-        title: group.label ?? job?.name ?? `Topo ${group.key.slice(0, 8)}`,
+        title,
         subtitle: countOf(group.members.length, "layer"),
         sizeBytes: group.sizeBytes,
         pill: { label: "Offline", tone: "accent" },
@@ -1084,13 +1099,13 @@ export function SavedScreen({
               // and cannot say why.
               removeShare: {
                 confirmTitle: removeShareConfirm({
-                  kindLabel: "topo",
-                  itemName: group.label ?? job?.name ?? "This topo",
+                  kindLabel: "LiDAR map",
+                  itemName: group.label ?? job?.name ?? "This LiDAR map",
                 }).title,
                 confirmBody: `${
                   removeShareConfirm({
-                    kindLabel: "topo",
-                    itemName: group.label ?? job?.name ?? "This topo",
+                    kindLabel: "LiDAR map",
+                    itemName: group.label ?? job?.name ?? "This LiDAR map",
                   }).body
                 } The ${countOf(group.members.length, "layer")} downloaded here are deleted too.`,
                 run: async () => {
@@ -1101,7 +1116,13 @@ export function SavedScreen({
                 },
               },
             }
-          : { share: { entityType: "topoJob" as const, entityId: group.key } }),
+          : {
+              share: {
+                entityType: "topoJob" as const,
+                entityId: group.key,
+                promise: lidarJobSharePromise(job),
+              },
+            }),
         // The saved layers' own extent, else the job's footprint from the account.
         locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
         resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
@@ -1119,7 +1140,8 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this topo?",
+          confirmTitle: `Delete ${title}?`,
+          synced: false,
           confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
           run: async () => {
             for (const artifact of group.members) {
@@ -1237,7 +1259,7 @@ export function SavedScreen({
         // The recording's account copy is the GPX it was backed up as; null
         // until that upload is registered.
         syncEntityId: track.mediaId,
-        ...trackActions(track),
+        ...trackActions(track, loggedTrackIds),
       });
     }
 
@@ -1247,8 +1269,8 @@ export function SavedScreen({
     // the same time.
     //
     // Deduped against the local recordings by `track.mediaId`, which is exactly
-    // what that column is for: the same trip must not appear twice because this
-    // phone happens to hold both halves of it.
+    // what that column is for: this phone can hold both halves of one trip,
+    // and it is listed once.
     const localTrackMediaIds = new Set(
       savedTracks
         .map((track) => track.mediaId)
@@ -1265,11 +1287,11 @@ export function SavedScreen({
             ? `${formatDistanceM(file.metadata.distanceM)} · recorded ${formatDay(file.metadata.startedAt)}`
             : "Recorded on another device",
         sizeBytes: file.fileSizeBytes ?? 0,
-        ...remoteTrackActions(file),
+        ...remoteTrackActions(file, loggedTrackIds),
       });
     }
 
-    // Every row is searchable by name (item 8). A row that set a richer
+    // Every row is searchable by name. A row that set a richer
     // haystack of its own keeps it; this fills the rest.
     for (const row of rows) {
       if (!row.search) row.search = { haystack: row.title.toLowerCase() };
@@ -1278,22 +1300,21 @@ export function SavedScreen({
     // The sync boundary, marked on the row — as a small cloud on what IS in the
     // account, never as a label on what is not.
     //
-    // It ran the other way round first ("This device" on every region, topo and
-    // GeoPDF) and that was the wrong statement in two ways: it spent a whole
-    // pill saying something reassuring in the language of a warning, on the
-    // rows that are least at risk, and it left the rows a user actually worries
-    // about — their own imports and recordings — saying nothing at all.
+    // Marking only what is in the account avoids spending a warning-styled
+    // pill on low-risk local maps while leaving user imports and recordings
+    // unmarked.
     //
     // The mark is per ITEM, not per category, because the category only says
     // what SHOULD be in the account. `pendingCreates` says what is.
     return rows.map((row) => {
       const entityId =
         row.syncEntityId === undefined ? row.key : row.syncEntityId;
-      const backedUp =
-        CATEGORY_SYNCS[row.category] &&
-        entityId !== null &&
-        !pendingCreates.has(entityId);
-      return backedUp ? { ...row, backedUp } : row;
+      if (!CATEGORY_SYNCS[row.category] || entityId === null) return row;
+      if (pendingCreates.has(entityId)) {
+        // A guest has no account for it to be waiting on.
+        return accountState === "guest" ? row : { ...row, waitingToSync: true };
+      }
+      return { ...row, backedUp: true };
     });
   })();
 
@@ -1350,7 +1371,7 @@ export function SavedScreen({
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
         return {
-          label: "Download a region",
+          label: "Save an offline map",
           onPress: onDownloadRegion,
           ...(online ? {} : { disabledReason: "Needs a connection" }),
         };
@@ -1365,7 +1386,7 @@ export function SavedScreen({
       case "import":
         return importBusy
           ? null
-          : { label: "Import a file", onPress: () => void handleImportFile() };
+          : { label: WAY_IMPORT.file, onPress: () => void handleImportFile() };
     }
   })();
 
@@ -1377,7 +1398,7 @@ export function SavedScreen({
       ? [...items].sort((a, b) => b.sizeBytes - a.sizeBytes)
       : items.filter((item) => item.category === filter);
 
-  // Every row now carries a `search.haystack` (item 8), so the name search
+  // Every row carries a `search.haystack`, so the name search
   // applies inside every tab, "All" included.
   const needle = searchQuery.trim().toLowerCase();
   const visibleItems = inCategory.filter(
@@ -1405,8 +1426,7 @@ export function SavedScreen({
     (visibleItems.some((item) => item.key === highlightKey) ||
       downloadableJobs.some(
         (job) => savedOverlayKey(job.jobId) === highlightKey,
-      ) ||
-      (accountJobs ?? []).some((job) => job.id === highlightKey));
+      ));
   const pulsedForNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!highlightPresent || pulsedForNonce.current === highlightNonce) return;
@@ -1414,11 +1434,8 @@ export function SavedScreen({
     setPulsingKey(highlightKey);
     scrolledForNonce.current = null;
     pulse.setValue(0);
-    // ONE WASH THAT DECAYS, not a blink and not three of them. The first
-    // version flashed the row's whole opacity down and back three times, and it
-    // read as an alarm rather than as a pointer — worst on a filter holding a
-    // single row, where the scroll has nothing to do and the flashing is the
-    // only thing that happens. This lands the tint fast (the eye needs to catch
+    // ONE WASH THAT DECAYS, not a blink: fading opacity reads as an alarm
+    // rather than as a pointer. This lands the tint fast (the eye needs to catch
     // it), holds it long enough to be seen as a state, then takes a second to
     // let go: "this one", said once.
     Animated.sequence([
@@ -1441,21 +1458,6 @@ export function SavedScreen({
     });
   }, [highlightKey, highlightNonce, highlightPresent, pulse]);
 
-  // An arrival that NAMES a row is the tap the lazy account list was waiting
-  // for. Without this the GeoPDF a notification points at is behind an "Import
-  // a GeoPDF" button, on a tab whose empty state says there is nothing here.
-  const autoLoadKey =
-    highlightKey && filter === "geoPdf" && accountJobs == null
-      ? `${highlightNonce}:${highlightKey}`
-      : null;
-  const [autoLoadedFor, setAutoLoadedFor] = useState<string | null>(null);
-  if (autoLoadKey !== autoLoadedFor) {
-    setAutoLoadedFor(autoLoadKey);
-    if (autoLoadKey !== null) setAccountJobsLoading(true);
-  }
-  useEffect(() => {
-    if (autoLoadKey !== null) void fetchAccountGeoPdfs();
-  }, [autoLoadKey, fetchAccountGeoPdfs]);
   // The search field itself follows the same "nothing to search" rule the tag
   // rail already did: hidden when the active tab holds no rows, so an empty
   // panel gets the whole screen body.
@@ -1474,70 +1476,59 @@ export function SavedScreen({
 
   /** One confirm for the whole batch; the sentence itself is
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
-  const deleteSelected = () => {
+  const deleteSelected = async () => {
     const targets = selectedItems;
-    const syncedCount = targets.filter(
-      (item) => item.category === "route",
-    ).length;
     const body = bulkDeleteConfirmBody({
-      onDeviceCount: targets.length - syncedCount,
-      syncedCount,
+      ...bulkDeleteCounts(targets),
       onDeviceBytes: selectedBytes,
     });
-    Alert.alert(`Delete ${countOf(targets.length, "item")}?`, body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            // Sequential, and a failure does not abandon the rest: these are
-            // independent deletes and stopping at the first one leaves the user
-            // guessing which half happened.
-            let failures = 0;
-            // An item with no delete descriptor cannot be selected in the
-            // first place; filtering rather than asserting keeps that true by
-            // construction if the selection rule ever changes.
-            const removals = targets.flatMap((item) => item.delete ?? []);
-            for (const removal of removals) {
-              try {
-                await removal.run();
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            refreshFreeSpace();
-            if (failures === 0)
-              info(`Deleted ${countOf(targets.length, "item")}.`);
-            else fail(`${failures} of ${targets.length} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    const ok = await confirm({
+      confirmTitle: `Delete ${countOf(targets.length, "item")}?`,
+      confirmBody: body,
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    // Sequential, and a failure does not abandon the rest: these are
+    // independent deletes and stopping at the first one leaves the user
+    // guessing which half happened.
+    let failures = 0;
+    // An item with no delete descriptor cannot be selected in the
+    // first place; filtering rather than asserting keeps that true by
+    // construction if the selection rule ever changes.
+    const removals = targets.flatMap((item) => item.delete ?? []);
+    for (const removal of removals) {
+      try {
+        await removal.run();
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    refreshFreeSpace();
+    if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
+    else fail(`${failures} of ${targets.length} couldn't be deleted.`);
   };
 
   const deleteItem = useCallback(
-    (item: SavedItem) => {
+    async (item: SavedItem) => {
       const removal = item.delete;
       if (!removal) return;
-      Alert.alert(removal.confirmTitle, removal.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            removal
-              .run()
-              .then(refreshFreeSpace)
-              .catch((err: unknown) => {
-                console.error(err);
-                fail(messageFromError(err, "Couldn't delete that."));
-              });
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: removal.confirmTitle,
+        confirmBody: removal.confirmBody,
+        confirmLabel: "Delete",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      removal
+        .run()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't delete that."));
+        });
     },
     [fail, refreshFreeSpace],
   );
@@ -1548,51 +1539,45 @@ export function SavedScreen({
    * from the one source that words this (`removeShareConfirm`).
    */
   const removeSharedItem = useCallback(
-    (item: SavedItem) => {
+    async (item: SavedItem) => {
       const removal = item.removeShare;
       if (!removal) return;
-      Alert.alert(removal.confirmTitle, removal.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          onPress: () => {
-            removal
-              .run()
-              .then(refreshFreeSpace)
-              .catch((err: unknown) => {
-                console.error(err);
-                fail(messageFromError(err, "Couldn't remove that."));
-              });
-          },
-        },
-      ]);
+      const ok = await confirm({
+        ...removal,
+        confirmLabel: "Remove",
+        tone: "filled",
+      });
+      if (!ok) return;
+      removal
+        .run()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't remove that."));
+        });
     },
     [fail, refreshFreeSpace],
   );
 
   /** Delete ONE file out of a grouped card (a basemap, a topo layer). */
   const deleteMember = useCallback(
-    (member: { title: string; delete: () => Promise<unknown> }) => {
-      Alert.alert(
-        `Delete ${member.title}?`,
-        "This map is removed from the device. The rest of this region stays.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              member
-                .delete()
-                .then(refreshFreeSpace)
-                .catch((err: unknown) => {
-                  console.error(err);
-                  fail(messageFromError(err, "Couldn't delete that."));
-                });
-            },
-          },
-        ],
-      );
+    async (member: { title: string; delete?: () => Promise<unknown> }) => {
+      const remove = member.delete;
+      if (!remove) return;
+      const ok = await confirm({
+        confirmTitle: `Delete ${member.title}?`,
+        confirmBody:
+          "This offline map is removed from the device. The rest of this area stays.",
+        confirmLabel: "Delete",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      remove()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't delete that."));
+        });
     },
     [fail, refreshFreeSpace],
   );
@@ -1685,6 +1670,7 @@ export function SavedScreen({
               kind: "entity",
               entityType: menuItem.share.entityType,
               entityId: menuItem.share.entityId,
+              promise: menuItem.share.promise,
             }
           : null,
     itemLabel: menuItem?.title ?? "",
@@ -1720,98 +1706,121 @@ export function SavedScreen({
 
   return (
     <View style={styles.screen}>
-      <Hero
-        eyebrow="Saved for offline use"
-        title="On this device"
-        value={formatBytes(usedBytes)}
-        valueSuffix={
-          freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"
-        }
-        actions={
-          <Button
-            label="Add"
-            icon="add"
-            compact
-            onPress={() => setAddSheetOpen(true)}
-          />
-        }
-      >
-        <Meter segments={segments} />
-        {/* Offline is a normal state here — everything already on the device
-            still works — so it sits beside what is still waiting to leave
-            rather than reading as an error. */}
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
+      {/* The storage summary is the hero; once the list scrolls it folds to
+          the title row (and the bulk bar, which takes its slot while picking),
+          and the chips and search stay pinned under it. */}
+      <CollapsingHeader collapse={heroCollapse}>
+        <CollapsingHero collapse={heroCollapse}>
+          {(compact) => (
+            <Hero
+              compact={compact}
+              value={formatBytes(usedBytes)}
+              valueSuffix={
+                freeBytes != null
+                  ? `used · ${formatBytes(freeBytes)} free`
+                  : "used"
+              }
+              // The pinned row names the filter even when it is compact (an Inbox
+              // tap lands on Routes).
+              title={(() => {
+                const name =
+                  filter === "all"
+                    ? "Saved"
+                    : `Saved · ${CATEGORY_META[filter].plural}`;
+                return compact
+                  ? compactHeroTitle(name, activeCategoryCount)
+                  : name;
+              })()}
+              titleNumberOfLines={2}
+              actions={
+                <Button
+                  label="Add"
+                  icon="addSaved"
+                  compact
+                  onPress={() => setAddSheetOpen(true)}
+                />
+              }
+            >
+              {selecting ? (
+                <SelectionBar
+                  countLabel={`${countOf(selectedItems.length, "item")} selected${
+                    selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
+                  }`}
+                  // "Everything" means everything a selection can act on — a shared
+                  // route or waypoint is skipped rather than picked and then refused.
+                  showSelectAll={selectedItems.length < selectableItems.length}
+                  extra={
+                    <BulkShareButton
+                      online={online}
+                      onPress={() => setBulkShareOpen(true)}
+                    />
+                  }
+                  onClear={clearSelection}
+                  onSelectAll={() =>
+                    setSelectedKeys(selectableItems.map((item) => item.key))
+                  }
+                  onDelete={deleteSelected}
+                />
+              ) : compact ? undefined : (
+                <>
+                  {/* One kind on the phone: its legend would say the line above again. */}
+                  <Meter
+                    segments={segments}
+                    legend={segments.filter((s) => s.value > 0).length > 1}
+                  />
+                  {/* Offline is a normal state here — everything already on the device
+                still works — so it sits beside what is still waiting to leave
+                rather than reading as an error. */}
+                  <SyncStatusPills
+                    online={online}
+                    pendingCount={pendingCount}
+                  />
+                </>
+              )}
+            </Hero>
+          )}
+        </CollapsingHero>
 
-      {/* While picking, the contextual bar TAKES ONLY THE SEGMENTED CONTROL'S
-          slot (item 15) — it used to replace the whole rail, search field and
-          tag chips included, and their absence is what made the list jump:
-          the two states had different heights, so every row below slid up the
-          moment a selection started. The narrowing controls now stay mounted
-          in the SAME place in both states, so the rail's height cannot
-          differ. They go inert rather than unmounting — see the note on
-          `disabled` below. */}
-      <View style={styles.rail}>
-        {selecting ? (
-          <SelectionBar
-            countLabel={`${countOf(selectedItems.length, "item")} selected${
-              selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
-            }`}
-            // "Everything" means everything a selection can act on — a shared
-            // route or waypoint is skipped rather than picked and then refused.
-            showSelectAll={selectedItems.length < selectableItems.length}
-            extra={
-              <BulkShareButton
-                online={online}
-                onPress={() => setBulkShareOpen(true)}
-              />
-            }
-            onClear={clearSelection}
-            onSelectAll={() =>
-              setSelectedKeys(selectableItems.map((item) => item.key))
-            }
-            onDelete={deleteSelected}
-          />
-        ) : (
-          <ChipRail
-            options={filterOptions}
-            value={filter}
-            onChange={selectFilter}
-            scroll
-          />
-        )}
-        {/* A name search on every tab (item 8) — every category now carries a
-            `search.haystack`. Nothing to search: the field is hidden with
-            nothing on the phone, same rule the waypoint tag rail already
-            follows, and the empty panel gets the whole screen body. */}
-        {activeCategoryCount > 0 ? (
-          // The field carries its own right pad because the rail has none —
-          // the category chips are meant to scroll off the edge, an input
-          // running into it just looks clipped.
-          <View style={styles.searchField}>
-            <TextField
-              label={`Search ${searchNoun(filter)}`}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              // Narrowing the list mid-selection could scroll a selected row
-              // out of view or drop it out of the visible set entirely — the
-              // same reason changing category clears the selection outright
-              // (selectFilter). The field stays visible (so the bar's height
-              // never differs from the rail's) but inert, rather than losing
-              // what was typed. It also GREYS OUT (TextField's own disabled
-              // treatment, `editable={false}`) — a live-looking field that
-              // silently eats taps read as broken, not as "not now".
-              editable={!selecting}
+        {/* Pinned with the hero (shared/DESIGN.md: only the list scrolls). */}
+        <View style={styles.pinnedRail}>
+          <View style={styles.rail}>
+            <ChipRail
+              options={filterOptions}
+              value={filter}
+              onChange={selectFilter}
+              scroll
             />
+            {/* A name search on every tab — every category carries a
+              `search.haystack`. Nothing to search: the field is hidden with
+              nothing on the phone, and the empty panel gets the whole screen
+              body. */}
+            {activeCategoryCount > 0 ? (
+              // The field carries its own right pad because the rail has none —
+              // the category chips are meant to scroll off the edge, an input
+              // running into it just looks clipped.
+              <View style={styles.searchField}>
+                <SearchField
+                  label={`Search ${searchNoun(filter)}`}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  // Narrowing the list mid-selection could scroll a selected row
+                  // out of view or drop it out of the visible set entirely — the
+                  // same reason changing category clears the selection outright
+                  // (selectFilter). The field stays visible but inert, rather
+                  // than losing what was typed. It also GREYS OUT — a
+                  // live-looking field that silently eats taps read as broken,
+                  // not as "not now".
+                  editable={!selecting}
+                />
+              </View>
+            ) : null}
           </View>
-        ) : null}
-      </View>
+        </View>
+      </CollapsingHeader>
 
-      {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
-          you are working in never scrolls out of reach. */}
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.body}
+      <HeroScrollView
+        {...heroCollapse.scrollProps}
+        contentContainerStyle={[styles.body, heroCollapse.inset()]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -1842,10 +1851,9 @@ export function SavedScreen({
                 ? `${Math.round(importRun.fraction * 100)}%`
                 : null,
               // What the run is going to cost, as soon as planning knows —
-              // a GeoPDF import is minutes of rendering and used to quote no
-              // number at all before starting them.
+              // a GeoPDF import is minutes of rendering.
               importRun.estimate
-                ? `${importRun.estimate.tiles.toLocaleString()} tiles · ${formatMinutes(importRun.estimate.seconds)}`
+                ? `about ${formatMinutes(importRun.estimate.seconds)}`
                 : null,
             ]
               .filter(Boolean)
@@ -1862,6 +1870,7 @@ export function SavedScreen({
                 accessibilityLabel="Cancel this import"
                 onPress={cancelGeoPdfImportRun}
                 disabled={!CANCELLABLE_PHASES.includes(importRun.phase)}
+                disabledReason="Can't be cancelled at this step"
               />
             }
           />
@@ -1875,16 +1884,23 @@ export function SavedScreen({
               <Row
                 key={group.groupId}
                 title={group.label || "Saving maps"}
-                subtitle={
-                  group.settled
-                    ? `${countOf(group.unfinished, "map")} didn't finish`
-                    : `${group.ready} of ${countOf(group.mapCount, "map")} saved`
-                }
+                subtitle={regionGroupStatusLine(group)}
                 icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
                 right={
                   <View style={styles.rowActions}>
+                    {group.settled && retryableJobs(group.jobs).length > 0 ? (
+                      <Button
+                        label="Try again"
+                        variant="outlineAccent"
+                        compact
+                        onPress={() => {
+                          for (const job of retryableJobs(group.jobs))
+                            resumeRegionDownload(job.spec.id);
+                        }}
+                      />
+                    ) : null}
                     <IconButton
                       icon="close"
                       accessibilityLabel="Stop saving these maps"
@@ -1892,7 +1908,7 @@ export function SavedScreen({
                     />
                     <IconButton
                       icon="overflow"
-                      accessibilityLabel={`Maps in ${group.label || "this download"}`}
+                      accessibilityLabel={`Layers in ${group.label || "this download"}`}
                       onPress={() => setDownloadSheetId(group.groupId)}
                     />
                   </View>
@@ -1967,7 +1983,16 @@ export function SavedScreen({
                 title={item.title}
                 subtitle={item.subtitle}
                 icon={CATEGORY_META[item.category].icon}
-                hue={assetHue[item.category]}
+                hue={
+                  item.update?.running?.settled
+                    ? theme.warning
+                    : assetHue[item.category]
+                }
+                progress={
+                  item.update?.running && !item.update.running.settled
+                    ? item.update.running.fraction
+                    : undefined
+                }
                 selected={picked}
                 // While selecting, an asset this user may not delete (a shared
                 // route or waypoint) is greyed out — the same dead look an
@@ -1981,14 +2006,12 @@ export function SavedScreen({
                 onPress={
                   selecting ? () => selectItem(item) : () => openItem(item)
                 }
+                rightBelow
                 /* ONE trailing slot for both modes, and every child of it keeps its
-               place when the mode changes. Selecting used to render a slot of
-               its own holding only the size and a 22px circle: the pill and the
-               two buttons went away, the title column got their width back, and
-               a two-line title un-wrapped — so entering the mode SHRANK rows
-               and the whole list jumped up under the user's finger. The circle
-               therefore takes the ⋯ button's 40pt box rather than replacing it,
-               and the pill stays put; only the buttons stop responding. */
+                place when the mode changes. The circle takes the ⋯ button's 40pt box
+                rather than replacing it, and the pill stays put while buttons stop
+                responding; keeping slot width prevents row resizing and list jumps
+                when entering selection mode. */
                 right={
                   <View style={styles.rowActions}>
                     {item.sizeBytes > 0 ? (
@@ -1996,21 +2019,11 @@ export function SavedScreen({
                         {formatBytes(item.sizeBytes)}
                       </Text>
                     ) : null}
-                    {/* The pill is wrapped because its own base style carries
-                    `alignSelf: "flex-start"` — right in the COLUMN contexts it
-                    is used in elsewhere (the hero notes, a detail header),
-                    where it stops the pill stretching the full width, but in
-                    this row-direction container flex-start is the TOP edge and
-                    the pill floated above the size text beside it. The wrapper
-                    takes the container's `alignItems: center` and the pill
-                    aligns inside it. */}
                     {item.pill ? (
-                      <View>
-                        <StatusPill
-                          label={item.pill.label}
-                          tone={item.pill.tone}
-                        />
-                      </View>
+                      <StatusPill
+                        label={item.pill.label}
+                        tone={item.pill.tone}
+                      />
                     ) : null}
                     {/* Shared out, by the same argument as the cloud below: the
                     row's own fan-out is a fact the user is not asking about
@@ -2033,12 +2046,45 @@ export function SavedScreen({
                     downloaded map and needs no announcement. LAST of the
                     glyphs, so the column it sits in is the same on every row;
                     the share glyph appearing on some rows must not push it. */}
+                    {/* Quiet when done, an up-arrow while it still has to go. */}
                     {item.backedUp ? (
                       <Icon
                         idea="sync"
                         size={15}
-                        color={theme.success}
+                        color={theme.textMuted}
                         label="Backed up to your account"
+                      />
+                    ) : item.waitingToSync ? (
+                      <Icon
+                        idea="uploading"
+                        size={15}
+                        color={theme.text}
+                        label="Waiting to sync"
+                      />
+                    ) : null}
+                    {item.update?.running?.settled &&
+                    retryableJobs(item.update.running.jobs).length > 0 &&
+                    !selecting ? (
+                      <Button
+                        label="Try again"
+                        variant="outlineAccent"
+                        compact
+                        onPress={() => {
+                          for (const job of retryableJobs(
+                            item.update?.running?.jobs ?? [],
+                          ))
+                            resumeRegionDownload(job.spec.id);
+                        }}
+                      />
+                    ) : null}
+                    {item.update?.running && !selecting ? (
+                      <IconButton
+                        icon="close"
+                        accessibilityLabel={`Stop updating ${item.title}`}
+                        onPress={() => {
+                          const run = item.update?.running;
+                          if (run) confirmStopGroup(run);
+                        }}
                       />
                     ) : null}
                     {item.inlineAction ? (
@@ -2050,6 +2096,7 @@ export function SavedScreen({
                         // but still rendered, because its absence would resize the
                         // row (see the note above).
                         disabled={selecting}
+                        disabledReason="Tap the row to pick it"
                         onPress={item.inlineAction.onPress}
                       />
                     ) : null}
@@ -2129,6 +2176,7 @@ export function SavedScreen({
                       accessibilityLabel={`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
+                      disabledReason={lidarWhyNot}
                       onPress={() => handleSaveOverlayJob(job)}
                     />
                   }
@@ -2137,61 +2185,7 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
-
-        {filter === "geoPdf" &&
-        accountJobs != null &&
-        accountJobs.length > 0 ? (
-          <>
-            <SectionHeader title="In your Logjam account" />
-            {accountJobs.map((job) => (
-              // Keyed by the JOB id, which is what a "GeoPDF ready"
-              // notification carries. Once imported the row is a local import
-              // with an id of its own and the pointer stops matching — the
-              // filter is still right, and nothing pulses.
-              <PulseSlot
-                key={job.id}
-                active={pulsingKey === job.id}
-                opacity={pulse}
-                onMeasure={scrollToPulse}
-              >
-                <Row
-                  title={job.title ?? "Untitled GeoPDF"}
-                  // Its home is the map but it is not on the phone: the one
-                  // obvious job is bringing it here, as its button does.
-                  onPress={
-                    geoPdfBusy
-                      ? undefined
-                      : () => handleImportAccountGeoPdf(job)
-                  }
-                  subtitle={
-                    job.resultBytes != null
-                      ? formatBytes(job.resultBytes)
-                      : undefined
-                  }
-                  icon="geoPdf"
-                  hue={assetHue.geoPdf}
-                  right={
-                    <IconButton
-                      icon="download"
-                      accessibilityLabel={`Import ${job.title ?? "this GeoPDF"} to this device`}
-                      color={theme.accent}
-                      disabled={geoPdfBusy}
-                      onPress={() => handleImportAccountGeoPdf(job)}
-                    />
-                  }
-                />
-              </PulseSlot>
-            ))}
-          </>
-        ) : null}
-
-        {/* The list ends with the button its empty state offers (the same one),
-            so adding is where the eye ends up after scrolling to the bottom. */}
-        <SavedListEnd
-          show={visibleItems.length > 0 && !searching}
-          action={emptyAction}
-        />
-      </ScrollView>
+      </HeroScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
           so the two cannot word a bulk share differently. */}
@@ -2220,7 +2214,7 @@ export function SavedScreen({
             source above its account one. */}
         <View style={styles.sheetBody}>
           <Row
-            title="Download a map region"
+            title="Save an offline map"
             icon="map"
             hue={assetHue.region}
             disabled={!online}
@@ -2238,30 +2232,10 @@ export function SavedScreen({
               handleImportGeoPdf();
             }}
           />
+          {/* Not up with the regions: this is something you made on the web and
+              are pulling down, which is less like a basemap download. */}
           <Row
-            title={
-              accountJobsLoading
-                ? "Loading your GeoPDFs…"
-                : "GeoPDFs from my account"
-            }
-            icon="sync"
-            hue={assetHue.geoPdf}
-            {...capabilityRowProps("accountGeoPdf", accountState, online)}
-            onPress={
-              accountGeoPdfReady && !accountJobsLoading
-                ? () => {
-                    setAddSheetOpen(false);
-                    loadAccountGeoPdfs();
-                  }
-                : undefined
-            }
-          />
-          {/* Under the other "from my account" row rather than up with the
-              regions: both are things you generated on the web and are pulling
-              down, which is more like each other than either is like a
-              basemap download. */}
-          <Row
-            title="LiDAR topos from my account"
+            title="Sharpened areas from my account"
             icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
@@ -2299,7 +2273,7 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Import GPX, KML or GeoJSON"
+            title={WAY_IMPORT.menu}
             icon="importedFile"
             hue={assetHue.import}
             onPress={
@@ -2425,9 +2399,7 @@ export function SavedScreen({
                   onPress={() => setMenuMode("sendCopy")}
                 />
               ) : null}
-              {/* Absent on a shared route or waypoint: the rename used to be
-                  offered, take the user's typing and drop it (the descriptor's
-                  stub resolved without writing anything). */}
+              {/* Absent on a shared route: shared items are read-only and cannot be renamed. */}
               {menuItem.rename ? (
                 <Row
                   title="Rename"
@@ -2436,17 +2408,50 @@ export function SavedScreen({
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
-              {/* Every asset that still reaches THIS sheet is a file on this
-                  handset. Routes, tracks, imports and waypoints left for their
-                  own sheets, which is what keeps this label from growing a
-                  branch per kind. */}
+              {menuItem.update ? (
+                <Row
+                  title="Update"
+                  icon="refresh"
+                  hue={assetHue[menuItem.category]}
+                  subtitle={
+                    menuItem.update.busy
+                      ? "Updating…"
+                      : `Saved ${menuItem.update.savedLine}`
+                  }
+                  disabled={menuItem.update.busy}
+                  onPress={() => {
+                    const target = menuItem.update;
+                    closeItemSheet();
+                    target
+                      ?.run()
+                      .then((refused) => {
+                        if (refused) fail(refused);
+                      })
+                      .catch((err: unknown) => {
+                        console.error(err);
+                        fail(
+                          messageFromError(err, "Couldn't start the update."),
+                        );
+                      });
+                  }}
+                />
+              ) : null}
+              {/* The update's files, one row each, with pause/resume/stop and
+                  the reason one failed: what the run card's sheet shows a first
+                  save. */}
+              {menuItem.update?.running ? (
+                <>
+                  <SectionHeader title="Updating" />
+                  {menuItem.update.running.jobs.map((job) => (
+                    <RegionDownloadRow key={job.spec.id} job={job} />
+                  ))}
+                </>
+              ) : null}
+              {/* A recording made on another device also reaches this sheet and
+                  is synced, so the label comes from the descriptor. */}
               {menuItem.delete ? (
                 <Row
-                  title={
-                    menuItem.members && menuItem.members.length > 1
-                      ? "Delete all from device"
-                      : "Delete from device"
-                  }
+                  title={deleteLabel(menuItem.delete, menuItem.members?.length)}
                   icon="delete"
                   hue={theme.warning}
                   onPress={() => {
@@ -2466,7 +2471,7 @@ export function SavedScreen({
               {menuItem.removeShare ? (
                 <Row
                   title="Remove from my account"
-                  icon="unshare"
+                  icon="hide"
                   hue={theme.warning}
                   {...shareRowProps}
                   onPress={() => {
@@ -2493,15 +2498,17 @@ export function SavedScreen({
                           <Text style={styles.size}>
                             {formatBytes(member.sizeBytes)}
                           </Text>
-                          <IconButton
-                            icon="delete"
-                            accessibilityLabel={`Delete ${member.title} from device`}
-                            color={theme.warning}
-                            onPress={() => {
-                              closeItemSheet();
-                              deleteMember(member);
-                            }}
-                          />
+                          {member.delete ? (
+                            <IconButton
+                              icon="delete"
+                              accessibilityLabel={`Delete ${member.title} from device`}
+                              color={theme.warning}
+                              onPress={() => {
+                                closeItemSheet();
+                                deleteMember(member);
+                              }}
+                            />
+                          ) : null}
                         </View>
                       }
                     />
@@ -2612,8 +2619,8 @@ function EmptyPanel({
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
   action: SavedAction | null;
-  /** The tab has rows, but a search/tag narrowed all of them out — a
-   *  different message from the tab genuinely holding nothing (item 8), same
+  /** The tab has rows, but a search narrowed all of them out — a
+   *  different message from the tab genuinely holding nothing, same
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
   searching: boolean;
 }) {
@@ -2623,29 +2630,27 @@ function EmptyPanel({
   const copy: Record<Category | "all", { title: string; hint: string }> = {
     route: {
       title: "No routes yet",
-      hint: "Draw one on the map with the draw tool.",
+      hint: "Draw one with the draw tool, or on Logjam Web.",
     },
     all: {
       title: "Nothing saved yet",
-      hint: "Places need maps that work with no signal. Save a region before you leave town.",
+      hint: "Places need maps that work with no signal. Save an offline map before you leave town.",
     },
     region: {
       title: "No offline map",
-      hint: "Without a saved region the map is blank once you lose signal.",
+      hint: "Without an offline map the map is blank once you lose signal.",
     },
     overlay: {
-      title: "No LiDAR topos here",
+      title: "No sharpened areas here",
       hint: isGuest
-        ? "LiDAR topos are generated on Logjam Web and need a Logjam account."
+        ? "Logjam Web makes sharpened areas, and they need a Logjam account."
         : online
-          ? "Save topo overlays you make on Logjam Web for offline use."
-          : "Connect to see the overlays on your account.",
+          ? "Save the sharpened areas you make on Logjam Web for offline use."
+          : "Connect to see the sharpened areas on your account.",
     },
     geoPdf: {
       title: "No GeoPDF maps",
-      hint: isGuest
-        ? "Import a GeoPDF from this phone. An account is needed to pull one from Logjam Web."
-        : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
+      hint: "Import a GeoPDF from this phone's storage.",
     },
     import: {
       title: "No imported files",
@@ -2670,7 +2675,7 @@ function EmptyPanel({
         action
           ? {
               label: action.label,
-              icon: "add",
+              icon: "addSaved",
               onPress: action.onPress,
               disabledReason: action.disabledReason,
             }
@@ -2685,42 +2690,6 @@ type SavedAction = {
   onPress: () => void;
   disabledReason?: string;
 };
-
-/** The end of a non-empty tab: the add button its empty state offers. */
-function SavedListEnd({
-  show,
-  action,
-}: {
-  show: boolean;
-  action: SavedAction | null;
-}) {
-  if (!show || !action) return null;
-  return (
-    <ListEnd>
-      <SavedAddButton action={action} />
-    </ListEnd>
-  );
-}
-
-/** The tab's one add button, with its reason when it cannot run just now. */
-function SavedAddButton({ action }: { action: SavedAction }) {
-  const styles = useStyles();
-
-  return (
-    <View style={styles.addButton}>
-      <Button
-        label={action.label}
-        icon="add"
-        compact
-        disabled={action.disabledReason != null}
-        onPress={action.onPress}
-      />
-      {action.disabledReason ? (
-        <Text style={styles.addReason}>{action.disabledReason}</Text>
-      ) : null}
-    </View>
-  );
-}
 
 /**
  * The Share sub-mode of the per-item sheet: who has this item, and who else
@@ -2786,8 +2755,6 @@ function PulseSlot({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  addButton: { alignItems: "center", gap: spacing(0.5) },
-  addReason: { ...muted(theme, textRole.detail) },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2804,8 +2771,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
   railInert: { opacity: opacity.disabled },
+  // The chips run off the right edge, so the rail bleeds past `pinnedRail`'s gutter.
   rail: {
+    marginHorizontal: -spacing(2),
     paddingLeft: spacing(2),
+  },
+  // The bottom pad is the gap the list scrolls against, as on Places and Logs.
+  pinnedRail: {
+    paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },

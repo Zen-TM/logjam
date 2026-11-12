@@ -4,9 +4,7 @@
 // Each section names the schema models it covers, so the guard
 // (dataExport.unit.test.ts) can hold every model in schema.prisma to a section
 // here, to the `user` object, or to a reason in NOT_EXPORTED_MODELS. A new table
-// of user data then fails the build until someone decides which it is; before
-// this, routes, links, direct shares, friendships, file sends, GeoPDF jobs and
-// device registrations had all been added without reaching the export.
+// of user data then fails the build until someone decides which it is.
 //
 // Another user appears only as id and username, never email (api/AGENTS.md).
 import prisma from "../services/prisma";
@@ -53,6 +51,13 @@ export const EXPORT_SECTIONS = {
         include: { places: true },
       }),
   },
+  // What an import changed on places and trips it merged into, kept until
+  // the import is undone.
+  importSnapshots: {
+    models: ["ImportSnapshot"],
+    load: (userId) =>
+      prisma.importSnapshot.findMany({ where: { ownerId: userId } }),
+  },
   // Media metadata only: file contents are not in the JSON.
   media: {
     models: ["Media"],
@@ -76,6 +81,41 @@ export const EXPORT_SECTIONS = {
         select: { id: true, createdAt: true, expiresAt: true },
       }),
   },
+  // The plans the user is in, and their own answers to a plan's forms. What
+  // is in a plan belongs to its group, so it is left out.
+  tripPlanMemberships: {
+    models: ["TripPlanMember", "TripPlan"],
+    load: (userId) =>
+      prisma.tripPlanMember.findMany({
+        where: { userId },
+        include: {
+          plan: {
+            select: { id: true, name: true, startDate: true, endDate: true },
+          },
+        },
+      }),
+  },
+  tripPlanAnswers: {
+    models: ["TripPlanAnswer", "TripPlanForm"],
+    load: (userId) =>
+      prisma.tripPlanAnswer.findMany({
+        where: { userId },
+        include: {
+          form: {
+            select: { id: true, planId: true, title: true, questions: true },
+          },
+        },
+      }),
+  },
+  // Unspent plan invite links the user made; as friendInvites, no hash.
+  tripPlanInvites: {
+    models: ["TripPlanInvite"],
+    load: (userId) =>
+      prisma.tripPlanInvite.findMany({
+        where: { createdById: userId },
+        select: { id: true, planId: true, createdAt: true, expiresAt: true },
+      }),
+  },
   sharesGiven: {
     models: ["PlaceShare"],
     load: (userId) =>
@@ -92,7 +132,7 @@ export const EXPORT_SECTIONS = {
         include: { sharedBy: otherUser },
       }),
   },
-  // Routes, topo maps and GeoPDFs shared one at a time.
+  // Routes and topo maps shared one at a time.
   itemSharesGiven: {
     models: ["Share"],
     load: (userId) =>
@@ -150,14 +190,6 @@ export const EXPORT_SECTIONS = {
     models: ["TopoTemplate"],
     load: (userId) => prisma.topoTemplate.findMany({ where: { userId } }),
   },
-  geoPdfJobs: {
-    models: ["GeoPdfJob"],
-    load: (userId) => prisma.geoPdfJob.findMany({ where: { userId } }),
-  },
-  geoPdfTemplates: {
-    models: ["GeoPdfTemplate"],
-    load: (userId) => prisma.geoPdfTemplate.findMany({ where: { userId } }),
-  },
   notifications: {
     models: ["Notification"],
     load: (userId) => prisma.notification.findMany({ where: { userId } }),
@@ -178,6 +210,14 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "sync bookkeeping: the ids of records already deleted or unshared, which say nothing the rest of the export does not",
   EgressLogCursor:
     "not per user: how far the egress meter has read the storage access logs",
+  Announcement:
+    "not per user: the maintainer's own messages; each user's copy is a row under notifications",
+  ComputeUsageCarryover:
+    "bookkeeping: one credit total per month for jobs the user deleted, naming no job or place, kept so a deleted job still counts against the allowance",
+  SiteComputeCarryover:
+    "not per user: the same total for every account together",
+  TripPlanSection:
+    "a plan's write-up belongs to its group, not to one member; the plans the user is in are under tripPlanMemberships",
 };
 
 /** v3 adds every section beyond v2's places, trip logs, templates, shares,

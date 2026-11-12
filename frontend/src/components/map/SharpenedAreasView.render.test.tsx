@@ -1,0 +1,158 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ToastProvider } from "../feedback/ToastProvider";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
+import SharpenedAreasView from "./SharpenedAreasView";
+import type { TopoJob } from "../dialogs/TopoDialog";
+
+const api = vi.hoisted(() => ({ apiFetch: vi.fn(async () => ({})) }));
+vi.mock("../../placeUtils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../placeUtils")>()),
+  ...api,
+}));
+
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    disconnect() {}
+  },
+);
+Element.prototype.scrollIntoView = () => {};
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement) {
+    this.removeAttribute("popover");
+  },
+  hidePopover() {},
+  togglePopover() {},
+});
+HTMLDialogElement.prototype.showModal = function showModal() {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close() {
+  this.removeAttribute("open");
+};
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+const footprint = {
+  type: "Polygon" as const,
+  coordinates: [
+    [
+      [150, -33],
+      [150.1, -33],
+      [150.1, -33.1],
+      [150, -33],
+    ],
+  ],
+};
+const job = (over: Partial<CompletedTopoJob>): CompletedTopoJob => ({
+  jobId: "j1",
+  syncRole: "owner",
+  name: "Made-up gully",
+  createdAt: "2026-10-01T00:00:00Z",
+  footprint,
+  layers: [],
+  ...over,
+});
+
+function draw(
+  jobs: CompletedTopoJob[],
+  loaded = true,
+  activeTopoJobs: TopoJob[] = [],
+) {
+  const props = {
+    onBack: vi.fn(),
+    onClose: vi.fn(),
+    activeTopoJobs,
+    completedTopoJobs: jobs,
+    friends: [],
+    loaded,
+    onSharpen: vi.fn(),
+    onExportArea: vi.fn(),
+    onFlyTo: vi.fn(),
+    onRefetchCompletedTopoJobs: vi.fn(),
+    onDismissActiveJob: vi.fn(),
+    onQuotaChanged: vi.fn(),
+  };
+  render(
+    <ToastProvider>
+      <SharpenedAreasView {...props} />
+    </ToastProvider>,
+  );
+  return props;
+}
+
+describe("the sharpened areas view", () => {
+  it("lists areas with a pill on one shared with you, and flies to a row", () => {
+    const props = draw([
+      job({}),
+      job({ jobId: "j2", name: "Friend's ridge", syncRole: "shared" }),
+    ]);
+    expect(screen.getAllByText("Shared with you")).toHaveLength(1);
+    fireEvent.click(screen.getAllByText("Made-up gully")[0]!);
+    expect(props.onFlyTo).toHaveBeenCalledWith(footprint);
+  });
+
+  // Mutation: run the delete without waiting for the confirm, and cancelling
+  // still deletes the area.
+  it("deletes only once the confirm is accepted", () => {
+    draw([job({})]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Actions for Made-up gully" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(screen.getByText("Delete Made-up gully?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("offers Share and Delete to the owner, Remove to a sharee", () => {
+    draw([job({ jobId: "j2", name: "Friend's ridge", syncRole: "shared" })]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Actions for Friend's ridge" }),
+    );
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^Share/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Remove" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Make a map…" })).toBeTruthy();
+  });
+
+  // Mutation: drop the `loaded` gate and the view says "None yet." while the
+  // first fetch is still out.
+  it("says it is loading, not empty, until the first fetch settles", () => {
+    draw([], false);
+    expect(screen.getByText("Loading your sharpened areas…")).toBeTruthy();
+    expect(screen.queryByText(/None yet/)).toBeNull();
+  });
+
+  // Mutation: drop `beingMade.length === 0` from the empty line's condition.
+  it('does not say "None yet" above a job that is queued', () => {
+    draw([], true, [
+      {
+        id: "q1",
+        status: "pending",
+        name: "Made-up gully",
+        footprint: null,
+        tileCount: 1,
+        estimatedSeconds: null,
+        layerOptions: null,
+        errorMessage: null,
+        createdAt: "2026-10-01T00:00:00Z",
+        updatedAt: "2026-10-01T00:00:00Z",
+        syncRole: "owner",
+      },
+    ]);
+    expect(screen.queryByText(/None yet/)).toBeNull();
+    expect(screen.getByText("Queued")).toBeTruthy();
+  });
+
+  it("opens the dialog from the Sharpen an area button", () => {
+    const props = draw([]);
+    fireEvent.click(screen.getByRole("button", { name: "Sharpen an area" }));
+    expect(props.onSharpen).toHaveBeenCalled();
+  });
+});

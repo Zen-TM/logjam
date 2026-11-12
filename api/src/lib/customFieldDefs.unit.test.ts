@@ -70,10 +70,8 @@ describe("createFieldDef scoping", () => {
 });
 
 describe("placeCustomFieldsRecord", () => {
-  // Values are at the TOP LEVEL of fieldValues now. They used to be nested
-  // under `attributes.customFields`, and the forward migration hoists them —
-  // reading the old shape here would find nothing on a migrated row, silently,
-  // which is precisely the failure the hoist exists to prevent.
+  // Values are at the TOP LEVEL of fieldValues. Reading an unhoisted nested
+  // shape would find nothing on a row, which this test prevents.
   it("reads the values at the top level", () => {
     expect(placeCustomFieldsRecord({ water_level: "high" })).toEqual({
       water_level: "high",

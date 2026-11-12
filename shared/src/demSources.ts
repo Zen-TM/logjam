@@ -6,8 +6,9 @@
 // `canvas`, Logjam GPS reads saved files and decodes with `fflate`.
 // docs/decisions/0028-a-height-comes-from-the-finest-dem-source-that-has-it.md
 //
-// A source is either a public XYZ tile set (`urlTemplate`) or a PMTiles archive
-// Logjam builds and serves itself (`archivePath`).
+// A source is a public XYZ tile set (`urlTemplate`), a PMTiles archive Logjam
+// builds and serves itself (`archivePath`), or a sharpened area's private
+// archive (`areaId`, shared/src/sharpen.ts), which each runtime opens itself.
 // docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md
 //
 // PRIVACY: positions here are precise wilderness coordinates and a tile index
@@ -21,6 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
+import { NSW_REGION, REGIONS } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -47,6 +49,12 @@ export type DemSource = {
    * Null for a public tile set.
    */
   archivePath: string | null;
+  /**
+   * A sharpened area's job id. Its archive is private, so neither field
+   * above names it: the runtime opens it after checking the caller may read
+   * the area (`sharpenedDemSource`; the API's check: `api/src/__tests__/sharpenedAreas.test.ts`).
+   */
+  areaId?: string;
   /** Required by the source's terms wherever a height from it is shown. */
   credit: string;
   /** The same credit for MapLibre, which renders HTML in `attribution`. */
@@ -71,28 +79,23 @@ export const TERRARIUM = {
 } as const satisfies DemSource;
 
 /**
- * NSW Spatial Services' 5 m DEM: bare earth, from LiDAR in the east and
- * photogrammetry in the west, built by `topo/build_nsw_dem.py`. A z15 pixel is
- * ~4 m at this latitude, the first zoom finer than the data.
+ * Every public source, finest first: each region's, then the worldwide one.
+ * The order IS the precedence.
  */
-export const NSW_5M = {
-  id: "nsw-5m",
-  sampleZoom: 15,
-  // NSW and the ACT. Inside it a tile the build did not produce is simply
-  // absent, and the position falls through.
-  coverage: [140.9, -37.6, 153.7, -28.0],
-  urlTemplate: null,
-  archivePath: "master/dem/nsw-5m.pmtiles",
-  // The licence asks for the credit, the licence's name, a note that this is
-  // derived, and the date it was extracted from Spatial Services.
-  credit:
-    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
-  creditHtml:
-    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
-} as const satisfies DemSource;
+export const DEM_SOURCES: readonly DemSource[] = [
+  ...REGIONS.flatMap((region) => region.dem),
+  TERRARIUM,
+];
 
-/** Every source, finest first. The order IS the precedence. */
-export const DEM_SOURCES: readonly DemSource[] = [NSW_5M, TERRARIUM];
+/** What a sharpened area's source id starts with, before its job id. */
+export const SHARPENED_SOURCE_PREFIX = "lidar-";
+
+/**
+ * The climb id every sharpened area's heights are stored under: finer than
+ * any public source, and naming no job, so a track's stored label says
+ * nothing of which area it crossed.
+ */
+export const SHARPENED_CLIMB_SOURCE = "lidar";
 
 /**
  * A climb summed from the recorder's own GPS heights: what a track carries
@@ -107,9 +110,17 @@ export const GPS_CLIMB_SOURCE = "gps";
  * can tell later that a finer source could now answer.
  */
 export const CLIMB_SOURCES: readonly string[] = [
+  SHARPENED_CLIMB_SOURCE,
   ...DEM_SOURCES.map((source) => source.id),
   GPS_CLIMB_SOURCE,
 ];
+
+/** The climb id a height read from `sourceId` is stored under. */
+export function climbSourceOf(sourceId: string): string {
+  return sourceId.startsWith(SHARPENED_SOURCE_PREFIX)
+    ? SHARPENED_CLIMB_SOURCE
+    : sourceId;
+}
 
 export function isClimbSource(value: unknown): value is string {
   return CLIMB_SOURCES.includes(value as string);
@@ -147,14 +158,23 @@ export function demTileUrl(
     .replace("{y}", String(tileY));
 }
 
-/** The credit lines for the sources a result was read from. */
+/**
+ * The credit lines for the sources a result was read from, each once. A
+ * sharpened area's carries the NSW 5 m credit too: where its survey has no
+ * ground, its archive holds the 5 m heights.
+ */
 export function demCredits(
   sourceIds: readonly string[] = DEM_SOURCES.map((source) => source.id),
   sources: readonly DemSource[] = DEM_SOURCES,
 ): string[] {
-  return sources
+  const lines = sources
     .filter((source) => sourceIds.includes(source.id))
-    .map((source) => source.credit);
+    .flatMap((source) =>
+      source.areaId
+        ? [source.credit, NSW_REGION.terrain.heights.credit]
+        : [source.credit],
+    );
+  return [...new Set(lines)];
 }
 
 export type DemTileAddress = { tileX: number; tileY: number };
@@ -256,7 +276,10 @@ export type DemSamples = {
   climbSeries?: number[];
 };
 
-function covers(source: DemSource, position: SamplePosition): boolean {
+export function demSourceCovers(
+  source: DemSource,
+  position: SamplePosition,
+): boolean {
   if (!source.coverage) return true;
   const [west, south, east, north] = source.coverage;
   return (
@@ -293,7 +316,9 @@ export async function sampleDem(
   /** The heights `sources[rank]` has for these positions, by position index. */
   async function read(rank: number, indices: readonly number[]) {
     const source = sources[rank]!;
-    const inside = indices.filter((i) => covers(source, positions[i]!));
+    const inside = indices.filter((i) =>
+      demSourceCovers(source, positions[i]!),
+    );
     const found = new Map<number, number>();
     if (inside.length === 0) return found;
     const addresses = resolveDemSamples(

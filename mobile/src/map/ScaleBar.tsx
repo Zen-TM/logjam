@@ -11,8 +11,16 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { Text, View } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
-import { chooseScaleStep, metersPerPixel } from "./scaleBar";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  withAlpha,
+  veil,
+} from "../theme";
+import { metersPerPixel } from "@logjam/shared";
+import { chooseScaleStep } from "./scaleBar";
 
 export type ScaleBarHandle = {
   update: (latitude: number, zoom: number) => void;
@@ -26,7 +34,7 @@ export type ScaleBarHandle = {
  * layout — it is a native view outside this tree — so the only way it can sit
  * clear of the instruments is to be told how tall they are. That number has to
  * shrink when the user turns this off (MapScreen), or the compass floats above
- * a gap where the bar used to be.
+ * an empty gap when the bar is hidden.
  */
 export const SCALE_BAR_HEIGHT = Math.round(
   fontSize.xs * 1.35 + spacing(0.25) + 6 + spacing(0.25) + spacing(0.5),
@@ -78,7 +86,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: withAlpha(theme.page, 0.8),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),

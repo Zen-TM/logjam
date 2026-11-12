@@ -1,4 +1,4 @@
-// What the owner does with a value that arrived on a copy (plan §2.6).
+// What the owner does with a value that arrived on a copy.
 //
 // `foreignFields` is a self-describing park: `[{key,label,type,min,max,value}]`
 // on the place row, rendered read-only in its own section, in no form and on no
@@ -22,7 +22,7 @@
 // four guards.
 //
 // ONLINE-ONLY, deliberately. ponytail: `foreignFields` is not client-writable
-// (it is absent from the push allowlist by design — §2.6 scope discipline), so
+// (it is absent from the push allowlist by design), so
 // an offline adopt would need its own op vocabulary carrying a def create AND a
 // value move atomically. Upgrade path if the field asks for it: a `foreignField`
 // push op with those two effects. Until then the section's actions are disabled
@@ -90,7 +90,7 @@ router.post(
     const place = await prisma.place.findUnique({ where: { id: placeId } });
     // OWNER ONLY, and a non-owner gets the 404 every place-id surface gives —
     // `foreignFields` is owner-private, so a sharee must not even learn that
-    // this place has any (404-not-403, root CLAUDE.md).
+    // this place has any (404-not-403, root AGENTS.md).
     if (!place || place.ownerId !== user.id) {
       throw new AppError(404, say`Couldn't find that place.`);
     }

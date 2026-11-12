@@ -7,10 +7,10 @@ vi.mock("../services/prisma", () => ({ default: {} }));
 import { truncateDisplayName } from "./bulkDelete";
 import { TRIP_NAME_MAX_LENGTH, formatTripPlaceNames } from "@logjam/shared";
 
-// STP-005: deleting places backfills a derived title onto trips that lose
+// Deleting places backfills a derived title onto trips that lose
 // their last linked place. User-typed titles are capped at
-// TRIP_NAME_MAX_LENGTH (parseDisplayName); the derived one was not, so a
-// many-place trip got a label PATCH /trips/:id would refuse to save.
+// TRIP_NAME_MAX_LENGTH (parseDisplayName); derived titles must obey the
+// same cap so PATCH /trips/:id can save them.
 describe("truncateDisplayName", () => {
   it("passes through a title within the cap", () => {
     expect(truncateDisplayName("Claustral & Ranon")).toBe("Claustral & Ranon");

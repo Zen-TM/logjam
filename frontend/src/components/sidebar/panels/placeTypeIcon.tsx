@@ -28,7 +28,7 @@ export function placeTypeLucideIcon(iconKey: string): lucide.LucideIcon {
   >;
   // A key this build does not know draws the fallback pin rather than nothing:
   // a row with no glyph reads as a broken row, and a NEWER server may name an
-  // icon an older web build has never heard of (protocol §10.3 is additive).
+  // icon an older web build has never heard of.
   return icons[componentName(iconKey)] ?? lucide.MapPin;
 }
 

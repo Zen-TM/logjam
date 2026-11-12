@@ -1,5 +1,5 @@
-"""Unit tests for the two-strata scrub combine (B.3) and density-normalized
-confidence-mask threshold (B.2).
+"""Unit tests for the two-strata scrub combine and density-normalized
+confidence-mask threshold.
 
 Covers only the pure arithmetic extracted from compute_rasters:
   - _combine_scrub_strata: weighted-strata NRD combine + shared UNSPLIT
@@ -46,7 +46,7 @@ class TestCombineScrubStrata(unittest.TestCase):
         self.assertTrue(np.all(raw_nrd >= 0.0))
         self.assertTrue(np.all(raw_nrd <= 1.0))
         # weighted_scrub <= low + high <= total_near whenever weights <= 1,
-        # so raw_nrd (weighted_scrub / total_near) can never exceed the old,
+        # so raw_nrd (weighted_scrub / total_near) can never exceed the
         # unweighted (low+high)/total_near ratio.
         unweighted_nrd = np.where(
             total_near > 0, (low + high) / np.maximum(total_near, 1.0), 0.0
@@ -95,9 +95,9 @@ class TestCombineScrubStrata(unittest.TestCase):
         self.assertGreater(high_heavy_nrd[0], low_heavy_nrd[0])
 
     def test_equal_weights_reproduce_old_unweighted_nrd(self):
-        # With both weights forced to 1.0, the combine must collapse to the
-        # pre-B.3 NRD = (scrub_count) / (scrub_count + below_count), where
-        # scrub_count = low + high (i.e. the old single scrub band).
+        # With both weights set to 1.0, the combine collapses to the
+        # unweighted NRD = (scrub_count) / (scrub_count + below_count), where
+        # scrub_count = low + high.
         rng = np.random.default_rng(7)
         low = rng.uniform(0, 20, size=(30, 30)).astype(np.float32)
         high = rng.uniform(0, 20, size=(30, 30)).astype(np.float32)

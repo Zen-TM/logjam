@@ -145,8 +145,8 @@ describe("trackColorName", () => {
     expect(trackColorName("#E6194B")).toBe("Red");
   });
 
-  // Unhelpful beats wrong: a route drawn before the palette existed carries an
-  // arbitrary hex, and inventing a word for it would hide which colour it is.
+  // Unhelpful beats wrong: a route can carry an arbitrary off-palette hex,
+  // and inventing a word for it would hide which colour it is.
   it("hands back an off-palette colour as its hex", () => {
     expect(trackColorName("#123456")).toBe("#123456");
   });

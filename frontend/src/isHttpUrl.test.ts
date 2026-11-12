@@ -1,13 +1,11 @@
-// FEUI-012: place `attributes.sources` URLs are free text stored verbatim
+// Place `attributes.sources` URLs are free text stored verbatim
 // and later emitted into an <a href>. isHttpUrl is the one gate both the
 // PlaceDialog save path and the PlaceDetailPanel render path go through.
 import { describe, it, expect, vi } from "vitest";
 import { isHttpUrl } from "./placeUtils";
 
-vi.mock("aws-amplify/auth", () => ({
-  fetchAuthSession: vi.fn().mockResolvedValue({
-    tokens: { idToken: { toString: () => "test-token" } },
-  }),
+vi.mock("./auth/oidc", () => ({
+  loadSession: vi.fn().mockResolvedValue({ id_token: "test-token" }),
 }));
 
 describe("isHttpUrl", () => {

@@ -109,23 +109,39 @@ test("the apply-role guard is envs/prod's alone", () => {
 // [path, in envs/prod's plan, in envs/github's plan]
 const SCOPE_CASES = [
   ["infra/terraform/envs/prod/s3.tf", true, false],
+  // The brain's switches: a change to this file alone is a prod plan and an
+  // apply (and the deploy workflows read it too).
+  ["infra/terraform/envs/prod/brain.auto.tfvars", true, false],
   ["infra/terraform/modules/storage/main.tf", true, false],
   ["infra/terraform/templates/env.local.tftpl", true, false],
   ["infra/terraform/bootstrap/main.tf", false, false],
   ["infra/terraform/envs/local/main.tf", false, false],
   ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
+  // What the brain's user data embeds (envs/prod/brain_instance.tf): everything
+  // under infra/brain/ but postgres/, tests/ and api.env.
+  ["infra/brain/host/boot.sh", true, false],
+  ["infra/brain/host/systemd/brain-boot.service", true, false],
+  ["infra/brain/compose.yaml", true, false],
+  ["infra/brain/compose.aws.yaml", true, false],
+  ["infra/brain/postgres/Dockerfile", false, false],
+  ["infra/brain/tests/e2e.sh", false, false],
+  ["infra/brain/api.env", false, false],
   ["infra/terraform/envs/github/rulesets.tf", false, true],
   ["infra/scripts/plan-summary.mjs", true, true],
   ["infra/scripts/plan-summary.test.mjs", true, true],
   [".github/workflows/terraform-apply.yml", true, true],
   [".github/workflows/terraform-plan.yml", true, true],
+  [".github/workflows/terraform-plan-sign.yml", true, true],
   ["frontend/src/App.tsx", false, false],
 ];
 
 test("each root plans and applies exactly its own changes", () => {
   // The plan and apply workflows both ask inScope(): a root applied without
   // having been planned refuses, so the two must agree. Mutation: widening
-  // prod's scope to all of infra/terraform/ turns this red.
+  // prod's scope to all of infra/terraform/, dropping infra/brain/ from it,
+  // widening it to postgres/, tests/ or api.env (which the user data does not
+  // embed), or narrowing envs/prod to *.tf (the settings file is
+  // brain.auto.tfvars) turns this red.
   for (const [path, prod, github] of SCOPE_CASES) {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);
@@ -134,28 +150,33 @@ test("each root plans and applies exactly its own changes", () => {
 
 test("terraform-apply.yml starts for every change a root plans", () => {
   // inScope() only runs once the workflow has started, and its `paths:`
-  // filter decides that. #201 changed only the pipeline, was planned, and
-  // was never applied because the filter lacked it. Mutation: dropping any
-  // path from that filter (or adding bootstrap/) turns this red.
+  // filter decides that: pipeline-only changes must still trigger an apply.
+  // Mutation: dropping any path from that filter (or adding bootstrap/, or dropping a `!` line for infra/brain/) turns this red.
   const yml = readFileSync(new URL("../../.github/workflows/terraform-apply.yml", import.meta.url), "utf8");
   const block = /\n {4}paths:\n((?: {6}- .+\n)+)/.exec(yml);
   assert.ok(block, "terraform-apply.yml's push trigger has a paths: list");
-  const globs = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) => {
+  // GitHub reads `paths:` in order and a later `!` pattern removes what an
+  // earlier one matched.
+  const toRe = (g) => {
     const re = g
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
       .replace(/\*\*/g, "\u0000")
       .replace(/\*/g, "[^/]*")
       .replace(/\u0000/g, ".*");
     return new RegExp(`^${re}$`);
-  });
+  };
+  const patterns = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) =>
+    g.startsWith("!") ? { not: true, re: toRe(g.slice(1)) } : { not: false, re: toRe(g) },
+  );
+  const starts = (path) => patterns.reduce((on, { not, re }) => (re.test(path) ? !not : on), false);
   for (const [path, prod, github] of SCOPE_CASES) {
-    const triggers = globs.some((g) => g.test(path));
+    const triggers = starts(path);
     assert.equal(triggers, prod || github, `terraform-apply.yml ${triggers ? "starts" : "does not start"} for ${path}`);
   }
 });
 
-// What #143's merge saw: the same ruleset, read by the plan App (no
-// bypass_actors) and by the apply App (the live admin bypass).
+// The same ruleset read by the plan App (no bypass_actors) and by the apply
+// App (the live admin bypass).
 const ADMIN = [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }];
 const ruleset = (address, before, after, actions = ["update"]) => ({
   address,
@@ -182,6 +203,18 @@ test("bypass_actors the plan App cannot read do not split the plan from the appl
   assert.match(header(asPlanApp(), "github"), /Counted as no change \(1\)[^]*`bypass_actors`[^]*github_repository_ruleset\.tags/);
 });
 
+test("a bypass list reads the same in GitHub's order and with the provider's zero for an unset id", () => {
+  // Mutation: hashing the list as each plan holds it (in order, null apart
+  // from 0): red. That refused every envs/github apply once one ruleset had
+  // two bypass actors, since GitHub returns the DeployKey first with id 0.
+  const key = { actor_type: "DeployKey", bypass_mode: "always" };
+  const coded = { ...live, bypass_actors: [...ADMIN, { ...key, actor_id: null }] };
+  const stored = { ...live, bypass_actors: [{ ...key, actor_id: 0 }, ...ADMIN] };
+  assert.equal(fingerprint(asPlanApp(coded), "github"), fingerprint(asApplyApp(stored), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(coded), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(stored), read, SHA).ok, true);
+});
+
 test("a configured bypass_actors change still changes the fingerprint", () => {
   // Mutation: leaving the configured values out of the fingerprint lets an
   // apply add a bypass actor the PR's plan never had: red.
@@ -197,6 +230,38 @@ test("a real rule change beside the hidden bypass stays an update", () => {
   const h = header(asPlanApp(changed), "github");
   assert.match(h, /1 to update/);
   assert.doesNotMatch(h, /Counted as no change/);
+});
+
+test("a ruleset the PR updates has the same value fingerprint read by either App", () => {
+  // GitHub's ETag hashes the response, which differs by viewer, and only the
+  // apply App sees bypass_actors. Mutation: dropping github's `perViewer`, or
+  // hashing unreadable attributes, refuses every ruleset update (#453): red.
+  const rules = [{ creation: false }];
+  const pr = {
+    resource_changes: [
+      ruleset(
+        "github_repository_ruleset.tags",
+        { ...live, etag: "W/plan-app", bypass_actors: [] },
+        { ...live, etag: "W/plan-app", rules, bypass_actors: ADMIN },
+      ),
+    ],
+  };
+  const atMerge = {
+    resource_changes: [
+      ruleset(
+        "github_repository_ruleset.tags",
+        { ...live, etag: "W/apply-app", bypass_actors: ADMIN },
+        { ...live, etag: "W/apply-app", rules, bypass_actors: ADMIN },
+      ),
+    ],
+  };
+  assert.deepEqual(valueFingerprints(pr, "github", KEY), valueFingerprints(atMerge, "github", KEY));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: pr, sha: SHA, key: KEY }).body;
+  assert.equal(check("github", atMerge, read, SHA, { key: KEY, mode: "enforce" }).ok, true);
+  // A hand edit to a rule is still seen.
+  const handEdited = structuredClone(atMerge);
+  handEdited.resource_changes[0].change.before.rules = [{ creation: true, hand: true }];
+  assert.equal(check("github", handEdited, read, SHA, { key: KEY, mode: "enforce" }).ok, false);
 });
 
 test("envs/prod has no unreadable attributes", () => {
@@ -224,7 +289,7 @@ const SENSITIVE = { secret: true };
 
 test("a changed value on an updated resource changes its value fingerprint", () => {
   // Mutation: valueFingerprints() hashing only the address and actions turns
-  // this red: that is the hole the apply-refusal drill found.
+  // this red: attribute drift on an updated resource must be caught.
   const a = valueFingerprints(topic(tags("prod")), "prod", KEY);
   const b = valueFingerprints(topic(tags("drill")), "prod", KEY);
   assert.deepEqual(Object.keys(a), ["aws_sns_topic.alerts"]);
@@ -232,13 +297,33 @@ test("a changed value on an updated resource changes its value fingerprint", () 
   assert.equal(a["aws_sns_topic.alerts"], valueFingerprints(topic(tags("prod")), "prod", KEY)["aws_sns_topic.alerts"]);
 });
 
+test("a hand change to a resource the PR updates changes its value fingerprint", () => {
+  // Mutation: hashing only `after` turns this red. The apply's plan reverts
+  // the hand tag, so both plans' `after` are equal and the revert goes
+  // unnoticed (docs/operations/drills.md, Apply refusal).
+  const pr = topic(tags("prod"));
+  const atMerge = topic(tags("prod"), { before: { ...tags("prod"), tags: { env: "prod", hand: "drill" } } });
+  assert.notEqual(
+    valueFingerprints(pr, "prod", KEY)["aws_sns_topic.alerts"],
+    valueFingerprints(atMerge, "prod", KEY)["aws_sns_topic.alerts"],
+  );
+});
+
 test("a sensitive value is neither in the comment nor in the fingerprint", () => {
-  // Mutation: not stripping after_sensitive puts the secret into the HMAC
-  // (the second assert goes red) and, if posted raw, into the comment.
+  // Mutation: not stripping after_sensitive or before_sensitive puts the
+  // secret into the HMAC and, if posted raw, into the comment.
   const one = topic({ ...tags("prod"), secret: "s3cr3t-one" }, { after_sensitive: SENSITIVE });
   const two = topic({ ...tags("prod"), secret: "s3cr3t-two" }, { after_sensitive: SENSITIVE });
   assert.deepEqual(valueFingerprints(one, "prod", KEY), valueFingerprints(two, "prod", KEY));
-  const body = comment({ root: "prod", planText: "plan", status: "success", plan: one, sha: SHA, key: KEY }).body;
+  const beforeOne = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-one" }, before_sensitive: SENSITIVE });
+  const beforeTwo = topic(tags("prod"), { before: { ...tags("prod"), secret: "b-two" }, before_sensitive: SENSITIVE });
+  assert.deepEqual(valueFingerprints(beforeOne, "prod", KEY), valueFingerprints(beforeTwo, "prod", KEY));
+  // A secret already in state, so the comment is not refused for adding one.
+  const kept = topic(
+    { ...tags("prod"), secret: "s3cr3t-one" },
+    { after_sensitive: SENSITIVE, before: { ...tags("prod"), secret: "s3cr3t-old" }, before_sensitive: SENSITIVE },
+  );
+  const body = comment({ root: "prod", planText: "plan", status: "success", plan: kept, sha: SHA, key: KEY }).body;
   assert.match(body, /plan-values: \{"aws_sns_topic\.alerts":"[0-9a-f]{16}"\}/);
   assert.doesNotMatch(body, /s3cr3t|hunter2/);
 });
@@ -296,7 +381,7 @@ test("report mode names the drifted resource and still applies", () => {
 });
 
 test("enforce mode refuses a plan whose values differ, without showing them", () => {
-  // Mutation: enforce not refusing on a mismatch leaves the drill's hole open.
+  // Mutation: enforce not refusing on a mismatch applies drifted values: red.
   const out = check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY, mode: "enforce" });
   assert.equal(out.ok, false);
   assert.match(out.reason, /different values on 1 resource[^]*`aws_sns_topic\.alerts`[^]*Nothing applied/);
@@ -329,4 +414,101 @@ test("the address and actions refusal is unchanged by the value check", () => {
   const out = check("prod", { resource_changes: [] }, read, SHA, { key: KEY, mode: "enforce" });
   assert.equal(out.ok, false);
   assert.match(out.reason, /is not the plan on the PR/);
+});
+
+// A PR's own workflow can post as github-actions[bot] from a job outside the
+// terraform-plan Environment, so it can write any comment that does not need
+// the key. Only the signature tells the plan workflow's comment from one.
+const deletes = (...addresses) => ({
+  resource_changes: addresses.map((address) => ({
+    address,
+    type: "aws_x",
+    change: { actions: ["delete"], before: { a: 1 }, after: null },
+  })),
+});
+
+test("a comment made without the key never applies, even one with no values to hash", () => {
+  // Mutation: dropping the signature check, or counting an empty plan-values
+  // map as compared, turns this red: a delete-only plan has no HMAC to forge.
+  const plan = deletes("aws_x.y");
+  const forged = comment({ root: "prod", planText: "No changes.", status: "success", plan, sha: SHA })
+    .body.replace("\n", "\n<!-- plan-values: {} -->\n");
+  assert.deepEqual(readValues(forged), {});
+  assert.equal(check("prod", plan, forged, SHA, { key: KEY, mode: "enforce" }).ok, false);
+  const signed = comment({ root: "prod", planText: "plan", status: "success", plan, sha: SHA, key: KEY }).body;
+  assert.equal(check("prod", plan, signed, SHA, { key: KEY, mode: "enforce" }).ok, true);
+});
+
+test("a signed comment whose fingerprint was edited does not apply", () => {
+  // Mutation: signing only the values map lets a forger keep a real
+  // comment's values and swap in the fingerprint of a bigger plan: red.
+  const read = comment({ root: "prod", planText: "plan", status: "success", plan: deletes("aws_x.y"), sha: SHA, key: KEY }).body;
+  const bigger = deletes("aws_x.y", "aws_x.z");
+  const edited = read.replace(readFingerprint(read).fingerprint, fingerprint(bigger, "prod"));
+  const out = check("prod", bigger, edited, SHA, { key: KEY, mode: "enforce" });
+  assert.equal(out.ok, false);
+  assert.match(out.reason, /signature/);
+});
+
+// The plan text comes from the PR's own run, which can print anything; the
+// header is computed from the plan JSON the fingerprint covers
+// (docs/decisions/0035-pr-plans-run-unattended-and-a-main-only-job-signs-them.md).
+const update = (address, before, after, extra = {}) => ({
+  address,
+  type: address.split(".")[0],
+  change: { actions: ["update"], before, after, after_unknown: {}, after_sensitive: {}, ...extra },
+});
+
+test("the header names every attribute an update changes, whatever the plan text says", () => {
+  // Mutation: listing updates by address alone lets a PR's plan text hide
+  // which attribute changes: red.
+  const plan = {
+    resource_changes: [
+      update("aws_security_group.api", { name: "api", cidr: "10.0.0.0/8" }, { name: "api", cidr: "0.0.0.0/0" }),
+    ],
+  };
+  const h = header(plan, "prod");
+  assert.match(h, /\*\*Updates \(1\):\*\*\n- `aws_security_group\.api` — `cidr`$/m);
+  assert.doesNotMatch(h, /0\.0\.0\.0/, "names, never values");
+  const { body } = comment({ root: "prod", planText: "  ~ name", status: "success", plan, sha: SHA, key: KEY });
+  assert.match(body, /`cidr`[^]*the PR's own run/);
+});
+
+const secret = (actions, before, after, extra = {}) => ({
+  resource_changes: [
+    {
+      address: "random_password.db",
+      type: "random_password",
+      change: { actions, before, after, after_unknown: {}, after_sensitive: {}, before_sensitive: {}, ...extra },
+    },
+  ],
+});
+
+test("a plan that puts a new secret in state posts no fingerprint", () => {
+  // Every PR's plan job can read the state, so a secret in it is a secret
+  // every collaborator can read. Mutation: dropping stateSecrets() from
+  // comment(), or ignoring a value only known after apply, turns this red.
+  const created = secret(["create"], null, { length: 32, result: null }, {
+    after_unknown: { result: true },
+    after_sensitive: { result: true },
+  });
+  const { body, ok } = comment({ root: "prod", planText: "plan", status: "success", plan: created, sha: SHA, key: KEY });
+  assert.equal(ok, false);
+  assert.equal(readFingerprint(body), null);
+  assert.match(body, /`random_password\.db\.result`/);
+});
+
+test("a secret already in state, or one the root allows, does not block a plan", () => {
+  // Mutation: flagging every sensitive value, not only new ones, blocks any
+  // update to a resource that already holds one: red.
+  const kept = secret(
+    ["update"],
+    { length: 32, result: "old", keepers: { a: "1" } },
+    { length: 32, result: "old", keepers: { a: "2" } },
+    { before_sensitive: { result: true }, after_sensitive: { result: true } },
+  );
+  assert.equal(comment({ root: "prod", planText: "plan", status: "success", plan: kept, sha: SHA, key: KEY }).ok, true);
+  const allowed = secret(["create"], null, { result: null }, { after_unknown: { result: true }, after_sensitive: { result: true } });
+  allowed.resource_changes[0].address = "random_password.origin_verify";
+  assert.equal(comment({ root: "prod", planText: "plan", status: "success", plan: allowed, sha: SHA, key: KEY }).ok, true);
 });

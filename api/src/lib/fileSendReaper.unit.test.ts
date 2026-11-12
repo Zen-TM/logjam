@@ -160,7 +160,7 @@ describe("sweepExpiredFileSends", () => {
   });
 
   // THE ONE PLACE A FILENAME MAY BE WRITTEN INTO A PAYLOAD. Everywhere else it
-  // is resolved from the live send (PRIV-005); here the row holding it is about
+  // is resolved from the live send; here the row holding it is about
   // to be deleted, and a recipient who never got the file is owed its name so
   // they can ask for it again.
   it("stamps the filename onto the notification of a recipient who missed it", async () => {

@@ -12,7 +12,7 @@ variable "versioning_enabled" {
 variable "sse_algorithm" {
   type        = string
   default     = null
-  description = "Server-side encryption algorithm (e.g. \"AES256\"). null = do not manage an SSE config (LocalStack dev)."
+  description = "Server-side encryption algorithm (e.g. \"AES256\"). null = do not manage an SSE config (MiniStack dev)."
 }
 
 variable "sse_bucket_key_enabled" {
@@ -29,7 +29,7 @@ variable "public_access_block" {
     restrict_public_buckets = bool
   })
   default     = null
-  description = "Public-access-block settings. null = do not manage one (LocalStack dev). Prod buckets are all-true (media/frontend/topo-jobs, CP-004) — the CloudFront OAC bucket policy grants access without needing any of the four PAB flags relaxed."
+  description = "Public-access-block settings. null = do not manage one (MiniStack dev). Prod buckets are all-true (media/frontend/topo-jobs) — the CloudFront OAC bucket policy grants access without needing any of the four PAB flags relaxed."
 }
 
 variable "cors_rules" {
@@ -41,17 +41,18 @@ variable "cors_rules" {
     max_age_seconds = optional(number)
   }))
   default     = []
-  description = "CORS rules. Empty = no CORS config managed (LocalStack does not enforce CORS)."
+  description = "CORS rules. Empty = no CORS config managed (MiniStack does not enforce CORS)."
 }
 
 variable "lifecycle_rules" {
   type = list(object({
-    id              = string
-    prefix          = string
-    expiration_days = number
+    id                              = string
+    prefix                          = string
+    expiration_days                 = optional(number)
+    abort_incomplete_multipart_days = optional(number)
   }))
   default     = []
-  description = "Object-expiry lifecycle rules. Empty = no lifecycle config managed."
+  description = "Lifecycle rules: expire objects, abort multipart uploads left incomplete, or both. Empty = no lifecycle config managed."
 }
 
 variable "log_target" {

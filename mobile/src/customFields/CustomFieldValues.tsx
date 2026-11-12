@@ -21,26 +21,24 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, muted } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import {
+  ChipRail,
   Field,
   IconButton,
   Row,
-  ChipRail,
   TextField,
   type ChipOption,
-  Icon,
 } from "../ui";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
  *
- * It was a switch, which has no empty state — so a form wrote `false` for every
- * toggle it showed, touched or not. On a trip that left a "No" nobody gave on
- * every trip the attribute was ever shown on: counted as answered in the stats,
- * and still there after the tag that asked for it came off, with no way to clear
- * it. The same row of stops a bounded integer draws, for the same reason: unset
- * has to stay reachable.
+ * A toggle switch has no empty state and would write `false` for every toggle
+ * shown, touched or not — leaving an unintended "No" on every trip the
+ * attribute was shown on, counted as answered in stats with no way to clear it.
+ * The same row of stops a bounded integer draws, for the same reason: unset
+ * must stay reachable.
  */
 const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },
@@ -91,8 +89,8 @@ export function CustomFieldValueInputs({
 
 /**
  * Recorded values as a hairline table (rows from `attributeRows`). A table and
- * not cards because a row here is a fact, not something to tap — see "A parked
- * attribute is a CARD; a recorded one is a table row" in mobile/CLAUDE.md.
+ * not cards because a row here is a fact, not something to tap: a parked
+ * attribute waits on the form for a finger, a recorded one is only read.
  */
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
   const styles = useStyles();
@@ -130,8 +128,6 @@ function CustomFieldValueInput({
   /** Drawn beside the CONTROL, centred on it — not beside the label above it. */
   trailing?: React.ReactNode;
 }) {
-  const theme = useTheme();
-
   const label = customFieldDisplayLabel(def);
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
@@ -174,7 +170,7 @@ function CustomFieldValueInput({
           icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
           onPress={onPickDate}
         />
       </Beside>

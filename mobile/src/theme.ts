@@ -1,10 +1,10 @@
 // Design tokens — sourced from the shared theme schemes (single source of
-// truth for both clients; MOBILE_DESIGN_BRIEF §4).
+// truth for both clients).
 //
 // The user's scheme (`uiPreferences.themeSchemeId`) is STATE: resolved here at
 // module evaluation from a synchronous on-device preference, so the first frame
 // is already in the right colours, and changed by `setThemeSchemeId`, which
-// repaints the running app. Nothing scheme-dependent is a module constant: a
+// repaints the running Logjam GPS. Nothing scheme-dependent is a module constant: a
 // component reads colours with `useTheme()` and styles with a `makeStyles`
 // hook (DESIGN.md §1). Guard: `liveTheme.test.ts`.
 import {
@@ -18,14 +18,15 @@ import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 import {
   ASSET_HUES,
   CONTROL,
-  DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
+  MEDAL_HUES,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
+  schemeForOs,
   SPACE_UNIT,
   type SpaceStep,
   TEXT_ROLES,
@@ -33,6 +34,7 @@ import {
   TOUCH_TARGET_MIN,
   type ThemeSchemeId,
   type ThemeTokens,
+  WASH,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "./prefsDb";
@@ -42,9 +44,24 @@ const TEXT_SCALE_PREF_KEY = "textScale";
 
 function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
-  // An unrecognised id (downgraded app, hand-edited row) falls back rather than
+  // An unrecognised id (downgraded Logjam GPS, hand-edited row) falls back rather than
   // crashing the whole style layer on a bad string.
-  return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
+  return normalizeThemeSchemeId(stored) ?? schemeForOs(osPrefersDark());
+}
+
+/**
+ * Whether the OS is in dark mode; true where there is no OS to ask, which is
+ * Sandstone, the default. Required lazily for the reason `osFontScale` is.
+ */
+function osPrefersDark(): boolean {
+  try {
+    const { Appearance } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("react-native") as typeof import("react-native");
+    return Appearance.getColorScheme() !== "light";
+  } catch {
+    return true;
+  }
 }
 
 let currentThemeSchemeId = resolveSchemeId();
@@ -55,13 +72,13 @@ const subscribeToScheme = (listener: () => void) => {
 };
 
 /**
- * Repaint the running app in `id`, and record it for the next launch. Returns
+ * Repaint the running Logjam GPS in `id`, and record it for the next launch. Returns
  * false when the device refused to store it (the repaint still happened), so
  * the caller can say the choice will not survive a restart.
  *
  * The account-level copy (`PATCH /users/me`) is the caller's job — that one is
  * what makes the choice follow the user to the web and to another phone; this
- * one is what makes the app open in the right colours with no network.
+ * one is what makes Logjam GPS open in the right colours with no network.
  */
 export function setThemeSchemeId(id: ThemeSchemeId): boolean {
   if (id !== currentThemeSchemeId) {
@@ -73,7 +90,7 @@ export function setThemeSchemeId(id: ThemeSchemeId): boolean {
 
 const ThemeSchemeContext = createContext<ThemeSchemeId>(currentThemeSchemeId);
 
-/** Wraps the whole app (`index.ts`), above the error boundary: everything
+/** Wraps Logjam GPS (`index.ts`), above the error boundary: everything
  *  under it repaints when the scheme changes, and nothing remounts. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const id = useSyncExternalStore(
@@ -83,7 +100,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return createElement(ThemeSchemeContext.Provider, { value: id }, children);
 }
 
-/** The scheme the app is painted in right now. */
+/** The scheme Logjam GPS is painted in right now. */
 export const useThemeSchemeId = (): ThemeSchemeId =>
   useContext(ThemeSchemeContext);
 
@@ -140,7 +157,7 @@ export const makeStyles = <T extends NamedStyles<T> | NamedStyles<unknown>>(
  * is on by default), so this preference exists only for the gap that leaves:
  * someone who wants Logjam's type bigger without enlarging every other app.
  * Which means the two knobs MULTIPLY, and a user on OS 1.3 who picks 1.4 here
- * would be asking for 1.8× — enough to break the row layouts this app is built
+ * would be asking for 1.8× — enough to break the row layouts Logjam GPS is built
  * out of. `resolveTextScale` therefore clamps the COMBINED figure to
  * `MAX_COMBINED_TEXT_SCALE` and returns what is left for us to apply.
  *
@@ -219,9 +236,15 @@ export function persistTextScale(scale: TextScale): boolean {
   return writePref(TEXT_SCALE_PREF_KEY, String(scale));
 }
 
+/** No type renders under this, whatever the pick: the 0.9 option would draw `xs`
+ *  at 11. The floor is the smallest step, `FONT.gps.xs` (12 on both clients). */
+const TEXT_FLOOR_PX = FONT.gps.xs;
+
 // Rounded to whole pixels: RN takes fractional font sizes, but a 13.8 px label
 // beside a 13.8 px icon lands on a different subpixel on every device.
-const scaled = (px: number): number => Math.round(px * textScale);
+export const scaleType = (px: number, scale: number): number =>
+  Math.max(Math.round(px * scale), TEXT_FLOOR_PX);
+const scaled = (px: number): number => scaleType(px, textScale);
 
 // Spacing, radius and type read the shared scales (`@logjam/shared`
 // designTokens.ts), the same names Logjam Web's tokens are generated from.
@@ -236,6 +259,7 @@ export const fontSize = {
   base: scaled(FONT.gps.base),
   lg: scaled(FONT.gps.lg),
   xl: scaled(FONT.gps.xl),
+  xxl: scaled(FONT.gps.xxl),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
@@ -245,6 +269,16 @@ export const formRhythm = FORM_RHYTHM;
 
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;
+
+/** The tints: `withAlpha(token, wash.selected)`. A literal alpha is a lint
+ *  error (eslint.config.js). */
+export const wash = WASH;
+
+/** A page-coloured surface drawn over the map or a photo, which a wash is too
+ *  faint to be: chrome you read through to the map (`map`), a fade or a frame
+ *  (`dim`), and the near-invisible fill iOS needs to hit-test a view (`hit`).
+ *  Same lint as `wash`. */
+export const veil = { map: 0.9, dim: 0.6, hit: 0.01 } as const;
 
 /** Control heights: a phone is a touch screen, so it takes the touch set. */
 export const controlSize = CONTROL.touch;
@@ -277,6 +311,7 @@ type TextRoleStyle = {
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
   lineHeight?: number;
   textTransform?: "uppercase";
+  fontVariant?: ["tabular-nums"];
 };
 export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 /**
@@ -297,10 +332,25 @@ export const textRoles = Object.fromEntries(
       fontWeight: fontWeight[role.weight],
       ...("leading" in role ? { lineHeight: leading } : {}),
       ...("uppercase" in role ? { textTransform: "uppercase" } : {}),
+      ...("tabular" in role ? { fontVariant: ["tabular-nums"] } : {}),
     };
     return [name, style];
   }),
 ) as TextRoles;
+
+/**
+ * Inline emphasis inside a role's text (a maintainer announcement's **bold**
+ * and `code`): a weight and a face, never a size, so the run keeps its role's.
+ */
+export const inlineText = {
+  strong: { fontWeight: fontWeight.bold },
+  // Per platform, for `Platform.select` (this module stays free of React
+  // Native values so vitest can load it): iOS has no family named monospace.
+  code: {
+    ios: { fontFamily: "Menlo" },
+    default: { fontFamily: "monospace" },
+  },
+} as const;
 
 // Modal/sheet scrims; the words on one are `ON_SCRIM` (shared/DESIGN.md §7).
 export { ON_SCRIM, SCRIM as scrim } from "@logjam/shared";
@@ -327,6 +377,11 @@ export function withAlpha(hex: string, alpha: number): string {
   const b = parseInt(full.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+
+/** An empty field's hint text: `textMuted` is so near `text` in the dark
+ *  schemes that a hint read as typed text, so it takes the shared dim. */
+export const placeholderColor = (theme: { textMuted: string }): string =>
+  withAlpha(theme.textMuted, OPACITY.disabled);
 
 /**
  * ASSET HUES — per-kind identity colours for on-device map assets.
@@ -372,11 +427,11 @@ const placeHues = (theme: ThemeTokens) =>
 
 /**
  * Inbox identity — BORROWED, not invented (shared/DESIGN.md §8). A notification is
- * always about something that lives somewhere else in the app, so it wears that
+ * always about something that lives somewhere else in Logjam GPS, so it wears that
  * thing's hue: a topo notification is the same eucalypt as a topo overlay in
  * Saved, a place-share is the same heath as a shared place on the Places
  * screen. Recognising a thing again where it lives is what makes the inbox part
- * of the app rather than a log of unrelated events.
+ * of Logjam GPS rather than a log of unrelated events.
  *
  * Adding a kind means pointing at an existing hue. If the thing it refers to has
  * no hue yet, that is the gap to fill first.
@@ -395,8 +450,10 @@ const notificationHues = (
     topo: assetHue.overlay,
     /** Topo exports — the waterhole blue of the vector files they produce. */
     export: assetHue.import,
-    /** GeoPDFs — as in Saved. */
-    geoPdf: assetHue.geoPdf,
+    /** Trip plans — the plan's own hue, as on the Plans list. */
+    plan: assetHue.plan,
+    /** A maintainer message: about Logjam itself, so the scheme accent. */
+    message: theme.accent,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in
      *  Saved's Imports, because that is where accepting it puts it. */
     file: assetHue.import,
@@ -415,6 +472,8 @@ export const huesFor = perScheme((theme) => {
     assetHue,
     placeHue,
     notificationHue: notificationHues(theme, assetHue, placeHue),
+    /** The leaderboard's medals — `MEDAL_HUES` in `@logjam/shared`. */
+    medalHue: MEDAL_HUES,
   };
 });
 

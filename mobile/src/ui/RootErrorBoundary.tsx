@@ -14,7 +14,7 @@ interface State {
   hasError: boolean;
 }
 
-// Top-level safety net, mirroring the web RootErrorBoundary. React unmounts the
+// Top-level safety net, mirroring Logjam Web's RootErrorBoundary. React unmounts the
 // whole tree on an uncaught render/lifecycle error; on a phone in a place that
 // is a blank screen with no console and no way back. It catches render and
 // lifecycle throws only — event handlers and async rejections still need local

@@ -1,20 +1,21 @@
-// Expo push notifications — mirrors the Resend email pattern (services/
+// Expo push notifications — mirrors the email pattern (services/
 // email.ts): best-effort fan-out at Notification-creation sites; the
 // in-app Notification row stays the source of truth. No SDK — the Expo push
 // API is one HTTPS POST.
 //
-// PRIVACY (hard rule, root CLAUDE.md + mobile plan Stage 3): push payloads
+// PRIVACY (hard rule, root AGENTS.md; Guard: push.unit.test.ts): push payloads
 // transit Apple/Google/Expo servers in plaintext. NEVER put place names,
 // coordinates, usernames, or any free text in a push. The payload is a
-// generic per-type title, the notification type, and opaque IDs only — the
-// app fetches details over the authed API on tap. buildPushMessages is the
-// single choke-point and takes NO free-text parameters by construction;
-// its unit tests assert the title map is static and the data keys are
+// generic per-type title, the notification type, and opaque IDs only —
+// Logjam GPS fetches details over the authed API on tap. buildPushMessages is
+// the single choke-point and takes NO free-text parameters by construction;
+// push.unit.test.ts asserts the title map is static and the data keys are
 // whitelisted.
 import prisma from "./prisma";
 import { logger } from "../lib/logger";
+import { getEnv } from "../lib/env";
+import { ANNOUNCEMENT } from "@logjam/shared";
 
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 // Expo accepts up to 100 messages per request.
 const EXPO_PUSH_BATCH_LIMIT = 100;
 
@@ -25,20 +26,26 @@ const PUSH_TITLES: Record<string, string> = {
   place_shared: "A place was shared with you",
   topo_complete: "Topo processing complete",
   topo_failed: "Topo processing failed",
-  topo_export_complete: "Topo export finished",
+  topo_export_complete: "Map finished",
   topo_export_skipped: "Auto-export skipped",
-  geo_pdf_complete: "GeoPDF finished",
-  geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
   egress_quota_warning: "Approaching your monthly download limit",
   egress_quota_exceeded: "Monthly download limit reached",
+  // Never the message's own title: that is free text, and the inbox has it.
+  // Guard: push.unit.test.ts, "titles an announcement generically…".
+  announcement: ANNOUNCEMENT.untitled,
   // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
   // neither who nor how many: a count is not free text, but a title is built by
   // lookup and never by interpolation, and keeping that true BY CONSTRUCTION is
   // what stops the next call site reaching for a username. The inbox has the
   // numbers; this only has to get the user there.
   bulk_shared: "New things were shared with you",
+  plan_invited: "You were invited to a trip plan",
+  plan_join_request: "Someone asked to join your plan",
+  plan_join_approved: "You're in",
+  plan_member_joined: "Someone joined your plan",
+  plan_access_ended: "A plan is no longer available",
 };
 
 const GENERIC_TITLE = "Logjam notification";
@@ -51,12 +58,13 @@ export type PushData = {
   placeId?: string;
   jobId?: string;
   exportId?: string;
-  geoPdfJobId?: string;
   entityType?: string;
   entityId?: string;
   fileSendId?: string;
   /** Groups the notifications one bulk share created. Opaque uuid. */
   batchId?: string;
+  announcementId?: string;
+  planId?: string;
 };
 
 const ALLOWED_DATA_KEYS = new Set([
@@ -66,11 +74,12 @@ const ALLOWED_DATA_KEYS = new Set([
   "placeId",
   "jobId",
   "exportId",
-  "geoPdfJobId",
   "entityType",
   "entityId",
   "fileSendId",
   "batchId",
+  "announcementId",
+  "planId",
 ]);
 
 export type ExpoPushMessage = {
@@ -131,7 +140,7 @@ export function tokensToPrune(
 /**
  * Send a push to every registered device of a user. Best-effort like email:
  * failures are logged (scrubbed) and swallowed — a push must never fail the
- * request that triggered it.
+ * request that triggered it (push.unit.test.ts).
  */
 export async function sendPushToUser(
   userId: string,
@@ -148,7 +157,7 @@ export async function sendPushToUser(
 
     for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_LIMIT) {
       const batchTokens = tokens.slice(i, i + EXPO_PUSH_BATCH_LIMIT);
-      const response = await fetch(EXPO_PUSH_URL, {
+      const response = await fetch(getEnv().EXPO_PUSH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(messages.slice(i, i + EXPO_PUSH_BATCH_LIMIT)),

@@ -14,17 +14,17 @@ import {
   type UpgradeEnforcement,
 } from "./version";
 
-// Forced-upgrade gate (Stage 0 lever). Checked on app start; "unknown" (offline
-// or endpoint unreachable) NEVER blocks — blocking an offline user mid-trip
-// over an upgrade check would violate the offline-first semantics (see Stage 1
-// session rules). Only a positive "server says this build is too old" blocks.
+// Forced-upgrade gate. Checked on Logjam GPS start; "unknown" (offline or
+// endpoint unreachable) NEVER blocks — blocking an offline user mid-trip
+// over an upgrade check would violate offline-first semantics. Only a
+// positive "server says this build is too old" blocks.
 //
-// MAPP-002: and even then, only on a connection the user can actually update
-// over for free. This hook owns the EFFECTS (the fetch, the foreground
+// And even then, only on a connection the user can actually update over
+// for free. This hook owns the EFFECTS (the fetch, the foreground
 // re-check, the connection subscription); the decision itself is
-// `upgradeEnforcement` in ./version, pure and exhaustively tested, because
-// mobile/ has no React Native test environment and a rule inside a hook is a
-// rule nothing can run.
+// `upgradeEnforcement` in ./version, pure and exhaustively tested (guard:
+// `src/version.test.ts`), because mobile/ has no React Native test environment
+// and a rule inside a hook is a rule nothing can run.
 export type MinVersionGate =
   | { status: "unknown" }
   | { status: "ok" }
@@ -34,7 +34,7 @@ export type MinVersionGate =
       enforcement: UpgradeEnforcement;
     };
 
-/** What the SERVER said, before the connection has a say (MAPP-002). */
+/** What the SERVER said, before the connection has a say. */
 type ServerAnswer =
   | { status: "unknown" }
   | { status: "ok" }
@@ -48,13 +48,13 @@ export function useMinVersionGate(): MinVersionGate {
   const status = gate.status;
 
   // The check re-runs on foreground WHILE, AND ONLY WHILE, the answer is still
-  // "unknown". A launch with no signal is the normal case at a trailhead, and a
-  // single failed check used to pin the lever off for the whole process — the
-  // build stayed unreachable even after the phone found a bar of reception. The
-  // narrow condition is what keeps the offline-first promise: once a build has
-  // been told "ok" it is never re-gated, so a session that started online can
-  // never be blocked mid-trip; only one that never got an answer at all can
-  // still receive one. "upgradeRequired" is terminal either way.
+  // "unknown". A launch with no signal is the normal case at a trailhead;
+  // checking only on launch would leave the status unconfirmed for the whole
+  // process even after the phone finds reception. The narrow condition is
+  // what keeps the offline-first promise: once a build has been told "ok" it
+  // is never re-gated, so a session that started online can never be blocked
+  // mid-trip; only one that never got an answer at all can still receive one.
+  // "upgradeRequired" is terminal either way.
   useEffect(() => {
     if (status !== "unknown") return;
     let cancelled = false;
@@ -101,7 +101,7 @@ export function useMinVersionGate(): MinVersionGate {
   // in the session they are already in. The min-version answer cannot change
   // under them — only the connection can — so this recomputes rather than
   // re-fetches. Subscribed only once the build IS below the minimum, which is
-  // both terminal and rare; nobody else pays for the listener.
+  // both terminal and rare; nobody else pays for the listener. Guard: `src/version.test.ts`.
   useEffect(() => {
     if (status !== "upgradeRequired") return;
     return subscribeConnection((state) => setMetered(meteredness(state)));

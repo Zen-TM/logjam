@@ -1,6 +1,10 @@
 // Pure geometry helper, kept out of SavedScreen.tsx so the unit suite can
-// import it without pulling React Native in (see CLAUDE.md testing notes).
+// import it without pulling React Native in.
 export type Bbox = [number, number, number, number];
+
+/** The half-width of the box one place is framed in: ~1 km across. A place's
+ *  Show on map and a plan's frame both stop at it. */
+export const PLACE_FOCUS_DEGREES = 0.005;
 
 export function bboxOfPoints(
   points: { lon: number; lat: number }[],

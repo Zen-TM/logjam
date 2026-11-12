@@ -13,6 +13,7 @@ override_resource { target = github_repository.logjam }
 override_resource { target = github_repository_ruleset.main }
 override_resource { target = github_repository_ruleset.mobile_release_tags }
 override_resource { target = github_repository_ruleset.mobile_release_branches }
+override_resource { target = github_repository_ruleset.maplibre_android_tags }
 override_resource { target = github_repository_environment.this }
 override_resource { target = github_repository_environment_deployment_policy.this }
 override_resource { target = github_actions_variable.this }
@@ -66,7 +67,7 @@ run "main_admits_only_green_squashed_prs" {
   # off strict lets a PR merge against a main it was not planned on.
   assert {
     condition = alltrue([
-      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks"] :
+      for c in ["shared", "api", "api-integration", "frontend", "mobile", "topo", "migrations", "migration-upgrade", "infra-scripts", "topo-e2e", "Live release on this schema", "plan-summary", "fmt", "validate", "test-github", "test-prod", "dependency-review", "setup-smoke", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks", "pr-closes", "expo-doctor", "brain-e2e-gate"] :
       contains([for r in github_repository_ruleset.main.rules[0].required_status_checks[0].required_check : r.context], c)
     ]) && github_repository_ruleset.main.rules[0].required_status_checks[0].strict_required_status_checks_policy
     error_message = "A required check left the main ruleset, or branches no longer need to be up to date. Add checks freely; removing one needs this test changed too."
@@ -106,25 +107,83 @@ run "prod_deploys_from_main_only" {
   }
 }
 
+run "plan_comments_are_signed_on_main_only" {
+  command = plan
+
+  # Mutation: widening terraform-plan-sign's policy (another branch,
+  # protected_branches, or no custom policy) lets a workflow on that branch
+  # read PLAN_FINGERPRINT_KEY and sign a plan comment for any plan.
+  assert {
+    condition = (
+      github_repository_environment.this["terraform-plan-sign"].deployment_branch_policy[0].custom_branch_policies &&
+      !github_repository_environment.this["terraform-plan-sign"].deployment_branch_policy[0].protected_branches &&
+      github_repository_environment_deployment_policy.this["terraform-plan-sign"].branch_pattern == "main" &&
+      github_repository_environment_deployment_policy.this["terraform-plan-sign"].tag_pattern == null
+    )
+    error_message = "The terraform-plan-sign Environment must be deployable from main and nothing else: it holds the key that signs plan comments."
+  }
+}
+
 run "releases_stay_the_maintainers" {
   command = plan
 
   # Mutation: dropping a rule or the admin-only bypass on either release
-  # ruleset lets a collaborator cut a Logjam GPS release.
+  # ruleset, or adding any other bypass actor to the tags', lets a
+  # collaborator cut a Logjam GPS release.
   assert {
     condition = alltrue(flatten([
       for rs in [github_repository_ruleset.mobile_release_tags, github_repository_ruleset.mobile_release_branches] : [
         rs.rules[0].creation, rs.rules[0].update, rs.rules[0].deletion,
-        length(rs.bypass_actors) == 1,
         rs.bypass_actors[0].actor_id == 5,
       ]
-    ]))
+    ])) && length(github_repository_ruleset.mobile_release_tags.bypass_actors) == 1
     error_message = "Only repository admins may create, move or delete mobile-v* tags and release/mobile-v* branches."
+  }
+
+  # Mutation: making the second bypass actor on the branches GitHub Actions
+  # (Integration 15368), or adding a third, lets any pull-request workflow
+  # that asks for a write token push the branch an OTA hotfix publishes from
+  # (docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md).
+  assert {
+    condition = (
+      length(github_repository_ruleset.mobile_release_branches.bypass_actors) == 2 &&
+      github_repository_ruleset.mobile_release_branches.bypass_actors[1].actor_type == "DeployKey"
+    )
+    error_message = "Besides admins, only a deploy key (ota-hotfix.yml's, in the mobile-ota Environment) may push release/mobile-v* branches."
   }
 
   assert {
     condition     = github_repository_environment_deployment_policy.this["mobile-release"].tag_pattern == "mobile-v*"
     error_message = "The mobile-release Environment, which holds EXPO_TOKEN, must be deployable from mobile-v* tags only."
+  }
+
+  # Mutation: dropping update or deletion, or widening the bypass, lets a
+  # collaborator move or delete the patched MapLibre release a build pins.
+  assert {
+    condition = alltrue([
+      github_repository_ruleset.maplibre_android_tags.rules[0].update,
+      github_repository_ruleset.maplibre_android_tags.rules[0].deletion,
+      length(github_repository_ruleset.maplibre_android_tags.bypass_actors) == 1,
+      github_repository_ruleset.maplibre_android_tags.bypass_actors[0].actor_id == 5,
+    ])
+    error_message = "Only repository admins may move or delete maplibre-android-v* tags."
+  }
+}
+
+run "ota_updates_are_signed_on_main_only" {
+  command = plan
+
+  # Mutation: widening mobile-ota's policy (another branch, a tag pattern,
+  # protected_branches, or no custom policy) lets a workflow on that ref read
+  # the OTA signing key and sign an update every phone would run.
+  assert {
+    condition = (
+      github_repository_environment.this["mobile-ota"].deployment_branch_policy[0].custom_branch_policies &&
+      !github_repository_environment.this["mobile-ota"].deployment_branch_policy[0].protected_branches &&
+      github_repository_environment_deployment_policy.this["mobile-ota"].branch_pattern == "main" &&
+      github_repository_environment_deployment_policy.this["mobile-ota"].tag_pattern == null
+    )
+    error_message = "The mobile-ota Environment must be deployable from main and nothing else: it holds the OTA signing key (docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)."
   }
 }
 
@@ -166,21 +225,5 @@ run "security_alerts_stay_on" {
   assert {
     condition     = github_repository_dependabot_security_updates.logjam.enabled
     error_message = "Dependabot security updates must stay enabled."
-  }
-}
-
-run "pr_plans_wait_for_the_maintainer" {
-  command = plan
-
-  # Mutation: removing the reviewers block, emptying it, or adding another
-  # user or a team lets a PR's plan run get the AWS plan role and the plan
-  # App's key without the maintainer's approval, or with someone else's.
-  assert {
-    condition = (
-      length(github_repository_environment.terraform_plan.reviewers) == 1 &&
-      github_repository_environment.terraform_plan.reviewers[0].users == toset([86338167]) &&
-      length(coalesce(github_repository_environment.terraform_plan.reviewers[0].teams, toset([]))) == 0
-    )
-    error_message = "The terraform-plan Environment must require the maintainer's approval, and only theirs."
   }
 }

@@ -1,11 +1,9 @@
 // Custom field DEFINITIONS — the one place that reads and writes them, and the
 // one place that knows a delete is two things.
 //
-// Definitions are rows in `custom_field_defs` (they used to be an array inside
-// `User.uiPreferences`; see the 20260905100000 migration for why they moved).
-// The VALUES they describe are still keyed by `key` on the owning rows:
-// `TripLog.customFields` at the top level, `Place.attributes.customFields`
-// nested inside the free-form blob.
+// Definitions are rows in `custom_field_defs`. The VALUES they describe are
+// keyed by `key` on the owning rows: `TripLog.customFields` and
+// `Place.fieldValues`.
 //
 // That split is the whole reason this module exists. Deleting a definition
 // must ALSO strip the now-orphaned values from every row that carried one, in
@@ -44,8 +42,7 @@ import {
 const DEF_SELECT = {
   id: true,
   // WHOSE it is: null for a system definition. The clients need it to know
-  // which rows may be renamed or deleted — without it the phone offered both
-  // on a built-in field and did the local half of the delete for real.
+  // which rows may be renamed or deleted, preventing edits to built-in fields.
   ownerId: true,
   entity: true,
   key: true,
@@ -68,11 +65,10 @@ function isJsonObject(
 
 // The user-visible field values of a place, or null when it has none.
 //
-// Values used to be NESTED, at `attributes.customFields[key]`, and are now at
-// the TOP level of `fieldValues` — the forward migration hoists them. The
-// internal `_`-prefixed entries (`_sources`) are excluded here because they are
-// not fields: a delete would otherwise offer to strip the source list off every
-// place. Exported for unit testing.
+// Values are at the TOP level of `fieldValues`. The internal `_`-prefixed
+// entries (`_sources`) are excluded here because they are not fields: a
+// delete would otherwise offer to strip the source list off every place.
+// Exported for unit testing.
 export function placeCustomFieldsRecord(
   fieldValues: Prisma.JsonValue | null,
 ): Record<string, unknown> | null {
@@ -158,10 +154,8 @@ const placeEntity: EntityConfig = {
       .filter((row) => hasValue(placeCustomFieldsRecord(row.fieldValues), key))
       .map((row): StripThunk => {
         // Removes ONE key. The internal `_sources` entry rides
-        // in the same object and must survive — before the hoist they were
-        // siblings of the customFields sub-object and survived structurally;
-        // now they are siblings of the values themselves, so `setFieldValues`
-        // has to be the thing that keeps them.
+        // in the same object and must survive: they are siblings of the
+        // values themselves, so `setFieldValues` keeps them.
         const next = setFieldValues(row.fieldValues, { [key]: null });
         return (tx) =>
           tx.place.update({
@@ -197,10 +191,9 @@ export const ENTITY_BY_SEGMENT: Record<string, CustomFieldEntity> = {
 export function loadDefRows(userId: string): Promise<CustomFieldDefRecord[]> {
   return prisma.customFieldDef.findMany({
     // The user's own PLUS the SYSTEM definitions (ownerId null), which label
-    // the built-in fields and belong to no account. Omitting them left every
-    // value RopeWiki import writes — and every grade a canyon has ever had —
-    // rendering as a bare key with no label and no bounds, because the one
-    // list the clients read did not contain the definitions that describe them.
+    // the built-in fields and belong to no account. Without them, values
+    // written by RopeWiki import or canyon grades render as bare keys with
+    // no label and no bounds.
     where: { OR: [{ ownerId: userId }, { ownerId: null }] },
     select: DEF_SELECT,
     // `customFieldDefsFromRows` re-sorts by (position, key) for display, so
@@ -428,9 +421,7 @@ export async function createFieldDef(
         // the flag off and an empty scoping exists in the settings list and
         // nowhere else. That is what a caller that never heard of the scoping
         // produces (every pre-rework caller, and Logjam Web, which has no
-        // picker for a trip field). Defaulting false made all three of alice's
-        // trip fields invisible on the trip form — found by reading the
-        // phone's mirror, not by a test.
+        // picker for a trip field).
         appliesToAllTypes:
           input.appliesToAllTypes ??
           (placeTypeIds.length === 0 && tripTypes.length === 0),

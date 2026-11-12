@@ -1,15 +1,15 @@
-// Sentry crash reporting — privacy-gated init (PROGRESS.md Stage 0 decision).
+// Sentry crash reporting — privacy-gated init (ADR 0004).
 //
 // Hard preconditions honoured here:
 //  - scrubEvent/scrubBreadcrumb (pure, vitest-covered) wired as beforeSend /
 //    beforeBreadcrumb — no place coords/names/URLs leave the device.
 //  - sendDefaultPii: false.
-//  - No-op when EXPO_PUBLIC_SENTRY_DSN is unset (operator hasn't created the
-//    Sentry org yet — OPERATOR_SETUP.md B). The DSN is not a secret (it's a
+//  - No-op when EXPO_PUBLIC_SENTRY_DSN is unset (when no DSN has been
+//    provisioned). The DSN is not a secret (it's a
 //    submission endpoint), so EXPO_PUBLIC_* is the right channel; the Sentry
 //    *auth token* (sourcemap upload) is a secret and stays in EAS secrets.
-//  - No-op until the user has said yes (crashReportPreference.ts). Guest mode
-//    made this necessary: telemetry with no account behind it has nothing to
+//  - No-op until the user has said yes (crashReportPreference.ts). In guest mode,
+//    telemetry with no account behind it has nothing to
 //    "leave the user's account" *to*, so consent is the only way to honour the
 //    root privacy rule. Every install is asked once, including one with a stored
 //    identity; none is switched on for the user.
@@ -24,7 +24,7 @@ import { scrubBreadcrumb, scrubEvent } from "./scrubEvent";
 // raster basemaps fetch `z/x/y` tile URLs, which localise to ~150 m, so this
 // stays off; JS fetch/XHR breadcrumbs remain and are scrubbed. Not in the
 // 7.2.0 option types, hence the spread; options are forwarded to the native
-// SDK as given. Guard: initSentry.test.ts.
+// SDK as given. Guard: mobile/src/sentry/initSentry.test.ts.
 const NATIVE_OPTIONS = { enableNetworkBreadcrumbs: false } as object;
 
 export function initSentry(): void {

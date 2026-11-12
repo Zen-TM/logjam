@@ -43,9 +43,8 @@ beforeEach(() => {
 // reasons a ROUTE can be visible (a Share row, or the place its `placeId`
 // points at being shared). Every test below pins one arm while the other is
 // absent, so a change that quietly drops an arm fails here rather than in the
-// field. The waypoint half of this file went with the phase 1c fold: a
-// waypoint is a place now, and a PlaceLink grants no visibility at all — so
-// there is one inheritance arm left in the codebase and it is the foreign key.
+// field. A waypoint is a place, and a PlaceLink grants no visibility at
+// all — so there is one inheritance arm and it is the foreign key.
 describe("getRouteRole", () => {
   it("grants 'shared' on a direct share of an UNLINKED route", async () => {
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
@@ -78,7 +77,7 @@ describe("getRouteRole", () => {
 });
 
 // The revoke path asks this directly: a direct revoke must not tombstone a
-// recipient who keeps the place arm (finding 2).
+// recipient who keeps the place arm.
 describe("hasPlaceInheritedAccess", () => {
   it("is true for a route whose place is shared with the user", async () => {
     mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
@@ -96,11 +95,11 @@ describe("getJobRole", () => {
     expect(await getJobRole(OWNER, "topoJob", job)).toBe("owner");
     expect(await getJobRole(OTHER, "topoJob", job)).toBe("none");
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
-    expect(await getJobRole(OTHER, "geoPdfJob", job)).toBe("shared");
+    expect(await getJobRole(OTHER, "topoJob", job)).toBe("shared");
   });
 });
 
-// The anti-oracle rule from root CLAUDE.md, in executable form: a caller with
+// The anti-oracle rule from root AGENTS.md, in executable form: a caller with
 // no access must not be able to tell "exists but not mine" from "absent".
 describe("404-not-403 anti-oracle", () => {
   it("requireShareAccess throws 404 on no access", () => {
@@ -146,15 +145,19 @@ describe("404-not-403 anti-oracle", () => {
 describe("deleteSharesFor", () => {
   it("deletes every share row for the given entities", async () => {
     const tx = {
-      share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      $queryRaw: vi.fn().mockResolvedValue([{ shared_with_id: "u1" }]),
       notification: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
     };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
-    expect(tx.share.deleteMany).toHaveBeenCalledWith({
-      where: { entityType: "route", entityId: { in: ["rt-1", "rt-2"] } },
-    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0].slice(1)).toEqual([
+      "route",
+      ["rt-1", "rt-2"],
+    ]);
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({
       where: {
+        // Mutation that turns it red: drop `userId`.
+        userId: { in: ["u1"] },
         type: "item_shared",
         AND: [{ payload: { path: ["entityType"], equals: "route" } }],
         OR: [
@@ -167,11 +170,11 @@ describe("deleteSharesFor", () => {
 
   it("issues no query for an empty id list", async () => {
     const tx = {
-      share: { deleteMany: vi.fn() },
+      $queryRaw: vi.fn(),
       notification: { deleteMany: vi.fn() },
     };
     await deleteSharesFor(tx as never, "route", []);
-    expect(tx.share.deleteMany).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
     expect(tx.notification.deleteMany).not.toHaveBeenCalled();
   });
 });
@@ -220,10 +223,10 @@ describe("parseSharableEntityType", () => {
   });
 });
 
-// APIR-007 / decision D2: unfriending revokes EVERY share type, in both
-// directions — not just the place shares the unfriend handler already
-// deleted. The distinction that is easy to get wrong is FileSend: a pending
-// send is still live access, an accepted one is a copy the recipient holds.
+// Unfriending revokes EVERY share type, in both directions — not just the
+// place shares the unfriend handler already deleted. The distinction that is
+// easy to get wrong is FileSend: a pending send is still live access, an
+// accepted one is a copy the recipient holds.
 describe("revokeAllSharesBetween", () => {
   const ME = "me";
   const EX = "ex-friend";
@@ -266,13 +269,12 @@ describe("revokeAllSharesBetween", () => {
       { id: "s1", entityType: "route", entityId: "rt-0", sharedWithId: EX },
       { id: "s2", entityType: "route", entityId: "rt-1", sharedWithId: ME },
       { id: "s3", entityType: "topoJob", entityId: "tj-1", sharedWithId: EX },
-      { id: "s4", entityType: "geoPdfJob", entityId: "gp-1", sharedWithId: EX },
     ]);
     await revokeAllSharesBetween(tx as never, ME, EX);
 
-    // All four Share rows go — a job share is revoked as hard as a route.
+    // All three Share rows go — a job share is revoked as hard as a route.
     expect(tx.share.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ["s1", "s2", "s3", "s4"] } },
+      where: { id: { in: ["s1", "s2", "s3"] } },
     });
     // Jobs are not delta-synced, so they get no tombstone (they reconcile on
     // the next list fetch); routes do, one per losing recipient.
@@ -303,7 +305,7 @@ describe("revokeAllSharesBetween", () => {
     await revokeAllSharesBetween(tx as never, ME, EX);
 
     const where = tx.fileSendRecipient.findMany.mock.calls[0][0].where;
-    // The status filter IS the accepted-is-a-copy rule (D2). If this ever
+    // The status filter IS the accepted-is-a-copy rule. If this ever
     // widens, accepted recipients start losing files they already own.
     expect(where.status).toBe("pending");
     expect(where.OR).toEqual([

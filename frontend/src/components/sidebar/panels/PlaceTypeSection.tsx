@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import {
   drawsYoursHeading,
   PLACE_TYPE_COLORS,
+  NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeCountLabel,
   placeTypeDeleteConfirm,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
@@ -21,6 +23,7 @@ import {
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useToast } from "../../feedback/ToastProvider";
 import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -29,7 +32,6 @@ import {
   Hero,
   IconButton,
   IconTile,
-  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -54,8 +56,10 @@ const copy = SETTINGS_LIST.copy;
  *  - A SYSTEM type (Canyon, Campsite, Marker) belongs to no account. It is
  *    listed — the picker offers it, places live in it — but it cannot be
  *    renamed or deleted, so it gets no verbs. The server answers 404 rather
- *    than 403 for either, the same way every id-addressed surface does.
- *  - A type with places IN it cannot be deleted, so the verb on one is MERGE:
+ *    than 403 for either, the same way every id-addressed surface does
+ *    (`api/src/__tests__/placeTypes.test.ts`).
+ *  - A type with places IN it cannot be deleted
+ *    (`api/src/__tests__/placeTypes.test.ts`), so the verb on one is MERGE:
  *    its places move to a type you pick and the empty category goes. "Move
  *    places", which is what the two API calls are called, describes the
  *    plumbing — nobody sets out to move their places, they set out to stop
@@ -64,7 +68,8 @@ const copy = SETTINGS_LIST.copy;
  *    a free key resolves in one client's icon set and not the other's, the
  *    colour because it is a map marker colour and the WCAG 3:1 guarantee can
  *    only be asserted over a closed set. A free picker would not fail that
- *    check, it would DELETE it — which is why `ColourField` is not used here.
+ *    check, it would DELETE it — which is why a free-form colour input is not
+ *    used here.
  *
  * BUILT-INS LAST, like the phone's editor and like the attribute list beside
  * it: the user's own types are the half with verbs on them. This is the
@@ -89,12 +94,12 @@ function PlaceTypeSection({
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
-  const [attributesFor, setAttributesFor] = useState<TPlaceType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
   const [mergingFrom, setMergingFrom] = useState<TPlaceType | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
+  const toast = useToast();
 
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
@@ -104,8 +109,8 @@ function PlaceTypeSection({
 
   // `placeCount` moves whenever a place is made, retyped or deleted ANYWHERE in
   // the app, and the list App holds was fetched at boot. The counts are what
-  // decide which verb each row offers, so a type that has since taken a place
-  // offered Delete and got a 409 — read them once on the way in.
+  // decide which verb each row offers, so refresh them once on entry to avoid
+  // offering Delete for a type that now holds places.
   // Best-effort: the list already on screen is the fallback.
   useEffect(() => {
     refresh().catch(console.error);
@@ -135,7 +140,7 @@ function PlaceTypeSection({
   const addTypeButton = (
     <Button
       compact
-      variant="outline"
+      variant="filled"
       icon="add"
       onClick={() => setEditing("new")}
     >
@@ -205,10 +210,9 @@ function PlaceTypeSection({
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
-                              setMergeTargetId(
-                                types.find((other) => other.id !== type.id)
-                                  ?.id ?? "",
-                              );
+                              // No default: one click must not file a type's
+                              // places under whichever type happens to be first.
+                              setMergeTargetId("");
                             },
                           }
                         : {
@@ -248,14 +252,23 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
-            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>
 
-      {editing !== null && (
+      {editing === "new" && (
+        <NewPlaceTypeFlow
+          types={types}
+          onTypesChange={onTypesChange}
+          placeDefs={placeDefs}
+          onPlaceDefsChange={onPlaceDefsChange}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {editing !== null && editing !== "new" && (
         <PlaceTypeDialog
-          editing={editing === "new" ? null : editing}
+          editing={editing}
           types={types}
           saving={saving}
           error={error}
@@ -265,43 +278,18 @@ function PlaceTypeSection({
             setError(null);
           }}
           onSave={async (draft) => {
-            // Held in an object: the assignment happens inside `run`'s
-            // callback, which the compiler cannot follow for a `let`.
-            const made: { type: TPlaceType | null } = { type: null };
-            const ok =
-              editing === "new"
-                ? await run(async () => {
-                    made.type = await createPlaceType(draft);
-                  }, "Couldn't create that type.")
-                : await run(
-                    () => updatePlaceType(editing.id, draft),
-                    "Couldn't save that type.",
-                  );
-            if (!ok) return;
-            setEditing(null);
-            if (stepAfterPlaceTypeSave(made.type !== null) === "attributes") {
-              setAttributesFor(made.type);
-            }
+            const ok = await run(
+              () => updatePlaceType(editing.id, draft),
+              "Couldn't save that type.",
+            );
+            if (ok) setEditing(null);
           }}
-        />
-      )}
-
-      {attributesFor && (
-        <TypeAttributesDialog
-          type={attributesFor}
-          placeTypes={types}
-          defs={placeDefs}
-          onDefsChange={onPlaceDefsChange}
-          onClose={() => setAttributesFor(null)}
         />
       )}
 
       <ConfirmDialog
         open={deleting !== null}
-        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
-        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
-        confirmLabel={copy.deleteType}
-        confirmColor="error"
+        copy={deleting && placeTypeDeleteConfirm(deleting.name)}
         busy={saving}
         onConfirm={async () => {
           const type = deleting;
@@ -323,47 +311,113 @@ function PlaceTypeSection({
           places have still moved, which is the half that carries the data. */}
       <ConfirmDialog
         open={mergingFrom !== null}
-        title={`Merge "${mergingFrom?.name ?? ""}" into another type?`}
-        message={
-          <>
-            <Select
-              label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
-              value={mergeTargetId}
-              onChange={(event) => setMergeTargetId(event.target.value)}
-            >
-              {types
-                .filter((type) => type.id !== mergingFrom?.id)
-                .map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-            </Select>
-            <p className={classes.note}>
-              "{mergingFrom?.name ?? ""}" is then deleted. Values{" "}
-              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no
-              attribute for are kept on each place, and can be added to it
-              later.
-            </p>
-          </>
+        copy={
+          mergingFrom && {
+            confirmTitle: `Merge "${mergingFrom.name}" into ${
+              mergeTarget ? `"${mergeTarget.name}"` : "another type"
+            }?`,
+            confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
+              mergeTarget ? `"${mergeTarget.name}"` : "the new type"
+            } has no attribute for are kept on each place, and can be added to it later.`,
+            confirmLabel: "Merge",
+            tone: "destructive",
+            icon: "merge",
+          }
         }
-        confirmLabel="Merge"
-        confirmColor="error"
         busy={saving}
+        confirmDisabledReason={
+          mergeTargetId ? undefined : "Pick the type to move them to"
+        }
         onConfirm={async () => {
           const type = mergingFrom;
           if (!type || !mergeTargetId) return;
+          const moved = placeCountLabel(type.placeCount);
           const ok = await run(async () => {
             await reassignPlaceType(type.id, mergeTargetId);
             await deletePlaceType(type.id);
           }, "Couldn't merge those types.");
-          if (ok) setMergingFrom(null);
+          if (ok) {
+            setMergingFrom(null);
+            toast.done(`${moved} moved to ${mergeTarget?.name}`);
+          }
         }}
         onClose={() => {
           if (!saving) setMergingFrom(null);
         }}
-      />
+      >
+        <Select
+          label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+          value={mergeTargetId}
+          onChange={(event) => setMergeTargetId(event.target.value)}
+        >
+          <option value="">Choose a type</option>
+          {types
+            .filter((type) => type.id !== mergingFrom?.id)
+            .map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+        </Select>
+      </ConfirmDialog>
     </div>
+  );
+}
+
+/** Making a type, from Settings or from the Places rail's New type chip: the
+ *  form, then the attributes step (`stepAfterPlaceTypeSave`). */
+export function NewPlaceTypeFlow({
+  types,
+  onTypesChange,
+  placeDefs,
+  onPlaceDefsChange,
+  onClose,
+}: {
+  types: TPlaceType[];
+  onTypesChange: (types: TPlaceType[]) => void;
+  placeDefs: ScopedCustomFieldDef[];
+  onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  onClose: () => void;
+}) {
+  const [made, setMade] = useState<TPlaceType | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (made)
+    return (
+      <TypeAttributesDialog
+        type={made}
+        placeTypes={types}
+        defs={placeDefs}
+        onDefsChange={onPlaceDefsChange}
+        onClose={onClose}
+      />
+    );
+
+  return (
+    <PlaceTypeDialog
+      editing={null}
+      types={types}
+      saving={saving}
+      error={error}
+      onDismissError={() => setError(null)}
+      onClose={onClose}
+      onSave={async (draft) => {
+        setSaving(true);
+        setError(null);
+        try {
+          const type = await createPlaceType(draft);
+          onTypesChange(await getPlaceTypes());
+          if (stepAfterPlaceTypeSave(true) === "attributes") setMade(type);
+          else onClose();
+        } catch (err) {
+          console.error(err);
+          setError(messageFromError(err, "Couldn't create that type."));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    />
   );
 }
 
@@ -391,7 +445,7 @@ function PlaceTypeDialog({
 }) {
   const [name, setName] = useState(editing?.name ?? "");
   const [iconKey, setIconKey] = useState(
-    editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
+    editing?.iconKey ?? NEW_PLACE_TYPE_ICON_KEY,
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
   // A taken name shows as it is typed; a blank one only once Save was pressed.
@@ -437,7 +491,7 @@ function PlaceTypeDialog({
           data-autofocus
         />
 
-        <SectionHeader title="Icon" />
+        <span className={classes.fieldLabel}>Icon</span>
         <div className={classes.iconGrid} role="radiogroup" aria-label="Icon">
           {PLACE_TYPE_ICON_KEYS.map((key) => {
             const Icon = placeTypeLucideIcon(key);
@@ -478,10 +532,6 @@ function PlaceTypeDialog({
       </div>
     </Dialog>
   );
-}
-
-function placeCountLabel(count: number): string {
-  return `${count} place${count === 1 ? "" : "s"}`;
 }
 
 export default PlaceTypeSection;

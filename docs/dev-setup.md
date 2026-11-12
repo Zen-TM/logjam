@@ -90,7 +90,7 @@ inside the repo prints the major version `mise.toml` pins.
 make dev
 ```
 
-This builds the two worker images, starts Postgres and MiniStack in Docker,
+This builds the two worker images and the Postgres image, starts Postgres, MiniStack and Mailpit in Docker,
 provisions MiniStack's S3 buckets and ECS task definitions with Terraform
 (which also writes the root `.env.local` the API reads), runs the database
 migrations and seeds three users with sample places and trips. The first run
@@ -123,6 +123,9 @@ In a third:
 cd frontend && npm run dev
 ```
 
+Email sent by the stack lands in Mailpit, not a real inbox: read it at
+<http://localhost:8025>.
+
 **It worked if** `curl localhost:8080/health` prints `{"status":"ok",...}` and
 Vite prints `Local:   http://localhost:5173/`.
 
@@ -130,7 +133,7 @@ Vite prints `Local:   http://localhost:5173/`.
 
 Open <http://localhost:5173>. There is no sign-in screen: with fake auth,
 every request is the seeded user **alice**, and Logjam Web opens on the map
-with its sidebar (Places, Logs, Friends and so on). Open **Places** to see her
+with its sidebar (Places, Trips, Friends and so on). Open **Places** to see her
 seeded places.
 
 **It worked if** `curl -H 'Authorization: Bearer x' localhost:8080/users/me`
@@ -179,7 +182,7 @@ pull request.
 |---|---|
 | Starting work | `make dev`, then the two app servers |
 | You edited `shared/` | `make shared`, then restart the API (and Metro) |
-| You changed worker code (`topo/`, the GeoPDF worker) | `make build-workers` |
+| You changed worker code (`topo/`) | `make build-workers` |
 | You want a clean database | `make reset` (wipes the volumes, re-migrates and re-seeds) |
 | Stopping for the day | `make down` (keeps the data) |
 
@@ -263,19 +266,18 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or
 in the Linux section, then add `eval "$(mise activate zsh)"` to `~/.zshrc`).
 Then follow the [Linux](#linux) steps from step 2.
 
-**Apple Silicon:** Postgres (`postgres:16`) and MiniStack
-(`ministackorg/ministack`) publish arm64 images and run natively. The two
+**Apple Silicon:** Postgres (built from `infra/brain/postgres`) and MiniStack
+(`ministackorg/ministack`) have arm64 images and run natively. The two
 worker images are built for `linux/amd64` on every host (`make build-workers`
-passes `--platform`), because that is what production runs, and because the
-API image downloads an x86-64 `pmtiles` binary. On Apple Silicon they build
-and run under emulation: turn on Docker Desktop's **Use Rosetta for x86/amd64
+passes `--platform`), because that is what production runs. On Apple Silicon
+they build and run under emulation: turn on Docker Desktop's **Use Rosetta for x86/amd64
 emulation** (OrbStack uses Rosetta by default). Expect the first `make dev` to
 take noticeably longer than on Linux while the topo image compiles, and a topo
 job to run slower than on an x86 machine.
 
 ## Logjam GPS on an emulator or phone
 
-Logjam GPS is an Expo app with a dev client (a debug build of the app that
+Logjam GPS is an Expo app with a dev client (a debug build of Logjam GPS that
 loads its JavaScript from Metro), not Expo Go. A real phone is better than an
 emulator for anything involving GPS, the camera or the biometric prompt;
 `mobile/AGENTS.md` has the rules of the dev loop.
@@ -321,8 +323,12 @@ EXPO_PUBLIC_AUTH_MODE=fake
 - `fake` signs in as the seeded alice, like Logjam Web.
   `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` picks another seeded user; it is baked
   into the bundle, so restart Metro after changing it.
-- `cognito` shows the real sign-in, and needs the Cognito pool and client IDs
-  and a Cognito test account. You do not need it for everyday work.
+- `oidc` needs `EXPO_PUBLIC_OIDC_ISSUER` and `EXPO_PUBLIC_OIDC_CLIENT_ID`
+  (Cognito's issuer is `https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`)
+  and a test account. Under a Cognito issuer Logjam GPS's landing screen signs
+  in, signs up and resets a password itself; under any other issuer it is one
+  button to the provider's page in the system browser. You do not need it for
+  everyday work.
 - Use `127.0.0.1`, not the example's `10.0.2.2`, on an emulator too: the
   `adb reverse` tunnels below make the device's own `127.0.0.1` reach your
   machine.
@@ -337,13 +343,13 @@ npm run dev:android                     # after that
 ```
 
 `npm run dev:android` (add `-- --emulator` to boot the `logjam` AVD first)
-reverses the ports the app dials on `127.0.0.1` (8081 Metro, 8080 API, 4566
+reverses the ports Logjam GPS dials on `127.0.0.1` (8081 Metro, 8080 API, 4566
 MiniStack), installs the dev client if it is missing and launches it. It
 prints each port it reversed and whether anything was listening there.
 Building the dev client takes 10–20 minutes the first time; you only rebuild
 it after a native change.
 
-**It worked if** the app opens on alice's places. If it opens but shows
+**It worked if** Logjam GPS opens on alice's places. If it opens but shows
 nothing, or edits never sync, rerun `npm run dev:android`: a reverse tunnel
 died.
 
@@ -356,11 +362,12 @@ Maestro UI flows and their prerequisites are in
 |---|---|
 | `make dev` fails with "port is already allocated" or "address already in use" (5432, 4566), or `npm run dev` with `EADDRINUSE` (8080, 5173) | Something else holds the port: another Postgres, another checkout's servers, an old `npm run dev`. Find it with `ss -ltnp \| grep :5432` (macOS: `lsof -i :5432`) and stop it. Every checkout shares one Compose stack, so a second clone's `make dev` reuses the first one's containers. |
 | Metro fails to start on 8081 | Another Metro or React Native tool holds it: stop it, or check `lsof -i :8081`. |
-| Nothing on <http://localhost:5173> after `make dev` | `make dev` starts only Postgres and MiniStack; the API and Logjam Web are the two `npm run dev` terminals from step 4. |
+| Nothing on <http://localhost:5173> after `make dev` | `make dev` starts only Postgres, MiniStack and Mailpit; the API and Logjam Web are the two `npm run dev` terminals from step 4. |
 | A change in `shared/` does not show up in the API, Logjam Web or Logjam GPS | They read the built `shared/dist`, not the source: `make shared`, then restart the API (nodemon does not see it) and Metro. |
 | The API integration suite (`cd api && npm test`) fails with a refused connection, or 500s in tests your change does not touch | The dev database is not reachable: check `docker compose ps`, rerun `make dev`, restart the API. Not a regression. |
-| The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro. Your editor's remote-development feature can forward them for you. |
+| The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro and `-L 8025:localhost:8025` for Mailpit. Your editor's remote-development feature can forward them for you. |
 | Uploads fail with `InvalidAccessKeyId` (the integration suite's media, track and file tests fail with `presigned PUT failed 403`) | Your shell exports real AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`), which win over the MiniStack ones the API reads from its env file. Start the API without them: `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE npm run dev`. |
+| Postgres logs `database "logjam" has a collation version mismatch` | The volume was made by an older `postgres:16` image, built on an earlier Debian release than the one in `infra/brain/postgres`. Harmless for development: `make reset` starts a fresh database. A volume made by a current `postgres:16` gives no warning. |
 | Logjam GPS opens but has no data, or its edits never sync | `127.0.0.1` in `mobile/.env` means the phone: rerun `npm run dev:android` to restore the `adb reverse` tunnels. |
 
 More symptoms, with causes, for the stack and for Metro and devices are in the

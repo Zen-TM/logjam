@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The fix rate is the single biggest battery lever the app has, so two things
-// are pinned here: the DEFAULT (a fresh install must not record at the finest
-// rate for a whole trip), and the fact that every rate offered by
+// The fix rate is the single biggest battery lever Logjam GPS has, so two
+// things are pinned here: the DEFAULT (a fresh install must not record at the
+// finest rate for a whole trip), and the fact that every rate offered by
 // FIX_RATE_OPTIONS actually round-trips through the preference store — the
 // "two lists that must agree" rule, now that the accepted-values list is
 // derived from the options table rather than hand-kept beside it.
@@ -50,9 +50,9 @@ describe("fix rate preference", () => {
     }
   });
 
-  // THE RENAME TRAP (2026-08-17): the names moved under the rates, and one name
+  // THE RENAME TRAP: the legacy names overlap the modern rates, and one name
   // — `balanced` — exists in both schemes meaning different things. A user who
-  // chose "balanced" when it meant 10 s must keep 10 s, not silently inherit
+  // chose legacy "balanced" (10 s) must keep 10 s, not silently inherit
   // the 30 s that now wears the name.
   describe("a choice made under the old names keeps its RATE", () => {
     const sameRate: Record<string, number> = {
@@ -94,7 +94,7 @@ describe("fix rate preference", () => {
   });
 });
 
-// Recordings used to stay on the handset. They sync now, and that is said ONCE
+// Recordings sync to the user's account, and that is announced ONCE
 // — a notice that reappears after every trip is one the user stops reading, and
 // one that is never shown is a change made behind their back.
 describe("the one-time backup notice", () => {

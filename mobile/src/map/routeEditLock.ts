@@ -17,3 +17,21 @@ export function setRouteEditing(value: boolean): void {
 export function isRouteEditing(): boolean {
   return editing;
 }
+
+/** Said in one place because it is said from two: the tab bar and a tapped
+ *  notification are both ways off the map. */
+export const FINISH_ROUTE_FIRST =
+  "Finish your route first. Save it, or delete the draft, before leaving the map.";
+
+const blockedListeners = new Set<() => void>();
+
+/** Subscribe to "you tried to leave the map mid-draw": BackgroundToast, the
+ *  only consumer, so a caller outside any component can answer the user. */
+export function onRouteLeaveBlocked(listener: () => void): () => void {
+  blockedListeners.add(listener);
+  return () => blockedListeners.delete(listener);
+}
+
+export function announceRouteLeaveBlocked(): void {
+  for (const listener of blockedListeners) listener();
+}

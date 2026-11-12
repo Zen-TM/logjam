@@ -1,7 +1,7 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 
 import { IconButton } from "../ui";
-import { ON_SCRIM, scrim, spacing } from "../theme";
+import { makeStyles, spacing, useTheme } from "../theme";
 
 /** Width taken by the back button, so a hint beside it can start after it. */
 export const MAP_BACK_SPACE = spacing(2) + 40 + spacing(1);
@@ -9,8 +9,8 @@ export const MAP_BACK_SPACE = spacing(2) + 40 + spacing(1);
 /**
  * The back arrow of a page pushed over the map (the point and area pickers):
  * a pushed page has a back arrow at its top left, and these have no hero to
- * hold one. Drawn over the map, so black-and-white on a scrim (a colour over a
- * basemap is not a theme colour).
+ * hold one. A map control, so a card with a hairline edge like the rest of the
+ * chrome (the map's buttons), not a black veil.
  */
 export function MapBackButton({
   top,
@@ -19,27 +19,31 @@ export function MapBackButton({
   top: number;
   onPress: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={[styles.wrap, { top }]}>
       <IconButton
         icon="back"
         accessibilityLabel="Back"
-        color={ON_SCRIM}
+        color={theme.text}
         onPress={onPress}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((theme) => ({
   wrap: {
     position: "absolute",
     left: spacing(2),
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: scrim.heavy,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     alignItems: "center",
     justifyContent: "center",
   },
-});
+}));

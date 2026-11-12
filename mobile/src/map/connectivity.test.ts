@@ -25,7 +25,7 @@ function emit(
 
 describe("subscribeReconnect", () => {
   it("fires on the reachability edge even while isConnected never drops", () => {
-    // The Pixel 9 case: a VPN interface keeps isConnected true through an
+    // A VPN interface keeps isConnected true through an
     // outage, so only isInternetReachable tells the truth.
     const onReconnect = vi.fn();
     subscribeReconnect(onReconnect);

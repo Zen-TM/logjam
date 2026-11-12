@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 import appConfig from "../app.config";
 import packageJson from "../package.json";
 
-// The app version is declared once, in package.json. The x-logjam-client header
+// The Logjam GPS version is declared once, in package.json. The x-logjam-client header
 // and the Expo config both read it; if either drifts, the server's
 // MIN_MOBILE_VERSION gate blocks everyone or no one, silently.
-describe("app version has one declaration", () => {
+describe("Logjam GPS version has one declaration", () => {
   const appJson = JSON.parse(
     readFileSync(join(__dirname, "../app.json"), "utf8"),
   ) as { expo: Record<string, unknown> };
@@ -17,7 +17,7 @@ describe("app version has one declaration", () => {
   it("app.json does not declare its own version", () => {
     expect(
       appJson.expo,
-      "package.json is the one declaration of the app version; app.config.ts and src/config.ts read it",
+      "package.json is the one declaration of the Logjam GPS version; app.config.ts and src/config.ts read it",
     ).not.toHaveProperty("version");
   });
 
@@ -31,8 +31,11 @@ describe("app version has one declaration", () => {
   it("the client header sends package.json's version", async () => {
     vi.stubEnv("EXPO_PUBLIC_API_URL", "http://127.0.0.1:8080");
     vi.stubEnv("EXPO_PUBLIC_WEB_URL", "http://localhost:5173");
-    const { CLIENT_SEMVER, CLIENT_VERSION } = await import("./config");
+    const { CLIENT_SEMVER, CLIENT_VERSION, CLIENT_VERSION_LABEL } =
+      await import("./config");
     expect(CLIENT_SEMVER).toBe(packageJson.version);
     expect(CLIENT_VERSION).toBe(`mobile/${packageJson.version}`);
+    // Mutation: derive the label from CLIENT_VERSION ("mobile/0.1.0").
+    expect(CLIENT_VERSION_LABEL).toBe(`Logjam GPS ${packageJson.version}`);
   });
 });

@@ -1,0 +1,78 @@
+{
+  "headers": [
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Notes"
+  ],
+  "dataRows": 3,
+  "parseErrors": [],
+  "kind": "place",
+  "assignments": {
+    "Name": "name",
+    "Latitude": "latitude",
+    "Longitude": "longitude",
+    "Notes": "notes"
+  },
+  "rows": [
+    {
+      "rowIndex": 0,
+      "sourceName": "Claustral Canyon",
+      "input": {
+        "name": "Claustral Canyon",
+        "latitude": -33.5603,
+        "longitude": 150.4033,
+        "notes": "Corpus note"
+      }
+    },
+    {
+      "rowIndex": 1,
+      "sourceName": "Heart Attack Canyon",
+      "input": {
+        "name": "Heart Attack Canyon",
+        "latitude": -33.2383,
+        "longitude": 150.3029,
+        "notes": "Corpus note with a comma, and a line\r\nbreak inside the quotes"
+      }
+    },
+    {
+      "rowIndex": 2,
+      "sourceName": "Corpus Excel Canyon",
+      "input": {
+        "name": "Corpus Excel Canyon",
+        "latitude": -33.3001,
+        "longitude": 150.2501,
+        "notes": null
+      }
+    }
+  ],
+  "warnings": [],
+  "droppedRows": 0,
+  "matches": [
+    {
+      "name": "Claustral Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Claustral Canyon",
+      "candidates": [
+        "Claustral Canyon"
+      ]
+    },
+    {
+      "name": "Heart Attack Canyon",
+      "decision": "merge",
+      "confidence": "auto",
+      "best": "Heart Attack Canyon",
+      "candidates": [
+        "Heart Attack Canyon"
+      ]
+    },
+    {
+      "name": "Corpus Excel Canyon",
+      "decision": "create",
+      "confidence": "none",
+      "best": null,
+      "candidates": []
+    }
+  ]
+}

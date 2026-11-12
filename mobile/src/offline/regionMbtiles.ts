@@ -1,21 +1,22 @@
-// MBTiles writer for downloaded raster basemap regions (stage4a-basemaps.md §4).
+// MBTiles writer for downloaded raster basemap regions.
 //
-// Same on-disk shape as a Stage 6 GeoPDF import — one raster MBTiles per region,
+// Same on-disk shape as a GeoPDF import — one raster MBTiles per region,
 // TMS row order, `logjam:*` namespaced metadata — but written from JS rather
 // than the native rasteriser, because there is no pixel work in this path: the
 // bytes arrive off the network already encoded.
 //
 // THE FILE IS THE CHECKPOINT. A tile is only in the file if its batch
 // transaction committed, so a kill mid-download loses at most one batch and the
-// next attempt resumes from exactly what is there (§4.4). The plan also spec'd a
-// `region_download` progress table for this; it isn't needed — the metadata rows
-// already carry the source, bbox and zoom range, so an unfinished file describes
-// its own job. `logjam:build_state` present ⇒ incomplete ⇒ never registered as a
-// usable artifact.
+// next attempt resumes from exactly what is there. No `region_download`
+// progress table is needed for this: the metadata rows already carry the
+// source, bbox and zoom range, so an unfinished file describes its own job.
+// `logjam:build_state` present ⇒ incomplete ⇒ never registered as a usable
+// artifact.
 //
 // PRIVACY: these files hold place-area coordinates in their `bounds` metadata
-// and live in app-private, backup-excluded storage behind the app lock. Never
-// log a path or a bbox from here — progress logging is counts and state words.
+// and live in app-private, backup-excluded storage behind the app lock. A file
+// is named by its job's uuid, so a path names no area, and nothing here logs a
+// bbox.
 import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 import {
@@ -375,10 +376,11 @@ export async function listUnfinishedRegions(
 ): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
-  // MOT-002: the single-file Protomaps clip (regionDownloads.ts) writes a
-  // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
-  // leaves it with nothing to resume into, unlike the MBTiles below. This is
-  // the one place that already walks this directory on every Saved-tab open.
+  // A clip (regionDownloads.ts) writes a `.pmtiles` here. Its checkpoint is
+  // the file, but the job that knows what it was cut for lives only in the
+  // queue's memory, so after an app kill nothing can resume it, unlike the
+  // MBTiles below. This is the one place that already walks this directory
+  // on every Saved-tab open.
   await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds);
   const names = await FileSystem.readDirectoryAsync(REGION_DIR);
   const unfinished: UnfinishedRegion[] = [];
@@ -400,7 +402,7 @@ export async function listUnfinishedRegions(
       const [west, south, east, north] = bounds.split(",").map(Number);
       unfinished.push({
         id,
-        label: (await readRegionMetadata(db, "name")) ?? "Offline map region",
+        label: (await readRegionMetadata(db, "name")) ?? "Offline map",
         groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
         groupLabel:
           (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,

@@ -1,39 +1,70 @@
 import { FRIENDS, FRIEND_SHARES } from "./friends.js";
 import { STATS } from "./stats.js";
+import { LEADERBOARD } from "./leaderboard.js";
 import { SEND_COPY, SHARE_SHEET } from "./share.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_OVERLAYS } from "./mapOverlays.js";
+import { MAP_TERRAIN } from "./mapTerrain.js";
 import { MAP_MEASURE } from "./mapMeasure.js";
 import { MAP_POINT } from "./mapPoint.js";
+import { GAUGES } from "./gauges.js";
+import { WEATHER } from "./weather.js";
 import { ACCOUNT } from "./account.js";
 import { SETTINGS } from "./settings.js";
 import { INBOX } from "./inbox.js";
 import { PLACE_PAGE } from "./placePage.js";
+import { ADD_WAY } from "./addWay.js";
 import { TRIP_PAGE } from "./tripPage.js";
+import { PLACE_FORM } from "./placeForm.js";
+import { TRIP_FORM } from "./tripForm.js";
 import { TRIPS_ADD, TRIPS_FILTER_SHEET, TRIPS_LIST } from "./tripLogs.js";
 import { PLACES_FILTER_SHEET } from "./placesFilterSheet.js";
 import { PLACES_ADD, PLACES_LIST } from "./placesList.js";
+import {
+  TRIP_PLANS_LIST,
+  TRIP_PLAN_FORMS,
+  TRIP_PLAN_INVITE,
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_PAGE,
+  TRIP_PLAN_PREVIEW,
+} from "./plans.js";
 import type { ScreenContract } from "./types.js";
 
 export * from "./types.js";
+export * from "./confirm.js";
 export * from "./placesList.js";
 export * from "./placesFilterSheet.js";
 export * from "./placeVerbs.js";
 export * from "./placePage.js";
+export * from "./addWay.js";
 export * from "./tripVerbs.js";
 export * from "./tripPage.js";
+export * from "./placeForm.js";
+export * from "./tripForm.js";
 export * from "./tripLogs.js";
+export * from "./nav.js";
+export * from "./ways.js";
 export * from "./inbox.js";
 export * from "./friends.js";
+export * from "./leaderboard.js";
 export * from "./settings.js";
 export * from "./account.js";
 export * from "./mapLayers.js";
 export * from "./mapOverlays.js";
+export * from "./mapTerrain.js";
 export * from "./mapMeasure.js";
+export * from "./mapTools.js";
 export * from "./mapPoint.js";
 export * from "./share.js";
 export * from "./stats.js";
 export * from "./wayVerbs.js";
+export * from "./gauges.js";
+export * from "./weather.js";
+export * from "./plans.js";
+export * from "./planVerbs.js";
+export * from "./planPerson.js";
+export * from "./planSections.js";
+export * from "./planOffline.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
 export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
@@ -41,20 +72,33 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   PLACES_ADD,
   PLACES_FILTER_SHEET,
   PLACE_PAGE,
+  ADD_WAY,
   TRIP_PAGE,
+  PLACE_FORM,
+  TRIP_FORM,
   TRIPS_LIST,
   TRIPS_ADD,
   TRIPS_FILTER_SHEET,
   INBOX,
   FRIENDS,
   FRIEND_SHARES,
+  LEADERBOARD,
   SETTINGS,
   ACCOUNT,
   MAP_LAYERS,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
   MAP_POINT,
   MAP_MEASURE,
   SHARE_SHEET,
   SEND_COPY,
   STATS,
+  GAUGES,
+  WEATHER,
+  TRIP_PLANS_LIST,
+  TRIP_PLAN_PAGE,
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_PREVIEW,
+  TRIP_PLAN_INVITE,
+  TRIP_PLAN_FORMS,
 ];

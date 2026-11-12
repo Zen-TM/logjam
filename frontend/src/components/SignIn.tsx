@@ -1,34 +1,49 @@
-// The way in: sign in, sign up, verify an email, and reset a forgotten
-// password. One component, five states, because they hand values to each other
-// — the password typed on the sign-up form is what verifies the account a
-// moment later without the user ever seeing the sign-in screen again.
+// The way in. Under a Cognito issuer: sign in, sign up, verify an email, and
+// reset a forgotten password, on this page (ADR 0045). One component, five
+// states, because they hand values to each other — the password typed on the
+// sign-up form is what verifies the account a moment later without the user
+// ever seeing the sign-in screen again. Under any other issuer: one button to
+// the provider's page, which is also where a Cognito sign-in goes when these
+// forms cannot finish it (useAuth).
 //
-// Built on the kit like every other surface (frontend/DESIGN.md). Two notes
-// that are design decisions rather than mechanics:
-//
-//  - **The Terms and Privacy links sit BESIDE the consent tick, not inside its
-//    label.** A link inside a `<label>` toggles the control it labels, so
-//    reading the terms used to tick (or untick) the box that says you agree
-//    with them.
-//  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
-//    the top of the form, and a field's own complaint goes under the field.
-import { useState, useEffect } from "react";
+// Built on the kit like every other surface (frontend/DESIGN.md). **The error
+// goes directly above the button it belongs to** (shared/DESIGN.md §11), never
+// at the top of the form, and a field's own complaint goes under the field.
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import classes from "./SignIn.module.css";
-import type { AuthState } from "../useAuth";
 import { isValidEmailFormat } from "../emailValidation";
+import { messageFromError } from "../errors/messageFromError";
+import {
+  confirmForgotPassword,
+  confirmSignUp,
+  forgotPassword,
+  hasCognitoAccount,
+  resendSignUpCode,
+  signUp,
+} from "../auth/oidc";
 import Footer from "./Footer";
-import { FRIENDS } from "@logjam/shared";
-import { pendingFriendInvite } from "../pendingFriendInvite";
+import SignInTerrain from "./SignInTerrain";
+import TermsTick from "./TermsTick";
+import useSignInArea from "./useSignInArea";
+import {
+  FRIENDS,
+  isValidPassword,
+  isValidUsername,
+  NSW_REGION,
+  PASSWORD_HINT,
+  resendCodeWaiting,
+  SIGN_IN_COPY,
+  TRIP_PLAN_JOIN,
+  signUpFormProblem,
+  USERNAME_HINT,
+  USERNAME_TAKEN,
+  verifyIntro,
+} from "@logjam/shared";
+import { usernameAvailable } from "../placeUtils";
+import { friendInvite, planInvite } from "../pendingInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
-import {
-  CURRENT_CONSENT_VERSION,
-  PENDING_CONSENT_STORAGE_KEY,
-} from "../consent";
 import { Button, Checkbox, TextField, ErrorBanner } from "../ui";
-
-const PASSWORD_HINT =
-  "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
 
 function Brand() {
   return (
@@ -39,39 +54,115 @@ function Brand() {
   );
 }
 
-function SignIn({
-  authState,
+function Frame({ children }: { children: ReactNode }) {
+  const area = useSignInArea();
+  return (
+    <div className={classes.container}>
+      <SignInTerrain area={area} />
+      <main className={classes.panel}>
+        {children}
+        <div className={classes.footer}>
+          <Footer />
+          {/* The terrain's licence credit (ADR 0031) on a phone, where the
+              card covers the corner the credit sits in when wide. Its line
+              for the area's name is kept from the start, so the card does not
+              move when the name arrives. */}
+          <p className={classes.credit}>
+            <span className={classes.creditPlace}>{area?.terrain.name}</span>
+            {NSW_REGION.terrain.heights.credit}
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <p className={classes.intro}>
+      Your private map and trips for canyoning in New South Wales.
+    </p>
+  );
+}
+
+function InviteNote() {
+  return (
+    <>
+      {friendInvite.pending() && (
+        <p className={classes.successBanner} role="status">
+          {FRIENDS.copy.inviteSignIn}
+        </p>
+      )}
+      {planInvite.pending() && (
+        <p className={classes.successBanner} role="status">
+          {TRIP_PLAN_JOIN.copy.signIn}
+        </p>
+      )}
+    </>
+  );
+}
+
+function RedirectCard({
   error,
-  onSignIn,
-  onSignUp,
-  onConfirmSignUp,
-  onResendCode,
-  onForgotPassword,
-  onConfirmForgotPassword,
-  goToSignUp,
-  goToSignIn,
-  goToForgotPassword,
+  onRedirect,
 }: {
-  authState: AuthState;
   error: string | null;
-  onSignIn: (username: string, password: string) => Promise<boolean>;
-  onSignUp: (
-    username: string,
-    password: string,
-    email: string,
-    name: string,
-  ) => Promise<void>;
-  onConfirmSignUp: (code: string, password: string) => Promise<void>;
-  onResendCode: () => Promise<{ ok: boolean; error?: string }>;
-  onForgotPassword: (email: string) => Promise<void>;
-  onConfirmForgotPassword: (
-    code: string,
-    newPassword: string,
-  ) => Promise<boolean>;
-  goToSignUp: () => void;
-  goToSignIn: () => void;
-  goToForgotPassword: () => void;
+  onRedirect: () => Promise<void>;
 }) {
+  const [redirecting, setRedirecting] = useState(false);
+
+  async function handleClick() {
+    setRedirecting(true);
+    // On success the browser is already leaving; only a failure comes back.
+    await onRedirect();
+    setRedirecting(false);
+  }
+
+  return (
+    <Frame>
+      <div className={classes.form}>
+        <Brand />
+        <Intro />
+        <InviteNote />
+        {error && <ErrorBanner message={error} />}
+        <Button
+          variant="filled"
+          busy={redirecting}
+          onClick={handleClick}
+          className={classes.submit}
+        >
+          Sign in or create an account
+        </Button>
+      </div>
+    </Frame>
+  );
+}
+
+type Screen =
+  | "signIn"
+  | "signUp"
+  | "confirmSignUp"
+  | "forgotPassword"
+  | "confirmForgotPassword";
+
+function CognitoForms({
+  error,
+  onPasswordSignIn,
+}: {
+  error: string | null;
+  onPasswordSignIn: (
+    email: string,
+    password: string,
+    newAccountUsername?: string,
+  ) => Promise<void>;
+}) {
+  const [screen, setScreen] = useState<Screen>(
+    // Someone opening a plan invite has usually never signed up.
+    planInvite.pending() ? "signUp" : "signIn",
+  );
+  // Set only once the sign-up form, ticks and all, has been accepted: it is what
+  // records consent at first sign-in, so whatever is typed in the field isn't.
+  const [signedUpUsername, setSignedUpUsername] = useState<string>();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -83,6 +174,8 @@ function SignIn({
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const usernameNow = useRef("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -99,19 +192,35 @@ function SignIn({
     setLocalError(null);
     setResendSuccess(false);
     setResendCooldown(30);
-    const result = await onResendCode();
-    if (result.ok) {
+    try {
+      await resendSignUpCode(email);
       setResendSuccess(true);
-    } else {
-      setLocalError(result.error ?? "Couldn't resend code.");
+    } catch (err) {
+      console.error(err);
+      setLocalError(messageFromError(err, "Couldn't resend code. Try again."));
       setResendCooldown(0);
     }
   }
 
-  const PASSWORD_REGEX =
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
-
   const displayError = localError || error;
+
+  function goTo(next: Screen) {
+    setLocalError(null);
+    setCode("");
+    // A wrong password typed on Sign in is not carried into a new account's form.
+    if (next === "signUp" && screen === "signIn") setPassword("");
+    setScreen(next);
+  }
+
+  async function usernameIsFree(): Promise<boolean> {
+    const asked = username;
+    const free = await usernameAvailable(asked.trim());
+    // The field may have moved on while this was out.
+    if (!free && asked === usernameNow.current) {
+      setUsernameError(USERNAME_TAKEN);
+    }
+    return free;
+  }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -121,57 +230,95 @@ function SignIn({
       return;
     }
     setEmailError(null);
+    // Unchecked by `noValidate`, and Cognito's refusal of a blank would hand
+    // over to the provider's page.
+    if (!password) {
+      setLocalError("Enter your password.");
+      return;
+    }
     setSubmitting(true);
-    await onSignIn(email, password);
+    try {
+      await onPasswordSignIn(email, password);
+    } catch (err) {
+      // Signed up, never entered the code: send one and ask for it here.
+      if (err instanceof Error && err.name === "UserNotConfirmedException") {
+        setSignedUpUsername(undefined);
+        goTo("confirmSignUp");
+        await resendSignUpCode(email).catch((resendErr) => {
+          console.error(resendErr);
+          setLocalError(
+            messageFromError(resendErr, "Couldn't resend code. Try again."),
+          );
+        });
+      } else {
+        console.error(err);
+        setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
+      }
+    }
     setSubmitting(false);
   }
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
-    if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+    const problem = signUpFormProblem({
+      name,
+      email,
+      username,
+      password,
+      confirmPassword,
+      agreed: consented,
+      ageConfirmed,
+    });
+    if (problem) {
+      setEmailError(problem.field === "email" ? problem.message : null);
+      setUsernameError(problem.field === "username" ? problem.message : null);
+      if (problem.field === "form") setLocalError(problem.message);
       return;
     }
     setEmailError(null);
-    if (password !== confirmPassword) {
-      setLocalError("Passwords do not match");
-      return;
-    }
-    if (!PASSWORD_REGEX.test(password)) {
-      setLocalError(
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
-      );
-      return;
-    }
-    if (!consented) {
-      setLocalError("Agree to the Terms of Use and Privacy Policy to sign up.");
-      return;
-    }
-    if (!ageConfirmed) {
-      setLocalError("Confirm you are 18 or older to sign up.");
-      return;
-    }
+    setUsernameError(null);
     setSubmitting(true);
-    try {
-      await onSignUp(username, password, email, name);
-      localStorage.setItem(
-        PENDING_CONSENT_STORAGE_KEY,
-        CURRENT_CONSENT_VERSION,
-      );
-    } finally {
+    if (!(await usernameIsFree())) {
       setSubmitting(false);
+      return;
     }
+    try {
+      await signUp(email, password, name);
+      setSignedUpUsername(username);
+      goTo("confirmSignUp");
+    } catch (err) {
+      console.error(err);
+      setLocalError(messageFromError(err, "Couldn't sign up. Try again."));
+    }
+    setSubmitting(false);
   }
 
   async function handleConfirm(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
     setSubmitting(true);
-    // Pass the password still held from the signUp form (this component never
-    // unmounts across signUp → confirmSignUp) so useAuth can auto-login the
-    // just-verified account without ever flashing the sign-in screen.
-    await onConfirmSignUp(code, password);
+    try {
+      await confirmSignUp(email, code);
+    } catch (err) {
+      console.error(err);
+      setLocalError(
+        messageFromError(err, "Couldn't confirm your code. Try again."),
+      );
+      setSubmitting(false);
+      return;
+    }
+    // The password is still held from the signUp form (this component never
+    // unmounts across signUp → confirmSignUp), so the just-verified account
+    // signs in without ever flashing the sign-in screen. After a reload it
+    // isn't, and the sign-in screen asks for it.
+    try {
+      await onPasswordSignIn(email, password, signedUpUsername);
+    } catch (err) {
+      console.error(err);
+      goTo("signIn");
+      setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
+    }
     setSubmitting(false);
   }
 
@@ -184,7 +331,15 @@ function SignIn({
     }
     setEmailError(null);
     setSubmitting(true);
-    await onForgotPassword(email);
+    try {
+      await forgotPassword(email);
+      goTo("confirmForgotPassword");
+    } catch (err) {
+      console.error(err);
+      setLocalError(
+        messageFromError(err, "Couldn't send reset code. Try again."),
+      );
+    }
     setSubmitting(false);
   }
 
@@ -195,26 +350,32 @@ function SignIn({
       setLocalError("Passwords do not match");
       return;
     }
-    if (!PASSWORD_REGEX.test(newPassword)) {
+    if (!isValidPassword(newPassword)) {
       setLocalError(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
       );
       return;
     }
     setSubmitting(true);
-    const succeeded = await onConfirmForgotPassword(code, newPassword);
+    try {
+      await confirmForgotPassword(email, code, newPassword);
+      setResetSuccess(true);
+      goTo("signIn");
+    } catch (err) {
+      console.error(err);
+      setLocalError(
+        messageFromError(err, "Couldn't reset password. Try again."),
+      );
+    }
     setSubmitting(false);
-    if (succeeded) setResetSuccess(true);
   }
 
-  if (authState === "confirmSignUp") {
+  if (screen === "confirmSignUp") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form className={classes.form} noValidate onSubmit={handleConfirm}>
           <Brand />
-          <p className={classes.subtitle}>
-            Check your email for a verification code (check spam)
-          </p>
+          <p className={classes.subtitle}>{verifyIntro(email)}</p>
           <TextField
             label="Verification code"
             value={code}
@@ -246,29 +407,24 @@ function SignIn({
             className={classes.submit}
           >
             {resendCooldown > 0
-              ? `Resend code (${resendCooldown}s)`
-              : "Resend code"}
+              ? resendCodeWaiting(resendCooldown)
+              : SIGN_IN_COPY.resendCode}
           </Button>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
-  if (authState === "forgotPassword") {
+  if (screen === "forgotPassword") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form
           className={classes.form}
           noValidate
           onSubmit={handleForgotPassword}
         >
           <Brand />
-          <p className={classes.subtitle}>
-            Enter your email and we&apos;ll send you a reset code
-          </p>
+          <p className={classes.subtitle}>{SIGN_IN_COPY.resetIntro}</p>
           <TextField
             label="Email"
             type="email"
@@ -292,21 +448,22 @@ function SignIn({
             {submitting ? "Sending…" : "Send reset code"}
           </Button>
           <p className={classes.switchText}>
-            <button type="button" className={classes.link} onClick={goToSignIn}>
+            <button
+              type="button"
+              className={classes.link}
+              onClick={() => goTo("signIn")}
+            >
               Back to sign in
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
-  if (authState === "confirmForgotPassword") {
+  if (screen === "confirmForgotPassword") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form
           className={classes.form}
           noValidate
@@ -352,28 +509,26 @@ function SignIn({
             {submitting ? "Resetting…" : "Reset password"}
           </Button>
           <p className={classes.switchText}>
-            <button type="button" className={classes.link} onClick={goToSignIn}>
+            <button
+              type="button"
+              className={classes.link}
+              onClick={() => goTo("signIn")}
+            >
               Back to sign in
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
-  if (authState === "signUp") {
+  if (screen === "signUp") {
     return (
-      <div className={classes.container}>
+      <Frame>
         <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
-          {pendingFriendInvite() && (
-            <p className={classes.successBanner} role="status">
-              {FRIENDS.copy.inviteSignIn}
-            </p>
-          )}
+          <Intro />
+          <InviteNote />
           <TextField
             label="Name"
             value={name}
@@ -397,9 +552,17 @@ function SignIn({
           <TextField
             label="Username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              usernameNow.current = e.target.value;
+              setUsernameError(null);
+            }}
+            onBlur={() => {
+              if (isValidUsername(username)) void usernameIsFree();
+            }}
+            error={usernameError}
             required
-            hint="What friends see when you share a place with them."
+            hint={USERNAME_HINT}
             autoComplete="username"
           />
           <TextField
@@ -420,25 +583,9 @@ function SignIn({
             autoComplete="new-password"
           />
           <div className={classes.consent}>
+            <TermsTick checked={consented} onChange={setConsented} />
             <Checkbox
-              label="I agree to the Terms of Use and acknowledge the Privacy Policy."
-              checked={consented}
-              onChange={setConsented}
-            />
-            {/* Beside the tick, never inside its label: a link in a label
-                toggles the control it labels, so reading the terms would
-                change the answer to the question about them. */}
-            <p className={classes.legal}>
-              <a href="/tos.html" target="_blank" rel="noopener noreferrer">
-                Read the Terms of Use
-              </a>
-              {" · "}
-              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
-                Read the Privacy Policy
-              </a>
-            </p>
-            <Checkbox
-              label="I confirm I am 18 years of age or older."
+              label={SIGN_IN_COPY.ageConfirm}
               checked={ageConfirmed}
               onChange={setAgeConfirmed}
             />
@@ -450,35 +597,35 @@ function SignIn({
             busy={submitting}
             className={classes.submit}
           >
-            {submitting ? "Creating account…" : "Sign up"}
+            {submitting
+              ? SIGN_IN_COPY.creatingAccount
+              : SIGN_IN_COPY.createAccount}
           </Button>
           <p className={classes.switchText}>
-            Already have an account?{" "}
-            <button type="button" className={classes.link} onClick={goToSignIn}>
-              Sign in
+            {SIGN_IN_COPY.haveAccount}{" "}
+            <button
+              type="button"
+              className={classes.link}
+              onClick={() => goTo("signIn")}
+            >
+              {SIGN_IN_COPY.signIn}
             </button>
           </p>
         </form>
-        <div className={classes.footerWrap}>
-          <Footer />
-        </div>
-      </div>
+      </Frame>
     );
   }
 
   // Default: signIn
   return (
-    <div className={classes.container}>
+    <Frame>
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
-        {pendingFriendInvite() && (
-          <p className={classes.successBanner} role="status">
-            {FRIENDS.copy.inviteSignIn}
-          </p>
-        )}
+        <Intro />
+        <InviteNote />
         {resetSuccess && (
           <p className={classes.successBanner} role="status">
-            Password reset — please sign in.
+            Password reset. Sign in to continue.
           </p>
         )}
         <TextField
@@ -516,22 +663,42 @@ function SignIn({
           <button
             type="button"
             className={classes.link}
-            onClick={goToForgotPassword}
+            onClick={() => goTo("forgotPassword")}
           >
             Forgot password?
           </button>
         </p>
         <p className={classes.switchText}>
-          Don&apos;t have an account?{" "}
-          <button type="button" className={classes.link} onClick={goToSignUp}>
-            Sign up
+          <button
+            type="button"
+            className={classes.link}
+            onClick={() => goTo("signUp")}
+          >
+            {SIGN_IN_COPY.goToSignUp}
           </button>
         </p>
       </form>
-      <div className={classes.footerWrap}>
-        <Footer />
-      </div>
-    </div>
+    </Frame>
+  );
+}
+
+function SignIn({
+  error,
+  onRedirect,
+  onPasswordSignIn,
+}: {
+  error: string | null;
+  onRedirect: () => Promise<void>;
+  onPasswordSignIn: (
+    email: string,
+    password: string,
+    newAccountUsername?: string,
+  ) => Promise<void>;
+}) {
+  return hasCognitoAccount() ? (
+    <CognitoForms error={error} onPasswordSignIn={onPasswordSignIn} />
+  ) : (
+    <RedirectCard error={error} onRedirect={onRedirect} />
   );
 }
 

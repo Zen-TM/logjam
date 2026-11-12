@@ -1,19 +1,16 @@
 // The live recording's numbers and its verbs, behind a tap on the record
 // button.
 //
-// It used to be a card pinned to the map's top notice stack for the whole trip.
-// The card said four things, three of which nobody reads while walking — what
-// a person actually wants from a recording in progress is the knowledge that it
-// IS in progress, and that is now the record button's pulse (RecordButton).
-// Everything else moved in here, where it costs no map at all and can therefore
-// afford to be longer than four numbers.
+// Holds recording numbers and verbs without taking space from the map.
+// Recording status itself is signalled by the record button's pulse
+// (RecordButton), while detailed stats and controls live here.
 //
 // The controls sit in the sheet's `footer` rather than in the scroll: with two
 // profile charts the body can outgrow the 80% cap, and a Finish button that
 // scrolls away leaves the drag handle as the only exit — which means DISCARD
 // (DESIGN.md).
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, AppState, StyleSheet, View } from "react-native";
+import { AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { ELEVATION_TRACK_MAX_SAMPLES } from "@logjam/shared";
@@ -24,13 +21,17 @@ import {
   BottomSheet,
   closedSheet,
   Button,
+  ErrorBanner,
+  CardActions,
   FieldError,
   IconButton,
 } from "../ui";
-import { confirmFinishRecording } from "./finishRecordingPrompt";
+import {
+  confirmDiscardRecording,
+  confirmFinishRecording,
+} from "./finishRecordingPrompt";
 import { TrackStatsBody } from "./TrackStatsBody";
 import {
-  discardTrackRecording,
   pauseTrackRecording,
   resumeTrackRecording,
   trackDurationMs,
@@ -56,30 +57,36 @@ export function RecordingSheet({
   allowNetwork?: boolean;
 }) {
   const theme = useTheme();
+  const [error, setError] = useState<string | null>(null);
 
   const recording = activeTrack?.state === "recording";
   const open = visible && activeTrack != null;
+  // A failure belongs to the opening it happened in.
+  const close = useCallback(() => {
+    setError(null);
+    onClose();
+  }, [onClose]);
 
   // A recorder that cannot write must not present as one that is writing: the
   // clock keeps ticking off the wall clock whether or not points reach SQLite,
-  // so a run of failed batch writes is said out loud here (MLIFE-001). The map
-  // says it too, in the notice stack, because this sheet is closed most of the
-  // time and that warning must not wait to be found.
+  // so a run of failed batch writes is said out loud here
+  // (mobile/src/tracks/trackRecorder.test.ts). The map says it too, in the
+  // notice stack, because this sheet is closed most of the time and that
+  // warning must not wait to be found.
   const writeFailing = useSyncExternalStore(
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,
   );
 
   // The clock ticks on its own second, not on the arrival of a fix batch. The
-  // stored durationMs only moves when a batch lands, so on good GPS while
-  // standing still the headline number used to sit frozen and then jump.
+  // stored durationMs only moves when a batch lands; ticking off the clock keeps
+  // the headline number smooth even while standing still on good GPS.
   const [elapsedMs, setElapsedMs] = useState(0);
   // It runs only while the sheet is OPEN and the app is in the FOREGROUND. It
   // is derived from the wall clock, so nothing is lost by stopping it — the
-  // recomputation on return is exact — and a recording is the one thing in this
-  // app that runs for hours with the screen off: a 1 Hz timer through all of it
-  // is thousands of wakeups nobody can see the result of. (Before the panel
-  // existed this ran whenever a recording did, which was strictly worse.)
+  // recomputation on return is exact — and a recording is the one thing in
+  // Logjam GPS that runs for hours with the screen off: a 1 Hz timer through all
+  // of it is thousands of wakeups nobody can see the result of.
   useEffect(() => {
     if (!open || activeTrack == null) return;
     const tick = () => setElapsedMs(trackDurationMs(activeTrack, null));
@@ -132,6 +139,7 @@ export function RecordingSheet({
   const handlePauseResume = useCallback(() => {
     if (!activeTrack) return;
     const work = async () => {
+      setError(null);
       if (recording) {
         await pauseTrackRecording(activeTrack.id);
         return;
@@ -139,15 +147,14 @@ export function RecordingSheet({
       // Resuming arms the location service again, and the permission can have
       // been revoked while the recording was paused (Android 12+ auto-revoke,
       // or the user changing it in settings). Ask the same way starting does —
-      // that alert names the problem and offers system settings, where the
-      // generic error below reads as "the pause button glitched".
-      if (!(await ensureForegroundLocationPermission())) return;
+      // that names the problem and offers system settings, where the generic
+      // error below reads as "the pause button glitched".
+      if (!(await ensureForegroundLocationPermission(setError))) return;
       await resumeTrackRecording(activeTrack);
     };
     work().catch((err: unknown) => {
       console.error(err);
-      Alert.alert(
-        "Recording error",
+      setError(
         recording
           ? "Couldn't pause the recording."
           : "Couldn't resume the recording.",
@@ -157,59 +164,44 @@ export function RecordingSheet({
 
   const handleFinish = useCallback(() => {
     if (!activeTrack) return;
-    confirmFinishRecording(activeTrack.id, onClose);
-  }, [activeTrack, onClose]);
+    setError(null);
+    confirmFinishRecording(activeTrack.id, close, setError);
+  }, [activeTrack, close]);
 
   const handleDiscard = useCallback(() => {
     if (!activeTrack) return;
-    const trackId = activeTrack.id;
-    Alert.alert(
-      "Discard this recording?",
-      "Every point recorded so far is deleted. This can't be undone.",
-      [
-        { text: "Keep recording", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            // MOT-009: every sibling verb surfaces failure (finish alerts,
-            // pause/resume alerts above) — a discard that silently fails to
-            // delete left the user on a sheet whose subject may still exist,
-            // with nothing telling them it didn't work.
-            discardTrackRecording(trackId).then(
-              () => onClose(),
-              (err: unknown) => {
-                console.error(err);
-                Alert.alert(
-                  "Recording error",
-                  "Couldn't delete the recording.",
-                );
-              },
-            );
-          },
-        },
-      ],
-    );
-  }, [activeTrack, onClose]);
+    setError(null);
+    confirmDiscardRecording(activeTrack.id, close, setError);
+  }, [activeTrack, close]);
 
   if (!activeTrack) return closedSheet;
 
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
+      onClose={close}
       title={recording ? "Recording" : "Recording paused"}
       footer={
         <View style={styles.actions}>
-          <Button
-            label={recording ? "Pause" : "Resume"}
-            icon={recording ? "pause" : "play"}
-            variant="outlineAccent"
-            compact
-            onPress={handlePauseResume}
-          />
-          <Button label="Finish" icon="done" compact onPress={handleFinish} />
-          <View style={styles.spacer} />
+          {/* Full size, never compact: these are the controls most likely to
+              be pressed with gloves on. */}
+          <View style={styles.verbs}>
+            <CardActions>
+              <Button
+                label={recording ? "Pause" : "Resume"}
+                icon={recording ? "pause" : "play"}
+                variant="outlineAccent"
+                compact={false}
+                onPress={handlePauseResume}
+              />
+              <Button
+                label="Finish"
+                icon="done"
+                compact={false}
+                onPress={handleFinish}
+              />
+            </CardActions>
+          </View>
           <IconButton
             icon="delete"
             color={theme.warning}
@@ -220,6 +212,9 @@ export function RecordingSheet({
       }
     >
       <View style={styles.body}>
+        {error ? (
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        ) : null}
         {writeFailing ? (
           <FieldError message="Points aren't being saved — this phone's storage is full or can't be written to. Finish, then free up space." />
         ) : null}
@@ -238,5 +233,5 @@ export function RecordingSheet({
 const styles = StyleSheet.create({
   body: { gap: spacing(1.5) },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  spacer: { flex: 1 },
+  verbs: { flex: 1 },
 });

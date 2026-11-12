@@ -1,11 +1,9 @@
 // What a notification lets you DO from the inbox row, as data.
 //
-// Two kinds of notification are a QUESTION rather than a report — a friend
-// request and a file a friend sent — and until now mobile answered neither in
-// the inbox: the friend request was tap-through to Friends, and the file send
-// had a whole screen of its own (`screens/ReceivedFilesScreen.tsx`, deleted
-// 2026-08-30). Both are one accept/decline pair, so both are the same widget,
-// and this module is the one place that says which pair a notification carries.
+// Four kinds of notification are a QUESTION rather than a report — a friend
+// request, a file a friend sent, an invite to a trip plan and a request to join
+// one. All are one accept/decline pair, so all are the same widget, and this
+// module is the one place that says which pair a notification carries.
 //
 // Shared by both inboxes, so Logjam GPS and Logjam Web offer the same answers
 // in the same words. Where a word names one client's surface ("find it in
@@ -22,6 +20,15 @@
 // treats it.
 import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
+import type { ContractPlatform } from "./contracts/types.js";
+import {
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_PAGE,
+  TRIP_PLANS_LIST,
+  tripPlanLetInMessage,
+} from "./contracts/plans.js";
+import { planTurnDownConfirm } from "./contracts/planVerbs.js";
+import { friendAcceptedMessage } from "./contracts/friends.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -33,11 +40,9 @@ export type NotificationInlineAction = {
    * Non-null means raise this dialog first (DESIGN.md — destructive actions
    * confirm in a dialog, which is where the explanation goes).
    *
-   * Both declines carry one, and the friend-request decline carries one even
-   * though neither web nor the Friends screen asks: on THOSE surfaces decline
-   * lives behind an overflow sheet, which is the house rule that "no" is never
-   * a mis-tap away from "yes" (FriendsScreen's own note). Side by side in a
-   * list row there is no sheet left to be that guard, so the dialog is.
+   * Both declines carry one, on every surface (ADR 0016): side by side with
+   * Accept in a list row there is no overflow sheet left to keep "no" a step
+   * away from "yes".
    */
   confirm: { title: string; body: string; confirmLabel: string } | null;
   /**
@@ -46,19 +51,25 @@ export type NotificationInlineAction = {
    */
   failure: string;
   /**
-   * The sentence confirming it worked. Accepting a file used to be silent — the
-   * row restyled itself and the import landed two tabs away with nothing said,
-   * which reads as "the button did nothing". Every action reports (DESIGN.md
-   * §6: toasts, not banners, for the outcome of an action).
+   * The sentence confirming it worked. Every action reports (DESIGN.md
+   * §6: toasts, not banners, for the outcome of an action), rather than
+   * staying silent and reading as "the button did nothing".
    */
   success: string;
+  /**
+   * A second go at something already done, not an answer: a row draws it as a
+   * quiet button, not the filled pair.
+   */
+  quiet?: boolean;
 };
 
 export type NotificationActions = {
   /** Which pair of API calls to run — the screen's discriminant. */
-  type: "friend_request" | "file_sent";
-  /** The one id those calls need: a friendshipId, or a fileSendId. */
+  type: "friend_request" | "file_sent" | "plan_invite" | "plan_join_request";
+  /** The one id those calls need: a friendshipId, a fileSendId or a planId. */
   targetId: string;
+  /** Who asked, for a join request (the call names them); null otherwise. */
+  requesterId: string | null;
   /** A trailing `StatusPill` label for a row that has a state, else null. */
   pill: string | null;
   /**
@@ -76,14 +87,53 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 }
 
 /**
+ * A friend request's two answers, for every surface that draws them: the
+ * Inbox row and both Friends lists say the same words. Guard:
+ * notificationActions.test.ts.
+ */
+export function friendRequestAnswers(
+  username: string,
+): NotificationInlineAction[] {
+  return [
+    {
+      kind: "accept",
+      label: "Accept",
+      confirm: null,
+      failure: "Couldn't accept that request.",
+      success: friendAcceptedMessage(username),
+    },
+    {
+      kind: "decline",
+      label: "Decline",
+      failure: "Couldn't decline that request.",
+      success: "Request declined.",
+      // Asked on every surface, the Friends lists included (ADR 0016):
+      // side by side with Accept there is no overflow sheet to keep "no" a step
+      // away. Guard: notificationActions.test.ts.
+      confirm: {
+        title: `Decline ${username}'s request?`,
+        // The two things the user actually needs: it is not announced, and
+        // it is not final.
+        body: `${username} won't be told, and can send another request later.`,
+        confirmLabel: "Decline",
+      },
+    },
+  ];
+}
+
+/**
  * The actions this notification offers, or null for the reporting kinds (a
  * finished topo, an accepted request) which have nothing to answer.
  *
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
+ *
+ * `platform` names the one answer that is a different act per client: accepting
+ * a sent file saves it on the phone, but on Logjam Web it is a download.
  */
 export function notificationActions(
   n: TNotification,
+  platform: ContractPlatform,
 ): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
@@ -93,6 +143,20 @@ export function notificationActions(
     return {
       type: "friend_request",
       targetId: friendshipId,
+      requesterId: null,
+      pill: null,
+      sender: null,
+      actions: friendRequestAnswers(username),
+    };
+  }
+
+  if (n.type === "plan_invited") {
+    const planId = str(payload, "planId");
+    if (!planId) return null;
+    return {
+      type: "plan_invite",
+      targetId: planId,
+      requesterId: null,
       pill: null,
       sender: null,
       actions: [
@@ -100,23 +164,54 @@ export function notificationActions(
           kind: "accept",
           label: "Accept",
           confirm: null,
-          failure: "Couldn't accept that request.",
-          // The same sentence the Friends screen uses, deliberately: one voice
-          // for one outcome, whichever surface it was answered from.
-          success: `${username} is now a friend.`,
+          failure: TRIP_PLAN_JOIN.copy.joinFailed,
+          success: TRIP_PLAN_JOIN.copy.joined,
         },
         {
           kind: "decline",
           label: "Decline",
-          failure: "Couldn't decline that request.",
-          success: "Request declined.",
           confirm: {
-            title: `Decline ${username}'s request?`,
-            // The two things the user actually needs: it is not announced, and
-            // it is not final.
-            body: `${username} won't be told, and can send another request later.`,
+            title: TRIP_PLAN_JOIN.copy.declineTitle,
+            body: TRIP_PLAN_JOIN.copy.declineBody,
             confirmLabel: "Decline",
           },
+          failure: TRIP_PLANS_LIST.copy.declineFailed,
+          success: TRIP_PLANS_LIST.copy.declined,
+        },
+      ],
+    };
+  }
+
+  if (n.type === "plan_join_request") {
+    const planId = str(payload, "planId");
+    const requesterId = str(payload, "requesterId");
+    if (!planId || !requesterId) return null;
+    const username = str(payload, "requesterUsername") ?? "them";
+    const turnDown = planTurnDownConfirm(username);
+    return {
+      type: "plan_join_request",
+      targetId: planId,
+      requesterId,
+      pill: null,
+      sender: null,
+      actions: [
+        {
+          kind: "accept",
+          label: "Accept",
+          confirm: null,
+          failure: TRIP_PLAN_PAGE.copy.letInFailed,
+          success: tripPlanLetInMessage(username),
+        },
+        {
+          kind: "decline",
+          label: "Decline",
+          confirm: {
+            title: turnDown.confirmTitle,
+            body: turnDown.confirmBody,
+            confirmLabel: turnDown.confirmLabel,
+          },
+          failure: TRIP_PLAN_PAGE.copy.turnDownFailed,
+          success: TRIP_PLAN_PAGE.copy.turnedDown,
         },
       ],
     };
@@ -134,23 +229,35 @@ export function notificationActions(
     // invariant now that the notification query deliberately keeps expired
     // sends the inbox endpoint drops.
     if (payload.fileSendStatus === "expired") return null;
-    // `accepted` means the download URL was ISSUED, not that the bytes landed
-    // (mobile/CLAUDE.md), so accept stays on offer as a retry and there is
-    // nothing left to turn down.
-    const accepted = payload.fileSendStatus === "accepted";
-    if (accepted) {
+    // `accepted` means the download URL was ISSUED, not that the bytes landed,
+    // and no client can tell whether they did: a browser download cancelled
+    // after the URL came back is invisible, a GeoPDF is stored only on the
+    // device that took it, and the other device never saw it. So a second fetch
+    // stays on offer, quietly, whatever happened in this session. Guard:
+    // notificationActions.test.ts.
+    const web = platform === "web";
+    // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
+    // there is a download and its words say so.
+    const acceptFailure = web
+      ? "Couldn't download that file."
+      : "Couldn't save that file.";
+    if (payload.fileSendStatus === "accepted") {
       return {
         type: "file_sent",
         targetId: fileSendId,
-        pill: "Saved",
+        requesterId: null,
+        pill: web ? "Downloaded" : "Saved",
         sender,
         actions: [
           {
             kind: "accept",
             label: "Download again",
             confirm: null,
-            failure: "Couldn't save that file.",
-            success: "Downloaded again — find it in Saved.",
+            failure: acceptFailure,
+            success: web
+              ? "Downloaded again."
+              : "Downloaded again — find it in Saved.",
+            quiet: true,
           },
         ],
       };
@@ -158,23 +265,24 @@ export function notificationActions(
     return {
       type: "file_sent",
       targetId: fileSendId,
+      requesterId: null,
       pill: null,
       sender,
       actions: [
         {
           kind: "accept",
-          label: "Save a copy",
+          label: platform === "web" ? "Download" : "Accept",
           confirm: null,
-          failure: "Couldn't save that file.",
-          success: "Saved — find it in Saved.",
+          failure: acceptFailure,
+          success: web ? "Downloaded." : "Saved — find it in Saved.",
         },
         {
           kind: "decline",
-          label: "Turn down",
-          failure: "Couldn't turn that down.",
-          success: "Turned down.",
+          label: "Decline",
+          failure: "Couldn't decline that.",
+          success: "Declined.",
           confirm: {
-            title: "Turn down this file?",
+            title: "Decline this file?",
             // Two facts and no more: what you lose, and the ONE way back. What
             // it does to the sender and the other recipients was true but not
             // the question being asked, and length is what stops a confirm
@@ -182,9 +290,9 @@ export function notificationActions(
             //
             // "send it again", never "share it again": a share is the other
             // verb — live and revocable — and blurring them here is exactly the
-            // confusion the two verbs exist to prevent (mobile/CLAUDE.md).
+            // confusion the two verbs exist to prevent (ADR 0016).
             body: `You won't get a copy of ${filename}. If you want it back, you'd have to ask ${sender ?? "them"} to send it again.`,
-            confirmLabel: "Turn down",
+            confirmLabel: "Decline",
           },
         },
       ],
@@ -197,10 +305,10 @@ export function notificationActions(
 /**
  * Is this failure "the question was already answered somewhere else"?
  *
- * A friend request accepted in the Friends screen, or a send declined on the
- * web, leaves a notification whose buttons are permanently dead rather than
- * retryable — so the row should clear like a successful action rather than pop
- * back with live buttons that will fail again (web's NOTIF-1, ported).
+ * A friend request accepted in the Friends screen, or a send declined in
+ * Logjam Web, leaves a notification whose buttons are permanently dead rather
+ * than retryable — so the row should clear like a successful action rather
+ * than pop back with live buttons that will fail again.
  *   400 — no longer pending / already actioned.
  *   404 — the friendship or the recipient row is gone (declining DELETES it).
  *   409 — conflicting state.

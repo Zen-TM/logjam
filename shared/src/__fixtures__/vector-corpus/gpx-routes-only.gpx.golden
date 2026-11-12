@@ -1,0 +1,59 @@
+{
+  "name": "Corpus Planned Route A",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.07,
+            -33.06
+          ],
+          [
+            150.0715,
+            -33.0612
+          ],
+          [
+            150.0731,
+            -33.063
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Planned Route A"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.074,
+            -33.064
+          ],
+          [
+            150.0752,
+            -33.065
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Planned Route B"
+      }
+    }
+  ],
+  "bbox": [
+    150.07,
+    -33.065,
+    150.0752,
+    -33.06
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 2,
+    "polygons": 0,
+    "positions": 5
+  }
+}

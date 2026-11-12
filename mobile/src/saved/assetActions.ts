@@ -5,11 +5,9 @@
 // This exists because SEVERAL surfaces offer them, and two copies of "what does
 // Delete mean for a GeoPDF" is how the wording on one of them goes stale.
 //
-// THE RENDER SITES, all of which must be checked when a verb is added here —
-// this list said "TWO places" until 2026-08-22, and a Share verb wired into
-// only the first one shipped invisible: routes in Saved open
-// RouteOptionsSheet, not SavedScreen's inline sheet, so every test passed
-// while the button did not exist in the running app.
+// THE RENDER SITES, all of which must be checked when a verb is added here:
+// routes in Saved open RouteOptionsSheet, not SavedScreen's inline sheet, so
+// wiring a verb into only SavedScreen leaves it invisible in Logjam GPS.
 //
 //   routes/RouteOptionsSheet.tsx   — routes,   from BOTH Saved and the map
 //   tracks/TrackOptionsSheet.tsx   — tracks,   from BOTH Saved and the map
@@ -24,7 +22,7 @@
 //                                    everything that CAN be tapped on the map
 //                                    has one sheet, above.
 //
-// A verb whose panel needs a surface (Share, Send a copy, "Attach to a place")
+// A verb whose panel needs a surface (Share, Send a copy, "Link to a place")
 // is rendered INSIDE the sheet that owns the verb, never handed to the caller
 // as a callback: a callback is only as good as the caller that remembers to
 // pass it, which is the same asymmetry in a different shape. The place picker
@@ -51,6 +49,7 @@ import {
   type MirrorMedia,
   type MirrorRoute,
 } from "../sync/mirrorStore";
+import { deleteSensorLog } from "../tracks/sensorLog";
 import {
   deleteTrack,
   listTrackPoints,
@@ -65,6 +64,7 @@ import {
 import {
   type FileSendSourceKind,
   type SharableEntityType,
+  type SharePromiseKind,
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
   exportFilename,
@@ -89,13 +89,8 @@ import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 import { deleteAsync, writeAsStringAsync } from "expo-file-system/legacy";
 import { scratchFileUri } from "../offline/localStores";
 
-// There was a SHARED_READ_ONLY_HINT here — one sentence, rendered on five
-// surfaces, explaining why a shared asset had no write verbs. It is gone
-// (2026-09-05): the row already says "shared with you" in its subtitle and
-// wears a Shared pill, and the sheet now offers "Remove from my account", so a
-// line stating what is absent was the third telling. `sharedWithYou` stays as
-// the descriptor's own statement of ownership — the surfaces read it, they just
-// no longer print a sentence about it.
+// `sharedWithYou` is the descriptor's own statement of ownership — surfaces
+// read it directly; rows show ownership in subtitles and the Shared pill.
 
 /**
  * The one wording for "remove this shared thing", in the field names this
@@ -114,15 +109,26 @@ function removeConfirmFields(
   return { confirmTitle: title, confirmBody: body };
 }
 
+/**
+ * The words on a delete row, by what the delete reaches. A row that also
+ * removes the account's copy says "Delete"; "from device" is only true of a
+ * file that lives on this phone alone.
+ */
+export function deleteLabel(
+  removal: { synced: boolean },
+  memberCount = 1,
+): string {
+  if (removal.synced) return "Delete";
+  return memberCount > 1 ? "Delete all from device" : "Delete from device";
+}
+
 export type AssetActions = {
   /**
    * Someone else owns this — the reason every write verb below is absent.
    *
-   * An EXPLICIT statement rather than the proxy the screens used to read (`no
-   * delete descriptor` = shared). The proxy only held for kinds whose delete
-   * is the owner's: a LiDAR topo shared with you is a file on this handset, so
-   * it keeps its delete, fell through the test, and lost its Share verb with
-   * nothing on screen saying why.
+   * An explicit statement rather than testing whether a delete descriptor is
+   * absent (which fails for handset-local assets like LiDAR topos where delete
+   * is preserved for sharees).
    */
   sharedWithYou?: true;
   /**
@@ -159,9 +165,7 @@ export type AssetActions = {
   /**
    * Display-only rename; resolution still keys off ids. ABSENT for the same
    * reason `delete` is: a shared route is read-only, and the API
-   * refuses the write. It used to be an `async () => undefined` stub, which
-   * meant the surfaces offering Rename accepted the user's typing and threw it
-   * away without a word.
+   * refuses the write rather than accepting a rename that cannot be persisted.
    */
   rename?: (name: string) => Promise<unknown>;
   /** Change the asset's display colour. */
@@ -174,13 +178,18 @@ export type AssetActions = {
    * `blocked`, and the next delta pull brings the row back: a destructive
    * action that fails loudly in Sync issues and quietly does nothing.
    *
-   * Optional rather than a `readOnly` flag beside it, because the type is then
-   * what stops a surface offering the verb — one of the three sheets that
-   * offered it used to be the only one that remembered the guard.
+   * Optional rather than a `readOnly` flag beside it, because the type prevents
+   * any surface from rendering the verb without checking.
    */
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    /**
+     * Whether the delete reaches the account (and so Logjam Web and other
+     * devices), not only this phone. Required, so no kind defaults into the
+     * "from device" wording; `assetActions.test.ts` holds each descriptor's.
+     */
+    synced: boolean;
     run: () => Promise<unknown>;
   };
   /**
@@ -204,20 +213,13 @@ export type AssetActions = {
     placeId?: string,
   ) => Promise<{ name: string; pointCount: number }>;
   /**
-   * Fill a place's route slot with a COPY of this asset's stored original.
+   * Link this asset to a place's route slot.
    *
-   * A COPY, and nothing in Saved changes: imports are device-local and never
-   * sync, while a place route attachment is synced media — which is the only
-   * reason a sharee sees one at all. So the file is uploaded against the place
-   * and the import row stays exactly as it was.
-   *
-   * Present only where there IS an original and it is a .gpx/.kml: a place
-   * route attachment is TRACK media and the API takes nothing else. An import
-   * is always one of those, so the verb is now unconditional on imports — it
-   * LINKS the file rather than uploading a copy of it, which is also why it no
-   * longer needs a retained original to work from.
+   * An import is TRACK media (which the API requires for place route attachments)
+   * and linking connects the existing standalone media row without duplicating
+   * the underlying file.
    */
-  attachToPlace?: (placeId: string) => Promise<unknown>;
+  attachToPlace?: (placeId: string, replaces?: string) => Promise<unknown>;
   /**
    * Present on a track that can be attached to a trip: "Log a trip" opens the
    * trip form on the track's day, and the track goes with the trip. The track
@@ -229,10 +231,9 @@ export type AssetActions = {
   /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
-   * A LIST rather than the old `(format: ExportFormat) => …`, because the two
-   * kinds that offer it no longer agree on what the choices are: a recording
-   * serialises to GPX or KML, while an import hands back the ORIGINAL file it
-   * was made from (whatever format that was) plus its derived GeoJSON. The
+   * A list rather than a single format function, because choices differ by kind:
+   * a recording serialises to GPX or KML, while an import hands back the ORIGINAL file
+   * it was made from (whatever format that was) plus its derived GeoJSON. The
    * surfaces render whatever is here, so neither has to know which kind it is
    * looking at.
    *
@@ -254,7 +255,12 @@ export type AssetActions = {
    * import, region) has nothing on the server to grant access TO, and gets
    * "Send a copy" instead, which is a different and non-revocable promise.
    */
-  share?: { entityType: SharableEntityType; entityId: string };
+  share?: {
+    entityType: SharableEntityType;
+    entityId: string;
+    /** What the share promises a friend, when the entity type alone can't say. */
+    promise?: SharePromiseKind;
+  };
   /**
    * Hand this asset to a friend as a FILE, for the kinds that have no server
    * record to grant access to. A different promise from `share` and not a
@@ -296,9 +302,9 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete this GeoPDF?",
-      confirmBody:
-        "The imported map and its tiles are removed from the device.",
+      confirmTitle: `Delete ${geoPdf.label}?`,
+      synced: false,
+      confirmBody: "The imported map is removed from the device.",
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
   };
@@ -373,8 +379,8 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     ],
     // The ORIGINAL bytes, never the derived GeoJSON — the derivation is lossy
     // (shared/src/vectorImport.ts keeps only `name` and `coordTimes`), which is
-    // the whole reason originals are kept. A row with no original predates that
-    // and can only offer what it has.
+    // the reason originals are kept. A row with no stored original can only
+    // offer what it has.
     ...(imported.sourcePath && sourceFormat
       ? {
           sendCopy: {
@@ -386,16 +392,15 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
       : {}),
     // Attaching LINKS this file to the place; it does not upload a copy of it.
     // The import stays in Saved, keeps its identity, and survives both being
-    // replaced and the place being deleted — which is why the promise the
-    // panel makes could change from "a copy of the file is attached" to what it
-    // says now (routeSlot.ts, IMPORT_TO_PLACE_PROMISE).
-    attachToPlace: (placeId: string) =>
-      linkStandaloneMediaLocal(imported.id, placeId),
+    // replaced and the place being deleted (see IMPORT_TO_PLACE_PROMISE in
+    // routeSlot.ts).
+    attachToPlace: (placeId: string, replaces?: string) =>
+      linkStandaloneMediaLocal(imported.id, placeId, replaces),
     delete: {
-      confirmTitle: "Delete this import?",
-      // Imports sync now, so this is not a local tidy-up: it removes the file
-      // from the account and therefore from every device. The old copy said
-      // "removed from the device", which after sync would have been a lie.
+      confirmTitle: `Delete ${imported.name}?`,
+      // Imports sync across devices, so deletion removes the file from the
+      // account and therefore from every device.
+      synced: true,
       confirmBody:
         "This deletes the file from your account, so it goes from Logjam Web and your other devices too.",
       run: () => deleteVectorImport(imported.id),
@@ -412,7 +417,11 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
  * a feature nobody has asked for — what this row is for is knowing the trip is
  * safe, being able to name it, and being able to get rid of it.
  */
-export function remoteTrackActions(file: MirrorMedia): AssetActions {
+export function remoteTrackActions(
+  file: MirrorMedia,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   const bbox = file.metadata.bbox ?? null;
   return {
     locatable: bbox !== null,
@@ -421,9 +430,17 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
     // The file is a recording of the account's own, so it can go into a trip
     // like one made here: its bytes are fetched once if they are not on the
     // phone (`needsConnection` says so, for the sheet that offers it).
-    logTrip: syncedTrackSource({ ...file, title: mediaDisplayName(file) }),
+    ...(loggedTrackIds?.has(file.id)
+      ? {}
+      : {
+          logTrip: syncedTrackSource({
+            ...file,
+            title: mediaDisplayName(file),
+          }),
+        }),
     delete: {
-      confirmTitle: "Delete this recording?",
+      confirmTitle: `Delete ${mediaDisplayName(file)}?`,
+      synced: true,
       confirmBody:
         "This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.",
       run: () => deleteMediaLocal(file),
@@ -447,7 +464,7 @@ export function routeActions(
    * me" (removed at the place) from "linked to a place I cannot see, and here
    * on a share of its own" (removable). Omitted — by the surfaces that only
    * need a bbox or an export — means neither Remove nor the place hint is
-   * offered, which is what every caller got before this existed.
+   * offered.
    */
   visiblePlaceIds?: readonly string[],
 ): AssetActions {
@@ -491,7 +508,8 @@ export function routeActions(
           rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
           delete: {
-            confirmTitle: "Delete route?",
+            confirmTitle: `Delete ${route.name}?`,
+            synced: true,
             confirmBody:
               "The route is removed from every device on your account. This can't be undone.",
             run: () => deleteRouteLocal(route.id),
@@ -501,7 +519,11 @@ export function routeActions(
   };
 }
 
-export function trackActions(track: Track): AssetActions {
+export function trackActions(
+  track: Track,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   return {
     locatable: track.pointCount > 0,
     // A track's extent isn't stored; derive it from its points on demand.
@@ -509,7 +531,11 @@ export function trackActions(track: Track): AssetActions {
     rename: (name) => updateTrack(track.id, { name }),
     setColor: (color: string) => updateTrack(track.id, { color }),
     // Attaching writes the points out as a GPX, which needs a line to write.
-    ...(track.pointCount >= 2 ? { logTrip: recordedTrackSource(track) } : {}),
+    // Not offered again once a trip has been logged from it.
+    ...(track.pointCount >= 2 &&
+    !(track.mediaId && loggedTrackIds?.has(track.mediaId))
+      ? { logTrip: recordedTrackSource(track) }
+      : {}),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS
@@ -581,10 +607,10 @@ export function trackActions(track: Track): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete track?",
-      // A finished recording is backed up to the account as a file, so deleting
-      // it here is not a local tidy-up any more — leaving the backup behind
-      // would put the same trip straight back in this list as a
+      confirmTitle: `Delete ${track.name}?`,
+      synced: true,
+      // A finished recording is backed up to the account as a file; leaving
+      // the backup behind would put the same trip straight back in this list as a
       // recorded-elsewhere row, which reads as the delete having failed.
       confirmBody:
         "The recorded points and the backup in your account are both deleted. This can't be undone.",
@@ -599,7 +625,7 @@ export function trackActions(track: Track): AssetActions {
  * Order matters: the media row goes FIRST. If that fails the local track
  * survives with its `mediaId` intact and the delete can be retried; the other
  * way round loses the points and leaves an orphan file in the account that
- * nothing on this phone still points at.
+ * nothing on this phone still points at (assetActions.test.ts).
  */
 async function deleteRecordedTrack(track: Track): Promise<void> {
   if (track.mediaId) {
@@ -607,4 +633,5 @@ async function deleteRecordedTrack(track: Track): Promise<void> {
     if (backup) await deleteMediaLocal(backup);
   }
   await deleteTrack(track.id);
+  await deleteSensorLog(track.id);
 }

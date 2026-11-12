@@ -1,6 +1,11 @@
-import { ACCOUNT } from "@logjam/shared";
+import {
+  ACCOUNT,
+  confirmEmailChange,
+  requestEmailChange,
+  SIGN_IN_COPY,
+} from "@logjam/shared";
 import { useId, useState } from "react";
-import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
+import { accessToken, issuerUrl } from "../../auth/oidc";
 import { messageFromError } from "../../errors/messageFromError";
 import { isValidEmailFormat } from "../../emailValidation";
 import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
@@ -15,7 +20,7 @@ const TITLES: Record<Stage, string> = {
 };
 
 /**
- * Two steps, because Cognito owns the email and verifies it: ask for the new
+ * Cognito only (the account page shows it for no other issuer). Two steps, because Cognito owns the email and verifies it: ask for the new
  * address, then confirm with the code sent TO that address. The step is state,
  * never a second dialog — the same shape Logjam GPS's email sheet has.
  */
@@ -81,9 +86,7 @@ function ChangeEmailForm({
     setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({
-        userAttribute: { attributeKey: "email", value: trimmed },
-      });
+      await requestEmailChange(issuerUrl(), await accessToken(), trimmed);
       setPendingEmail(trimmed);
       setStage("verify");
     } catch (err) {
@@ -91,7 +94,7 @@ function ChangeEmailForm({
       setError(
         messageFromError(
           err,
-          "Couldn't send the verification code. Please try again.",
+          "Couldn't send the verification code. Try again.",
         ),
       );
     } finally {
@@ -103,15 +106,13 @@ function ChangeEmailForm({
     setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({
-        userAttribute: { attributeKey: "email", value: pendingEmail },
-      });
+      await requestEmailChange(issuerUrl(), await accessToken(), pendingEmail);
     } catch (err) {
       console.error(err);
       setError(
         messageFromError(
           err,
-          "Couldn't resend the verification code. Please try again.",
+          "Couldn't resend the verification code. Try again.",
         ),
       );
     } finally {
@@ -128,17 +129,12 @@ function ChangeEmailForm({
     setBusy(true);
     setError(null);
     try {
-      await confirmUserAttribute({
-        userAttributeKey: "email",
-        confirmationCode: trimmedCode,
-      });
+      await confirmEmailChange(issuerUrl(), await accessToken(), trimmedCode);
       setStage("done");
       onSuccess(pendingEmail);
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Incorrect or expired code. Please try again."),
-      );
+      setError(messageFromError(err, "Incorrect or expired code. Try again."));
     } finally {
       setBusy(false);
     }
@@ -166,7 +162,7 @@ function ChangeEmailForm({
                 disabled={busy}
                 disabledReason="Working…"
               >
-                Resend code
+                {SIGN_IN_COPY.resendCode}
               </Button>
             )}
             <Button type="submit" form={formId} variant="filled" busy={busy}>

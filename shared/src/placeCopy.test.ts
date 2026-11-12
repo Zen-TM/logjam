@@ -127,10 +127,10 @@ describe("matchPlaceTypeByName", () => {
   };
   const userCampsite = { id: "user-1", name: "campsite", ownerId: "bob" };
 
-  // §2.6 rule 1, and the ordering is the point: branching on the SENDER's type
-  // kind would create a second, user-owned "Campsite" beside the system one —
-  // two Campsite tabs, and the zero-places self-heal never fires because the
-  // copy just put a place in the new one.
+  // The ordering is the point: branching on the SENDER's type kind would
+  // create a second, user-owned "Campsite" beside the system one — two
+  // Campsite tabs, and the zero-places self-heal never fires because the copy
+  // just put a place in the new one.
   it("prefers the system type when both share a name", () => {
     expect(
       matchPlaceTypeByName("Campsite", [userCampsite, systemCampsite])?.id,

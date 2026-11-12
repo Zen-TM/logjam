@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Corpus Swapped Axes" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Corpus Swapped</name>
+    <trkseg>
+      <trkpt lat="150.0200" lon="-33.0100"/>
+      <trkpt lat="150.0210" lon="-33.0110"/>
+    </trkseg>
+  </trk>
+</gpx>

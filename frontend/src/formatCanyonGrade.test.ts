@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { formatCanyonGrade } from "./placeUtils";
 
-// `formatCanyonGrade` takes the FIELD VALUES now rather than a place-shaped
-// object: the three grades are reserved keys in `fieldValues`, not columns.
-// It stays canyon-specific on purpose — `v3a4 III` is how a canyon's grade is
+// `formatCanyonGrade` takes field values: the three grades are reserved
+// keys in `fieldValues`, not columns.
+// It stays canyon-specific on purpose — `v3a4III` is how a canyon's grade is
 // written and no other place type has one, so this is a presenter the generic
 // field renderer defers to, not a rule applied to everything.
 function grades(
@@ -22,7 +22,7 @@ describe("formatCanyonGrade — fully specified", () => {
   it("joins v, a and commitment", () => {
     expect(
       formatCanyonGrade(grades({ vGrade: 3, aGrade: 4, commitment: 3 })),
-    ).toBe("v3a4 III");
+    ).toBe("v3a4III");
   });
 
   it("renders v and a glued together with no commitment", () => {
@@ -31,8 +31,8 @@ describe("formatCanyonGrade — fully specified", () => {
 });
 
 describe("formatCanyonGrade — omits unset segments instead of '?'", () => {
-  // The regression this file exists for: a place with no A grade rendered
-  // "v2a?", which reads as corrupt data rather than "not recorded".
+  // A place with no A grade must omit it: "v2a?" reads as corrupt data
+  // rather than "not recorded".
   it("omits a missing A grade rather than substituting '?'", () => {
     expect(formatCanyonGrade(grades({ vGrade: 2 }))).toBe("v2");
   });

@@ -1,7 +1,7 @@
 // Terrarium PNG → heights, in JS.
 //
 // React Native has no canvas, and there is no pixel-access image API in the
-// Expo modules this app already carries, so the offline elevation reader
+// Expo modules Logjam GPS already carries, so the offline elevation reader
 // decodes the tile itself. That is less alarming than it sounds: a terrarium
 // tile from the AWS Open Data set is always 8-bit truecolour, non-interlaced,
 // 256×256 — so the decoder is a zlib inflate plus the five PNG row filters,
@@ -9,6 +9,7 @@
 //
 // Anything outside that shape THROWS rather than guessing: a misread height
 // field is a confidently wrong elevation profile, which is worse than none.
+// Guard: `src/offline/demPng.test.ts`.
 import { unzlibSync } from "fflate";
 import { DEM_TILE_SIZE, demMetresFromRgb } from "@logjam/shared";
 

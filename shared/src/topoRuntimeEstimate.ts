@@ -1,12 +1,12 @@
 // Adaptive topo-job runtime estimator.
 //
-// The pipeline is a moving target (render perf has changed materially as the
-// renderer is optimised), so a hardcoded seconds-per-tile constant goes stale.
-// Instead, fit the estimate from recent completed jobs' actual runtimes and
-// fall back to a configurable default until enough samples exist.
+// Render performance varies across environments and pipeline adjustments, so
+// a hardcoded seconds-per-tile constant goes stale. Instead, fit the estimate
+// from recent completed jobs' actual runtimes and fall back to a configurable
+// default until enough samples exist.
 //
-// Model: post-render-optimisation, render time is ~linear in output tiles and
-// output tiles ∝ input tiles, so total runtime is ~linear in INPUT tiles —
+// Model: render time is approximately linear in output tiles and output
+// tiles ∝ input tiles, so total runtime is approximately linear in INPUT tiles —
 // which is the only size signal known at submit time. We therefore fit a
 // per-input-tile rate and key the estimate on input tile count.
 

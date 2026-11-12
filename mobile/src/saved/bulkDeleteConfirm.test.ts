@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
+import { bulkDeleteConfirmBody, bulkDeleteCounts } from "./bulkDeleteConfirm";
 
 // This copy is the only warning before an irreversible delete, and the counts
 // it reads from vary independently — so every combination is pinned as a whole
@@ -49,7 +49,7 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 684032,
       }),
     ).toBe(
-      "4 of them are routes and waypoints, removed from your account and from any friends they're shared with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
+      "4 of them are synced files and routes, removed from your account and from any friends they're shared with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
     );
   });
 
@@ -61,7 +61,7 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 0,
       }),
     ).toBe(
-      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
+      "One of them is a synced file or route, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
     );
   });
 
@@ -73,7 +73,35 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 2097152,
       }),
     ).toBe(
-      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
+      "One of them is a synced file or route, removed from your account and from any friends they're shared with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
+    );
+  });
+});
+
+// The split comes from each item's own delete descriptor, never from its
+// category: an import and a recording are files that also live in the account.
+// Mutation: count `category === "route"` again instead of `delete.synced`.
+describe("bulkDeleteCounts", () => {
+  it("counts every account-reaching delete as synced, whatever its kind", () => {
+    expect(
+      bulkDeleteCounts([
+        { delete: { synced: true } }, // import
+        { delete: { synced: true } }, // recording
+        { delete: { synced: false } }, // region
+        {},
+      ]),
+    ).toEqual({ syncedCount: 2, onDeviceCount: 1 });
+  });
+
+  it("words a mixed selection as synced files and routes", () => {
+    expect(
+      bulkDeleteConfirmBody({
+        onDeviceCount: 1,
+        syncedCount: 2,
+        onDeviceBytes: 0,
+      }),
+    ).toBe(
+      "2 of them are synced files and routes, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
     );
   });
 });

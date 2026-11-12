@@ -1,4 +1,10 @@
 import { INK } from "./designTokens.js";
+import { normalizeRegionIds } from "./regions.js";
+import {
+  parseSlopeBands,
+  RASTER_TEMPLATE_DEFAULTS,
+  type SlopeBand,
+} from "./topoSettings.js";
 import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
@@ -69,7 +75,6 @@ export type ThemeScheme = {
 export type NotificationPreferences = {
   topoEmail: boolean;
   exportEmail: boolean;
-  geoPdfEmail: boolean;
   friendRequestInApp: boolean;
   shareInApp: boolean;
 };
@@ -77,7 +82,6 @@ export type NotificationPreferences = {
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   topoEmail: true,
   exportEmail: true,
-  geoPdfEmail: true,
   friendRequestInApp: true,
   shareInApp: true,
 };
@@ -87,7 +91,6 @@ export type UserUiPreferences = {
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   placeCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
-  autoDownloadGeoPdfs: boolean;
   importMergePolicy?: import("./mergePlace.js").PlaceMergePolicy;
   /**
    * Whether saving a copy of a shared place brings that place's place-level
@@ -100,16 +103,34 @@ export type UserUiPreferences = {
    * lives in its operation's own dialog rather than behind a first-run modal.
    *
    * TRUE by default, and the direction matters. Not copying is the silent
-   * failure: the sharee loses photos they could see, and on the phone the
+   * failure: the sharee loses photos they could see, and on Logjam GPS the
    * cached blobs go with them (`cascadePlaceDelete`). Copying is the LOUD one —
    * the server refuses with 507 when the quota will not take it, which the user
    * can read and act on.
    *
    * The SERVER reads this as the fallback when `POST /places/:id/copy` carries
-   * no `copyMedia`, so a client with no switch of its own (Logjam Web, today)
-   * still honours the user's choice instead of quietly doing the other thing.
+   * no `copyMedia`, so a copy that asks nothing still honours the user's choice
+   * (Settings › Privacy and security, on both clients) instead of quietly doing
+   * the other thing.
    */
   copyPlaceMedia: boolean;
+  /**
+   * Whether the user is on the friends leaderboard. FALSE by default: joining
+   * shares a count of trip data with friends, and no default widens who sees
+   * something (root AGENTS.md). See shared/src/leaderboard.ts.
+   */
+  leaderboardOptIn: boolean;
+  /**
+   * The bands the Terrain group's statewide slope is coloured in, on both
+   * clients (shared/src/terrain.ts). Edited on Logjam Web.
+   */
+  slopeBands: SlopeBand[];
+  /**
+   * The regions whose maps and canyon list Logjam offers this user
+   * (regions.ts): ids of known regions, NSW when never chosen. Chosen in the
+   * first-login gate and Settings once there is more than one region.
+   */
+  regions: string[];
 };
 
 export function isNotificationPreferences(
@@ -120,7 +141,6 @@ export function isNotificationPreferences(
   for (const key of [
     "topoEmail",
     "exportEmail",
-    "geoPdfEmail",
     "friendRequestInApp",
     "shareInApp",
   ] as const) {
@@ -145,10 +165,6 @@ function normalizeNotificationPreferences(
       typeof prefs.exportEmail === "boolean"
         ? prefs.exportEmail
         : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
-    geoPdfEmail:
-      typeof prefs.geoPdfEmail === "boolean"
-        ? prefs.geoPdfEmail
-        : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
     friendRequestInApp:
       typeof prefs.friendRequestInApp === "boolean"
         ? prefs.friendRequestInApp
@@ -162,11 +178,18 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
-// The three dark schemes keep the values they had under the old rank names:
-// `field` is the old web `color-mix(in srgb, black 12%, page)` worked out to a
-// hex, `lineStrong` the muted text colour. `cardPressed` is the card a step
-// darker in Sandstone and Ironbark, where the old `bonus2` it replaced was
-// lighter than the card and muted text failed on it.
+/**
+ * The scheme a client opens in before the user has picked one: it follows the
+ * OS, dark to Sandstone and light to Ghost Gum. A stored pick always wins.
+ */
+export function schemeForOs(prefersDark: boolean): ThemeSchemeId {
+  return prefersDark ? DEFAULT_THEME_SCHEME_ID : "ghostGum";
+}
+
+// In the dark schemes, `field` provides input background contrast against
+// `page` (calculated as `color-mix(in srgb, black 12%, page)` resolved to hex),
+// `lineStrong` matches muted text, and `cardPressed` steps darker than `card` so
+// muted text remains legible during press states.
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
@@ -178,7 +201,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#61553F",
       cardPressed: "#524836",
       field: "#45403C",
-      line: "#6B5F4B",
+      line: "#74674F",
       lineStrong: "#D8CCB9",
       text: "#F7F3EC",
       textMuted: "#D8CCB9",
@@ -197,11 +220,11 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
     description: "Cool plunge-water blues against dark gorge rock.",
     mode: "dark",
     tokens: {
-      page: "#2B3F52",
-      card: "#5F432F",
-      cardPressed: "#16232D",
-      field: "#263748",
-      line: "#16232D",
+      page: "#26394B",
+      card: "#33495E",
+      cardPressed: "#283C4F",
+      field: "#213242",
+      line: "#435A70",
       lineStrong: "#A7BBC9",
       text: "#EAF1F6",
       textMuted: "#A7BBC9",
@@ -225,14 +248,14 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#3A4D45",
       cardPressed: "#2A3A34",
       field: "#27362F",
-      line: "#212E29",
+      line: "#4A6157",
       lineStrong: "#B4C8BC",
       text: "#EAF2EC",
       textMuted: "#B4C8BC",
       accent: "#DAB084",
       warning: "#E6AAA3",
       success: "#8FBE86",
-      neutral: "#A8C4A1",
+      neutral: "#D3DDD0",
       inverse: "#EAF2EC",
       onInverse: INK,
       onFill: INK,
@@ -253,11 +276,11 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#F9FAF6",
       cardPressed: "#E0E4DB",
       field: "#F9FAF6",
-      line: "#D5DAD0",
+      line: "#BCC3B6",
       lineStrong: "#7A857C",
       text: "#252A26",
-      textMuted: "#4C554D",
-      accent: "#6A9072",
+      textMuted: "#3F4740",
+      accent: "#778D7C",
       warning: "#C2735A",
       success: "#7E8E3E",
       neutral: "#B3BBAE",
@@ -333,16 +356,13 @@ const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
  * Validate and normalize an importMergePolicy value. Returns the entries that
  * are well-formed, or undefined when the value is absent or not an object.
  *
- * PARTIAL IS NOW VALID, and that is a behaviour change with a reason. The
- * policy used to be a fixed seven-entry union of grade columns, so "all known
- * fields present" was a meaningful check. Its keys are field KEYS now — an
- * open set that differs per user and per place type — so demanding every one
- * of them would reject a perfectly good policy the moment the user added a
- * field, or deleted one, silently reverting all of their merge choices to the
- * default. A missing entry already means `keepExisting` (`mergePolicyFor` in
- * mergePlace.ts), which is the safe direction.
+ * Partial policy objects are valid: keys are field keys — an open set that
+ * differs per user and per place type — so demanding every field would reject
+ * an otherwise valid policy whenever the user adds or deletes a field,
+ * reverting merge choices to default. A missing entry defaults to `keepExisting`
+ * (`mergePolicyFor` in `mergePlace.ts`), which is the safe direction.
  *
- * Malformed ENTRIES are still dropped rather than tolerated, so a garbage
+ * Malformed entries are still dropped rather than tolerated, so an invalid
  * value cannot reach the merge as if it were a decision.
  */
 export function normalizeImportMergePolicy(
@@ -359,6 +379,34 @@ export function normalizeImportMergePolicy(
   return result as unknown as import("./mergePlace.js").PlaceMergePolicy;
 }
 
+/**
+ * The scheme the user picked, or null when none is stored. A missing or
+ * unreadable value is not a pick: `normalizeUserUiPreferences` fills it with
+ * the default, which would hide from a client that the account has no
+ * preference and the OS should decide.
+ */
+export function storedThemeSchemeId(value: unknown): ThemeSchemeId | null {
+  return typeof value === "object" && value !== null
+    ? normalizeThemeSchemeId((value as Record<string, unknown>).themeSchemeId)
+    : null;
+}
+
+/**
+ * `normalizeUserUiPreferences` for the wire and for writing back: the scheme is
+ * present only when the user picked one, so "no pick" survives a round trip and
+ * saving any other preference does not store the default as a pick.
+ */
+export function normalizeUserUiPreferencesKeepingNoPick(value: unknown): Omit<
+  UserUiPreferences,
+  "themeSchemeId"
+> & {
+  themeSchemeId?: ThemeSchemeId;
+} {
+  const { themeSchemeId: _filled, ...rest } = normalizeUserUiPreferences(value);
+  const picked = storedThemeSchemeId(value);
+  return picked ? { ...rest, themeSchemeId: picked } : rest;
+}
+
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;
@@ -369,10 +417,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     );
     const placeCustomFields = normalizeCustomFieldDefs(prefs.placeCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
-    const autoDownloadGeoPdfs =
-      typeof prefs.autoDownloadGeoPdfs === "boolean"
-        ? prefs.autoDownloadGeoPdfs
-        : true;
     const importMergePolicy = normalizeImportMergePolicy(
       prefs.importMergePolicy,
     );
@@ -385,8 +429,10 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       tripLogCustomFields,
       placeCustomFields,
       notifications,
-      autoDownloadGeoPdfs,
       copyPlaceMedia,
+      leaderboardOptIn: prefs.leaderboardOptIn === true,
+      slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
+      regions: normalizeRegionIds(prefs.regions),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
@@ -397,7 +443,17 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     tripLogCustomFields: [],
     placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
-    autoDownloadGeoPdfs: true,
     copyPlaceMedia: true,
+    leaderboardOptIn: false,
+    slopeBands: defaultSlopeBands(),
+    regions: normalizeRegionIds(undefined),
   };
+}
+
+/**
+ * A fresh copy: a caller that edits it must not edit the template default.
+ * Guard: `terrain.test.ts` ("hands out a copy of the defaults").
+ */
+function defaultSlopeBands(): SlopeBand[] {
+  return RASTER_TEMPLATE_DEFAULTS.slope.bands.map((band) => ({ ...band }));
 }

@@ -1,19 +1,57 @@
-import { useCallback, useMemo, useState } from "react";
-import { Text, View } from "react-native";
 import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Text, View, type TextInputInstance } from "react-native";
+import {
+  abandonConfirm,
+  ADD_WAY,
   ATTRIBUTE_NOUN,
+  contractSectionKeys,
   defsForType,
+  isValidLatitude,
+  isValidLongitude,
+  placeAttributesTitle,
+  PLACE_FORM,
+  type SectionKeysOn,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   userFieldValues,
   validatePlacePayload,
   type ScopedCustomFieldDef,
+  coordinateEntry,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
+import {
+  coordinateBlur,
+  coordinateProblem,
+  coordinateText,
+  coordinateValue,
+  seedCoord,
+  shownCoord,
+} from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
+import { attachMediaLocal } from "../sync/mediaUpload";
+import { AddWaySheet } from "./AddWaySheet";
+import {
+  PhotoSourceSheet,
+  StagedPhotosSection,
+  StagedWaySection,
+  useStagedMedia,
+} from "./useStagedMedia";
+import {
+  hasStagedMedia,
+  NO_STAGED_MEDIA,
+  queueStagedMedia,
+} from "./stagedPlaceMedia";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -51,8 +89,8 @@ import {
  * Both paths queue through the outbox, so adding a place standing at its
  * entrance with no signal works exactly like adding one at home.
  *
- * Coordinates are typed, or seeded by the caller from a point pressed on the map
- * (`initialCoords`). They are never captured from GPS *here*: a permission window
+ * Coordinates are typed, or seeded by the caller from a point pressed on the map or
+ * the map's centre (`initialCoords`). They are never captured from GPS *here*: a permission window
  * cannot be raised from an open sheet (DESIGN.md — the bug that made "Take
  * photo" look dead), so any future fix-based entry belongs in the caller too.
  *
@@ -61,10 +99,36 @@ import {
  * never a second modal). A date-typed field needs the picker, which is the
  * other mode.
  *
+ * A NEW place also takes photos, videos and a way (the place page's own
+ * entries). They are only held here until Save, then queued behind the place's
+ * create, so cancelling leaves nothing queued (`stagedPlaceMedia.test.ts`). A
+ * system picker cannot run under an open sheet (DESIGN.md §4), so while one of
+ * their sheets is up this form steps out of the way, state intact, like the
+ * map picker's `resuming` round trip.
+ *
  * PRIVACY: a place's name and position are the most sensitive pair in the app.
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
+type FormValues = {
+  name: string;
+  altNames: string;
+  latitude: string;
+  longitude: string;
+  notes: string;
+  placeTypeId: string;
+  fieldValues: Record<string, string>;
+};
+
+/** An emptied field is the same as one never filled, so it is left out. */
+const formFingerprint = (values: FormValues) =>
+  JSON.stringify({
+    ...values,
+    fieldValues: Object.entries(values.fieldValues)
+      .filter(([, value]) => value !== "")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  });
+
 /** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md). */
 type Mode = "form" | "date" | "fields" | "fieldForm";
 
@@ -76,6 +140,7 @@ export function PlaceEditSheet({
   onPickOnMap,
   pickedCoords,
   resuming = false,
+  focusName = false,
   onSaved,
 }: {
   visible: boolean;
@@ -106,16 +171,30 @@ export function PlaceEditSheet({
    * intact; this flag is only what stops the seed from wiping it.
    */
   resuming?: boolean;
+  /** Opens with the keyboard on Name: the one thing a quick drop left out. */
+  focusName?: boolean;
   onSaved: (message: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
   const editing = place != null;
+  const nameRef = useRef<TextInputInstance>(null);
+  useEffect(() => {
+    if (!visible || !focusName) return;
+    // `autoFocus` fails in a modal that is still sliding in (TextField), so
+    // focus once it has settled.
+    const timer = setTimeout(() => nameRef.current?.focus(), 400);
+    return () => clearTimeout(timer);
+  }, [visible, focusName]);
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  // Only a field the user has typed in (or a picked point filled) writes; the
+  // others follow the place's stored value (`coordinateText`).
+  const [latitudeEdited, setLatitudeEdited] = useState(false);
+  const [longitudeEdited, setLongitudeEdited] = useState(false);
   const [notes, setNotes] = useState("");
   const [placeTypeId, setPlaceTypeId] = useState<string>(
     SYSTEM_PLACE_TYPE_IDS.canyon,
@@ -131,6 +210,10 @@ export function PlaceEditSheet({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
+  // New place only: the photos and way picked so far and the sheets that pick
+  // them.
+  const media = useStagedMedia(() => setFormError(PLACE_FORM.copy.pickFailed));
+  const { staged, setStaged } = media;
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
     useFieldDefs("place");
   const placeTypes = useMirrorPlaceTypes();
@@ -138,6 +221,8 @@ export function PlaceEditSheet({
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
+  // The form as seeded, to tell an edit from an untouched sheet (§10).
+  const [pristine, setPristine] = useState("");
   const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(
     null,
   );
@@ -167,27 +252,42 @@ export function PlaceEditSheet({
     setLongitudeError(null);
     setFormError(null);
     setSaving(false);
-    setName(place?.name ?? "");
-    setAltNames((place?.altNames ?? []).join(", "));
-    // An existing place's stored value is shown exactly; a freshly picked point
-    // is trimmed, because a map press carries fifteen meaningless decimals.
-    setLatitude(
-      place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude),
-    );
-    setLongitude(
-      place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude),
-    );
-    // The grades are ordinary field values, seeded by the one path every other
-    // field uses — there is no second reader for them any more.
-    setNotes(place?.notes ?? "");
-    // A new place starts as a CANYON: this is a canyoning app, and a default
-    // that is right most of the time beats a picker with nothing chosen. The
-    // rail is right there to say otherwise.
-    setPlaceTypeId(place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon);
+    const start: FormValues = {
+      name: place?.name ?? "",
+      altNames: (place?.altNames ?? []).join(", "),
+      // An existing place shows its position as its page does, to five places;
+      // `coordinate` hands the stored value back unless the user typed over it.
+      // A freshly picked point is trimmed too, because a map press carries
+      // fifteen meaningless decimals.
+      latitude: place
+        ? shownCoord(place.latitude)
+        : seedCoord(initialCoords?.latitude),
+      longitude: place
+        ? shownCoord(place.longitude)
+        : seedCoord(initialCoords?.longitude),
+      notes: place?.notes ?? "",
+      // A new place starts as a CANYON: this is a canyoning app, and a default
+      // that is right most of the time beats a picker with nothing chosen. The
+      // rail is right there to say otherwise.
+      placeTypeId: place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon,
+      // The grades are ordinary field values, seeded by the one path every
+      // other field uses.
+      fieldValues: fieldValueStrings(userFieldValues(place?.fieldValues)),
+    };
+    setName(start.name);
+    setAltNames(start.altNames);
+    setLatitude(start.latitude);
+    setLongitude(start.longitude);
+    setLatitudeEdited(false);
+    setLongitudeEdited(false);
+    setNotes(start.notes);
+    setPlaceTypeId(start.placeTypeId);
+    setFieldValues(start.fieldValues);
+    setPristine(formFingerprint(start));
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    setFieldValues(fieldValueStrings(userFieldValues(place?.fieldValues)));
+    media.reset();
   }
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -200,6 +300,8 @@ export function PlaceEditSheet({
     if (pickedCoords) {
       setLatitude(seedCoord(pickedCoords.latitude));
       setLongitude(seedCoord(pickedCoords.longitude));
+      setLatitudeEdited(true);
+      setLongitudeEdited(true);
       setLatitudeError(null);
       setLongitudeError(null);
     }
@@ -221,20 +323,28 @@ export function PlaceEditSheet({
   /**
    * The fields THIS type's form asks for — ALL of them, with nothing cut.
    *
-   * The seven canyon axes used to be seven hand-written controls above this
-   * list, with their keys spelled out, and were then subtracted from it so they
-   * were not asked twice. They are ordinary bounded field values with ordinary
-   * definitions, so the generic renderer draws them now: a bounded integer is a
-   * rail (`CustomFieldValues.tsx`), which is the same control by a rule instead
-   * of by name. Three consequences, all wanted — a canyon's own fields finally
-   * appear in "Your place attributes"; `quality` is a FLOAT and gets a decimal
-   * box rather than a rail that silently could not express the 4.5 the web
-   * stores; and a user's own "Difficulty, 1-5" is drawn exactly like a V grade
-   * without anything knowing about canyons.
+   * Canyon axes are ordinary bounded field values with definitions rendered
+   * by the generic renderer: a bounded integer is a rail
+   * (`CustomFieldValues.tsx`), by rule instead of by name. A canyon's own
+   * fields appear in "Your place attributes"; `quality` is a FLOAT and gets a
+   * decimal box rather than a rail that cannot express the 4.5 Logjam Web
+   * stores; and a user's own "Difficulty, 1-5" is drawn like a V grade without
+   * anything knowing about canyons.
    */
   const typeFieldDefs = useMemo(
     () => defsForType(customFieldDefs, placeTypeId),
     [customFieldDefs, placeTypeId],
+  );
+
+  const latitudeShown = coordinateText(
+    latitude,
+    latitudeEdited,
+    place?.latitude,
+  );
+  const longitudeShown = coordinateText(
+    longitude,
+    longitudeEdited,
+    place?.longitude,
   );
 
   /** The form in the shape both the validator and the ops speak. */
@@ -245,11 +355,20 @@ export function PlaceEditSheet({
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry !== ""),
-      latitude: parseNumber(latitude),
-      longitude: parseNumber(longitude),
+      latitude: coordinateValue(latitude, latitudeEdited, place?.latitude),
+      longitude: coordinateValue(longitude, longitudeEdited, place?.longitude),
       notes: notes.trim() || null,
     }),
-    [altNames, latitude, longitude, name, notes],
+    [
+      altNames,
+      latitude,
+      latitudeEdited,
+      longitude,
+      longitudeEdited,
+      name,
+      notes,
+      place,
+    ],
   );
 
   const save = useCallback(async () => {
@@ -257,25 +376,41 @@ export function PlaceEditSheet({
     setLatitudeError(null);
     setLongitudeError(null);
     setFormError(null);
-    if (draft.name === "") {
-      setNameError("A place needs a name.");
-      return;
-    }
     const effectiveCustomFields = coerceCustomFields(
       fieldValues,
       typeFieldDefs,
     );
+    // Every check runs, so one press lights every bad field. The coordinates
+    // are required on an edit too, as on Logjam Web.
+    const nameProblem = draft.name === "" ? PLACE_FORM.copy.nameMissing : null;
+    const latitudeProblem = coordinateProblem(
+      latitudeShown,
+      draft.latitude,
+      isValidLatitude,
+      PLACE_FORM.copy.latitudeMissing,
+      PLACE_FORM.copy.latitudeInvalid,
+    );
+    const longitudeProblem = coordinateProblem(
+      longitudeShown,
+      draft.longitude,
+      isValidLongitude,
+      PLACE_FORM.copy.longitudeMissing,
+      PLACE_FORM.copy.longitudeInvalid,
+    );
     // The same predicate the API applies, run before anything is queued: a
     // rejected op would otherwise sit in the outbox as a dead push whose reason
-    // the user never sees.
-    const problem = validatePlacePayload(
+    // the user never sees. The coordinates are checked above, so only a valid
+    // one is handed over.
+    const fieldProblem = validatePlacePayload(
       {
         // Cleared fields are dropped for the CHECK: `coerceCustomFields` writes
         // an explicit null so the merge below can remove the key, and the
         // validator must not be handed a null for a field simply not recorded.
         fieldValues: withoutClearedFields(effectiveCustomFields),
-        ...(draft.latitude != null && { latitude: draft.latitude }),
-        ...(draft.longitude != null && { longitude: draft.longitude }),
+        ...(isValidLatitude(draft.latitude) && { latitude: draft.latitude }),
+        ...(isValidLongitude(draft.longitude) && {
+          longitude: draft.longitude,
+        }),
       },
       // The bounds come from the DEFINITIONS — the system ones (compiled in,
       // so the check works with no signal) AND the ones this type actually
@@ -284,17 +419,20 @@ export function PlaceEditSheet({
       // refused it, and it parked as a sync issue — exactly the outcome this
       // check exists to prevent.
       {
-        requireCoords: !editing,
+        requireCoords: false,
         defs: [...SYSTEM_FIELD_DEFS, ...typeFieldDefs],
       },
     );
-    if (problem) {
-      // The two coordinate fields are separate controls, so a message that
-      // names one goes under it; anything else (a field-value range) is not
-      // attributable to a single control and is the banner instead.
-      if (problem.startsWith("Latitude")) setLatitudeError(problem);
-      else if (problem.startsWith("Longitude")) setLongitudeError(problem);
-      else setFormError(problem);
+    setNameError(nameProblem);
+    setLatitudeError(latitudeProblem);
+    setLongitudeError(longitudeProblem);
+    if (nameProblem || latitudeProblem || longitudeProblem) {
+      setFormError(PLACE_FORM.copy.fixFields);
+      return;
+    }
+    if (fieldProblem) {
+      // A field-value range belongs to no single control, so it is the banner.
+      setFormError(fieldProblem);
       return;
     }
 
@@ -336,11 +474,11 @@ export function PlaceEditSheet({
           return;
         }
         await updatePlaceLocal(place.id, changes);
-        onSaved("Place updated.");
+        onSaved(PLACE_FORM.copy.saved);
       } else {
-        await createPlaceLocal({
+        const newId = await createPlaceLocal({
           name: draft.name,
-          // Non-null by the validation above: requireCoords is on for a create.
+          // Non-null by the validation above.
           latitude: draft.latitude as number,
           longitude: draft.longitude as number,
           altNames: draft.altNames,
@@ -348,7 +486,12 @@ export function PlaceEditSheet({
           placeTypeId,
           fieldValues: withFieldValues({}, effectiveCustomFields),
         });
-        onSaved("Place added.");
+        // After the place's own create, so each waits behind it in the outbox.
+        const { failed } = await queueStagedMedia(newId, staged, (file) =>
+          attachMediaLocal("place", newId, file),
+        );
+        setStaged(NO_STAGED_MEDIA);
+        onSaved(failed ? PLACE_FORM.copy.addedNotAll : PLACE_FORM.copy.added);
       }
       onClose();
     } catch (err) {
@@ -356,18 +499,21 @@ export function PlaceEditSheet({
       // The sheet is still open here — onClose() only runs on success — so a
       // toast would render under it and never be seen (shared/DESIGN.md §11). The
       // banner above Save is what reports it.
-      setFormError("Couldn't save this place.");
+      setFormError(PLACE_FORM.copy.saveFailed);
     } finally {
       setSaving(false);
     }
   }, [
     place,
     draft,
-    editing,
     fieldValues,
     onClose,
     onSaved,
+    latitudeShown,
+    longitudeShown,
     placeTypeId,
+    staged,
+    setStaged,
     typeFieldDefs,
   ]);
 
@@ -377,9 +523,8 @@ export function PlaceEditSheet({
     defs: customFieldDefs,
     editing: editingField,
     // Opened from a place's own form, so the type it is on is the default —
-    // and still changeable, which is the whole of finding #17: this used to
-    // REMOVE the scope picker, making the form reached from a place strictly
-    // less capable than the identical form in Settings.
+    // and still changeable, keeping the form reached from a place as capable
+    // as the identical form in Settings.
     initialTypeId: placeTypeId,
     onSaved: (next, message) => {
       setCustomFieldDefs(next);
@@ -399,103 +544,44 @@ export function PlaceEditSheet({
             ? editingField.label
             : `New place ${ATTRIBUTE_NOUN.one}`
           : editing
-            ? "Edit place"
-            : "Add a place";
+            ? PLACE_FORM.copy.editTitle
+            : PLACE_FORM.copy.addTitle;
 
-  return (
-    <BottomSheet
-      visible={visible}
-      // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
-      // not "throw away everything I just typed".
-      onClose={
-        mode === "form"
-          ? onClose
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      title={title}
-      // A sub-mode gets an arrow back to the mode it came from.
-      onBack={
-        mode === "form"
-          ? undefined
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      footer={
-        mode === "form" ? (
-          <FormStack>
-            {/* Not attributable to one control (a field-value range, a save
-                the outbox rejected) — directly above Save, never at the top
-                of the form where it can sit out of sight of the button
-                (shared/DESIGN.md §11). */}
-            {formError ? <ErrorBanner message={formError} /> : null}
-            <Button
-              label={editing ? "Save changes" : "Add place"}
-              icon="done"
-              loading={saving}
-              onPress={() => void save()}
-            />
-          </FormStack>
-        ) : mode === "fieldForm" ? (
-          fieldForm.footer
-        ) : mode === "fields" ? (
-          // PINNED. It used to be the last row of the list, which put the one
-          // action this mode exists for below however many rows were already
-          // there.
-          <Button
-            label={ATTRIBUTE_NOUN.add}
-            icon="add"
-            onPress={() => {
-              setEditingField(null);
-              setMode("fieldForm");
-            }}
-          />
-        ) : (
-          <Button label="Done" icon="done" onPress={() => setMode("form")} />
-        )
-      }
-    >
-      {mode === "date" && dateFieldKey ? (
-        <FormStack>
-          <DatePicker
-            value={fieldValues[dateFieldKey] || null}
-            onChange={(key) =>
-              setFieldValues((current) => ({ ...current, [dateFieldKey]: key }))
-            }
-          />
-          {/* An attribute date may be unknown; a picker with no way back to
-              blank turns that into a wrong answer. */}
-          {fieldValues[dateFieldKey] ? (
-            <Button
-              label="Clear date"
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                setFieldValues((current) => ({
-                  ...current,
-                  [dateFieldKey]: "",
-                }));
-                setMode("form");
-              }}
-            />
-          ) : null}
-        </FormStack>
-      ) : null}
+  const dirty =
+    mode === "form" &&
+    (formFingerprint({
+      name,
+      altNames,
+      latitude,
+      longitude,
+      notes,
+      placeTypeId,
+      fieldValues,
+    }) !== pristine ||
+      hasStagedMedia(staged));
 
-      {mode === "fields" ? (
-        <CustomFieldList
-          entity="place"
-          defs={typeFieldDefs}
-          onEdit={(def) => {
-            setEditingField(def);
-            setMode("fieldForm");
-          }}
-        />
-      ) : null}
-
-      {mode === "fieldForm" ? fieldForm.body : null}
-
-      {mode !== "form" ? null : (
-        <FormStack>
-          {/* TYPE FIRST, because everything below it depends on the answer: the
+  const sections: Record<SectionKeysOn<typeof PLACE_FORM, "gps">, ReactNode> = {
+    // The two below are for a NEW place only (`onlyWhenAdding` in the
+    // contract): an existing one has both on its page, with the real strip.
+    photos: (
+      <StagedPhotosSection
+        media={media}
+        title={PLACE_FORM.copy.photos}
+        hint={PLACE_FORM.copy.stagedHint}
+      />
+    ),
+    route: (
+      <StagedWaySection
+        media={media}
+        title={PLACE_FORM.copy.route}
+        hint={PLACE_FORM.copy.stagedHint}
+        addLabel={ADD_WAY.copy.title}
+        chooseAnotherLabel={PLACE_FORM.copy.chooseAnotherWay}
+      />
+    ),
+    type: (
+      <>
+        {/* TYPE FIRST, because everything below it depends on the answer: the
             fields the form asks for, the colour of the pin, the tab it lands
             under. A rail rather than a wizard step — the form reshapes under
             it, so the choice is visible and reversible instead of a screen you
@@ -505,135 +591,344 @@ export function PlaceEditSheet({
             retyping a place keeps its media, routes, links and trips where
             delete-and-recreate would lose them. Values the new type has no
             field for are kept and offered back (§2.6), never dropped. */}
-          {typeOptions.length > 1 ? (
-            <Field label="Type">
-              <ChipRail
-                scroll
-                options={typeOptions}
-                value={placeTypeId}
-                onChange={setPlaceTypeId}
-              />
-            </Field>
-          ) : null}
-
-          <TextField
-            label="Name"
-            value={name}
-            onChangeText={(next) => {
-              setName(next);
-              if (nameError) setNameError(null);
-            }}
-            error={nameError}
-            autoCapitalize="words"
-          />
-          <TextField
-            label="Also known as"
-            value={altNames}
-            onChangeText={setAltNames}
-            autoCapitalize="words"
-            hint="Separate alternative names with commas — they’re searchable too."
-          />
-
-          <SectionHeader title="Position" />
-          <View style={styles.coordRow}>
-            <View style={styles.coordField}>
-              <TextField
-                label="Latitude"
-                value={latitude}
-                onChangeText={(next) => {
-                  setLatitude(next);
-                  if (latitudeError) setLatitudeError(null);
-                }}
-                error={latitudeError}
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
-            <View style={styles.coordField}>
-              <TextField
-                label="Longitude"
-                value={longitude}
-                onChangeText={(next) => {
-                  setLongitude(next);
-                  if (longitudeError) setLongitudeError(null);
-                }}
-                error={longitudeError}
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
-          </View>
-          {/* Under the coordinates it fills in, because that is what it does —
-            not at the top as a second way to start, which is what the old
-            two-option "Add a place" sheet made it. Nothing is lost by going:
-            the form comes back exactly as it was left. */}
-          {onPickOnMap ? (
-            <Button
-              label="Select on map"
-              icon="place"
-              variant="outlineAccent"
-              onPress={() =>
-                onPickOnMap(
-                  draft.latitude != null && draft.longitude != null
-                    ? { latitude: draft.latitude, longitude: draft.longitude }
-                    : null,
-                )
-              }
+        {typeOptions.length > 1 ? (
+          <Field label={PLACE_FORM.copy.type}>
+            <ChipRail
+              scroll
+              options={typeOptions}
+              value={placeTypeId}
+              onChange={setPlaceTypeId}
             />
-          ) : null}
-          {!editing && initialCoords ? (
-            <View style={styles.fixNote}>
-              <Icon idea="place" size={14} color={theme.accent} />
-              <Text style={styles.hint}>
-                Filled in from the point you pressed.
-              </Text>
-            </View>
-          ) : null}
-
-          {/* No SectionHeader: the field's own label already says "Notes", and
-            the pair printed it twice. */}
-          <TextField
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            autoCapitalize="sentences"
-            hint="Visible to anyone you share the place with. Per-trip notes stay private."
+          </Field>
+        ) : null}
+      </>
+    ),
+    name: (
+      <>
+        <TextField
+          label={PLACE_FORM.copy.name}
+          requiredMark
+          reserveError
+          value={name}
+          onChangeText={(next) => {
+            setName(next);
+            if (nameError) setNameError(null);
+          }}
+          error={nameError}
+          autoCapitalize="words"
+          inputRef={nameRef}
+        />
+      </>
+    ),
+    alsoKnownAs: (
+      <>
+        <TextField
+          label={PLACE_FORM.copy.alsoKnownAs}
+          value={altNames}
+          onChangeText={setAltNames}
+          autoCapitalize="words"
+          hint={PLACE_FORM.copy.alsoKnownAsHint}
+        />
+      </>
+    ),
+    position: (
+      <>
+        <SectionHeader title={PLACE_FORM.copy.position} />
+        <View style={styles.coordRow}>
+          <View style={styles.coordField}>
+            <TextField
+              label={PLACE_FORM.copy.latitude}
+              requiredMark
+              reserveError
+              value={latitudeShown}
+              onChangeText={(next) => {
+                const entry = coordinateEntry(next, "latitude", latitudeShown);
+                setLatitude((was) => entry.latitude ?? was);
+                setLongitude((was) => entry.longitude ?? was);
+                setLatitudeEdited(true);
+                // A pair fills both, so neither keeps its old error.
+                if (
+                  entry.latitude !== undefined &&
+                  entry.longitude !== undefined
+                ) {
+                  setLatitudeEdited(true);
+                  setLongitudeEdited(true);
+                  setLatitudeError(null);
+                  setLongitudeError(null);
+                }
+                if (latitudeError) setLatitudeError(null);
+              }}
+              error={latitudeError}
+              keyboardType="numbers-and-punctuation"
+              onBlur={() => {
+                if (!latitudeEdited) return;
+                const left = coordinateBlur(
+                  latitudeShown,
+                  isValidLatitude,
+                  PLACE_FORM.copy.latitudeInvalid,
+                );
+                if (!left) return;
+                setLatitude(left.text);
+                setLatitudeError(left.error);
+              }}
+            />
+          </View>
+          <View style={styles.coordField}>
+            <TextField
+              label={PLACE_FORM.copy.longitude}
+              requiredMark
+              reserveError
+              value={longitudeShown}
+              onChangeText={(next) => {
+                const entry = coordinateEntry(
+                  next,
+                  "longitude",
+                  longitudeShown,
+                );
+                setLatitude((was) => entry.latitude ?? was);
+                setLongitude((was) => entry.longitude ?? was);
+                setLongitudeEdited(true);
+                // A pair fills both, so neither keeps its old error.
+                if (
+                  entry.latitude !== undefined &&
+                  entry.longitude !== undefined
+                ) {
+                  setLatitudeEdited(true);
+                  setLongitudeEdited(true);
+                  setLatitudeError(null);
+                  setLongitudeError(null);
+                }
+                if (longitudeError) setLongitudeError(null);
+              }}
+              error={longitudeError}
+              keyboardType="numbers-and-punctuation"
+              onBlur={() => {
+                if (!longitudeEdited) return;
+                const left = coordinateBlur(
+                  longitudeShown,
+                  isValidLongitude,
+                  PLACE_FORM.copy.longitudeInvalid,
+                );
+                if (!left) return;
+                setLongitude(left.text);
+                setLongitudeError(left.error);
+              }}
+            />
+          </View>
+        </View>
+        <Text style={styles.coordsHint}>{PLACE_FORM.copy.coordinatesHint}</Text>
+        {/* Under the coordinates it fills in, because that is what it does —
+            not at the top as a second way to start. Nothing is lost by going:
+            the form comes back exactly as it was left. */}
+        {onPickOnMap ? (
+          <Button
+            label={PLACE_FORM.copy.selectOnMap}
+            icon="place"
+            variant="outlineAccent"
+            onPress={() =>
+              onPickOnMap(
+                draft.latitude != null && draft.longitude != null
+                  ? { latitude: draft.latitude, longitude: draft.longitude }
+                  : null,
+              )
+            }
           />
-
-          {/* Named for the TYPE, not for the user: on a Campsite these are
+        ) : null}
+        {!editing && initialCoords ? (
+          <View style={styles.fixNote}>
+            <Icon idea="place" size={14} color={theme.accent} />
+            <Text style={styles.hint}>Filled in from the map.</Text>
+          </View>
+        ) : null}
+      </>
+    ),
+    notes: (
+      <>
+        {/* No SectionHeader: the field's own label already says "Notes", and
+            the pair printed it twice. */}
+        <TextField
+          label={PLACE_FORM.copy.notes}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          autoCapitalize="sentences"
+          hint={PLACE_FORM.copy.notesHint}
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        {/* Named for the TYPE, not for the user: on a Campsite these are
             Capacity and Is-a-cave, which are ours, not theirs. Absent when the
             type has none rather than standing over nothing. */}
-          {typeFieldDefs.length > 0 ? (
-            <SectionHeader
-              title={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+        {typeFieldDefs.length > 0 ? (
+          <SectionHeader
+            title={placeAttributesTitle(typeName(placeTypeId, placeTypes.data))}
+          />
+        ) : null}
+        <CustomFieldValueInputs
+          defs={typeFieldDefs}
+          values={fieldValues}
+          onChange={(key, next) =>
+            setFieldValues((current) => ({ ...current, [key]: next }))
+          }
+          onPickDate={(key) => {
+            setDateFieldKey(key);
+            setMode("date");
+          }}
+        />
+        {/* Definitions are local rows written through the outbox, so this door
+            is open with no account and no signal, for everyone. */}
+        <Row
+          icon="tag"
+          title={`Your place ${ATTRIBUTE_NOUN.many}`}
+          subtitle={
+            typeFieldDefs.length === 0
+              ? "Add your own — permits, access notes, anything."
+              : `${typeFieldDefs.length} on this type`
+          }
+          chevron
+          onPress={() => setMode("fields")}
+        />
+      </>
+    ),
+  };
+
+  return (
+    <>
+      <BottomSheet
+        visible={visible && !media.away}
+        discard={dirty ? abandonConfirm("place", !editing) : null}
+        // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
+        // not "throw away everything I just typed".
+        onClosed={media.formClosed}
+        onClose={
+          mode === "form"
+            ? () => {
+                media.cancel();
+                onClose();
+              }
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        title={title}
+        // A sub-mode gets an arrow back to the mode it came from.
+        onBack={
+          mode === "form"
+            ? undefined
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        footer={
+          mode === "form" ? (
+            <FormStack>
+              {/* Not attributable to one control (a field-value range, a save
+                the outbox rejected) — directly above Save, never at the top
+                of the form where it can sit out of sight of the button
+                (shared/DESIGN.md §11). */}
+              {formError ? <ErrorBanner message={formError} /> : null}
+              <Button
+                label={
+                  editing
+                    ? PLACE_FORM.copy.saveSubmit
+                    : PLACE_FORM.copy.addSubmit
+                }
+                icon="done"
+                loading={saving}
+                onPress={() => void save()}
+              />
+            </FormStack>
+          ) : mode === "fieldForm" ? (
+            fieldForm.footer
+          ) : mode === "fields" ? (
+            // PINNED, keeping the action this mode exists for visible above the
+            // list rows.
+            <Button
+              label={ATTRIBUTE_NOUN.add}
+              icon="add"
+              onPress={() => {
+                setEditingField(null);
+                setMode("fieldForm");
+              }}
             />
-          ) : null}
-          <CustomFieldValueInputs
+          ) : (
+            <Button label="Done" icon="done" onPress={() => setMode("form")} />
+          )
+        }
+      >
+        {mode === "date" && dateFieldKey ? (
+          <FormStack>
+            <DatePicker
+              value={fieldValues[dateFieldKey] || null}
+              onChange={(key) =>
+                setFieldValues((current) => ({
+                  ...current,
+                  [dateFieldKey]: key,
+                }))
+              }
+            />
+            {/* An attribute date may be unknown; a picker with no way back to
+              blank turns that into a wrong answer. */}
+            {fieldValues[dateFieldKey] ? (
+              <Button
+                label="Clear date"
+                icon="close"
+                variant="ghost"
+                onPress={() => {
+                  setFieldValues((current) => ({
+                    ...current,
+                    [dateFieldKey]: "",
+                  }));
+                  setMode("form");
+                }}
+              />
+            ) : null}
+          </FormStack>
+        ) : null}
+
+        {mode === "fields" ? (
+          <CustomFieldList
+            entity="place"
             defs={typeFieldDefs}
-            values={fieldValues}
-            onChange={(key, next) =>
-              setFieldValues((current) => ({ ...current, [key]: next }))
-            }
-            onPickDate={(key) => {
-              setDateFieldKey(key);
-              setMode("date");
+            onEdit={(def) => {
+              setEditingField(def);
+              setMode("fieldForm");
             }}
           />
-          {/* Definitions are local rows written through the outbox, so this door
-            is open with no account and no signal, for everyone. */}
-          <Row
-            icon="tag"
-            title={`Your place ${ATTRIBUTE_NOUN.many}`}
-            subtitle={
-              typeFieldDefs.length === 0
-                ? "Add your own — permits, access notes, anything."
-                : `${typeFieldDefs.length} on this type`
-            }
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("fields")}
+        ) : null}
+
+        {mode === "fieldForm" ? fieldForm.body : null}
+
+        {mode !== "form" ? null : (
+          <FormStack>
+            {contractSectionKeys(
+              PLACE_FORM,
+              "gps",
+              editing ? "edit" : "add",
+            ).map((key) => (
+              <Fragment key={key}>{sections[key]}</Fragment>
+            ))}
+          </FormStack>
+        )}
+      </BottomSheet>
+
+      {/* The pickers of a new place's photos and way, each shown alone while the
+        form above is out of the way (DESIGN.md §4: never a second sheet). */}
+      {editing ? null : (
+        <>
+          <PhotoSourceSheet media={media} />
+          <AddWaySheet
+            placeId={null}
+            placeName={draft.name}
+            media={[]}
+            visible={media.pickSheet === "way"}
+            onClose={() => media.setPickSheet(null)}
+            onClosed={() => media.setAway(false)}
+            onStage={media.stageWay}
+            onInfo={() => {}}
+            onError={setFormError}
           />
-        </FormStack>
+        </>
       )}
-    </BottomSheet>
+    </>
   );
 }
 
@@ -647,36 +942,13 @@ function typeName(
   return types?.find((type) => type.id === typeId)?.name ?? "place";
 }
 
-/** "" and an unparseable entry both mean "not recorded", not zero. */
-function parseNumber(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed === "") return null;
-  const value = Number(trimmed);
-  return Number.isFinite(value) ? value : null;
-}
-
-function numberText(value: number | null | undefined): string {
-  return value == null ? "" : String(value);
-}
-
-/**
- * A picked coordinate at 6 decimal places — about 10 cm, which is finer than any
- * map press or GPS fix, and readable. Stored values are never re-rounded on the
- * way through the edit form: only a NEW point gets this.
- */
-const SEED_COORD_DECIMALS = 6;
-function seedCoord(value: number | null | undefined): string {
-  return value == null
-    ? ""
-    : String(Number(value.toFixed(SEED_COORD_DECIMALS)));
-}
-
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((entry, index) => entry === b[index]);
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
   hint: { ...muted(theme, textRole.detail), flex: 1 },
+  coordsHint: muted(theme, textRole.detail),
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
   fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },

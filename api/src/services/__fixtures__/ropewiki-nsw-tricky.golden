@@ -1,0 +1,281 @@
+{
+  "places": [
+    {
+      "ropeWikiId": 77537,
+      "name": "Danae Brook Canyon",
+      "latitude": -33.967200000000005,
+      "longitude": 150.1087,
+      "numAbseils": 11,
+      "longestAbseil": 35,
+      "vGrade": 4,
+      "aGrade": 3,
+      "commitment": 5,
+      "quality": 5,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=77537"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 74259,
+      "name": "Urumbilum Canyon",
+      "latitude": -30.3205,
+      "longitude": 152.9353,
+      "numAbseils": 9,
+      "longestAbseil": 52,
+      "vGrade": 4,
+      "aGrade": 4,
+      "commitment": 3,
+      "quality": 4.5,
+      "hours": 8,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=74259"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 11675,
+      "name": "Hole in the Wall",
+      "latitude": -33.3754,
+      "longitude": 150.3292,
+      "numAbseils": 3,
+      "longestAbseil": 15,
+      "vGrade": 2,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 4.4,
+      "hours": 7,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=11675"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 76103,
+      "name": "Ranon",
+      "latitude": -33.550399999999996,
+      "longitude": 150.3923,
+      "numAbseils": 5,
+      "longestAbseil": 20,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 4,
+      "quality": 4.3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=76103"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 44840,
+      "name": "Tiger Snake Canyon",
+      "latitude": -33.2214,
+      "longitude": 150.2527,
+      "numAbseils": 4,
+      "longestAbseil": 23,
+      "vGrade": 2,
+      "aGrade": 1,
+      "commitment": 2,
+      "quality": 3.6,
+      "hours": 7,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=44840"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 77775,
+      "name": "Midwinter",
+      "latitude": -32.939099999999996,
+      "longitude": 150.28220000000002,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": 1,
+      "aGrade": 1,
+      "commitment": null,
+      "quality": 4,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=77775"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 77436,
+      "name": "Freshwater Creek",
+      "latitude": -33.1515,
+      "longitude": 150.30790000000002,
+      "numAbseils": null,
+      "longestAbseil": 25,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 4,
+      "quality": 4,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=77436"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 80870,
+      "name": "Coombadjha Creek",
+      "latitude": -29.4594,
+      "longitude": 152.3372,
+      "numAbseils": 3,
+      "longestAbseil": 6.1,
+      "vGrade": 3,
+      "aGrade": 3,
+      "commitment": null,
+      "quality": 2.4,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=80870"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 83368,
+      "name": "Dry Canyon, The",
+      "latitude": -33.2572,
+      "longitude": 150.213,
+      "numAbseils": 0,
+      "longestAbseil": 0,
+      "vGrade": 1,
+      "aGrade": 1,
+      "commitment": 1,
+      "quality": 3.3,
+      "hours": 2,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=83368"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 74267,
+      "name": "Apsley Gorge",
+      "latitude": -31.1032,
+      "longitude": 151.9074,
+      "numAbseils": null,
+      "longestAbseil": null,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "quality": 5,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=74267"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 84422,
+      "name": "Kippara",
+      "latitude": -31.1886,
+      "longitude": 152.4714,
+      "numAbseils": 6,
+      "longestAbseil": 60,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 3,
+      "hours": 9,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=84422"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 101500,
+      "name": "Cocky Creek (Upper)",
+      "latitude": -31.177,
+      "longitude": 152.3793,
+      "numAbseils": 3,
+      "longestAbseil": 50,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 2,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=101500"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 77680,
+      "name": "Scatters",
+      "latitude": -33.3998,
+      "longitude": 150.3169,
+      "numAbseils": null,
+      "longestAbseil": 0,
+      "vGrade": 1,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=77680"
+          ]
+        ]
+      }
+    }
+  ],
+  "errors": [
+    "Row 13 (Tweeters): could not parse coordinates \"\"",
+    "Row 14 (Bells Folly): could not parse coordinates \"\""
+  ]
+}

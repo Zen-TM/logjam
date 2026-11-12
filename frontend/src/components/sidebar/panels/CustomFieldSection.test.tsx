@@ -1,6 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ScopedCustomFieldDef } from "@logjam/shared";
+import {
+  attributesHint,
+  SETTINGS_LIST,
+  type ScopedCustomFieldDef,
+} from "@logjam/shared";
 
 import CustomFieldSection from "./CustomFieldSection";
 
@@ -60,10 +64,9 @@ function renderSection(defs: ScopedCustomFieldDef[]) {
 afterEach(cleanup);
 
 /**
- * The server looks a definition up under the CALLER's id, so a built-in is a
- * 404 to both `PATCH` and `DELETE` — "Custom field not found" is what Rename on
- * "Quality" used to produce. A button that fails is worse than one that is
- * absent, so the guard is that the built-in row carries no verbs at all.
+ * The server looks a definition up under the caller's ID, so a built-in is a
+ * 404 to both `PATCH` and `DELETE`. A button that fails is worse than one that
+ * is absent, so the guard is that the built-in row carries no verbs at all.
  */
 describe("a built-in attribute gets no verbs", () => {
   it("opens the user's own definitions to rename, and never a built-in", () => {
@@ -97,5 +100,18 @@ describe("a built-in attribute gets no verbs", () => {
     expect(headings.findIndex((text) => text.includes("Yours"))).toBeLessThan(
       headings.findIndex((text) => text.includes("Built in")),
     );
+  });
+});
+
+// Mutation: show the hint only while the list is empty, or drop the line
+// under "Built in", and a user with their own attributes (or a locked row they
+// can't open) is left to guess what the page is for.
+describe("what the page says about itself", () => {
+  it("carries its help line and says why built-ins are locked", () => {
+    renderSection([SYSTEM_DEF, OWN_DEF]);
+    expect(screen.getByText(attributesHint("place"))).toBeTruthy();
+    expect(
+      screen.getByText(SETTINGS_LIST.copy.builtInAttributesWhy),
+    ).toBeTruthy();
   });
 });

@@ -3,12 +3,11 @@
 # in budgets.tf). docs/operations/alarms.md lists each alarm and what to do
 # first when it fires.
 #
-# The topic and the alarms logjam-api-5xx and logjam-topo-stuck-task were made
-# by hand before Terraform owned monitoring; the `import` blocks adopt them. The
-# topic's email subscription is still unmanaged: its id is an ARN only AWS
-# knows, and an email subscription needs a person to confirm it anyway. The
-# topic's policy is the AWS default, which lets CloudWatch alarms in this
-# account publish; nothing else publishes to it.
+# The topic and the alarms logjam-api-5xx and logjam-topo-stuck-task are
+# imported into Terraform. The topic's email subscription is unmanaged: its id
+# is an ARN only AWS knows, and an email subscription needs a person to confirm
+# it anyway. The topic's policy is the AWS default, which lets CloudWatch alarms
+# in this account publish; nothing else publishes to it.
 
 import {
   to = aws_sns_topic.alerts
@@ -69,11 +68,10 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
-# The pgaudit -> WORM pipeline's only health signal. INF-001: the CloudWatch
-# subscription filter fed this stream from a log group that stopped existing at
-# the 2026-06-23 DB rename, so the stream sat ACTIVE and idle for two months
-# while the CloudTrail half kept writing to the same bucket — the audit sink
-# looked alive from every angle except the one nobody checked.
+# The pgaudit -> WORM pipeline's only health signal. If the log group or
+# subscription filter breaks, the Firehose stream sits ACTIVE and idle while
+# CloudTrail continues writing to the bucket — an idle stream can appear healthy
+# without an explicit delivery check.
 #
 # A starved Firehose emits NO datapoints rather than bad ones, so
 # treat_missing_data = "breaching" is the entire point of this alarm: absence of
@@ -82,7 +80,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
 # overnight.
 resource "aws_cloudwatch_metric_alarm" "pgaudit_delivery_stalled" {
   alarm_name        = "logjam-pgaudit-delivery-stalled"
-  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf, INF-001)."
+  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf)."
 
   namespace   = "AWS/Firehose"
   metric_name = "IncomingBytes"
@@ -106,6 +104,17 @@ locals {
   # referenced by name, never managed (logging.tf's header).
   eb_api_stdout_log_group = "/aws/elasticbeanstalk/${aws_elastic_beanstalk_environment.api.name}/var/log/eb-docker/containers/eb-current-app/stdouterr.log"
 
+  # The group of the API that CloudFront sends users to, for the filters that
+  # read the request log: Elastic Beanstalk's, or the brain's once brain_public
+  # moves the origin (not brain_serving: between the two the brain's API runs
+  # but serves nobody, and the filters would go blind to the one that does).
+  # The brain's container logs through Docker's awslogs driver, which ships
+  # each stdout line as one event, the same pino JSON line EB's stdouterr.log
+  # holds, so the filter patterns match both. A filter's group is fixed at
+  # creation: moving it replaces the filter, a few seconds without a datapoint.
+  # Guard: brain_public_moves_the_api_log_filters.
+  api_log_group = var.brain_public ? aws_cloudwatch_log_group.brain_api.name : local.eb_api_stdout_log_group
+
   alarms_doc = "https://github.com/Zen-TM/logjam/blob/main/docs/operations/alarms.md"
 }
 
@@ -115,10 +124,11 @@ locals {
 # CloudFront's 5xxErrorRate: CloudFront publishes only in us-east-1, where this
 # topic cannot be an alarm action, and a rate over a handful of requests is
 # 100% after one failure. A dead container writes no log line, so it cannot
-# raise this count; api_environment_degraded below covers that case.
+# raise this count; api_environment_degraded below covers that case, and the
+# watchdog (brain_watchdog.tf) once the brain serves.
 resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   name           = "logjam-api-5xx"
-  log_group_name = local.eb_api_stdout_log_group
+  log_group_name = local.api_log_group
   pattern        = "{ $.res.statusCode >= 500 }"
 
   metric_transformation {
@@ -165,6 +175,14 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 # a deploy's cold restart is Severe for a minute or two, so a shorter window
 # would page on every release. Maximum, not Minimum, so a container that
 # restarts and dies again inside each minute still counts.
+#
+# Once brain_public moves CloudFront to the brain this environment idles until
+# its teardown, so the alarm stops paging (actions_enabled) and stays: a
+# rollback that sends CloudFront back to it needs the alarm watching it, and
+# reverting brain_public turns the actions on again in the same apply. The
+# brain's own crash-loop and dead-host cases are the watchdog's (api_unready,
+# status_missing) and the EC2 status-check alarms (brain_alarms.tf). Guard:
+# brain_public_moves_the_api_log_filters.
 resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
   alarm_name        = "logjam-api-environment-degraded"
   alarm_description = "Elastic Beanstalk ${aws_elastic_beanstalk_environment.api.name} has been Degraded or Severe for 10 minutes. First: read the environment's health causes (console or `aws elasticbeanstalk describe-environment-health --environment-name ${aws_elastic_beanstalk_environment.api.name} --attribute-names All`); if a deploy just ran, roll it back (docs/operations/rollback.md). ${local.alarms_doc}"
@@ -182,15 +200,15 @@ resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
   threshold           = 20
   treat_missing_data  = "missing"
 
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
+  actions_enabled = !var.brain_public
+  alarm_actions   = [aws_sns_topic.alerts.arn]
+  ok_actions      = [aws_sns_topic.alerts.arn]
 }
 
 # ── Workers ────────────────────────────────────────────────────────────────
 
-# Adopted as it was made by hand; the settings are the live ones. Despite the
-# name it watches the whole cluster: some task (any family) has been running in
-# every hour of the last six.
+# Despite the name it watches the whole cluster: some task (any family) has
+# been running in every hour of the last six.
 import {
   to = aws_cloudwatch_metric_alarm.topo_stuck_task
   id = "logjam-topo-stuck-task"
@@ -223,8 +241,11 @@ resource "aws_cloudwatch_metric_alarm" "topo_stuck_task" {
 # written to a log group and counted from there, rather than sent to the topic
 # directly: an email per failed job is not an alarm, and ECS forgets a stopped
 # task after about an hour, while this log keeps which family failed, its exit
-# code and ECS's reason. The events carry task and job ids, never user data
-# (the only override is the job id env var, api/src/lib/ecsRunTask.ts). A
+# code and ECS's reason. The events carry task and job ids, never user data:
+# the API's only override is the job id env var (api/src/lib/ecsRunTask.ts).
+# A maintainer announcement (docs/operations/announcements.md) is a by-hand
+# RunTask whose overrides are the script's command and the message, the
+# maintainer's own text; a refused or failed one also counts here. A
 # metric filter on the worker log groups was the other option; an OOM-killed
 # task logs nothing.
 resource "aws_cloudwatch_log_group" "worker_failures" {
@@ -301,10 +322,10 @@ resource "aws_cloudwatch_log_metric_filter" "worker_failures" {
 }
 
 # Three in an hour. Every failed job exits 1 (topo/worker.py,
-# export_worker.py, geoPdfWorker.ts), so one bad upload is one failure, and a
-# user retrying it twice more is worth a look too. Jobs are rare, so a broken
-# worker image may take hours to fail three times; the user is told of each
-# failure meanwhile.
+# topo/export_worker.py), so one bad upload is
+# one failure, and a user retrying it twice more is worth a look too. Jobs are
+# rare, so a broken worker image may take hours to fail three times; the user
+# is told of each failure meanwhile.
 resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   alarm_name        = "logjam-worker-failures"
   alarm_description = "3+ ECS worker tasks stopped with a non-zero exit or failed to start within an hour. First: read ${aws_cloudwatch_log_group.worker_failures.name} for the family, exit code and stoppedReason, then that worker's log group (/ecs/<family>); if a worker deploy just ran, roll the worker back (docs/operations/rollback.md). ${local.alarms_doc}"
@@ -317,6 +338,242 @@ resource "aws_cloudwatch_metric_alarm" "worker_failures" {
   evaluation_periods  = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 3
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# ── Place registry ─────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, not
+# worker_failures' three an hour. Its failed stops already reach that log
+# group through the rule above; this counts them on their own.
+resource "aws_cloudwatch_log_metric_filter" "place_registry_failures" {
+  name           = "logjam-place-registry-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.place_registry.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "PlaceRegistryFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "place_registry_failed" {
+  alarm_name        = "logjam-place-registry-failed"
+  alarm_description = "The monthly place registry build stopped with a non-zero exit or failed to start; the published registry is unchanged. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.place_registry.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.place_registry_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.place_registry_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# A run that never starts leaves no ECS event: the scheduler's RunTask call
+# itself failed (a role, a subnet, the task definition). Any target error
+# alarms, including one a retry then got past, since the next chance is a
+# month away. The metric's only dimension is the schedule group, which holds
+# just this schedule.
+resource "aws_cloudwatch_metric_alarm" "place_registry_not_launched" {
+  alarm_name        = "logjam-place-registry-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly place registry build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.place_registry.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.place_registry_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.place_registry.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# ── River gauges ───────────────────────────────────────────────────────────
+
+# A run that fails before publishing leaves the readings as they were, and
+# clients show their age; a cold sweep failing part way publishes the hot
+# readings first, then exits non-zero. One failure alarms: the job runs every two hours, and a key or a
+# WaterNSW outage should be known before the readings go a day stale.
+resource "aws_cloudwatch_log_metric_filter" "gauges_failures" {
+  name           = "logjam-gauges-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.gauges.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "GaugesFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "gauges_failed" {
+  alarm_name        = "logjam-gauges-failed"
+  alarm_description = "The river gauges job stopped with a non-zero exit or failed to start; the published readings may be unchanged and getting older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.gauges.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule: the place registry has its own.
+resource "aws_cloudwatch_metric_alarm" "gauges_not_launched" {
+  alarm_name        = "logjam-gauges-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the river gauges job (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.gauges.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.gauges_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.gauges.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# ── Fire history ───────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, as for
+# the place registry. A short read of the service exits non-zero with the
+# published raster left in place.
+resource "aws_cloudwatch_log_metric_filter" "fire_history_failures" {
+  name           = "logjam-fire-history-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.fire_history.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "FireHistoryFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "fire_history_failed" {
+  alarm_name        = "logjam-fire-history-failed"
+  alarm_description = "The monthly fire history build stopped with a non-zero exit or failed to start; the published raster is unchanged and a month older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.fire_history.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.fire_history_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.fire_history_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule.
+resource "aws_cloudwatch_metric_alarm" "fire_history_not_launched" {
+  alarm_name        = "logjam-fire-history-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly fire history build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.fire_history.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.fire_history_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.fire_history.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# ── Coverage ───────────────────────────────────────────────────────────────
+
+# The monthly build (ecs.tf) runs once, so one failure is the alarm, as for
+# the place registry. A release caught mid-upload, or a map with nothing in
+# NSW, exits non-zero with the published archive left in place.
+resource "aws_cloudwatch_log_metric_filter" "coverage_failures" {
+  name           = "logjam-coverage-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.coverage.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "CoverageFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "coverage_failed" {
+  alarm_name        = "logjam-coverage-failed"
+  alarm_description = "The monthly coverage build stopped with a non-zero exit or failed to start; the published archive is unchanged and a release behind. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.coverage.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.coverage_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.coverage_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule.
+resource "aws_cloudwatch_metric_alarm" "coverage_not_launched" {
+  alarm_name        = "logjam-coverage-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the monthly coverage build (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.coverage.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.coverage_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.coverage.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]

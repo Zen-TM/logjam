@@ -29,9 +29,8 @@ PUSH_TITLES = {
     "place_shared": "A place was shared with you",
     "topo_complete": "Topo processing complete",
     "topo_failed": "Topo processing failed",
-    "topo_export_complete": "Topo export finished",
+    "topo_export_complete": "Map finished",
     "topo_export_skipped": "Auto-export skipped",
-    "geo_pdf_complete": "GeoPDF finished",
 }
 GENERIC_TITLE = "Logjam notification"
 
@@ -39,7 +38,7 @@ GENERIC_TITLE = "Logjam notification"
 # builds the payload and either sender may deliver it, and build_push_messages
 # RAISES on a key that is not here — so a key the API adds and this list lacks
 # is a send that throws, for an edit in a file this module never imports.
-# Guard: tests/test_push_constants_sync.py, which found these four missing.
+# Guard: tests/test_push_constants_sync.py.
 # Every key is an opaque id; that is the whole rule (no free text, ever).
 ALLOWED_DATA_KEYS = {
     "type",
@@ -48,11 +47,12 @@ ALLOWED_DATA_KEYS = {
     "placeId",
     "jobId",
     "exportId",
-    "geoPdfJobId",
     "entityType",
     "entityId",
     "fileSendId",
     "batchId",
+    "announcementId",
+    "planId",
 }
 
 

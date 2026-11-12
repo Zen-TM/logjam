@@ -2,7 +2,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 import type { AuthenticatedRequest } from "./auth";
 
-// SINGLE-INSTANCE ASSUMPTION (ARCH-007).
+// SINGLE-INSTANCE ASSUMPTION.
 //
 // Every limiter below uses express-rate-limit's default in-process MemoryStore
 // (no `store` configured). The counters live in this process's memory, so the
@@ -65,9 +65,9 @@ const USER_PATCH_MAX_DEFAULT = 30;
 
 // The same CI headroom for userPatchLimiter, which is per USER, so every
 // integration file acting as alice shares one 30-write window: a write-heavy
-// file (customFields, placeTypes) left it empty and the NEXT file's first
-// PATCH /users/me 429'd, failing as an assertion about users. The per-file
-// retry wrappers only protect the file that has them. Same fail-closed rule.
+// file (customFields, placeTypes) would otherwise exhaust the window and cause
+// subsequent PATCH /users/me calls to 429. The per-file retry wrappers only
+// protect the file that has them. Same fail-closed rule.
 export function userPatchLimitMax(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
@@ -86,6 +86,16 @@ export function bulkImportLimitMax(
 export const globalLimiter = rateLimit({
   windowMs: 60_000,
   max: globalLimitMax(),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+// Before sign-in, so per address. A sign-up form asks once or twice; this is
+// what stops it being a way to test a list of names.
+export const usernameCheckLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
@@ -119,27 +129,27 @@ export const friendInviteRedeemLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
-export const ropeWikiHeavyLimiter = rateLimit({
-  windowMs: 5 * 60_000,
-  max: 5,
+// The plan invite twins of the two above: minting a plan's links, and
+// previewing or redeeming one.
+export const planInviteCreateLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
 });
 
-// Protomaps region clips. One clip is a `pmtiles extract` reading byte ranges
-// of the archive from S3 (under a second against a local copy; not timed in
-// prod, where the route kills it at 25 s), a temporary file of 1 to 7 MB in the bush and 80 MB at the very most, deleted
-// within two minutes, and that many bytes sent back. Cheap, so the limit is
-// set by the honest case, not the cost: Logjam GPS asks for one clip with
-// every area a signed-in user saves, and nobody frames, names and saves an
-// area a minute for an hour. It stays a limit because the worst case is not
-// free: 60 clips of 80 MB is about 5 GB of egress an hour per account.
-// Guard: `rateLimit.unit.test.ts` ("regionClipLimiter").
-export const REGION_CLIPS_PER_HOUR = 60;
-export const regionClipLimiter = rateLimit({
-  windowMs: 60 * 60_000,
-  max: REGION_CLIPS_PER_HOUR,
+export const planInviteRedeemLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+export const ropeWikiHeavyLimiter = rateLimit({
+  windowMs: 5 * 60_000,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
@@ -149,7 +159,7 @@ export const regionClipLimiter = rateLimit({
 // (services/elevation.ts), so cost scales with the bbox a caller asks for, not
 // with request count. Interactive though — the measure tool and route editor
 // re-request on edit — so this is a ceiling on sustained fan-out, not a
-// regionClip-style hard cap.
+// hard cap.
 export const elevationLimiter = rateLimit({
   windowMs: 60_000,
   max: 60,
@@ -165,6 +175,24 @@ export const elevationLimiter = rateLimit({
 export const flowNetworkLimiter = rateLimit({
   windowMs: 60_000,
   max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+// Location search as you type (routes/placeSearch.ts), per user. A client
+// asks once the user stops typing for PLACE_SEARCH_DEBOUNCE_MS, so a fast
+// typist sends a request per pause, not per key: a minute of hard searching
+// is well under 60. The registry is public, so this guards no data, only the
+// CPU a scraper would burn: at 120 a minute and 36 ms for the worst query,
+// one account costs at most 7 % of a core. The global limiter applies too,
+// and so does the edge WAF's 300 requests per 5 min per IP, which counts
+// searches with every other API call (infra/terraform/envs/prod/waf.tf).
+// Guard: `rateLimit.unit.test.ts` ("placeSearchLimiter").
+export const PLACE_SEARCHES_PER_MINUTE = 120;
+export const placeSearchLimiter = rateLimit({
+  windowMs: 60_000,
+  max: PLACE_SEARCHES_PER_MINUTE,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,

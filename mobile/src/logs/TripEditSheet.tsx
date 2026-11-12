@@ -1,15 +1,31 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Text, TextInput, View } from "react-native";
 import {
+  abandonConfirm,
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
+  contractSectionKeys,
+  tripTitleHint,
+  ADD_WAY,
+  TRIP_FORM,
+  type SectionKeysOn,
   enforceCanyoningTag,
   formatTripPlaceNames,
   linksCanyon,
   MAX_PLACES_PER_TRIP,
+  TRIP_PLACES_CAP_SENTENCE,
   TRIP_TYPE_SUGGESTIONS,
+  TRIP_NEAR_TRACK_LABEL,
   tripFieldDefs,
   tripPrefillFromTrack,
+  type TripPlanTripLogPrefill,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
@@ -22,6 +38,16 @@ import {
   muted,
 } from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
+import { AddWaySheet } from "../places/AddWaySheet";
+import { queueStagedMedia } from "../places/stagedPlaceMedia";
+import {
+  PhotoSourceSheet,
+  StagedPhotosSection,
+  StagedWaySection,
+  useStagedMedia,
+} from "../places/useStagedMedia";
+import { attachMediaLocal } from "../sync/mediaUpload";
+import { trackSourceWay } from "./tripWays";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -70,7 +96,7 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  *
  * PRIVACY: place names are the sensitive payload here. They stay in component
  * state and go out only through the outbox's authed push — nothing is logged,
- * and there is no autosaved draft (the web's localStorage draft has no mobile
+ * and there is no autosaved draft (Logjam Web's localStorage draft has no Logjam GPS
  * equivalent: the OS doesn't evict this form mid-edit the way a browser tab
  * gets reclaimed).
  */
@@ -90,6 +116,7 @@ export function TripEditSheet({
   places,
   initialPlaces,
   fromTrack,
+  prefill,
   existingTypes,
   onSaved,
   online,
@@ -113,6 +140,13 @@ export function TripEditSheet({
    * when the sheet opens, not when it changes.
    */
   fromTrack?: TripTrackSource | null;
+  /**
+   * "Start a trip log from this plan": a NEW trip opens on the plan's first
+   * day, named after it, with its types and its write-up as notes
+   * (`tripPlanTripLogPrefill`). Ignored when editing; read when the sheet
+   * opens, like `initialPlaces`.
+   */
+  prefill?: TripPlanTripLogPrefill | null;
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -136,12 +170,18 @@ export function TripEditSheet({
   const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
+  // Places near where the track began and ended, offered as chips.
+  const [nearIds, setNearIds] = useState<string[]>([]);
   const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
-  // Place-cap refusal (rule: a tap a picker refuses is that picker's
-  // FieldError, not a toast) and a failed save (rule: a failure while the form
-  // stays open is the banner above Save, not a toast either).
+  // Place-cap refusal (the picker's FieldError) and a failed save (the banner
+  // above Save): each error in its one place, neither a toast while the form is
+  // open (shared/DESIGN.md §11).
   const [placesError, setPlacesError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // New trip only: the photos and the way picked so far, and the sheets that
+  // pick them. A track logged from its options arrives as the way.
+  const media = useStagedMedia(() => setSaveError(TRIP_FORM.copy.pickFailed));
+  const { staged, setStaged } = media;
   // Custom-field VALUES are held as strings while editing (like the web form)
   // and coerced to their declared type on save.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -179,8 +219,8 @@ export function TripEditSheet({
    * would unmount the field under the cursor.
    *
    * Kept-only fields sit in their own section with a remove button, because
-   * clearing is not a way out for every kind — a date had no empty state until
-   * "Clear date", and nothing said which fields were leftovers. Removing drops
+   * clearing is not a way out for every kind — a date has no empty state
+   * without "Clear date", and leftover fields need clear labeling. Removing drops
    * the key from `keptKeys`, so the field leaves the form and the save leaves it
    * out; closing without saving brings it back, which is why there is no
    * confirm.
@@ -211,7 +251,7 @@ export function TripEditSheet({
   //
   // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
   // A detail screen hands this a fresh object on every mirror change (a sync
-  // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
+  // pull, an upload tick, an inbox refresh), and re-seeding on that would wipe
   // whatever the user was halfway through typing. `initialPlaces` is left out
   // for the same reason: callers build that array inline.
   const openKey = visible ? (trip?.id ?? "new") : null;
@@ -221,21 +261,24 @@ export function TripEditSheet({
     setOpenedWith(trip ?? null);
     setMode("form");
     setPlaceSearch("");
-    setCustomTypes([]);
+    // A plan's own type (a leader's "lilo") stays a chip when unticked.
+    setCustomTypes(trip ? [] : (prefill?.types ?? []));
     setSaving(false);
     setDateKey(
       trip
         ? toDateKey(new Date(trip.date))
         : fromTrack
           ? tripPrefillFromTrack({ startedAt: fromTrack.startedAt }).date
-          : todayDateKey(),
+          : (prefill?.date ?? todayDateKey()),
     );
     setSelected(
       trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
-    setDisplayName(trip?.displayName ?? "");
-    setTypes(trip?.types ?? []);
-    setNotes(trip?.notes ?? "");
+    setDisplayName(
+      trip ? (trip.displayName ?? "") : (prefill?.displayName ?? ""),
+    );
+    setTypes(trip ? trip.types : (prefill?.types ?? []));
+    setNotes(trip ? (trip.notes ?? "") : (prefill?.notes ?? ""));
     setDateTarget({ kind: "trip" });
     setEditingField(null);
     setFieldValues(fieldValueStrings(trip?.customFields));
@@ -248,6 +291,9 @@ export function TripEditSheet({
     );
     setPlacesError(null);
     setSaveError(null);
+    media.reset();
+    if (!trip && fromTrack)
+      media.setStaged({ files: [], way: trackSourceWay(fromTrack) });
   }
 
   // Linking a CANYON means "I did that canyon", so the API force-tags
@@ -255,7 +301,8 @@ export function TripEditSheet({
   // SELECTED the moment a canyon is linked — and it is LOCKED (see
   // CANYONING_LOCKED) rather than toggleable, because the server re-adds it on
   // save anyway, so a chip the user could "deselect" would be a lie.
-  // enforceCanyoningTag only ever force-ADDS, so unlinking the canyon leaves an
+  // enforceCanyoningTag only ever force-ADDS (guard:
+  // shared/src/tripName.test.ts), so unlinking the canyon leaves an
   // existing `canyoning` alone (a canyon-less trip can still be canyoning) —
   // and with no canyon linked the chip is a normal toggle. A campsite or a
   // marker is not a canyon: linking one tags nothing.
@@ -269,6 +316,37 @@ export function TripEditSheet({
     setTaggedFor(linkedCanyon);
     setTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
   }
+
+  // The form once it has settled after opening (the canyoning tag above lands
+  // in the opening render), to tell an edit from an untouched sheet (§10). An
+  // emptied field is the same as one never filled.
+  const fingerprint = JSON.stringify({
+    dateKey,
+    selected,
+    displayName,
+    types,
+    notes,
+    fieldValues: Object.entries(fieldValues)
+      .filter(([, value]) => value !== "")
+      .sort(([a], [b]) => a.localeCompare(b)),
+    photos: staged.files.map((file) => file.uri),
+    way: staged.way?.label ?? null,
+  });
+  const [pristine, setPristine] = useState<{ for: string; of: string } | null>(
+    null,
+  );
+  if (openKey === null && pristine !== null) setPristine(null);
+  if (
+    openKey !== null &&
+    seededFor === openKey &&
+    taggedFor === linkedCanyon &&
+    pristine?.for !== openKey
+  )
+    setPristine({ for: openKey, of: fingerprint });
+  const dirty =
+    mode === "form" &&
+    pristine?.for === openKey &&
+    fingerprint !== pristine?.of;
 
   // The place-cap error belongs to the picker mode; leaving it clears it, same
   // as any other field's error clearing when the user moves on.
@@ -316,19 +394,36 @@ export function TripEditSheet({
     [typeOptions],
   );
 
+  useEffect(() => {
+    if (!visible || !fromTrack?.ends) return;
+    let live = true;
+    fromTrack
+      .ends()
+      .then((ends) => {
+        if (live)
+          setNearIds(
+            tripPrefillFromTrack({ startedAt: null, ends }, undefined, places)
+              .nearPlaceIds,
+          );
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      setNearIds([]);
+    };
+  }, [visible, fromTrack, places]);
+
   const togglePlace = useCallback(
     (place: MirrorPlace) => {
       if (selected.some((link) => link.id === place.id)) {
-        // Deselecting makes room again — same "clears on edit" rule a field
-        // error follows.
+        // Deselecting makes room again, so the error clears as a field's does
+        // when it is edited (shared/DESIGN.md §11).
         setPlacesError(null);
         setSelected(selected.filter((link) => link.id !== place.id));
         return;
       }
       if (selected.length >= MAX_PLACES_PER_TRIP) {
-        setPlacesError(
-          `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`,
-        );
+        setPlacesError(TRIP_PLACES_CAP_SENTENCE);
         return;
       }
       setSelected([...selected, { id: place.id, name: place.name }]);
@@ -367,7 +462,7 @@ export function TripEditSheet({
       if (trip && base) {
         // Field-scoped: push only what the user changed since the sheet opened,
         // so a concurrent edit to another field on another device isn't
-        // clobbered (§6 LWW).
+        // clobbered (field-scoped LWW).
         const changes: Parameters<typeof updateTripLocal>[1] = {};
         if (isoDate !== new Date(base.date).toISOString())
           changes.date = isoDate;
@@ -394,7 +489,7 @@ export function TripEditSheet({
           return;
         }
         await updateTripLocal(trip.id, changes);
-        onSaved("Trip updated.");
+        onSaved(TRIP_FORM.copy.saved);
       } else {
         const tripId = await createTripLocal({
           date: isoDate,
@@ -404,19 +499,15 @@ export function TripEditSheet({
           customFields: effectiveCustomFields,
           places: selected,
         });
-        // The trip is saved either way, so a track that will not attach is said
-        // in the outcome rather than failing the save and losing the form.
-        const attached =
-          !fromTrack ||
-          (await fromTrack.attach(tripId).catch((err: unknown) => {
-            console.error(err);
-            return false;
-          }));
-        onSaved(
-          attached
-            ? "Trip logged."
-            : "Trip logged. The track couldn't be attached.",
+        // After the trip's own create, so each waits behind it in the outbox.
+        // The trip is saved either way, so a photo or a way that will not queue
+        // is said in the outcome rather than failing the save and losing the
+        // form.
+        const { failed } = await queueStagedMedia(tripId, staged, (file) =>
+          attachMediaLocal("tripLog", tripId, file),
         );
+        setStaged({ files: [], way: null });
+        onSaved(failed ? TRIP_FORM.copy.loggedNotAll : TRIP_FORM.copy.logged);
       }
       onClose();
     } catch (err) {
@@ -425,7 +516,7 @@ export function TripEditSheet({
       // stays open on a failed save, so this reports in its own banner above
       // Save rather than a toast, which is drawn under the sheet.
       console.error(err);
-      setSaveError("Couldn't save this trip.");
+      setSaveError(TRIP_FORM.copy.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -442,7 +533,8 @@ export function TripEditSheet({
     selected,
     trip,
     types,
-    fromTrack,
+    staged,
+    setStaged,
   ]);
 
   const fieldForm = useCustomFieldForm({
@@ -463,7 +555,7 @@ export function TripEditSheet({
       ? dateTarget.kind === "trip"
         ? "Trip date"
         : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ??
-          "Date")
+          TRIP_FORM.copy.date)
       : mode === "places"
         ? "Places on this trip"
         : mode === "fields"
@@ -473,243 +565,326 @@ export function TripEditSheet({
               ? editingField.label
               : `New trip ${ATTRIBUTE_NOUN.one}`
             : editing
-              ? "Edit trip"
-              : "Log a trip";
+              ? TRIP_FORM.copy.editTitle
+              : TRIP_FORM.copy.addTitle;
 
   const pickFieldDate = (key: string) => {
     setDateTarget({ kind: "field", key });
     setMode("date");
   };
 
-  return (
-    <BottomSheet
-      visible={visible}
-      // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
-      // not "throw away everything I just typed".
-      onClose={
-        mode === "form"
-          ? onClose
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      title={title}
-      // A sub-mode gets an arrow back to the mode it came from.
-      onBack={
-        mode === "form"
-          ? undefined
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      // Pinned, because the place list is longer than the sheet: a Done button
-      // that scrolls out of reach leaves the handle as the only exit.
-      footer={
-        mode === "form" ? (
-          <FormStack>
-            {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
-            {saveError ? <ErrorBanner message={saveError} /> : null}
-            <Button
-              label={editing ? "Save changes" : "Log trip"}
-              icon="done"
-              loading={saving}
-              onPress={() => void save()}
+  const sections: Record<SectionKeysOn<typeof TRIP_FORM, "gps">, ReactNode> = {
+    date: (
+      <>
+        <Row
+          icon="date"
+          title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
+          subtitle={TRIP_FORM.copy.date}
+          chevron
+          onPress={() => setMode("date")}
+        />
+      </>
+    ),
+    places: (
+      <>
+        <Row
+          icon="place"
+          title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
+          subtitle={
+            selected.length === 1 ? "1 place" : `${selected.length} places`
+          }
+          titleNumberOfLines={2}
+          chevron
+          onPress={() => setMode("places")}
+        />
+
+        {!editing && nearIds.length > 0 ? (
+          <ChipPicker
+            label={TRIP_NEAR_TRACK_LABEL}
+            options={nearIds.flatMap((id) => {
+              const place = places.find((p) => p.id === id);
+              return place ? [{ value: id, label: place.name }] : [];
+            })}
+            selected={selected.map((link) => link.id)}
+            onToggle={(id) => {
+              const place = places.find((p) => p.id === id);
+              if (place) togglePlace(place);
+            }}
+          />
+        ) : null}
+      </>
+    ),
+    title: (
+      <>
+        <TextField
+          label={TRIP_FORM.copy.title}
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoCapitalize="sentences"
+          hint={displayName.trim() ? undefined : tripTitleHint(derivedTitle)}
+        />
+      </>
+    ),
+    type: (
+      <>
+        <ChipPicker
+          label={TRIP_FORM.copy.type}
+          options={typeOptions}
+          selected={types}
+          onToggle={toggleType}
+          onAdd={addType}
+          addPlaceholder="Other"
+          disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
+          // Chips stay in stable order rather than moving to show which type
+          // leads, so the one that picks the trip's glyph and hue is starred —
+          // only once there is a choice between two, when it stops being
+          // obvious.
+          primaryValue={
+            types.length > 1 ? (primaryTripType(types) ?? undefined) : undefined
+          }
+          hint={
+            [
+              linkedCanyon ? TRIP_FORM.copy.typeCanyoningHint : null,
+              types.length > 1 ? TRIP_FORM.copy.typeStarHint : null,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        />
+      </>
+    ),
+    notes: (
+      <>
+        <TextField
+          label={TRIP_FORM.copy.notes}
+          placeholder={TRIP_FORM.copy.notesPlaceholder}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          autoCapitalize="sentences"
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        {askedFieldDefs.length > 0 ? (
+          <SectionHeader title={TRIP_FORM.copy.attributes} />
+        ) : null}
+        <CustomFieldValueInputs
+          defs={askedFieldDefs}
+          values={fieldValues}
+          onChange={setFieldValue}
+          onPickDate={pickFieldDate}
+        />
+
+        {/* Definitions are local rows written through the outbox, so this
+              door is open with no account and no signal, for everyone. */}
+        <Row
+          icon="tag"
+          title={`Your trip ${ATTRIBUTE_NOUN.many}`}
+          subtitle={
+            customFieldDefs.length === 0
+              ? "Add your own — water level, party size, anything"
+              : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
+          }
+          chevron
+          onPress={() => setMode("fields")}
+        />
+      </>
+    ),
+    leftover: (
+      <>
+        {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. */}
+        {keptOnlyFieldDefs.length > 0 ? (
+          <>
+            <SectionHeader
+              title={`${TRIP_FORM.copy.leftover} · ${keptOnlyFieldDefs.length}`}
             />
+            <Text style={styles.hint}>{TRIP_FORM.copy.leftoverNote}</Text>
+            <CustomFieldValueInputs
+              defs={keptOnlyFieldDefs}
+              values={fieldValues}
+              onChange={setFieldValue}
+              onPickDate={pickFieldDate}
+              onRemove={removeField}
+            />
+          </>
+        ) : null}
+      </>
+    ),
+    // The two below are for a NEW trip only (`onlyWhenAdding` in the contract):
+    // an existing one has both on its page, with the real strip.
+    photos: (
+      <StagedPhotosSection
+        media={media}
+        title={TRIP_FORM.copy.photos}
+        hint={TRIP_FORM.copy.stagedHint}
+      />
+    ),
+    routes: (
+      <StagedWaySection
+        media={media}
+        title={TRIP_FORM.copy.routes}
+        hint={TRIP_FORM.copy.stagedHint}
+        addLabel={ADD_WAY.copy.title}
+        chooseAnotherLabel={TRIP_FORM.copy.chooseAnotherWay}
+      />
+    ),
+  };
+
+  return (
+    <>
+      <BottomSheet
+        visible={visible && !media.away}
+        discard={dirty ? abandonConfirm("trip", !editing) : null}
+        onClosed={media.formClosed}
+        // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
+        // not "throw away everything I just typed".
+        onClose={
+          mode === "form"
+            ? () => {
+                media.cancel();
+                onClose();
+              }
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        title={title}
+        // A sub-mode gets an arrow back to the mode it came from.
+        onBack={
+          mode === "form"
+            ? undefined
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        // Pinned, because the place list is longer than the sheet: a Done button
+        // that scrolls out of reach leaves the handle as the only exit.
+        footer={
+          mode === "form" ? (
+            <FormStack>
+              {/* Server refusal / failure while the sheet is still open — the
+                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
+              {saveError ? <ErrorBanner message={saveError} /> : null}
+              <Button
+                label={
+                  editing ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit
+                }
+                icon="done"
+                loading={saving}
+                onPress={() => void save()}
+              />
+            </FormStack>
+          ) : mode === "fieldForm" ? (
+            fieldForm.footer
+          ) : mode === "fields" ? (
+            // PINNED, for the same reason the Done button is: the one action this
+            // mode exists for must not sit below however many rows are already
+            // in the list.
+            <Button
+              label={ATTRIBUTE_NOUN.add}
+              icon="add"
+              onPress={() => {
+                setEditingField(null);
+                setMode("fieldForm");
+              }}
+            />
+          ) : (
+            <Button label="Done" icon="done" onPress={() => setMode("form")} />
+          )
+        }
+      >
+        {mode === "date" ? (
+          <FormStack>
+            <DatePicker
+              value={
+                dateTarget.kind === "trip"
+                  ? dateKey
+                  : fieldValues[dateTarget.key] || null
+              }
+              onChange={(key) => {
+                if (dateTarget.kind === "trip") {
+                  setDateKey(key);
+                  return;
+                }
+                setFieldValue(dateTarget.key, key);
+              }}
+            />
+            {/* A trip always has a date; an attribute date may be unknown, and
+              a picker with no way back to blank turns that into a wrong
+              answer — the same reason a rail starts with "—". */}
+            {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
+              <Button
+                label="Clear date"
+                icon="close"
+                variant="ghost"
+                onPress={() => {
+                  setFieldValue(dateTarget.key, "");
+                  setMode("form");
+                }}
+              />
+            ) : null}
           </FormStack>
-        ) : mode === "fieldForm" ? (
-          fieldForm.footer
-        ) : mode === "fields" ? (
-          // PINNED, for the same reason the Done button is: the one action this
-          // mode exists for must not sit below however many rows are already
-          // in the list.
-          <Button
-            label={ATTRIBUTE_NOUN.add}
-            icon="add"
-            onPress={() => {
-              setEditingField(null);
+        ) : null}
+
+        {mode === "fields" ? (
+          <CustomFieldList
+            entity="tripLog"
+            defs={customFieldDefs}
+            onEdit={(def) => {
+              setEditingField(def);
               setMode("fieldForm");
             }}
           />
-        ) : (
-          <Button label="Done" icon="done" onPress={() => setMode("form")} />
-        )
-      }
-    >
-      {mode === "date" ? (
-        <FormStack>
-          <DatePicker
-            value={
-              dateTarget.kind === "trip"
-                ? dateKey
-                : fieldValues[dateTarget.key] || null
-            }
-            onChange={(key) => {
-              if (dateTarget.kind === "trip") {
-                setDateKey(key);
-                return;
-              }
-              setFieldValue(dateTarget.key, key);
-            }}
-          />
-          {/* A trip always has a date; an attribute date may be unknown, and
-              a picker with no way back to blank turns that into a wrong
-              answer — the same reason a rail starts with "—". */}
-          {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
-            <Button
-              label="Clear date"
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                setFieldValue(dateTarget.key, "");
-                setMode("form");
-              }}
+        ) : null}
+
+        {mode === "fieldForm" ? fieldForm.body : null}
+
+        {mode === "places" ? (
+          <>
+            <PlacePicker
+              places={places}
+              selected={selected}
+              search={placeSearch}
+              onSearch={setPlaceSearch}
+              onToggle={togglePlace}
             />
-          ) : null}
-        </FormStack>
-      ) : null}
+            <FieldError message={placesError} />
+          </>
+        ) : null}
 
-      {mode === "fields" ? (
-        <CustomFieldList
-          entity="tripLog"
-          defs={customFieldDefs}
-          onEdit={(def) => {
-            setEditingField(def);
-            setMode("fieldForm");
-          }}
-        />
-      ) : null}
+        {mode === "form" ? (
+          <FormStack>
+            {contractSectionKeys(
+              TRIP_FORM,
+              "gps",
+              editing ? "edit" : "add",
+            ).map((key) => (
+              <Fragment key={key}>{sections[key]}</Fragment>
+            ))}
+          </FormStack>
+        ) : null}
+      </BottomSheet>
 
-      {mode === "fieldForm" ? fieldForm.body : null}
-
-      {mode === "places" ? (
+      {/* The pickers of a new trip's photos and way, each shown alone while the
+        form above is out of the way (DESIGN.md §4: never a second sheet). */}
+      {editing ? null : (
         <>
-          <PlacePicker
-            places={places}
-            selected={selected}
-            search={placeSearch}
-            onSearch={setPlaceSearch}
-            onToggle={togglePlace}
+          <PhotoSourceSheet media={media} />
+          <AddWaySheet
+            placeId={null}
+            placeName=""
+            media={[]}
+            forTrip
+            visible={media.pickSheet === "way"}
+            onClose={() => media.setPickSheet(null)}
+            onClosed={() => media.setAway(false)}
+            onStage={media.stageWay}
+            onInfo={() => {}}
+            onError={setSaveError}
           />
-          <FieldError message={placesError} />
         </>
-      ) : null}
-
-      {mode === "form" ? (
-        <FormStack>
-          <Row
-            icon="date"
-            title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
-            subtitle="Date"
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("date")}
-          />
-          <Row
-            icon="place"
-            title={derivedTitle ?? "No places linked"}
-            subtitle={
-              selected.length === 1 ? "1 place" : `${selected.length} places`
-            }
-            titleNumberOfLines={2}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("places")}
-          />
-
-          {/* Read-only: the recording goes with the trip when it is saved. A row
-              with nothing to press is not pressable (shared/DESIGN.md §4). */}
-          {!editing && fromTrack ? (
-            <Row
-              icon="track"
-              title={fromTrack.name}
-              subtitle="Track · attached when you log the trip"
-              titleNumberOfLines={2}
-            />
-          ) : null}
-
-          <TextField
-            label="Title"
-            value={displayName}
-            onChangeText={setDisplayName}
-            autoCapitalize="sentences"
-            hint={
-              displayName.trim()
-                ? undefined
-                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
-            }
-          />
-
-          <ChipPicker
-            label="Type"
-            options={typeOptions}
-            selected={types}
-            onToggle={toggleType}
-            onAdd={addType}
-            addPlaceholder="Other"
-            disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
-            // The chips no longer move to show which type leads, so the one
-            // that picks the trip's glyph and hue is starred — only once there
-            // is a choice between two, when it stops being obvious.
-            primaryValue={
-              types.length > 1
-                ? (primaryTripType(types) ?? undefined)
-                : undefined
-            }
-            hint={
-              types.length > 1
-                ? "The starred type sets the trip’s icon."
-                : undefined
-            }
-          />
-
-          <TextField
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            autoCapitalize="sentences"
-          />
-
-          <CustomFieldValueInputs
-            defs={askedFieldDefs}
-            values={fieldValues}
-            onChange={setFieldValue}
-            onPickDate={pickFieldDate}
-          />
-
-          {/* Not a place's "Doesn't fit this type" and its three actions:
-              these are the user's own definitions, so there is nothing to
-              adopt — only keep or remove. */}
-          {keptOnlyFieldDefs.length > 0 ? (
-            <>
-              <SectionHeader
-                title={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
-              />
-              <Text style={styles.hint}>
-                These {ATTRIBUTE_NOUN.many} are left over from when this trip
-                was saved as a different type.
-              </Text>
-              <CustomFieldValueInputs
-                defs={keptOnlyFieldDefs}
-                values={fieldValues}
-                onChange={setFieldValue}
-                onPickDate={pickFieldDate}
-                onRemove={removeField}
-              />
-            </>
-          ) : null}
-
-          {/* Definitions are local rows written through the outbox, so this
-              door is open with no account and no signal, for everyone. */}
-          <Row
-            icon="tag"
-            title={`Your trip ${ATTRIBUTE_NOUN.many}`}
-            subtitle={
-              customFieldDefs.length === 0
-                ? "Add your own — water level, party size, anything"
-                : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
-            }
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("fields")}
-          />
-        </FormStack>
-      ) : null}
-    </BottomSheet>
+      )}
+    </>
   );
 }
 

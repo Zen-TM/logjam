@@ -22,11 +22,11 @@
 // metre apart. This screen's question is "which places", answered at
 // kilometres, so everything else is clutter over the box being drawn.
 //
-// The basemap rail in particular was tried and removed. Anything pinned to a
+// There is no basemap rail: anything pinned to a
 // screen edge is an obstacle to a frame whose handles live on those edges: a
 // rail top-right puts pressable thumbs exactly where the right handle travels
 // as the frame is reshaped, and a handle under a thumb cannot be grabbed back.
-// Clamping the frame away from it then silently narrowed a restored area on a
+// Clamping the frame away from it would silently narrow a restored area on a
 // round trip that changed nothing. The basemap carries over from the map the
 // user was last looking at (`lastCamera`), which is the one they know.
 //
@@ -55,6 +55,8 @@ import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
+import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
@@ -74,9 +76,6 @@ import {
   type BasemapId,
   type ResolveContext,
 } from "./sourceResolver";
-
-/** Matches `MapScreen`'s — every map in the app renders the same vector basemap. */
-const PROTOMAPS_FLAVOR = "light" as const;
 
 /**
  * Breathing room around a restored area, so the frame that comes back has
@@ -271,14 +270,13 @@ export function PickAreaScreen({
                   <ProtomapsLayers
                     flavor={PROTOMAPS_FLAVOR}
                     sourceID={sourceIdFor(resolved.key)}
-                    startIndex={1}
                   />
                 ) : (
                   <Layer
                     key={`pick-area-basemap-${resolved.key}`}
                     type="raster"
                     id={`pick-area-basemap-${resolved.key}`}
-                    layerIndex={1}
+                    beforeId={BAND_MARKERS.land}
                     style={{ rasterOpacity: 1 }}
                   />
                 )}
@@ -324,6 +322,7 @@ export function PickAreaScreen({
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}
+            disabledReason="Waiting for the map"
             onPress={() => area && onConfirm(area)}
           />
         </View>
@@ -335,7 +334,7 @@ export function PickAreaScreen({
 const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
-  // was dark on dark in Daylight).
+  // would be dark on dark in Ghost Gum).
   // After the back button, which owns the top left.
   hint: {
     position: "absolute",

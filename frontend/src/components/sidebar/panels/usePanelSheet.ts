@@ -7,8 +7,6 @@ import { useCallback, useEffect, useState } from "react";
  * narrow web the bottom sheet grows to full so the sheet has room.
  *
  * Both pages that have a sheet call this rather than repeating the plumbing.
- * Repeating it is exactly how Logs' date sheet ended up opening without the
- * map's chrome moving over, while Places' did (operator, 2026-09-16).
  */
 export function usePanelSheet({
   onOpenChange,

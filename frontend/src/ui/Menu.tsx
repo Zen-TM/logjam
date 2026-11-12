@@ -30,6 +30,10 @@ export type MenuItem = {
   /** The item's accessible name when it must say more than `label`. */
   accessibleLabel?: string;
   disabled?: boolean;
+  /** Offered but not yet runnable, and why (shared/DESIGN.md §5): the item
+   *  stays in the arrow keys' path, says the reason beside its label and in
+   *  its name, and selecting it does nothing. */
+  disabledReason?: string;
 };
 
 export type MenuEntry = MenuItem | { id: string; separator: true };
@@ -55,13 +59,63 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
   }, [open, ref]);
 }
 
+/** How long after a press is released its click can still arrive. The click
+ *  follows the release at once; this is only slack. */
+const CLICK_AFTER_RELEASE_MS = 400;
+
+/** Whether the press being clicked just closed a panel over the map: see
+ *  `takeDismissingPress`. Cleared by `forget` once the press is released and
+ *  its click has had time to come (a drag, a touch pan, a right-click that
+ *  never clicks), or by the next press. So a later click with no press before
+ *  it (Enter or Space on a focused button, a screen reader's activation) is
+ *  never taken for it. */
+let pressDismissed = false;
+let forget: (() => void) | null = null;
+
+function markDismissingPress() {
+  forget?.();
+  pressDismissed = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const released = () => {
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
+    timer = setTimeout(clear, CLICK_AFTER_RELEASE_MS);
+  };
+  const clear = () => {
+    clearTimeout(timer);
+    window.removeEventListener("pointerdown", clear, true);
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
+    pressDismissed = false;
+    forget = null;
+  };
+  forget = clear;
+  window.addEventListener("pointerdown", clear, true);
+  window.addEventListener("pointerup", released, true);
+  window.addEventListener("pointercancel", released, true);
+}
+
+/** True once, for the map click that ends a press which just closed a panel
+ *  (a map point panel, the Tools tray): that click must not ask about a new
+ *  point. It is the map's to read and nothing else's: a click on a route, a
+ *  place or a gauge under the same press still acts on it. */
+export function takeDismissingPress(): boolean {
+  const was = pressDismissed;
+  if (was) forget?.();
+  return was;
+}
+
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. */
-function useOutsidePress(
+ *  and reopening in one click. With `suppressAskWithin`, a press that lands
+ *  inside that element (the map) closes the panel and is marked, so the map
+ *  does not read the click it ends in as a new question
+ *  (`takeDismissingPress`); the click still reaches whatever is under it. */
+export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
+  suppressAskWithin: Element | null = null,
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -69,7 +123,17 @@ function useOutsidePress(
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (refs.some((ref) => ref.current?.contains(target))) return;
+      // A modal dialog opened from inside (a help button's Dialog) portals
+      // out of the floating element; pressing it is not pressing outside.
+      // One the floating element itself sits in is a different matter.
+      const modal = (target as Element).closest?.("dialog[open]");
+      if (
+        modal &&
+        !refs.some((ref) => ref.current && modal.contains(ref.current))
+      )
+        return;
       handleOutside();
+      if (suppressAskWithin?.contains(target)) markDismissingPress();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>
@@ -180,6 +244,7 @@ export function Menu({
               />
             );
           const index = items.indexOf(entry);
+          const reason = entry.disabledReason;
           return (
             <button
               key={entry.id}
@@ -189,12 +254,17 @@ export function Menu({
               type="button"
               role="menuitem"
               tabIndex={-1}
-              aria-label={entry.accessibleLabel}
+              aria-label={
+                entry.accessibleLabel ??
+                (reason ? `${entry.label}, ${reason}` : undefined)
+              }
               disabled={entry.disabled}
+              aria-disabled={reason ? true : undefined}
               className={[classes.item, entry.danger && classes.danger]
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => {
+                if (reason) return;
                 close();
                 entry.onSelect();
               }}
@@ -203,6 +273,12 @@ export function Menu({
                 <Icon idea={entry.icon} size={16} className={classes.glyph} />
               )}
               <span className={classes.label}>{entry.label}</span>
+              {/* Load-bearing: without it the badge glues "Inbox10" together,
+                  and axe's label-content-name-mismatch finds that the
+                  accessible label ("Inbox, 10 unread") does not contain it
+                  (e2e/a11y.spec.ts). It renders no gap: .item is a flex row,
+                  which drops whitespace. */}{" "}
+              {reason && <span className={classes.hint}>{reason}</span>}
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (
                 <span className={classes.badge} aria-hidden>
@@ -221,12 +297,12 @@ export function Menu({
  * A non-modal panel floating beside a control — the map's Layers. Escape or its
  * close button (top right) dismisses it and focus returns to the control.
  *
- * Whether a press OUTSIDE it dismisses depends on what it is for, so the caller
- * says. Layers must NOT: the whole point of it is to stay open while the user
- * pans the map behind it and watches overlays come and go. A popover that is a
- * FIELD's value — the colour palette — must, because every other way of
- * choosing a value in this app closes when you look away, and one that hangs
- * around reads as stuck (operator, 2026-09-17).
+ * A press OUTSIDE it (the map included) dismisses it only when the caller
+ * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
+ * look away, and one that hangs around reads as stuck. The press is never
+ * swallowed, so focus goes where the user pressed and a click acts on what it
+ * landed on; `suppressAskWithin` only stops the map reading it as a new
+ * question.
  */
 export function Popover({
   open,
@@ -237,6 +313,8 @@ export function Popover({
   className,
   fit = false,
   dismissOnOutsidePress = false,
+  suppressAskWithin = null,
+  onEscape,
   closeButton = true,
   children,
 }: {
@@ -253,8 +331,17 @@ export function Popover({
   fit?: boolean;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
+  /** With `dismissOnOutsidePress`: a press inside this element (the map)
+   *  closes the panel and the click it ends in asks about no new point, so
+   *  looking away from one never opens another. It still reaches a route,
+   *  place or gauge under it, and a press elsewhere closes and acts as ever. */
+  suppressAskWithin?: Element | null;
+  /** Escape undoes one layer of the panel's own, and this is told first;
+   *  without it Escape closes the panel and returns focus to the anchor. */
+  onEscape?: () => void;
   /** The × at the top right (UX §3: every surface carries its way out). Off
-   *  only for a popover whose own header already ends in one. */
+   *  only for a popover whose own header already ends in one, and for a map
+   *  point panel, which is left by a press outside it and by Escape. */
   closeButton?: boolean;
   children: ReactNode;
 }) {
@@ -263,8 +350,14 @@ export function Popover({
   useAnchoredPosition(open, anchorRef, ref, placement);
   // The anchor is excluded inside the hook, so pressing the trigger toggles
   // rather than closing and reopening in one gesture.
-  useOutsidePress(open && dismissOnOutsidePress, [ref, anchorRef], onClose);
+  useOutsidePress(
+    open && dismissOnOutsidePress,
+    [ref, anchorRef],
+    onClose,
+    suppressAskWithin,
+  );
   useEscape(open ? ref : null, () => {
+    if (onEscape) return onEscape();
     onClose();
     anchorRef.current?.focus();
   });
@@ -280,7 +373,12 @@ export function Popover({
       role="dialog"
       aria-label={label}
       tabIndex={-1}
-      className={[classes.popover, fit && classes.fit, className]
+      className={[
+        classes.popover,
+        fit && classes.fit,
+        fit && !closeButton && classes.bare,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
     >

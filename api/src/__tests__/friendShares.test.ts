@@ -8,30 +8,26 @@ import {
   ALICE_ID,
   BOB_ID,
   SHARED_PLACE_ID,
-  BOB_SHARED_PLACE_ID,
-  BOB_SHARED_ROUTE_ID,
+  BOB_SHARES_WITH_ALICE,
   NONEXISTENT_ID,
   as,
   CANYON_TYPE_ID,
 } from "./_actors";
 
-// Sharing-audit surface (fix 24): GET/DELETE /friends/:id/shares.
+// Sharing-audit surface: GET/DELETE /friends/:id/shares.
 //
-// BOTH SHARE TABLES. The payload used to be place-only; it now speaks the
-// (entityType, entityId) pair the bulk share speaks, and covers the `Share`
-// table too (route / topo / GeoPDF) — so the phone's per-friend
-// screen can list everything a friend can see rather than the places alone.
+// BOTH SHARE TABLES. The payload speaks the (entityType, entityId) pair the
+// bulk share speaks, and covers the `Share` table too (route / topo) —
+// so the phone's per-friend screen can list everything a friend can
+// see rather than the places alone.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Seed baseline: alice owns 4 places shared with bob (incl. SHARED_PLACE_ID);
-// bob shares two rows back with alice (BOB_SHARED_PLACE_ID and
-// BOB_SHARED_ROUTE_ID); alice<->bob is an accepted friendship; carol->alice
+// bob shares four rows back with alice (BOB_SHARES_WITH_ALICE); alice<->bob is an accepted friendship; carol->alice
 // is PENDING and carol is shared nothing.
 //
-// The incoming pair is named in `_actors.ts` rather than assumed absent. Three
-// tests here asserted alice's received list was `[]`, which was true only while
-// the seed had no incoming shares at all — and this suite is NOT in CI, so the
-// seed change that added them landed green and broke it silently.
+// The incoming rows are named in `_actors.ts` rather than assumed absent, so
+// assertions match the incoming shares present in the seed.
 //
 // The bulk-revoke test destroys the seeded alice->bob shares, and
 // SHARED_PLACE_ID-is-shared-with-bob is an invariant the rest of the suite
@@ -134,7 +130,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(res.status).toBe(200);
     const received = (res.body as SharesBody).sharedWithYou;
     expect(received.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
+      [...BOB_SHARES_WITH_ALICE].sort(),
     );
   });
 
@@ -147,18 +143,18 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     const body = res.body as SharesBody;
-    // Bob's forward list is what HE owns and shares — the same two rows alice
+    // Bob's forward list is what HE owns and shares — the same rows alice
     // saw as incoming, now read from the other end of the same friendship.
     expect(body.sharedWithThem.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
+      [...BOB_SHARES_WITH_ALICE].sort(),
     );
     // ...and alice's places appear in his received list.
     expect(placeIdsIn(body.sharedWithYou)).toContain(SHARED_PLACE_ID);
   });
 
-  // THE UNION. A route/topo/GeoPDF share lives in the `Share` table,
-  // which this surface used not to read at all — so a friend holding six items
-  // saw an audit screen that said "nothing shared".
+  // THE UNION. A route/topo share lives in the `Share` table: an audit
+  // lists these items alongside places so a friend holding them does not see
+  // "nothing shared".
   it("lists a directly-shared ROUTE alongside the places, in both directions", async () => {
     const routeId = await createRoute(ALICE_SUB, "friend-shares-union");
     const grant = await request(API_URL)
@@ -198,7 +194,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // list — which holds only what the seed says bob owns and shares.
     expect(
       (theirs.body as SharesBody).sharedWithThem.map((r) => r.entityId).sort(),
-    ).toEqual([BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort());
+    ).toEqual([...BOB_SHARES_WITH_ALICE].sort());
 
     // Alice's route is hers to clean up: it is shared with bob, so leaving it
     // moves the baseline the exact-set assertions above read.
@@ -226,12 +222,12 @@ describe("GET /friends/:id/shares — the audit surface", () => {
   // direct share changes nothing, so a Remove offered on it would appear to
   // work and be undone by the next delta pull. Only the server can answer this
   // — a client deriving it from its own mirror is wrong until that mirror has
-  // pulled the linked row (seen on device, 2026-09-05).
+  // pulled the linked row.
   //
-  // A route, not a waypoint, since the phase 1c fold: `Route.placeId` is a
-  // FOREIGN KEY and still carries the route to the place's sharees, while a
-  // PlaceLink grants no visibility at all (lib/shareAccess.ts §2.5). That
-  // distinction is the whole reason this two-arm case still exists.
+  // A route, not a waypoint: `Route.placeId` is a FOREIGN KEY and still
+  // carries the route to the place's sharees, while a PlaceLink grants no
+  // visibility at all (lib/shareAccess.ts). That distinction is the reason
+  // this two-arm case exists.
   it("marks a received row that ALSO rides a place the friend shared", async () => {
     // A place of bob's, shared with alice.
     const place = await request(API_URL).post("/places").set(as(BOB_SUB)).send({
@@ -296,8 +292,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
 
     // TEARDOWN, and it is not optional. Everything this test created is
     // SHARED bob→alice, so leaving it behind changes the seed baseline the
-    // exact-set assertions above depend on — the file then passes on a fresh
-    // seed and fails on the second run, which is how this arrived.
+    // exact-set assertions above depend on.
     await request(API_URL)
       .delete(`/routes/${linked.body.id as string}`)
       .set(as(BOB_SUB));
@@ -317,6 +312,19 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     const raw = JSON.stringify(res.body);
     expect(raw).not.toContain("@");
     expect(raw).not.toContain("email");
+  });
+
+  // Logjam Web's FriendSharingSection relies on this: names, never places.
+  // Mutation: add `latitude` to the shares query's select.
+  it("carries no coordinates, geometry or notes", async () => {
+    const res = await request(API_URL)
+      .get(`/friends/${aliceBobFriendshipId}/shares`)
+      .set(as(ALICE_SUB));
+    expect(res.status).toBe(200);
+    const raw = JSON.stringify(res.body);
+    for (const key of ["latitude", "longitude", "geometry", "notes"]) {
+      expect(raw).not.toContain(`"${key}"`);
+    }
   });
 
   it("403s for a user who is not a member of the friendship", async () => {
@@ -408,7 +416,7 @@ describe("DELETE /friends/:id/shares — unshare all", () => {
 
   // Ids in the body authorize nothing: they filter a set derived from the
   // caller's own ownership. Carol's place cannot be revoked by naming it, and
-  // the count must not report whether it existed (SEC-001's anti-oracle rule).
+  // the count must not report whether it existed (the anti-oracle rule).
   it("cannot revoke a row the caller does not own by naming it", async () => {
     const carolRoute = await createRoute(CAROL_SUB, "friend-shares-foreign");
     const del = await request(API_URL)

@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { chipFill } from "@logjam/shared";
 
 import {
   hitSlop,
@@ -8,6 +9,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  wash,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -50,6 +52,7 @@ export function Chip({
   count,
   starred = false,
   dashed = false,
+  choice,
   onPress,
 }: {
   label: string;
@@ -61,17 +64,31 @@ export function Chip({
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
   dashed?: boolean;
+  /** What picking this chip means to a screen reader: one of a rail's options
+   *  (`radio`) or a vocabulary entry toggled on its own (`checkbox`). Left out,
+   *  the chip is a plain button, as the "add one" chip is. */
+  choice?: "single" | "multi";
   onPress: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
-  const tint = hue ?? theme.accent;
+  // Selected is the fill alone: moved off the unselected card until it stands
+  // 3:1 apart (`chipFill`).
+  const tint = chipFill(hue ?? theme.accent, theme);
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={
+        choice === "single"
+          ? "radio"
+          : choice === "multi"
+            ? "checkbox"
+            : "button"
+      }
       accessibilityLabel={starred ? `${label}, starred` : undefined}
-      accessibilityState={{ selected: active, disabled }}
+      accessibilityState={
+        choice ? { checked: active, disabled } : { selected: active, disabled }
+      }
       disabled={disabled}
       onPress={onPress}
       hitSlop={hitSlop}
@@ -89,10 +106,6 @@ export function Chip({
           size={14}
           color={active ? theme.onFill : theme.textMuted}
         />
-      ) : active ? (
-        // A SELECTED chip says so with a check as well as a fill, so it is never
-        // mistaken for the primary button, which is filled too.
-        <Icon idea="done" size={14} color={theme.onFill} />
       ) : null}
       <Text
         style={[
@@ -141,15 +154,15 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(0.5),
     minHeight: CHIP_HEIGHT,
     // A pill is never narrower than it is tall: a one-glyph chip is a circle.
+    // Guard: pill.test.ts.
     minWidth: CHIP_HEIGHT,
     justifyContent: "center",
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.control, color: theme.text },
-  // `onFill`, not the page colour: on the shared heath fill the old dark page
-  // was 3.7:1 (root CLAUDE.md, "Text or a glyph ON a colour fill uses a dark
-  // ink").
+  // `onFill`, not the page colour: text or a glyph on a colour fill needs
+  // dark ink for contrast.
   labelActive: { color: theme.onFill },
   labelMuted: { color: theme.textMuted },
   // The add chip is not a value of the rail, so it does not wear a value's
@@ -161,19 +174,19 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // A fixed box with a radius of exactly half of it, and a background that is
   // always set (`badgeActive` makes it transparent, never absent): see
-  // `halfRadius` for why a 999 radius came back square once another chip was
+  // `halfRadius` for why a 999 radius renders square once another chip is
   // selected.
   badge: {
     height: BADGE_SIZE,
     minWidth: BADGE_SIZE,
     paddingHorizontal: spacing(0.5),
     borderRadius: halfRadius(BADGE_SIZE),
-    backgroundColor: withAlpha(theme.text, 0.12),
+    backgroundColor: withAlpha(theme.text, wash.selected),
     alignItems: "center",
     justifyContent: "center",
   },
-  // No wash on a fill: an ink wash darkened Daylight's accent until the count
-  // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
+  // No wash on a fill: an ink wash darkens Ghost Gum's accent until the count
+  // on it falls under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
   badgeText: { ...textRole.caption, color: theme.textMuted },
   badgeTextActive: { color: theme.onFill },

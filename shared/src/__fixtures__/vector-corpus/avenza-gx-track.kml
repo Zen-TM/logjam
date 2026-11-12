@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <Schema id="schema0" name="schema0">
+      <SimpleField name="Description" type="string"/>
+    </Schema>
+    <Schema id="track_schema" name="track_schema">
+      <gx:SimpleArrayField name="speed" type="float">
+        <displayName>speed</displayName>
+      </gx:SimpleArrayField>
+      <gx:SimpleArrayField name="horizontal_accuracy" type="float">
+        <displayName>horizontal_accuracy</displayName>
+      </gx:SimpleArrayField>
+      <gx:SimpleArrayField name="vertical_accuracy" type="float">
+        <displayName>vertical_accuracy</displayName>
+      </gx:SimpleArrayField>
+      <gx:SimpleArrayField name="source" type="string">
+        <displayName>source</displayName>
+      </gx:SimpleArrayField>
+    </Schema>
+    <Folder>
+      <name>Planning</name>
+      <ExtendedData>
+        <SchemaData schemaUrl="#schema0"/>
+      </ExtendedData>
+      <Placemark>
+        <name>Track 1</name>
+        <TimeStamp>
+          <when>2026-01-01T09:00:00+10:00</when>
+        </TimeStamp>
+        <gx:Track>
+          <when>2026-01-01T09:00:00+10:00</when>
+          <when>2026-01-01T09:00:05+10:00</when>
+          <when>2026-01-01T09:00:10+10:00</when>
+          <when>2026-01-01T09:00:15+10:00</when>
+          <when>2026-01-01T09:00:20+10:00</when>
+          <gx:coord>150.3 -33.6 812.5</gx:coord>
+          <gx:coord>150.3002 -33.6001 812.1</gx:coord>
+          <gx:coord>150.3005 -33.6003 811.0</gx:coord>
+          <gx:coord>150.3009 -33.6004 809.8</gx:coord>
+          <gx:coord>150.3012 -33.6008 808.2</gx:coord>
+          <gx:angles>0.5 0 0</gx:angles>
+          <gx:angles>10.5 0 0</gx:angles>
+          <gx:angles>20.5 0 0</gx:angles>
+          <gx:angles>30.5 0 0</gx:angles>
+          <gx:angles>40.5 0 0</gx:angles>
+          <ExtendedData>
+            <SchemaData schemaUrl="#track_schema">
+              <gx:SimpleArrayData name="speed">
+                <gx:value>0</gx:value>
+                <gx:value>1.2</gx:value>
+                <gx:value>1.4</gx:value>
+                <gx:value>1.1</gx:value>
+                <gx:value>0.9</gx:value>
+              </gx:SimpleArrayData>
+              <gx:SimpleArrayData name="horizontal_accuracy">
+                <gx:value>4.8</gx:value>
+                <gx:value>3.9</gx:value>
+                <gx:value>3.5</gx:value>
+                <gx:value>3.6</gx:value>
+                <gx:value>4.1</gx:value>
+              </gx:SimpleArrayData>
+              <gx:SimpleArrayData name="vertical_accuracy">
+                <gx:value>3.0</gx:value>
+                <gx:value>3.0</gx:value>
+                <gx:value>2.5</gx:value>
+                <gx:value>2.5</gx:value>
+                <gx:value>3.0</gx:value>
+              </gx:SimpleArrayData>
+              <gx:SimpleArrayData name="source">
+                <gx:value>Satellite</gx:value>
+                <gx:value>Satellite</gx:value>
+                <gx:value>Satellite</gx:value>
+                <gx:value>Satellite</gx:value>
+                <gx:value>Satellite</gx:value>
+              </gx:SimpleArrayData>
+            </SchemaData>
+          </ExtendedData>
+        </gx:Track>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

@@ -50,7 +50,7 @@
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
-/* The native control in the app's own colour; the focus ring is index.css's. */
+/* The native control in Logjam Web's own colour; the focus ring is index.css's. */
 .radio {
   flex: none;
   margin: 0;

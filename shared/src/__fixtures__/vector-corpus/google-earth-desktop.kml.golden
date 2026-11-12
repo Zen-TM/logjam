@@ -1,0 +1,43 @@
+{
+  "name": "Untitled KML file",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.09,
+            -33.08,
+            0
+          ],
+          [
+            150.0911,
+            -33.0809,
+            0
+          ],
+          [
+            150.0925,
+            -33.0818,
+            0
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Drawn Path"
+      }
+    }
+  ],
+  "bbox": [
+    150.09,
+    -33.0818,
+    150.0925,
+    -33.08
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 3
+  }
+}

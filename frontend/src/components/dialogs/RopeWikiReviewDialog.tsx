@@ -66,15 +66,18 @@ function toApplyDecision(
 
 function RopeWikiReviewDialog({
   open,
+  regionId,
   review,
   autoImported,
   onClose,
   onApplied,
 }: {
   open: boolean;
+  /** The region whose list the review came from; decisions apply to it. */
+  regionId: string;
   review: RopeWikiCandidatePayload[];
   // Counts of what the refresh already imported automatically (confident
-  // non-duplicates), surfaced here so the auto-import is transparent (IMPORT-3).
+  // non-duplicates), surfaced here so the auto-import is transparent.
   autoImported?: { added: number; autoLinked: number; updated: number };
   onClose: () => void;
   onApplied: () => void;
@@ -124,13 +127,13 @@ function RopeWikiReviewDialog({
       const payload: RopeWikiApplyDecision[] = review.map((row, i) =>
         toApplyDecision(row, items[i]),
       );
-      const result = await applyRopeWikiImport(payload);
+      const result = await applyRopeWikiImport(regionId, payload);
       const parts = [
         result.created > 0 ? `${result.created} created` : null,
         result.linked > 0 ? `${result.linked} linked` : null,
         result.skipped > 0 ? `${result.skipped} skipped` : null,
       ].filter(Boolean);
-      toast.success(
+      toast.done(
         parts.length > 0
           ? `Review applied: ${parts.join(", ")}.`
           : "Review applied.",
@@ -175,7 +178,7 @@ function RopeWikiReviewDialog({
       <div className={classes.body}>
         {/* What the refresh already did, before what it is asking about: a
             count of places that appeared without being asked about is the
-            first thing to account for (IMPORT-3). */}
+            first thing to account for. */}
         {autoParts.length > 0 && (
           <p className={classes.intro}>
             Already imported automatically: {autoParts.join(", ")}. The{" "}

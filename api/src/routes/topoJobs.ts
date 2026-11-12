@@ -7,7 +7,11 @@ import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  CreateMultipartUploadCommand,
+} from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
 import {
   say,
@@ -15,24 +19,30 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   validateRasterTemplateSettings,
-  validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
+  RASTER_TEMPLATE_DEFAULTS,
+  TOPO_UPLOAD_SIGN_MAX,
+  type SharpenedOverlay,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { deleteTopoJob } from "../lib/deleteTopoJob";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasCredits } from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { assertGlobalCapacity } from "../lib/fargateCapacity";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
-import { deleteS3Prefix } from "../lib/s3Cleanup";
+  MAX_INPUT_ZIP_COMPRESSED_BYTES,
+  TOPO_UPLOAD_MAX_PARTS,
+  TOPO_UPLOAD_PART_BYTES,
+  joinTopoUpload,
+  signTopoParts,
+} from "../lib/topoUpload";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { sharpenedAreaFrom } from "../services/sharpenedAreas";
 import {
-  deleteSharesFor,
   directlySharedIds,
   getJobRole,
   requireShareAccess,
@@ -51,9 +61,7 @@ export const TOPO_JOB_NAME_MAX_LENGTH = 200;
 // GET /topo-jobs, GET /topo-jobs/:id and (for the role stamp)
 // /completed-overlays all answer the same two questions about a TopoJob row:
 // which columns a client is allowed to see, and what a NON-owner is allowed to
-// see of them. Answering them three times is how they drifted — the detail
-// endpoint used to stamp no syncRole at all, so a client polling a shared job
-// could not tell from that response that it was read-only.
+// see of them.
 //
 // Two rules, declared once:
 //   - userId NEVER leaves this file. A recipient has no business learning the
@@ -100,13 +108,10 @@ export function serializeTopoJobFor<
   };
 }
 
-// Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
-// A legitimate ELVIS export is bounded by the monthly tile quota (default 40
-// tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
-// any realistic export while rejecting pathological archives before the worker
-// is launched. The uncompressed cap is the real bomb guard; the compressed cap
-// bounds wasted S3 transfer/storage.
-const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
+// Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
+// worker. A legitimate ELVIS export is ~17 MB compressed LAZ + ~5 MB DEM per
+// tile; this sits well above any realistic one while rejecting pathological
+// archives before the worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
@@ -120,12 +125,10 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { tileCount, jobName, settings, autoExport } = req.body;
+    const { tileCount, jobName, settings } = req.body;
 
-    // Same class as APIR-010, on a route no finding named: a non-string
-    // jobName reached Prisma and came back as a raw 500. The name is a user
-    // label, so cap it alongside the type check rather than storing whatever
-    // fits in the body budget.
+    // Validate jobName is a string and cap it alongside the type check rather
+    // than storing whatever fits in the body budget.
     if (jobName !== undefined && jobName !== null) {
       if (typeof jobName !== "string")
         throw malformed("jobName must be a string");
@@ -146,9 +149,9 @@ router.post(
     );
     await assertHasStorageQuota(user.id);
 
-    // Optional raster template settings. Worker falls back to its built-in
-    // defaults if layerOptions is null.
-    let layerOptions: object | undefined;
+    // Optional raster template settings: without them the job gets the
+    // defaults Logjam Web sends, since the worker has no fallback of its own.
+    let layerOptions: object = RASTER_TEMPLATE_DEFAULTS;
     if (settings !== undefined && settings !== null) {
       const validation = validateRasterTemplateSettings(settings);
       if (!validation.ok) {
@@ -157,20 +160,6 @@ router.post(
         );
       }
       layerOptions = validation.value as object;
-    }
-
-    // Optional auto-export config. Persisted so the reaper can queue a
-    // TopoExportJob once this job completes. Validated to the same legality
-    // rules as a manual export so a bad config can't strand the auto-export.
-    let autoExportConfig: object | undefined;
-    if (autoExport !== undefined && autoExport !== null) {
-      const validation = validateAutoExportSettings(autoExport);
-      if (!validation.ok) {
-        throw malformed(
-          `Invalid auto-export settings: ${validation.errors.join("; ")}`,
-        );
-      }
-      autoExportConfig = validation.value as object;
     }
 
     // Snapshot the user's live vector style at submission time. The composite
@@ -188,8 +177,7 @@ router.post(
         name: jobName ?? null,
         tileCount: tileCount ?? null,
         estimatedSeconds,
-        layerOptions: layerOptions ?? undefined,
-        autoExport: autoExportConfig ?? undefined,
+        layerOptions,
         vectorStyleSnapshot,
       },
     });
@@ -200,6 +188,8 @@ router.post(
       data: { s3InputKey },
     });
 
+    // uploadUrl is the single-PUT path a Logjam Web tab loaded before the
+    // multipart client still takes; it can go once that client is everywhere.
     const uploadUrl = await getSignedUrl(
       s3,
       new PutObjectCommand({
@@ -209,8 +199,87 @@ router.post(
       }),
       { expiresIn: 900 }, // 15 minutes
     );
+    const { UploadId: uploadId } = await s3.send(
+      new CreateMultipartUploadCommand({
+        Bucket: TOPO_BUCKET,
+        Key: s3InputKey,
+        ContentType: "application/zip",
+      }),
+    );
 
-    res.status(201).json({ jobId: job.id, uploadUrl });
+    res.status(201).json({
+      jobId: job.id,
+      uploadUrl,
+      uploadId,
+      partSize: TOPO_UPLOAD_PART_BYTES,
+    });
+  },
+);
+
+/** The owner's job, still waiting for its ZIP; the upload id from the body.
+ *  The id needs no lookup of its own: S3 ties it to the job's key, so an id
+ *  from another job's upload signs nothing here. */
+async function ownUploadingJob(req: AuthenticatedRequest) {
+  const user = await getUser(req.user!.sub);
+  const job = await prisma.topoJob.findUnique({
+    where: { id: getParam(req.params.id) },
+  });
+  if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
+  requireShareOwner(
+    await getJobRole(user.id, "topoJob", job),
+    "topoJob",
+    say`Only the owner can upload to this LiDAR map.`,
+  );
+  if (job.status !== "uploading")
+    throw new AppError(400, say`That upload has already been received.`);
+  const { uploadId } = req.body ?? {};
+  if (typeof uploadId !== "string" || !uploadId || uploadId.length > 1024)
+    throw malformed("uploadId must be a non-empty string");
+  return { key: job.s3InputKey!, uploadId };
+}
+
+// POST /topo-jobs/:id/parts — presigned PUT URLs for parts of the ZIP
+router.post(
+  "/:id/parts",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { sizeBytes, partNumbers } = req.body;
+    if (!Number.isInteger(sizeBytes) || sizeBytes < 1)
+      throw malformed("sizeBytes must be a positive integer");
+    if (!Array.isArray(partNumbers) || partNumbers.length === 0)
+      throw malformed("partNumbers must be a non-empty array");
+    if (partNumbers.length > TOPO_UPLOAD_SIGN_MAX)
+      throw malformed(
+        `At most ${TOPO_UPLOAD_SIGN_MAX} partNumbers per request`,
+        413,
+      );
+    const parts = await signTopoParts(
+      TOPO_BUCKET,
+      key,
+      uploadId,
+      sizeBytes,
+      partNumbers,
+    );
+    res.json({ parts });
+  },
+);
+
+// POST /topo-jobs/:id/complete — join the uploaded parts into the ZIP
+router.post(
+  "/:id/complete",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { key, uploadId } = await ownUploadingJob(req);
+    const { partCount } = req.body;
+    if (
+      !Number.isInteger(partCount) ||
+      partCount < 1 ||
+      partCount > TOPO_UPLOAD_MAX_PARTS
+    )
+      throw malformed("partCount must be an integer in range");
+    await joinTopoUpload(TOPO_BUCKET, key, uploadId, partCount);
+    res.status(204).send();
   },
 );
 
@@ -268,6 +337,7 @@ router.post(
     );
     const tailBytes = await tail.Body!.transformToByteArray();
     let verifiedTileCount: number | null = null;
+    let lazCount = 0;
     try {
       const entries = parseZipCentralDirectory(
         new Uint8Array(tailBytes),
@@ -283,6 +353,7 @@ router.post(
         );
       }
       verifiedTileCount = zipStats.tileCount || null;
+      lazCount = zipStats.lazCount;
     } catch (e) {
       if (e instanceof ElvisZipError) {
         throw new AppError(400, e.sentence);
@@ -291,7 +362,7 @@ router.post(
     }
 
     // Authoritative quota check against server-counted tiles from the actual
-    // ZIP, serialised per user (ARCH-009): the user-row lock prevents two
+    // ZIP, serialised per user: the user-row lock prevents two
     // concurrent /start calls from both reading the same monthly aggregate and
     // both passing. The job is still "uploading" so it won't appear in the
     // aggregate. RunTask stays outside the transaction (no AWS calls inside
@@ -318,6 +389,7 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
+          sharpen: sharpenMark(lazCount, job.layerOptions),
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
@@ -332,9 +404,9 @@ router.post(
     });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
-    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // launchFargateTask throws on placement failure (`failures[]`
     // populated / no task) as well as on SDK errors, so a launch problem can
-    // never strand the job in `pending` (ARCH-002a).
+    // never strand the job in `pending`.
     if (ECS_SUBNETS.length) {
       try {
         const taskArn = await launchFargateTask({
@@ -342,7 +414,7 @@ router.post(
           containerName: "topo-worker",
           environment: [{ name: "JOB_ID", value: jobId }],
         });
-        // Persist the ARN (Design L2) so the reaper / DELETE can StopTask it.
+        // Persist the ARN so the reaper / DELETE can StopTask it.
         await prisma.topoJob.update({
           where: { id: jobId },
           data: { ecsTaskArn: taskArn },
@@ -368,6 +440,17 @@ router.post(
     res.json({ jobId, status: "pending" });
   },
 );
+
+/**
+ * What /start writes to `TopoJob.sharpen` to send a job down the sharpen
+ * pipeline; the worker replaces it with its result. Vegetation needs point
+ * clouds, so it is ticked only for a ZIP that has them.
+ */
+export function sharpenMark(lazCount: number, layerOptions: unknown) {
+  const vegetation = (layerOptions as { vegetation?: { enabled?: unknown } })
+    ?.vegetation;
+  return { v: 1, vegetation: lazCount > 0 && vegetation?.enabled === true };
+}
 
 // GET /topo-jobs — list authenticated user's jobs
 router.get(
@@ -416,6 +499,7 @@ router.get(
         footprint: true,
         createdAt: true,
         s3OutputKeys: true,
+        sharpen: true,
       },
     });
 
@@ -427,6 +511,15 @@ router.get(
     const expiresAt = new Date(
       Date.now() + presignTtlSeconds * 1000,
     ).toISOString();
+
+    const presign = (key: string) =>
+      getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: key }),
+        {
+          expiresIn: presignTtlSeconds,
+        },
+      );
 
     const jobsResult = await Promise.all(
       jobs.map(async (j) => {
@@ -447,14 +540,7 @@ router.get(
             )
             .map(async (o) => {
               const meta = layerMetaByName.get(o.name as TopoLayerName)!;
-              const pmtilesUrl = await getSignedUrl(
-                s3,
-                new GetObjectCommand({
-                  Bucket: TOPO_BUCKET,
-                  Key: o.pmtilesKey,
-                }),
-                { expiresIn: presignTtlSeconds },
-              );
+              const pmtilesUrl = await presign(o.pmtilesKey);
               return {
                 name: o.name as TopoLayerName,
                 format: meta.format,
@@ -462,12 +548,26 @@ router.get(
               };
             }),
         );
+        // A sharpened job's archives, in their own field so an old build,
+        // which reads only `layers`, ignores them (ADR 0040).
+        const area = sharpenedAreaFrom(j);
+        let sharpened: SharpenedOverlay | undefined;
+        if (area) {
+          const { keys, ...shown } = area;
+          sharpened = {
+            ...shown,
+            heightsUrl: await presign(keys.heights),
+            slopeUrl: await presign(keys.slope),
+            contoursUrl: keys.contours ? await presign(keys.contours) : null,
+          };
+        }
         return {
           jobId: j.id,
           name: j.name,
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
+          ...(sharpened ? { sharpened } : {}),
           // Same rule as the job view above — the role is the whole answer,
           // and the owner's internal id is never emitted. This payload is a
           // derived overlay shape rather than a job row, so it stamps the role
@@ -492,18 +592,18 @@ router.get(
       select: { ...TOPO_JOB_SELECT, s3OutputKeys: true },
     });
     if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-    // Was a 403, which confirmed the id existed to anyone who guessed it.
-    // shareAccess gives a stranger the same 404 a missing id gets.
+    // ShareAccess gives a stranger the same 404 a missing id gets, so
+    // existence is not confirmed to a guesser.
     requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
     res.json(serializeTopoJobFor(job, user.id));
   },
 );
 
-// (Stage 2) Per-job download URLs are gone. All downloads now go through
-// POST /topo-exports → the export worker. See routes/topoExports.ts.
+// All downloads go through POST /topo-exports → the export worker.
+// See routes/topoExports.ts.
 
 // DELETE /topo-jobs/:id — delete job and all S3 objects. In-flight jobs are
-// cancel-then-purged (Design L5): the row is force-failed (status-guarded)
+// cancelled then purged: the row is force-failed (status-guarded)
 // so the worker can't complete it mid-delete, the Fargate task is stopped
 // best-effort, and only then are the prefixes purged and the row removed.
 router.delete(
@@ -529,7 +629,7 @@ router.delete(
     if (runningExports > 0) {
       throw new AppError(
         409,
-        say`An export of this LiDAR map is running. Try again when it finishes.`,
+        say`A map is being made from this LiDAR map. Try again when it finishes.`,
       );
     }
 
@@ -537,7 +637,7 @@ router.delete(
       // Cancel: status-guarded flip so a worker that completes between the
       // ownership read and this write wins (its storage charge then matches
       // the fresh outputBytes re-read below). After the flip, the worker's
-      // guarded terminal write (Design L1) matches 0 rows and self-cleans, so
+      // guarded terminal write matches 0 rows and self-cleans, so
       // a missed StopTask only costs Fargate time.
       await prisma.topoJob.updateMany({
         where: { id: jobId, status: { in: ["pending", "processing"] } },
@@ -561,46 +661,10 @@ router.delete(
       }
     }
 
-    // Re-read outputBytes: the worker may have completed between the
-    // ownership read and the cancel flip — the decrement must match what was
-    // actually charged.
-    const fresh = await prisma.topoJob.findUnique({
-      where: { id: jobId },
-      select: { outputBytes: true },
-    });
-    if (!fresh) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-
-    // S3-first (ARCH-004): delete the objects before the DB row and the quota
-    // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
-    // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
-    // — no orphaned objects, and the quota is only decremented once the bytes
-    // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
-    await Promise.all(
-      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map(
-        (prefix) => deleteS3Prefix(TOPO_BUCKET, prefix),
-      ),
-    );
-
-    // One transaction (Design Q): queued exports referencing this job are
-    // force-failed with a clear message (their COG source is about to
-    // disappear), and the row delete commits with the quota decrement.
-    await prisma.$transaction(async (tx) => {
-      await tx.topoExportJob.updateMany({
-        where: { status: "queued", sourceJobIds: { has: jobId } },
-        data: {
-          status: "failed",
-          errorMessage: say`A LiDAR map this export needed was deleted before it started.`,
-        },
-      });
-      // Share.entityId is polymorphic, so Postgres cannot cascade: without
-      // this the rows outlive the job and keep it in a recipient's list.
-      // No tombstone — topo jobs are not delta-synced; the recipient's next
-      // GET /topo-jobs simply stops returning it and the client reconciles
-      // its downloaded overlay from that.
-      await deleteSharesFor(tx, "topoJob", [jobId]);
-      await tx.topoJob.delete({ where: { id: jobId } });
-      await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
-    });
+    // The worker may have completed between the ownership read and the
+    // cancel flip: `deleteTopoJob` re-reads the charge it undoes.
+    if (!(await deleteTopoJob(jobId, job.userId)))
+      throw new AppError(404, say`Couldn't find that LiDAR map.`);
 
     res.status(204).send();
   },

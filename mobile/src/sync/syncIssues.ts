@@ -1,4 +1,4 @@
-// Parked-ops + conflict-shelf surface (stage8-sync.md §8.4/§8.5). The
+// Parked-ops + conflict-shelf surface. The
 // fail-loudly rule applied to sync: ops the server rejected (blocked) or that
 // lost an edit↔delete race (deadRemote), plus shelved conflict values, are
 // never silently dropped — they surface here with explicit user actions.
@@ -15,7 +15,7 @@ import {
   type SyncPushOp,
 } from "@logjam/shared";
 
-import { getMirrorPlace } from "./mirrorStore";
+import { getMirrorPlace, getMirrorTrip } from "./mirrorStore";
 import { parkedError, type ParkedError } from "./parkedError";
 import {
   canKeepBothField,
@@ -46,7 +46,7 @@ export type ParkedOp = {
   op: SyncPushOp["op"];
   entityId: string;
   /** 'blocked' = server rejected (validation/quota); 'deadRemote' = the row
-   * was deleted server-side under a pending edit (§6 delete-wins). */
+   * was deleted server-side under a pending edit (delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
   error: ParkedError | null;
@@ -79,9 +79,18 @@ export type ShelfEntry = {
   entity: string;
   entityId: string;
   field: string;
-  /** What the user wrote, and lost. */
+  /** What the user wrote. The account took it: a conflict receipt exists only
+   *  for an APPLIED push, and the API's rule is that the later arrival wins. */
   shelvedValue: unknown;
-  /** What the account holds instead — null when the other device CLEARED it. */
+  /** What the field holds NOW, as this phone mirrors it — `shelvedValue` when
+   *  the mirror can't say. Restore and Keep both overwrite THIS, so dialogs
+   *  quote it: the user may have edited the field again, or another device
+   *  written after the flush, and a snapshot would name text that isn't there. */
+  currentValue: unknown;
+  /** True when `currentValue` is no longer the text the user's push wrote. */
+  changedSince: boolean;
+  /** What the account held before the user's write replaced it — the only copy
+   *  left of it. Null when the account had nothing there. */
   serverValue: unknown;
   at: string;
   /** Why "Restore" is unavailable, or null when it can be. */
@@ -94,14 +103,15 @@ export type ShelfEntry = {
 };
 
 /**
- * Why a shelved value cannot be put back, or null when it can.
+ * Why the earlier version cannot be put back, or null when it can.
  *
  * Checked BEFORE the verb is offered, because every one of these ends the same
  * way if it isn't: the write parks as a fresh `blocked` op, and a row the user
  * tapped in Lost reappears in Stuck. A recovery action that manufactures a new
- * sync issue is worse than no recovery action.
+ * sync issue is worse than no recovery action. `nothing` is the account having
+ * held nothing: "restoring" it would clear the user's field.
  */
-export type RestoreBlock = "gone" | "unsupported";
+export type RestoreBlock = "gone" | "unsupported" | "nothing";
 
 type ParkedRow = {
   seq: number;
@@ -209,19 +219,23 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     const target = await shelfTarget(entity, row.entity_id, field);
     const shelvedValue = row.shelved_json ? JSON.parse(row.shelved_json) : null;
     const serverValue = row.server_json ? JSON.parse(row.server_json) : null;
+    const live = await liveFieldValue(entity, row.entity_id, field);
+    const currentValue = live === undefined ? shelvedValue : live;
     entries.push({
       id: row.id,
       entity,
       entityId: row.entity_id,
       field,
       shelvedValue,
+      currentValue,
+      changedSince: !sameValue(currentValue, shelvedValue),
       serverValue,
       at: row.at,
-      restoreBlock: target.block,
+      restoreBlock: target.block ?? (serverValue === null ? "nothing" : null),
       canKeepBoth:
         target.block === null &&
         canKeepBothField(entity, field) &&
-        isMergeablePair(shelvedValue, serverValue),
+        isMergeablePair(currentValue, serverValue),
       // The stored name first: it was captured while the row still existed, and
       // the mirror lookup is only the fallback for entries shelved before the
       // column did (`ensureLocalColumns` backfills nothing).
@@ -233,6 +247,33 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     });
   }
   return entries;
+}
+
+/**
+ * The field's value in the phone's mirror, or `undefined` when the mirror
+ * can't say (an entity with no mirror reader, a row since deleted). Places and
+ * trips are the entities that conflict in practice.
+ */
+async function liveFieldValue(
+  entity: string,
+  entityId: string,
+  field: string,
+): Promise<unknown> {
+  const row =
+    entity === "place"
+      ? await getMirrorPlace(entityId)
+      : entity === "tripLog"
+        ? await getMirrorTrip(entityId)
+        : null;
+  return row && field in row
+    ? (row as unknown as Record<string, unknown>)[field]
+    : undefined;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  const flat = (value: unknown) =>
+    JSON.stringify(typeof value === "string" ? value.trim() : (value ?? null));
+  return flat(a) === flat(b);
 }
 
 /** Two values worth joining: both real text, and not already the same text. */
@@ -254,10 +295,8 @@ function isMergeablePair(shelved: unknown, server: unknown): boolean {
  * since — there is nothing left to restore it into.
  *
  * There is deliberately no `readOnly`: a shelf entry only exists because a push
- * was APPLIED (flush.ts), and `sync.ts` 404s an update to a place you do not
- * own. So a conflict receipt can only ever be about a row of the user's own,
- * and a block for "someone shared this with you" was unreachable code that only
- * hand-seeded rows could produce.
+ * was applied (flush.ts), and the sync endpoint 404s an update to an unowned
+ * place. A conflict receipt can only ever be about a row of the user's own.
  */
 async function shelfTarget(
   entity: string,
@@ -276,38 +315,39 @@ async function shelfTarget(
 }
 
 /**
- * Put a shelved value back: write it locally, queue the update, and DELETE the
- * shelf row — the issue has been dealt with, and a row that stayed behind in a
- * "restored" state asked the user to decide the same thing twice.
+ * Put the account's earlier version back: write it locally, queue the update,
+ * and DELETE the shelf row — the issue has been dealt with, and a row that
+ * stayed behind in a "restored" state asked the user to decide the same thing
+ * twice.
  *
- * This is a clobber, not a merge: the value it displaces is the other device's,
- * and after this write nothing records what that was. The confirm dialog is
- * where that is said, and it quotes the value being replaced, because this
- * function is the point of no return for it. `keepBothShelfValue` is the way
- * out that costs nothing.
+ * This is a clobber, not a merge: the value it displaces is the user's own
+ * (live on every device now), and after this write nothing records what that
+ * was. The confirm dialog is where that is said, and it quotes the value being
+ * replaced, because this function is the point of no return for it.
+ * `keepBothShelfValue` is the way out that costs nothing.
  *
  * The write wins on arrival because it is a NEW edit with a current timestamp,
  * not a replay of the one that lost. It loses only to an edit made after it,
  * which is ordinary LWW and correct.
  */
 export async function restoreShelfValue(id: number): Promise<void> {
-  await writeShelfValue(id, (entry) => entry.shelvedValue);
+  await writeShelfValue(id, (entry) => entry.serverValue);
 }
 
 /**
- * Keep both: write `{kept}\n\n{recovered}` and delete the shelf row.
+ * Keep both: write `{earlier}\n\n{yours}` and delete the shelf row.
  *
- * The kept value goes FIRST because the sentence describing it has to be
- * unambiguous — "your text is added below what's there now" — and chronology
+ * The earlier text goes FIRST because the sentence describing it has to be
+ * unambiguous — "the earlier text is added above yours" — and chronology
  * cannot supply an order here: an offline edit can be typed after the value
- * that beat it to the server.
+ * it replaced.
  */
 export async function keepBothShelfValue(id: number): Promise<void> {
   await writeShelfValue(id, (entry) => {
     if (!entry.canKeepBoth) {
       throw new Error(`Cannot keep both for shelf entry ${id}`);
     }
-    return `${String(entry.serverValue).trim()}\n\n${String(entry.shelvedValue).trim()}`;
+    return `${String(entry.serverValue).trim()}\n\n${String(entry.currentValue).trim()}`;
   });
 }
 
@@ -336,18 +376,15 @@ async function writeShelfValue(
 /**
  * Badge count for the More hub's row: parked ops + an unapplicable delta page.
  *
- * The second is why this isn't one COUNT: a page this app version can't apply
- * stops the mirror dead, and the only thing that used to say so was a line
- * claiming the account was unreachable and that it would keep retrying. A
- * permanent failure belongs on the screen for permanent failures.
+ * A page this Logjam GPS version cannot apply stops the mirror; a permanent
+ * failure belongs on the screen for permanent failures rather than retrying
+ * silently in the background.
  *
- * Conflict receipts ARE counted, and that reverses what this comment used to
- * say. The old argument was that a shelved value "needs nothing" because it
- * already lost — but what it is, is a change the user made and the account does
- * not have, which is the same sentence as a parked op and the same thing the
- * badge exists to say. It is also the only warning they will ever get: the
- * value was dropped in favour of another device's, silently, and if nobody
- * looks it stays dropped. That is exactly the fail-loudly case.
+ * Conflict receipts are counted: a shelved value is a change the user made that
+ * the account does not have, which is the same sentence as a parked op and the
+ * same thing the badge exists to say. It is also the only warning they will ever
+ * get: the value was dropped in favour of another device's, silently, and if
+ * nobody looks it stays dropped. That is exactly the fail-loudly case.
  */
 export async function countSyncIssues(): Promise<number> {
   const db = await getSyncDb();
@@ -389,9 +426,9 @@ export async function retryParkedOp(seq: number): Promise<void> {
 }
 
 /**
- * Discard a parked op: its field data is moved to the conflict shelf (never
- * silently lost — §8.4) and the op is deleted. The optimistic mirror row it
- * created (a never-synced create) is also removed.
+ * Discard a parked op: the op is deleted and the optimistic mirror row it
+ * created (a never-synced create) is removed. The user has already confirmed
+ * the discard in the UI.
  */
 export async function discardParkedOp(seq: number): Promise<void> {
   const db = await getSyncDb();
@@ -404,16 +441,13 @@ export async function discardParkedOp(seq: number): Promise<void> {
     );
     if (!row) return;
     const entity = row.entity as OutboxEntity;
-    // Discarding does NOT shelve what the user typed, and that is deliberate
-    // (changed 2026-09-02). It used to, and the row it left behind asked the
-    // user to decide the same thing a second time — they had already read the
-    // change, read what it would cost, and pressed a destructive confirm. The
-    // confirm is where the cost is stated; see `discardExplanation`.
+    // Discarding does not shelve what the user typed: the user already read
+    // the change, read what it would cost, and pressed a destructive confirm.
+    // The confirm is where the cost is stated; see `discardExplanation`.
     // A create that never synced leaves an orphan optimistic mirror row — the
     // pendingUpload tile in a media strip, the ghost place in a list. Guard on
-    // null: an entity with no id-keyed mirror row must SKIP this, not build
-    // `DELETE FROM null` and roll the whole transaction back (which is how
-    // "Discard" came to do nothing at all for a media op).
+    // null: an entity with no id-keyed mirror row must skip this, not build
+    // `DELETE FROM null` and roll the transaction back.
     if (row.op === "create") {
       const table = outboxMirrorTable(entity);
       if (table) {
@@ -465,12 +499,65 @@ export async function discardParkedOp(seq: number): Promise<void> {
       // Discarding a create discards its lineage. The row will never exist
       // server-side, so a queued update or delete still pointing at it is no
       // longer merely deferred (nothing is `blocked` any more) — it flushes,
-      // 404s, and parks as a FRESH sync issue. One discard became a cascade.
+      // 404s, and parks as a FRESH sync issue. One discard became a cascade
+      // (syncIssues.test.ts).
       await db.runAsync(
         "DELETE FROM outbox WHERE entity_id = ? AND seq != ?",
         row.entity_id,
         seq,
       );
+      // The photos and the way queued behind a place or trip that will never
+      // exist (or a trip's copies of a recording that will never upload) name it in their payload, not in `entity_id`, so the delete above
+      // misses them: each would presign, 404 and park as its own issue. Their
+      // pending rows and cached bytes go with it; a file linked onto the row
+      // is unlinked and stays standalone.
+      const queued = await db.getAllAsync<{
+        seq: number;
+        entity_id: string;
+        op: string;
+        fields_json: string | null;
+      }>(
+        "SELECT seq, entity_id, op, fields_json FROM outbox WHERE entity = 'media' AND op IN ('create', 'link')",
+      );
+      for (const media of queued) {
+        const fields = JSON.parse(media.fields_json ?? "{}") as {
+          linkedId?: string;
+          placeId?: string | null;
+          sourceMediaId?: string;
+        };
+        // A trip's copy of a recording names it too: the copy's name can never
+        // resolve once the recording's upload is discarded, so it would park as
+        // a second issue.
+        const namesDiscarded =
+          media.op === "create" && fields.sourceMediaId === row.entity_id;
+        if (
+          !namesDiscarded &&
+          (media.op === "create" ? fields.linkedId : fields.placeId) !==
+            row.entity_id
+        )
+          continue;
+        if (media.op === "create") {
+          const cached = await db.getFirstAsync<{
+            local_display_path: string | null;
+            local_thumb_path: string | null;
+          }>(
+            "SELECT local_display_path, local_thumb_path FROM media WHERE id = ?",
+            media.entity_id,
+          );
+          if (cached?.local_display_path)
+            orphanedFiles.push(cached.local_display_path);
+          if (cached?.local_thumb_path)
+            orphanedFiles.push(cached.local_thumb_path);
+          await db.runAsync("DELETE FROM media WHERE id = ?", media.entity_id);
+        } else {
+          await db.runAsync(
+            "UPDATE media SET linked_type = 'none', linked_id = NULL WHERE id = ? AND linked_id = ?",
+            media.entity_id,
+            row.entity_id,
+          );
+        }
+        await db.runAsync("DELETE FROM outbox WHERE seq = ?", media.seq);
+      }
     }
     await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
   });
@@ -575,6 +662,7 @@ export async function recreateFromDeadRemote(
             )
           : [],
         notes: pick<string>("notes"),
+        gaugeId: pick<string>("gaugeId"),
         elevation:
           typeof merged.elevation === "number" ? merged.elevation : null,
         // The recovered copy keeps the type it had. Falling back to Canyon
@@ -584,8 +672,7 @@ export async function recreateFromDeadRemote(
           typeof merged.placeTypeId === "string" && merged.placeTypeId
             ? merged.placeTypeId
             : SYSTEM_PLACE_TYPE_IDS.canyon,
-        // Every field value in one go, including what used to be the seven
-        // grade columns.
+        // Every field value in one go.
         fieldValues: asFieldValues(merged.fieldValues),
       });
       await dropOp(seq);
@@ -608,9 +695,10 @@ async function dropOp(seq: number): Promise<void> {
 }
 
 /**
- * Throw a lost value away. The only copy — nothing expires it any more (the
- * 30-day purge went with the tabs: a countdown to silent deletion is what this
- * screen exists to prevent), so the table shrinks only when the user says so.
+ * "Keep my version": the user's text is already the account's, so this only
+ * deletes the earlier text — the only copy. Conflict entries never expire (a
+ * countdown to silent deletion would violate fail-loudly), so the table shrinks
+ * only when the user says so.
  */
 export async function dismissShelfEntry(id: number): Promise<void> {
   const db = await getSyncDb();

@@ -11,17 +11,16 @@
 // so it survives offline, patching the cache first for an immediate read state.
 //
 // A notification that REFERS to something is a way in to that thing: tapping a
-// place share opens the place. Previously every tap did nothing but mark the
-// row read, which made the inbox a dead end you had to navigate out of by hand.
+// place share opens the place, rather than leaving the inbox a dead end you have
+// to navigate out of by hand.
 //
 // A notification that ASKS something is answered HERE, in the row (§5's inline
 // action slot): a friend request and a file a friend sent both carry accept /
 // decline under the row. Which pair a notification carries, and every word of
 // the copy, is `notifications/notificationActions.ts` — the screen renders what
-// that returns and knows nothing about friendships or sends. This is what
-// replaced the standalone "Received files" screen (deleted 2026-08-30): an
-// accepted file becomes an ordinary Saved import through the same pipeline any
-// picked file goes through, so it never needed a page of its own.
+// that returns and knows nothing about friendships or sends. An accepted file
+// becomes an ordinary Saved import through the same pipeline any picked file
+// goes through, so it does not need a page of its own.
 //
 // PRIVACY: rows show the server-resolved label (which may include a place NAME —
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
@@ -33,10 +32,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -59,10 +59,13 @@ import {
   messageFromError,
   newestNotificationsFirst,
   notificationActions,
+  notificationAnnouncement,
+  notificationVerb,
   notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
   notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
@@ -71,6 +74,8 @@ import {
   type NotificationActions,
   type NotificationBatch,
   type NotificationInlineAction,
+  type NotificationPlanTarget,
+  loadStateOf,
 } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -81,12 +86,22 @@ import { capabilityScreenBlock } from "../auth/capabilities";
 import { acceptReceivedFile } from "../imports/acceptReceivedFile";
 import { useConnectivity } from "../map/connectivity";
 import {
+  approveMember,
+  joinPlan,
+  leavePlan,
+  removeMember,
+} from "../plans/plansApi";
+import {
   batchFileActionMessage,
   runBatchFileAction,
   type BatchFileActionKind,
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
-import type { NotificationDestination } from "../notifications/notificationDestination";
+import {
+  notificationDestination,
+  type NotificationDestination,
+} from "../notifications/notificationDestination";
+import { AnnouncementSheet } from "../notifications/AnnouncementSheet";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -106,21 +121,30 @@ import { clearReadNotifications } from "../api/queries";
 import {
   BottomSheet,
   Button,
+  CardActions,
+  confirm,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroSectionList,
+  compactHeroTitle,
   EmptyState,
-  ErrorState,
   Hero,
   IconButton,
-  LoadingState,
+  ListBody,
+  RequestAnswers,
   Row,
   ChipRail,
   SelectionBar,
   SelectionMark,
   StatusPill,
-  TextField,
+  SearchField,
   Toast,
   useBulkSelection,
+  useHeroCollapse,
   type ChipOption,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { notificationMeta } from "./notificationMeta";
 
@@ -142,8 +166,9 @@ type NotificationsState = {
 // cache surfaces the error.
 //
 // `blocked` is the guest gate: a guest has no inbox to fetch, and neither the
-// cache read nor the fetch may fire (mobile/CLAUDE.md — a guaranteed 401 per
-// screen open). It is a parameter rather than a hook read so this stays one
+// cache read nor the fetch may fire (mobile/AGENTS.md, guard:
+// mobile/src/auth/capabilities.test.ts — a guaranteed 401 per screen open).
+// It is a parameter rather than a hook read so this stays one
 // decision made by the screen.
 function useNotifications(blocked: boolean): NotificationsState {
   const [notifications, setNotifications] = useState<TNotification[] | null>(
@@ -231,14 +256,20 @@ const EMPTY_BATCH_KEYS: ReadonlySet<string> = new Set<string>();
 
 export function NotificationsScreen({
   onBack,
+  backLabel,
   onUnreadChanged,
   onOpenPlace,
+  onOpenPlan,
   onOpenSaved,
   onOpenFriends,
+  openAnnouncement,
 }: {
   onBack: () => void;
+  backLabel: string;
   onUnreadChanged?: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** A plan notification: its plan, as Logjam Web's inbox opens it. */
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   /**
    * "View in Saved" — the tab, on the filter the subject lives under, with that
    * row pulsed on arrival. `highlightKey` is null when the notification names
@@ -247,8 +278,14 @@ export function NotificationsScreen({
    */
   onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
   onOpenFriends: () => void;
+  /**
+   * A tapped announcement push: open that message once its row is in the
+   * list. `nonce` so tapping the same push twice opens it twice.
+   */
+  openAnnouncement?: { announcementId: string; nonce: number };
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -260,20 +297,22 @@ export function NotificationsScreen({
   const refetch = query.refetch;
   // ONE toast channel for every action outcome (DESIGN.md): an inline banner
   // reflows the list under the user's thumb and then lingers with no owner, and
-  // on a scrolled list it lands off screen entirely — which is how accepting a
-  // file came to look like it did nothing.
+  // on a scrolled list it lands off screen entirely.
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
   );
+  const heroCollapse = useHeroCollapse();
   const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
+  /** Which announcement's message sheet is open, by notification id. */
+  const [messageId, setMessageId] = useState<string | null>(null);
   // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
@@ -523,10 +562,10 @@ export function NotificationsScreen({
   // --- The two group verbs, over the current selection ----------------------
 
   // The selection SURVIVES this one. Marking is not destructive and the rows
-  // are all still there, so dropping the picks made the button feel like it had
-  // done something more than it had — and left the obvious follow-up (mark
-  // these, now delete them) needing the whole selection built again. Delete
-  // still clears, because those rows are gone.
+  // are all still there, so dropping the picks would make the button feel like
+  // it had done something more than it had — leaving the obvious follow-up
+  // (mark these, now delete them) needing the whole selection built again.
+  // Delete clears because those rows are gone.
   const applyReadAction = useCallback(() => {
     if (!readAction) return;
     void (async () => {
@@ -535,23 +574,16 @@ export function NotificationsScreen({
     })();
   }, [notify, readAction, setRead]);
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedNotifications;
-    const count = targets.length;
-    const { confirmTitle, confirmBody } = notificationDeleteConfirm(count);
-    Alert.alert(confirmTitle, confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            await deleteNotifications(targets);
-            clearSelection();
-          })();
-        },
-      },
-    ]);
+    const ok = await confirm({
+      ...notificationDeleteConfirm(targets.length),
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    await deleteNotifications(targets);
+    clearSelection();
   }, [clearSelection, deleteNotifications, selectedNotifications]);
 
   const markAll = useCallback(async () => {
@@ -560,6 +592,7 @@ export function NotificationsScreen({
       await patchCachedRead("all");
       await enqueueNotificationRead(unreadIds);
       onUnreadChanged?.();
+      notify(INBOX.copy.markedAllRead, "done");
     } catch (err) {
       console.error(err);
       notify(messageFromError(err, "Couldn't mark those as read."), "error");
@@ -570,36 +603,23 @@ export function NotificationsScreen({
   const [actionsOpen, setActionsOpen] = useState(false);
   const readCount = notifications.filter((n) => n.read).length;
 
-  const clearRead = useCallback(() => {
-    Alert.alert(
-      CLEAR_READ_CONFIRM.confirmTitle,
-      CLEAR_READ_CONFIRM.confirmBody,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: CLEAR_READ_CONFIRM.confirmLabel,
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                await clearReadNotifications();
-                // The mirror follows the server: the read ones this phone holds
-                // go from the cache too, so they stay gone offline.
-                await removeCachedNotifications(
-                  notifications.filter((n) => n.read).map((n) => n.id),
-                );
-                clearSelection();
-                onUnreadChanged?.();
-                query.refetch();
-              } catch (err) {
-                console.error(err);
-                notify(CLEAR_READ_CONFIRM.failed, "error");
-              }
-            })();
-          },
-        },
-      ],
-    );
+  const clearRead = useCallback(async () => {
+    const ok = await confirm({ ...CLEAR_READ_CONFIRM, tone: "destructive" });
+    if (!ok) return;
+    try {
+      await clearReadNotifications();
+      // The mirror follows the server: the read ones this phone holds
+      // go from the cache too, so they stay gone offline.
+      await removeCachedNotifications(
+        notifications.filter((n) => n.read).map((n) => n.id),
+      );
+      clearSelection();
+      onUnreadChanged?.();
+      query.refetch();
+    } catch (err) {
+      console.error(err);
+      notify(CLEAR_READ_CONFIRM.failed, "error");
+    }
   }, [clearSelection, notifications, notify, onUnreadChanged, query]);
 
   /**
@@ -607,8 +627,8 @@ export function NotificationsScreen({
    *
    * Which call runs is the descriptor's `type`; nothing here knows what a
    * friendship or a send IS beyond the id to pass. Only a file accept leaves
-   * the notification alive (as the "Download again" retry — the download URL
-   * is issued before the bytes land); the other three are purged server-side,
+   * the notification alive (as a finished row, or "Try again" if the bytes
+   * did not land: the download URL is issued before they do); the other three are purged server-side,
    * so the row is hidden the moment the call succeeds.
    *
    * `silent` is for a batch run, which answers eight rows through this same
@@ -633,6 +653,16 @@ export function NotificationsScreen({
           await (action.kind === "accept"
             ? acceptFriendRequest
             : declineFriendRequest)(target.targetId);
+        } else if (target.type === "plan_invite") {
+          await (action.kind === "accept" ? joinPlan : leavePlan)(
+            target.targetId,
+          );
+        } else if (target.type === "plan_join_request") {
+          // Told the status the leader saw, so it acts on no one who has since
+          // moved on (a 409, which clears the row below).
+          await (action.kind === "accept"
+            ? approveMember(target.targetId, target.requesterId!)
+            : removeMember(target.targetId, target.requesterId!, "requested"));
         } else if (action.kind === "accept") {
           await acceptReceivedFile(target.targetId, target.sender);
         } else {
@@ -641,9 +671,9 @@ export function NotificationsScreen({
         if (survives) {
           // Answering a notification IS reading it. Both patches go to the
           // CACHE and there is deliberately no refetch: `GET /notifications` is
-          // the authority on `read`, so re-fetching here raced the outbox push
-          // and wrote `read: false` straight back over the mark-read. The row
-          // now settles in place — same position, "Saved", no longer New.
+          // the authority on `read`, so re-fetching here would race the outbox
+          // push and write `read: false` straight back over the mark-read. The
+          // row settles in place — same position, "Saved", no longer New.
           await patchCachedPayload(n.id, { fileSendStatus: "accepted" });
           await markRead(n);
         } else {
@@ -680,23 +710,21 @@ export function NotificationsScreen({
 
   /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md). */
   const requestAction = useCallback(
-    (
+    async (
       n: TNotification,
       target: NotificationActions,
       action: NotificationInlineAction,
     ) => {
-      if (!action.confirm) {
-        void runAction(n, target, action);
-        return;
+      if (action.confirm) {
+        const ok = await confirm({
+          confirmTitle: action.confirm.title,
+          confirmBody: action.confirm.body,
+          confirmLabel: action.confirm.confirmLabel,
+          tone: "filled",
+        });
+        if (!ok) return;
       }
-      Alert.alert(action.confirm.title, action.confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: action.confirm.confirmLabel,
-          style: "destructive",
-          onPress: () => void runAction(n, target, action),
-        },
-      ]);
+      void runAction(n, target, action);
     },
     [runAction],
   );
@@ -731,7 +759,7 @@ export function NotificationsScreen({
           onProgress: (progress) =>
             setBatchBusy((prev) => (prev ? { ...prev, progress } : prev)),
           run: async (notification) => {
-            const target = notificationActions(notification);
+            const target = notificationActions(notification, "gps");
             // No target means the row is not answerable any more (expired, or
             // already taken) — nothing to do, and not a failure either.
             if (!target) return;
@@ -765,39 +793,22 @@ export function NotificationsScreen({
    * many rather than which.
    */
   const requestBatchAction = useCallback(
-    (batch: NotificationBatch, kind: BatchFileActionKind) => {
+    async (batch: NotificationBatch, kind: BatchFileActionKind) => {
       const pending = batchPendingFileSends(batch);
       if (pending.length === 0) return;
-      if (kind === "accept") {
-        void runBatch(batch, kind);
-        return;
+      if (kind !== "accept") {
+        const who = batch.sender ?? "them";
+        const ok = await confirm({
+          confirmTitle: `Decline ${pending.length} files?`,
+          confirmBody: `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
+          confirmLabel: "Decline",
+          tone: "destructive",
+        });
+        if (!ok) return;
       }
-      const who = batch.sender ?? "them";
-      Alert.alert(
-        `Turn down ${pending.length} files?`,
-        `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Turn down",
-            style: "destructive",
-            onPress: () => void runBatch(batch, kind),
-          },
-        ],
-      );
+      void runBatch(batch, kind);
     },
     [runBatch],
-  );
-
-  // Reading it is what marks it read, so both happen on one tap; the place
-  // then opens on top.
-  const openNotification = useCallback(
-    (n: TNotification) => {
-      void markRead(n);
-      const placeId = notificationPlaceId(n);
-      if (placeId) onOpenPlace(placeId);
-    },
-    [markRead, onOpenPlace],
   );
 
   /**
@@ -816,6 +827,82 @@ export function NotificationsScreen({
     },
     [markRead, onOpenFriends, onOpenSaved],
   );
+
+  // Reading it is what marks it read, so both happen on one tap; the place
+  // or the plan then opens on top. A message is the exception: it opens over
+  // the inbox and is read when it closes, so in Unread its row stays put until
+  // then (as `toggleBatch` explains).
+  const openNotification = useCallback(
+    (n: TNotification) => {
+      if (notificationAnnouncement(n)) {
+        setMessageId(n.id);
+        return;
+      }
+      const placeId = notificationPlaceId(n);
+      const plan = notificationPlanTarget(n);
+      // Every other row opens what it is about, as its ⋯ sheet's "View in" does.
+      const destination = notificationDestination(n);
+      if (!placeId && !plan && destination)
+        return viewNotification(n, destination);
+      void markRead(n);
+      if (placeId) onOpenPlace(placeId);
+      else if (plan) onOpenPlan(plan);
+    },
+    [markRead, onOpenPlace, onOpenPlan, viewNotification],
+  );
+
+  const closeMessage = useCallback(() => {
+    const n = notifications.find((row) => row.id === messageId);
+    if (n) void markRead(n);
+    setMessageId(null);
+  }, [markRead, messageId, notifications]);
+
+  // A push can land while a sheet is up, and a second Modal must not stack on
+  // the first: that sheet closes, and its `onClosed` opens the message.
+  const parkedMessage = useRef<TNotification | null>(null);
+  const openParked = useCallback(() => {
+    const parked = parkedMessage.current;
+    parkedMessage.current = null;
+    if (parked) openNotification(parked);
+  }, [openNotification]);
+  const showMessage = useCallback(
+    (n: TNotification) => {
+      if (menuId === null && !actionsOpen && messageId === null) {
+        return openNotification(n);
+      }
+      parkedMessage.current = n;
+      setMenuId(null);
+      setActionsOpen(false);
+      if (messageId !== null) closeMessage();
+    },
+    [actionsOpen, closeMessage, menuId, messageId, openNotification],
+  );
+
+  // The push named the announcement, not the row. The message opens as soon
+  // as the cached or live list holds its row; when neither does, one refetch
+  // per push asks for it, since an inbox already on screen fetches nothing on
+  // its own. A retracted one never arrives, and the inbox is where the tap
+  // lands.
+  const openedNonce = useRef<number | null>(null);
+  const fetchedNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openAnnouncement || openedNonce.current === openAnnouncement.nonce) {
+      return;
+    }
+    const { announcementId, nonce } = openAnnouncement;
+    const row = query.notifications.find(
+      (n) => notificationAnnouncement(n)?.id === announcementId,
+    );
+    if (!row) {
+      if (fetchedNonce.current === nonce) return;
+      fetchedNonce.current = nonce;
+      refetch();
+      return;
+    }
+    openedNonce.current = nonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, once the list holds its row
+    showMessage(row);
+  }, [openAnnouncement, query.notifications, refetch, showMessage]);
 
   const openMenu = useCallback((n: TNotification) => setMenuId(n.id), []);
 
@@ -919,47 +1006,69 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow={INBOX.title} title={INBOX.title} onBack={onBack} />
+        <Hero title={INBOX.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
   }
-  if (query.loading && notifications.length === 0)
-    return <LoadingState label={INBOX.copy.loading} />;
-  if (query.error && notifications.length === 0) {
-    return <ErrorState message={query.error} onRetry={query.refetch} />;
+  const nothingYet = notifications.length === 0;
+  if (nothingYet && (query.loading || query.error)) {
+    // With the Hero kept: a failed load must leave the way back.
+    return (
+      <View style={styles.root}>
+        <Hero title={INBOX.title} onBack={onBack} backLabel={backLabel} />
+        <ListBody
+          state={loadStateOf(false, query.loading ? null : query.error)}
+          loadingLabel={INBOX.copy.loading}
+          error={query.error}
+          onRetry={query.refetch}
+        >
+          {null}
+        </ListBody>
+      </View>
+    );
   }
 
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  // The truncation note scrolls in the list's header; every other section is
+  // drawn in place, so the chips and search stay pinned under the hero.
+  const headKeys: readonly string[] = ["truncated"];
+  const head = contractSectionKeys(INBOX, "gps").filter((key) =>
+    headKeys.includes(key),
+  );
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
+    // The hero is pinned and folds to its title row once the list scrolls;
+    // the chips and search stay pinned under it. A multi-select's bar
+    // takes the compact row's slot (DESIGN.md).
+    //
+    // The answer to "what happened while I was away?" is a NUMBER of things
+    // that did (shared/DESIGN.md §2), rather than a line that says the same
+    // words for one notification and for forty. The tally beside it stays the
+    // whole inbox, so the two never restate each other.
     hero: () => (
-      <Hero
-        eyebrow={INBOX.title}
-        // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (shared/DESIGN.md §2). "Something new" was that answer rounded to a boolean —
-        // it said the same words for one notification and for forty, and read as
-        // a marketing line rather than a count. The tally below it stays the
-        // whole inbox, so the two lines never restate each other.
-        title={inboxHeroTitle(unreadCount, notifications.length)}
-        onBack={onBack}
-        value={String(tally.total)}
-        valueSuffix={tally.total === 1 ? "notification" : "notifications"}
-        actions={
-          <IconButton
-            icon="overflow"
-            accessibilityLabel="Inbox actions"
-            onPress={() => setActionsOpen(true)}
-          />
-        }
-      />
-    ),
-    buckets: () => (
-      <>
-        {/* The bulk bar takes the ChipRail's slot and only that slot, so
-            the rail's height cannot change when a selection starts (DESIGN.md). */}
-        {notifications.length > 0 ? (
-          <View style={styles.rail}>
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            // The unread count is what the row says once the summary is gone.
+            title={
+              compact && unreadCount > 0
+                ? compactHeroTitle(INBOX.title, unreadCount)
+                : INBOX.title
+            }
+            value={inboxHeroTitle(unreadCount, notifications.length)}
+            valueSuffix={`${tally.total} ${tally.total === 1 ? "notification" : "notifications"}`}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              <IconButton
+                icon="overflow"
+                accessibilityLabel="Inbox actions"
+                onPress={() => setActionsOpen(true)}
+              />
+            }
+          >
             {selecting && readAction ? (
               <SelectionBar
                 countLabel={selectionCountLabel(selectedNotifications)}
@@ -980,31 +1089,33 @@ export function NotificationsScreen({
                 onSelectAll={selectAll}
                 onDelete={deleteSelected}
               />
-            ) : (
-              <ChipRail
-                options={buckets}
-                value={bucket}
-                onChange={changeBucket}
-                scroll
-              />
-            )}
-            {/* The name search, in the SAME place in both states so the rail's
-                height cannot differ between them (DESIGN.md). It goes inert rather than
-                unmounting while picking — a keystroke could narrow a selected row
-                out of the list — and dims to say so, the treatment Saved's field
-                and the waypoint tag rail already use. */}
-            <View style={styles.searchField}>
-              <TextField
-                label={INBOX.copy.searchField}
-                value={search}
-                onChangeText={setSearch}
-                editable={!selecting}
-              />
-            </View>
-          </View>
-        ) : null}
-      </>
+            ) : undefined}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
+    buckets: () =>
+      notifications.length > 0 ? (
+        <View style={styles.pinnedRail}>
+          <ChipRail
+            options={buckets}
+            value={bucket}
+            onChange={changeBucket}
+            scroll
+          />
+          {/* Inert while picking rather than unmounted — a keystroke could
+              narrow a selected row out of the list — and dimmed to say so, the
+              treatment Saved's field already uses. */}
+          <View style={styles.searchField}>
+            <SearchField
+              label={INBOX.copy.searchField}
+              value={search}
+              onChangeText={setSearch}
+              editable={!selecting}
+            />
+          </View>
+        </View>
+      ) : null,
     truncated: () =>
       truncated ? (
         <Text style={styles.truncation}>
@@ -1012,17 +1123,27 @@ export function NotificationsScreen({
         </Text>
       ) : null,
     list: () => (
-      <SectionList
+      <HeroSectionList
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={sections}
         keyExtractor={keyExtractor}
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
+        ListHeaderComponent={
+          <View>
+            {head.map((key) => (
+              <Fragment key={key}>{page[key]()}</Fragment>
+            ))}
+          </View>
+        }
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}
@@ -1046,9 +1167,14 @@ export function NotificationsScreen({
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(INBOX, "gps").map((key) => (
-        <Fragment key={key}>{page[key]()}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(INBOX, "gps")
+          .filter((key) => !head.includes(key) && key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{page[key]()}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {page.list()}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}
@@ -1056,15 +1182,24 @@ export function NotificationsScreen({
         notification={notifications.find((n) => n.id === menuId) ?? null}
         visible={menuId !== null}
         onClose={() => setMenuId(null)}
+        onClosed={openParked}
         onOpen={openNotification}
         onView={viewNotification}
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
       />
 
+      <AnnouncementSheet
+        notification={notifications.find((n) => n.id === messageId) ?? null}
+        visible={messageId !== null}
+        onClose={closeMessage}
+        onClosed={openParked}
+      />
+
       <BottomSheet
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
+        onClosed={openParked}
         title="Inbox actions"
       >
         <View style={styles.actionsBody}>
@@ -1104,12 +1239,18 @@ export function NotificationsScreen({
   );
 }
 
+/** Why a row's buttons are dimmed, for the press that asks. */
+function actionsDisabledReason(online: boolean, selecting: boolean): string {
+  if (!online) return "Needs a connection";
+  return selecting ? "Finish picking first" : "Working…";
+}
+
 function keyExtractor(item: TNotification): string {
   return item.id;
 }
 
 // Memoised, with a callback that takes the item rather than closing over it —
-// §9, the whole reason the Logs list stopped re-rendering every mounted cell.
+// so the list does not re-render every mounted cell on change (§9).
 const NotificationRow = memo(function NotificationRow({
   item,
   batch,
@@ -1184,8 +1325,8 @@ const NotificationRow = memo(function NotificationRow({
   }
   const label = notificationLabel(item);
   const meta = notificationMeta(item, theme);
-  const target = notificationActions(item);
-  const subtitle = [label.warning, formatTime(item.createdAt)]
+  const target = notificationActions(item, "gps");
+  const subtitle = [label.detail, formatTime(item.createdAt)]
     .filter(Boolean)
     .join(" · ");
   // The row's own STATE beats the unread flag in the one trailing slot: unread
@@ -1195,6 +1336,14 @@ const NotificationRow = memo(function NotificationRow({
   ) : !item.read ? (
     <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
   ) : undefined;
+  // A finished send has nothing to answer: a quiet way to its copy, and to
+  // fetch it again.
+  const quietActions = target?.actions.filter((action) => action.quiet) ?? [];
+  const answers = target?.actions.filter((action) => !action.quiet) ?? [];
+  const showInSaved =
+    target?.type === "file_sent" && answers.length === 0
+      ? notificationDestination(item)
+      : null;
   return (
     <Row
       icon={meta.icon}
@@ -1230,47 +1379,68 @@ const NotificationRow = memo(function NotificationRow({
       // are not. A selected row lights the edge too, so it never looks like the
       // selection has un-marked it.
       // A member of an expanded batch is INDENTED, so the header above it reads
-      // as what the indented rows belong to. Under unread-first sorting the
-      // members were pulled out of wherever they had drifted to and re-inserted
-      // beneath the header (`collapseBatches`), and without the indent there is
-      // nothing on screen saying that is what happened.
+      // as what the indented rows belong to. Members are grouped beneath the
+      // header (`collapseBatches`), and the indent makes clear on screen that
+      // they belong together.
       style={[
         !item.read || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle,
         ...(member ? [styles.batchMember] : []),
       ]}
-      // INSIDE the card. Sitting below it, the pair read as a caption for the
-      // next notification down — which is how a "Download again" got pressed
-      // for a file the user had just turned down.
+      // INSIDE the card. Sitting below it, the pair would read as a caption for
+      // the next notification down.
       footer={
-        target ? (
-          <>
-            <View style={styles.actions}>
-              {target.actions.map((action) => (
-                <Button
-                  key={action.kind}
-                  label={action.label}
-                  // Decline is the outline: two filled buttons side by side
-                  // make "no" look like the thing to press.
-                  variant={
-                    action.kind === "decline" ? "outlineAccent" : undefined
-                  }
-                  compact
-                  // Split the card's width rather than shrink-wrapping the
-                  // label: a full-width target is the one that survives being
-                  // tapped with cold hands, and it belongs to the card it fills.
-                  grow
-                  disabled={actionsDisabled}
-                  loading={busyKind === action.kind}
-                  onPress={() => onAction(item, target, action)}
-                />
-              ))}
-            </View>
-            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md). */}
-            {!online ? (
-              <Text style={styles.actionHint}>Needs a connection</Text>
+        target && answers.length > 0 ? (
+          <RequestAnswers
+            answers={answers.map((action) => ({
+              key: action.kind,
+              label: action.label,
+              decline: action.kind === "decline",
+              loading: busyKind === action.kind,
+              onPress: () => onAction(item, target, action),
+            }))}
+            disabled={actionsDisabled}
+            disabledReason={actionsDisabledReason(online, selecting)}
+            reasonShown={!online}
+            // The reason on the thing that is dimmed, not on the screen (DESIGN.md).
+            hint={!online ? "Needs a connection" : undefined}
+          />
+        ) : showInSaved || quietActions.length > 0 ? (
+          <CardActions>
+            {showInSaved ? (
+              <Button
+                label={showInSaved.label}
+                variant="ghost"
+                disabled={selecting}
+                disabledReason={actionsDisabledReason(true, selecting)}
+                onPress={() => onPress(item)}
+              />
             ) : null}
-          </>
-        ) : null
+            {target
+              ? quietActions.map((action) => (
+                  <Button
+                    key={action.kind}
+                    label={action.label}
+                    variant="ghost"
+                    loading={busyKind === action.kind}
+                    disabled={actionsDisabled}
+                    disabledReason={actionsDisabledReason(online, selecting)}
+                    onPress={() => onAction(item, target, action)}
+                  />
+                ))
+              : null}
+          </CardActions>
+        ) : notificationAnnouncement(item) ? (
+          // A button, not only the row: nothing else says a row opens a message.
+          <CardActions>
+            <Button
+              label={notificationVerb("readMessage").label}
+              variant="outlineAccent"
+              disabled={selecting}
+              disabledReason="Finish picking first"
+              onPress={() => onPress(item)}
+            />
+          </CardActions>
+        ) : undefined
       }
     />
   );
@@ -1375,38 +1545,36 @@ const BatchRow = memo(function BatchRow({
         // sent files gets buttons, and only while some are still unanswered.
         batch.group === "files" && pending.length > 0 ? (
           <>
-            <View style={styles.actions}>
+            <CardActions>
               {/* THE COUNT IS THE PROGRESS INDICATOR, so neither of these
                   passes `loading`: `Button` swaps the whole label out for a
-                  spinner, which threw away the one thing worth showing — a
-                  batch accept is a download queue, and "Saving 2 of 3" is the
+                  spinner, which would discard the one thing worth showing — a
+                  batch accept is a download queue, and "Accepting 2 of 3" is the
                   difference between waiting and wondering whether it hung.
                   `actionsDisabled` covers the run, so the pair still dims and
                   refuses taps. */}
               <Button
                 label={
                   batchBusy?.kind === "accept"
-                    ? `Saving ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
-                    : `Save all ${pending.length}`
+                    ? `Accepting ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
+                    : `Accept all ${pending.length}`
                 }
-                compact
-                grow
                 disabled={actionsDisabled}
+                disabledReason={actionsDisabledReason(online, selecting)}
+                reasonShown={!online}
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
                 label={
-                  batchBusy?.kind === "decline"
-                    ? "Turning down…"
-                    : "Turn all down"
+                  batchBusy?.kind === "decline" ? "Declining…" : "Decline all"
                 }
                 variant="outlineAccent"
-                compact
-                grow
                 disabled={actionsDisabled}
+                disabledReason={actionsDisabledReason(online, selecting)}
+                reasonShown={!online}
                 onPress={() => onBatchAction(batch, "decline")}
               />
-            </View>
+            </CardActions>
             {/* Accepting a batch is a DOWNLOAD QUEUE — each one presigns, pulls
                 the bytes and runs the import — so the row says so rather than
                 spinning silently for a minute on trail signal. */}
@@ -1450,6 +1618,7 @@ function EmptyPanel({
     return (
       <EmptyState
         title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        hint={bucket === "unread" ? copy.noUnreadBody : copy.noReadBody}
         action={{
           label: copy.showEverything,
           variant: "ghost",
@@ -1464,8 +1633,10 @@ function EmptyPanel({
 const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
-  rail: {
-    paddingHorizontal: spacing(2),
+  // Pinned outside the list, so it carries the list's gutter itself; the chips
+  // run off the right edge.
+  pinnedRail: {
+    paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
@@ -1496,11 +1667,11 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(2),
   },
   // Unread is an accent EDGE, not an accent border all round — that border is
-  // `Row`'s `selected` treatment, and while a multi-select is running the two
-  // states were drawn the same way on the same card. A left edge reads as a
-  // property of the row (and survives a row that is BOTH unread and picked,
-  // which is most of them), the way an unread marker does in any inbox. Both
-  // states declare the same WIDTH — see the note at the call site.
+  // `Row`'s `selected` treatment; otherwise, while a multi-select is running
+  // the two states would be drawn the same way on the same card. A left edge
+  // reads as a property of the row (and survives a row that is BOTH unread and
+  // picked, which is most of them), the way an unread marker does in any
+  // inbox. Both states declare the same WIDTH — see the note at the call site.
   rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
   rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: theme.line },
   // One step in, so an expanded batch's rows read as belonging to the header
@@ -1513,8 +1684,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
-  // what it replaced.
-  actions: { flexDirection: "row", gap: spacing(1) },
+  // that box.
   actionHint: {
     ...muted(theme, textRole.meta),
     textAlign: "center",

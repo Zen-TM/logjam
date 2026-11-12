@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, TextInput, View, type TextInputInstance } from "react-native";
 
 import {
   formRhythm,
@@ -11,6 +11,7 @@ import {
   muted,
 } from "../theme";
 import { Chip, type ChipOption } from "./Chip";
+import { Field } from "./Field";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
 
@@ -20,8 +21,8 @@ import { SectionHeader } from "./SectionHeader";
  * always allowed (`TRIP_TYPE_SUGGESTIONS` is a seed, not an enum).
  *
  * Chips stay in VOCABULARY order whatever is selected. Moving a chip to the
- * front on selection made the user re-read the whole layout after every tap,
- * and put the chip they were reaching for somewhere else. `onAdd` renders a
+ * front on selection makes the user re-read the whole layout after every tap,
+ * and puts the chip they are reaching for somewhere else. `onAdd` renders a
  * trailing "+ Add" chip that swaps into an inline field; omit it for a closed
  * vocabulary.
  */
@@ -36,6 +37,7 @@ export function ChipPicker({
   primaryValue,
   hint,
   error,
+  field = false,
 }: {
   label: string;
   options: ChipOption[];
@@ -55,13 +57,16 @@ export function ChipPicker({
   hint?: string;
   /** The problem with this choice (shared/DESIGN.md §11, "Form errors"). */
   error?: string | null;
+  /** One question among a form's fields: labelled as a `Field` is, not
+   *  headed as a vocabulary of its own (a trip's types). */
+  field?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const commit = () => {
     const trimmed = draft.trim();
@@ -72,50 +77,60 @@ export function ChipPicker({
 
   const isSelected = new Set(selected);
 
+  const chips = (
+    <View style={styles.chips}>
+      {options.map((option) => (
+        <Chip
+          key={option.value}
+          label={option.label}
+          active={isSelected.has(option.value)}
+          disabled={disabledValues?.has(option.value) ?? false}
+          hue={option.hue}
+          icon={option.icon}
+          starred={option.value === primaryValue}
+          choice="multi"
+          onPress={() => onToggle(option.value)}
+        />
+      ))}
+      {onAdd && !adding ? (
+        <Chip
+          label={addPlaceholder}
+          icon="add"
+          dashed
+          onPress={() => {
+            setAdding(true);
+            // Focus on the next frame: the input does not exist yet on this one.
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+        />
+      ) : null}
+      {adding ? (
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          value={draft}
+          onChangeText={setDraft}
+          onSubmitEditing={commit}
+          onBlur={commit}
+          accessibilityLabel={addPlaceholder}
+          placeholder={addPlaceholder}
+          placeholderTextColor={theme.textMuted}
+          autoCapitalize="none"
+          returnKeyType="done"
+        />
+      ) : null}
+    </View>
+  );
+  if (field)
+    return (
+      <Field label={label} hint={hint} error={error}>
+        {chips}
+      </Field>
+    );
   return (
     <View style={styles.wrap}>
       <SectionHeader title={label} />
-      <View style={styles.chips}>
-        {options.map((option) => (
-          <Chip
-            key={option.value}
-            label={option.label}
-            active={isSelected.has(option.value)}
-            disabled={disabledValues?.has(option.value) ?? false}
-            hue={option.hue}
-            icon={option.icon}
-            starred={option.value === primaryValue}
-            onPress={() => onToggle(option.value)}
-          />
-        ))}
-        {onAdd && !adding ? (
-          <Chip
-            label={addPlaceholder}
-            icon="add"
-            dashed
-            onPress={() => {
-              setAdding(true);
-              // Focus on the next frame: the input does not exist yet on this one.
-              requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-          />
-        ) : null}
-        {adding ? (
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={draft}
-            onChangeText={setDraft}
-            onSubmitEditing={commit}
-            onBlur={commit}
-            accessibilityLabel={addPlaceholder}
-            placeholder={addPlaceholder}
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="none"
-            returnKeyType="done"
-          />
-        ) : null}
-      </View>
+      {chips}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       <FieldError message={error} />
     </View>

@@ -12,7 +12,9 @@ resource "aws_s3_bucket" "tfstate" {
   bucket = "logjam-tfstate-620853681701"
 
   # State loss = lose Terraform's map of code→real resources (recoverable by
-  # re-import, but painful). Never let an apply delete this bucket.
+  # re-import, but painful). The guard is the lifecycle block below: Terraform
+  # refuses a plan that would destroy this bucket, and infra/AGENTS.md forbids
+  # removing `prevent_destroy` to get past one.
   lifecycle {
     prevent_destroy = true
   }

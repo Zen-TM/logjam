@@ -71,7 +71,7 @@ describe("scrubStructure", () => {
   it("censors coordinate and name keys at any depth", () => {
     const input = {
       place: { name: "Secret", latitude: -33.7, longitude: 150.3, safe: "ok" },
-      list: [{ notes: "private", other: 1 }],
+      list: [{ notes: "private", gaugeId: "210001", other: 1 }],
     };
     expect(scrubStructure(input)).toEqual({
       place: {
@@ -80,14 +80,13 @@ describe("scrubStructure", () => {
         longitude: "[redacted]",
         safe: "ok",
       },
-      list: [{ notes: "[redacted]", other: 1 }],
+      list: [{ notes: "[redacted]", gaugeId: "[redacted]", other: 1 }],
     });
   });
 
-  // The rework moved every type-specific value into `fieldValues` — the seven
-  // grades included — and added `foreignFields`, which holds ANOTHER user's
-  // labels and values. A crash report carrying either would leak more than the
-  // notes key this list was written for.
+  // `fieldValues` holds type-specific values (grades included) and
+  // `foreignFields` holds another user's labels and values on copy. A crash
+  // report carrying either would leak private field data.
   it("censors a place's own field values and what arrived on a copy", () => {
     const input = {
       place: {
@@ -120,6 +119,67 @@ describe("scrubStructure", () => {
       comment: "[redacted]",
       title: "[redacted]",
     });
+  });
+
+  // The user-written values of a cached plan's write-up, places, ways, forms
+  // and answers (GET /plans/:id, made up here) leave as "[redacted]". Not
+  // covered: a media item's `filename` and `metadata.bbox` (a plan's photos
+  // and files), which no key catches anywhere in mobile, plan or not.
+  // Mutation that turns this red: delete `body`, `questions`, `answers` or
+  // `points` from SENSITIVE_KEYS.
+  it("censors a trip plan's write-up, places, ways, forms and answers", () => {
+    const secrets = [
+      "Wollemi slot trip",
+      "Meet at the locked gate",
+      "Emergency contact",
+      "0400 000 000",
+      "Hidden pool",
+      "Exit gully",
+      "Bring a wetsuit",
+      "Abseil",
+      "151.234567",
+      "-33.456789",
+    ];
+    const plan = {
+      id: "plan-1",
+      name: "Wollemi slot trip",
+      tripTypes: ["Abseil"],
+      sections: [
+        { id: "s1", title: "Overview", body: "Meet at the locked gate" },
+      ],
+      places: [
+        {
+          id: "p1",
+          name: "Hidden pool",
+          latitude: -33.456789,
+          longitude: 151.234567,
+          notes: "Bring a wetsuit",
+        },
+      ],
+      routes: [
+        {
+          id: "r1",
+          name: "Exit gully",
+          points: [
+            [151.234567, -33.456789],
+            [151.24, -33.46],
+          ],
+        },
+      ],
+      forms: [
+        {
+          id: "form-1",
+          title: "Safety contacts",
+          questions: [{ id: "q1", kind: "phone", label: "Emergency contact" }],
+          myAnswer: { answers: { q1: "0400 000 000" } },
+          answers: [{ user: { id: "u2" }, answers: { q1: "0400 000 000" } }],
+        },
+      ],
+    };
+    const scrubbed = JSON.stringify(scrubStructure({ plan }));
+    for (const secret of secrets) expect(scrubbed).not.toContain(secret);
+    // Ids survive: they are what a report needs to be any use.
+    expect(scrubbed).toContain("form-1");
   });
 
   it("scrubs URLs inside string values", () => {
@@ -247,9 +307,100 @@ describe("scrubBreadcrumb", () => {
   });
 });
 
+describe("a forecast request", () => {
+  // Mutation that turns it red: narrow the URL pattern in `redactTilePathPatterns`
+  // so a query string survives. The request holds the 0.1° cell (ADR 0038).
+  it("reaches a breadcrumb as [redacted-url], cell and all", () => {
+    const url =
+      "https://api.open-meteo.com/v1/forecast?latitude=-33.6&longitude=150.4&elevation=600";
+    const crumb = scrubBreadcrumb({
+      category: "xhr",
+      message: `GET ${url}`,
+      data: { url, status_code: 200 },
+    });
+    expect(JSON.stringify(crumb)).not.toContain("open-meteo");
+    expect(JSON.stringify(crumb)).not.toContain("150.4");
+    expect(crumb.message).toBe("GET [redacted-url]");
+  });
+});
+
+describe("a file-system error from an export", () => {
+  // Mutation that turns it red: drop the `content|file` pattern from
+  // `redactTilePathPatterns`, and the place's name in the URI reaches Sentry.
+  it("reaches a breadcrumb without the exported file's URI", () => {
+    const uri =
+      "content://com.android.externalstorage.documents/tree/primary%3ADownload/document/primary%3ADownload%2FSecret%20Falls.gpx";
+    const crumb = scrubBreadcrumb({
+      category: "console",
+      message: `Location '${uri}' isn't writable. file:///data/user/0/au.logjam/cache/Secret%20Falls.gpx`,
+    });
+    expect(JSON.stringify(crumb)).not.toContain("Secret");
+    expect(JSON.stringify(crumb)).not.toContain("externalstorage");
+    expect(crumb.message).toBe(
+      "Location '[redacted-url] isn't writable. [redacted-url]",
+    );
+  });
+});
+
+describe("the typed search query", () => {
+  // Mutation that turns it red: drop "q" or "query" from SENSITIVE_KEYS.
+  it("never reaches a breadcrumb or an event", () => {
+    const crumb = scrubBreadcrumb({
+      category: "console",
+      data: { arguments: [{ q: "Secret Canyon", limit: 8 }] },
+    });
+    expect(JSON.stringify(crumb)).not.toContain("Secret Canyon");
+    const event = scrubEvent({ extra: { search: { query: "Secret Canyon" } } });
+    expect(JSON.stringify(event)).not.toContain("Secret Canyon");
+  });
+});
+
 describe("scrubMessage", () => {
   it("applies both args-block and URL/tile redaction", () => {
     const msg = "failed https://x.test/a/1/2/3\n{ latitude: -33 }";
     expect(scrubMessage(msg)).toBe("failed [redacted-url]\n[redacted-args]");
+  });
+});
+
+// Mutation: delete the JWT or custom-scheme replace in redactTilePathPatterns,
+// or a token key from SENSITIVE_KEYS.
+describe("sign-in secrets", () => {
+  const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhYmMifQ.c2lnbmF0dXJl";
+
+  it("strips a token from free text", () => {
+    expect(redactTilePathPatterns(`refresh failed for ${jwt}`)).toBe(
+      "refresh failed for [redacted-token]",
+    );
+  });
+
+  it("strips the redirect that carries the authorization code", () => {
+    expect(
+      redactTilePathPatterns("opened logjam://auth?code=abc&state=xyz"),
+    ).toBe("opened [redacted-url]");
+    expect(redactTilePathPatterns("logjamdev://auth?code=abc")).toBe(
+      "[redacted-url]",
+    );
+  });
+
+  it("censors token keys in structured data", () => {
+    expect(
+      scrubStructure({
+        idToken: jwt,
+        refresh_token: "r",
+        params: { code: "c", code_verifier: "v" },
+      }),
+    ).toEqual({
+      idToken: "[redacted]",
+      refresh_token: "[redacted]",
+      params: { code: "[redacted]", code_verifier: "[redacted]" },
+    });
+  });
+
+  // Mutation: drop "token" from SENSITIVE_KEYS: the revoke call's body is
+  // {token, client_id} and an opaque refresh token has no eyJ prefix.
+  it("censors the revoke call's opaque token", () => {
+    expect(
+      scrubStructure({ token: "opaque-refresh", client_id: "client" }),
+    ).toEqual({ token: "[redacted]", client_id: "client" });
   });
 });

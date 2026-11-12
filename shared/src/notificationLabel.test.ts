@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+  NOTIFICATION_DESTINATIONS,
+  NOTIFICATION_TYPES,
+  notificationPlaceId,
+  notificationAnnouncement,
   notificationHaystack,
+  notificationKind,
   notificationLabel,
+  notificationPlanTarget,
+  notificationWayTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -19,6 +26,23 @@ function notification(
 }
 
 describe("notificationLabel", () => {
+  // Mutation: return the username uncut. A 32-character name fills the row
+  // and the verb is clamped away (UAT 2026-11-02).
+  it("cuts a long username with an ellipsis and keeps the verb", () => {
+    const { text } = notificationLabel(
+      notification("plan_member_joined", {
+        memberUsername: "maximilian_bartholomew_featherst",
+        planName: "Wollangambe weekend",
+      }),
+    );
+    expect(text).toBe("maximilian_bart… joined Wollangambe weekend");
+    expect(
+      notificationLabel(
+        notification("plan_member_joined", { memberUsername: "a".repeat(16) }),
+      ).text,
+    ).toBe(`${"a".repeat(16)} joined your trip plan`);
+  });
+
   it("labels friend requests with the requester username", () => {
     expect(
       notificationLabel(
@@ -70,7 +94,7 @@ describe("notificationLabel", () => {
           entityId: "w1",
         }),
       ),
-    ).toEqual({ text: "bob shared a waypoint with you" });
+    ).toEqual({ text: "bob shared a place with you" });
     expect(
       notificationLabel(
         notification("item_shared", {
@@ -78,7 +102,7 @@ describe("notificationLabel", () => {
           entityType: "topoJob",
         }),
       ).text,
-    ).toBe("bob shared a LiDAR topo with you");
+    ).toBe("bob shared a LiDAR map with you");
     // An entity type this build has never heard of still reads as a sentence
     // rather than leaking a raw enum name.
     expect(
@@ -91,19 +115,24 @@ describe("notificationLabel", () => {
     ).toBe("bob shared an item with you");
   });
 
-  it("labels topo completion, with OSM warning when flagged", () => {
+  it("labels topo completion", () => {
     expect(
       notificationLabel(notification("topo_complete", { jobName: "Kanangra" })),
     ).toEqual({
       text: "Kanangra map ready",
     });
-    const withWarning = notificationLabel(
-      notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
-    );
-    expect(withWarning.warning).toMatch(/Roads and labels/);
   });
 
-  it("labels export completion and failure", () => {
+  // Mutation: uppercase the format again, and it reads "GPKG map ready".
+  it("names a map's format as the app does", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { format: "gpkg" }),
+      ).text,
+    ).toBe("GeoPackage map ready");
+  });
+
+  it("labels a map's completion and failure", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -111,7 +140,7 @@ describe("notificationLabel", () => {
           jobName: "Kanangra",
         }),
       ).text,
-    ).toBe("PDF export for Kanangra ready");
+    ).toBe("PDF map for Kanangra ready");
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -120,21 +149,25 @@ describe("notificationLabel", () => {
           errorMessage: "boom",
         }),
       ),
-    ).toEqual({ text: "PDF export failed", warning: "boom" });
-  });
-
-  it("labels geo_pdf completion and failure", () => {
-    expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe(
-      "GeoPDF ready",
-    );
+    ).toEqual({ text: "PDF map failed", detail: "boom" });
+    // Only a real format is upper-cased. Mutation: upper-case the fallback.
     expect(
       notificationLabel(
-        notification("geo_pdf_complete", {
-          status: "failed",
-          errorMessage: "no extent",
+        notification("topo_export_complete", { status: "failed" }),
+      ).text,
+    ).toBe("Map failed");
+  });
+
+  // Mutation: drop the size branch and the detail line vanishes.
+  it("gives a finished map its size when it has one", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", {
+          format: "geotiff",
+          resultBytes: 5 * 1024 ** 2,
         }),
       ),
-    ).toEqual({ text: "Couldn't create GeoPDF", warning: "no extent" });
+    ).toEqual({ text: "GeoTIFF map ready", detail: "5 MB" });
   });
 
   it("degrades gracefully on missing payload fields", () => {
@@ -150,6 +183,52 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("future_type")).text).toBe(
       "Notification",
     );
+  });
+});
+
+describe("announcement", () => {
+  const resolved = {
+    announcementId: "a1",
+    title: "Trip season",
+    body: "Hello **all**",
+  };
+
+  // Red if the byline goes: a bare title reads like any system notice.
+  it("is labelled with the message's own title and who it is from", () => {
+    expect(notificationLabel(notification("announcement", resolved))).toEqual({
+      text: "Trip season",
+      detail: "From the Logjam maintainer",
+    });
+    expect(notificationLabel(notification("announcement"))).toEqual({
+      text: "A message from the Logjam maintainer",
+    });
+  });
+
+  // Red if it falls back to "people": a friends glyph reads as a friend event.
+  it("is its own kind", () => {
+    expect(notificationKind(notification("announcement"))).toBe("message");
+  });
+
+  it("hands a client the resolved message", () => {
+    expect(
+      notificationAnnouncement(notification("announcement", resolved)),
+    ).toEqual({
+      id: "a1",
+      title: "Trip season",
+      body: "Hello **all**",
+    });
+  });
+
+  // Red if the helper stops checking the type or the resolved body.
+  it("is null for another type or an unresolved payload", () => {
+    expect(
+      notificationAnnouncement(notification("topo_complete", resolved)),
+    ).toBeNull();
+    expect(
+      notificationAnnouncement(
+        notification("announcement", { announcementId: "a1" }),
+      ),
+    ).toBeNull();
   });
 });
 
@@ -178,7 +257,7 @@ describe("file_sent", () => {
       }),
     );
     expect(label.text).toBe("bob sent you Exit notes.gpx");
-    expect(label.warning).toBe("This file expired. Ask bob to send it again.");
+    expect(label.detail).toBe("This file expired. Ask bob to send it again.");
   });
 
   // Nothing to explain while it is still answerable.
@@ -190,7 +269,7 @@ describe("file_sent", () => {
             fileSendId: "s1",
             fileSendStatus: status,
           }),
-        ).warning,
+        ).detail,
       ).toBeUndefined();
     }
   });
@@ -214,7 +293,7 @@ describe("notificationHaystack — what the inbox search matches", () => {
     expect(haystack).toContain("bob");
   });
 
-  it("includes the warning line, which is the only place some rows say why", () => {
+  it("includes the detail line, which is the only place some rows say why", () => {
     expect(
       notificationHaystack(
         notification("topo_export_skipped", {
@@ -230,5 +309,127 @@ describe("notificationHaystack — what the inbox search matches", () => {
         notification("file_sent", { fileSendId: "abc123", filename: "x.gpx" }),
       ),
     ).not.toContain("abc123");
+  });
+});
+
+// Mutation that turns this red: adding a type to NOTIFICATION_TYPES without a
+// branch in notificationLabel, which would show it as the generic fallback.
+describe("NOTIFICATION_TYPES", () => {
+  it("has a label branch for every type", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      expect(notificationLabel(notification(type)).text, type).not.toBe(
+        "Notification",
+      );
+    }
+  });
+});
+
+// Mutation that turns this red: add a type to NOTIFICATION_TYPES without an
+// entry in NOTIFICATION_DESTINATIONS (it fails to compile too), or declare
+// `place` / `plan` for a type whose payload names neither.
+describe("NOTIFICATION_DESTINATIONS", () => {
+  it("declares exactly the stored types", () => {
+    expect(Object.keys(NOTIFICATION_DESTINATIONS).sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
+  });
+
+  it("agrees with the place and plan targets the payload names", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, { placeId: "p1", planId: "pl1" });
+      const kind = NOTIFICATION_DESTINATIONS[type];
+      if (kind === "place") expect(notificationPlaceId(n), type).not.toBeNull();
+      expect(notificationPlanTarget(n) !== null, type).toBe(kind === "plan");
+    }
+  });
+});
+
+// Mutation that turns this red: word a plan_access_ended reason as another's,
+// or drop the planName the payload carries for it.
+describe("plan notifications", () => {
+  it("names the people and the plan resolved at read time", () => {
+    expect(
+      notificationLabel(
+        notification("plan_join_request", {
+          requesterUsername: "tom",
+          planName: "Wollangambe trip",
+        }),
+      ).text,
+    ).toBe("tom asked to join Wollangambe trip");
+  });
+
+  it("says why access ended, by reason", () => {
+    const ended = (reason: string) =>
+      notificationLabel(
+        notification("plan_access_ended", {
+          reason,
+          planName: "Wollangambe trip",
+        }),
+      ).text;
+    expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
+    expect(ended("declined")).toBe(
+      "Your request to join Wollangambe trip was declined",
+    );
+    expect(ended("deleted")).toBe("Wollangambe trip was deleted");
+  });
+});
+
+describe("a plan notification", () => {
+  it("is a plan, wearing the plan's glyph and hue", () => {
+    for (const type of NOTIFICATION_TYPES.filter((t) => t.startsWith("plan_")))
+      expect(notificationKind(notification(type))).toBe("plan");
+  });
+
+  // Mutations: return a target for plan_access_ended, and opening it lands
+  // on a 404 for a plan the reader is no longer in; drop the view, and a
+  // request opens away from where it is answered; drop `invited`, and an
+  // invite opens the member's page, which 404s for someone invited.
+  it("opens its plan where the reader acts on it, unless the plan is gone for them", () => {
+    expect(
+      notificationPlanTarget(
+        notification("plan_join_request", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", view: "people", invited: false });
+    expect(
+      notificationPlanTarget(notification("plan_invited", { planId: "p" })),
+    ).toEqual({ planId: "p", invited: true });
+    expect(
+      notificationPlanTarget(
+        notification("plan_join_approved", { planId: "p" }),
+      ),
+    ).toEqual({ planId: "p", invited: false });
+    expect(
+      notificationPlanTarget(
+        notification("plan_access_ended", { planId: "p", reason: "removed" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationPlanTarget(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
+  });
+
+  // Mutation that turns it red: drop the entityType check, and a shared place
+  // or LiDAR map opens the Ways list for an id that is not a route.
+  it("names the route a route share is about, and nothing else", () => {
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toBe("r1");
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "topoJob", entityId: "j1" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("place_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 // The contextual bar a multi-select swaps into the rail's ChipRail slot.
 // Cancel / count / select-all / destroy, fixed to CHIP_RAIL_HEIGHT so the
-// rail's height cannot differ between the two states and the list below does not
-// jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
+// rail's height cannot differ between the two states and the list below does
+// not jump.
 import { Text, View } from "react-native";
 
 import { spacing, makeStyles, useTheme } from "../theme";
@@ -17,6 +17,8 @@ export function SelectionBar({
   onDelete,
   deleteIcon = "delete",
   deleteLabel = "Delete the selected items",
+  deleteDisabledReason,
+  destructive = true,
 }: {
   /** The words between the close and the buttons — "3 places selected". */
   countLabel: string;
@@ -44,13 +46,18 @@ export function SelectionBar({
    * the word: the per-friend sharing screen puts "unshare these" and "remove my
    * access" here, which are destructive in the same way (irreversible from this
    * screen) and destructive of something else entirely (a grant, not a record).
-   * Naming it delete there would have promised to destroy the place.
+   * Naming it delete there would promise to destroy the place.
    */
   onDelete: () => void;
   /** Glyph for that slot: `delete` unless the verb is not deletion. */
   deleteIcon?: React.ComponentProps<typeof IconButton>["icon"];
   /** Screen-reader label for it — REQUIRED to change with the icon. */
   deleteLabel?: string;
+  /** Not now (offline): dimmed, and pressing it says why. */
+  deleteDisabledReason?: string;
+  /** False when the slot only gives up access (leaving), which never wears
+   *  the warning tone (shared/DESIGN.md §9). */
+  destructive?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -76,8 +83,10 @@ export function SelectionBar({
       <IconButton
         icon={deleteIcon}
         accessibilityLabel={deleteLabel}
-        color={theme.warning}
-        filled
+        // The glyph carries the intent; a tinted disc read as already pressed.
+        color={destructive ? theme.warning : theme.accent}
+        disabled={deleteDisabledReason != null}
+        disabledReason={deleteDisabledReason ?? ""}
         onPress={onDelete}
       />
     </View>

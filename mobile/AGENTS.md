@@ -12,8 +12,11 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   Point a dev client at `127.0.0.1:8081`, never `10.0.2.2` (emulator too).
 - **Never hand-edit `/android` or `/ios`:** add native capability with a config
   plugin and `npx expo install`. After a native change,
-  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`.
-  A release APK for a device is only `./scripts/build-local-apk.sh`.
+  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`,
+  or `gh workflow run dev-apk.yml --ref <branch>` for the dev variant's APK.
+  A release APK for a device is only `./scripts/build-local-apk.sh`, prod-pointed
+  ones too: it bakes in `.env` unless the shell overrides it (header has the
+  recipe).
 - A second identity: `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` (dev only, baked into
   the bundle).
 - **A phone that holds a real Logjam GPS gets the dev variant:**
@@ -31,7 +34,6 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
 - **A guest syncs nothing yet:** gate a new server call through
   `auth/capabilities.ts` so a guest makes none, and never add a guest-only
   write path. [0007](../docs/decisions/0007-guest-mode-is-dont-sync-yet.md)
-- **An aggregate of the user's own data filters out `syncRole === "shared"`.**
 
 ## Privacy and battery
 
@@ -40,8 +42,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 - **What leaves the device carries ids, not place data:** push payloads and
   crash reports (through `src/sentry/scrubEvent.ts`) never carry a place's
-  name, coordinates or fields, and a region-of-interest bbox reaches the
-  server only as the body of the vector clip request (`offline/regionDownloads.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0029](../docs/decisions/0029-vector-map-with-every-signed-in-region.md)
+  name, coordinates or fields, and a region-of-interest bbox never reaches
+  our API: offline clips are cut on the phone (`offline/regionDownloads.ts`,
+  guard `offline/regionDownloads.test.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0036](../docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md)
 - **A new dependency can add Android permissions:** block each with
   `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
@@ -52,14 +55,23 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 ## Builds and verify
 
+- **`mobile-emulator.yml` launches the dev build on an emulator** over a live
+  local stack, runs `maestro/smoke.yaml` through `scripts/emulator-smoke.sh`
+  and checks the added place reached Postgres. It selects by visible text, so
+  rewording "Add a place" or a field label means updating the flow; it never
+  asserts the map's pixels (a software GPU). The dev APK is cached on the
+  native inputs listed in `.github/actions/build-dev-apk/action.yml`: add a
+  new native directory to that key.
+
 - `npm run typecheck`, `lint` and `test` gate every change. Nothing in CI
   bundles: run `npx expo export --platform android` before a Gradle build.
 - **Metro does not rebuild `shared/`** (typecheck does): `make shared` first.
 - **A fresh worktree needs real installs** (`npm ci` in `shared/` and `mobile/`):
   symlinked `node_modules` pass typecheck and vitest, then Metro fails. It also
   lacks the gitignored `.env`, `google-services.json` and `keys/`.
-- **OTA is `npm run update:preview` / `update:production`,** never bare
-  `eas update` (the signing key path). A production update comes only from a
+- **OTA is `npm run update:preview` / `update:production` /
+  `promote:production`,** never bare `eas update` (the signing key path, and
+  the production guard). A production update comes only from a
   `release/mobile-vX.Y.Z` branch, never `main`; anything native needs a
-  release. [0009](../docs/decisions/0009-signed-ota-updates.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
+  release. [0046](../docs/decisions/0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md), [0023](../docs/decisions/0023-ota-runtime-is-the-native-fingerprint.md);
   procedure: `docs/operations/mobile-release.md`.

@@ -24,11 +24,9 @@ import { writeTombstones, routeUnlinkTombstones } from "./syncTombstones";
 /**
  * Anchor indices for a validated point list, or SQL NULL.
  *
- * Lives here rather than in the route handler because there are TWO write
- * paths — PATCH /routes/:id and the sync push op — and only one of them used
- * to apply this rule. The other accepted `anchors`, validated it, and then
- * silently dropped it on the floor, so every route drawn on a phone lost the
- * user's own vertices on the first pull after it flushed.
+ * Lives here rather than in the route handler so both write paths —
+ * PATCH /routes/:id and the sync push op — apply the same anchor rules
+ * consistently without dropping vertices.
  *
  * validateRoutePayload has already rejected a malformed list, so this only
  * re-parses for the normalised numbers. Null means "no record", which is a

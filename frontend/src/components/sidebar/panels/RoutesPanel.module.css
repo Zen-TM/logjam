@@ -8,11 +8,7 @@
 }
 
 .rails {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gutter) 8px;
+  composes: rails from "../../../ui/Chip.module.css";
 }
 
 .banner {

@@ -1,11 +1,9 @@
 // "View in Saved" / "View in Friends" — where a notification's SUBJECT lives,
 // as data.
 //
-// A notification is a report about something that now exists somewhere else in
-// the app, and until now only one kind said where: a place share opened the
-// place. Everything else — a finished topo, a GeoPDF, a file a friend sent and
-// you kept, a route someone shared — left the user to go and find the thing
-// themselves, in a tab with seven filters.
+// A notification reports on an entity that exists in Logjam GPS: a place share
+// opens the place directly, while other entities (a finished topo, a GeoPDF,
+// a received file, a shared route) live under specific tabs and filters.
 //
 // So each row's ⋯ sheet offers one more verb: go to the tab, on the right
 // filter, with the row it is about pulsed so the eye lands on it. Which is a
@@ -63,7 +61,6 @@ export function notificationDestination(
   n: TNotification,
 ): NotificationDestination | null {
   const payload = n.payload;
-  const failed = payload.status === "failed";
 
   switch (n.type) {
     // Both sides of a friendship land on the same screen: the pending request
@@ -87,12 +84,6 @@ export function notificationDestination(
       return saved("overlay", jobId ? savedOverlayKey(jobId) : null);
     }
 
-    case "geo_pdf_complete": {
-      // A failed render produced no PDF — Saved has nothing to show.
-      if (failed) return null;
-      return saved("geoPdf", str(payload, "geoPdfJobId"));
-    }
-
     // Only once it has been KEPT. A send still waiting to be answered is not in
     // Saved, and pointing at the tab would be pointing at nothing; the row's own
     // Save a copy is the way in.
@@ -110,7 +101,7 @@ export function notificationDestination(
     }
 
     // place_shared already has "Open" in the same sheet.
-    // topo_failed / topo_export_* / a failed GeoPDF are about something that
+    // topo_failed / topo_export_* are about something that
     // does not exist to be looked at.
     default:
       return null;

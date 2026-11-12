@@ -2,11 +2,9 @@
 // gets.
 //
 // Shared, because both clients draw this screen and the asymmetry below is the
-// part that must not be re-derived: Logjam Web's audit listed PLACES only and
-// answered "what does Bob see?" with a subset, while the payload had carried
-// his routes, topos and GeoPDFs all along. It lived in mobile/src/sharing until
-// Logjam Web's friends work (2026-09-18), already free of React Native imports
-// — which is what made it testable there and movable here.
+// part that must not be re-derived: the payload carries routes and topos
+// alongside places. Free of React Native imports so both clients can
+// use it.
 //
 // THE TWO DIRECTIONS ARE NOT MIRROR IMAGES, and the asymmetry is the whole
 // design:
@@ -54,7 +52,7 @@ export type FriendShareCard = {
   title: string;
   /** "Place · shared 12 Aug" — kind first, because kind is what a mixed list needs. */
   subtitle: string;
-  /** Copying it into my own account is possible (places only, today). */
+  /** Copying it into my own account is possible. */
   copyable: boolean;
   /** Dropping my access would actually change what I can see. */
   removable: boolean;
@@ -98,10 +96,10 @@ function capitalise(word: string): string {
 /**
  * Build the cards for one direction.
  *
- * The "this also rides a shared place" answer comes from the ROW (the server
- * sets `alsoViaPlace`), not from the local mirror. Deriving it here was right
- * only once the mirror had pulled the linked row — before that, the same
- * waypoint offered a Remove that the next delta pull would have undone.
+ * The "this also rides a shared place" answer comes from the row (the server
+ * sets `alsoViaPlace`), not from the local mirror: deriving it from the local
+ * mirror is only valid once the linked row is pulled, otherwise a delta pull
+ * could undo the removal.
  */
 export function buildShareCards(
   rows: FriendShareRow[],
@@ -171,14 +169,14 @@ export function unshareAllConfirm(args: {
 }): { title: string; body: string } {
   const things = args.count === 1 ? "1 item" : `${args.count} items`;
   return {
-    title: `Unshare ${things} from ${args.friendName}?`,
+    title: `Stop sharing ${things} with ${args.friendName}?`,
     body:
       `${args.friendName} loses access to ${things}` +
       (args.includesPlace
         ? ", and a place takes its notes, its photos and its route with it. "
         : ". ") +
       `You stay friends, and what ${args.friendName} shares with you is unaffected. ` +
-      `There is no undo — you would have to share each one again. Unsharing won't remove copies ${args.friendName} has already made.`,
+      `There is no undo — you would have to share each one again. Stopping sharing won't remove copies ${args.friendName} has already made.`,
   };
 }
 
@@ -203,10 +201,8 @@ export function removeAllConfirm(args: {
     body:
       `${things} ${one ? "is" : "are"} removed from your account, on every device. ` +
       `${args.friendName} keeps the ${one ? "original" : "originals"}.` +
-      // "place" was right while places were the only copyable kind; a route
-      // copies now, and naming the wrong kind in the one sentence that offers
-      // the safe alternative is how a user decides the alternative isn't for
-      // them.
+      // Naming the wrong kind in the one sentence that offers the safe
+      // alternative is how a user decides the alternative isn't for them.
       (args.copyableCount === 0
         ? ""
         : one
@@ -215,7 +211,6 @@ export function removeAllConfirm(args: {
   };
 }
 
-/** What a bulk copy did, in one sentence. */
 /**
  * The line under Remove in a row's sheet. NOT `removeShareConfirm(...).title` —
  * that is a question ("Remove shared place?"), and a question reads as an
@@ -243,9 +238,8 @@ export function copyConfirm(args: {
   /**
    * The owner's username, where the surface knows it. The item sheets do NOT —
    * a mirrored place or route carries an `ownerId` and no name — so this is
-   * optional and the fallback is spelled in both positions below. Passing the
-   * literal "the owner" instead is what put a lowercase word at the start of a
-   * sentence on the device.
+   * optional and the fallback is spelled in both positions below, capitalized
+   * when starting a sentence.
    */
   friendName?: string | null;
   /** The single row's name, when only one is being copied. */
@@ -284,20 +278,19 @@ export function copyOutcomeMessage(outcome: {
   mediaSkipped?: number;
   /** The skip was the account's storage filling up, not a transfer fault. */
   mediaOutOfSpace?: boolean;
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { copied, failed } = outcome;
   const skipped = outcome.mediaSkipped ?? 0;
-  const media =
-    skipped === 0
-      ? ""
-      : outcome.mediaOutOfSpace
-        ? ` Your storage is full, so ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
-        : ` ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`;
+  const sentence = mediaSkippedSentence(
+    skipped,
+    outcome.mediaOutOfSpace === true,
+  );
+  const media = sentence ? ` ${sentence}` : "";
   const saved = copied === 1 ? "Saved 1 copy" : `Saved ${copied} copies`;
   if (failed.length === 0) {
     return {
       text: `${saved}.${media}`,
-      tone: skipped > 0 ? "error" : "info",
+      tone: skipped > 0 ? "error" : "done",
     };
   }
   if (copied === 0) {
@@ -340,7 +333,7 @@ export function copyAndRemoveOutcomeMessage(outcome: {
   failed: string[];
   mediaSkipped: number;
   mediaOutOfSpace: boolean;
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { done, copiedNotRemoved, failed, mediaSkipped, mediaOutOfSpace } =
     outcome;
   const parts: string[] = [];
@@ -366,20 +359,15 @@ export function copyAndRemoveOutcomeMessage(outcome: {
         : `Couldn't copy ${failed.join(", ")} — they're still shared with you.`,
     );
   }
-  if (mediaSkipped > 0) {
-    parts.push(
-      mediaOutOfSpace
-        ? `Your storage is full, so ${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} weren't copied.`
-        : `${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} couldn't be copied.`,
-    );
-  }
+  const media = mediaSkippedSentence(mediaSkipped, mediaOutOfSpace === true);
+  if (media) parts.push(media);
 
   return {
     text: parts.join(" "),
     tone:
       failed.length > 0 || copiedNotRemoved.length > 0 || mediaSkipped > 0
         ? "error"
-        : "info",
+        : "done",
   };
 }
 
@@ -397,10 +385,10 @@ export function unshareOutcomeMessage(args: {
 export function removeOutcomeMessage(outcome: {
   removed: number;
   failed: string[];
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { removed, failed } = outcome;
   const gone = removed === 1 ? "Removed 1 item" : `Removed ${removed} items`;
-  if (failed.length === 0) return { text: `${gone}.`, tone: "info" };
+  if (failed.length === 0) return { text: `${gone}.`, tone: "done" };
   if (removed === 0) {
     return {
       text:
@@ -414,4 +402,21 @@ export function removeOutcomeMessage(outcome: {
     text: `${gone}. Couldn't remove ${failed.join(", ")}.`,
     tone: "error",
   };
+}
+
+/**
+ * Said after a copy whose photos and files didn't all come, or null when
+ * they did: the API says how many and whether storage stopped them. Every
+ * copy that brings media says it this way (friend shares, Plans).
+ */
+export function mediaSkippedSentence(
+  skipped: number,
+  outOfSpace: boolean,
+): string | null {
+  if (skipped === 0) return null;
+  const what =
+    skipped === 1 ? "1 photo or file" : `${skipped} photos and files`;
+  return outOfSpace
+    ? `Your storage is full, so ${what} ${skipped === 1 ? "wasn't" : "weren't"} copied.`
+    : `${what[0].toUpperCase()}${what.slice(1)} couldn't be copied.`;
 }

@@ -14,15 +14,24 @@ import {
   Menu,
   NorthNeedle,
   useEscape,
+  useOutsidePress,
   type MenuEntry,
   type Glyph,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
+/** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
+const TRAY_CLOSE_MS = 100;
+
+type MapToolBase = {
+  id: string;
+  label: string;
+  icon: Glyph;
+};
 export type MapTool =
-  | { id: string; label: string; icon: Glyph; onSelect: () => void }
-  | { id: string; label: string; icon: Glyph; menu: readonly MenuEntry[] };
+  | (MapToolBase & { onSelect: () => void })
+  | (MapToolBase & { menu: readonly MenuEntry[] });
 
 type LocateState = "off" | "waiting" | "on" | "error";
 
@@ -57,6 +66,7 @@ export default function MapChrome({
   notices,
   layersButton,
   tools,
+  selectingArea = false,
 }: {
   /** Null until the map has loaded. */
   map: maplibregl.Map | null;
@@ -67,12 +77,31 @@ export default function MapChrome({
   notices?: ReactNode;
   layersButton?: ReactNode;
   tools: readonly MapTool[];
+  /** While an area is being selected: a second tool can't start over it, and
+   *  the map stays north-up and flat (Map.tsx), so 3D and the compass are off. */
+  selectingArea?: boolean;
 }) {
   const toast = useToast();
   const [bearing, setBearing] = useState(0);
   const [zoom, setZoom] = useState({ atMin: false, atMax: false });
   const [locate, setLocate] = useState<LocateState>("off");
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpenState, setToolsOpen] = useState(false);
+  const toolsOpen = toolsOpenState && !selectingArea;
+  // The tray stays drawn for `TRAY_CLOSE_MS` after it closes, to fade; under
+  // reduced motion it goes at once.
+  const [trayDrawn, setTrayDrawn] = useState(false);
+  if (toolsOpen && !trayDrawn) setTrayDrawn(true);
+  useEffect(() => {
+    if (toolsOpen || !trayDrawn) return;
+    const still = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = setTimeout(
+      () => setTrayDrawn(false),
+      still ? 0 : TRAY_CLOSE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [toolsOpen, trayDrawn]);
   const trayId = useId();
   // The tray AND its button: opening the tray leaves focus on the button, so
   // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
@@ -127,6 +156,15 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
+  // Closes on any press elsewhere. One on the map only stops the map asking
+  // about that point (`takeDismissingPress`); one on a control still acts.
+  useOutsidePress(
+    toolsOpen,
+    [toolsLineRef],
+    () => setToolsOpen(false),
+    map?.getContainer() ?? null,
+  );
+
   const runTool = (action: () => void) => {
     setToolsOpen(false);
     action();
@@ -144,15 +182,30 @@ export default function MapChrome({
 
       <div className={classes.actions}>
         <div ref={toolsLineRef} className={classes.toolsLine}>
-          {toolsOpen && (
+          {trayDrawn && (
             <div
               id={trayId}
               role="group"
               aria-label="Tools"
-              className={classes.tray}
+              inert={!toolsOpen}
+              className={`${classes.tray} ${toolsOpen ? "" : classes.trayClosing}`}
             >
-              {tools.map((tool) =>
-                "menu" in tool ? (
+              {tools.map((tool, index) => {
+                const item = {
+                  className: `${classes.trayItem} ${index === 0 ? classes.trayFirst : ""}`,
+                  style: { "--i": index } as CSSProperties,
+                };
+                const face = (
+                  <>
+                    <Icon
+                      idea={tool.icon}
+                      size={18}
+                      className={classes.trayGlyph}
+                    />
+                    <span className={classes.trayLabel}>{tool.label}</span>
+                  </>
+                );
+                return "menu" in tool ? (
                   <Menu
                     key={tool.id}
                     label={tool.label}
@@ -163,17 +216,8 @@ export default function MapChrome({
                         : { ...entry, onSelect: () => runTool(entry.onSelect) },
                     )}
                     trigger={(props) => (
-                      <button
-                        {...props}
-                        type="button"
-                        className={classes.trayItem}
-                      >
-                        <Icon
-                          idea={tool.icon}
-                          size={18}
-                          className={classes.trayGlyph}
-                        />
-                        {tool.label}
+                      <button {...props} type="button" {...item}>
+                        {face}
                       </button>
                     )}
                   />
@@ -181,18 +225,13 @@ export default function MapChrome({
                   <button
                     key={tool.id}
                     type="button"
-                    className={classes.trayItem}
+                    {...item}
                     onClick={() => runTool(tool.onSelect)}
                   >
-                    <Icon
-                      idea={tool.icon}
-                      size={18}
-                      className={classes.trayGlyph}
-                    />
-                    {tool.label}
+                    {face}
                   </button>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
           <MapButton
@@ -203,6 +242,7 @@ export default function MapChrome({
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
+            disabled={selectingArea}
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
@@ -211,7 +251,7 @@ export default function MapChrome({
           label="3D terrain"
           pressed={is3D}
           onClick={onToggle3D}
-          disabled={!map}
+          disabled={!map || selectingArea}
         />
         <MapButton
           icon="locate"
@@ -241,7 +281,7 @@ export default function MapChrome({
         <MapButton
           icon={NorthNeedle}
           label="Reset north"
-          disabled={!map}
+          disabled={!map || selectingArea}
           className={classes.compass}
           style={{ "--bearing": `${bearing}deg` } as CSSProperties}
           onClick={() => map?.resetNorthPitch()}

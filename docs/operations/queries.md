@@ -38,6 +38,13 @@ Logs Insights shows no `msg` field, the lines carry a prefix: each query
 needs `parse @message` before the `filter`, and the `SyncRequests` metric
 below counts nothing, because its filter reads each line as JSON.
 
+Once `brain_public` is on (the API runs on the brain, [brain.md](brain.md)),
+the API's stdout is in the group `/logjam/brain/api` instead, one event per
+line as the API writes it, so the queries should work there without
+`parse @message` (not yet run against it: try one first).
+The Elastic Beanstalk group then stops growing and expires after 14 days; to
+look back across the move, run each query on both groups.
+
 ### 14 days: Logs Insights
 
 The group keeps 14 days (`api/.ebextensions/cloudwatch-logs.config`, the figure

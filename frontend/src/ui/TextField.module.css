@@ -4,9 +4,34 @@
   gap: var(--form-label);
 }
 
+/* Does not stretch or shrink beside the inputs that share its row. */
+.beside {
+  flex: none;
+}
+
+/* A row too narrow to hold the button beside its inputs wraps it under them
+   (the row is a size container); the spacer would only leave a gap above it. */
+@container (max-width: 400px) {
+  .beside > .label {
+    display: none;
+  }
+}
+
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.required {
   composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
@@ -28,10 +53,9 @@
   color: var(--color-text-muted);
 }
 
+/* The global ring (index.css) shows focus; the accent edge only backs it up. */
 .input:focus-visible {
-  outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .input[aria-invalid="true"] {
@@ -102,7 +126,8 @@
 
 .search:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 .searchGlyph {
@@ -124,106 +149,31 @@
   color: var(--color-text-muted);
 }
 
+/* The browser's own clear button is a saturated blue × in every scheme. It keeps
+   its behaviour and gets a × from two token-coloured strokes. */
+.searchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 var(--space-0-5);
+  cursor: pointer;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    );
+}
+
 /* The pill draws the focus state. */
 .searchInput:focus-visible {
   outline: none;
-}
-
-/* The slider: its label and reading on one line, the track and its two ends on
-   the next, so the bounds are readable and not merely implied by the geometry. */
-.rangeField {
-  display: flex;
-  flex-direction: column;
-  gap: var(--form-label);
-}
-
-.rangeHead {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1);
-}
-
-.rangeHead > .label {
-  flex: 1;
-  min-width: 0;
-}
-
-.rangeValue {
-  composes: body from "../textRoles.generated.module.css";
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text);
-}
-
-.range {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--control-md);
-}
-
-.rangeEnd {
-  composes: meta from "../textRoles.generated.module.css";
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-}
-
-/* The track and thumb are drawn here rather than left to `accent-color`, which
-   painted a grey knob whatever the scheme said (operator, 2026-09-18). */
-.rangeInput {
-  flex: 1;
-  min-width: 0;
-  height: var(--control-sm);
-  margin: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.rangeInput::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    to right,
-    var(--color-accent) var(--fill),
-    var(--color-field) var(--fill)
-  );
-}
-
-.rangeInput::-moz-range-track {
-  height: 4px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    to right,
-    var(--color-accent) var(--fill),
-    var(--color-field) var(--fill)
-  );
-}
-
-.rangeInput::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: var(--control-sm);
-  height: var(--control-sm);
-  /* Centred on a 4px track. */
-  margin-top: calc((4px - var(--control-sm)) / 2);
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-}
-
-.rangeInput::-moz-range-thumb {
-  width: var(--control-sm);
-  height: var(--control-sm);
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-}
-
-.rangeInput:focus-visible {
-  outline: 2px solid var(--color-text);
-  outline-offset: 2px;
-  border-radius: var(--radius-pill);
 }

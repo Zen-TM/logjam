@@ -4,9 +4,11 @@ import {
   MIN_FRAME_PX,
   bboxToFrame,
   defaultFrameInsets,
+  detailLabel,
   frameToBbox,
   metresPerPixel,
   moveFrameEdge,
+  startingArea,
   type FrameInsets,
   type FrameViewport,
 } from "./regionFrame";
@@ -198,5 +200,42 @@ describe("metresPerPixel", () => {
   it("is about 2 m/px at z16 in the Blue Mountains", () => {
     expect(metresPerPixel(-33.7, 16)).toBeGreaterThan(1.7);
     expect(metresPerPixel(-33.7, 16)).toBeLessThan(2.1);
+  });
+});
+
+describe("startingArea", () => {
+  it("pads the bbox by 12% of its size on each side", () => {
+    const [w, s, e, n] = startingArea([150, -34, 151, -33]);
+    expect([w, s, e, n].map((v) => Number(v.toFixed(6)))).toEqual([
+      149.88, -34.12, 151.12, -32.88,
+    ]);
+  });
+
+  it("frames the plan's box, not the default inset, in a viewport", () => {
+    const view = {
+      west: 149.88,
+      east: 151.12,
+      north: -32.88,
+      south: -34.12,
+      width: 400,
+      height: 800,
+    };
+    const frame = bboxToFrame(view, {
+      west: 150,
+      south: -34,
+      east: 151,
+      north: -33,
+    });
+    expect(frame.left).toBeCloseTo(400 * (0.12 / 1.24), 0);
+    expect(frame.left).toBeLessThan(defaultFrameInsets(view).left);
+  });
+});
+
+describe("detailLabel", () => {
+  // Mutation: print the z-level ("z16") instead of the ground distance.
+  it("names a level by the ground it resolves, never by its z-level", () => {
+    expect(detailLabel(16, -33.5)).toBe("Fine, 2 m");
+    expect(detailLabel(12, -33.5)).toBe("Overview, 32 m");
+    expect(detailLabel(18, -33.5)).toBe("Finest, 0.5 m");
   });
 });

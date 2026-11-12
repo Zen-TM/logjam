@@ -1,7 +1,23 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
+  abandonConfirm,
+  ADD_WAY,
   buildCustomFieldDef,
+  contractSectionKeys,
+  PLACE_FORM,
+  TRIP_FORM,
+  tripTitleHint,
+  type SectionKeysOn,
   CANYONING_TRIP_TYPE,
   coerceFieldValue,
   formatFieldValue,
@@ -11,33 +27,38 @@ import {
   isValidLatitude,
   isValidLongitude,
   MAX_PLACES_PER_TRIP,
+  TRIP_PLACES_CAP_SENTENCE,
   MAX_TRIP_TYPES_PER_TRIP,
   primaryTripType,
   SYSTEM_PLACE_TYPE_IDS,
   todayDateKey,
+  gpxEnds,
   tripPrefillFromTrack,
+  TRIP_PAGE,
   TRIP_TYPE_SUGGESTIONS,
+  TRIP_NEAR_TRACK_LABEL,
+  type tripPlanTripLogPrefill,
   tripFieldDefs,
-  tripTypeLabel,
   type MediaItem,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
+  coordinateEntry,
+  coordinateNumber,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TPlace, TTripLog } from "../../placeUtils";
 import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
-  getMediaDownloadUrls,
   getTripLog,
   createPlace,
   createCustomField,
   uploadMedia,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { discardUploads } from "./discardUploads";
 import {
   clearTripDraft,
   readTripDraft,
@@ -49,7 +70,9 @@ import {
 import MediaUpload from "../media/MediaUpload";
 import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
-import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
+import TripWayPicker, { type TripWay } from "./TripWayPicker";
+import { fetchMediaFile } from "./tripWayModel";
+import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import {
   Button,
   ChipPicker,
@@ -64,11 +87,12 @@ import {
   Icon,
   ErrorBanner,
   FieldError,
+  FieldBeside,
 } from "../../ui";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
-import ConfirmDialog from "./ConfirmDialog";
+import { CurrentUserIdContext } from "../../CurrentUserIdContext";
 import classes from "./TripLogDialog.module.css";
 
 // True when a date-only string (YYYY-MM-DD) is after today. Both sides are
@@ -100,18 +124,6 @@ function formatDraftSavedAt(iso: string): string {
   });
 }
 
-// Case-insensitive dedupe that preserves the casing of the first occurrence —
-// used to union the built-in TRIP_TYPE_SUGGESTIONS with whatever casing the
-// user has already typed into their own trip history.
-function dedupeTypesPreserveCase(values: string[]): string[] {
-  const seen = new Map<string, string>();
-  for (const v of values) {
-    const key = v.toLowerCase();
-    if (!seen.has(key)) seen.set(key, v);
-  }
-  return Array.from(seen.values());
-}
-
 /**
  * A recorded track to log a trip FROM: the form opens on the track's day, with
  * its place linked and the track already in the Tracks section.
@@ -125,14 +137,23 @@ export type TripLogTrack = {
   placeId: string | null;
 };
 
+/** What a shortcut fills the trip form with ("Start a trip log from this
+ *  plan"); a missing date is today. `placeIds` are the user's own places,
+ *  linked even before the place list has refetched them. */
+export type TripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill> & {
+  placeIds: string[];
+  /** Their types, which a canyon's tag needs before the list has them. */
+  placeTypeIds: string[];
+};
+
 /**
  * Log or edit a trip — one form for both, because the fields are identical and
  * a second form would drift (Logjam GPS's `TripEditSheet`).
  *
- * Choosing places is a MODE of this dialog, not a dialog of its own (DESIGN.md
- * §6): the body swaps to a searchable list, the title says which step this is,
- * and Escape, the close button and Done all back out to the form rather than
- * out of the dialog.
+ * Choosing places is a MODE of this dialog, not a dialog of its own
+ * (shared/DESIGN.md §10, "One modal at a time"): the body swaps to a searchable
+ * list, the title says which step this is, and Escape, the close button and
+ * Done all back out to the form rather than out of the dialog.
  */
 function TripLogDialog({
   open,
@@ -141,6 +162,7 @@ function TripLogDialog({
   places,
   defaultPlaceId = null,
   fromTrack = null,
+  prefill = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -158,6 +180,9 @@ function TripLogDialog({
   defaultPlaceId?: string | null;
   // Create-mode only: log the trip from this track (`TripLogTrack`).
   fromTrack?: TripLogTrack | null;
+  // Create-mode only: a shortcut's values, as "Start a trip log from this
+  // plan" hands them over (shared/DESIGN.md §10: it opens the real form).
+  prefill?: TripLogPrefill | null;
   tripLog?: TTripLog;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -201,7 +226,7 @@ function TripLogDialog({
   // Set on a Save attempt so every invalid custom field shows its inline error
   // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
-  const [mode, setMode] = useState<"form" | "places">("form");
+  const [mode, setMode] = useState<"form" | "places" | "way">("form");
   const [placeSearch, setPlaceSearch] = useState("");
   // A choice a picker refuses (the place or type cap) is that picker's own
   // error, under it, not a toast.
@@ -237,6 +262,13 @@ function TripLogDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftTripId, setDraftTripId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  // Uploads in flight, across the dialog's drop zones.
+  const [uploading, setUploading] = useState(0);
+  const handleUploadBusy = (busy: boolean) =>
+    setUploading((n) => n + (busy ? 1 : -1));
   // Set once the trip has been saved/committed, so closing won't delete it.
   const committedRef = useRef(false);
   // De-dupes concurrent draft creation when several files upload at once.
@@ -298,7 +330,7 @@ function TripLogDialog({
 
   // Snapshot of the form fields as populated below, taken in the same effect
   // that sets them — used by the unsaved-changes guard to tell a real edit
-  // apart from "the dialog is open" (TRIP-3). Moves when the form is
+  // apart from "the dialog is open". Moves when the form is
   // re-populated, which includes restoring a draft.
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
     null,
@@ -318,6 +350,13 @@ function TripLogDialog({
   const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(
     null,
   );
+  // Who a draft is written for and offered to; null until Logjam Web has
+  // loaded the signed-in user, when no draft is read or written.
+  const currentUserId = useContext(CurrentUserIdContext);
+  // The user the draft slot was last checked for in this open. When the user
+  // loads late, changes or goes, the slot is checked again in the same render,
+  // so autosave never clears or overwrites a draft that was not yet offered.
+  const [draftCheckedFor, setDraftCheckedFor] = useState<string | null>(null);
   // One autosave-failure toast per open, not one per keystroke.
   const draftWarnedRef = useRef(false);
   // Whether the Dialog moves focus into the date field as it opens; settled by
@@ -350,6 +389,20 @@ function TripLogDialog({
         populateForm();
       }
     }
+  }
+
+  // The user arrived, changed or went (an expiry) while the form was open:
+  // check the slot for them now, and drop an offer made to someone else.
+  if (
+    open &&
+    !tripLog &&
+    openKey === populatedFor &&
+    draftCheckedFor !== currentUserId
+  ) {
+    setDraftCheckedFor(currentUserId);
+    setRestorableDraft(
+      currentUserId ? readTripDraft(currentUserId, new Date()) : null,
+    );
   }
 
   function populateForm() {
@@ -385,19 +438,25 @@ function TripLogDialog({
       const fromTrackPrefill = fromTrack
         ? tripPrefillFromTrack(fromTrack)
         : null;
-      initialDate = fromTrackPrefill?.date ?? todayDateKey();
-      initialNotes = "";
-      initialSelectedPlaceIds = fromTrackPrefill
-        ? fromTrackPrefill.placeIds.filter((id) =>
-            places.some((place) => place.id === id),
-          )
-        : defaultPlaceId
-          ? [defaultPlaceId]
-          : [];
-      initialDisplayNameInput = "";
+      initialDate = prefill?.date ?? fromTrackPrefill?.date ?? todayDateKey();
+      initialNotes = prefill?.notes ?? "";
+      initialSelectedPlaceIds = prefill
+        ? prefill.placeIds
+        : fromTrackPrefill
+          ? fromTrackPrefill.placeIds.filter((id) =>
+              places.some((place) => place.id === id),
+            )
+          : defaultPlaceId
+            ? [defaultPlaceId]
+            : [];
+      initialDisplayNameInput = prefill?.displayName ?? "";
       initialSelectedTypes = enforceCanyoningTag(
-        [],
-        linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
+        prefill?.types ?? [],
+        linksCanyon(
+          prefill
+            ? prefill.placeTypeIds
+            : placeTypeIdsFor(initialSelectedPlaceIds),
+        ),
       );
       initialFieldValues = {};
     }
@@ -436,8 +495,12 @@ function TripLogDialog({
     // already typed and have to work out where it came from. Edit mode never
     // reads the draft — it holds a create form, and pouring it into an existing
     // trip would overwrite a saved one (tripDraft.ts re-checks `mode` too).
-    const foundDraft = tripLog ? null : readTripDraft(new Date());
+    const foundDraft =
+      tripLog || !currentUserId
+        ? null
+        : readTripDraft(currentUserId, new Date());
     setRestorableDraft(foundDraft);
+    setDraftCheckedFor(currentUserId);
     setFocusDateWhenOpened(foundDraft === null);
     setError(null);
     setShowFieldErrors(false);
@@ -447,6 +510,7 @@ function TripLogDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
   }
 
@@ -495,14 +559,12 @@ function TripLogDialog({
   );
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
-  // dialog was (re)populated — not just "the dialog is open" (TRIP-3). Media
-  // is excluded: uploads persist immediately (or via the self-cleaning draft
-  // trip in create mode), so they're never "unsaved" by the time a close is
-  // attempted.
+  // dialog was (re)populated — not just "the dialog is open". Uploads persist
+  // at once, but only Discard can undo them, so they count too.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    currentFingerprint !== initialFormSnapshot;
+    (uploadedIds.length > 0 || currentFingerprint !== initialFormSnapshot);
 
   // Whether there's anything in the form worth keeping. Measured against the
   // pristine baseline, so a restored draft still counts as worth keeping even
@@ -514,10 +576,10 @@ function TripLogDialog({
     currentFingerprint !== pristineFormSnapshot;
 
   // Autosave the create form so a phone call, a tab eviction or a flat battery
-  // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
+  // doesn't take it — the exits `Dialog`'s `discard` structurally cannot
   // cover, because nobody is there to answer its prompt.
   useEffect(() => {
-    if (!open || tripLog) return;
+    if (!open || tripLog || !currentUserId) return;
     // Don't overwrite the draft we're currently offering to restore.
     if (restorableDraft) return;
     const timer = setTimeout(() => {
@@ -530,7 +592,7 @@ function TripLogDialog({
         clearTripDraft();
         return;
       }
-      const result = writeTripDraft(currentForm, new Date());
+      const result = writeTripDraft(currentUserId, currentForm, new Date());
       if (result.status === "saved") return;
       // A draft the user assumes exists but doesn't is the exact failure this
       // feature exists to prevent, so say so instead of failing quietly. Once
@@ -549,7 +611,15 @@ function TripLogDialog({
       }
     }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [open, tripLog, restorableDraft, draftWorthKeeping, currentForm, toast]);
+  }, [
+    open,
+    tripLog,
+    currentUserId,
+    restorableDraft,
+    draftWorthKeeping,
+    currentForm,
+    toast,
+  ]);
 
   function handleRestoreDraft() {
     if (!restorableDraft) return;
@@ -605,8 +675,8 @@ function TripLogDialog({
   async function resolvePlaceIds(): Promise<string[]> {
     if (!creating) return selectedPlaceIds;
     if (!creating.name.trim()) throw new Error("Place name is required.");
-    const lat = parseFloat(creating.latitude);
-    const lng = parseFloat(creating.longitude);
+    const lat = coordinateNumber(creating.latitude);
+    const lng = coordinateNumber(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
       throw new Error("Valid latitude and longitude are required.");
     if (!isValidLatitude(lat) || !isValidLongitude(lng))
@@ -666,10 +736,51 @@ function TripLogDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
+  }
+
+  // A track file onto the draft trip (made on the first one), so it can be
+  // taken out again and a Cancel deletes it with the draft. `sourceMediaId` is
+  // the recording it copies, where it copies one.
+  async function addTrackFile(file: File, sourceMediaId?: string) {
+    const resolved = resolveMediaType(file);
+    if (!resolved) throw new Error("Unsupported track file.");
+    const tripId = await ensureLinkedTripId();
+    const item = await uploadMedia({
+      linkedType: "tripLog",
+      linkedId: tripId,
+      file,
+      mediaType: resolved.mediaType,
+      thumbnail: await generateThumbnail(file, resolved.category),
+      sourceMediaId,
+    });
+    setMedia((prev) => [...prev, item]);
+  }
+
+  // Add a way: the picker's choice, fetched or written out as a file, then
+  // copied onto the trip like any track.
+  const [wayBusy, setWayBusy] = useState(false);
+  const [wayError, setWayError] = useState<string | null>(null);
+  async function addWay(way: TripWay) {
+    setWayBusy(true);
+    setWayError(null);
+    // Counts as an upload, so Save and closing wait for the copy.
+    handleUploadBusy(true);
+    try {
+      await addTrackFile(await way.load(), way.sourceMediaId);
+      setMode("form");
+    } catch (err) {
+      console.error(err);
+      setWayError(messageFromError(err, ADD_WAY.copy.failed));
+    } finally {
+      setWayBusy(false);
+      handleUploadBusy(false);
+    }
   }
 
   // "Log a trip" on a track: the track goes into the form as a copy of its file
@@ -677,6 +788,8 @@ function TripLogDialog({
   // be taken out again and a Cancel deletes it with the draft. Once per open.
   // The form state it reads is the populate's, which was set during render.
   const [attachingTrack, setAttachingTrack] = useState(false);
+  // Places near where the track began and ended, offered as chips.
+  const [nearPlaceIds, setNearPlaceIds] = useState<string[]>([]);
   const attachedSessionRef = useRef(-1);
   useEffect(() => {
     if (!open || tripLog || !fromTrack) return;
@@ -685,29 +798,26 @@ function TripLogDialog({
     setAttachingTrack(true);
     void (async () => {
       try {
-        const { items } = await getMediaDownloadUrls([fromTrack.mediaId]);
-        const url = items[0]?.displayUrl;
-        if (!url) throw new Error("The file could not be fetched.");
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("The file could not be fetched.");
-        const file = new File([await response.blob()], fromTrack.filename);
-        const resolved = resolveMediaType(file);
-        if (!resolved) throw new Error("Unsupported track file.");
-        const tripId = await ensureLinkedTripId();
-        const item = await uploadMedia({
-          linkedType: "tripLog",
-          linkedId: tripId,
-          file,
-          mediaType: resolved.mediaType,
-          thumbnail: await generateThumbnail(file, resolved.category),
-        });
-        setMedia((prev) => [...prev, item]);
+        const file = await fetchMediaFile(
+          fromTrack.mediaId,
+          fromTrack.filename,
+        );
+        setNearPlaceIds(
+          tripPrefillFromTrack(
+            { startedAt: null, ends: gpxEnds(await file.text()) },
+            undefined,
+            places,
+          ).nearPlaceIds,
+        );
+        // The copy names its recording, so the recording stops offering
+        // "Log a trip".
+        await addTrackFile(file, fromTrack.mediaId);
       } catch (err) {
         console.error(err);
         setError(
           messageFromError(
             err,
-            "Couldn't add the track to this trip. You can add it below.",
+            "Couldn't add the route to this trip. You can add it below.",
           ),
         );
       } finally {
@@ -728,6 +838,17 @@ function TripLogDialog({
       } catch (err) {
         console.error(err);
         setError(
+          messageFromError(err, "Couldn't discard uploaded files. Try again."),
+        );
+        return;
+      }
+    }
+    if (tripLog && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        await discardUploads(uploadedIds, handleMediaDeleted);
+      } catch (err) {
+        console.error(err);
+        setError(
           messageFromError(
             err,
             "Couldn't discard uploaded files. Please try again.",
@@ -739,10 +860,14 @@ function TripLogDialog({
     onClose();
   }
 
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
+  // Reached only when clean, or once the dialog's discard confirm is answered
+  // with its verb. "Discard" is the deliberate answer the autosaved draft can't
+  // second-guess; create mode only, so discarding *edits* to a saved trip
+  // doesn't take an unrelated create draft with it.
+  function closeAndForget() {
+    if (isDirty && !tripLog) clearTripDraft();
+    void handleRequestClose();
+  }
 
   function getFieldValue(key: string): string {
     return fieldValues[key] ?? "";
@@ -811,7 +936,7 @@ function TripLogDialog({
       return;
     }
     if (selectedCount >= MAX_PLACES_PER_TRIP) {
-      setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+      setPlacesError(TRIP_PLACES_CAP_SENTENCE);
       return;
     }
     setSelectedPlaceIds([...selectedPlaceIds, id]);
@@ -819,7 +944,7 @@ function TripLogDialog({
 
   function startCreate(name: string) {
     if (selectedCount >= MAX_PLACES_PER_TRIP) {
-      setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+      setPlacesError(TRIP_PLACES_CAP_SENTENCE);
       return;
     }
     setCreating({
@@ -834,32 +959,14 @@ function TripLogDialog({
   // The vocabulary in a stable order — seeds, then the user's history, then
   // types added here — each shown in the casing the SELECTION uses, so a picked
   // "Canyoning" lights the seeded "canyoning" chip instead of adding a second.
-  const typeOptions = useMemo(() => {
-    const vocabulary = dedupeTypesPreserveCase([
-      ...TRIP_TYPE_SUGGESTIONS,
-      ...existingTripTypes,
-      ...addedTypes,
-    ]);
-    const values = vocabulary.map(
-      (type) =>
-        selectedTypes.find(
-          (picked) => picked.toLowerCase() === type.toLowerCase(),
-        ) ?? type,
-    );
-    for (const picked of selectedTypes) {
-      if (!values.some((value) => value.toLowerCase() === picked.toLowerCase()))
-        values.push(picked);
-    }
-    return values.map((value) => {
-      const look = tripTypeLook(value);
-      return {
-        value,
-        label: tripTypeLabel(value),
-        icon: look.icon,
-        hue: look.hue,
-      };
-    });
-  }, [existingTripTypes, addedTypes, selectedTypes]);
+  const typeOptions = useMemo(
+    () =>
+      tripTypeOptions(
+        [...TRIP_TYPE_SUGGESTIONS, ...existingTripTypes, ...addedTypes],
+        selectedTypes,
+      ),
+    [existingTripTypes, addedTypes, selectedTypes],
+  );
 
   // The canyoning tag is locked (shown, not removable) while a place is linked
   // — the API re-adds it on save, so offering to remove it would be a lie.
@@ -915,12 +1022,8 @@ function TripLogDialog({
 
   const typesHint =
     [
-      linkedCanyon
-        ? "Trips with a linked canyon are always tagged canyoning."
-        : null,
-      selectedTypes.length > 1
-        ? "The starred type sets the trip’s icon."
-        : null,
+      linkedCanyon ? TRIP_FORM.copy.typeCanyoningHint : null,
+      selectedTypes.length > 1 ? TRIP_FORM.copy.typeStarHint : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
@@ -939,18 +1042,15 @@ function TripLogDialog({
   }
 
   async function handleSave() {
-    if (!date) {
-      setError("Date is required.");
-      return;
-    }
-    // Block save if any custom numeric field is invalid (e.g. "5.5" in an
-    // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
+    // Every check runs, so one press lights every bad field. Blocks save if any
+    // custom numeric field is invalid (e.g. "5.5" in an integer field) so it
+    // can't be silently mangled on save.
+    setShowFieldErrors(true);
     const customFieldInvalid = visibleFieldDefs.some(
       (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
     );
-    if (customFieldInvalid) {
-      setShowFieldErrors(true);
-      setError("Please fix the highlighted fields.");
+    if (!date || customFieldInvalid) {
+      setError(TRIP_FORM.copy.fixFields);
       return;
     }
     setSaving(true);
@@ -1005,13 +1105,11 @@ function TripLogDialog({
       // draft that this save says nothing about.
       if (!tripLog) clearTripDraft();
       onSaved();
-      toast.success(tripLog ? "Trip updated." : "Trip logged.");
+      toast.done(tripLog ? TRIP_FORM.copy.saved : TRIP_FORM.copy.logged);
       onClose();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't save this trip. Please try again."),
-      );
+      setError(messageFromError(err, TRIP_FORM.copy.saveFailed));
     } finally {
       setSaving(false);
     }
@@ -1056,7 +1154,7 @@ function TripLogDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save the attribute. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);
@@ -1065,6 +1163,335 @@ function TripLogDialog({
 
   const derivedTitle = formatTripPlaceNames(selectedPlaceNames);
 
+  const sections: Record<SectionKeysOn<typeof TRIP_FORM, "web">, ReactNode> = {
+    date: (
+      <>
+        <TextField
+          data-autofocus={focusDateOnOpen || undefined}
+          label={TRIP_FORM.copy.date}
+          type="date"
+          required
+          requiredMark
+          reserveError
+          value={date}
+          onChange={(event) => setDate(event.target.value)}
+          error={showFieldErrors && !date ? TRIP_FORM.copy.dateMissing : null}
+          // Non-blocking — a future date is allowed (trip planning), it is
+          // only flagged so an accidental typo doesn't pass unnoticed.
+          hint={isFutureDate(date) ? TRIP_FORM.copy.futureDate : undefined}
+        />
+      </>
+    ),
+    places: (
+      <>
+        <div ref={placesFieldRef} className={classes.field}>
+          <span className={classes.fieldLabel} aria-hidden>
+            {TRIP_FORM.copy.places}
+          </span>
+          <Row
+            className={classes.row}
+            title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
+            subtitle={
+              selectedCount === 1 ? "1 place" : `${selectedCount} places`
+            }
+            description="Places on this trip. Press to choose."
+            leading={<IconTile icon="place" hue="var(--color-accent)" />}
+            trailing={
+              <Icon
+                idea="disclosure"
+                size={18}
+                aria-hidden
+                className={classes.chevron}
+              />
+            }
+            onOpen={openPlacesPicker}
+          />
+          {nearPlaceIds.length > 0 && (
+            <ChipPicker
+              label={TRIP_NEAR_TRACK_LABEL}
+              options={nearPlaceIds.flatMap((id) => {
+                const place = places.find((p) => p.id === id);
+                return place ? [{ value: id, label: place.name }] : [];
+              })}
+              selected={selectedPlaceIds}
+              onToggle={togglePlace}
+            />
+          )}
+          {/* The new place's position: typed, or picked on the map. The name
+                is what was typed in the picker. */}
+          {creating && (
+            <div className={classes.createPlace}>
+              <p className={classes.muted}>
+                Where is{" "}
+                {creating.name ? `“${creating.name}”` : "the new place"}?
+              </p>
+              <div className={classes.coordinates}>
+                <TextField
+                  label={PLACE_FORM.copy.latitude}
+                  className={classes.grow}
+                  inputMode="decimal"
+                  placeholder="-33.123456"
+                  value={creating.latitude}
+                  onChange={(event) =>
+                    setCreating((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            ...coordinateEntry(
+                              event.target.value,
+                              "latitude",
+                              prev.latitude,
+                            ),
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                <TextField
+                  label={PLACE_FORM.copy.longitude}
+                  className={classes.grow}
+                  inputMode="decimal"
+                  placeholder="150.123456"
+                  value={creating.longitude}
+                  onChange={(event) =>
+                    setCreating((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            ...coordinateEntry(
+                              event.target.value,
+                              "longitude",
+                              prev.longitude,
+                            ),
+                          }
+                        : prev,
+                    )
+                  }
+                />
+                {onPickCoords && (
+                  <FieldBeside>
+                    <Button
+                      variant="outline"
+                      icon="addPlace"
+                      onClick={handlePickCoords}
+                    >
+                      {PLACE_FORM.copy.selectOnMap}
+                    </Button>
+                  </FieldBeside>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    ),
+    title: (
+      <>
+        {/* Overrides the derived title (the joined place names). */}
+        <TextField
+          label={TRIP_FORM.copy.title}
+          value={displayNameInput}
+          onChange={(event) => setDisplayNameInput(event.target.value)}
+          hint={
+            displayNameInput.trim() ? undefined : tripTitleHint(derivedTitle)
+          }
+        />
+      </>
+    ),
+    type: (
+      <>
+        <ChipPicker
+          label={TRIP_FORM.copy.type}
+          options={typeOptions}
+          selected={selectedTypes}
+          onToggle={toggleType}
+          onAdd={addType}
+          addLabel="Add a type"
+          lockedValues={lockedTypes}
+          primaryValue={
+            selectedTypes.length > 1
+              ? (primaryTripType(selectedTypes) ?? undefined)
+              : undefined
+          }
+          hint={typesHint}
+          error={typesError}
+        />
+      </>
+    ),
+    notes: (
+      <>
+        <TextArea
+          label={TRIP_FORM.copy.notes}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder={TRIP_FORM.copy.notesPlaceholder}
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.attributes} />
+          {askedFieldDefs.map((def) => (
+            <div key={def.key} className={classes.attribute}>
+              <div className={classes.grow}>
+                <CustomFieldInput
+                  def={def}
+                  value={getFieldValue(def.key)}
+                  onChange={(value) => setFieldValue(def.key, value)}
+                  showError={showFieldErrors}
+                />
+              </div>
+              <FieldBeside>
+                <IconButton
+                  icon="delete"
+                  label={`Delete the attribute ${def.label}`}
+                  tone="danger"
+                  onClick={() => setFieldToDelete(def)}
+                />
+              </FieldBeside>
+            </div>
+          ))}
+          {showAddField ? (
+            <AddCustomFieldForm
+              label={newFieldLabel}
+              onLabelChange={setNewFieldLabel}
+              type={newFieldType}
+              onTypeChange={setNewFieldType}
+              onAdd={handleAddField}
+              onCancel={() => {
+                setShowAddField(false);
+                setNewFieldLabel("");
+                setNewFieldBounded(false);
+                setNewFieldMin("");
+                setNewFieldMax("");
+                setAddFieldError(null);
+              }}
+              adding={addingField}
+              error={addFieldError}
+              bounds={{
+                bounded: newFieldBounded,
+                onBoundedChange: setNewFieldBounded,
+                min: newFieldMin,
+                onMinChange: setNewFieldMin,
+                max: newFieldMax,
+                onMaxChange: setNewFieldMax,
+              }}
+            />
+          ) : (
+            <Button
+              compact
+              icon="add"
+              className={classes.addAttribute}
+              onClick={() => setShowAddField(true)}
+            >
+              Add an attribute
+            </Button>
+          )}
+        </section>
+      </>
+    ),
+    leftover: (
+      <>
+        {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. The same card row, though, so the
+              two read as the same kind of thing. */}
+        {leftoverFieldDefs.length > 0 && (
+          <section className={classes.section}>
+            <SectionHeader
+              title={TRIP_FORM.copy.leftover}
+              count={leftoverFieldDefs.length}
+            />
+            <p className={classes.muted}>{TRIP_FORM.copy.leftoverNote}</p>
+            {leftoverFieldDefs.map((def) => (
+              <Row
+                key={def.key}
+                leading={<IconTile icon="help" hue="var(--color-accent)" />}
+                title={def.label}
+                subtitle={formatFieldValue(
+                  coerceFieldValue(getFieldValue(def.key), def.type),
+                  def.type,
+                )}
+                trailing={
+                  <IconButton
+                    icon="close"
+                    label={`Remove ${def.label} from this trip`}
+                    onClick={() => removeLeftoverField(def.key)}
+                  />
+                }
+              />
+            ))}
+          </section>
+        )}
+      </>
+    ),
+    photos: (
+      <>
+        {/* Media. In create mode the first upload lazily creates a draft trip
+              to link files to; discarding deletes it (and its files). */}
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.photos} />
+          {mediaLoading ? (
+            <p className={classes.muted} role="status">
+              Loading files…
+            </p>
+          ) : (
+            <MediaGallery
+              media={media}
+              variant="visual"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText="No photos or videos yet."
+            />
+          )}
+          <MediaUpload
+            category="visual"
+            linkedType="tripLog"
+            linkedId={tripLog ? tripLog.id : ""}
+            resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
+            onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
+            disabled={saving}
+          />
+        </section>
+      </>
+    ),
+    routes: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.routes} />
+          {attachingTrack && (
+            <p className={classes.muted} role="status">
+              Adding the route…
+            </p>
+          )}
+          {!mediaLoading && (
+            <MediaGallery
+              media={media}
+              variant="tracks"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText={TRIP_PAGE.copy.routesEmpty}
+            />
+          )}
+          <Button
+            icon="add"
+            variant="outline"
+            onClick={() => {
+              setWayError(null);
+              setMode("way");
+            }}
+            disabled={saving}
+            disabledReason="Saving…"
+          >
+            {ADD_WAY.copy.title}
+          </Button>
+        </section>
+      </>
+    ),
+  };
+
   return (
     <>
       <Dialog
@@ -1072,34 +1499,49 @@ function TripLogDialog({
         title={
           mode === "places"
             ? "Places on this trip"
-            : tripLog
-              ? "Edit trip"
-              : "Log a trip"
+            : mode === "way"
+              ? ADD_WAY.copy.title
+              : tripLog
+                ? TRIP_FORM.copy.editTitle
+                : TRIP_FORM.copy.addTitle
         }
         size="large"
-        dismissible={!saving}
+        // A file still landing would miss the delete Discard does.
+        dismissible={!saving && uploading === 0 && !wayBusy}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
-        onClose={mode === "places" ? backToForm : guard.requestClose}
-        footer={
+        onClose={
+          mode === "places"
+            ? backToForm
+            : mode === "way"
+              ? () => setMode("form")
+              : closeAndForget
+        }
+        discard={
+          isDirty && mode === "form" ? abandonConfirm("trip", !tripLog) : null
+        }
+        footer={(requestClose) =>
           mode === "places" ? (
             <Button variant="filled" icon="done" onClick={backToForm}>
               Done
             </Button>
+          ) : mode === "way" ? (
+            <Button
+              icon="back"
+              onClick={() => setMode("form")}
+              disabled={wayBusy}
+              disabledReason="Adding…"
+            >
+              Back to the trip
+            </Button>
           ) : (
             <>
-              {/* Not "Cancel": the add-attribute sub-form renders its own
-                  "Cancel" that only backs out of that sub-form, and both can be
-                  on screen at once — two identical words, opposite scopes. In
-                  edit mode the object is the *changes*, not the trip: "Discard
-                  trip" on a saved trip would read as "delete it from my
-                  logbook". */}
               <Button
-                onClick={guard.requestClose}
-                disabled={saving}
-                disabledReason="Saving…"
+                onClick={requestClose}
+                disabled={saving || uploading > 0}
+                disabledReason={saving ? "Saving…" : "Uploading…"}
               >
-                {tripLog ? "Discard changes" : "Discard trip"}
+                Cancel
               </Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
                   path, so a click can't fire alongside the form's submit. */}
@@ -1109,12 +1551,16 @@ function TripLogDialog({
                 variant="filled"
                 busy={saving || attachingTrack}
               >
-                {tripLog ? "Save changes" : "Log trip"}
+                {tripLog ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit}
               </Button>
             </>
           )
         }
       >
+        {mode === "way" && (
+          <TripWayPicker busy={wayBusy} error={wayError} onPick={addWay} />
+        )}
+
         {mode === "places" && (
           <div className={classes.picker}>
             <SearchField
@@ -1235,274 +1681,9 @@ function TripLogDialog({
             </div>
           )}
 
-          <TextField
-            data-autofocus={focusDateOnOpen || undefined}
-            label="Date"
-            type="date"
-            required
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            error={date ? null : "Date is required."}
-            // Non-blocking — a future date is allowed (trip planning), it is
-            // only flagged so an accidental typo doesn't pass unnoticed.
-            hint={
-              isFutureDate(date) ? "This date is in the future." : undefined
-            }
-          />
-
-          <div ref={placesFieldRef} className={classes.field}>
-            <span className={classes.fieldLabel} aria-hidden>
-              Places
-            </span>
-            <Row
-              className={classes.row}
-              title={derivedTitle ?? "No places linked"}
-              subtitle={
-                selectedCount === 1 ? "1 place" : `${selectedCount} places`
-              }
-              description="Places on this trip. Press to choose."
-              leading={<IconTile icon="place" hue="var(--color-accent)" />}
-              trailing={
-                <Icon
-                  idea="disclosure"
-                  size={18}
-                  aria-hidden
-                  className={classes.chevron}
-                />
-              }
-              onOpen={openPlacesPicker}
-            />
-            {/* The new place's position: typed, or picked on the map. The name
-                is what was typed in the picker. */}
-            {creating && (
-              <div className={classes.createPlace}>
-                <p className={classes.muted}>
-                  Where is{" "}
-                  {creating.name ? `“${creating.name}”` : "the new place"}?
-                </p>
-                <div className={classes.coordinates}>
-                  <TextField
-                    label="Latitude"
-                    className={classes.grow}
-                    inputMode="decimal"
-                    placeholder="-33.123456"
-                    value={creating.latitude}
-                    onChange={(event) =>
-                      setCreating((prev) =>
-                        prev ? { ...prev, latitude: event.target.value } : prev,
-                      )
-                    }
-                  />
-                  <TextField
-                    label="Longitude"
-                    className={classes.grow}
-                    inputMode="decimal"
-                    placeholder="150.123456"
-                    value={creating.longitude}
-                    onChange={(event) =>
-                      setCreating((prev) =>
-                        prev
-                          ? { ...prev, longitude: event.target.value }
-                          : prev,
-                      )
-                    }
-                  />
-                  {onPickCoords && (
-                    <Button
-                      variant="outline"
-                      icon="addPlace"
-                      onClick={handlePickCoords}
-                    >
-                      Pick on map
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Overrides the derived title (the joined place names). */}
-          <TextField
-            label="Title"
-            value={displayNameInput}
-            onChange={(event) => setDisplayNameInput(event.target.value)}
-            hint={
-              displayNameInput.trim()
-                ? undefined
-                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
-            }
-          />
-
-          <ChipPicker
-            label="Type"
-            options={typeOptions}
-            selected={selectedTypes}
-            onToggle={toggleType}
-            onAdd={addType}
-            addLabel="Add a type"
-            lockedValues={lockedTypes}
-            primaryValue={
-              selectedTypes.length > 1
-                ? (primaryTripType(selectedTypes) ?? undefined)
-                : undefined
-            }
-            hint={typesHint}
-            error={typesError}
-          />
-
-          <TextArea
-            label="Notes"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Conditions, observations…"
-          />
-
-          <section className={classes.section}>
-            <SectionHeader title="Trip attributes" />
-            {askedFieldDefs.map((def) => (
-              <div key={def.key} className={classes.attribute}>
-                <div className={classes.grow}>
-                  <CustomFieldInput
-                    def={def}
-                    value={getFieldValue(def.key)}
-                    onChange={(value) => setFieldValue(def.key, value)}
-                    showError={showFieldErrors}
-                  />
-                </div>
-                <IconButton
-                  icon="delete"
-                  label={`Delete the attribute ${def.label}`}
-                  tone="danger"
-                  onClick={() => setFieldToDelete(def)}
-                />
-              </div>
-            ))}
-            {showAddField ? (
-              <AddCustomFieldForm
-                label={newFieldLabel}
-                onLabelChange={setNewFieldLabel}
-                type={newFieldType}
-                onTypeChange={setNewFieldType}
-                onAdd={handleAddField}
-                onCancel={() => {
-                  setShowAddField(false);
-                  setNewFieldLabel("");
-                  setNewFieldBounded(false);
-                  setNewFieldMin("");
-                  setNewFieldMax("");
-                  setAddFieldError(null);
-                }}
-                adding={addingField}
-                error={addFieldError}
-                bounds={{
-                  bounded: newFieldBounded,
-                  onBoundedChange: setNewFieldBounded,
-                  min: newFieldMin,
-                  onMinChange: setNewFieldMin,
-                  max: newFieldMax,
-                  onMaxChange: setNewFieldMax,
-                }}
-              />
-            ) : (
-              <Button
-                compact
-                icon="add"
-                className={classes.addAttribute}
-                onClick={() => setShowAddField(true)}
-              >
-                Add an attribute
-              </Button>
-            )}
-          </section>
-
-          {/* Not a place's "Doesn't fit this type" and its three actions:
-              these are the user's own definitions, so there is nothing to
-              adopt — only keep or remove. The same card row, though, so the
-              two read as the same kind of thing. */}
-          {leftoverFieldDefs.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title="Leftover attributes"
-                count={leftoverFieldDefs.length}
-              />
-              <p className={classes.muted}>
-                These attributes are left over from when this trip was saved as
-                a different type.
-              </p>
-              {leftoverFieldDefs.map((def) => (
-                <Row
-                  key={def.key}
-                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
-                  title={def.label}
-                  subtitle={formatFieldValue(
-                    coerceFieldValue(getFieldValue(def.key), def.type),
-                    def.type,
-                  )}
-                  trailing={
-                    <IconButton
-                      icon="close"
-                      label={`Remove ${def.label} from this trip`}
-                      onClick={() => removeLeftoverField(def.key)}
-                    />
-                  }
-                />
-              ))}
-            </section>
-          )}
-
-          {/* Media. In create mode the first upload lazily creates a draft trip
-              to link files to; discarding deletes it (and its files). */}
-          <section className={classes.section}>
-            <SectionHeader title="Photos & videos" />
-            {mediaLoading ? (
-              <p className={classes.muted} role="status">
-                Loading files…
-              </p>
-            ) : (
-              <MediaGallery
-                media={media}
-                variant="visual"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No photos or videos yet."
-              />
-            )}
-            <MediaUpload
-              category="visual"
-              linkedType="tripLog"
-              linkedId={tripLog ? tripLog.id : ""}
-              resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-            />
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Tracks" />
-            {attachingTrack && (
-              <p className={classes.muted} role="status">
-                Adding the track…
-              </p>
-            )}
-            {!mediaLoading && (
-              <MediaGallery
-                media={media}
-                variant="tracks"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No tracks yet."
-              />
-            )}
-            <MediaUpload
-              category="track"
-              linkedType="tripLog"
-              linkedId={tripLog ? tripLog.id : ""}
-              resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-            />
-          </section>
-
+          {contractSectionKeys(TRIP_FORM, "web").map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
@@ -1525,23 +1706,6 @@ function TripLogDialog({
             });
           }
         }}
-      />
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={() => {
-          // "Discard" is the deliberate answer the autosaved draft can't
-          // second-guess — the whole point of the prompt is that the user means
-          // it. Create mode only: discarding *edits* to a saved trip must not
-          // take an unrelated create draft with it.
-          if (!tripLog) clearTripDraft();
-          guard.confirmDiscard();
-        }}
-        onClose={guard.cancelDiscard}
       />
     </>
   );

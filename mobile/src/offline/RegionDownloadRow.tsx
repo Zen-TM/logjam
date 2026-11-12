@@ -1,17 +1,15 @@
 // One job of a region download run — which basemap, how far in, and the action
 // its state allows (pause/resume, stop, or the sentence explaining a failure).
 //
-// It lives here rather than on a screen because the run does: the progress
-// SCREEN is gone and Saved shows the run as one card per area, with these rows
-// behind its ⋯ sheet.
+// Saved shows the run as one card per area, with these rows behind its ⋯ sheet.
 //
 // PRIVACY: a row carries a basemap label and counts. Never the bbox, never a
 // path.
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { formatBytes } from "../format";
 import { spacing, useTheme, useHues } from "../theme";
-import { Button, Row } from "../ui";
+import { Button, confirm, Row } from "../ui";
 import {
   cancelRegionDownload,
   pauseRegionDownload,
@@ -22,6 +20,7 @@ import {
   canPause,
   isRetryableFailure,
   regionRejectedLine,
+  sourceUnavailableLine,
 } from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
@@ -44,14 +43,11 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "region-rejected":
           return regionRejectedLine(state.detail);
         case "source-unavailable":
-          // Not the phone's fault and not fixable by retrying, so it doesn't
-          // say "try again" — this is the vector clip's 5xx.
-          return "Logjam couldn't prepare this map right now. Other maps still work.";
+          // Not fixable by retrying, so it doesn't say "try again".
+          return sourceUnavailableLine(state.detail);
         default:
           // The detail is the message from the exception that ended the run,
-          // scrubbed (see failureDetail). Without it this row said only "that
-          // didn't finish", which told the user nothing to act on and left a
-          // developer with a logcat line nobody was attached to.
+          // scrubbed (see failureDetail).
           return state.detail
             ? `Download didn't finish: ${state.detail}`
             : "Download didn't finish. Try again.";
@@ -104,7 +100,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
       right={
         // A SAVED job is done with. Everything else — running, paused, and a
         // failure worth another go — keeps its actions here, which is where
-        // resuming a failed download now lives: the partial file is a lossless
+        // resuming a failed download lives: the partial file is a lossless
         // checkpoint, and the run that owns it is the honest place to offer it.
         state.kind === "ready" ? null : (
           <View style={styles.rowActions}>
@@ -118,7 +114,9 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                 />
               ) : null
             ) : state.kind === "failed" &&
-              !isRetryableFailure(state.code) ? null : ( // the same failure; the row's sentence says what to do instead. // Retrying a rejected area, or an endpoint that is down, repeats
+              !isRetryableFailure(state.code) ? null : (
+              // Retrying a rejected area, or an endpoint that is down, repeats
+              // the same failure; the row's sentence says what to do instead.
               <Button
                 label="Resume"
                 variant="outlineAccent"
@@ -130,22 +128,24 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
               label={state.kind === "failed" ? "Discard" : "Stop"}
               variant="ghost"
               compact
-              onPress={() =>
-                Alert.alert(
-                  state.kind === "failed"
-                    ? "Discard this download?"
-                    : "Stop this download?",
-                  "The download so far will be deleted from this phone.",
-                  [
-                    { text: "Keep it", style: "cancel" },
-                    {
-                      text: state.kind === "failed" ? "Discard" : "Stop",
-                      style: "destructive",
-                      onPress: () => cancelRegionDownload(spec.id),
-                    },
-                  ],
-                )
-              }
+              onPress={() => {
+                const failed = state.kind === "failed";
+                void (async () => {
+                  if (
+                    await confirm({
+                      confirmTitle: failed
+                        ? "Discard this download?"
+                        : "Stop this download?",
+                      confirmBody: spec.update
+                        ? "The map you have saved stays as it is."
+                        : "The download so far will be deleted from this phone.",
+                      confirmLabel: failed ? "Discard" : "Stop",
+                      tone: "destructive",
+                    })
+                  )
+                    cancelRegionDownload(spec.id);
+                })();
+              }}
             />
           </View>
         )

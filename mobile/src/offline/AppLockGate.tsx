@@ -3,18 +3,15 @@
 // background. Uses the OS authenticator (biometric with PIN/pattern fallback) —
 // no app-managed secret.
 //
-// The lock is UNCONDITIONAL on the preference. It used to arm only once
-// downloaded map data existed, on the theory that an empty device had nothing
-// worth gating — which was never true: the sync mirror holds place names and
-// coordinates from the first sync after sign-in, and trips, notes and photos
-// with them. "Nothing downloaded" is not "nothing sensitive", so the data hooks
-// that used to decide this are gone rather than reworded.
+// The lock is UNCONDITIONAL on the preference: the sync mirror holds place
+// names and coordinates from the first sync after sign-in, and trips, notes and
+// photos with them. "Nothing downloaded" is not "nothing sensitive".
 //
-// The preference itself now defaults to OFF (appLockPreference.ts has the
+// The preference defaults to OFF (appLockPreference.ts has the
 // operator's reasoning) — so this gate is inert until someone asks for it.
 //
 // A device with NO enrolled security (no biometrics, no passcode) has nothing
-// to gate with; the gate passes through rather than bricking the app — the
+// to gate with; the gate passes through rather than bricking Logjam GPS — the
 // data is exactly as protected as everything else on an unlocked device.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Text } from "react-native";
@@ -69,9 +66,8 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   //
   // That is reachable ONLY while something keeps JS alive in the background,
   // which is exactly what track recording's foreground service does: going to
-  // background relocks (below) and the prompt effect used to fire on the spot,
-  // in the background, against no activity. The recording had to be killed from
-  // Android to get back in. Prompt when we're on screen, not before.
+  // background relocks (below). Firing the prompt in the background against no
+  // activity hangs the authenticator. Prompt when we're on screen, not before.
   const [appActive, setAppActive] = useState(
     () => AppState.currentState === "active",
   );
@@ -87,8 +83,8 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // It is STATE, decided at mount, and deliberately not an effect that reacts
   // to the switch. An effect runs after the commit that already swapped
   // `children` for the lock screen, and that unmount tears down the whole
-  // navigation tree: flipping the switch in Settings bounced the user out to a
-  // freshly-mounted Map tab before the effect let them back in. Seeded from the
+  // navigation tree: flipping the switch in Settings bounces the user out to a
+  // freshly-mounted Map tab before the effect lets them back in. Seeded from the
   // preference so a cold start with the lock already on is gated normally.
   const [lockDeferred, setLockDeferred] = useState(() => !isAppLockEnabled());
   // Turning it back OFF re-arms the deferral, so switching off and on again
@@ -166,8 +162,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Auto-prompt ONCE per lock; further attempts go through the button. An
-  // unconditional retry here is what looped when the authenticator fails
-  // instantly.
+  // unconditional retry here loops when the authenticator fails instantly.
   useEffect(() => {
     if (appActive && locked && !autoPrompted.current) {
       autoPrompted.current = true;

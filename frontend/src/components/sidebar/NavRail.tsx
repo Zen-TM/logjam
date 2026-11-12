@@ -1,10 +1,11 @@
-import { Fragment, type Ref } from "react";
+import { Fragment, type MouseEvent, type Ref } from "react";
+import { labelWithBadge } from "@logjam/shared";
 import type { PanelId } from "./panels";
 import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
+  MORE_BADGE_NOUN,
   type NavBadgeCounts,
 } from "./navItems";
 import { useIsMobile } from "../../useIsMobile";
@@ -19,6 +20,7 @@ function NavButton({
   icon,
   active,
   count,
+  badgeNoun,
   onClick,
   ref,
   ...rest
@@ -27,7 +29,8 @@ function NavButton({
   icon: Glyph;
   active: boolean;
   count: number;
-  onClick: () => void;
+  badgeNoun?: string;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   ref?: Ref<HTMLButtonElement>;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">) {
   return (
@@ -36,7 +39,7 @@ function NavButton({
       type="button"
       className={classes.item}
       data-active={active}
-      aria-label={labelWithBadge(label, count)}
+      aria-label={labelWithBadge(label, count, badgeNoun)}
       onClick={onClick}
       {...rest}
     >
@@ -44,6 +47,10 @@ function NavButton({
         <Icon idea={icon} size={22} />
       </span>
       <span className={classes.label}>{label}</span>
+      {/* Load-bearing: without it the badge glues "Inbox10" together, and
+          axe's label-content-name-mismatch finds that the accessible name
+          ("Inbox, 10 unread") does not contain it (e2e/a11y.spec.ts). It
+          renders no gap: .item is a column flex, which drops whitespace. */}{" "}
       {count > 0 && (
         <span className={classes.badge} aria-hidden>
           {count}
@@ -55,9 +62,9 @@ function NavButton({
 
 /**
  * The page nav. A fixed 84px rail on desktop — every page labelled, the active
- * one filled — and Logjam GPS's tab bar on narrow web (Map · Places · Logs ·
- * Ways · More). Pressing the open page's button closes it; on narrow web the
- * Map tab does.
+ * one filled — and a tab bar on narrow web (Places · Trips · Ways · Plans ·
+ * More). Pressing the open page's button closes it. Narrow web has no Map tab:
+ * its panels are sheets over the map, and closing one is how a user gets back.
  */
 function NavRail({
   activePanel,
@@ -72,7 +79,13 @@ function NavRail({
   const { railItems, moreItems, spacerAfterIndex } =
     partitionNavItems(isNarrow);
 
-  const toggle = (id: PanelId) => onPanelChange(activePanel === id ? null : id);
+  const toggle = (id: PanelId, event?: MouseEvent) => {
+    onPanelChange(activePanel === id ? null : id);
+    // Opened from the keyboard (a click event's detail is 0 then): carry focus
+    // into the panel, so its controls are one Tab away, not past every rail stop.
+    if (activePanel !== id && event?.detail === 0)
+      requestAnimationFrame(() => document.getElementById("panel")?.focus());
+  };
 
   const items = railItems.map((item, index) => (
     <Fragment key={item.id}>
@@ -82,7 +95,8 @@ function NavRail({
         active={activePanel === item.id}
         aria-current={activePanel === item.id ? "page" : undefined}
         count={badgeCounts[item.id] ?? 0}
-        onClick={() => toggle(item.id)}
+        badgeNoun={item.badgeNoun}
+        onClick={(event) => toggle(item.id, event)}
       />
       {index === spacerAfterIndex && <div className={classes.spacer} />}
     </Fragment>
@@ -102,14 +116,6 @@ function NavRail({
   const moreCount = aggregateBadgeCount(moreItems, badgeCounts);
   return (
     <nav className={classes.tabs} aria-label="Pages">
-      <NavButton
-        label="Map"
-        icon="map"
-        active={activePanel === null}
-        aria-current={activePanel === null ? "page" : undefined}
-        count={0}
-        onClick={() => onPanelChange(null)}
-      />
       {items}
       <Menu
         label="More pages"
@@ -120,6 +126,7 @@ function NavRail({
           accessibleLabel: labelWithBadge(
             item.label,
             badgeCounts[item.id] ?? 0,
+            item.badgeNoun,
           ),
           icon: item.icon,
           badge: badgeCounts[item.id],
@@ -132,6 +139,7 @@ function NavRail({
             icon="moreTab"
             active={isPanelInMore(moreItems, activePanel)}
             count={moreCount}
+            badgeNoun={MORE_BADGE_NOUN}
           />
         )}
       />

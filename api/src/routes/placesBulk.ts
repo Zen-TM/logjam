@@ -25,12 +25,18 @@ import { resolveUser } from "../lib/resolveUser";
 import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
 import { placeImportKey } from "../lib/importKeys";
 import { deletePlacesCascade } from "../lib/bulkDelete";
+import {
+  diffFields,
+  placeFields,
+  snapshotWrites,
+  type Change,
+} from "../lib/importSnapshot";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
 // unbounded IN-list lookup + multi-chunk write transaction (the import path does
 // per-element work proportional to length). Mirrors BULK_DELETE_LIMIT; the 1 MB
-// body cap and 300/min limiter are the other ceilings. See SEC-001.
+// body cap and 300/min limiter are the other ceilings.
 const BULK_IMPORT_LIMIT = 2000;
 const CHUNK_SIZE = 200;
 
@@ -42,9 +48,8 @@ type BulkPlaceInput = {
   longitude: number;
   altNames?: string[];
   notes?: string | null;
-  /** Type-specific values, keyed by definition key. The seven grade columns
-   *  used to be named members here; they are ordinary keys now, which is what
-   *  lets a CSV of campsites import through the same endpoint. */
+  /** Type-specific values, keyed by definition key, allowing places of any
+   *  type to import through the same endpoint. */
   fieldValues?: Record<string, unknown>;
 };
 
@@ -58,9 +63,8 @@ function validateInput(
   defs: TripLogCustomFieldDef[],
 ): boolean {
   // Messages carry no "Row N:" prefix: `rowIndex` is returned alongside so the
-  // caller can label the error with the ORIGINAL CSV line (the request-body index
-  // isn't the CSV line once unparseable rows are filtered client-side). A prefix
-  // here produced the double "Row 1: Row 0: ..." index seen in the UI (IMPORT-7).
+  // caller can label the error with the original CSV line (the request-body index
+  // isn't the CSV line once unparseable rows are filtered client-side).
   if (!input.name || typeof input.name !== "string" || !input.name.trim()) {
     errors.push({ rowIndex, message: say`A place needs a name.` });
     return false;
@@ -79,10 +83,9 @@ function validateInput(
     });
     return false;
   }
-  // Field values are validated against the DEFINITIONS in force for the target
+  // Field values are validated against the definitions in force for the target
   // type, which is the same check POST/PATCH /places runs — so this import path
-  // cannot drift from them. It used to re-implement the grade ranges inline and
-  // omit pitches/longest/hours entirely, letting negatives through here.
+  // cannot drift from them.
   const values = asFieldValues(input.fieldValues);
   if (validateFieldValues(values, defs)) {
     errors.push({ rowIndex, message: fieldValueSentence(values, defs) });
@@ -91,11 +94,10 @@ function validateInput(
   return true;
 }
 
-// Re-validate the client-supplied policy against the fields this TYPE actually
-// has — the same list mergePlace enforces and the frontend renders switches
-// for. It used to redeclare the field names, so adding a policy entry in shared
-// left the server silently rejecting it as an unknown key; now the list is
-// derived from the type's definitions, so it cannot be redeclared at all.
+// Re-validate the client-supplied policy against the fields this type actually
+// has — the same list mergePlace enforces and Logjam Web renders switches
+// for. The list is derived from the type's definitions to prevent redeclaration
+// drift.
 //
 // A field the policy omits is keepExisting (mergePolicyFor), so a partial
 // policy is accepted rather than rejected: rejecting it would revert every
@@ -239,6 +241,7 @@ router.post(
               altNames: true,
               notes: true,
               fieldValues: true,
+              importBatchId: true,
             },
           })
         : [];
@@ -281,6 +284,7 @@ router.post(
           altNames: true,
           notes: true,
           fieldValues: true,
+          importBatchId: true,
         },
       });
       for (const row of existing) {
@@ -297,7 +301,7 @@ router.post(
     // the unique constraint → P2002 → 409 with the creates already persisted.
     // Since importKey is best-effort idempotency metadata (it only enables a
     // future re-import to dedupe), dropping it on a merge is harmless versus a
-    // half-applied 409. IMPORT-1.
+    // half-applied 409.
     const createClaimedImportKeys = new Set<string>();
     for (const row of rowsAfterTargetCheck) {
       if (
@@ -319,6 +323,7 @@ router.post(
     type MergeOp = {
       kind: "merge";
       placeId: string;
+      target: (typeof mergeTargetLookup)[number];
       mergedData: Record<string, unknown>;
       setImportKey: string | null; // Set importKey if place didn't have one.
       // Reported back so the completion screen can say WHICH places were folded
@@ -334,7 +339,8 @@ router.post(
     // Tracks the create op already queued for a given importKey so a second
     // create row with the SAME importKey (identical/near-identical rows — common
     // in real spreadsheets) folds into the first instead of hitting the
-    // (ownerId, importKey) unique constraint at write time (was a raw 500) — IMPORT-1.
+    // (ownerId, importKey) unique constraint at write time (which would cause a
+    // unique constraint error).
     const createOpByKey = new Map<string, CreateOp>();
     let created = 0;
 
@@ -350,6 +356,7 @@ router.post(
         merges.push({
           kind: "merge",
           placeId: existingPlace.id,
+          target: existingPlace,
           mergedData: {
             altNames: mergedResult.altNames,
             notes: mergedResult.notes ?? null,
@@ -371,7 +378,7 @@ router.post(
         // Set importKey if currently null (so future re-imports are idempotent)
         // — but only if no create row and no earlier merge in this request
         // already claims it, otherwise the write races to the same
-        // (ownerId, importKey) unique constraint (IMPORT-1). importKey is
+        // (ownerId, importKey) unique constraint. importKey is
         // best-effort metadata, so dropping it here is harmless.
         // Do NOT set importBatchId (pre-existing row — must survive undo).
         let setImportKey: string | null = target.importKey ? null : importKey;
@@ -386,6 +393,7 @@ router.post(
         merges.push({
           kind: "merge",
           placeId: targetId,
+          target,
           mergedData: {
             altNames: mergedResult.altNames,
             notes: mergedResult.notes ?? null,
@@ -398,7 +406,7 @@ router.post(
       } else {
         // Fold a duplicate create (same importKey within this request) into the
         // first one — fill nulls under the merge policy, keep name/lat/lng — so a
-        // repeated row never collides on the unique constraint (IMPORT-1).
+        // repeated row never collides on the unique constraint.
         const priorOp = createOpByKey.get(importKey);
         if (priorOp) {
           const folded = mergePlace(
@@ -448,7 +456,7 @@ router.post(
     // Within-request duplicates are already folded above; a residual unique-
     // constraint clash can still happen if a concurrent import created the same
     // importKey between our idempotency lookup and this write (TOCTOU). Surface it
-    // as a structured 409 instead of a raw 500 (IMPORT-1). No place name/coords
+    // as a structured 409 instead of a raw 500. No place name/coords
     // in the message (privacy rule).
     try {
       // Creates via createMany in chunks.
@@ -459,20 +467,47 @@ router.post(
         });
       }
 
-      // Merges (updates) via batched $transaction.
-      for (let i = 0; i < merges.length; i += CHUNK_SIZE) {
-        const chunk = merges.slice(i, i + CHUNK_SIZE);
-        await prisma.$transaction(
-          chunk.map((op) =>
-            prisma.place.update({
-              where: { id: op.placeId },
-              data: {
-                ...op.mergedData,
-                ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
-              },
-            }),
+      // One update per place. Two rows merging into one place both merged
+      // into its stored values, so the later row's values are the ones that
+      // land.
+      const updateByPlace = new Map<
+        string,
+        { target: MergeOp["target"]; data: Record<string, unknown> }
+      >();
+      for (const op of merges) {
+        updateByPlace.set(op.placeId, {
+          target: op.target,
+          data: {
+            ...updateByPlace.get(op.placeId)?.data,
+            ...op.mergedData,
+            ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
+          },
+        });
+      }
+
+      // Merges (updates) via batched $transaction, each with the snapshot Undo
+      // restores it from. A place this batch created needs none: Undo deletes it.
+      const updates = [...updateByPlace];
+      for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+        const chunk = updates.slice(i, i + CHUNK_SIZE);
+        const changes = new Map<string, Change>();
+        for (const [placeId, { target, data }] of chunk) {
+          if (target.importBatchId === body.importBatchId) continue;
+          const stored = placeFields(target);
+          const change = diffFields(stored, { ...stored, ...data });
+          if (change) changes.set(placeId, change);
+        }
+        await prisma.$transaction([
+          ...chunk.map(([placeId, { data }]) =>
+            prisma.place.update({ where: { id: placeId }, data }),
           ),
-        );
+          ...(await snapshotWrites(
+            user.id,
+            body.importBatchId,
+            "placeId",
+            changes,
+          )),
+        ]);
       }
     } catch (err) {
       if (

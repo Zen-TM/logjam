@@ -1,23 +1,66 @@
 import { parse } from "csv-parse/sync";
-import { SOURCES_FIELD_KEY, say } from "@logjam/shared";
+import { SOURCES_FIELD_KEY, say, type Region } from "@logjam/shared";
 
 import { AppError } from "../middleware/errorHandler";
 
 // notes is a Logjam user-only field — never sourced from RopeWiki.
 
-const ROPEWIKI_CSV_URL =
-  "https://ropewiki.com/index.php?title=Special:Ask" +
-  "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
-  ".Located-20in-20regions%3A%3AX-7C-7CNew-20South-20Wales-5D-5D" +
-  "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
-  "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
-  "-20rating%3DQuality%2F-3FHas-20rating%3DRating%2F-3FHas-20fastest-20typical" +
-  "-20time%3DMin-20Time%2F-3FHas-20slowest-20typical-20time%3DMax-20Time%2F-3F" +
-  "Has-20length-20of-20hike%3DHike%2F-3FHas-20info-20rappels%3DRappels%2F-3F" +
-  "Has-20longest-20rappel%3DLongest%2F-3FHas-20best-20season%3DBest-20Season%2F-3F" +
-  "Has-20shuttle-20length%3DShuttle%2F-3FHas-20vehicle-20type%3DVehicle&mainlabel" +
-  "=-&limit=2000&order=descending%2C%20ascending&sort=Has_rank_rating%2C%20" +
-  "Has_name&offset=0&format=csv";
+/** A region's canyon source, as `Region.canyons` declares it (shared regions.ts). */
+export type RopeWikiSource = NonNullable<Region["canyons"]>;
+
+/**
+ * Semantic MediaWiki's escape for a value inside a `Special:Ask` path, which it
+ * reads back by turning each `-` into `%` and URL-decoding: so every byte of
+ * a character but a letter or a digit goes as `-` and its hex, a space as `-20`.
+ */
+function askEscape(text: string): string {
+  return text.replace(/[^A-Za-z0-9]/g, (c) =>
+    [...new TextEncoder().encode(c)]
+      .map((byte) => `-${byte.toString(16).toUpperCase().padStart(2, "0")}`)
+      .join(""),
+  );
+}
+
+/** The `Special:Ask` CSV export of every canyon RopeWiki files under a region. */
+export function ropeWikiCsvUrl(source: RopeWikiSource): string {
+  return (
+    "https://ropewiki.com/index.php?title=Special:Ask" +
+    "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
+    `.Located-20in-20regions%3A%3AX-7C-7C${askEscape(source.ropewikiRegion)}-5D-5D` +
+    "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
+    "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
+    "-20rating%3DQuality%2F-3FHas-20rating%3DRating%2F-3FHas-20fastest-20typical" +
+    "-20time%3DMin-20Time%2F-3FHas-20slowest-20typical-20time%3DMax-20Time%2F-3F" +
+    "Has-20length-20of-20hike%3DHike%2F-3FHas-20info-20rappels%3DRappels%2F-3F" +
+    "Has-20longest-20rappel%3DLongest%2F-3FHas-20best-20season%3DBest-20Season%2F-3F" +
+    "Has-20shuttle-20length%3DShuttle%2F-3FHas-20vehicle-20type%3DVehicle&mainlabel" +
+    "=-&limit=2000&order=descending%2C%20ascending&sort=Has_rank_rating%2C%20" +
+    "Has_name&offset=0&format=csv"
+  );
+}
+
+/**
+ * A copy of `rw` with the source's extra link (OzUltimate for NSW) unioned
+ * into `attributes.sources`, when its name matches one.
+ */
+export function withExtraLinks(
+  source: RopeWikiSource,
+  rw: RopeWikiCanyon,
+  altNames: string[] = [],
+): RopeWikiCanyon {
+  const extra = source.extraLinks;
+  const url = extra?.match(rw.name, altNames);
+  if (!extra || !url) return rw;
+  const existing = rw.attributes?.sources ?? [];
+  if (existing.some(([, u]) => u === url)) return rw;
+  return {
+    ...rw,
+    attributes: {
+      ...rw.attributes,
+      sources: [...existing, [extra.label, url] as [string, string]],
+    },
+  };
+}
 
 export type RopeWikiCanyon = {
   ropeWikiId: number;
@@ -246,6 +289,28 @@ function parseDMS(
   return null;
 }
 
+/** Parse decimal degrees: `-33.5, 150.4` (signed) or `33.5 S, 150.4 E`. */
+function parseDecimal(
+  coord: string,
+): { latitude: number; longitude: number } | null {
+  const m = coord
+    .trim()
+    .match(
+      /^(-?\d+(?:\.\d+)?)\s*([NSEW])?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*([NSEW])?$/i,
+    );
+  // Two bare integers ("0 0", "33 51") are placeholders, not coordinates.
+  if (!m || !/[.NSEW]/i.test(coord)) return null;
+  const signed = (n: string, dir?: string) =>
+    /^[SW]$/i.test(dir ?? "") ? -Math.abs(parseFloat(n)) : parseFloat(n);
+  let latitude = signed(m[1], m[2]);
+  let longitude = signed(m[3], m[4]);
+  if (/^[EW]$/i.test(m[2] ?? "") && /^[NS]$/i.test(m[4] ?? "")) {
+    [latitude, longitude] = [longitude, latitude];
+  }
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { latitude, longitude };
+}
+
 /**
  * Parse rating HTML to extract the French grading system.
  * RopeWiki stores two grading systems; the French grade (e.g. "v2a3 III")
@@ -267,12 +332,14 @@ function parseRating(html: string): {
     {};
   if (!html) return result;
 
-  // Extract content inside parentheses
+  // The French grade sits in parentheses; without them, read the whole text
+  // but only if it names a v grade, so a bare "3B III" (the other system)
+  // is not misread.
   const parenMatch = html.match(/\(([^)]+)\)/);
-  if (!parenMatch) return result;
-
-  // Strip all HTML tags to get plain text
-  const plain = parenMatch[1].replace(/<[^>]+>/g, "").trim();
+  const plain = (parenMatch ? parenMatch[1] : html)
+    .replace(/<[^>]+>/g, "")
+    .trim();
+  if (!parenMatch && !/\bv\d/i.test(plain)) return result;
 
   const romanToNum: Record<string, number> = {
     I: 1,
@@ -305,21 +372,42 @@ function parseLongestRappel(value: string): number | null {
   if (feetMatch) return Math.round(parseFloat(feetMatch[1]) * 0.3048 * 10) / 10;
   const mMatch = value.match(/([\d.]+)\s*(?:m|meters?)/i);
   if (mMatch) return Math.round(parseFloat(mMatch[1]) * 10) / 10;
-  const numMatch = value.match(/([\d.]+)/);
-  if (numMatch) return Math.round(parseFloat(numMatch[1]) * 0.3048 * 10) / 10;
+  // A bare number has no unit to trust; null beats a guess.
   return null;
 }
 
-/** Parse a time string like "5 hours", "4-6 hours", or "5 hr" to a number. */
+/**
+ * Parse a time string like "5 hours", "4-6 hours", "5 hr", "2 hr 30 min" or
+ * "45 min" to hours. A bare number is hours. Anything else, including "2 days"
+ * (a day of canyoning is not 24 hours), gives null: a guess would be stored
+ * as fact.
+ */
 function parseHours(value: string): number | null {
-  if (!value || !value.trim()) return null;
-  const rangeMatch = value.match(/([\d.]+)\s*-\s*([\d.]+)/);
-  if (rangeMatch) {
-    return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
+  const NUM = String.raw`(\d+(?:\.\d+)?)`;
+  const UNIT = String.raw`(h|hr|hrs|hours?|m|mins?|minutes?)`;
+  const toHours = (n: string, unit: string | undefined) =>
+    unit?.startsWith("m") ? parseFloat(n) / 60 : parseFloat(n);
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const text = (value ?? "").trim().toLowerCase();
+
+  const range = text.match(
+    new RegExp(`^${NUM}\\s*${UNIT}?\\s*-\\s*${NUM}\\s*${UNIT}?\\.?$`),
+  );
+  if (range) {
+    const unit = range[4] ?? range[2];
+    return round2(
+      (toHours(range[1], range[2] ?? unit) + toHours(range[3], unit)) / 2,
+    );
   }
-  const numMatch = value.match(/([\d.]+)/);
-  if (numMatch) return parseFloat(numMatch[1]);
-  return null;
+  const sum = text.match(
+    new RegExp(`^${NUM}\\s*${UNIT}?\\.?(?:\\s*${NUM}\\s*${UNIT}\\.?)?$`),
+  );
+  if (!sum) return null;
+  // "2 hr 30" has a second number with no unit of its own to read it by.
+  if (sum[3] != null && sum[2] == null) return null;
+  return round2(
+    toHours(sum[1], sum[2]) + (sum[3] != null ? toHours(sum[3], sum[4]) : 0),
+  );
 }
 
 /** Parse number of rappels — may be a range like "3-5", take the first number. */
@@ -342,7 +430,7 @@ function parseQuality(value: string): number | null {
 }
 
 /**
- * Fetch the NSW place CSV straight from RopeWiki.
+ * Fetch a region's canyon CSV straight from RopeWiki.
  *
  * As of 2026-08-30 this cannot succeed from a server: RopeWiki sits behind a
  * Cloudflare managed challenge that 403s every non-browser client on every
@@ -350,11 +438,11 @@ function parseQuality(value: string): number | null {
  * go through getRopeWikiCanyons() in ./ropeWikiCache, which reads a
  * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
  */
-export async function fetchAndParseRopeWiki(): Promise<{
+export async function fetchAndParseRopeWiki(source: RopeWikiSource): Promise<{
   places: RopeWikiCanyon[];
   errors: string[];
 }> {
-  const response = await fetch(ROPEWIKI_CSV_URL, {
+  const response = await fetch(ropeWikiCsvUrl(source), {
     signal: AbortSignal.timeout(15000),
     headers: {
       "User-Agent":
@@ -376,7 +464,23 @@ export async function fetchAndParseRopeWiki(): Promise<{
   return parseRopeWikiCsv(await response.text());
 }
 
-/** Parse a RopeWiki Special:Ask CSV export into places plus per-row errors. */
+/**
+ * The sentence a user gets whenever the corpus itself is unusable — the
+ * snapshot is missing (ropeWikiCache.ts), refused (below), or unparseable.
+ * Carried rather than composed: the same failure must not read two ways
+ * depending on which door it came through.
+ */
+export const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available right now.`;
+
+/**
+ * Parse a RopeWiki Special:Ask CSV export into places plus per-row errors.
+ *
+ * A bad CSV is an unavailable corpus, not an internal fault: both callers serve
+ * it to a route, and a bare Error would reach the client as errorHandler's
+ * generic 500 with nothing to act on. The `devDetail` names the fault for
+ * whoever re-exports the file; neither it nor the row contents are logged.
+ * (src/services/ropeWikiCache.unit.test.ts)
+ */
 export function parseRopeWikiCsv(csvText: string): {
   places: RopeWikiCanyon[];
   errors: string[];
@@ -387,7 +491,12 @@ export function parseRopeWikiCsv(csvText: string): {
   });
 
   if (records.length < 2) {
-    throw new Error("RopeWiki CSV is empty or has no data rows");
+    throw new AppError(
+      503,
+      ROPEWIKI_UNAVAILABLE,
+      undefined,
+      "RopeWiki CSV is empty or has no data rows",
+    );
   }
 
   // First row is headers — identify column indices by name
@@ -395,7 +504,12 @@ export function parseRopeWikiCsv(csvText: string): {
   const requiredCol = (name: string): number => {
     const i = headers.indexOf(name);
     if (i === -1) {
-      throw new Error(`RopeWiki CSV missing required column: ${name}`);
+      throw new AppError(
+        503,
+        ROPEWIKI_UNAVAILABLE,
+        undefined,
+        `RopeWiki CSV missing required column: ${name}`,
+      );
     }
     return i;
   };
@@ -425,6 +539,7 @@ export function parseRopeWikiCsv(csvText: string): {
 
   const places: RopeWikiCanyon[] = [];
   const errors: string[] = [];
+  const seenPageIds = new Set<number>();
 
   for (let i = 1; i < records.length; i++) {
     const row = records[i];
@@ -436,6 +551,11 @@ export function parseRopeWikiCsv(csvText: string): {
         continue;
       }
 
+      if (seenPageIds.has(pageId)) {
+        errors.push(`Row ${i}: duplicate PAGEID ${pageId}, first row kept`);
+        continue;
+      }
+
       const name = locationCol >= 0 ? row[locationCol]?.trim() : "";
       if (!name) {
         errors.push(`Row ${i}: missing name`);
@@ -443,7 +563,7 @@ export function parseRopeWikiCsv(csvText: string): {
       }
 
       const coordStr = coordCol >= 0 ? row[coordCol]?.trim() : "";
-      const coords = parseDMS(coordStr || "");
+      const coords = parseDMS(coordStr || "") ?? parseDecimal(coordStr || "");
       if (!coords) {
         errors.push(
           `Row ${i} (${name}): could not parse coordinates "${coordStr}"`,
@@ -460,8 +580,13 @@ export function parseRopeWikiCsv(csvText: string): {
         longestCol >= 0 ? parseLongestRappel(row[longestCol] || "") : null;
       const maxTimeRaw = maxTimeCol >= 0 ? row[maxTimeCol] || "" : "";
       const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
-      const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
+      // Min is the fallback only when Max is empty: an unreadable Max ("2 days")
+      // is no estimate, not licence to report the Min.
+      const hours = maxTimeRaw.trim()
+        ? parseHours(maxTimeRaw)
+        : parseHours(minTimeRaw);
 
+      seenPageIds.add(pageId);
       places.push({
         ropeWikiId: pageId,
         name,

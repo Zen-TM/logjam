@@ -1,0 +1,68 @@
+{
+  "places": [
+    {
+      "ropeWikiId": 74264,
+      "name": "Gleniffer Canyon",
+      "latitude": -30.3324,
+      "longitude": 152.89249999999998,
+      "numAbseils": 15,
+      "longestAbseil": 70,
+      "vGrade": 6,
+      "aGrade": 5,
+      "commitment": 5,
+      "quality": 5,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=74264"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 80868,
+      "name": "Dandahra Canyon",
+      "latitude": -29.520899999999997,
+      "longitude": 152.3706,
+      "numAbseils": 9,
+      "longestAbseil": 65,
+      "vGrade": 5,
+      "aGrade": 5,
+      "commitment": 5,
+      "quality": 5,
+      "hours": 10,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=80868"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 11672,
+      "name": "Claustral Canyon",
+      "latitude": -33.5592,
+      "longitude": 150.4033,
+      "numAbseils": 4,
+      "longestAbseil": 15,
+      "vGrade": 3,
+      "aGrade": 2,
+      "commitment": 3,
+      "quality": 5,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=11672"
+          ]
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

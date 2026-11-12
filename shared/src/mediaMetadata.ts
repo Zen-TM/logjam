@@ -1,6 +1,6 @@
 // The stats a standalone media file carries on its ROW, so a second device can
 // list it — name, size, extent, how far you walked — without downloading the
-// blob (stage8-sync.md §7.3: delta rows are metadata only).
+// blob (delta rows are metadata only).
 //
 // Lives in a `Json` column rather than a dozen nullable ones, the same shape
 // `Place.attributes` and `TripLog.customFields` already take. The cost of a
@@ -15,6 +15,7 @@
 // error message (the parse errors below name FIELDS, never values).
 
 import { isClimbSource } from "./demSources.js";
+import { isUuidV4 } from "./sync.js";
 import type { TrackClimb } from "./elevation.js";
 
 /** [west, south, east, north] — the extent of an import or a recording. */
@@ -32,6 +33,22 @@ export type MediaOrigin = (typeof MEDIA_ORIGINS)[number];
 
 export function isMediaOrigin(value: unknown): value is MediaOrigin {
   return (MEDIA_ORIGINS as readonly unknown[]).includes(value);
+}
+
+export class SourceMediaIdError extends Error {}
+
+/**
+ * The `sourceMediaId` of an upload: absent or null is no link, anything else
+ * must be a media id (a UUIDv4, as every id is). Whether it names one of the
+ * caller's recordings is the API's to check; this is only its shape. The
+ * message names the field, never the value.
+ */
+export function parseSourceMediaId(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (!isUuidV4(value)) {
+    throw new SourceMediaIdError("sourceMediaId must be a media id");
+  }
+  return value;
 }
 
 /** A file the user brought in from another app (GPX/KML/GeoJSON). */
@@ -217,9 +234,9 @@ export function parseMediaMetadata(
 }
 
 /**
- * Read metadata off a row for DISPLAY. Never throws: a row that predates a
- * field, or one written by a client with a bug, must still render as a file
- * with a name and a size rather than taking the list down.
+ * Read metadata off a row for DISPLAY. Never throws (mediaMetadata.test.ts): a
+ * row that predates a field, or one written by a client with a bug, must still
+ * render as a file with a name and a size rather than taking the list down.
  */
 export function readMediaMetadata(
   origin: string | null,

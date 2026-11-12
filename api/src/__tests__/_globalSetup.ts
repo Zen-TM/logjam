@@ -16,7 +16,7 @@ declare module "vitest" {
 
 export default async function setup(project: TestProject) {
   // The baseline is the seed, not whatever the database holds now: rows left
-  // by an earlier killed run must fail here, not become "seed" (#278).
+  // by an earlier killed run must fail here, not become "seed".
   const seed = await loadSeedSnapshot();
   const problem = describeSeedMismatch(seed, await takeSnapshot());
   if (problem) throw new Error(problem);

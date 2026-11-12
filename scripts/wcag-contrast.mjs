@@ -2,8 +2,9 @@
 // WCAG 2.1 contrast checker for the Logjam theme schemes.
 // Verifies every *rendered* foreground/background pair, named by its colour
 // roles (`ThemeTokens`) and measured on the surface it renders on, under every
-// scheme: text >= 4.5:1 (7:1 in a light scheme, which exists for full sun),
-// muted text >= 4.5:1, an edge, glyph or fill a user must see >= 3:1.
+// scheme: text and muted text >= 4.5:1 (7:1 in a light scheme, which exists
+// for full sun); a label on a fill >= 4.5:1; an edge, glyph or fill a user must
+// see >= 3:1; a surface told from the one under it (separation) by its fill or edge.
 //
 // Usage:
 //   node scripts/wcag-contrast.mjs            # check committed shared/src/themeSchemes.ts
@@ -45,8 +46,9 @@ function parseFriendAvatarHues() {
   return colors;
 }
 
-// The scheme-independent tokens (`INK`, `ASSET_HUES`, `PLACE_STATUS_HUES`),
-// parsed the same way so a retuned hue is measured the moment it changes.
+// The scheme-independent tokens (`INK`, `ASSET_HUES`, `PLACE_STATUS_HUES`,
+// `MEDAL_HUES`), parsed the same way so a retuned hue is measured the moment
+// it changes.
 function parseDesignTokens() {
   const src = readFileSync(designTokensPath, "utf8");
   const ink = /export const INK = "(#[0-9A-Fa-f]{6})";/.exec(src);
@@ -55,6 +57,11 @@ function parseDesignTokens() {
   if (!onScrim) throw new Error("ON_SCRIM not found in designTokens.ts");
   const scrimHeavy = /export const SCRIM = \{[\s\S]*?heavy: "rgba\(0,0,0,([0-9.]+)\)"/.exec(src);
   if (!scrimHeavy) throw new Error("SCRIM.heavy not found in designTokens.ts");
+  const mapInk = (role) => {
+    const m = new RegExp(`export const MAP_INK = \\{[\\s\\S]*?${role}: "(#[0-9A-Fa-f]{6})"`).exec(src);
+    if (!m) throw new Error(`MAP_INK.${role} not found in designTokens.ts`);
+    return m[1];
+  };
   const hues = (name) => {
     const block = new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\} as const;`).exec(src);
     if (!block) throw new Error(`${name} not found in designTokens.ts`);
@@ -66,8 +73,11 @@ function parseDesignTokens() {
     ink: ink[1],
     onScrim: onScrim[1],
     scrimHeavyAlpha: Number(scrimHeavy[1]),
+    mapCasing: mapInk("casing"),
+    mapRing: mapInk("ring"),
     assetHues: hues("ASSET_HUES"),
     statusHues: hues("PLACE_STATUS_HUES"),
+    medalHues: hues("MEDAL_HUES"),
     tripTypeHues: hues("TRIP_TYPE_OPEN_HUES"),
   };
 }
@@ -134,29 +144,37 @@ const PLACE_TYPE_COLORS = parsePaletteColors();
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
 const FRIEND_AVATAR_HUES = parseFriendAvatarHues();
-const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
+const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, mapCasing: MAP_CASING, mapRing: MAP_RING, assetHues: ASSET_HUES, statusHues: STATUS_HUES, medalHues: MEDAL_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
 // Every identity hue. An identity hue is only ever a FILL — a tile with an
 // `onFill` glyph, an active chip with an `onFill` label, a swatch, a mark on
 // the map — never a glyph, line or text on a theme surface, so the label on it
-// is the only pair it has. Mid-light hues fail 3:1 as glyphs on a light page,
-// and some did on dark cards (Logjam GPS's old wash tile).
+// is the only pair it has. Mid-light hues fail 3:1 as glyphs on a light page
+// and on dark cards.
 const IDENTITY_FILLS = [
   ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
   ["shared heath", SHARED_MARKER],
   ...ASSET_HUES.map(([name, color]) => [`asset hue ${name}`, color]),
   ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
+  // A leaderboard medal's tile (LeaderboardPage, LeaderboardScreen).
+  ...MEDAL_HUES.map(([name, color]) => [`medal hue ${name}`, color]),
   // A user-typed trip type's tile and its active chip (tripTypeIdentity).
   ...TRIP_TYPE_HUES.map(([name, color]) => [`trip type hue ${name}`, color]),
   ...FRIEND_AVATAR_HUES.map((color) => [`friend avatar ${color}`, color]),
 ];
 
 /**
- * Pairs that fail today and are KNOWN to, each with where it renders. They are
- * printed but do not fail the run — and a known failure that starts PASSING
- * does fail it, so this list can only shrink: fix the pair, delete its line.
- * Adding to it is a decision to ship an inaccessible pair, and needs saying.
+ * Pairs that fail today and are KNOWN to, keyed by scheme and pair
+ * (`"ghostGum: textMuted on page"`), so a pair excused in one scheme is still
+ * held in the others. Each carries the ratio it has today as a floor: a known
+ * failure that falls below it fails the run, and one that starts PASSING does
+ * too, so this list can only shrink: fix the pair, delete its line. Adding to
+ * it is a decision to ship an inaccessible pair, and needs saying.
  */
 const KNOWN_FAILURES = new Map([]);
+
+// Reference basemap grounds a point mark is drawn on, not tokens: the OSM Topo
+// land colour and the satellite imagery's mid green.
+const MAP_GROUNDS = { lightLand: "#F2EFE9", satellite: "#3D4A35" };
 
 /** The one hue reserved for "shared", read from the same declaration. */
 function parseSharedPlaceColor() {
@@ -168,8 +186,8 @@ function parseSharedPlaceColor() {
 
 // ─── Rendered pairs, by role. `min` is the WCAG threshold. ──────────────────
 function pairsFor({ mode, tokens: t }) {
-  // A light scheme exists for full sun, where AA is not enough: its text
-  // clears AAA. Muted text keeps the AA floor in every scheme.
+  // A light scheme exists for full sun, where AA is not enough: its text and
+  // muted text clear AAA. A label on a fill keeps the AA floor in every scheme.
   const textMin = mode === "light" ? 7 : 4.5;
   const surfaces = [
     ["page", t.page],
@@ -180,7 +198,7 @@ function pairsFor({ mode, tokens: t }) {
   return [
     // Words: only ever `text` or `textMuted`, on every surface they sit on.
     ...surfaces.map(([name, bg]) => ({ name: `text on ${name}`, fg: t.text, bg, min: textMin })),
-    ...surfaces.map(([name, bg]) => ({ name: `textMuted on ${name}`, fg: t.textMuted, bg, min: 4.5 })),
+    ...surfaces.map(([name, bg]) => ({ name: `textMuted on ${name}`, fg: t.textMuted, bg, min: textMin })),
     { name: "onInverse on inverse (toast, tooltip)", fg: t.onInverse, bg: t.inverse, min: textMin },
     // An edge that must be seen: a field's outline, an outline control.
     ...["page", "card", "field"].map((name) => ({
@@ -214,7 +232,7 @@ function pairsFor({ mode, tokens: t }) {
     },
     // ── Washes: a tint of a role laid over a surface ──
     // An "on" icon button wears the same wash with a `text` glyph: an accent
-    // glyph on a wash of itself fell to 2.7:1 on the light page.
+    // glyph on a wash of itself falls to 2.7:1 on the light page.
     {
       name: "text on accent wash over page (active icon button)",
       fg: t.text,
@@ -223,7 +241,7 @@ function pairsFor({ mode, tokens: t }) {
     },
     // The sign-in success banner: the same idea over a CARD at 15%. A wash
     // does not carry the ratio the flat surface does, which is why this pair
-    // exists separately (found 2026-09-19 by the a11y spec's sign-in case).
+    // exists separately.
     {
       name: "text on accent wash over card (sign-in success banner)",
       fg: t.text,
@@ -231,9 +249,19 @@ function pairsFor({ mode, tokens: t }) {
       min: textMin,
     },
     // ProgressBar: the fill in its `field` track. A wash of the text colour
-    // darkened the light page's track until the fill fell to 2.5:1.
+    // darkens the light page's track until the fill falls to 2.5:1.
     { name: "accent on field (ProgressBar fill in its track)", fg: t.accent, bg: t.field, min: 3 },
     { name: "warning on field (failed ProgressBar fill in its track)", fg: t.warning, bg: t.field, min: 3 },
+    // ── Separation: a surface told from the one under it (shared/DESIGN.md §1) ──
+    // The light scheme's card fill cannot separate further from its page
+    // without breaking its 3:1 intent pairs (accent, warning and success sit
+    // in a narrow luminance band), so its edge carries the separation.
+    { name: "card on page (separation: a pressable fill)", fg: t.card, bg: t.page, min: mode === "light" ? 1.1 : 1.2 },
+    { name: "line on page (separation: a card's edge)", fg: t.line, bg: t.page, min: 1.5 },
+    { name: "cardPressed on card (separation: press feedback)", fg: t.cardPressed, bg: t.card, min: 1.2 },
+    // ── The map: a point mark's edge against the basemaps it sits on ──
+    { name: "MAP_INK.casing on light land (point-mark edge)", fg: MAP_CASING, bg: MAP_GROUNDS.lightLand, min: 3 },
+    { name: "MAP_INK.ring on satellite (point-mark halo)", fg: MAP_RING, bg: MAP_GROUNDS.satellite, min: 3 },
   ];
 }
 
@@ -243,17 +271,21 @@ const schemes = parseSchemes(src, INK);
 const failuresOnly = process.argv.includes("--failures");
 
 let totalFail = 0;
-const knownPassing = new Set();
-const knownFailing = new Set();
+const seenKnown = new Set();
+const fixedKnown = [];
 for (const [id, scheme] of Object.entries(schemes)) {
   const rows = pairsFor(scheme).map((p) => {
     const r = ratio(p.fg, p.bg);
-    return { ...p, ratio: r, pass: r >= p.min, known: KNOWN_FAILURES.has(p.name) };
+    const key = `${id}: ${p.name}`;
+    const known = KNOWN_FAILURES.get(key);
+    if (known) seenKnown.add(key);
+    if (known && r >= p.min) fixedKnown.push(key);
+    // A known failure may not get worse than it is today.
+    const regressed = known && !(r >= p.min) && r < known.floor - 0.005;
+    return { ...p, ratio: r, pass: r >= p.min, known: known && !regressed, key };
   });
   const fails = rows.filter((r) => !r.pass && !r.known);
   totalFail += fails.length;
-  for (const r of rows) if (r.pass && r.known) knownPassing.add(r.name);
-  for (const r of rows) if (!r.pass && r.known) knownFailing.add(r.name);
   if (failuresOnly && fails.length === 0) continue;
   console.log(`\n=== ${id} (${scheme.mode}) ${fails.length ? `(${fails.length} FAIL)` : "(all pass)"} ===`);
   for (const r of failuresOnly ? rows.filter((row) => !row.pass) : rows) {
@@ -263,15 +295,14 @@ for (const [id, scheme] of Object.entries(schemes)) {
     );
   }
 }
-// A known failure passes only once it passes under EVERY scheme.
-const fixedKnown = [...KNOWN_FAILURES.keys()].filter(
-  (name) => knownPassing.has(name) && !knownFailing.has(name),
-);
-for (const name of fixedKnown) {
-  console.log(`\n✗ "${name}" now passes in every scheme — delete it from KNOWN_FAILURES.`);
-}
-const knownStill = [...knownFailing].map((name) => `${name} (${KNOWN_FAILURES.get(name)})`);
-if (knownStill.length) console.log(`\n! ${knownStill.length} known failing pair(s): ${knownStill.join("; ")}`);
-const ok = totalFail === 0 && fixedKnown.length === 0;
+const unmatched = [...KNOWN_FAILURES.keys()].filter((key) => !seenKnown.has(key));
+for (const key of fixedKnown)
+  console.log(`\n✗ "${key}" now passes — delete it from KNOWN_FAILURES.`);
+for (const key of unmatched)
+  console.log(`\n✗ "${key}" matches no scheme or pair — delete it from KNOWN_FAILURES.`);
+const knownStill = [...KNOWN_FAILURES].filter(([key]) => seenKnown.has(key) && !fixedKnown.includes(key));
+if (knownStill.length)
+  console.log(`\n! ${knownStill.length} known failing pair(s): ${knownStill.map(([key, k]) => `${key} (${k.why})`).join("; ")}`);
+const ok = totalFail === 0 && fixedKnown.length === 0 && unmatched.length === 0;
 console.log(`\n${ok ? "✓ ALL PASS" : `✗ ${totalFail} failing pair(s)`}`);
 process.exit(ok ? 0 : 1);

@@ -29,5 +29,5 @@ resource "github_actions_variable" "this" {
 resource "github_actions_variable" "plan_value_check" {
   repository    = github_repository.logjam.name
   variable_name = "PLAN_VALUE_CHECK"
-  value         = "report"
+  value         = "enforce"
 }

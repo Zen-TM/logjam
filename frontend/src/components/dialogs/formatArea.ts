@@ -1,8 +1,8 @@
 /**
- * Format a drawn-area size for display (TOPO-4). Sub-10 km² areas keep two
- * decimals so a small (< 0.5 km²) draw is visibly registered instead of
- * rendering as "0 km²"; anything at least 10 km² rounds to whole km² as
- * before. Areas that would still display as 0.00 show "<0.01 km²".
+ * Format a drawn-area size for display. Sub-10 km² areas keep two decimals so a
+ * small (< 0.5 km²) draw is visibly registered instead of rendering as "0 km²";
+ * anything at least 10 km² rounds to whole km². Areas that would still display
+ * as 0.00 show "<0.01 km²".
  */
 export function formatAreaKm2(areaKm2: number): string {
   if (!Number.isFinite(areaKm2) || areaKm2 < 0) {

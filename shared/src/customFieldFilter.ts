@@ -2,19 +2,16 @@
  * Custom-field filtering — the ONE answer to "does this record's value for a
  * user-defined field pass this filter", for places and for trips alike.
  *
- * It lived inside `passesPlaceFilters` as a loop over `filters.custom` until
- * Logjam Web's Logs sheet gained attribute filters (operator, 2026-09-17).
  * Only ONE thing differs between the two entities — a place keeps its answers
  * in `fieldValues` and a trip in `customFields` — so this takes the values
  * object rather than the record, and neither client can end up with a
- * different idea of what "over 30, include unknowns" means. The alternative
- * was a second copy of a five-kind switch, and the switch has edge cases worth
- * having once: the NaN branch is here because the first version matched EVERY
- * range for a date field holding "15/01/2026", and `includeUnknowns` has to be
- * consulted in three separate places rather than only at the top.
+ * different idea of what "over 30, include unknowns" means. A shared switch
+ * avoids duplicated logic and edge cases: unparsable dates like "15/01/2026"
+ * must not match every range, and `includeUnknowns` must be consulted for each
+ * condition rather than only at the top.
  *
  * PRIVACY: pure predicates over values the caller already holds. Nothing here
- * logs — a user-authored field label is as sensitive as a note (root CLAUDE.md).
+ * logs — a user-authored field label is as sensitive as a note (root AGENTS.md).
  */
 import { fieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
@@ -63,12 +60,10 @@ export function customFilterKind(
  * Midnight of a `yyyy-mm-dd` bound in the VIEWER's timezone, or null if it
  * isn't a usable date.
  *
- * `created_at`/`updated_at` are real instants, and the bounds were parsed as
- * UTC midnight — so in Sydney (UTC+10/+11) everything added between local
- * midnight and 11:00 filed under the previous day. A place added
- * 15 January 09:00 AEDT is 14 January 22:00 UTC: filtering "from 15 January"
- * excluded it, and "up to 14 January" included it. `Date.parse` on a date-only
- * string is UTC by spec; the explicit `T00:00:00` form is local by spec.
+ * `created_at`/`updated_at` are instants, whereas bounds represent local
+ * calendar days. `Date.parse` on a date-only string is UTC by spec, which
+ * misaligns local times in positive UTC offsets (e.g. Sydney AEDT/AEST); the
+ * explicit `T00:00:00` form parses as local time by spec.
  */
 function dayStartMs(day: string | null | undefined): number | null {
   if (day == null) return null;
@@ -78,8 +73,7 @@ function dayStartMs(day: string | null | undefined): number | null {
 
 /**
  * Inclusive on both bounds. A value that cannot be placed on a calendar is an
- * unknown, not a match: returning true for it (which is what every NaN
- * comparison did) meant a custom date field holding "15/01/2026" matched EVERY
+ * unknown, not a match: returning true for an unparsable date would match every
  * range, in or out.
  */
 export function passesDateRangeFilter(

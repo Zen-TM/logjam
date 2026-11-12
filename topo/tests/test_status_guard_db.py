@@ -1,4 +1,4 @@
-"""ARCH-001 resurrection invariant against a REAL Postgres (gap 3).
+"""Resurrection invariant against a real Postgres.
 
 test_status_guards.py proves the guard at the SQL-emission level on a fake
 cursor. This test closes the remaining seam — that a real database actually
@@ -110,7 +110,7 @@ class TestStatusGuardAgainstRealDb(unittest.TestCase):
             expected_status="processing",
         )
         self.assertEqual(updated, 0)
-        # No quota charge for a job the guard refused to complete (ARCH-007).
+        # No quota charge for a job the guard refused to complete.
         self.assertEqual(self._alice_storage(), before)
 
 

@@ -6,12 +6,14 @@ import {
   defsForType,
   PLACE_ROPEWIKI_OPTIONS as ROPEWIKI,
   PLACE_SORT_OPTIONS as SORTS,
+  PLACE_STATUS_FILTER_OPTIONS,
   PLACES_FILTER_SHEET,
   placesOnMapSummary,
   type CustomFieldFilter,
   type FieldDateRange,
   type PlaceFilters,
   type PlaceSortKey,
+  type PlaceStatusFilterValue,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
 } from "@logjam/shared";
@@ -33,12 +35,11 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 const { copy } = PLACES_FILTER_SHEET;
 
 /**
- * Sort and filter for the Places screen — everything that isn't the rail.
+ * Sort and filter for the Places screen — everything but the type rail.
  *
  * What it holds, in what order and under what words is its contract
  * (`PLACES_FILTER_SHEET` in `@logjam/shared`), which Logjam Web's sheet renders
- * from too. Completion and ownership are NOT here: they are the rail's
- * buckets, and a second copy in this sheet would let the two disagree.
+ * from too.
  *
  * EVERY ATTRIBUTE IS DRAWN BY ITS DEFINITION'S SHAPE (the kit's
  * `AttributeFilter`), and which ones appear is decided by the type tab. A
@@ -70,6 +71,8 @@ type Props = {
   onClose: () => void;
   filters: PlaceFilters;
   onChangeFilters: (next: PlaceFilters) => void;
+  status: PlaceStatusFilterValue;
+  onChangeStatus: (next: PlaceStatusFilterValue) => void;
   sort: PlaceSortKey;
   onChangeSort: (next: PlaceSortKey) => void;
   onReset: () => void;
@@ -155,6 +158,22 @@ export const FILTER_SHEET_SECTIONS: Record<
     </>
   ),
 
+  status: ({ status, onChangeStatus }) => (
+    <>
+      <SectionHeader title={copy.status} />
+      <View style={styles.chipRow}>
+        {PLACE_STATUS_FILTER_OPTIONS.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            active={status === option.value}
+            onPress={() => onChangeStatus(option.value)}
+          />
+        ))}
+      </View>
+    </>
+  ),
+
   attributes: ({ typeDefs, filters, patch, pickDate }) =>
     typeDefs.length > 0 ? (
       <>
@@ -172,6 +191,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         <SwitchRow
           icon="help"
           title={copy.includeMissing}
+          description={copy.includeMissingHint}
           checked={filters.include_unknowns}
           onChange={(next) => patch({ include_unknowns: next })}
         />
@@ -378,8 +398,8 @@ export function PlaceFilterSheet(props: Props) {
     >
       {/* The list stays mounted underneath (see `overlay` on BottomSheet):
           swapping the sheet's CHILDREN for the short picker collapses the
-          scroll content, and RN clamps the offset to 0 — so coming back from a
-          date threw the user to the top of a long sheet. */}
+          scroll content, and RN clamps the offset to 0 — which would throw the
+          user to the top of a long sheet when returning from a date. */}
       <FormStack>
         {contractSectionKeys(PLACES_FILTER_SHEET, "gps").map((key) => (
           <Fragment key={key}>{FILTER_SHEET_SECTIONS[key](context)}</Fragment>

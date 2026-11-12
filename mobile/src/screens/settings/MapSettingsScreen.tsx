@@ -87,7 +87,7 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
   waypoint: "Drop a marker",
   navigate: "Navigate",
-  route: "Draw route",
+  route: "Draw a route",
   measure: "Measure",
   place: "Add place",
 };
@@ -114,16 +114,15 @@ const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
  * It also says whether the value is REAL or the fallback, which is otherwise
  * unobservable — the app derives the true declination from a location fix
  * (heading.ts, `learnDeclination`) and quietly uses a single NSW constant until
- * it gets one. "Which of those am I on" was a question nothing on the device
- * could answer.
+ * it gets one. "Which of those am I on" is otherwise a question nothing on the
+ * device can answer.
  */
 /**
  * What the compass itself is reporting, under the control that depends on it.
  *
- * Provisional in the sense that every threshold above it was set from very
- * little data — this line is how that gets fixed. It is also the only place a
- * user can find out whether the app thinks their compass is healthy, which for
- * a navigation app should not have been missing.
+ * Provisional in the sense that every threshold above it is set from little
+ * data — this line is how that gets tuned. It is also the only place a user
+ * can find out whether the app thinks their compass is healthy.
  */
 function compassHint(): string {
   return `Compass: ${lastCompassDiagnostics()}`;
@@ -219,7 +218,7 @@ export function MapSettingsScreen() {
   // Switch animates to the new position the moment it is pressed, then snaps
   // back to whatever `value` still says on the next render — so an await
   // between the press and the state, even one that resolves immediately with
-  // the permission already granted, drew on → off → on. Moving first and
+  // the permission already granted, would draw on → off → on. Moving first and
   // reverting on refusal means the only animation the user sees is the one
   // their thumb asked for.
   const toggleCompass = useCallback(async () => {
@@ -233,7 +232,7 @@ export function MapSettingsScreen() {
   }, [compassEnabled, stored]);
 
   // Same shape as the compass toggle above, and for a stronger reason: this
-  // one needs a POSITION, so a switch that went on and showed two dashes
+  // one needs a POSITION, so a switch that goes on and shows two dashes
   // forever is exactly what one permission prompt avoids.
   const toggleSpeedElevation = useCallback(async () => {
     const next = !speedElevation;
@@ -269,6 +268,7 @@ export function MapSettingsScreen() {
 
         <SectionHeader title="Your location marker" />
         <ColourField
+          icon="colour"
           label="Colour"
           palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
           value={MARKER_COLORS[markerColorId]}
@@ -285,9 +285,10 @@ export function MapSettingsScreen() {
           }}
         />
 
+        <SectionHeader title="On the map" />
         <PreferenceRow
           icon="northUp"
-          title="Keep the map north-up"
+          title="Map always north-up"
           value={northUp}
           ready
           onToggle={() => {
@@ -314,7 +315,7 @@ export function MapSettingsScreen() {
         <PreferenceRow
           icon="compass"
           title="Compass"
-          subtitle="Uses more battery while on the map."
+          subtitle="Uses more battery on the map."
           value={compassEnabled}
           ready
           onToggle={() => void toggleCompass()}
@@ -324,7 +325,7 @@ export function MapSettingsScreen() {
         <PreferenceRow
           icon="elevation"
           title="Speed and elevation"
-          subtitle="Uses more battery while on the map."
+          subtitle="Uses more battery on the map."
           value={speedElevation}
           ready
           onToggle={() => void toggleSpeedElevation()}
@@ -385,6 +386,7 @@ export function MapSettingsScreen() {
         />
 
         {/* ── Recording ─────────────────────────────────────────────────── */}
+        <SectionHeader title="Recording" />
         <ChoiceGroup
           label="Track detail"
           options={(Object.keys(FIX_RATE_LABELS) as FixRate[]).map((rate) => ({
@@ -402,7 +404,7 @@ export function MapSettingsScreen() {
             // stretch, and getting it on the following trip is no use.
             applyRecordingOptionsToActiveTrack()
               .then((applied) => {
-                if (applied) notify("Recording now at the new detail.", "info");
+                if (applied) notify("Recording now at the new detail.", "done");
               })
               .catch((error: unknown) => {
                 console.error(error);
@@ -435,7 +437,7 @@ export function MapSettingsScreen() {
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
             icon="sensors"
-            title="Log raw sensors while recording"
+            title="Log raw sensors"
             subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
             subtitleNumberOfLines={4}
             value={sensorLogging}
@@ -458,7 +460,7 @@ export function MapSettingsScreen() {
                 next
                   ? "Raw sensors will be logged from the next recording."
                   : "Sensor logging off from the next recording.",
-                "info",
+                "done",
               );
             }}
           />
@@ -485,15 +487,17 @@ function sensorLoggingSubtitle(
     caps.barometer ? "pressure" : null,
     caps.stepCounter ? "steps" : null,
     "satellites",
+    "GPS positions",
   ].filter(Boolean) as string[];
   // Cost first, and in the same breath as what it buys: the row is four lines
   // and the sentence a user needs before flipping it is the price, not the
   // reassurance. The privacy line stays because it is the second question
-  // everyone asks of a thing called "raw sensors".
+  // everyone asks of a thing called "raw sensors": the file holds positions
+  // now, so what it can truthfully say is where the file goes.
   const cost = caps.imuFifoEvents > 0 ? "a few percent" : "some";
   // Disk is stated because it is the larger of the two costs and the one that
   // can take the recording down with it if it runs out.
-  const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour. No positions written.`;
+  const what = `${channels.join(", ")} to a file on this phone — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour.`;
   if (!enabled) return what;
   const status = sensorLogStatus();
   if (status == null || !status.logging)

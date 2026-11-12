@@ -1,10 +1,9 @@
 """Composite tile rendering for export.
 
-Stage 2 plan calls for headless MapLibre Native here, but that pipeline has
-significant risk (see plan §Risks). This module ships a working Python
-implementation using GDAL + PIL that reuses the existing tile compositor in
-pipeline.py. Headless MapLibre Native can replace this implementation
-later behind the same render_composite_to_* function signatures.
+This module implements composite tile rendering using GDAL + PIL, reusing
+the existing tile compositor in pipeline.py. Headless MapLibre Native can
+replace this implementation later behind the same render_composite_to_*
+function signatures.
 
 MBTiles composite (`render_composite_to_mbtiles`):
   1. Load source COGs for selected raster layers (already styled).
@@ -18,8 +17,7 @@ MBTiles composite (`render_composite_to_mbtiles`):
        (pipeline.COMPOSITE_LAYER_ORDER).
 
 GeoTIFF composite (`render_composite_to_geotiff`):
-  Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
-  = false`. Warp each source COG onto the template grid as its own RGBA array
+  Raster-only: vector layers are not composited. Warp each source COG onto the template grid as its own RGBA array
   (`srcAlpha=True, dstAlpha=True`), then alpha-composite bottom→top with
   explicit numpy source-over. (Warping sequentially into one shared destination
   no longer composites under GDAL 3.11 — see render_composite_to_geotiff.)
@@ -362,8 +360,7 @@ def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
 def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) -> Path:
     """Composite the selected raster COGs into a single GeoTIFF.
 
-    Raster-only — vector layers are NOT included (Stage 2 GeoTIFF format is
-    raster-only, see EXPORT_FORMAT_RULES.geotiff.allowVector = false).
+    Raster-only: vector layers are not composited.
 
     Strategy: warp each source COG onto the template grid as its own RGBA array,
     then alpha-composite them bottom→top with explicit numpy source-over.

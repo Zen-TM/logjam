@@ -17,12 +17,15 @@
   pointer-events: none;
 }
 
+/* The label keeps at least its longest word and its tooltip glyph: a rail
+   too wide for the line scrolls beside it (`min-width: 0` on the rail),
+   rather than the label shrinking under the chips. */
 .rowLabel {
   composes: detail from "../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);
-  min-width: 0;
+  min-width: min-content;
   color: var(--color-text);
 }
 

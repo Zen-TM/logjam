@@ -3,7 +3,7 @@ import request from "supertest";
 import { randomUUID } from "crypto";
 import { API_URL, ALICE_SUB, BOB_SUB, as, CANYON_TYPE_ID } from "./_actors";
 
-// Client-supplied create ids (Stage 8 §3.5 — outbox idempotency backbone).
+// Client-supplied create ids (outbox idempotency backbone).
 // Uniform rules under test: strict UUIDv4 or 400; own-id replay → 200 with the
 // existing row; foreign id → 404 (never 403/409 — no existence oracle for ids
 // the caller can't see). Requires `make dev`.

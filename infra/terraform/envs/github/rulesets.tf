@@ -15,12 +15,33 @@ locals {
   # (image-build.yml) build the Docker images on a PR that changes what they
   # are built from, and pass at once otherwise. gitleaks (ci.yml) catches
   # what push protection cannot: it knows only providers' key formats, while
-  # gitleaks also flags generic high-entropy secrets.
+  # gitleaks also flags generic high-entropy secrets. The heavy jobs
+  # (api-integration, mobile, migrations, migration-upgrade, topo-e2e,
+  # rollback-compat's "Live release on this schema", terraform-ci's,
+  # setup-smoke, brain-e2e behind brain-e2e-gate) skip, and so pass, on a PR
+  # that touches nothing they test (infra/scripts/ci-scope.sh);
+  # dependency-review passes when no manifest changed, and expo-doctor when
+  # the PR is not a Logjam GPS release. Each workflow starts on every PR: a
+  # required check whose workflow never starts leaves the PR waiting.
   required_checks = [
     "shared",
     "api",
+    "api-integration",
     "frontend",
+    "mobile",
     "topo",
+    "migrations",
+    "migration-upgrade",
+    "infra-scripts",
+    "topo-e2e",
+    "Live release on this schema",
+    "plan-summary",
+    "fmt",
+    "validate",
+    "test-github",
+    "test-prod",
+    "dependency-review",
+    "setup-smoke",
     "format",
     "actionlint",
     "plan-prod",
@@ -29,6 +50,9 @@ locals {
     "api-image",
     "topo-image",
     "gitleaks",
+    "pr-closes",
+    "expo-doctor",
+    "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
   ]
 }
 
@@ -127,7 +151,10 @@ resource "github_repository_ruleset" "main_review" {
 
 # A mobile-v* tag push is a Logjam GPS release (deploy-mobile.yml), and the
 # workflow also accepts a tag on a release/mobile-v* branch: only admins may
-# create, move or delete either.
+# create, move or delete either. An OTA hotfix publishes from the release
+# branch, so ota-hotfix.yml may also push one, with a deploy key held in the
+# main-only mobile-ota Environment. Not GitHub Actions as a whole: any
+# collaborator's pull-request workflow can ask for a write token.
 import {
   to = github_repository_ruleset.mobile_release_tags
   id = "logjam:24101808"
@@ -187,8 +214,46 @@ resource "github_repository_ruleset" "mobile_release_branches" {
     bypass_mode = local.admin_bypass.bypass_mode
   }
 
+  bypass_actors {
+    actor_type  = "DeployKey"
+    bypass_mode = "always"
+  }
+
   rules {
     creation = true
+    update   = true
+    deletion = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# A maplibre-android-v* tag holds the patched MapLibre Android the Logjam GPS
+# build downloads (mobile/plugins/withPatchedMapLibre.js). Anyone may cut a new
+# one; only admins may move or delete one, so the release a build pins never
+# changes under it. Guard: tests/guards.tftest.hcl.
+resource "github_repository_ruleset" "maplibre_android_tags" {
+  name        = "maplibre-android-tags"
+  repository  = github_repository.logjam.name
+  target      = "tag"
+  enforcement = "active"
+
+  conditions {
+    ref_name {
+      include = ["refs/tags/maplibre-android-v*"]
+      exclude = []
+    }
+  }
+
+  bypass_actors {
+    actor_id    = local.admin_bypass.actor_id
+    actor_type  = local.admin_bypass.actor_type
+    bypass_mode = local.admin_bypass.bypass_mode
+  }
+
+  rules {
     update   = true
     deletion = true
   }

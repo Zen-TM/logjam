@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   groupArtifacts,
+  isBundledRegionMember,
+  isRegionArtifact,
   overlayJobId,
+  cardDates,
   regionGroupKey,
+  settleUpdate,
+  supersededBy,
   unionBbox,
   type Bbox,
 } from "./artifactGroups";
 import type { MapArtifact } from "../map/sourceResolver";
+import { regionClipKind, regionClipSpecs } from "./regionTilePlanning";
 
 function artifact(
   overrides: Partial<MapArtifact> & { id: string },
@@ -65,7 +71,7 @@ describe("groupArtifacts", () => {
         artifact({
           id: "1",
           groupId: "run-1",
-          groupLabel: "Blue Gum",
+          groupLabel: "Test region",
           sizeBytes: 10,
           bbox: [150, -34, 151, -33],
         }),
@@ -73,7 +79,7 @@ describe("groupArtifacts", () => {
         artifact({
           id: "3",
           groupId: "run-1",
-          groupLabel: "Blue Gum",
+          groupLabel: "Test region",
           sizeBytes: 7,
           bbox: [149, -34, 150, -33],
         }),
@@ -84,7 +90,7 @@ describe("groupArtifacts", () => {
     expect(groups[0].sizeBytes).toBe(17);
     expect(groups[0].members).toHaveLength(2);
     expect(groups[0].bbox).toEqual([149, -34, 151, -33]);
-    expect(groups[0].label).toBe("Blue Gum");
+    expect(groups[0].label).toBe("Test region");
   });
 
   it("prefers the group name over a single row's rename, and falls back to it", () => {
@@ -148,5 +154,141 @@ describe("a resumed download rejoins its run", () => {
       regionGroupKey,
     );
     expect(groups).toHaveLength(2);
+  });
+});
+
+describe("REGION_ARTIFACT_KINDS", () => {
+  // Mutation: drop `slope-region` from the list, and a saved area's slope clip
+  // leaves its card in Saved and the bytes sign-out warns about.
+  it("holds every kind a saved area's run files", () => {
+    const specs = regionClipSpecs(
+      {
+        bbox: { west: 150.2, south: -33.8, east: 150.4, north: -33.6 },
+        groupId: "g",
+        groupLabel: "Katoomba",
+        allowCellular: false,
+      },
+      ["nsw-5m"],
+      (id) => ({ id, label: id }),
+    );
+    const kinds = specs.map(regionClipKind);
+    expect(new Set(kinds)).toEqual(
+      new Set([
+        "dem-region",
+        "contours-region",
+        "slope-region",
+        "land-region",
+        "fire-region",
+        "coverage-region",
+        "basemap-region",
+      ]),
+    );
+    for (const kind of kinds) expect(isRegionArtifact({ kind })).toBe(true);
+    expect(isRegionArtifact({ kind: "topo-overlay" })).toBe(false);
+  });
+});
+
+describe("isBundledRegionMember", () => {
+  // Mutation: test only the kind, and the vector map (a basemap-region file
+  // filed under "protomaps") gets a delete button of its own again; test only
+  // the key, and the elevation and contours clips do.
+  it("lets the user delete only the raster maps they picked", () => {
+    const member = (kind: MapArtifact["kind"], logicalKey: string) =>
+      isBundledRegionMember({ kind, logicalKey });
+    expect(member("basemap-region", "six-topo")).toBe(false);
+    expect(member("basemap-region", "six-imagery")).toBe(false);
+    expect(member("basemap-region", "protomaps")).toBe(true);
+    expect(member("dem-region", "terrarium")).toBe(true);
+    expect(member("dem-region", "nsw-5m")).toBe(true);
+    expect(member("contours-region", "nsw-contours")).toBe(true);
+    expect(member("slope-region", "nsw-slope")).toBe(true);
+    expect(member("land-region", "nsw-land")).toBe(true);
+    expect(member("fire-region", "nsw-fire")).toBe(true);
+    expect(member("coverage-region", "nsw-coverage")).toBe(true);
+    expect(member("dem-region", "lidar-abc")).toBe(true);
+  });
+});
+
+describe("supersededBy", () => {
+  const saved = (id: string, extra: Partial<MapArtifact> = {}) =>
+    artifact({ id, groupId: "run-1", ...extra });
+  // Mutation: drop the groupId test and an update of one card deletes the
+  // same map from every other saved area; drop the logicalKey test and it
+  // deletes the card's other maps.
+  it("names only the same map in the same card", () => {
+    const fresh = saved("new");
+    const all = [
+      fresh,
+      saved("old"),
+      saved("other-map", { logicalKey: "six-imagery" }),
+      saved("other-card", { groupId: "run-2" }),
+      saved("clip", { kind: "dem-region" }),
+    ];
+    expect(supersededBy(fresh, all).map((a) => a.id)).toEqual(["old"]);
+  });
+
+  it("finds a legacy row, which stands alone under its own id", () => {
+    const legacy = artifact({ id: "legacy" });
+    const fresh = artifact({ id: "new", groupId: "legacy" });
+    expect(supersededBy(fresh, [legacy, fresh]).map((a) => a.id)).toEqual([
+      "legacy",
+    ]);
+  });
+});
+
+describe("settleUpdate", () => {
+  const saved = (id: string, extra: Partial<MapArtifact> = {}) =>
+    artifact({ id, groupId: "run-1", ...extra });
+  const old = saved("old", { downloadedAt: "2026-10-03T00:00:00.000Z" });
+  const fresh = saved("new", { downloadedAt: "2026-11-06T00:00:00.000Z" });
+
+  // Mutation: ignore the failed-tile count and an update trades a whole copy
+  // for one with holes.
+  it("keeps the older copy when the new one has dead tiles", () => {
+    expect(settleUpdate(fresh, 3, [fresh, old])).toEqual({
+      accepted: false,
+      drop: [fresh],
+      firstSavedAt: null,
+    });
+  });
+
+  it("accepts dead tiles on a first save, which has nothing to keep", () => {
+    expect(settleUpdate(fresh, 3, [fresh]).accepted).toBe(true);
+  });
+
+  // Mutation: carry the newer time and the card moves to the top of Saved.
+  it("passes the older copy's first-saved time to the new one", () => {
+    const earlier = saved("older", {
+      firstSavedAt: "2026-09-01T00:00:00.000Z",
+    });
+    expect(settleUpdate(fresh, 0, [fresh, old, earlier])).toEqual({
+      accepted: true,
+      drop: [old, earlier],
+      firstSavedAt: "2026-09-01T00:00:00.000Z",
+    });
+  });
+});
+
+describe("cardDates", () => {
+  // Mutation: take the newest file's time as the saved time, and an updated
+  // card claims to be saved the day it was updated.
+  it("says when it was first saved, and updated only once a file was replaced", () => {
+    const first = artifact({
+      id: "a",
+      downloadedAt: "2026-10-03T00:00:00.000Z",
+    });
+    expect(cardDates([first])).toEqual({
+      savedAt: "2026-10-03T00:00:00.000Z",
+      updatedAt: null,
+    });
+    const replaced = artifact({
+      id: "b",
+      downloadedAt: "2026-11-06T00:00:00.000Z",
+      firstSavedAt: "2026-10-03T00:00:00.000Z",
+    });
+    expect(cardDates([replaced, first])).toEqual({
+      savedAt: "2026-10-03T00:00:00.000Z",
+      updatedAt: "2026-11-06T00:00:00.000Z",
+    });
   });
 });

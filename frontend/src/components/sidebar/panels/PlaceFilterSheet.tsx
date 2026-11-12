@@ -6,6 +6,7 @@ import {
   defsForType,
   PLACE_ROPEWIKI_OPTIONS,
   PLACE_SORT_OPTIONS,
+  PLACE_STATUS_FILTER_OPTIONS,
   PLACES_FILTER_SHEET,
   placesCountLabel,
   type PlaceFilters,
@@ -23,6 +24,7 @@ import {
   SwitchRow,
   TextField,
 } from "../../../ui";
+import type { StatusBucket } from "./placesModel";
 import classes from "./PlaceFilterSheet.module.css";
 
 type CustomFilter = PlaceFilters["custom"][string];
@@ -45,6 +47,8 @@ const { copy } = PLACES_FILTER_SHEET;
 type Props = {
   filters: PlaceFilters;
   onChangeFilters: (next: PlaceFilters) => void;
+  status: StatusBucket;
+  onChangeStatus: (next: StatusBucket) => void;
   sort: PlaceSortKey;
   onChangeSort: (next: PlaceSortKey) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
@@ -94,6 +98,22 @@ export const FILTER_SHEET_SECTIONS: Record<
     </SheetSection>
   ),
 
+  status: ({ status, onChangeStatus }) => (
+    <SheetSection title={copy.status}>
+      <div className={classes.chips}>
+        {PLACE_STATUS_FILTER_OPTIONS.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            active={status === option.value}
+            aria-pressed={status === option.value}
+            onClick={() => onChangeStatus(option.value)}
+          />
+        ))}
+      </div>
+    </SheetSection>
+  ),
+
   attributes: ({ fieldDefs, filters, onChangeFilters, patch }) =>
     fieldDefs.length > 0 && (
       <SheetSection title={copy.attributes}>
@@ -110,6 +130,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         {/* With the attributes because it widens only them. */}
         <SwitchRow
           title={copy.includeMissing}
+          description={copy.includeMissingHint}
           checked={filters.include_unknowns}
           onChange={(next) => patch({ include_unknowns: next })}
         />
@@ -192,7 +213,7 @@ export const FILTER_SHEET_SECTIONS: Record<
 };
 
 /**
- * Sort and filter for Places — everything that isn't a rail. It opens BESIDE
+ * Sort and filter for Places — everything but the type rail. It opens BESIDE
  * the list, so the list it narrows stays in view and updates as you go.
  *
  * What it holds, in what order and under what words is its contract

@@ -11,7 +11,7 @@ import {
   placeImportTemplateFilename,
 } from "./placeTemplate";
 
-/** The template is a STRING; parse it the way a spreadsheet would. (The app's
+/** The template is a STRING; parse it the way a spreadsheet would. (Logjam Web's
  *  own `parseCsv` takes a File and is async — same papaparse underneath.) */
 function parse(csv: string): {
   headers: string[];
@@ -37,9 +37,8 @@ const campsiteDefs: TripLogCustomFieldDef[] = [
 ];
 
 describe("placeImportTemplateCsv", () => {
-  // THE POINT OF GENERATING IT: the static template asked every importer for a
-  // V grade, so someone importing campsites got a file with no column for
-  // capacity and one for a grade a campsite does not have.
+  // Ask for only the chosen type's own fields — e.g. a campsite has
+  // capacity but not a V grade.
   it("asks for the chosen type's own fields and nothing else", () => {
     const csv = placeImportTemplateCsv(
       "Campsite",
@@ -74,7 +73,7 @@ describe("placeImportTemplateCsv", () => {
     expect(roles["Capacity"]).toBe("attr:capacity");
   });
 
-  it("keeps the canyon example values the static template shipped with", () => {
+  it("provides example values for canyon fields", () => {
     const csv = placeImportTemplateCsv(
       "Canyon",
       SYSTEM_PLACE_TYPE_IDS.canyon,

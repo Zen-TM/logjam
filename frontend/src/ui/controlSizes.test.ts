@@ -56,10 +56,8 @@ describe("kit control sizes", () => {
  * A card is a flex item in the column its list scrolls, and a flex item shrinks
  * by default: without `flex: none` every row is squeezed from its natural
  * height toward `min-height` the moment the list overflows, which crushes the
- * padding until the subtitle hangs out of the card. It shows only on a list
- * long enough to scroll, so six panels each wrote `flex-shrink: 0` beside their
- * own rows and the seventh inherited the bug by not knowing to (2026-09-18).
- * The kit owns it now; this is the test that fails if it is taken back out.
+ * padding until the subtitle hangs out of the card. The kit owns this rule so
+ * panels do not need to restate `flex-shrink: 0` per row.
  */
 describe("a row keeps its own height", () => {
   const rowCss = () => readFileSync(join(KIT_DIR, "Row.module.css"), "utf8");

@@ -35,9 +35,6 @@ describe("notificationMeta", () => {
     expect(notificationMeta(notification("topo_complete")).hue).toBe(
       notificationHue.topo,
     );
-    expect(notificationMeta(notification("geo_pdf_complete")).hue).toBe(
-      notificationHue.geoPdf,
-    );
     expect(notificationMeta(notification("friend_request")).kind).toBe(
       "people",
     );
@@ -51,22 +48,10 @@ describe("notificationMeta", () => {
         notification("topo_export_complete", { status: "failed" }),
       ).kind,
     ).toBe("problem");
-    expect(
-      notificationMeta(notification("geo_pdf_complete", { status: "failed" }))
-        .kind,
-    ).toBe("problem");
     expect(notificationMeta(notification("topo_export_skipped")).kind).toBe(
       "problem",
     );
     expect(notificationMeta(notification("topo_failed")).icon).toBe("warning");
-  });
-
-  it("keeps a completion with a warning as a completion", () => {
-    // A finished topo job whose OSM fetch failed still produced a map.
-    const meta = notificationMeta(
-      notification("topo_complete", { osmFailed: true }),
-    );
-    expect(meta.kind).toBe("topo");
   });
 
   it("gives an unknown type a glyph rather than nothing", () => {
@@ -98,7 +83,7 @@ describe("notificationPlaceId", () => {
 
 // NOT the share hue: a sent file is a copy that becomes the recipient's own,
 // and wearing the share colour is the one confusion the two verbs exist to
-// prevent (mobile/CLAUDE.md, "Sharing and sending").
+// prevent (ADR 0016).
 it("gives a received file its own kind, distinct from a share", () => {
   const file = notificationMeta({
     id: "n1",

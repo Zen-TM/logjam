@@ -17,8 +17,7 @@ describe("filterPillStops", () => {
   });
 
   it("draws quality as pills too, although it is a float", () => {
-    // Canyon and campsite share this definition; they used to get pills and
-    // two number boxes respectively, because one of them had a bespoke control.
+    // Canyon and campsite share this definition so both render pills.
     expect(filterPillStops(system("quality"))).toEqual([1, 2, 3, 4, 5]);
   });
 

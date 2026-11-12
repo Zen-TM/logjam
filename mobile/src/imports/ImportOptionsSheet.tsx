@@ -5,18 +5,18 @@
 // ONE component for both, on the model of TrackOptionsSheet and for the same
 // reason: the actions have a single definition in saved/assetActions.ts, and an
 // import reached from the map must not be a lesser object than one reached from
-// Saved (DESIGN.md). Until this existed the map offered NOTHING at all — an
-// imported line was the one drawn thing on the map that could not be tapped.
+// Saved (DESIGN.md).
 //
 // Rename, Send a copy and the stats are sub-modes of THIS sheet rather than
-// second sheets (§6: never open a second sheet — swap the content), so no
+// second sheets (DESIGN.md: never open a second sheet — swap the content), so no
 // caller can be the surface that forgot one.
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the file you tapped.
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
+  ADD_WAY,
   ELEVATION_TRACK_MAX_SAMPLES,
   messageFromError,
   TRACK_COLORS,
@@ -24,8 +24,15 @@ import {
 } from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
-import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
-import { vectorImportActions } from "../saved/assetActions";
+import {
+  BottomSheet,
+  closedSheet,
+  ColourField,
+  confirm,
+  RenameForm,
+  Row,
+} from "../ui";
+import { deleteLabel, vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
@@ -75,9 +82,9 @@ export function ImportOptionsSheet({
 
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // shipped twice: the route sheet opened straight into its share panel, and
-  // the options list became unreachable.
+  // set means the NEXT open lands inside it instead of on the verb list.
+  // Resetting ensures the next open lands on the verb list rather than inside
+  // an orphaned sub-mode.
   if (!visible && (renaming || sending || showingStats || attaching)) {
     setRenaming(false);
     setSending(false);
@@ -119,11 +126,11 @@ export function ImportOptionsSheet({
   const placePicker = usePlacePicker({
     source: "import",
     active: attaching,
-    attach: async (placeId, placeName) => {
+    attach: async (placeId, _placeName, replaces) => {
       if (!actions?.attachToPlace)
         throw new Error("This import has no original file.");
-      await actions.attachToPlace(placeId);
-      onInfo(`Attached a copy as ${placeName}'s route.`);
+      await actions.attachToPlace(placeId, replaces);
+      onInfo(ADD_WAY.copy.linkedDone);
     },
     onDone: () => {
       setAttaching(false);
@@ -185,7 +192,7 @@ export function ImportOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a place"
+              ? "Link to a place"
               : imported.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -236,6 +243,9 @@ export function ImportOptionsSheet({
         <View style={styles.body}>
           {actions.setColor ? (
             <ColourField
+              icon="colour"
+              hue={assetHue.import}
+              disabled={busy}
               label="Colour"
               palette={TRACK_COLORS}
               value={imported.color}
@@ -279,7 +289,7 @@ export function ImportOptionsSheet({
               nothing legal to upload (assetActions.ts withholds the verb). */}
           {actions.attachToPlace ? (
             <Row
-              title="Attach to a place"
+              title="Link to a place"
               subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}
@@ -319,29 +329,32 @@ export function ImportOptionsSheet({
               onPress={() => setRenaming(true)}
             />
           ) : null}
-          {/* "From device", not "Delete import": an import never syncs, so this
-              is a statement about this handset and nothing else. */}
+          {/* An import syncs, so deleting it reaches the account and every
+              device: the label is just "Delete" (`deleteLabel`). */}
           {actions.delete ? (
             <Row
-              title="Delete from device"
+              title={deleteLabel(actions.delete)}
               icon="delete"
               hue={theme.warning}
               disabled={busy}
               onPress={() => {
                 const removal = actions.delete!;
                 close();
-                Alert.alert(removal.confirmTitle, removal.confirmBody, [
-                  { text: "Keep it", style: "cancel" },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: () =>
-                      removal.run().catch((err: unknown) => {
-                        console.error(err);
-                        onError("Couldn't delete that import.");
-                      }),
-                  },
-                ]);
+                void (async () => {
+                  if (
+                    !(await confirm({
+                      confirmTitle: removal.confirmTitle,
+                      confirmBody: removal.confirmBody,
+                      confirmLabel: "Delete",
+                      tone: "destructive",
+                    }))
+                  )
+                    return;
+                  removal.run().catch((err: unknown) => {
+                    console.error(err);
+                    onError("Couldn't delete that import.");
+                  });
+                })();
               }}
             />
           ) : null}

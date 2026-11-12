@@ -2,23 +2,26 @@
 // they imported, and the tracks on places friends shared with them.
 //
 // The page answers "what lines have I got?" (shared/DESIGN.md §2). One pinned rail
-// narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
-// mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
+// narrows it by kind, using the kinds `WAY_KIND_WORDS` declares for both clients; what each kind IS is `waysModel.ts`.
 //
 // A row OPENS — whatever kind it is — and its ⋯ acts. Which verbs it offers is
 // `wayActions.ts`, the same list the way's own page offers: a row shows the
 // full list and hands the ones needing a form (share, rename, delete) to the
 // page with that verb armed, so the two surfaces can never offer different
-// things. Nothing here renames or deletes in place any more.
-import { useMemo, useState } from "react";
+// things.
+import { useMemo } from "react";
 import {
   exportFilename,
   formatDistanceM,
   GPX_MIME_TYPE,
+  incomingLabel,
   KML_MIME_TYPE,
   routeToGpx,
   routeToKml,
   type StandaloneFile,
+  WAY_IMPORT,
+  WAY_KIND_WORDS,
+  WAY_KINDS,
   wayVerbIcon,
 } from "@logjam/shared";
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
@@ -34,6 +37,7 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   StatusPill,
   type MenuEntry,
@@ -44,8 +48,6 @@ import {
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
   buildWays,
-  WAY_KIND_LABELS,
-  WAY_KINDS,
   wayKindCounts,
   wayMatchesSearch,
   type WayItem,
@@ -81,7 +83,7 @@ const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   delete: "delete",
 };
 
-/** Export never touches the server — a route's geometry is already here. */
+/** Export is made in the browser, from the route's geometry already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
   const anchor = document.createElement("a");
@@ -103,7 +105,7 @@ export default function RoutesPanel({
   places,
   sharedPlaces,
   onStartDrawingRoute,
-  onOpenUnifiedImport,
+  onImportWay,
   onOpenWay,
   onOpenPlace,
 }: {
@@ -125,7 +127,7 @@ export default function RoutesPanel({
    *  (`WayItem.viaPlace`). */
   sharedPlaces: TPlace[];
   onStartDrawingRoute: () => void;
-  onOpenUnifiedImport: () => void;
+  onImportWay: () => void;
   /**
    * Open a way's own page, which also centres the map on it. `verb` arms one
    * of that page's actions — how a row offers Share, Rename and Delete without
@@ -141,7 +143,6 @@ export default function RoutesPanel({
     "",
     sessionStorage,
   );
-  const [searchOpen, setSearchOpen] = useState(query !== "");
   const [kind, setKind] = useStoredState<WayKind | typeof ANY_KIND>(
     "logjam.wayKind",
     ANY_KIND,
@@ -162,6 +163,14 @@ export default function RoutesPanel({
     [sharedPlaces],
   );
 
+  // `places` is owned plus shared: what is not shared is owned, and a shared
+  // list still loading leaves those places out of both.
+  const ownPlaceIds = useMemo(
+    () =>
+      new Set(places.filter((p) => !sharedPlaceIds.has(p.id)).map((p) => p.id)),
+    [places, sharedPlaceIds],
+  );
+
   const ways = useMemo(
     () =>
       buildWays({
@@ -170,8 +179,16 @@ export default function RoutesPanel({
         placeTracks,
         currentUserId,
         sharedPlaceIds,
+        ownPlaceIds,
       }),
-    [routes, standaloneFiles, placeTracks, currentUserId, sharedPlaceIds],
+    [
+      routes,
+      standaloneFiles,
+      placeTracks,
+      currentUserId,
+      sharedPlaceIds,
+      ownPlaceIds,
+    ],
   );
 
   const searched = useMemo(
@@ -188,11 +205,6 @@ export default function RoutesPanel({
   // Counts apply every axis but the rail's own, so a chip answers "how many
   // would I get if I pressed this" (shared/DESIGN.md §8).
   const counts = useMemo(() => wayKindCounts(searched), [searched]);
-
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
 
   /** What a row says under its title: how long it is, then where it lives. */
   const subtitleOf = (way: WayItem): string | undefined => {
@@ -266,64 +278,37 @@ export default function RoutesPanel({
     <Hero
       title="Ways"
       actions={
-        searchOpen ? (
-          <IconButton icon="close" label="Close search" onClick={closeSearch} />
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label="Search ways"
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            <Menu
-              label="Add a way"
-              placement="bottom-end"
-              entries={[
-                {
-                  id: "draw",
-                  label: "Draw a route",
-                  icon: "draw",
-                  onSelect: onStartDrawingRoute,
-                },
-                {
-                  id: "import",
-                  label: "Import from file",
-                  icon: "upload",
-                  onSelect: onOpenUnifiedImport,
-                },
-              ]}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  Add
-                </Button>
-              )}
-            />
-          </>
-        )
-      }
-    >
-      {searchOpen && (
-        <SearchField
-          label="Search by name"
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
+        <Menu
+          label="Add a way"
+          placement="bottom-end"
+          entries={[
+            {
+              id: "draw",
+              label: "Draw a route",
+              icon: "draw",
+              onSelect: onStartDrawingRoute,
+            },
+            {
+              id: "import",
+              label: WAY_IMPORT.menu,
+              icon: "upload",
+              onSelect: onImportWay,
+            },
+          ]}
+          trigger={(props) => (
+            <Button
+              {...props}
+              compact
+              variant="filled"
+              icon="add"
+              trailingIcon="expand"
+            >
+              Add
+            </Button>
+          )}
         />
-      )}
-    </Hero>
+      }
+    />
   );
 
   const rails = (
@@ -334,7 +319,7 @@ export default function RoutesPanel({
           { value: ANY_KIND, label: "All", count: counts.all },
           ...WAY_KINDS.map((each) => ({
             value: each,
-            label: WAY_KIND_LABELS[each],
+            label: WAY_KIND_WORDS[each].plural,
             count: counts[each],
             icon: KIND_IDENTITY[each].icon,
             hue: KIND_IDENTITY[each].hue,
@@ -344,6 +329,18 @@ export default function RoutesPanel({
         value={kind}
         onChange={(next) => setKind(next as WayKind | typeof ANY_KIND)}
       />
+      {ways.length > 0 && (
+        <SearchField
+          label="Search ways"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || query === "") return;
+            event.stopPropagation();
+            setQuery("");
+          }}
+        />
+      )}
     </div>
   );
 
@@ -358,13 +355,8 @@ export default function RoutesPanel({
       >
         Draw a route
       </Button>
-      <Button
-        compact
-        variant="outline"
-        icon="upload"
-        onClick={onOpenUnifiedImport}
-      >
-        Import
+      <Button compact variant="outline" icon="upload" onClick={onImportWay}>
+        {WAY_IMPORT.file}
       </Button>
     </>
   );
@@ -377,8 +369,8 @@ export default function RoutesPanel({
     <div className={classes.emptyArea}>
       <EmptyState
         icon="route"
-        title="No lines yet"
-        body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
+        title="No ways yet"
+        body="Draw a route on the map. Tracks you record in Logjam GPS appear here too."
         actions={addWayButtons}
       />
     </div>
@@ -403,11 +395,14 @@ export default function RoutesPanel({
       />
     </div>
   ) : (
-    <div className={classes.list}>
+    <RowList className={classes.list}>
       {visible.map((way) => {
         const identity = KIND_IDENTITY[way.kind];
+        // A file seen through a shared place is the place owner's.
         const ownerId =
-          way.kind === "route" ? routeById.get(way.id)?.ownerId : undefined;
+          way.kind === "route"
+            ? routeById.get(way.id)?.ownerId
+            : placeById.get(way.placeId ?? "")?.ownerId;
         const owner =
           way.shared && ownerId ? ownerUsername(friends, ownerId) : null;
         return (
@@ -417,12 +412,12 @@ export default function RoutesPanel({
             data-way-kind={way.kind}
             title={way.title}
             subtitle={subtitleOf(way)}
-            description={WAY_KIND_LABELS[way.kind]}
+            description={WAY_KIND_WORDS[way.kind].plural}
             leading={
               <IconTile
                 icon={identity.icon}
                 hue={identity.hue}
-                label={WAY_KIND_LABELS[way.kind]}
+                label={WAY_KIND_WORDS[way.kind].plural}
               />
             }
             // Every kind opens, and opening centres the map on it.
@@ -431,7 +426,8 @@ export default function RoutesPanel({
               <>
                 {way.shared && (
                   <StatusPill
-                    label={owner ? `From ${owner}` : "Shared"}
+                    label={incomingLabel(owner)}
+                    icon="friends"
                     tone="outline"
                   />
                 )}
@@ -454,7 +450,7 @@ export default function RoutesPanel({
         );
       })}
       <ListEnd>{addWayButtons}</ListEnd>
-    </div>
+    </RowList>
   );
 
   return (

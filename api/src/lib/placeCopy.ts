@@ -1,4 +1,4 @@
-// The database half of copying someone else's place (plan §2.6).
+// The database half of copying someone else's place.
 //
 // The decisions themselves are pure and live in `shared/src/placeCopy.ts`, so
 // both clients can predict them and a test needs no Postgres. What is here is
@@ -8,7 +8,7 @@
 // One function, called from one place (POST /places/:id/copy) — but written as
 // a lib rather than inline because the phone will need the same answer when the
 // copy flow gets its type picker, and a second implementation of "which type
-// does this land in" is exactly the drift §2.6 rule 1 exists to prevent.
+// does this land in" is exactly the drift the shared implementation exists to prevent.
 
 import { say } from "@logjam/shared";
 import type { ForeignFieldValue, TripLogCustomFieldDef } from "@logjam/shared";
@@ -37,7 +37,7 @@ export type CopyTypeResolution = {
 /**
  * The type a copy of `sourceTypeId` lands in for `recipientId`.
  *
- * §2.6 rule 1, in order:
+ * Resolution rules, in order:
  *  1. A SYSTEM type resolves globally — one row shared by every account — so a
  *     copied canyon needs no reconciliation at all.
  *  2. Otherwise match the sender's type NAME case-insensitively against the
@@ -56,6 +56,10 @@ export async function resolveCopyPlaceType(
   recipientId: string,
   sourceTypeId: string,
   requested?: unknown,
+  /** A plan's place: its custom type's name, kept when it was added. The
+   *  copier's own type of that name wins; a type is never created for it, so
+   *  no match leaves the plan place's system type. */
+  planTypeName?: string | null,
 ): Promise<CopyTypeResolution> {
   if (requested !== undefined && requested !== null) {
     if (typeof requested !== "string" || requested.length === 0) {
@@ -82,15 +86,16 @@ export async function resolveCopyPlaceType(
   // is a 500-shaped situation reported as one rather than papered over.
   if (!source) throw fault("The place's type is missing");
 
-  if (source.ownerId === null)
+  if (source.ownerId === null && !planTypeName)
     return { placeTypeId: source.id, created: false };
 
   const candidates = await prisma.placeType.findMany({
     where: visiblePlaceTypeWhere(recipientId),
     select: { id: true, ownerId: true, name: true },
   });
-  const matched = matchPlaceTypeByName(source.name, candidates);
+  const matched = matchPlaceTypeByName(planTypeName ?? source.name, candidates);
   if (matched) return { placeTypeId: matched.id, created: false };
+  if (planTypeName) return { placeTypeId: source.id, created: false };
 
   const created = await createPlaceType(recipientId, undefined, {
     name: source.name,
@@ -104,43 +109,64 @@ export async function resolveCopyPlaceType(
  * The values a copy keeps and the ones it parks, for a copy landing in
  * `placeTypeId`.
  *
- * The SOURCE's `foreignFields` are deliberately NOT read here: a copy clears
- * them rather than concatenating (§2.6). A copy-of-a-copy reconciles the
- * sender's `fieldValues` against the recipient's definitions and nothing else —
- * otherwise residue accumulates down a share chain with no owner and no way to
- * clear it.
+ * The SOURCE's `foreignFields` are deliberately NOT read for an owned source:
+ * a copy clears them rather than concatenating. A copy-of-a-copy reconciles
+ * the sender's `fieldValues` against the recipient's definitions and nothing
+ * else — otherwise residue accumulates down a share chain with no owner and no
+ * way to clear it.
+ *
+ * A PLAN is the exception on both sides, because its place belongs to no one
+ * and so has no one's definitions but the system's. Into a plan
+ * (`recipientId` null), every value without a system definition is parked.
+ * Out of a plan (`sourceOwnerId` null), the parked values ARE the plan's
+ * values, which members see read-only and cannot adopt, so they are fed back
+ * through the split as values, each its own definition, as a type change does.
+ * Guard: __tests__/planItems.test.ts ("lands a place of the adder's own type
+ * as a Marker").
  */
 export async function reconcileCopiedPlace(args: {
-  recipientId: string;
-  sourceOwnerId: string;
+  recipientId: string | null;
+  sourceOwnerId: string | null;
   sourceTypeId: string;
   targetTypeId: string;
   fieldValues: unknown;
+  foreignFields?: unknown;
 }): Promise<{
   fieldValues: Record<string, unknown>;
   foreignFields: ReturnType<typeof reconcileCopiedFieldValues>["foreignFields"];
 }> {
+  const parked =
+    args.sourceOwnerId === null ? asForeignFields(args.foreignFields) : [];
   const [senderDefs, recipientDefs]: TripLogCustomFieldDef[][] =
     await Promise.all([
       defsForPlaceType(args.sourceOwnerId, args.sourceTypeId),
       defsForPlaceType(args.recipientId, args.targetTypeId),
     ]);
   return reconcileCopiedFieldValues({
-    fieldValues: args.fieldValues,
-    senderDefs,
+    fieldValues: {
+      ...Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      ...asFieldValues(args.fieldValues),
+    },
+    senderDefs: [
+      ...parked
+        .filter((item) => !senderDefs.some((def) => def.key === item.key))
+        .map(parkedItemAsDef),
+      ...senderDefs,
+    ],
     recipientDefs,
   });
 }
 
 /**
  * A place's values after its TYPE changes — the second writer of
- * `foreignFields` and the last (§2.6 scope discipline).
+ * `foreignFields` and the last.
  *
  * Miscategorising is inevitable and a type change is a legal edit, so it must
- * not destroy what the user typed under the old type. A value the new type has
- * no definition for is parked rather than deleted or left in `fieldValues`
- * where nothing renders it: parked, it is visible, labelled, and adoptable into
- * the new type with one tap.
+ * not destroy what the user typed under the old type. Guard:
+ * api/src/lib/placeCopy.unit.test.ts. A value the new type has no definition
+ * for is parked rather than deleted or left in `fieldValues` where nothing
+ * renders it: parked, it is visible, labelled, and adoptable into the new type
+ * with one tap.
  *
  * APPENDS rather than clears, unlike a copy: the row keeps its owner, so an
  * earlier stranding is still theirs. Same key twice keeps the newest.
@@ -176,11 +202,8 @@ export async function strandValuesOnTypeChange(args: {
   // side, which is a key another client is entitled to have written.
   //
   // The park is still re-matched, in the one direction that can only help: a
-  // value the CURRENT type defines comes home. That is what heals a row
-  // stranded BEFORE the round trip above existed — there is no migration for
-  // those, and the alternative was telling the user to retype the place twice
-  // to get their own grades back. Skipped entirely when nothing is parked,
-  // which is almost every write.
+  // value the CURRENT type defines comes home. Skipped entirely when nothing is
+  // parked, which is almost every write.
   if (args.fromTypeId === args.toTypeId) {
     if (parked.length === 0) {
       return {

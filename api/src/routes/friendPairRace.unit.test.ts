@@ -183,15 +183,26 @@ describe("POST /friends/invites/redeem, when the other write lands first", () =>
   });
 
   it("accepts the row that won", async () => {
-    findFriendship
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: "f-1", status: "pending" });
+    findFriendship.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "f-1",
+      requesterId: "them",
+      addresseeId: "me",
+      status: "pending",
+    });
 
     expect(await spend()).toBeUndefined();
     expect(tx.friendship.create).not.toHaveBeenCalled();
     expect(tx.friendship.update).toHaveBeenCalledWith({
       where: { id: "f-1" },
       data: { status: "accepted" },
+    });
+    // Mutation that turns it red: scope the purge to the caller only.
+    expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: { in: ["them", "me"] },
+        type: "friend_request",
+        payload: { path: ["friendshipId"], equals: "f-1" },
+      },
     });
     expect(json).toHaveBeenCalledWith({
       id: "them",

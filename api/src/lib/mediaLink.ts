@@ -7,15 +7,16 @@
 // copy of one, so the parent moves in both directions over the file's life.
 //
 // The rule this file exists to hold in one place: DELETING A PARENT MUST NOT
-// DESTROY A STANDALONE FILE. It is unlinked and survives in Saved, exactly as
-// `Route.placeId`'s SetNull already leaves a drawn route standing when its
-// place is deleted. Three call sites need that (place delete, bulk place
-// delete, way replacement) and each deciding for itself is how one of them ends
-// up deleting the user's only copy of a file they imported.
+// DESTROY A STANDALONE FILE. Guard: api/src/lib/mediaLink.unit.test.ts.
+// It is unlinked and survives in Saved, exactly as `Route.placeId`'s SetNull
+// already leaves a drawn route standing when its place is deleted. Three call
+// sites need that (place delete, bulk place delete, way replacement) and each
+// deciding for itself is how one of them ends up deleting the user's only copy
+// of a file they imported.
 //
 // PRIVACY: unlinking is a visibility REVOCATION for the place's sharees. Every
 // site here pairs the unlink with their tombstones in the same transaction —
-// see lib/syncTombstones.ts.
+// see lib/syncTombstones.ts. Guard: api/src/lib/syncTombstones.unit.test.ts.
 import type { Prisma } from "@prisma/client";
 
 /** The parent columns of a file that belongs to nobody but its owner. */

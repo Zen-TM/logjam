@@ -1,10 +1,10 @@
 // Choosing one of your places by NAME, for a field that points at a place.
 //
 // A `<select>` is the wrong control once the list is long: picking a place
-// meant scrolling hundreds of options in a native dropdown, with no way in but
+// means scrolling hundreds of options in a native dropdown, with no way in but
 // the platform's type-to-find, which matches from the START of the primary name
-// only (operator, 2026-09-17). A canyon known to its owner by an alternative
-// name was unreachable that way.
+// only. A canyon known to its owner by an alternative name is unreachable that
+// way.
 //
 // So: type, and see what matches. The matching is `placeMatchesSearch` — the
 // same predicate the Places page's own search box uses, which covers `altNames`

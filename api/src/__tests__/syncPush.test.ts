@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
 import {
+  MAX_SCOPED_PLACE_TYPES,
+  MAX_TRIP_TYPES_PER_TRIP,
+} from "@logjam/shared";
+import {
   API_URL,
   ALICE_SUB,
   BOB_SUB,
@@ -11,7 +15,7 @@ import {
   MARKER_TYPE_ID,
 } from "./_actors";
 
-// POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
+// POST /sync/push contract: FIFO order, per-op transactions,
 // per-op statuses, dependencyFailed propagation, conflict receipts, and the
 // foreign-id anti-oracle. Requires `make dev`. Synthetic coords only.
 
@@ -220,7 +224,55 @@ describe("sync push — FIFO batch lifecycle", () => {
   });
 });
 
-describe("sync push — conflicts (§6)", () => {
+describe("sync push — a place's gauge link", () => {
+  it("stores a good id, clears it with null, and refuses what REST refuses", async () => {
+    const id = randomUUID();
+    const fields = {
+      placeTypeId: MARKER_TYPE_ID,
+      name: "g",
+      latitude: -33.6,
+      longitude: 150.2,
+    };
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "g1",
+        entity: "place",
+        op: "create",
+        id,
+        fields: { ...fields, gaugeId: "210001" },
+      },
+      {
+        opId: "g2",
+        entity: "place",
+        op: "update",
+        id,
+        fields: { gaugeId: "bad id!" },
+      },
+      {
+        opId: "g3",
+        entity: "place",
+        op: "update",
+        id,
+        fields: { gaugeId: null },
+      },
+    ]);
+    expect(res.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "applied",
+      "rejected",
+      "applied",
+    ]);
+    expect(res.body.results[0].row.gaugeId).toBe("210001");
+    expect(res.body.results[2].row.gaugeId).toBeNull();
+    const rest = await request(API_URL)
+      .patch(`/places/${id}`)
+      .set(as(ALICE_SUB))
+      .send({ gaugeId: "bad id!" });
+    expect(rest.status).toBe(400);
+    await request(API_URL).delete(`/places/${id}`).set(as(ALICE_SUB));
+  });
+});
+
+describe("sync push — conflicts", () => {
   // The reply to a push can be lost after the write landed, and the phone
   // sends the op again with its original base. A canyon-linked trip is
   // force-tagged, so the stored types are not the ones the op carried.
@@ -426,9 +478,8 @@ describe("sync push — ownership boundary", () => {
 });
 
 describe("sync push — route colour", () => {
-  // Colour used to be assigned server-side and ignored on the wire, so a route
-  // drawn on a phone rendered in a fallback colour and then changed under the
-  // user when the create op came back.
+  // A route honours the colour chosen by the client rather than falling back
+  // and changing colour when the create op comes back.
   it("honours a palette colour on create and update, and refuses one outside it", async () => {
     const routeId = randomUUID();
     const points = [
@@ -505,9 +556,9 @@ describe("sync push — notification markRead", () => {
     expect(res.body.results[0].status).toBe("alreadyApplied");
   });
 
-  // The same anti-oracle rule for the two ops mark-as-unread and delete added
-  // with the inbox's per-row menu: a notification that is not this user's is
-  // reported exactly as one that never existed.
+  // The same anti-oracle rule applies to mark-as-unread and delete: a
+  // notification that is not this user's is reported exactly as one that never
+  // existed.
   it("markUnread and delete on a purged/foreign notification are alreadyApplied", async () => {
     const res = await push(ALICE_SUB, [
       {
@@ -562,11 +613,9 @@ describe("sync push — notification markRead", () => {
 });
 
 describe("sync push — route anchors", () => {
-  // Regression: the push handler accepted `anchors`, validated it, and then
-  // dropped it — so every route drawn on a phone lost the user's own vertices
-  // on the first pull after it flushed, and reopening a snapped route gave
-  // back a handle on every snapped point. REST PATCH always applied the rule;
-  // only this path didn't.
+  // Route anchors must be persisted on create and update (matching REST
+  // PATCH) so user vertices survive sync rather than being replaced by all
+  // snapped points.
   it("persists anchors on create and update, and clears them when points move without anchors", async () => {
     const routeId = randomUUID();
     const points = [
@@ -636,9 +685,9 @@ describe("sync push — route anchors", () => {
 
 describe("sync push — direct-share delete cleanup", () => {
   // REST DELETE /routes/:id fans tombstones out to direct sharees and purges
-  // their Share rows; the sync push delete used to do neither (finding 1), so a
-  // place/route deleted from a phone while offline stranded the recipient's
-  // mirror AND left the Share row granting access to a dead id.
+  // their Share rows. Sync push delete must do the same, otherwise a
+  // place/route deleted while offline strands the recipient's mirror and leaves
+  // the Share row granting access to a dead id.
   it("a pushed route delete tombstones a direct sharee", async () => {
     const routeId = randomUUID();
     const created = await push(ALICE_SUB, [
@@ -698,11 +747,9 @@ describe("sync push — direct-share delete cleanup", () => {
 });
 
 // A "how many" field has a floor and no honest ceiling — three of the SYSTEM
-// definitions are exactly that shape. The push path gated `min` and `max` on
-// BOTH being numbers, so a one-sided definition created offline arrived
-// unbounded: the form stopped showing the range and nothing refused a
-// negative, leaving no check anywhere. The REST twin already passed them
-// independently, so this was also a REST/sync divergence.
+// definitions are exactly that shape. Both push and REST accept one-sided
+// bounds (min without max, or vice versa) so offline definitions do not arrive
+// unbounded.
 describe("sync push — a definition keeps a one-sided bound", () => {
   it("stores a min with no max", async () => {
     const defId = randomUUID();
@@ -737,10 +784,79 @@ describe("sync push — a definition keeps a one-sided bound", () => {
     expect(def!.max ?? null).toBeNull();
 
     // Checked, because an unchecked cleanup that 429s leaves this definition in
-    // alice's list and customFields.test's exact-list assertion fails instead.
+    // alice's list and customFields.test.ts's exact-list assertion fails instead.
     const removed = await request(API_URL)
       .delete(`/custom-fields/trip-log/${key}`)
       .set(as(ALICE_SUB));
     expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+  });
+});
+
+// The sync twin of POST /trips' cap (tripLogsGlobal.test.ts): both call
+// parseTripTypes, so an over-cap list is the same 413, per op.
+describe("sync push — a trip log's types are capped", () => {
+  // Mutation: return the list unparsed from parseTripTypes (no cap).
+  it("rejects more than the cap with a 413 on that op", async () => {
+    const pushed = await push(ALICE_SUB, [
+      {
+        opId: `trip-types-capped-${randomUUID()}`,
+        entity: "tripLog",
+        op: "create",
+        id: randomUUID(),
+        fields: {
+          date: "2026-07-12",
+          placeIds: [],
+          types: Array.from(
+            { length: MAX_TRIP_TYPES_PER_TRIP + 1 },
+            (_, i) => `t${i}`,
+          ),
+        },
+      },
+    ]);
+    expect(pushed.body.results[0], JSON.stringify(pushed.body)).toMatchObject({
+      status: "rejected",
+      error: { code: 413 },
+    });
+  });
+});
+
+// The other half of the REST/sync pair: `parseScoping` in routes/customFields.ts
+// caps `placeTypeIds`, so a definition arriving by push is capped too — push
+// would otherwise be the way around the REST cap. Per-op 413, not a
+// whole-batch abort, because the op is terminally bad and its neighbours are not.
+describe("sync push — a definition's scoping is capped", () => {
+  it("rejects a scoping past the ceiling with a 413 on that op alone", async () => {
+    const defId = randomUUID();
+    const key = `scoped_${Date.now()}`.slice(0, 24);
+    const pushed = await push(ALICE_SUB, [
+      {
+        opId: `def-capped-${defId}`,
+        entity: "customFieldDef",
+        op: "create",
+        id: defId,
+        fields: {
+          entity: "place",
+          key,
+          label: "Over-scoped",
+          type: "string",
+          placeTypeIds: Array.from({ length: MAX_SCOPED_PLACE_TYPES + 1 }, () =>
+            randomUUID(),
+          ),
+        },
+      },
+    ]);
+
+    expect(pushed.body.results[0], JSON.stringify(pushed.body)).toMatchObject({
+      status: "rejected",
+      error: { code: 413 },
+    });
+
+    // Nothing was written on the way to the refusal.
+    const list = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(ALICE_SUB));
+    expect(
+      (list.body.fields as { key: string }[]).some((def) => def.key === key),
+    ).toBe(false);
   });
 });

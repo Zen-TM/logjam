@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { AppError } from "../middleware/errorHandler";
 import {
@@ -27,7 +29,7 @@ function statusOf(fn: () => unknown): number | undefined {
 // function rather than an inline `.trim()`.
 describe("sanitizeSendFilename", () => {
   it("keeps an ordinary filename intact", () => {
-    expect(sanitizeSendFilename("Kanangra Main.gpx")).toBe("Kanangra Main.gpx");
+    expect(sanitizeSendFilename("Alpha Creek.gpx")).toBe("Alpha Creek.gpx");
   });
 
   it("strips the quote that would close the Content-Disposition token", () => {
@@ -52,6 +54,36 @@ describe("sanitizeSendFilename", () => {
       400,
     );
     expect(sanitizeSendFilename("a".repeat(251) + ".gpx")).toHaveLength(255);
+  });
+});
+
+// A place's name is exactly what a user ends up typing into the filename box,
+// and this is the one user-supplied string on a send (root AGENTS.md:
+// logs never carry a place's name). Mutations: put `value` into the refusal's
+// detail (the detail IS logged, errorHandler.ts), or pass `filename` into a log
+// call on the send surface.
+describe("a sent file's name never reaches a log", () => {
+  it("names only ids in every log call on the send surface", () => {
+    const source = readFileSync(
+      join(__dirname, "../routes/fileSends.ts"),
+      "utf8",
+    );
+    const calls = source.match(/logger\.\w+\([\s\S]*?\);/g) ?? [];
+    // Guards the guard: a regex that matched nothing would pass vacuously.
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).not.toMatch(/filename/i);
+  });
+
+  it("refuses a filename without repeating it back", () => {
+    let refusal: unknown;
+    try {
+      sanitizeSendFilename({ toString: () => "Alpha Creek" });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(AppError);
+    expect((refusal as AppError).message).not.toContain("Alpha Creek");
+    expect((refusal as AppError).devDetail).not.toContain("Alpha Creek");
   });
 });
 
@@ -97,9 +129,8 @@ describe("assertSendableSize", () => {
     expect(statusOf(() => assertSendableSize(-1))).toBe(400);
   });
 
-  // Derived from the constant, never a literal: this cap has already moved once
-  // (30 MB → 64 MB, when GeoPDFs became sendable) and a hardcoded copy here is
-  // a second list that has to agree with the first.
+  // Derived from the constant, never a literal: avoid a hardcoded copy here
+  // that would be a second declaration that has to agree with the first.
   it("rejects an oversized file with 413 and accepts one exactly at the cap", () => {
     expect(statusOf(() => assertSendableSize(FILE_SEND_MAX_BYTES + 1))).toBe(
       413,

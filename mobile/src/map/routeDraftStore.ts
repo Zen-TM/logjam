@@ -1,4 +1,4 @@
-// Draft safety: the in-progress route survives the app being killed.
+// Draft safety: the in-progress route survives Logjam GPS being killed.
 //
 // Drawing a route is minutes of work with no save point until the end, and
 // Android kills backgrounded apps freely — a phone in a pocket between two

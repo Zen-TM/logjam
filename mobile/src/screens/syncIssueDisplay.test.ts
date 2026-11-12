@@ -6,6 +6,9 @@ import {
   bulkDiscardBody,
   opChanges,
   opTarget,
+  hasEarlierVersion,
+  keepMineConfirmBody,
+  readableValue,
   restoreConfirmBody,
   canRecreate,
   rejectedFields,
@@ -46,6 +49,8 @@ function shelved(overrides: Partial<ShelfEntry> = {}): ShelfEntry {
     entityId: "c1",
     field: "notes",
     shelvedValue: "Abseil 3 anchor spinning",
+    currentValue: "Abseil 3 anchor spinning",
+    changedSince: false,
     serverValue: "Classic. Do it in summer.",
     at: "2026-08-30T00:00:00.000Z",
     restoreBlock: null,
@@ -100,8 +105,8 @@ describe("opTitle", () => {
   });
 
   it("names a media op by its filename and its own verb", () => {
-    // "media — create" was the raw column values reaching the screen, and every
-    // stuck upload looked like every other one.
+    // Without filename and verb, stuck uploads would look identical under raw
+    // column values.
     expect(
       opTitle(
         parked({ entity: "media", op: "create", entityName: "Davies.kml" }),
@@ -145,9 +150,9 @@ describe("opAdvice", () => {
   });
 
   it("treats a validation rejection as permanent and names no hint", () => {
-    // Retry on a 400 can only park it a second time, which is what taught users
-    // the button does nothing (§7 — a verb that can only refuse is absent). The
-    // rows below the line are the advice, so there is no hint.
+    // Retrying on a 400 can only park it again (shared/DESIGN.md §7 — a verb
+    // that can only refuse is absent). The rows below the line are the advice,
+    // so there is no hint.
     const advice = opAdvice(parked({ error: { code: 400 } }));
     expect(advice.line).toBe("This change can't be saved as it is.");
     expect(advice.canRetry).toBe(false);
@@ -156,9 +161,8 @@ describe("opAdvice", () => {
 
   it("says a temporary refusal lasted a day, and blames neither the change nor the signal", () => {
     // A 503 only reaches this screen after `shouldGiveUpOnSyncOp` let it: the
-    // account answered, and kept answering no, for a day. "Better signal" was
-    // written for the old five-tries cap and sends the reader to look for
-    // something that was never missing.
+    // account answered, and kept answering no, for a day. Blaming signal would
+    // send the reader to look for something that was never missing.
     const refused = opAdvice(parked({ error: { code: 503 }, attempts: 40 }));
     expect(refused.line).toBe("Your account kept turning this down for a day.");
     expect(refused.canRetry).toBe(true);
@@ -212,8 +216,8 @@ describe("opAdvice shows a rejection in the server's sentence", () => {
     opAdvice(parked(overrides)).line;
 
   it("says what the server said, whatever the op looks like", () => {
-    // A trip refused for listing one place twice used to read "names a place
-    // that no longer exists": a guess from the fields, and wrong.
+    // The rejection sentence from the server must be shown rather than guessing
+    // from fields, which can produce inaccurate reasons.
     expect(
       line({
         entity: "tripLog",
@@ -276,8 +280,8 @@ describe("rejectedFields / salvageableFields", () => {
   });
 
   it("splits a rejected edit into what the server refused and what it didn't", () => {
-    // One bad number used to take a paragraph of notes down with it: the API
-    // validates the whole payload, so the whole op parks.
+    // Without salvaging valid fields, one bad number takes valid notes down
+    // with it because the API validates the whole payload and parks the op.
     // The whole `fieldValues` blob is ONE dirty field on the wire, so that is
     // the granularity a "send the rest" offer can work at — the client cannot
     // resend half a JSON column.
@@ -330,11 +334,8 @@ describe("rejectedFields / salvageableFields", () => {
 });
 
 describe("restoreSubtitle", () => {
-  it("warns about the replacement only when there IS something to replace", () => {
-    expect(restoreSubtitle(shelved())).toMatch(/replaces what's there now/);
-    // The other device CLEARED the field: nothing is being overwritten, and the
-    // warning would describe a cost the user is not paying.
-    expect(restoreSubtitle(shelved({ serverValue: null }))).toBeUndefined();
+  it("says restoring replaces the user's own text", () => {
+    expect(restoreSubtitle()).toMatch(/Replaces yours/);
   });
 });
 
@@ -373,9 +374,10 @@ describe("opChanges", () => {
   });
 
   it("marks WHICH line the rejection is about", () => {
-    // Two changes over one complaint left the reader guessing which had caused
-    // it. The client runs the same range rules as the API (`shared/`), so it
-    // can point at the field without reading the server's English.
+    // Without marking which line was rejected, multiple changes leave the
+    // reader guessing. The client runs the same range rules as the API
+    // (`shared/`), so it can point at the field without reading the server's
+    // English.
     const changes = opChanges(
       parked({
         fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
@@ -448,8 +450,8 @@ describe("opTarget", () => {
 
 describe("discardExplanation", () => {
   it("promises no copy anywhere, because discarding no longer keeps one", () => {
-    // It used to shelve what was typed, and the row it left behind asked the
-    // user to decide the same thing twice. This dialog is now the last place
+    // Discarding drops what was typed rather than shelving it to avoid asking
+    // the user to decide the same thing twice. This dialog is now the last place
     // the cost can be stated.
     const text = discardExplanation(parked({ entity: "place" }));
     expect(text).not.toMatch(/Lost/);
@@ -478,9 +480,8 @@ describe("canRecreate", () => {
   });
 
   it("is false where that call would quietly discard instead", () => {
-    // The button said "Saves what you typed as a new one" for every deadRemote
-    // op, and for anything but a place with a local row the implementation
-    // falls back to a discard — a button that deletes the change it promises
+    // For anything other than a place with a local row, recreation would fall
+    // back to a discard — a button that deletes the change it promises
     // to keep.
     expect(
       canRecreate(
@@ -507,94 +508,44 @@ describe("canRecreate", () => {
 });
 
 describe("shelf copy", () => {
-  it("names the field and the thing, in the past tense", () => {
+  it("names the field and the thing, and does not say whose text won", () => {
     expect(shelfTitle(shelved())).toBe(
-      "Your notes for “Claustral” were overwritten",
+      "Notes for “Claustral” changed on two devices",
     );
-    // Agreement follows the FIELD, and got this wrong on a shipped row: "your
-    // water grade WERE overwritten".
     expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
-      "Your water grade for “Claustral” was overwritten",
+      "Water grade for “Claustral” changed on two devices",
     );
     // The name is captured when the value is shelved, so it survives the row
     // being deleted — this fallback is for entries shelved before that column.
     expect(shelfTitle(shelved({ entityName: null }))).toBe(
-      "Your notes on a place were overwritten",
+      "Notes on a place changed on two devices",
     );
   });
 
-  it("agrees in number with every field label we ship", () => {
-    // The rule is "a plural label ends in s, a singular one doesn't", which is
-    // true of the whole map today and is what `isPluralLabel` reads. A future
-    // label that breaks it (a "status") fails here rather than on a phone.
-    const plural = [
-      "notes",
-      "altNames",
-      "placeIds",
-      "customFields",
-      "fieldValues",
-    ];
-    // `types` is in here on purpose: the FIELD is plural and its LABEL — "trip
-    // type" — is not, and the label is what the sentence has to agree with.
-    const singular = [
-      "name",
-      "types",
-      "v_grade",
-      "a_grade",
-      "commitment",
-      "quality",
-      "hours",
-      "date",
-      "displayName",
-      "elevation",
-      "symbol",
-      "color",
-      "num_abseils",
-      "longest_abseil",
-    ];
-    for (const field of plural) {
-      expect(shelfTitle(shelved({ field })), field).toContain(" were ");
-    }
-    for (const field of singular) {
-      expect(shelfTitle(shelved({ field })), field).toContain(" was ");
-    }
+  // Mutation: swap the two values back (describe `serverValue` as the winner).
+  it("says the user's version was saved, and shows what it replaced", () => {
+    expect(shelfSubtitle(shelved(), NOW)).toBe(
+      "Replaced: Classic. Do it in summer. · yesterday",
+    );
+    expect(shelfExplanation(shelved())).toBe(
+      "Your version was saved. It replaced a different one that another device wrote.",
+    );
+    expect(shelfExplanation(shelved())).not.toMatch(/overwritten|dropped|lost/);
   });
 
-  it("says CLEARED when the other device emptied the field", () => {
-    // A null server value is a real outcome, not a missing one, and "overwritten"
-    // would leave the user hunting for a replacement that does not exist.
-    expect(shelfTitle(shelved({ serverValue: null }))).toMatch(/were cleared$/);
+  it("says nothing was replaced when the account had nothing there", () => {
     expect(shelfSubtitle(shelved({ serverValue: null }), NOW)).toBe(
-      "Cleared on another device · yesterday",
+      "Yours was saved · yesterday",
     );
     expect(shelfExplanation(shelved({ serverValue: null }))).toMatch(
-      /cleared this field/,
+      /Your version was saved/,
     );
-  });
-
-  it("shows what is there instead in the supporting line", () => {
-    expect(shelfSubtitle(shelved(), NOW)).toBe(
-      "Kept instead: Classic. Do it in summer. · yesterday",
-    );
-  });
-
-  it("answers 'I typed that, where did it go' in one sentence", () => {
-    // One answer, because a shelf entry can only ever be a conflict receipt:
-    // the push was applied and a newer value for that field won. No deadline —
-    // nothing expires these any more.
-    const text = shelfExplanation(shelved());
-    expect(text).toBe(
-      "Your change was overwritten by another device on this account.",
-    );
-    expect(text).not.toMatch(/30 days/);
   });
 
   it("says what happened to the thing, for every reason a restore is refused", () => {
-    // Two reasons, not four: `readOnly` was unreachable (a shelf entry only
-    // exists for a row the push was APPLIED to, i.e. one the user owns) and
-    // `restored` went with the row, which is now deleted on restore.
-    // And it NAMES the kind: the shelf row records the entity, so "the thing
-    // this belonged to" was a sentence written without looking.
+    // Two reasons, not four: a shelf entry only exists for a row the push was
+    // APPLIED to (one the user owns), and a restored row is deleted on restore.
+    // It names the kind from the recorded entity rather than generic phrasing.
     expect(restoreBlockReason(shelved({ restoreBlock: "gone" }))).toBe(
       "The place this belonged to has been deleted, so there's nothing to restore it into.",
     );
@@ -604,6 +555,9 @@ describe("shelf copy", () => {
     expect(
       restoreBlockReason(shelved({ restoreBlock: "unsupported" })),
     ).toMatch(/yourself/);
+    expect(restoreBlockReason(shelved({ restoreBlock: "nothing" }))).toMatch(
+      /nothing there before/,
+    );
   });
 });
 
@@ -616,7 +570,7 @@ describe("bulkDiscardBody", () => {
     });
     expect(body).toContain("2 changes are dropped");
     expect(body).toContain("One waiting upload is deleted from this phone");
-    expect(body).toContain("3 lost values are deleted");
+    expect(body).toContain("3 earlier versions are deleted");
   });
 
   it("never mentions a kind the selection does not contain", () => {
@@ -636,7 +590,7 @@ describe("bulkDiscardBody", () => {
 });
 
 describe("restoreConfirmBody", () => {
-  it("QUOTES the value it is about to destroy", () => {
+  it("QUOTES the user's own text it is about to replace", () => {
     // This is the last moment that text exists anywhere, and the sheet showing
     // it has closed behind the dialog — "replaces what your account holds now"
     // names nothing the user can weigh.
@@ -653,7 +607,7 @@ describe("restoreConfirmBody", () => {
   });
 
   it("counts instead of quoting in bulk, where N values cannot all be shown", () => {
-    expect(restoreConfirmBody(4)).toMatch(/Those 4 values/);
+    expect(restoreConfirmBody(4)).toMatch(/Those 4 earlier versions/);
   });
 });
 
@@ -680,5 +634,53 @@ describe("selectionCountLabel", () => {
     expect(
       selectionCountLabel({ selected: 2, retryCount: 0, restoreCount: 0 }),
     ).toBe("2 selected");
+  });
+});
+
+describe("keepMineConfirmBody", () => {
+  it("quotes the earlier text, because deleting it is the whole cost", () => {
+    const body = keepMineConfirmBody("Classic. Do it in summer.");
+    expect(body).toContain("“Classic. Do it in summer.”");
+    expect(body).toMatch(/Your version stays/);
+  });
+});
+
+describe("hasEarlierVersion", () => {
+  // Mutation: test `typeof serverValue === "string"` instead — an attributes
+  // blob, a list or a number would then be deleted by Keep my version with no
+  // dialog.
+  it("is true for a value of any type, false only for nothing", () => {
+    expect(hasEarlierVersion(shelved())).toBe(true);
+    expect(
+      hasEarlierVersion(
+        shelved({ field: "fieldValues", serverValue: { quality: 3 } }),
+      ),
+    ).toBe(true);
+    expect(
+      hasEarlierVersion(shelved({ field: "altNames", serverValue: ["a"] })),
+    ).toBe(true);
+    expect(
+      hasEarlierVersion(shelved({ field: "elevation", serverValue: 0 })),
+    ).toBe(true);
+    expect(hasEarlierVersion(shelved({ serverValue: null }))).toBe(false);
+  });
+});
+
+describe("readableValue", () => {
+  it("reads lists, attributes and numbers as words, not JSON", () => {
+    expect(readableValue("altNames", ["Upper", "Lower"])).toBe("Upper, Lower");
+    expect(
+      readableValue("fieldValues", { quality: 3, _internal: 1, hours: 6 }),
+    ).toBe("Star rating: 3/5; Trip time: 6 hours");
+    expect(readableValue("elevation", 120)).toBe("120");
+    expect(readableValue("latitude", -33.6)).toBe("(hidden)");
+  });
+});
+
+describe("a conflict whose field changed after the push", () => {
+  it("says so instead of claiming the user's version is what's saved", () => {
+    expect(shelfExplanation(shelved({ changedSince: true }))).toMatch(
+      /changed again/,
+    );
   });
 });

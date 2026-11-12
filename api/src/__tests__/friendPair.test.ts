@@ -57,6 +57,30 @@ describe("one friendship per pair", () => {
     expect(rows[0].status).toBe("accepted");
   });
 
+  // Mutation that turns it red: scope the purge to the requester only, which
+  // leaves the addressee's friend_request behind.
+  it("unfriending drops the friend_request and friend_request_accepted rows", async () => {
+    const friendship = await prisma.friendship.create({
+      data: { requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" },
+    });
+    const payload = { friendshipId: friendship.id };
+    await prisma.notification.createMany({
+      data: [
+        { userId: CAROL_ID, type: "friend_request", payload },
+        { userId: BOB_ID, type: "friend_request_accepted", payload },
+      ],
+    });
+    const res = await request(API_URL)
+      .delete(`/friends/${friendship.id}`)
+      .set(as(BOB_SUB));
+    expect(res.status).toBe(204);
+    expect(
+      await prisma.notification.count({
+        where: { payload: { path: ["friendshipId"], equals: friendship.id } },
+      }),
+    ).toBe(0);
+  });
+
   it("accepts a waiting request when its addressee asks back", async () => {
     const first = await requestFriend(BOB_SUB, CAROL_ID);
     expect(first.status).toBe(201);

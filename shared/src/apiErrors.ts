@@ -1,6 +1,6 @@
-// Shared API/auth error types + user-facing message mapping, used by both web
-// (frontend) and mobile. Moved from frontend/src/errors/ so the two clients
-// can never diverge on error semantics (same motivation as consent.ts).
+// Shared API/auth error types + user-facing message mapping, used by both
+// Logjam Web and Logjam GPS so the two clients never diverge on error
+// semantics.
 //
 // ApiError identity matters: messageFromError branches on `instanceof ApiError`,
 // so every client must construct and check the SAME class — always import it
@@ -29,62 +29,62 @@ export class ApiError extends Error {
   }
 }
 
-// ── Cognito/Amplify auth error mapping ────────────────────────────────────────
+// ── Cognito account-call error mapping ────────────────────────────────────────
 
-const AUTH_ERROR_CODES: Record<string, string> = {
-  NotAuthorizedException: "Incorrect username or password.",
-  UserNotConfirmedException:
-    "Please confirm your email address before signing in.",
+export const AUTH_ERROR_CODES: Record<string, string> = {
+  NotAuthorizedException: "Incorrect email or password.",
+  UserNotConfirmedException: "Confirm your email address before signing in.",
   UserNotFoundException: "No account found with that email address.",
   UsernameExistsException: "An account with that email already exists.",
   InvalidPasswordException:
     "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
   CodeMismatchException:
-    "Incorrect verification code. Please check your email (check spam) and try again.",
+    "Incorrect verification code. Check your email (and spam) and try again.",
   ExpiredCodeException:
-    "That verification code has expired. Please request a new one.",
+    "That verification code has expired. Request a new one.",
   LimitExceededException:
-    "Too many attempts. Please wait a few minutes and try again.",
-  InvalidParameterException: "Please check your details and try again.",
-  NetworkError: "Couldn't connect. Please check your internet connection.",
+    "Too many attempts. Wait a few minutes and try again.",
+  InvalidParameterException: "Check your details and try again.",
+  NetworkError: "Couldn't connect. Check your internet connection.",
 };
 
-const AUTH_NEXT_STEPS: Record<string, string> = {
-  CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED:
-    "You must set a new password to continue.",
-  CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE: "Additional verification is required.",
-  CONFIRM_SIGN_IN_WITH_TOTP_CODE: "Please enter your authenticator code.",
-  CONFIRM_SIGN_IN_WITH_SMS_CODE: "Please enter the code sent to your phone.",
-  RESET_PASSWORD: "Your password must be reset before you can sign in.",
-  CONFIRM_SIGN_UP: "Please confirm your email address before signing in.",
-  DONE: "Sign-in complete.",
-};
+// Cognito wraps a pre sign-up Lambda's error as "PreSignUp failed with error
+// <text>" under UserLambdaValidationException, a name other triggers share, so
+// the cap is recognised by the sentence the Lambda throws, which must match
+// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. Guard:
+// apiErrors.test.ts.
+export const SIGNUP_CAP_SENTENCE =
+  "Logjam is not taking new accounts this month";
+export const SIGNUP_CAP_MESSAGE =
+  "Logjam isn't taking new accounts right now. Try again next month.";
 
 export function mapAuthError(err: unknown): string | null {
   if (err instanceof Error) {
+    if (
+      err.name === "UserLambdaValidationException" &&
+      err.message.includes(SIGNUP_CAP_SENTENCE)
+    ) {
+      return SIGNUP_CAP_MESSAGE;
+    }
     const code = (err as { code?: string }).code ?? err.name;
     if (code && AUTH_ERROR_CODES[code]) return AUTH_ERROR_CODES[code];
   }
   return null;
 }
 
-export function mapAuthNextStep(step: string): string {
-  return AUTH_NEXT_STEPS[step] ?? "Additional verification is required.";
-}
-
 // ── User-facing message derivation ────────────────────────────────────────────
 
 const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
 const NETWORK_ERROR_MESSAGE =
-  "Couldn't reach Logjam. Please check your connection and try again.";
+  "Couldn't reach Logjam. Check your connection and try again.";
 
+// 403 and 404 are absent on purpose: only the caller knows what it was after
+// ("Couldn't find this place."), so its fallback beats a generic sentence.
 const STATUS_MESSAGES: Record<number, string | undefined> = {
-  401: "You're not authorised to do that. Please sign in and try again.",
-  403: "You don't have permission to do that.",
-  404: "The requested item could not be found.",
-  429: "Too many requests. Please wait a moment and try again.",
+  401: "You're signed out. Sign in and try again.",
+  429: "Too many requests. Wait a moment and try again.",
   500: SERVER_ERROR_MESSAGE,
-  503: "Logjam is temporarily unavailable. Please try again shortly.",
+  503: "Logjam is unavailable for a moment. Try again shortly.",
 };
 
 /**

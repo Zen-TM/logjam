@@ -25,7 +25,7 @@ describe("bulkShareOutcomeMessage", () => {
   it("reports both legs in one sentence", () => {
     expect(
       bulkShareOutcomeMessage({ ...clean, granted: 6, copiesSent: 2 }),
-    ).toEqual({ text: "Shared 6 items and sent 2 copies.", tone: "info" });
+    ).toEqual({ text: "Shared 6 items and sent 2 copies.", tone: "done" });
   });
 
   it("says nothing about pairs that were already shared", () => {

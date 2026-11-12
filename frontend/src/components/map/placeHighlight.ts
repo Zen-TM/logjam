@@ -1,11 +1,10 @@
 /**
  * The place whose pin is lit because its Places row is under the pointer.
  *
- * NOT React state. A hover changes many times a second, and as App state each
- * change re-rendered App, the map component and every row in the list: 56-300 ms
- * per row crossed with 37 places (measured 2026-09-14), and the row's own hover
- * styling waited behind that render. The list writes here, the map subscribes
- * and sets a layer filter, and nothing renders.
+ * NOT React state. A hover changes many times a second; keeping it in React
+ * state would re-render App, Map and every row in the list on each pointer
+ * movement. The list writes here, the map subscribes and sets a layer filter,
+ * avoiding React re-renders on hover.
  */
 export type PlaceHighlight = {
   set: (id: string | null) => void;

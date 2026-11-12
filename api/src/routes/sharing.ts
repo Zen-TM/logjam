@@ -32,11 +32,11 @@ router.post(
     const { sharedWithUserId } = req.body;
     if (!sharedWithUserId) throw malformed("sharedWithUserId is required");
 
-    // Friendship FIRST, target-user lookup second. Probing arbitrary internal
-    // user ids used to answer 404 for an unknown id and 403 for an existing
-    // non-friend — a user-row existence oracle (PRIV-101). An accepted
-    // friendship implies the row exists, so checking it first collapses both
-    // cases onto the same 403.
+    // Friendship first, target-user lookup second: looking the user up first
+    // would answer 404 for an unknown id and 403 for a non-friend, an oracle
+    // for which user ids exist. An accepted friendship implies the row
+    // exists, so this order gives both the same 403 (sharing.test.ts,
+    // "unknown user id").
     const friendship = await prisma.friendship.findFirst({
       where: {
         status: "accepted",
@@ -90,21 +90,21 @@ router.post(
           throw err;
         });
       // The delta's shared-place visibility is a WHERE-restriction layered on
-      // `updatedAt > since`, so GRANTING visibility moves no watermark and the
-      // place is simply not in the recipient's next page. A sharee who had
-      // ever synced before received the share row pointing at a place they
-      // never got — until the owner happened to edit it. Only a first-ever
-      // pull (since = epoch) was unaffected, which is why it went unnoticed.
+      // `updatedAt > since`, so GRANTING visibility must touch `updatedAt` to
+      // advance the watermark into the recipient's next delta page. Without
+      // this, a recipient who has already synced receives the share row
+      // pointing at a place whose record they never receive until the owner
+      // edits it.
       await tx.place.update({
         where: { id: placeId },
         data: { updatedAt: new Date() },
       });
       if (notifyRecipient) {
         // Store only reference IDs — never denormalise plaintext place names
-        // or usernames into the payload (PRIV-005). Display strings are resolved
+        // or usernames into the payload. Display strings are resolved
         // from the live place/user rows at read time in notifications.ts. This
-        // is what makes revoked/deleted shares stop surfacing a name at all
-        // (PRIV-001/003): if the reference is gone there is nothing to resolve.
+        // is what makes revoked/deleted shares stop surfacing a name at all:
+        // if the reference is gone there is nothing to resolve.
         await tx.notification.create({
           data: {
             userId: sharedWithUserId,
@@ -141,23 +141,25 @@ router.delete(
     const targetUserId = rawUserId === "me" ? user.id : rawUserId;
 
     // Authorize BEFORE any share lookup so the response can't become an
-    // existence oracle for a (placeId, targetUserId) share pair (SEC-001).
+    // existence oracle for a (placeId, targetUserId) share pair.
     // Revoke is permitted for the place owner (sharer) or the named sharee
     // removing their own share. A caller who is neither gets 404 — identical
     // to the no-place / no-share path — so a third party cannot distinguish
     // "place X is shared with user Y" from "it is not". The owner decision
     // derives from placeAccess (getPlaceRole), never an inline owner check.
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, say`Couldn't find that place.`);
+    // A plan's place (null owner) is never shared, so answers as missing.
+    if (!place?.ownerId)
+      throw new AppError(404, say`Couldn't find that place.`);
+    const placeOwnerId = place.ownerId;
 
     const isSharer = (await getPlaceRole(user.id, place)) === "owner";
     const isSharee = targetUserId === user.id;
     if (!isSharer && !isSharee)
       throw new AppError(404, say`Couldn't find that place.`);
 
-    // Every row, not one: the duplicate check on grant is not atomic and the
-    // table has no unique key, so a raced pair can exist, and any survivor
-    // would keep the sharee's access.
+    // Every row, not one: defensive cleanup so any duplicate survivor
+    // would not keep the sharee's access.
     const shares = await prisma.placeShare.findMany({
       where: { placeId, sharedWithId: targetUserId },
       select: { id: true },
@@ -166,7 +168,7 @@ router.delete(
       throw new AppError(404, say`This isn't shared with them any more.`);
 
     // Revoke the share AND remove the recipient's place_shared notification
-    // for this place in one transaction (PRIV-001). The read-time filter would
+    // for this place in one transaction. The read-time filter would
     // already hide the name, but revocation should purge the recipient's
     // residual row, not leave it at rest. Sync tombstones ride the same
     // transaction: the sharee must forget the place record + its place-level
@@ -199,7 +201,7 @@ router.delete(
       await writeTombstones(
         tx,
         shareRevokeTombstones({
-          placeOwnerId: place.ownerId,
+          placeOwnerId,
           shareeId: targetUserId,
           shareId: shares[0].id,
           placeId,
@@ -207,7 +209,7 @@ router.delete(
           routeId: linkedRoute?.id ?? null,
         }).concat(
           shares.slice(1).map((extra) => ({
-            userId: place.ownerId,
+            userId: placeOwnerId,
             entityType: "placeShare" as const,
             entityId: extra.id,
           })),

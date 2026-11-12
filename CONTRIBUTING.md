@@ -29,13 +29,19 @@ infrastructure change, or a change to a convention in an `AGENTS.md`. Use the
 [feature proposal form](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml).
 Wait for the maintainer to agree the approach in the issue, marked by the
 `accepted` label, before writing code: a pull request for a feature nobody
-agreed to may be closed unreviewed. Your pull request then links the issue.
+agreed to may be closed unreviewed. Your pull request then closes the issue.
 
 **Open a pull request directly** for a typo, a docs fix, a lint or tooling
 fix, or a small bug fix that starts with a failing test.
 
 Unsure which? Open the issue. A short issue costs less than a pull request
 that gets turned down.
+
+A proposal too big for one pull request keeps its design in the proposal and
+splits the work into sub-issues of it, one for each part that can merge on its
+own, opened with the task form. Order them with GitHub's "blocked by" links,
+not in the text. Each pull request closes its sub-issue. Reasoning that must
+outlast the work goes in an [ADR](docs/decisions/README.md), not the issue.
 
 To report a bug, use the
 [bug report form](https://github.com/Zen-TM/logjam/issues/new?template=bug.yml)

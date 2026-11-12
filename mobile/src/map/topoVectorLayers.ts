@@ -1,24 +1,22 @@
-// Pure builder for vector topo overlay layer definitions — the mobile port of
-// web Map.tsx's structural layer creation + applyVectorPaint, collapsed into
-// one declarative pass (React re-renders on VectorStyleSettings change, so the
-// web's structural/paint split isn't needed here).
+// Pure builder for vector topo overlay layer definitions — the Logjam GPS port of
+// Logjam Web's structural layer creation + applyVectorPaint
+// (`frontend/src/components/map/Map.tsx`), collapsed into one declarative pass
+// (React re-renders on VectorStyleSettings change, so the Logjam Web
+// structural/paint split isn't needed here).
 //
-// Expressions mirror the web layer set verbatim; only the font differs
-// ("Noto Sans Medium" — the mobile glyph host's stack; web uses Open Sans).
-// Width/colour/size math comes from @logjam/shared so live map, web, and baked
+// Expressions mirror the Logjam Web layer set verbatim; only the font differs
+// ("Noto Sans Medium" — the mobile glyph host's stack; Logjam Web uses Open Sans).
+// Width/colour/size math comes from @logjam/shared so live map, Logjam Web, and baked
 // exports stay in lockstep.
 import {
-  OSM_POINT_FEATURE_KEYS,
-  OSM_POINT_ICON,
-  OSM_POINT_ICON_NATURAL_PX,
+  CONTOUR_LABELS_MIN_ZOOM,
+  CONTOURS_MIN_ZOOM,
+  CONTOURS_MINOR_MIN_ZOOM,
   contourLabelHalo,
   contourWidthStops,
-  featureLineWidthStops,
-  iconTargetPx,
-  MAP_INK,
   rgbaCssFromHex,
-  type OsmFeatureKey,
   type VectorStyleSettings,
+  zoomFadeIn,
 } from "@logjam/shared";
 
 import { topoLabelText } from "./mapLabelText";
@@ -27,33 +25,16 @@ export type TopoVectorLayerDef = {
   /** Suffix appended to the per-overlay layer id ("minor", "road-label", …). */
   suffix: string;
   type: "line" | "fill" | "symbol";
-  sourceLayer: "contours" | "features";
+  sourceLayer: "contours";
   filter?: unknown[];
   minzoom?: number;
   /** MLRN camelCase style object (paint + layout merged). */
   style: Record<string, unknown>;
 };
 
-function lineWidthInterp(widthZ18: number): unknown[] {
-  const { z12, z18 } = featureLineWidthStops(widthZ18);
-  return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
-}
-
 function contourPixelWidth(widthM: number): unknown[] {
   const { z12, z18 } = contourWidthStops(widthM);
   return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
-}
-
-function iconSizeInterp(sizeZ18: number): unknown[] {
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    12,
-    iconTargetPx(sizeZ18, 12) / OSM_POINT_ICON_NATURAL_PX,
-    18,
-    iconTargetPx(sizeZ18, 18) / OSM_POINT_ICON_NATURAL_PX,
-  ];
 }
 
 const CONTOUR_MAJOR_FILTER = [
@@ -75,8 +56,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "line",
       sourceLayer: "contours",
       filter: CONTOUR_MINOR_FILTER,
-      minzoom: 14,
+      minzoom: CONTOURS_MINOR_MIN_ZOOM,
       style: {
+        lineOpacity: zoomFadeIn(CONTOURS_MINOR_MIN_ZOOM),
         lineColor: rgbaCssFromHex(vs.contours.minorColour),
         lineWidth: contourPixelWidth(vs.contours.minorWidthM),
       },
@@ -86,7 +68,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "line",
       sourceLayer: "contours",
       filter: CONTOUR_MAJOR_FILTER,
+      minzoom: CONTOURS_MIN_ZOOM,
       style: {
+        lineOpacity: zoomFadeIn(CONTOURS_MIN_ZOOM),
         lineColor: rgbaCssFromHex(vs.contours.majorColour),
         lineWidth: contourPixelWidth(vs.contours.majorWidthM),
       },
@@ -96,13 +80,15 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "symbol",
       sourceLayer: "contours",
       filter: CONTOUR_MAJOR_FILTER,
-      minzoom: 12,
+      minzoom: CONTOUR_LABELS_MIN_ZOOM,
       style: {
+        textOpacity: zoomFadeIn(CONTOUR_LABELS_MIN_ZOOM),
         textField: ["concat", ["to-string", ["get", "elev"]], "m"],
         ...labelText,
         symbolPlacement: "line",
         // LAZ-derived contours are very knobbly — 150° lets labels place
-        // along wiggly runs at low zoom (web parity, see Map.tsx).
+        // along wiggly runs at low zoom (Logjam Web parity, see
+        // frontend/src/components/map/Map.tsx).
         textMaxAngle: 150,
         textColor: rgbaCssFromHex(vs.contours.majorColour),
         textHaloColor: contourLabelHalo(vs.contours.majorColour),
@@ -112,170 +98,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
   ];
 }
 
-function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
-  const feat = (key: OsmFeatureKey) => vs.features[key];
-  const labelText = topoLabelText(vs.labelScale ?? 1);
-  const defs: TopoVectorLayerDef[] = [];
-
-  // Line features (waterway/track/road) + power + building fill.
-  const lineSpecs: { key: OsmFeatureKey; extra?: Record<string, unknown> }[] = [
-    { key: "waterway" },
-    { key: "track", extra: { lineDasharray: [4, 2] } },
-    { key: "road" },
-  ];
-  for (const { key, extra } of lineSpecs) {
-    if (!feat(key).enabled) continue;
-    defs.push({
-      suffix: key,
-      type: "line",
-      sourceLayer: "features",
-      filter: ["==", ["get", "_category"], key],
-      style: {
-        lineColor: rgbaCssFromHex(feat(key).colour),
-        lineWidth: lineWidthInterp(feat(key).widthZ18),
-        ...extra,
-      },
-    });
-  }
-  if (feat("power").enabled) {
-    defs.push({
-      suffix: "power",
-      type: "line",
-      sourceLayer: "features",
-      filter: ["==", ["get", "_category"], "power"],
-      style: {
-        // Raw pixel width (no zoom interpolation) — web parity.
-        lineColor: rgbaCssFromHex(feat("power").colour),
-        lineWidth: feat("power").widthZ18,
-        lineDasharray: [3, 4],
-      },
-    });
-  }
-  if (feat("building").enabled) {
-    const colour = rgbaCssFromHex(feat("building").colour);
-    defs.push({
-      suffix: "building",
-      type: "fill",
-      sourceLayer: "features",
-      filter: ["==", ["get", "_category"], "building"],
-      style: { fillColor: colour, fillOutlineColor: colour },
-    });
-  }
-
-  // Line-feature name labels — label colour follows the line colour.
-  const lineLabelSpecs: {
-    key: "waterway" | "track" | "road";
-    filter: unknown[];
-  }[] = [
-    {
-      key: "waterway",
-      filter: [
-        "all",
-        ["==", ["get", "_category"], "waterway"],
-        ["has", "name"],
-      ],
-    },
-    {
-      key: "track",
-      filter: ["all", ["==", ["get", "_category"], "track"], ["has", "name"]],
-    },
-    {
-      key: "road",
-      filter: [
-        "all",
-        ["==", ["get", "_category"], "road"],
-        ["any", ["has", "name"], ["has", "ref"]],
-      ],
-    },
-  ];
-  for (const { key, filter } of lineLabelSpecs) {
-    if (!feat(key).enabled) continue;
-    defs.push({
-      suffix: `${key}-label`,
-      type: "symbol",
-      sourceLayer: "features",
-      filter,
-      minzoom: 12,
-      style: {
-        textField: ["coalesce", ["get", "name"], ["get", "ref"], ""],
-        ...labelText,
-        symbolPlacement: "line",
-        textMaxAngle: 60,
-        textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: MAP_INK.labelHalo,
-        textHaloWidth: 1.5,
-      },
-    });
-  }
-
-  // Point features → fixed PNG icons (registered app-side via <Images>),
-  // then name labels (peaks also show elevation).
-  for (const key of OSM_POINT_FEATURE_KEYS) {
-    if (!feat(key).enabled) continue;
-    defs.push({
-      suffix: key,
-      type: "symbol",
-      sourceLayer: "features",
-      filter: ["==", ["get", "_category"], key],
-      minzoom: key === "gate" ? 12 : 10,
-      style: {
-        iconImage: `topo-icon-${key}`,
-        iconSize: iconSizeInterp(OSM_POINT_ICON[key].sizeZ18),
-        iconAllowOverlap: true,
-      },
-    });
-  }
-  for (const key of OSM_POINT_FEATURE_KEYS) {
-    if (!feat(key).enabled) continue;
-    const textField =
-      key === "peak"
-        ? [
-            "case",
-            ["all", ["has", "name"], ["has", "ele"]],
-            [
-              "concat",
-              ["get", "name"],
-              "\n",
-              ["to-string", ["get", "ele"]],
-              " m",
-            ],
-            ["has", "name"],
-            ["get", "name"],
-            ["has", "ele"],
-            ["concat", ["to-string", ["get", "ele"]], " m"],
-            "",
-          ]
-        : ["coalesce", ["get", "name"], ""];
-    defs.push({
-      suffix: `${key}-label`,
-      type: "symbol",
-      sourceLayer: "features",
-      filter: ["==", ["get", "_category"], key],
-      minzoom: 12,
-      style: {
-        textField,
-        ...labelText,
-        textAnchor: "top",
-        textOffset: [0, 0.8],
-        textOptional: true,
-        textColor: rgbaCssFromHex(feat(key).colour),
-        textHaloColor: MAP_INK.labelHalo,
-        textHaloWidth: 1.5,
-      },
-    });
-  }
-
-  return defs;
-}
-
-/**
- * Layer definitions for one vector topo overlay. `kind` is derived from the
- * layer name ("contours" ⇒ contour styling, anything else ⇒ OSM features —
- * matches the web's `id.includes("contours")` test).
- */
+/** The statewide contours' layer definitions, styled by `vs`. */
 export function buildTopoVectorLayerDefs(
-  kind: "contours" | "features",
   vs: VectorStyleSettings,
 ): TopoVectorLayerDef[] {
-  return kind === "contours" ? contourLayerDefs(vs) : featureLayerDefs(vs);
+  return contourLayerDefs(vs);
 }

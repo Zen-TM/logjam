@@ -4,21 +4,33 @@ vi.mock("../services/prisma", () => ({
   default: { $queryRaw: vi.fn() },
 }));
 
+// 0 = no site-wide cap, so the per-user tests make one query each; the pool
+// tests set it.
+const env = vi.hoisted(() => ({ SITE_MONTHLY_COMPUTE_CREDITS: 0 }));
+vi.mock("./env", async (original) => {
+  const real = await original<typeof import("./env")>();
+  return { ...real, getEnv: () => ({ ...real.getEnv(), ...env }) };
+});
+
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getMonthlyCreditUsage, assertHasCredits } from "./computeCredits";
 
 const queryRaw = (prisma as unknown as { $queryRaw: Mock }).$queryRaw;
 
-/** The aggregate query returns one row with a bigint sum. */
-function usageOf(credits: number | bigint) {
-  queryRaw.mockResolvedValueOnce([{ credits: BigInt(credits) }]);
+/** The usage query returns one row: credits derived from live job rows, and
+ *  credits carried over from deleted ones. */
+function usageOf(derived: number | bigint, carried: number | bigint = 0) {
+  queryRaw.mockResolvedValueOnce([
+    { derived: BigInt(derived), carried: BigInt(carried) },
+  ]);
 }
 
 const user = { id: "user-1", monthlyComputeCredits: 1200 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  env.SITE_MONTHLY_COMPUTE_CREDITS = 0;
 });
 
 describe("getMonthlyCreditUsage", () => {
@@ -48,6 +60,14 @@ describe("getMonthlyCreditUsage", () => {
     expect(usage.used).toBe(0);
   });
 
+  it("adds what deleted jobs carried over to what live rows cost", async () => {
+    usageOf(300, 100);
+    expect((await getMonthlyCreditUsage("user-1", 1200)).used).toBe(400);
+    // A skewed live row must not eat into the carry-over.
+    usageOf(-50, 100);
+    expect((await getMonthlyCreditUsage("user-1", 1200)).used).toBe(100);
+  });
+
   it("never reports negative remaining when usage exceeds the quota", async () => {
     usageOf(2000);
     const usage = await getMonthlyCreditUsage("user-1", 1200);
@@ -71,7 +91,7 @@ describe("assertHasCredits", () => {
   it("refuses on a 429 carrying used/quota/resetAt", async () => {
     usageOf(1200);
     try {
-      await assertHasCredits(user, "geoPdf", 30);
+      await assertHasCredits(user, "topoExport", 30);
       expect.unreachable("should have thrown");
     } catch (err) {
       const appError = err as AppError;
@@ -99,11 +119,11 @@ describe("assertHasCredits", () => {
   });
 
   it("prices the same runtime differently per worker", async () => {
-    // 4 minutes: geoPdf costs 4 credits, topo costs 32. At 1180 used, only the
+    // 4 minutes: an export costs 16 credits, topo costs 32. At 1180 used, only the
     // small one fits — this is the whole point of weighting by vCPU.
     usageOf(1180);
     await expect(
-      assertHasCredits(user, "geoPdf", 240),
+      assertHasCredits(user, "topoExport", 240),
     ).resolves.toBeUndefined();
     usageOf(1180);
     await expect(assertHasCredits(user, "topo", 240)).rejects.toThrow(AppError);
@@ -112,11 +132,69 @@ describe("assertHasCredits", () => {
   it("admits a job that exactly fills the allowance, then refuses the next", async () => {
     // The comparison is `used + cost > quota`, so a job landing exactly on the
     // allowance is admitted and the one after it is not.
-    usageOf(1199);
-    await expect(assertHasCredits(user, "geoPdf", 60)).resolves.toBeUndefined();
-    usageOf(1200);
-    await expect(assertHasCredits(user, "geoPdf", 60)).rejects.toThrow(
+    usageOf(1196);
+    await expect(
+      assertHasCredits(user, "topoExport", 60),
+    ).resolves.toBeUndefined();
+    usageOf(1197);
+    await expect(assertHasCredits(user, "topoExport", 60)).rejects.toThrow(
       AppError,
     );
+  });
+});
+
+describe("assertHasCredits, the site-wide pool", () => {
+  const POOL = 15000;
+  beforeEach(() => {
+    env.SITE_MONTHLY_COMPUTE_CREDITS = POOL;
+  });
+
+  // Mutation that turns the refusals red: skip the pool block in
+  // assertHasCredits (or read getEnv().SITE_MONTHLY_COMPUTE_CREDITS as 0).
+  it("refuses once the pool is spent, with the pool's sentence and only the reset date", async () => {
+    usageOf(10); // the user is well inside their own allowance
+    usageOf(POOL); // the pool is not
+    try {
+      await assertHasCredits(user, "topoExport", 30);
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      const appError = err as AppError;
+      expect(appError.statusCode).toBe(429);
+      expect(appError.message).toMatch(/everyone on Logjam/);
+      expect(appError.details).toEqual({ resetAt: expect.any(String) });
+    }
+  });
+
+  it("refuses a job the remaining pool cannot hold, and admits one it can", async () => {
+    // topo at 60 s = 8 credits.
+    usageOf(10);
+    usageOf(POOL - 7);
+    await expect(assertHasCredits(user, "topo", 60)).rejects.toThrow(AppError);
+    usageOf(10);
+    usageOf(POOL - 8);
+    await expect(assertHasCredits(user, "topo", 60)).resolves.toBeUndefined();
+  });
+
+  it("refuses a spent pool even with no estimate", async () => {
+    usageOf(10);
+    usageOf(POOL);
+    await expect(assertHasCredits(user, "topo", null)).rejects.toThrow(
+      AppError,
+    );
+  });
+
+  it("tells a user over their own allowance that first", async () => {
+    usageOf(1200);
+    await expect(assertHasCredits(user, "topo", 60)).rejects.toThrow(
+      /used all of this month's/,
+    );
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes no pool query when the cap is 0", async () => {
+    env.SITE_MONTHLY_COMPUTE_CREDITS = 0;
+    usageOf(10);
+    await expect(assertHasCredits(user, "topo", 60)).resolves.toBeUndefined();
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,25 +8,20 @@ function namedError(name: string, message = "boom"): Error {
 }
 
 describe("classifySessionError", () => {
-  it("rejects on NotAuthorizedException (expired/revoked refresh token)", () => {
-    expect(classifySessionError(namedError("NotAuthorizedException"))).toBe(
-      "rejected",
-    );
-  });
-
-  it("rejects on UserNotFoundException / PasswordResetRequiredException", () => {
-    expect(classifySessionError(namedError("UserNotFoundException"))).toBe(
-      "rejected",
-    );
-    expect(
-      classifySessionError(namedError("PasswordResetRequiredException")),
-    ).toBe("rejected");
+  it("rejects on invalid_grant (expired/revoked refresh token)", () => {
+    expect(classifySessionError(namedError("invalid_grant"))).toBe("rejected");
   });
 
   it("honours an error `code` property when present", () => {
     const err = new Error("x") as Error & { code: string };
-    err.code = "NotAuthorizedException";
+    err.code = "invalid_grant";
     expect(classifySessionError(err)).toBe("rejected");
+  });
+
+  it("does not reject on other OAuth errors, which say nothing about the session", () => {
+    for (const name of ["invalid_client", "server_error", "invalid_request"]) {
+      expect(classifySessionError(namedError(name))).toBe("transient");
+    }
   });
 
   it("treats network failures as transient", () => {

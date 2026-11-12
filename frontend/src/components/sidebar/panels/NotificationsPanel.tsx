@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AREA_EXPORT_FAILED,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -16,6 +17,7 @@ import {
   bulkReadAction,
   collapseBatches,
   countBatchRows,
+  BUG_REPORT_URL,
   expandBatchSelection,
   findNotificationBatches,
   CLEAR_READ_CONFIRM,
@@ -26,18 +28,20 @@ import {
   inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
+  notificationAnnouncement,
   notificationActions,
   notificationDeleteConfirm,
   notificationHaystack,
   notificationKind,
   notificationLabel,
-  notificationPlaceId,
+  type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
   type SectionKeysOn,
   tallyNotifications,
   type NotificationActions,
+  type ConfirmCopy,
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationKind,
@@ -50,15 +54,21 @@ import {
   declineFileSend,
   declineFriendRequest,
   deleteNotification,
-  getGeoPdfJob,
   getTopoExport,
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../placeUtils";
+import {
+  approveMember,
+  joinPlan,
+  leavePlan,
+  removeMember,
+} from "../../../plansApi";
 import { triggerDownload } from "../../../download";
-import type { MapsView, PanelId } from "../panels";
+import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import AnnouncementDialog from "../../dialogs/AnnouncementDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -70,9 +80,11 @@ import {
   IconTile,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   type Glyph,
@@ -90,7 +102,8 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   people: "friends",
   topo: "lidar",
   export: "export",
-  geoPdf: "geoPdf",
+  plan: "plan",
+  message: "info",
   problem: "warning",
 };
 
@@ -103,16 +116,15 @@ const KIND_HUE: Record<NotificationKind, string> = {
   people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
-  geoPdf: "var(--hue-geo-pdf)",
+  plan: "var(--hue-plan)",
+  message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };
 
 type Bucket = "all" | "unread" | "read";
 
 type PendingConfirm = {
-  title: string;
-  message: string;
-  confirmLabel: string;
+  copy: ConfirmCopy;
   run: () => Promise<void>;
 };
 
@@ -148,10 +160,13 @@ function NotificationsPanel({
   onRefetchNotifications,
   onOverrideRead,
   onRefetchFriends,
+  onRefetchPlans,
   setSelectedPlaceID,
   setActivePanel,
-  onMapsViewChange,
   onTopoFlyTarget,
+  onOpenPlan,
+  onOpenRoute,
+  onShowSharpened,
 }: {
   notifications: TNotification[];
   notificationsLoaded: boolean;
@@ -162,16 +177,20 @@ function NotificationsPanel({
   /** Show a read state now, ahead of its write (`null` takes it back). */
   onOverrideRead: (ids: string[], read: boolean | null) => void;
   onRefetchFriends: () => void;
+  onRefetchPlans: () => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
-  onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
+  /** Open a route's page; false when the user no longer holds it. */
+  onOpenRoute: (routeId: string) => Promise<boolean>;
+  /** Opens the Layers popover on Terrain → Sharpened areas. */
+  onShowSharpened: () => void;
 }) {
   const toast = useToast();
   const dayIdPrefix = useId();
   const [bucket, setBucket] = useState<Bucket>("all");
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [expandedBatches, setExpandedBatches] =
     useState<ReadonlySet<string>>(NO_KEYS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -184,10 +203,14 @@ function NotificationsPanel({
     null,
   );
   const [confirming, setConfirming] = useState(false);
+  const [messageOf, setMessageOf] = useState<TNotification | null>(null);
+  // Where focus goes once a closed message's row has left the list: a row id,
+  // or null for the page's title.
+  const refocus = useRef<{ rowId: string | null } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Refetch on every open — notifications are otherwise only fetched at boot, so
-  // ones received mid-session (or resolved elsewhere, NOTIF-1) stay stale until
+  // ones received mid-session (or resolved elsewhere) stay stale until
   // a full reload.
   useEffect(() => {
     onRefetchNotifications();
@@ -348,15 +371,49 @@ function NotificationsPanel({
     [onOverrideRead, onRefetchNotifications, toast],
   );
 
-  // Reading it is what marks it read; a place it is about opens on top.
+  // Reading it is what marks it read; a place it is about opens on top. A
+  // message is read once its dialog closes (`closeMessage`), so its row is
+  // still there while it is open.
   const openNotification = (n: TNotification) => {
-    if (!n.read) void setRead([n.id], true);
-    const placeId = notificationPlaceId(n);
-    if (placeId) {
-      setSelectedPlaceID(placeId);
-      setActivePanel("place-detail");
+    if (notificationAnnouncement(n)) {
+      setMessageOf(n);
+      return;
     }
+    // Every row opens what it is about, as its ⋯ menu's first entry does.
+    const destination = inboxDestination(n);
+    if (destination) goTo(n, destination);
+    else if (!n.read) void setRead([n.id], true);
   };
+
+  // In Unread, the read row leaves as the dialog closes and takes the focus
+  // the dialog hands back with it: the row that takes its place gets it, else
+  // the previous one, else the page's title (NotificationsPanel.test.tsx).
+  const closeMessage = () => {
+    if (messageOf && !messageOf.read) {
+      void setRead([messageOf.id], true);
+      if (bucket === "unread") {
+        const i = rowIds.indexOf(messageOf.id);
+        refocus.current = { rowId: rowIds[i + 1] ?? rowIds[i - 1] ?? null };
+      }
+    }
+    setMessageOf(null);
+  };
+
+  // After the dialog's own restore, which runs as it unmounts.
+  useEffect(() => {
+    const to = refocus.current;
+    const root = rootRef.current;
+    if (messageOf || !to || !root) return;
+    refocus.current = null;
+    const target = to.rowId
+      ? root.querySelector<HTMLElement>(
+          // The row's open button: its checkbox is the button with a role.
+          `[data-row-id="${CSS.escape(to.rowId)}"] button:not([role])`,
+        )
+      : root.querySelector<HTMLElement>("h2");
+    if (target && !to.rowId) target.tabIndex = -1;
+    target?.focus();
+  }, [messageOf]);
 
   // Following a notification through to its subject reads it, as opening does.
   const goTo = (n: TNotification, destination: InboxDestination) => {
@@ -366,8 +423,25 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
-    if (destination.mapsView) onMapsViewChange(destination.mapsView);
-    setActivePanel(destination.panel);
+    if (destination.kind === "plan") return onOpenPlan(destination.target);
+    if (destination.kind === "way") {
+      // A failed lookup is not "removed": it keeps its own error.
+      void onOpenRoute(destination.routeId).then(
+        (found) => {
+          if (!found) toast.error(copy.removed);
+        },
+        (err) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't open that route."));
+        },
+      );
+      return;
+    }
+    if (destination.kind === "sharpened") {
+      onShowSharpened();
+    } else {
+      setActivePanel(destination.panel);
+    }
     // Opening a topo fits the map to it, from here as from its own row: the map
     // sits beside the page, so there is no verb for it (shared/DESIGN.md §3).
     const footprint = n.payload.footprint as GeoJsonPolygonal | undefined;
@@ -396,7 +470,7 @@ function NotificationsPanel({
     hide(ids);
     try {
       await Promise.all(ids.map((id) => deleteNotification(id)));
-      toast.success(
+      toast.done(
         ids.length === 1
           ? "Notification deleted."
           : `Deleted ${ids.length} notifications.`,
@@ -413,9 +487,11 @@ function NotificationsPanel({
 
   const confirmDelete = (ids: string[]) =>
     setPendingConfirm({
-      title: notificationDeleteConfirm(ids.length).confirmTitle,
-      message: notificationDeleteConfirm(ids.length).confirmBody,
-      confirmLabel: "Delete",
+      copy: {
+        ...notificationDeleteConfirm(ids.length),
+        confirmLabel: "Delete",
+        tone: "destructive",
+      },
       run: async () => {
         await deleteNotifications(ids);
         clearSelection();
@@ -428,7 +504,7 @@ function NotificationsPanel({
   const applyReadAction = async () => {
     if (!readAction) return;
     if (await setRead(readAction.ids, readAction.read))
-      toast.success(readAction.success);
+      toast.done(readAction.success);
   };
 
   const markAllRead = async () => {
@@ -436,6 +512,7 @@ function NotificationsPanel({
     onOverrideRead(unreadIds, true);
     try {
       await markAllNotificationsRead();
+      toast.done(INBOX.copy.markedAllRead);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't mark notifications read."));
@@ -447,9 +524,12 @@ function NotificationsPanel({
 
   const confirmClearRead = () =>
     setPendingConfirm({
-      title: CLEAR_READ_CONFIRM.confirmTitle,
-      message: CLEAR_READ_CONFIRM.confirmBody,
-      confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+      copy: {
+        confirmTitle: CLEAR_READ_CONFIRM.confirmTitle,
+        confirmBody: CLEAR_READ_CONFIRM.confirmBody,
+        confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+        tone: "destructive",
+      },
       run: async () => {
         try {
           await clearReadNotifications();
@@ -472,7 +552,7 @@ function NotificationsPanel({
   ) => {
     const run = async () => {
       setBusyId(n.id);
-      // Only a file ACCEPT leaves the notification alive (as "Download again");
+      // Only a file ACCEPT leaves the notification alive (as the finished "Saved" row);
       // the server purges the notification on the other three.
       const survives = target.type === "file_sent" && action.kind === "accept";
       try {
@@ -481,6 +561,18 @@ function NotificationsPanel({
             ? acceptFriendRequest
             : declineFriendRequest)(target.targetId);
           onRefetchFriends();
+        } else if (target.type === "plan_invite") {
+          await (action.kind === "accept" ? joinPlan : leavePlan)(
+            target.targetId,
+          );
+          onRefetchPlans();
+        } else if (target.type === "plan_join_request") {
+          // Told the status the leader saw, so it acts on no one who has since
+          // moved on (a 409, which clears the row below).
+          await (action.kind === "accept"
+            ? approveMember(target.targetId, target.requesterId!)
+            : removeMember(target.targetId, target.requesterId!, "requested"));
+          onRefetchPlans();
         } else if (action.kind === "accept") {
           const { downloadUrl, filename } = await acceptFileSend(
             target.targetId,
@@ -488,7 +580,7 @@ function NotificationsPanel({
           triggerDownload(downloadUrl);
           // Logjam Web has no Saved: accepting a copy here IS the download, so
           // the phone's "find it in Saved" would send the user looking for nothing.
-          toast.success(`Downloading ${filename}.`);
+          toast.done(`Downloading ${filename}.`);
         } else {
           await declineFileSend(target.targetId);
         }
@@ -497,7 +589,7 @@ function NotificationsPanel({
           if (!n.read) void setRead([n.id], true);
         } else {
           hide([n.id]);
-          toast.success(action.success);
+          toast.done(action.success);
         }
       } catch (err) {
         console.error(err);
@@ -505,7 +597,7 @@ function NotificationsPanel({
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (Friends, Logjam GPS, another tab), or the
           // send is gone: the buttons are dead, not retryable, so clear the row
-          // as a success would rather than bring them back (NOTIF-1).
+          // as a success would rather than bring them back.
           hide([n.id]);
           // Best-effort: the server has usually purged it already, which is a 404.
           deleteNotification(n.id).catch((deleteErr) =>
@@ -519,9 +611,13 @@ function NotificationsPanel({
     };
     if (action.confirm) {
       setPendingConfirm({
-        title: action.confirm.title,
-        message: action.confirm.body,
-        confirmLabel: action.confirm.confirmLabel,
+        // Declining an invite or a request loses nothing of the user's own.
+        copy: {
+          confirmTitle: action.confirm.title,
+          confirmBody: action.confirm.body,
+          confirmLabel: action.confirm.confirmLabel,
+          tone: "filled",
+        },
         run,
       });
     } else {
@@ -550,6 +646,17 @@ function NotificationsPanel({
   const rowEntries = (n: TNotification): MenuEntry[] => {
     const destination = inboxDestination(n);
     const entries: MenuEntry[] = [];
+    if (notificationAnnouncement(n)) {
+      entries.push(
+        {
+          id: "read-message",
+          label: notificationVerb("readMessage").label,
+          icon: "forward",
+          onSelect: () => openNotification(n),
+        },
+        { id: "sep-message", separator: true },
+      );
+    }
     if (destination) {
       entries.push(
         {
@@ -590,15 +697,22 @@ function NotificationsPanel({
   // The row's own answer, inside the card. Inert while a selection runs: a
   // press meant for a checkbox must not accept a friend request.
   const rowFooter = (n: TNotification): ReactNode => {
-    const target = notificationActions(n);
+    const target = notificationActions(n, "web");
     if (target) {
       return target.actions.map((action) => (
         <Button
           key={action.kind}
           compact
           // Decline is the outline: two filled buttons side by side make "no"
-          // look like the thing to press.
-          variant={action.kind === "decline" ? "outline" : "filled"}
+          // look like the thing to press. A second fetch of a finished send
+          // is plain: it is not the thing to press.
+          variant={
+            action.quiet
+              ? "plain"
+              : action.kind === "decline"
+                ? "outline"
+                : "filled"
+          }
           disabled={selecting || busyId !== null}
           disabledReason={selecting ? "Not while selecting" : "Working…"}
           onClick={() => answer(n, target, action)}
@@ -624,7 +738,7 @@ function NotificationsPanel({
             void downloadJobFile(
               n,
               async () => (await getTopoExport(exportJobId)).downloadUrl,
-              "Couldn't download the export.",
+              "Couldn't download the map.",
             )
           }
         >
@@ -632,28 +746,38 @@ function NotificationsPanel({
         </Button>
       );
     }
-    const geoPdfJobId = payloadString(n, "geoPdfJobId");
+    // A failed export has no support to contact; the bug form is the way on,
+    // for the failure that tells the owner nothing to do. Too large, outside
+    // NSW and the rest say their own next step.
     if (
-      n.type === "geo_pdf_complete" &&
-      n.payload.status === "completed" &&
-      geoPdfJobId
+      n.type === "topo_export_complete" &&
+      n.payload.errorMessage === AREA_EXPORT_FAILED
     ) {
       return (
         <Button
           compact
           variant="outline"
-          icon="download"
           disabled={selecting}
           disabledReason="Not while selecting"
           onClick={() =>
-            void downloadJobFile(
-              n,
-              async () => (await getGeoPdfJob(geoPdfJobId)).downloadUrl,
-              "Couldn't download the GeoPDF.",
-            )
+            window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer")
           }
         >
-          Download
+          Report a bug
+        </Button>
+      );
+    }
+    // A button, not only the row: nothing else says a row opens a message.
+    if (notificationAnnouncement(n)) {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() => openNotification(n)}
+        >
+          {notificationVerb("readMessage").label}
         </Button>
       );
     }
@@ -689,8 +813,8 @@ function NotificationsPanel({
       const label = notificationLabel(row);
       title = label.text;
       subtitle = [
-        label.warning,
-        notificationActions(row)?.pill,
+        label.detail,
+        notificationActions(row, "web")?.pill,
         formatTime(row.createdAt),
       ]
         .filter(Boolean)
@@ -700,6 +824,7 @@ function NotificationsPanel({
     return (
       <Row
         key={row.id}
+        data-row-id={row.id}
         className={member ? classes.member : undefined}
         title={title}
         subtitle={subtitle || undefined}
@@ -747,73 +872,36 @@ function NotificationsPanel({
     );
   };
 
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
-
   const hero = (
     <Hero
       title={INBOX.title}
       actions={
-        searchOpen ? (
-          <IconButton
-            icon="close"
-            label={copy.closeSearch}
-            onClick={closeSearch}
-          />
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.searchField}
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            <Menu
-              label="Inbox actions"
-              placement="bottom-end"
-              entries={[
-                {
-                  id: "read-all",
-                  label: inboxVerb("markAllRead").label,
-                  icon: "selectAll",
-                  disabled: tally.unread === 0,
-                  onSelect: () => void markAllRead(),
-                },
-                {
-                  id: "clear-read",
-                  label: inboxVerb("clearRead").label,
-                  icon: "delete",
-                  danger: true,
-                  disabled: readCount === 0,
-                  onSelect: confirmClearRead,
-                },
-              ]}
-              trigger={(props) => (
-                <IconButton {...props} icon="overflow" label="Inbox actions" />
-              )}
-            />
-          </>
-        )
-      }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
+        <Menu
+          label="Inbox actions"
+          placement="bottom-end"
+          entries={[
+            {
+              id: "read-all",
+              label: inboxVerb("markAllRead").label,
+              icon: "selectAll",
+              disabled: tally.unread === 0,
+              onSelect: () => void markAllRead(),
+            },
+            {
+              id: "clear-read",
+              label: inboxVerb("clearRead").label,
+              icon: "delete",
+              danger: true,
+              disabled: readCount === 0,
+              onSelect: confirmClearRead,
+            },
+          ]}
+          trigger={(props) => (
+            <IconButton {...props} icon="overflow" label="Inbox actions" />
+          )}
         />
-      )}
-    </Hero>
+      }
+    />
   );
 
   const emptyArea = (children: ReactNode) => (
@@ -858,12 +946,14 @@ function NotificationsPanel({
         <EmptyState
           icon="selectAll"
           title={copy.noUnreadTitle}
+          body={copy.noUnreadBody}
           actions={showEverything}
         />
       ) : (
         <EmptyState
           icon="notifications"
           title={copy.noReadTitle}
+          body={copy.noReadBody}
           actions={showEverything}
         />
       ),
@@ -886,7 +976,7 @@ function NotificationsPanel({
               count={countBatchRows(section.data, batches)}
               className={classes.dayHead}
             />
-            {section.data.map(renderRow)}
+            <RowList>{section.data.map(renderRow)}</RowList>
           </section>
         );
       })}
@@ -912,18 +1002,16 @@ function NotificationsPanel({
                       selection, and the count line says the unread tally that
                       decides it. */}
                 {readAction && (
-                  <IconButton
-                    icon={readAction.icon}
-                    label={readAction.label}
-                    onClick={() => void applyReadAction()}
-                  />
+                  <SelectionVerb onClick={() => void applyReadAction()}>
+                    {readAction.label}
+                  </SelectionVerb>
                 )}
-                <IconButton
-                  icon="delete"
-                  label="Delete"
-                  tone="danger"
+                <SelectionVerb
+                  danger
                   onClick={() => confirmDelete(selected.map((n) => n.id))}
-                />
+                >
+                  Delete
+                </SelectionVerb>
               </SelectionBar>
             ) : (
               <ChipRail
@@ -952,6 +1040,17 @@ function NotificationsPanel({
                 onChange={changeBucket}
               />
             )}
+            <SearchField
+              label={copy.searchField}
+              value={query}
+              disabled={selecting}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || query === "") return;
+                event.stopPropagation();
+                setQuery("");
+              }}
+            />
           </div>
         </>
       ) : null,
@@ -972,10 +1071,7 @@ function NotificationsPanel({
 
       <ConfirmDialog
         open={pendingConfirm != null}
-        title={pendingConfirm?.title ?? ""}
-        message={pendingConfirm?.message ?? ""}
-        confirmLabel={pendingConfirm?.confirmLabel}
-        confirmColor="error"
+        copy={pendingConfirm?.copy}
         busy={confirming}
         onConfirm={() => {
           if (!pendingConfirm) return;
@@ -986,6 +1082,10 @@ function NotificationsPanel({
           });
         }}
         onClose={() => setPendingConfirm(null)}
+      />
+      <AnnouncementDialog
+        message={messageOf && notificationAnnouncement(messageOf)}
+        onClose={closeMessage}
       />
     </div>
   );

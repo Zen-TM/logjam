@@ -11,7 +11,7 @@
 //
 // PRIVACY: the result is COUNTS. Never a per-id verdict — "that one wasn't
 // yours" on an id the caller supplied is an existence oracle, which is the same
-// rule that makes /shares answer 404 rather than 403 (SEC-001). The caller
+// rule that makes /shares answer 404 rather than 403. The caller
 // supplied the list, so it can label its own rows from the totals.
 import {
   say,
@@ -48,10 +48,8 @@ export type BulkSharePlan = {
    *
    * A GRANT MOVES NO WATERMARK ON ITS OWN. Delta sync restricts shared rows by
    * a WHERE clause layered over `updatedAt > since`, so making a row visible
-   * leaves it out of the recipient's next page until the owner happens to edit
-   * it. Both single-item share paths learned this the hard way (the note on
-   * `touchForDelta` in routes/shares.ts, and the longer one in
-   * routes/sharing.ts); bulk would have re-learned it 23 rows at a time.
+   * leaves it out of the recipient's next page until the owner updates it
+   * (see `touchForDelta` in routes/shares.ts and routes/sharing.ts).
    */
   touchedIdsByType: Map<BulkShareItemType, string[]>;
   result: BulkShareResult;
@@ -63,7 +61,7 @@ export type BulkSharePlan = {
  * An empty list is ALLOWED here and rejected by the route only when there is
  * nothing else in the action either: a bulk share of ten recorded tracks is all
  * copies and grants no shares at all, and it still needs the endpoint for the
- * single push it fires. Oversized is 413, per the api/CLAUDE.md bulk rule.
+ * single push it fires. Oversized is 413, per the api/AGENTS.md bulk rule.
  */
 export function parseBulkShareItems(value: unknown): BulkShareItem[] {
   if (!Array.isArray(value)) {

@@ -1,0 +1,48 @@
+{
+  "name": null,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            150.03,
+            -33.02,
+            540
+          ],
+          [
+            150.0315,
+            -33.021,
+            532.5
+          ],
+          [
+            150.0333,
+            -33.0224,
+            520.1
+          ],
+          [
+            150.035,
+            -33.023,
+            509.9
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Corpus Gaia Walk-in"
+      }
+    }
+  ],
+  "bbox": [
+    150.03,
+    -33.023,
+    150.035,
+    -33.02
+  ],
+  "stats": {
+    "points": 0,
+    "lines": 1,
+    "polygons": 0,
+    "positions": 4
+  }
+}

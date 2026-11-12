@@ -3,18 +3,21 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 // expo-sqlite has no native runtime here: a recording stand-in stands in for
-// the one connection, so the STATEMENTS can be asserted (which is where the
-// mirror-wipe bugs lived).
+// the one connection, so the STATEMENTS can be asserted (which is where
+// mirror-wipe bugs surface).
 const wipeCalls: string[] = [];
 const execCalls: string[] = [];
-/** Columns this stand-in database claims each table already has. The one gap —
- * conflict_shelf.entity_name — is an install that predates the shelf storing
- * the name of the row a value belongs to, which is the case the local-table
- * migration exists for. */
+/** Columns this stand-in database claims each table already has. The gaps —
+ * conflict_shelf.entity_name, plans_cache.downloaded_at — are an install that
+ * predates each column, which is the case the column migration exists for. */
+const GAPS: Record<string, string> = {
+  conflict_shelf: "entity_name",
+  plans_cache: "downloaded_at",
+};
 const existingColumns = (table: string): { name: string }[] => {
   const declared = Object.keys(tableSchema(table)?.columns ?? {});
   return declared
-    .filter((name) => !(table === "conflict_shelf" && name === "entity_name"))
+    .filter((name) => GAPS[table] !== name)
     .map((name) => ({ name }));
 };
 const nativeDb = {
@@ -42,7 +45,7 @@ const { getSyncDb, withSyncTransaction, wipeMirror } = await import("./syncDb");
 
 /** A stand-in for the one shared connection: BEGIN/COMMIT with no isolation,
  * exactly like expo-sqlite's own implementation. `depth > 1` is the nested
- * BEGIN that used to roll back the OTHER writer's transaction. */
+ * BEGIN that would roll back the other writer's transaction. */
 function fakeDb(log: string[]) {
   let depth = 0;
   return {
@@ -119,31 +122,38 @@ describe("withSyncTransaction", () => {
 
 describe("single-writer discipline", () => {
   it("is the only place sync code opens a transaction", () => {
-    // The rule, enforced: a bare db.withTransactionAsync anywhere in src/sync
-    // is a writer outside the lock, which is the whole bug back again.
+    // The rule, enforced: a bare db.withTransactionAsync in src/sync,
+    // src/tracks or src/offline is a writer outside the lock, which is the whole
+    // bug back again (#694). Mutation: revert any of them to a bare call.
     const offenders: string[] = [];
-    for (const name of readdirSync(__dirname)) {
-      if (
-        !name.endsWith(".ts") ||
-        name === "syncDb.ts" ||
-        name.endsWith(".test.ts")
-      ) {
-        continue;
+    for (const dir of ["sync", "tracks", "offline"]) {
+      const full = join(__dirname, "..", dir);
+      for (const name of readdirSync(full)) {
+        if (
+          !name.endsWith(".ts") ||
+          name === "syncDb.ts" ||
+          name === "regionMbtiles.ts" || // exclusive transaction on its own connection
+          name.endsWith(".test.ts")
+        ) {
+          continue;
+        }
+        const source = readFileSync(join(full, name), "utf8");
+        if (source.includes(".withTransactionAsync(")) {
+          offenders.push(`${dir}/${name}`);
+        }
       }
-      const source = readFileSync(join(__dirname, name), "utf8");
-      if (source.includes(".withTransactionAsync(")) offenders.push(name);
     }
     expect(offenders).toEqual([]);
   });
 });
 
 describe("wipeMirror", () => {
-  // Both halves of "the mirror is now empty", which the plain wipe got wrong.
+  // Both halves of "the mirror is now empty".
   it("clears lastSyncAt with the cursor, so an empty mirror can't claim to be current", async () => {
     // applySchemaVersion documents the rule for the schema-reset path; a
-    // server-forced reset is the same event. Keeping it made hasMirrorSynced()
-    // return true over nothing, which suppressed the first-sync error state
-    // when the post-reset pull failed.
+    // server-forced reset is the same event. Keeping it would make
+    // hasMirrorSynced() return true over nothing, suppressing the first-sync
+    // error state when the post-reset pull fails.
     wipeCalls.length = 0;
     await wipeMirror();
     // (the first sync_state delete of the run is applySchemaVersion's, on the
@@ -158,9 +168,9 @@ describe("wipeMirror", () => {
 
   it("spares rows a queued create op still names", async () => {
     // "Changes still waiting to upload are kept" is what the confirm promises.
-    // The op survived a wipe, but a never-flushed create exists ONLY as its
-    // optimistic mirror row — so the entity vanished from every screen, and
-    // offline nothing brought it back.
+    // An op survives a wipe, but a never-flushed create exists ONLY as its
+    // optimistic mirror row — if deleted, the entity vanishes from every screen,
+    // and offline nothing brings it back.
     wipeCalls.length = 0;
     await wipeMirror();
     const places = wipeCalls.find((sql) =>
@@ -187,32 +197,34 @@ describe("local-table migration", () => {
   // table that already exists. So a column added to a local table after it
   // shipped reaches an upgraded install through this path or not at all, and
   // "not at all" is silent: every read of it returns undefined.
-  it("adds a declared local column the database is missing", async () => {
+  // A `keepOnReset` mirror table is never dropped either, so it takes the
+  // same path. Mutation: skip `keepOnReset` tables in ensureLocalColumns.
+  it("adds a declared column a never-dropped table is missing", async () => {
     await getSyncDb();
     const alters = execCalls.filter((sql) => sql.startsWith("ALTER TABLE"));
     expect(alters).toEqual([
       "ALTER TABLE conflict_shelf ADD COLUMN entity_name TEXT",
+      "ALTER TABLE plans_cache ADD COLUMN downloaded_at TEXT",
     ]);
   });
 
-  it("leaves the mirror tables to the version lever", async () => {
+  it("leaves the other mirror tables to the version lever", async () => {
     // A mirror table is rebuildable, so it is dropped and recreated rather than
     // altered; altering it here would be a second, divergent migration path.
     await getSyncDb();
     for (const sql of execCalls.filter((call) =>
       call.startsWith("ALTER TABLE"),
     )) {
-      expect(sql).toMatch(/^ALTER TABLE (outbox|conflict_shelf|sync_state) /);
+      expect(sql).toMatch(
+        /^ALTER TABLE (outbox|conflict_shelf|sync_state|plans_cache) /,
+      );
     }
   });
 
-  // The ordering bug this pins cost a device session (2026-09-04). Everything
-  // was created up front, so `CREATE INDEX ... ON media(origin)` ran against
-  // the PREVIOUS version's media table, failed with "no such column", and
-  // aborted the exec — before the drop-and-rebuild that would have added the
-  // column. The mirror stayed at the old shape and every delta apply failed on
-  // every launch, and no test could see it because the stand-in never fails a
-  // statement.
+  // If mirror tables are created up front, `CREATE INDEX ... ON media(origin)`
+  // runs against the PREVIOUS version's media table, fails with "no such column",
+  // and aborts the exec — before the drop-and-rebuild that adds the column.
+  // The mirror would stay at the old shape and delta apply would fail on launch.
   it("creates mirror tables only AFTER the stale ones are dropped", async () => {
     await getSyncDb();
     // The first statement of the open must carry LOCAL tables and nothing else.
