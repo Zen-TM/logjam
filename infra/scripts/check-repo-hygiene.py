@@ -71,9 +71,6 @@ ALLOWED = {
         "scripts/pr-closes-check.sh",
         "#12",
     ): "an example of prose the check must not count",
-    ("scripts/snapshot-scrub.sql", "guard"): "note lands with its own PR",
-    ("api/src/__tests__/placesBulk.test.ts", "guard"): "note lands with its own PR",
-    ("topo/tests/test_status_guard_db.py", "guard"): "note lands with its own PR",
 }
 
 
