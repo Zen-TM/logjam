@@ -5,32 +5,28 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
-const MUI_PATTERNS = [
-  {
-    group: ["@mui/*", "@emotion/*"],
-    message:
-      "Logjam Web builds on its own kit — import from src/ui (frontend/DESIGN.md).",
-  },
-];
+const LUCIDE_PATH = {
+  name: "lucide-react",
+  message:
+    "Draw icons with <Icon idea=…> from src/ui — add the idea to shared/src/icons.ts if it is missing.",
+};
+
+// An error's message can carry a place name (the third selector below).
+const ERROR_MESSAGE =
+  "MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]";
+const ERROR_MESSAGE_MSG =
+  "An error's message can carry a place name. Show messageFromError(err, \"Couldn't save place.\") through ErrorBanner, FieldError or useToast().error (frontend/DESIGN.md §3).";
 
 export default tseslint.config(
   { ignores: ["dist"] },
   {
-    // Logjam Web builds on its own kit: this rule prevents importing MUI
-    // packages and names what to reach for instead (frontend/DESIGN.md).
+    // Logjam Web draws icons through its own kit, never Lucide directly.
     files: ["src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [
-            {
-              name: "lucide-react",
-              message:
-                "Draw icons with <Icon idea=…> from src/ui — add the idea to shared/src/icons.ts if it is missing.",
-            },
-          ],
-          patterns: MUI_PATTERNS,
+          paths: [LUCIDE_PATH],
         },
       ],
     },
@@ -48,7 +44,37 @@ export default tseslint.config(
       "src/**/*.test.{ts,tsx}",
     ],
     rules: {
-      "no-restricted-imports": ["error", { patterns: MUI_PATTERNS }],
+      "no-restricted-imports": "off",
+    },
+  },
+  {
+    // A panel gets callbacks from App.tsx and never reaches into the map
+    // (frontend/AGENTS.md, UI). It repeats the base rule's lucide entry because
+    // a later block replaces the rule, not merges it. The two icon resolvers
+    // are in the lucide allow-list above, not panels.
+    files: [
+      "src/components/**/*Panel.tsx",
+      "src/components/sidebar/panels/**/*.{ts,tsx}",
+    ],
+    ignores: [
+      "src/**/*.test.{ts,tsx}",
+      "src/components/sidebar/panels/placeTypeIcon.tsx",
+      "src/components/sidebar/panels/tripTypeIcon.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [LUCIDE_PATH],
+          patterns: [
+            {
+              group: ["**/map/Map", "./Map"],
+              message:
+                "A panel never imports from Map.tsx: App.tsx hands it callbacks. A type the panel needs belongs in @logjam/shared or its own file (frontend/AGENTS.md, UI).",
+            },
+          ],
+        },
+      ],
     },
   },
   {
@@ -70,12 +96,15 @@ export default tseslint.config(
           message:
             'A colour is a role (--color-<role>), or a hue the kit reads through a custom property (style={{ "--tile-hue": hue }}). Never set one inline (frontend/DESIGN.md §1).',
         },
-        {
-          selector:
-            "JSXElement > JSXExpressionContainer MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
-          message:
-            "An error's message can carry a place name. Show messageFromError(err, \"Couldn't save place.\") through ErrorBanner, FieldError or useToast().error (frontend/DESIGN.md §3).",
-        },
+        // Rendered as a child, an attribute (also inside a template literal),
+        // a toast's text, or a setXxxError call.
+        ...[
+          `JSXElement > JSXExpressionContainer ${ERROR_MESSAGE}`,
+          `JSXAttribute > JSXExpressionContainer > ${ERROR_MESSAGE}`,
+          `JSXAttribute > JSXExpressionContainer > TemplateLiteral ${ERROR_MESSAGE}`,
+          `CallExpression[callee.object.name=/^(toast|api)$/][callee.property.name=/^(error|success|done|info)$/] ${ERROR_MESSAGE}`,
+          `CallExpression[callee.name=/^set\\w*Error$/] ${ERROR_MESSAGE}`,
+        ].map((selector) => ({ selector, message: ERROR_MESSAGE_MSG })),
       ],
     },
   },
