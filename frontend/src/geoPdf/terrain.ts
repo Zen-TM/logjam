@@ -8,8 +8,7 @@
 // the screen. Pure, like geoPdfTileMath: render.ts reads the tiles and draws
 // the result.
 //
-// A port of api/src/services/geoPdfTerrain.ts (which the server-removal PR
-// deletes) with faster loops: typed lookups instead of per-pixel Maps and
+// A port of the server's terrain code (since removed) with faster loops: typed lookups instead of per-pixel Maps and
 // closures. Same results to the byte; terrain.test.ts holds the originals and
 // compares on made-up grids.
 //
@@ -369,8 +368,8 @@ const NO_DATA = -32768;
  * an ancestor is stretched: nearest for slope, so a band keeps its edge, and
  * bilinear for heights, reading across the ancestor's edges into the tiles
  * the router gives beside it, so a hillshade shades no seam where an area's
- * deeper tiles meet the stretched statewide ones. Guard: the plane test in
- * geoPdfTerrain.unit.test.ts.
+ * deeper tiles meet the stretched statewide ones. Guard: the "no seam at an area's edge"
+ * test in terrain.test.ts.
  */
 export function terrainGrid(
   zoom: number,
@@ -484,7 +483,7 @@ export function contourTilesBySource(
  * worded the same way. The statewide line is the NSW 5 m credit an area's
  * always carries too (`demCredits`), because its edge tiles hold 5 m heights,
  * so it names every layer an area supplied as well as `drawn`. Guard: the
- * "beside the NSW 5 m data" test in geoPdfTerrain.unit.test.ts.
+ * "beside the NSW 5 m data" test in terrain.test.ts.
  */
 export function terrainCreditLines(
   drawn: ReadonlySet<TerrainLayerKey>,
@@ -504,7 +503,7 @@ export function terrainCreditLines(
  * overlays, minus those its base sheet already carries (imagery its own
  * shadows, a topographic sheet its own contours). A saved request, an older
  * client or a direct call can ask for either over any sheet, so the renderer
- * decides, not the dialog. Guard: `geoPdfTerrain.unit.test.ts` ("overlaysDrawn").
+ * decides, not the dialog. Guard: `terrain.test.ts` ("overlaysDrawn").
  */
 export function overlaysDrawn(config: {
   baseLayer: string;

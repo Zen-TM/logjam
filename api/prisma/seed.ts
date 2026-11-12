@@ -193,7 +193,7 @@ function seededFile(
  * Puts the seeded files where their rows say they are.
  *
  * BEST EFFORT on purpose: a box brought up with `docker compose up postgres
- * ministack` skips `make _ministack-tf`, so no bucket exists (CLAUDE.local.md).
+ * ministack` skips `make _ministack-tf`, so no bucket exists.
  * Failing the seed over that would block every other fixture for the sake of
  * five small files, so this warns and leaves the rows.
  */

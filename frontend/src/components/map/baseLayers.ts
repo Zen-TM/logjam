@@ -4,7 +4,7 @@ import {
   type BasemapCatalogEntry,
 } from "@logjam/shared";
 
-// Derived from the canonical shared basemap catalog (map-sources.md D2) —
+// Derived from the canonical shared basemap catalog —
 // same ids, order, URLs, and zoom caps as before the consolidation. The
 // interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
 // while the GeoPDF renderer keeps fetching its native 20).
