@@ -35,10 +35,58 @@ module "access_logs" {
 
 # User media uploads. Fully private (presigned URLs only); browser-direct
 # uploads need the CORS rule.
+#
+# Versioned, so a delete or an overwrite is a 10-day undo window rather than
+# final (docs/operations/brain.md, "Bringing back deleted media"). The window
+# is a lifecycle rule on NONCURRENT versions only. NEVER give that rule, or any
+# other rule here outside file-sends/, an `expiration_days`: it would delete
+# every current photo when it ran. Guard: tests/guards.tftest.hcl
+# (media_is_versioned_and_never_expires_current_objects).
+#
+# Noncurrent versions cost the operator, not the user, for at most 10 days:
+# storage accounting counts current objects only, so no quota changes.
+#
+# The two settings are locals because a Terraform test reads locals but not a
+# module's inner resources.
+locals {
+  media_versioned = true
+  media_lifecycle_rules = [
+    # "Send a copy" handoffs. The bytes are transient by design: one object per
+    # send, collected here rather than by any application delete path.
+    #
+    # 8 days, deliberately ONE MORE than shared/src/sharing.ts's
+    # FILE_SEND_TTL_DAYS = 7. The API reaper sweeps the rows (and refunds the
+    # sender's quota) at day 7; this rule must not remove the object first, or a
+    # recipient gets a download URL for bytes that are already gone. S3 expiry is
+    # asynchronous and only guaranteed to be "at least" N days, so the margin is
+    # what keeps the ordering true. Raising FILE_SEND_TTL_DAYS means raising this
+    # first.
+    #
+    # It also collects abandoned presigns: an upload that never confirmed leaves
+    # an orphan blob with no row, which is why this feature needs no orphan
+    # sweeper of its own.
+    {
+      id              = "expire-file-sends"
+      prefix          = "file-sends/"
+      expiration_days = 8
+    },
+    # The undo window, on the whole bucket. It also collects a send's bytes: the
+    # day-8 expiry leaves a delete marker and a noncurrent version, gone 10 days
+    # after that.
+    {
+      id                         = "end-the-undo-window"
+      prefix                     = ""
+      noncurrent_expiration_days = 10
+      expire_delete_markers      = true
+    },
+  ]
+}
+
 module "media" {
-  source        = "../../modules/storage"
-  bucket_name   = "logjam-media"
-  sse_algorithm = "AES256"
+  source             = "../../modules/storage"
+  bucket_name        = "logjam-media"
+  sse_algorithm      = "AES256"
+  versioning_enabled = local.media_versioned
 
   log_target = {
     bucket = module.access_logs.bucket_id
@@ -60,25 +108,7 @@ module "media" {
     max_age_seconds = 3000
   }]
 
-  # "Send a copy" handoffs. The bytes are transient by design: one object per
-  # send, collected here rather than by any application delete path.
-  #
-  # 8 days, deliberately ONE MORE than shared/src/sharing.ts's
-  # FILE_SEND_TTL_DAYS = 7. The API reaper sweeps the rows (and refunds the
-  # sender's quota) at day 7; this rule must not remove the object first, or a
-  # recipient gets a download URL for bytes that are already gone. S3 expiry is
-  # asynchronous and only guaranteed to be "at least" N days, so the margin is
-  # what keeps the ordering true. Raising FILE_SEND_TTL_DAYS means raising this
-  # first.
-  #
-  # It also collects abandoned presigns: an upload that never confirmed leaves
-  # an orphan blob with no row, which is why this feature needs no orphan
-  # sweeper of its own.
-  lifecycle_rules = [{
-    id              = "expire-file-sends"
-    prefix          = "file-sends/"
-    expiration_days = 8
-  }]
+  lifecycle_rules = local.media_lifecycle_rules
 }
 
 # Topo job inputs/outputs + CDN-served master tiles. All four PAB flags true:

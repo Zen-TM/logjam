@@ -10,7 +10,7 @@ import { logger } from "./logger";
  *
  * A presigned PUT can succeed without /media/:id/confirm ever being called:
  * no Media row exists, no quota is charged, and the object would sit in the
- * media bucket forever (the bucket has no lifecycle rules). The sweep lists
+ * media bucket forever (no lifecycle rule touches `media/`). The sweep lists
  * `media/` objects, keeps anything whose mediaId has a confirmed Media row or
  * shows activity newer than MEDIA_ORPHAN_TTL_MS, and deletes the rest. The
  * DB-row check makes deleting confirmed media impossible by construction,

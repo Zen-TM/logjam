@@ -11,7 +11,6 @@ resource "aws_s3_bucket" "this" {
   # before an apply gets that far. Every bucket this module makes is kept on
   # purpose: media and topo tiles are user data or costly to rebuild, and the
   # frontend and access-log buckets back the live site and its audit trail.
-  # Versioning stays off: a file a user deletes is gone.
   lifecycle {
     prevent_destroy = true
   }
@@ -74,9 +73,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
         prefix = rule.value.prefix
       }
       dynamic "expiration" {
-        for_each = rule.value.expiration_days != null ? [1] : []
+        for_each = rule.value.expiration_days != null || rule.value.expire_delete_markers ? [1] : []
         content {
           days = rule.value.expiration_days
+          # Set with expiration_days the provider refuses the rule: the two do not mix.
+          expired_object_delete_marker = rule.value.expire_delete_markers ? true : null
+        }
+      }
+      dynamic "noncurrent_version_expiration" {
+        for_each = rule.value.noncurrent_expiration_days != null ? [1] : []
+        content {
+          noncurrent_days = rule.value.noncurrent_expiration_days
         }
       }
       dynamic "abort_incomplete_multipart_upload" {

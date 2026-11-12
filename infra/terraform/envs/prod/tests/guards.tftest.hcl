@@ -740,6 +740,41 @@ run "brain_backups_are_locked_and_never_expire" {
   }
 }
 
+run "media_is_versioned_and_never_expires_current_objects" {
+  command = plan
+  plan_options {
+    target = [module.media]
+  }
+
+  # Mutation: `media_versioned = false` (a delete is final again).
+  assert {
+    condition     = local.media_versioned == true
+    error_message = "The media bucket must stay versioned: it is the 10-day undo window for a deleted photo."
+  }
+
+  # Mutation: an `expiration_days` on the undo rule (prefix "") or on any new
+  # rule outside file-sends/. That is `expiration { days = N }` on current
+  # objects, and it deletes every user's photos N days after upload. Only the
+  # "Send a copy" prefix may expire current objects.
+  assert {
+    condition = alltrue([
+      for r in local.media_lifecycle_rules :
+      r.prefix == "file-sends/" || try(r.expiration_days, null) == null
+    ])
+    error_message = "No lifecycle rule on the media bucket may expire current objects in days, bar file-sends/ (infra/terraform/envs/prod/s3.tf)."
+  }
+
+  # Mutation: removing the noncurrent-version rule, or changing its 10 days,
+  # leaves versions for ever (a cost) or drops the undo window.
+  assert {
+    condition = anytrue([
+      for r in local.media_lifecycle_rules :
+      r.prefix == "" && try(r.noncurrent_expiration_days, null) == 10
+    ])
+    error_message = "The media bucket must expire noncurrent versions after 10 days, for the whole bucket."
+  }
+}
+
 run "brain_deploy_role_writes_only_release_json" {
   command = plan
   plan_options {

@@ -261,8 +261,8 @@ step says why.
 7. **Turn serving on only once the data is checked.** `brain_serving` stays
    `false` until the restore's `last_restore_lag_seconds` and the drill say the
    data is the data you expect: the API's background sweeps delete media that
-   has no row in *their own* database, and the media bucket has no versioning
-   to get a photo back. Then set `brain_serving = true` in a pull request.
+   has no row in *their own* database, and a photo it deletes can be brought
+   back only within 10 days ([below](#bringing-back-deleted-media)). Then set `brain_serving = true` in a pull request.
 8. **Check the watchdog is green.** Its log group's latest line is
    `{"failed": []}`. The first minutes can show `status_missing`, `full_stale`
    and `wal_stale`, and `logjam-brain-watchdog-not-running` may email once in
@@ -417,6 +417,12 @@ database promoted somewhere else; add a new key with a corrected time.
 old volume, detached and untouched, and in the archive's old timeline. It is
 not in the new database.
 
+**Media deleted since T.** The database goes back to T, so its rows come back,
+but the photos and files users deleted after T are gone from the media bucket.
+Bring them back as described in
+[Bringing back deleted media](#bringing-back-deleted-media), within 10 days of
+each deletion.
+
 **Undoing it, or rewinding again.** A restore follows the newest backup, and the
 newest backup is always of the live database. So a second rewind, earlier or
 later, is the same change with the next key. And putting the old volume back is
@@ -429,6 +435,62 @@ disk loss were all exercised on a scratch copy in one run (2026-11-11), every st
 one apply, with the rows exactly as this says: a rewind keeps every row at or
 before the target and none after it, and a later disk loss restores the volume
 that was live.
+
+## Bringing back deleted media
+
+The media bucket (`logjam-media`) keeps every version of every object. Deleting
+a photo or file does not remove its bytes: S3 puts a *delete marker* on top, and
+the bytes stay underneath as a noncurrent version for 10 days, then are removed
+for good (`end-the-undo-window` in `infra/terraform/envs/prod/s3.tf`). Nothing in
+the bucket is kept longer than that, so this is an undo, not a backup. The
+database has its own, longer history (above). A user's deleted file therefore stays in
+the bucket, readable by the operator, for those 10 days.
+
+Keys are `media/<ownerId>/<mediaId>/<filename>`. Not yet run anywhere:
+
+1. **Find the key and its versions.** From a database restore or a user's report
+   you have the media's id; `--prefix` takes the part you know:
+
+   ```sh
+   aws s3api list-object-versions --bucket logjam-media \
+     --prefix media/<ownerId>/<mediaId>/ \
+     --query '{Markers: DeleteMarkers[].[Key,VersionId,IsLatest,LastModified], Versions: Versions[].[Key,VersionId,IsLatest,LastModified]}'
+   ```
+
+   A deleted object has a marker with `IsLatest` true and the bytes under it
+   with `IsLatest` false.
+2. **Remove the marker, not the bytes.** Delete the marker by its own version
+   id; the version beneath it becomes current again:
+
+   ```sh
+   aws s3api delete-object --bucket logjam-media --key '<key>' --version-id '<marker VersionId>'
+   ```
+
+   Never pass the version id of the bytes: that deletes them for good.
+3. **Check it.** `aws s3api head-object --bucket logjam-media --key '<key>'`
+   answers instead of `404`.
+
+This returns the file, not its database row. A row a user deleted comes back
+only by restoring the database; one that is already in the database needs
+nothing more.
+
+**After a database restore to an earlier time T,** every file deleted since T is
+a marker you can list, and the same two steps bring each back. List the latest
+markers under `media/` with their times, keep the ones at or after T, and remove
+each (do this within 10 days of the first deletion, or the oldest are gone):
+
+```sh
+aws s3api list-object-versions --bucket logjam-media --prefix media/ \
+  --query 'DeleteMarkers[?IsLatest].[LastModified,Key,VersionId]' --output text \
+  | awk '$1 >= "2026-11-20T03:15"' > /tmp/markers.txt
+cat /tmp/markers.txt   # read it, then:
+while IFS=$'\t' read -r _ key vid; do
+  aws s3api delete-object --bucket logjam-media --key "$key" --version-id "$vid"
+done < /tmp/markers.txt
+```
+
+The times are UTC, so write T in UTC. Files from `file-sends/` are not under
+`media/` and are meant to disappear.
 
 ## Deleting an old volume
 
