@@ -264,7 +264,7 @@ def check_inventory(failures):
             f"found only {len(specs)} Playwright specs, expected 10 or more: did the scan stop matching?"
         )
     for spec in specs:
-        ran = re.search(rf"\be2e/{re.escape(spec)}", runs) is not None
+        ran = re.search(rf"\be2e/{re.escape(spec)}(?![\w.-])", runs) is not None
         if not ran and spec not in NOT_RUN_SPECS:
             failures.append(
                 f"frontend/e2e/{spec} is run by no workflow step. Add `e2e/{spec}` to a "
@@ -306,16 +306,17 @@ def check_inventory(failures):
         )
     for f in gdal_tests:
         name = Path(f).name
-        if not re.search(rf"\btests/{re.escape(name)}\b", gdal_runs):
+        if not re.search(rf"\btests/{re.escape(name)}(?![\w.-])", gdal_runs):
             failures.append(
                 f"{f} skips when GDAL is absent, which the `topo` job lacks, and no step of "
                 f"the {GDAL_JOB[1]} job runs it in the worker image. Add `tests/{name}` to its "
                 "`Unit tests that need real GDAL` step in ci.yml."
             )
-        if name.removesuffix(".py") not in scope:
+        module = name.removesuffix(".py")
+        if not re.search(rf"(?<!\w){re.escape(module)}(?!\w)", scope):
             failures.append(
                 f"{f} runs in the {GDAL_JOB[1]} job, but ci-scope.sh's topo_e2e area does not "
-                f"name it, so a change to it would not start that job. Add `{name.removesuffix('.py')}` "
+                f"name it, so a change to it would not start that job. Add `{module}` "
                 "to the topo_e2e pattern there, and a self-test line."
             )
     if "skipped=" not in gdal_runs:

@@ -113,6 +113,9 @@ test("an owner links and unlinks places, and adds photos, on the place's page", 
     await page
       .getByRole("menuitem", { name: "Unlink from this place" })
       .click();
+    // The toast comes before the refetch: the link is gone from the account
+    // only once the row leaves the list.
+    await expect(options).toBeHidden();
   };
   await aside.getByRole("combobox", { name: "Link a place" }).fill(other);
   await page.getByRole("option", { name: other, exact: true }).first().click();
