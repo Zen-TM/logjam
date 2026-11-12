@@ -118,7 +118,7 @@ Scheduler starts at 04:00 Sydney time on the 5th of each month. A failed
 build publishes nothing: the registry under `master/places/` stays as it
 was, a month older. Run it again by hand once the cause is fixed: ECS →
 `logjam-cluster` → Run new task, family `logjam-place-registry`, Fargate,
-the `logjam-worker-sg` security group, a public IP. Neither alarm notices a
+the `logjam-workers` security group, a public IP. Neither alarm notices a
 schedule that is deleted or disabled; Terraform owns it, so a plan shows that
 as drift.
 

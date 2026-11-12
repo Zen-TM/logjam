@@ -2058,6 +2058,11 @@ run "prod_runs_on_the_brain" {
     values          = { id = "sg-mockworker" }
     override_during = plan
   }
+  override_resource {
+    target          = aws_security_group.workers
+    values          = { id = "sg-mockworkers" }
+    override_during = plan
+  }
   # The alarm is imported (monitoring.tf), which a mocked provider cannot do.
   override_resource {
     target          = aws_cloudwatch_metric_alarm.api_5xx

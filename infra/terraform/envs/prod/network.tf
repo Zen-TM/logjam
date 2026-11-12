@@ -64,7 +64,8 @@ resource "aws_security_group" "worker" {
 # be edited, and two groups in a VPC cannot share a name, so the group is
 # replaced under a new one. Both exist while the tasks move across, and the
 # brain admits both on 5432 (brain_network.tf), so no task is cut off from
-# the database at any step. Nothing launches into this one yet.
+# the database at any step. Everything launches into this one now; the old
+# group stays until the tasks already running in it have ended.
 resource "aws_security_group" "workers" {
   name        = "logjam-workers"
   description = "Fargate tasks (workers, migration, scheduled jobs) - the group the brain admits on 5432"

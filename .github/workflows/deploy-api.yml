@@ -208,7 +208,7 @@ jobs:
       # so its id is generated and a replacement mints a new one, leaving a
       # hardcoded id here silently pointing at nothing while Terraform is
       # perfectly happy. Look it up by the name Terraform sets (network.tf
-      # `aws_security_group.worker`, name = logjam-worker-sg) — the one identity
+      # `aws_security_group.workers`, name = logjam-workers) — the one identity
       # that survives replacement. This is the SG the brain's Postgres port admits,
       # so a wrong or empty value must abort, never fall back.
       - name: Run DB migrations (gated pre-deploy)
@@ -216,7 +216,7 @@ jobs:
           CLUSTER: logjam-cluster
           TASK_DEF: logjam-api-migrate
           SUBNETS: subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231
-          WORKER_SG_NAME: logjam-worker-sg
+          WORKER_SG_NAME: logjam-workers
         run: |
           set -euo pipefail
           SECURITY_GROUP=$(aws ec2 describe-security-groups \
@@ -224,7 +224,7 @@ jobs:
             --query 'SecurityGroups[0].GroupId' --output text)
           if [ -z "$SECURITY_GROUP" ] || [ "$SECURITY_GROUP" = "None" ]; then
             echo "::error::no security group named $WORKER_SG_NAME — refusing to \
-          guess. Check network.tf's aws_security_group.worker."; exit 1
+          guess. Check network.tf's aws_security_group.workers."; exit 1
           fi
           echo "Resolved $WORKER_SG_NAME -> $SECURITY_GROUP"
           echo "Launching migrate task ($TASK_DEF) on the newly pushed image..."
