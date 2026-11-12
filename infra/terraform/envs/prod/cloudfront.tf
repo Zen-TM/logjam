@@ -121,7 +121,7 @@ resource "aws_cloudfront_distribution" "api" {
     min_ttl                  = 0
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
     smooth_streaming         = false
-    target_origin_id         = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl"
+    target_origin_id         = "logjam-brain"
     trusted_key_groups       = []
     trusted_signers          = []
     viewer_protocol_policy   = "redirect-to-https"
@@ -134,11 +134,10 @@ resource "aws_cloudfront_distribution" "api" {
     connection_attempts = 3
     connection_timeout  = 10
     # The brain's Elastic IP name, unconditionally: with no brain (empty
-    # brain_pg_image_tag) this does not plan, which is the point. The origin id
-    # is still the old Elastic Beanstalk name the default behavior points at:
-    # renaming it would show as a diff to both. Guard: prod_runs_on_the_brain.
+    # brain_pg_image_tag) this does not plan, which is the point. Guard:
+    # prod_runs_on_the_brain.
     domain_name = aws_eip.brain[0].public_dns
-    origin_id   = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl"
+    origin_id   = "logjam-brain"
     # Origin-verify (WAF-bypass guard). Only CloudFront knows this token; the API
     # rejects origin fetches whose X-Origin-Verify doesn't match, so a client
     # hitting the brain's address directly (skipping this distribution + its WAF)
