@@ -102,20 +102,12 @@ Each package's `AGENTS.md` says how its suites run.
 - A change to a privacy or security boundary (share visibility, email
   omission, log redaction, the error-detail whitelist, auth fail-closed) ships
   a test that the boundary holds.
-- A new guard test names the mutation that turns it red, and you run it: a
-  test nobody has seen fail may be unable to. `infra/scripts/check-repo-hygiene.py`
-  holds every guard an `AGENTS.md` names to the note.
-- A boundary test is an allow-list (the exact keys a sharee receives), not a
-  deny-list of the fields someone thought of: a new field must fail it.
+- A new guard test names the mutation that turns it red. Guard, for every
+  test an `AGENTS.md` names: `infra/scripts/check-repo-hygiene.py`.
 - A test that scans source asserts a floor on what it found, so a pattern
   that stops matching cannot pass by checking nothing.
 - A test fails, never skips or returns early, when its premise is missing (a
-  seed row, a sample file, an import), unless CI runs that case elsewhere and
-  a check names where.
-- A test pins what it depends on (clock, timezone, order) and waits on the
-  condition, never a sleep: each of these has failed CI on a change that did
-  not touch it.
+  seed row, a sample file, an import), unless a check names where CI runs that
+  case instead.
 - A rule that must hold gets an executable check; two lists that must agree
-  become one declaration plus a test. A new suite, self-test, e2e spec or CI
-  job is wired into a workflow in the same change
-  (`infra/scripts/check-required-checks.py` fails on one nothing runs).
+  become one declaration plus a test.
