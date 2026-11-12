@@ -18,12 +18,15 @@ SET email    = 'CANARY-users-email-' || id,
 UPDATE custom_field_defs
 SET label = 'CANARY-custom_field_defs-label',
     trip_types = ARRAY['CANARY-custom_field_defs-trip_types'];
+-- The system fields keep the keys the code pins.
+UPDATE custom_field_defs SET key = 'CANARY-custom_field_defs-key-' || id WHERE owner_id IS NOT NULL;
 
 -- The system types are app copy and must come through the scrub untouched.
 UPDATE place_types SET name = 'CANARY-place_types-name-' || id WHERE owner_id IS NOT NULL;
 
 UPDATE places
 SET type_name = 'CANARY-places-type_name',
+    import_key = 'CANARY-places-import_key-' || id,
     name = 'CANARY-places-name',
     "altNames" = ARRAY['CANARY-places-altNames'],
     notes = 'CANARY-places-notes',
@@ -36,10 +39,11 @@ INSERT INTO import_snapshots (id, owner_id, batch_id, place_id, before, after)
 SELECT gen_random_uuid()::text, owner_id, 'canary-batch', id,
        jsonb_build_object('k', 'CANARY-import_snapshots-before'),
        jsonb_build_object('k', 'CANARY-import_snapshots-after')
-FROM places LIMIT 1;
+FROM places WHERE owner_id IS NOT NULL ORDER BY id LIMIT 1;
 
 UPDATE trip_logs
 SET display_name = 'CANARY-trip_logs-display_name',
+    import_key = 'CANARY-trip_logs-import_key-' || id,
     types = ARRAY['CANARY-trip_logs-types'],
     notes = 'CANARY-trip_logs-notes',
     custom_fields = jsonb_build_object('k', 'CANARY-trip_logs-custom_fields');

@@ -35,6 +35,11 @@ const schema = readFileSync(
  * relation points at, and `id`, are not listed: they are ids, and repointing
  * one is not a scrub. A new column fails the test until it is added to one.
  *
+ * `custom_field_defs.key` is the label slugged, and `places.import_key` and
+ * `trip_logs.import_key` are unsalted hashes of a name with the coordinates or
+ * dates the snapshot keeps (lib/importKeys.ts): a guessed name confirms
+ * against them, so they go.
+ *
  * `users.ui_preferences` is scrubbed by removing keys, not by blanking it: the
  * rest is settings (theme, regions, opt-ins), not text a user typed.
  */
@@ -43,10 +48,12 @@ const SCRUBBED = [
   "users.username",
   "users.email",
   "users.ui_preferences",
+  "custom_field_defs.key",
   "custom_field_defs.label",
   "custom_field_defs.trip_types",
   "place_types.name",
   "places.type_name",
+  "places.import_key",
   "places.name",
   "places.altNames",
   "places.notes",
@@ -56,6 +63,7 @@ const SCRUBBED = [
   "import_snapshots.before",
   "import_snapshots.after",
   "trip_logs.display_name",
+  "trip_logs.import_key",
   "trip_logs.types",
   "trip_logs.notes",
   "trip_logs.custom_fields",
@@ -81,7 +89,6 @@ const SAFE: Record<string, string[]> = {
   "protocol or app vocabulary, not user text": [
     "users.consent_version",
     "custom_field_defs.entity",
-    "custom_field_defs.key",
     "custom_field_defs.type",
     "place_types.icon_key",
     "place_types.color",
@@ -107,30 +114,29 @@ const SAFE: Record<string, string[]> = {
     "trip_plan_forms.preset",
     "trip_plan_forms.visible_to",
   ],
-  "opaque ids, keys and hashes: no words, and a dev needs them to join rows": [
-    "places.import_key",
-    "places.import_batch_id",
-    "import_snapshots.batch_id",
-    "trip_logs.import_key",
-    "trip_logs.import_batch_id",
-    "media.linked_id",
-    "media.source_media_id",
-    "media.s3_key_thumbnail",
-    "media.s3_key_display",
-    "friend_invites.token_hash",
-    "topo_jobs.s3_input_key",
-    "topo_jobs.s3_output_keys",
-    "topo_jobs.ecs_task_arn",
-    "topo_export_jobs.source_job_ids",
-    "topo_export_jobs.result_key",
-    "topo_export_jobs.ecs_task_arn",
-    "sync_tombstones.entity_id",
-    "shares.entity_id",
-    "file_sends.s3_key",
-    "egress_log_cursors.prefix",
-    "egress_log_cursors.last_key",
-    "trip_plan_invites.token_hash",
-  ],
+  "random ids and keys, and hashes of random tokens: no words, and nothing a guess confirms":
+    [
+      "places.import_batch_id",
+      "import_snapshots.batch_id",
+      "trip_logs.import_batch_id",
+      "media.linked_id",
+      "media.source_media_id",
+      "media.s3_key_thumbnail",
+      "media.s3_key_display",
+      "friend_invites.token_hash",
+      "topo_jobs.s3_input_key",
+      "topo_jobs.s3_output_keys",
+      "topo_jobs.ecs_task_arn",
+      "topo_export_jobs.source_job_ids",
+      "topo_export_jobs.result_key",
+      "topo_export_jobs.ecs_task_arn",
+      "sync_tombstones.entity_id",
+      "shares.entity_id",
+      "file_sends.s3_key",
+      "egress_log_cursors.prefix",
+      "egress_log_cursors.last_key",
+      "trip_plan_invites.token_hash",
+    ],
   "geometry: a snapshot exists to give a dev real map data (see the end of snapshot-scrub.sql)":
     [
       "media.metadata",
@@ -295,6 +301,8 @@ describe("snapshot-scrub.sql", () => {
     ).toEqual([]);
   });
 
+  // Mutation that turns it red: list a column in both SCRUBBED and SAFE, or
+  // twice in either.
   it("declares no column both scrubbed and safe", () => {
     const safe = Object.values(SAFE).flat();
     expect(safe.filter((pair) => SCRUBBED.includes(pair))).toEqual([]);
@@ -345,6 +353,14 @@ describe("snapshot-scrub.sql", () => {
   it("renames only user-owned place types", () => {
     expect(scrubStatements).toMatch(
       /UPDATE place_types\s+SET[^;]*WHERE owner_id IS NOT NULL;/,
+    );
+  });
+
+  // Mutation that turns it red: drop the WHERE from the custom_field_defs
+  // UPDATE, so the system fields lose the keys the code pins.
+  it("rekeys only user-owned field definitions", () => {
+    expect(scrubStatements).toMatch(
+      /UPDATE custom_field_defs\s+SET[^;]*WHERE owner_id IS NOT NULL;/,
     );
   });
 

@@ -588,6 +588,8 @@ jobs:
       # rewrites every row. Plants a marker in each column the prod-snapshot
       # scrub covers, runs the scrub, and fails if a marker is still in a dump.
       - name: Snapshot scrub canary
+        env:
+          CANARY_TARGET_IS_THROWAWAY: "yes"
         run: scripts/snapshot-scrub-canary.sh
 
   brain-postgres-image:

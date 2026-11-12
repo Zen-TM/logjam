@@ -48,7 +48,13 @@ SET name = 'place-' || substring(id::text, 1, 8),
     gauge_id = NULL,
     field_values = '{}',
     foreign_fields = NULL,
-    type_name = NULL;
+    type_name = NULL,
+    import_key = NULL;
+
+-- `import_key` on places and trips is an unsalted hash of the name with the
+-- coordinates (or date and notes) the snapshot keeps, so a guessed name would
+-- confirm against it: NULL. A CSV imported into a snapshot no longer merges
+-- with the rows it was imported from.
 
 -- TRIP TYPES are user-authored tags ("Claustral recon", "with Dad"), held in two
 -- places that must keep MATCHING after the scrub: a trip's own `types`, and the
@@ -80,6 +86,7 @@ $$;
 UPDATE trip_logs
 SET notes = NULL,
     display_name = NULL,
+    import_key = NULL,
     custom_fields = '{}',
     types = pg_temp.scrub_trip_types(types);
 
@@ -89,6 +96,12 @@ SET notes = NULL,
 UPDATE custom_field_defs
 SET label = 'field-' || substring(id::text, 1, 8),
     trip_types = pg_temp.scrub_trip_types(trip_types);
+
+-- A field's `key` is its label slugged, once, at creation. User-owned fields get
+-- a stand-in (the full id keeps the unique (owner_id, entity, key)); the system
+-- fields (owner_id NULL) keep the keys the code pins. The values that were keyed
+-- by it are blanked above and below.
+UPDATE custom_field_defs SET key = 'field-' || id WHERE owner_id IS NOT NULL;
 
 -- Undo's copies of the place and trip fields scrubbed above. Blank, Undo
 -- restores nothing.
@@ -129,7 +142,8 @@ UPDATE notifications
 SET payload = payload - 'planName' - 'filename' - 'jobName';
 
 -- DELIBERATELY NOT SCRUBBED, so the omission reads as a decision:
---   places.latitude/longitude, routes.points/anchors, media.metadata —
+--   places.latitude/longitude, routes.points/anchors, media.metadata,
+--   topo_jobs.footprint, topo_export_jobs.bbox —
 --   coordinates and geometry. A snapshot exists to give a dev real map data;
 --   scrubbing the coordinates leaves nothing to develop against. The operator's
 --   boundary here is identity plus free text, and the snapshot stays as
