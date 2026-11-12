@@ -189,7 +189,7 @@ def check_inventory(failures):
     files = git_files()
 
     # A script that takes the flag, as a shell case or a quoted string.
-    flag = re.compile(r"""--self-test\)|(["'])--self-test\1""")
+    flag = re.compile(r"""--self-test\)|(["'])--self-test\1|=\s*--self-test\b""")
     scripts = [
         f
         for f in files
