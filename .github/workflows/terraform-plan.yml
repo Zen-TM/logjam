@@ -53,7 +53,6 @@ jobs:
   # No Environment and no credentials. If it fails, the plan jobs still start
   # and fail, so a required check never passes on a skipped plan.
   scope:
-    name: plan-scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

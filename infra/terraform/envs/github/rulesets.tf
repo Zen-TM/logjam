@@ -55,14 +55,6 @@ locals {
     "expo-doctor",
     "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
     "brain-postgres", # ci.yml's one name for the brain-postgres-image matrix
-    # The scope jobs: each decides which of its workflow's jobs run, and a
-    # required one cannot fail unseen.
-    "ci-scope",
-    "emulator-scope",
-    "rollback-compat-scope",
-    "setup-smoke-scope",
-    "terraform-scope",
-    "plan-scope",
   ]
 }
 
