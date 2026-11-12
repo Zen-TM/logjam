@@ -372,42 +372,33 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci
-      - name: Playwright smoke
+      # Both Logjam Web builds the Playwright steps serve (E2E_PREVIEW), made
+      # once here. A build that breaks fails this step, which nothing else in
+      # CI runs: deploy-frontend.yml builds only after a merge. `--mode e2e`
+      # leaves out the CSP meta, whose connect-src has no localhost API.
+      - name: Build Logjam Web
+        working-directory: frontend
+        run: npm run build:e2e
+      # Smoke, a11y, and the Make a map and confirm specs, in one run so the
+      # browser and the two servers start once. Playwright starts the second
+      # server on 5199 itself. None of them writes, so two workers can share the
+      # account; the list reporter puts each case's duration in the log.
+      - name: Playwright read-only specs
         working-directory: frontend
         env:
+          E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts
-      # Same job, not its own: it needs this seeded stack, and this job's
-      # area (api/, shared/, frontend/) is exactly what the spec can break.
-      # Serial, because a parallel run on a cold checkout times out on
-      # page.goto. Playwright starts the second server on 5199 itself.
-      - name: Playwright accessibility
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/a11y.spec.ts --workers=1
-      # App's own state around Make a map's box pick, which no unit test
-      # reaches (App has no render harness). Writes nothing.
-      - name: Playwright Make a map
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts --workers=1
-      # Writes to the seeded account and Undoes it, which leaves sync
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts --workers=2 --reporter=list,github,html
+      # These write to the seeded account and take it back, which leaves sync
       # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
       # later integration run): after the integration suite, never before it.
-      - name: Playwright CSV import
+      # Their own run, serial, so none writes while an a11y case reads.
+      - name: Playwright specs that write
         working-directory: frontend
         env:
+          E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/csv-import.spec.ts e2e/ways-import.spec.ts e2e/discard.spec.ts e2e/place-verbs.spec.ts --workers=1
-      # Links and unlinks a way on a seeded place and takes it back, leaving
-      # sync tombstones (see above): after the integration suite too.
-      - name: Playwright place route
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/place-route.spec.ts --workers=1
+        run: npx playwright test e2e/csv-import.spec.ts e2e/ways-import.spec.ts e2e/discard.spec.ts e2e/place-verbs.spec.ts e2e/place-route.spec.ts --workers=1 --reporter=list,github,html
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
