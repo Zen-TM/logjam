@@ -112,11 +112,16 @@ def _listing(s3, bucket, prefix):
 
 
 def _archive_id_order(prefix):
-    # "16-1" -> (16, 1): the newest archive id, not the lexicographic last.
+    # "<major>-<history>", as "16-1" or "18-2": the newest is the highest history, which only
+    # ever grows, not the highest major (a stanza taken back from 18 to 16 is "16-3") and
+    # not the lexicographic last ("9-1" after "10-1").
     try:
-        return tuple(int(n) for n in prefix.rstrip("/").rsplit("/", 1)[1].split("-"))
+        major, history = (
+            int(n) for n in prefix.rstrip("/").rsplit("/", 1)[1].split("-")
+        )
+        return (history, major)
     except ValueError:
-        return (-1,)
+        return (-1, -1)
 
 
 def newest_wal_time(s3, bucket, wal_prefix):

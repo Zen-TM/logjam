@@ -220,7 +220,7 @@ jobs:
     services:
       # Mirrors the `migrations` job's config exactly.
       postgres:
-        image: postgres:16.15-trixie
+        image: postgres:18.6-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -501,7 +501,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16.15-trixie
+        image: postgres:18.6-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -549,7 +549,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16.15-trixie
+        image: postgres:18.6-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -582,6 +582,14 @@ jobs:
       - name: Install
         working-directory: api
         run: npm ci
+      # The runner's pg_dump is older than the server, and pg_dump refuses a newer server.
+      # The client's major is the one the Postgres image builds FROM.
+      - name: Install a pg_dump as new as the server
+        run: |
+          major=$(sed -n 's/^FROM postgres:\([0-9]*\)\..*/\1/p' infra/brain/postgres/Dockerfile)
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-$major"
+          echo "/usr/lib/postgresql/$major/bin" >> "$GITHUB_PATH"
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
       # The upgraded, seeded database is thrown away after this: the canary
@@ -704,7 +712,7 @@ jobs:
     timeout-minutes: 60
     services:
       postgres:
-        image: postgres:16.15-trixie
+        image: postgres:18.6-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam

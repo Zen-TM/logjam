@@ -18,7 +18,22 @@
 #   pg_ident.conf: dropping the brain_agent line;
 #   Dockerfile: dropping ca-certificates (the S3 handshake);
 #   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin);
-#   Dockerfile: dropping task-lib.sh or drill.sh from the task scripts' COPY.
+#   Dockerfile: dropping task-lib.sh or drill.sh from the task scripts' COPY;
+#   Dockerfile: dropping `ENV PGDATA` (the cluster is made outside the mount, as #932 showed);
+#   Dockerfile: dropping postgresql-16 (the upgrade has no 16 binaries to read the old cluster);
+#   brain-entrypoint.sh: dropping the major-version guard, or moving it above the init/restore
+#     block (a 16 directory crashes the 18 server; a restored 16 backup does too);
+#   major-upgrade.sh: `--copy` -> `--link` (the old cluster is no longer a rollback);
+#   major-upgrade.sh: dropping `-c archive_mode=off` from the old server's start or from
+#     --old-options (an old cluster archives into the repository);
+#   major-upgrade.sh: dropping the server.crt/server.key copy (a new certificate);
+#   major-upgrade.sh: the checksum setting fixed instead of read from the old cluster;
+#   major-upgrade.sh: the refusals for a newer cluster, missing binaries, too little space, an
+#     existing postgres-<N> and a foreign postgres.new, each deleted in turn;
+#   major-upgrade.sh: dropping the finish-the-rename branch (the rerun after a crash does nothing);
+#   major-upgrade.sh: pg_upgrade's output sent to stdout; dropping the ALTER SYSTEM carry-over, or
+#     carrying a restore's recovery settings too.
+# Not testable here: that the swap is one atomic rename (`mv -T --exchange`); the state after a crash is.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 IMAGE=${IMAGE:-brain-postgres:test}
@@ -80,6 +95,11 @@ docker run -d --name $C -v brain-pg-test-prod:$DATA "${PROD_ENV[@]}" "$IMAGE" > 
 if ! wait_up $C; then bad "prod container did not come up"; exit 1; fi
 
 check "bootstrap enables data checksums" [ "$(sql -c 'show data_checksums')" = on ]
+# 18's own PGDATA is /var/lib/postgresql/18/docker, outside the mount every compose file makes.
+check "PGDATA is the mounted path" [ "$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE" | sed -n 's/^PGDATA=//p')" = "$DATA" ]
+check "the cluster is in the mount" [ "$(sql -c 'show data_directory')" = "$DATA" ]
+check "the image runs the Postgres major the Dockerfile pins" \
+  [ "$(sql -c 'show server_version_num' | cut -c1-2)" = "$(sed -n 's/^FROM postgres:\([0-9]*\)\..*/\1/p' Dockerfile)" ]
 
 while IFS='|' read -r name want; do
   got=$(sql -c "show $name")
@@ -214,10 +234,188 @@ else
 fi
 cleanup
 
+# --- the major-version guard, and upgrading a 16 database ----------------------------
+# The previous image, as far as these tests need it: this image with the 16 server first on PATH and
+# PG_MAJOR=16, so the real entrypoints make a real 16 database the way prod's was made.
+PG16=(-e PG_MAJOR=16 -e PATH=/usr/lib/postgresql/16/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+SUB() { echo "type=volume,src=$1,dst=$DATA,volume-subpath=postgres"; } # the host mounts /data/postgres at $DATA
+vol_sh() { local v=$1; shift; docker run --rm -v "$v":/data --entrypoint bash "$IMAGE" -c "$@"; } # root, on a whole volume
+sqlj() { docker exec -u postgres "$C" psql -U postgres -d logjam -tAXq "$@"; }
+# make16 <volume> <stop|kill>: a 16 cluster as prod made it, with a row, a role with a password and the
+# certificate; its own config archives (starting it without archive_mode=off shows, the command runs in the
+# data directory), and a segment waits for the archiver.
+make16() {
+  docker volume create "$1" > /dev/null
+  vol_sh "$1" 'mkdir -p /data/postgres'
+  C=brain-pg-test-16
+  docker run -d --name $C --mount "$(SUB "$1")" "${PG16[@]}" -e BRAIN_INIT=bootstrap -e POSTGRES_DB=logjam -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -e BRAIN_TLS_SANS=brain.test,localhost "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_ENDPOINT=localhost:9 "$IMAGE" > /dev/null
+  wait_up $C && [ "$(sql -c 'show server_version_num' | cut -c1-2)" = 16 ] || return 1
+  sqlj -c "create table t (v text); insert into t values ('row16'); create role logjam_app login password 'secret-pw'; grant connect on database logjam to logjam_app" > /dev/null &&
+    sqlj -c "alter system set work_mem = '7MB'" > /dev/null &&
+    docker exec $C bash -c "printf \"archive_mode = on\narchive_command = 'touch archive-attempted'\n\" >> $DATA/postgresql.conf; printf \"restore_command = 'false'\nrecovery_target_timeline = 'current'\n\" >> $DATA/postgresql.auto.conf" &&
+    sqlj -c "select pg_switch_wal()" > /dev/null || return 1
+  if [ "$2" = kill ]; then docker kill $C > /dev/null; else docker stop $C > /dev/null; fi
+  docker rm -f -v $C > /dev/null
+}
+# upgrade <volume> [docker args]: stdout to $WORK/out, stderr to $WORK/err, the exit status in $rc.
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"; cleanup' EXIT
+upgrade() { local v=$1; shift; docker run --rm -v "$v":/data "$@" "$IMAGE" /usr/local/lib/brain/major-upgrade.sh > "$WORK/out" 2> "$WORK/err"; rc=$?; }
+silent() { bash -c '[ ! -s "$1" ] && [ ! -s "$2" ]' _ "$WORK/out" "$WORK/err"; }
+untouched() { [ "$(vol_sh "$1" 'cat /data/postgres/PG_VERSION; ls /data | tr "\n" " "')" = "$(printf '16\npostgres ')" ]; }
+
+make16 brain-pg-test-up stop || bad "a 16 database is made (clean shutdown)"
+make16 brain-pg-test-up-kill kill || bad "a 16 database is made (killed)"
+make16 brain-pg-test-up-refuse stop || bad "a 16 database is made (for the refusals)"
+
+# The guard: a server start on another major's directory says so and starts nothing.
+C=brain-pg-test-guard
+docker run -d --name $C --mount "$(SUB brain-pg-test-up-refuse)" "${PROD_ENV[@]}" -e BRAIN_INIT=none "$IMAGE" > /dev/null
+rc=$(timeout 60 docker wait $C || echo running)
+out=$(docker logs $C 2>&1)
+docker rm -f $C > /dev/null
+check "an 18 server on a 16 directory exits non-zero (got $rc)" grep -Eq '^[1-9]' <<<"$rc"
+check "...naming both versions" bash -c 'grep -q "holds a PostgreSQL 16 database" <<<"$1" && grep -q "this image runs PostgreSQL 18" <<<"$1"' _ "$out"
+check "...and what to do (the host upgrades prod; make reset in dev)" bash -c 'grep -q "boot upgrades it" <<<"$1" && grep -q "make reset" <<<"$1"' _ "$out"
+check "...and it started nothing: the directory is as it was" untouched brain-pg-test-up-refuse
+check "...while a command that is not the server runs there" quiet docker run --rm --mount "$(SUB brain-pg-test-up-refuse)" "$IMAGE" postgres --version
+
+# After a restore as well: a backup of the old major comes back as an old-major directory.
+R16=(-e POSTGRES_PASSWORD=pw "${BUCKET_ENV[@]}" -e PGBACKREST_REPO1_TYPE=posix -e PGBACKREST_REPO1_PATH=/repo -v brain-pg-test-repo16:/repo)
+docker volume create brain-pg-test-repo16 > /dev/null
+docker run --rm -v brain-pg-test-repo16:/repo --entrypoint chmod "$IMAGE" 777 /repo
+C=brain-pg-test-src16
+docker run -d --name $C -v brain-pg-test-src16:$DATA "${PG16[@]}" -e BRAIN_INIT=bootstrap "${R16[@]}" "$IMAGE" > /dev/null
+if wait_up $C; then
+  quiet docker exec -u postgres $C pgbackrest --stanza=logjam stanza-create
+  quiet docker exec -u postgres $C pgbackrest --stanza=logjam --type=full backup
+  docker stop $C > /dev/null
+  C=brain-pg-test-restore16
+  docker run -d --name $C -v brain-pg-test-restore16:$DATA -e BRAIN_INIT=restore "${R16[@]}" "$IMAGE" > /dev/null
+  rc=$(timeout 90 docker wait $C || echo running)
+  out=$(docker logs $C 2>&1)
+  check "restoring a 16 backup under the 18 image stops (got $rc)" grep -Eq '^[1-9]' <<<"$rc"
+  check "...with the version message, not a crash" grep -q 'holds a PostgreSQL 16 database' <<<"$out"
+else
+  bad "a 16 database with a backup is made"
+fi
+docker ps -aq --filter name=brain-pg-test | xargs -r docker rm -f -v > /dev/null 2>&1
+
+# Refusals: each leaves the old cluster where it was and prints nothing on stdout.
+refuses() { # <what> <message fragment>
+  check "$1: exit non-zero (got $rc)" [ "$rc" != 0 ]
+  check "...saying why" grep -q -- "$2" "$WORK/err"
+  check "...and nothing on stdout" [ ! -s "$WORK/out" ]
+}
+V=brain-pg-test-up-refuse
+upgrade $V -e BRAIN_UPGRADE_MARGIN=1125899906842624; refuses "too little free space" "not upgrading"
+check "...and nothing was made" untouched $V
+vol_sh $V 'mkdir /data/postgres-16'
+upgrade $V; refuses "an existing postgres-16" "exists already"
+vol_sh $V 'rmdir /data/postgres-16'
+vol_sh $V 'mkdir /data/postgres.new && echo 15 > /data/postgres.new/PG_VERSION && echo keep > /data/postgres.new/mine'
+upgrade $V; refuses "a postgres.new holding a 15 cluster" "not deleting it"
+check "...which is still there" [ "$(vol_sh $V 'cat /data/postgres.new/mine')" = keep ]
+vol_sh $V 'rm -rf /data/postgres.new'
+vol_sh brain-pg-test-up-newer 'mkdir -p /data/postgres && echo 19 > /data/postgres/PG_VERSION'
+upgrade brain-pg-test-up-newer; refuses "a cluster newer than the image" "this image runs 18"
+check "...and it is untouched" [ "$(vol_sh brain-pg-test-up-newer 'cat /data/postgres/PG_VERSION; ls /data')" = "$(printf '19\npostgres')" ]
+vol_sh brain-pg-test-up-old 'mkdir -p /data/postgres && echo 15 > /data/postgres/PG_VERSION'
+upgrade brain-pg-test-up-old; refuses "a 15 cluster, which this image has no binaries for" "no PostgreSQL 15 binaries"
+
+# What an unfinished run left (a new cluster, here a marker file) is removed, and the upgrade goes ahead.
+vol_sh $V 'mkdir /data/postgres.new && echo 18 > /data/postgres.new/PG_VERSION && touch /data/postgres.new/junk'
+upgrade $V
+check "an unfinished postgres.new of its own is replaced, and the upgrade succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...stdout is the one line" [ "$(cat "$WORK/out")" = "upgraded 16 -> 18" ]
+check "...and the junk is gone" quiet vol_sh $V 'test ! -e /data/postgres/junk && test ! -e /data/postgres-16/junk'
+
+# A full upgrade, from a clean shutdown.
+V=brain-pg-test-up
+upgrade $V
+[ "$rc" = 0 ] || tail -20 "$WORK/err"
+check "the upgrade exits 0 (got $rc)" [ "$rc" = 0 ]
+check "stdout is one line: upgraded 16 -> 18" [ "$(cat "$WORK/out")" = "upgraded 16 -> 18" ]
+check "pg_upgrade's output went to stderr" grep -q 'Upgrade Complete' "$WORK/err"
+check "the new cluster is at /data/postgres, and the old one is kept as /data/postgres-16" \
+  [ "$(vol_sh $V 'cat /data/postgres/PG_VERSION /data/postgres-16/PG_VERSION; ls /data | tr "\n" " "')" = "$(printf '18\n16\npostgres postgres-16 ')" ]
+check "the old cluster was copied, not linked (no data file has a second link)" [ "$(vol_sh $V 'find /data/postgres-16/base -type f -links +1 | wc -l')" = 0 ]
+check "the same certificate and key, with the same mode and owner" \
+  [ "$(vol_sh $V 'cd /data && for d in postgres postgres-16; do stat -c "%a %U" $d/server.key; sha256sum < $d/server.crt; sha256sum < $d/server.key; done | sort -u | wc -l')" = 3 ]
+check "the old server config's archive_command never ran (clean shutdown, pending segment)" quiet vol_sh $V 'test ! -e /data/postgres-16/archive-attempted && test ! -e /data/postgres/archive-attempted'
+
+C=brain-pg-test-upgraded
+docker run -d --name $C --mount "$(SUB $V)" "${PROD_ENV[@]}" -e BRAIN_INIT=none "$IMAGE" > /dev/null
+if wait_up $C; then
+  check "the 18 server starts on the upgraded cluster" [ "$(sql -c 'show server_version_num' | cut -c1-2)" = 18 ]
+  check "the row is there" [ "$(sqlj -c 'select v from t')" = row16 ]
+  PW=secret-pw
+  check "the role connects over TLS with its password, pinning the same certificate" \
+    [ "$(conn "host=localhost user=logjam_app dbname=logjam sslmode=verify-full sslrootcert=$DATA/server.crt" 'select current_user')" = logjam_app ]
+  check "data checksums are still on" [ "$(sql -c 'show data_checksums')" = on ]
+  check "encoding, collation and provider are the old cluster's" \
+    [ "$(sql -c "select pg_encoding_to_char(encoding) || '/' || datcollate || '/' || datctype || '/' || datlocprovider::text from pg_database where datname = 'logjam'")" = UTF8/en_US.utf8/en_US.utf8/c ]
+  check "an ALTER SYSTEM setting survived" [ "$(sql -c 'show work_mem')" = 7MB ]
+  check "...and a restore's recovery settings were not carried" not docker exec $C grep -Eq '^(restore_command|recovery_)' $DATA/postgresql.auto.conf
+  check "the prod HBA is installed again (no plain host line)" not docker exec $C grep -Eq '^host[[:space:]]' $DATA/pg_hba.conf
+  check "the pgaudit extension came across" [ "$(sqlj -c "select count(*) from pg_extension where extname = 'pgaudit'")" = 1 ]
+  sqlj -c "insert into t values ('audited')" > /dev/null
+  check "pgaudit logs a write on the upgraded cluster" bash -c 'docker logs "$1" 2>&1 | grep -Eq "AUDIT: SESSION,[0-9]+,[0-9]+,WRITE,INSERT,.*insert into t"' _ $C
+  check "the image's settings apply (log_error_verbosity)" [ "$(sql -c 'show log_error_verbosity')" = terse ]
+else
+  bad "the 18 server starts on the upgraded cluster"
+fi
+docker rm -f -v $C > /dev/null
+
+# The old cluster is the rollback: the 16 server still starts on it and finds its row, and not the new one.
+check "the 16 server starts on the kept old cluster and finds its row" \
+  [ "$(docker run --rm -v $V:/data --entrypoint bash "$IMAGE" -c '
+    B=/usr/lib/postgresql/16/bin
+    gosu postgres $B/pg_ctl -D /data/postgres-16 -w -o "-c listen_addresses= -c unix_socket_directories=/tmp" -l /tmp/log start > /dev/null &&
+    gosu postgres $B/psql -h /tmp -U postgres -d logjam -tAXqc "select min(v) from t"
+    gosu postgres $B/pg_ctl -D /data/postgres-16 -m fast -w stop > /dev/null' 2>&1)" = row16 ]
+
+# A rerun on a finished upgrade does nothing and says nothing.
+upgrade $V
+check "a rerun on an upgraded cluster exits 0 (got $rc)" [ "$rc" = 0 ]
+check "...and prints nothing at all" silent
+
+# A crash between the exchange and the last rename: the new cluster is in place, the old one has the temporary name.
+inode=$(vol_sh $V 'stat -c %i /data/postgres')
+vol_sh $V 'mv /data/postgres-16 /data/postgres.new'
+upgrade $V
+check "after a crash between the swap and the rename the rerun exits 0 (got $rc)" [ "$rc" = 0 ]
+check "...finishes the rename and says so" [ "$(cat "$WORK/out")" = "upgraded 16 -> 18" ]
+check "...so the old cluster is /data/postgres-16 again and no postgres.new is left" \
+  [ "$(vol_sh $V 'cat /data/postgres-16/PG_VERSION; ls /data | tr "\n" " "')" = "$(printf '16\npostgres postgres-16 ')" ]
+check "...and the new cluster was not touched (same directory)" [ "$(vol_sh $V 'stat -c %i /data/postgres')" = "$inode" ]
+upgrade $V
+check "...and a rerun after that does nothing" silent
+
+# Not shut down cleanly: the server was killed with a segment waiting for the archiver.
+V=brain-pg-test-up-kill
+upgrade $V
+[ "$rc" = 0 ] || tail -20 "$WORK/err"
+check "a cluster that was killed is recovered and upgraded (exit $rc)" [ "$rc" = 0 ]
+check "...saying it was not shut down" grep -q 'state: in production' "$WORK/err"
+check "...without archiving: the old config's archive_command never ran" quiet vol_sh $V 'test ! -e /data/postgres-16/archive-attempted && test ! -e /data/postgres/archive-attempted'
+C=brain-pg-test-upgraded-kill
+docker run -d --name $C --mount "$(SUB $V)" "${PROD_ENV[@]}" -e BRAIN_INIT=none "$IMAGE" > /dev/null
+if wait_up $C; then
+  check "...and the row written before the kill is there" [ "$(sqlj -c 'select v from t')" = row16 ]
+else
+  bad "the 18 server starts on the recovered and upgraded cluster"
+fi
+cleanup
+
 # --- dev mode on a volume the stock image made -------------------------------
 C=brain-pg-test-dev
 DEV=(-e POSTGRES_DB=logjam -e POSTGRES_USER=logjam -e POSTGRES_PASSWORD=logjam)
-docker run -d --name brain-pg-test-stock -v brain-pg-test-dev:$DATA "${DEV[@]}" postgres:16 > /dev/null
+# The stock image of the Dockerfile's own FROM line, with PGDATA where a dev volume has always been
+# (its own default is outside the mount: the Dockerfile says why).
+STOCK=$(sed -n 's/^FROM //p' Dockerfile)
+docker run -d --name brain-pg-test-stock -v brain-pg-test-dev:$DATA -e PGDATA=$DATA "${DEV[@]}" "$STOCK" > /dev/null
 for _ in $(seq 60); do docker exec brain-pg-test-stock pg_isready -q -h 127.0.0.1 -U logjam && break; sleep 1; done
 docker stop brain-pg-test-stock > /dev/null && docker rm brain-pg-test-stock > /dev/null
 docker run -d --name $C -v brain-pg-test-dev:$DATA -e BRAIN_DEV=1 -e BRAIN_INIT=bootstrap "${DEV[@]}" "$IMAGE" postgres -c archive_mode=off > /dev/null
@@ -227,7 +425,7 @@ if wait_up $C; then
   check "plain TCP with the dev password works" [ "$(conn 'host=127.0.0.1 user=logjam dbname=logjam sslmode=disable' 2>/dev/null)" = 1 ]
   check "the passwordless local socket works (make dev-snapshot)" quiet docker exec $C psql -U logjam logjam -tAqc 'select 1'
   check "the -c archive_mode=off from Compose wins" [ "$(docker exec $C psql -U logjam logjam -tAXqc 'show archive_mode' 2>/dev/null)" = off ]
-  check "a volume made by stock postgres:16 gives no collation warning" \
+  check "a volume made by the stock image gives no collation warning" \
     not grep -q 'collation version' <<<"$(docker exec $C psql -U logjam logjam -tAqc 'select 1' 2>&1)"
   check "the settings file still applies" [ "$(docker exec $C psql -U logjam logjam -tAXqc 'show log_error_verbosity' 2>/dev/null)" = terse ]
 else

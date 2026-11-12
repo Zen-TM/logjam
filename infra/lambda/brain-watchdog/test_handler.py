@@ -7,7 +7,8 @@ Mutations that turn this red (each applied once and seen to fail):
   - treating a missing status.json as green (`codes = []` in run()'s except):
     test_status_missing;
   - choosing the lexicographically last archive id, or any directory but the
-    last: the listing tests;
+    last: the listing tests; ordering archive ids by major before history
+    (`return (history, major)` -> `(major, history)`): test_the_newest_archive_id_is_the_highest_history_not_the_highest_major;
   - dropping the `serving` condition on the API check: test_api_not_checked_when_not_serving;
   - `< MEMORY_MIN_MB` to `<=`, or checking memory while Postgres is down:
     test_memory_low;
@@ -387,6 +388,22 @@ class Listing(unittest.TestCase):
         self.assertEqual(
             handler.newest_wal_time(FakeS3({}, keys), "backups", WAL), ago(10)
         )
+
+    def test_the_newest_archive_id_is_the_highest_history_not_the_highest_major(self):
+        # A major upgrade (16-1 to 18-2), and the way back (18-2 to 16-3).
+        for ids, newest in (
+            (("16-1", "18-2"), "18-2"),
+            (("16-1", "18-2", "16-3"), "16-3"),
+        ):
+            keys = {
+                WAL + f"{i}/0000000100000000/x-a.zst": ago(10 + n)
+                for n, i in enumerate(reversed(ids))
+            }
+            # The newest id's segment is the one that is the most recent.
+            keys[WAL + f"{newest}/0000000100000000/x-a.zst"] = ago(3)
+            self.assertEqual(
+                handler.newest_wal_time(FakeS3({}, keys), "backups", WAL), ago(3)
+            )
 
     def test_listings_follow_pages(self):
         keys = {WAL + f"16-1/{n:016x}/seg-a.zst": ago(1000 - n) for n in range(7)}

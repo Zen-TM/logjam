@@ -4,6 +4,7 @@
 # BRAIN_INIT=restore restores the latest backup (or the time in BRAIN_RESTORE_TARGET),
 # anything else stops.
 # Otherwise a volume that failed to mount would come up empty and look healthy.
+# A server start on a database of another major version stops too.
 # Any other command (`pgbackrest info`, `bash`, `postgres --version`) skips
 # all that and runs as given.
 set -Eeuo pipefail
@@ -71,6 +72,15 @@ if [ "$server" = 1 ]; then
         echo "brain-entrypoint: $PGDATA has no database and BRAIN_INIT is '${BRAIN_INIT:-}', not bootstrap or restore: refusing to create one" >&2
         exit 1 ;;
     esac
+  fi
+
+  # After a restore too: a backup of the old major comes back as an old-major directory.
+  # A server of another major refuses it with a crash; this says why and what to do.
+  if [ -s "$PGDATA/PG_VERSION" ] && [ "$(tr -d '[:space:]' < "$PGDATA/PG_VERSION")" != "$PG_MAJOR" ]; then
+    echo "brain-entrypoint: $PGDATA holds a PostgreSQL $(tr -d '[:space:]' < "$PGDATA/PG_VERSION") database and this image runs PostgreSQL $PG_MAJOR: refusing to start." \
+      "Prod: the host's boot upgrades it (host/boot.sh), and a restore from before an upgrade needs the image tag of that time." \
+      "Dev: run make reset." >&2
+    exit 1
   fi
 
   # A volume made by the stock image has no certificate; dev adds one.

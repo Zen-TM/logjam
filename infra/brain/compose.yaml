@@ -88,3 +88,16 @@ services:
     command: ["gosu", "postgres", "pgbackrest", "--stanza=logjam", "info", "--output=json"]
     environment:
       <<: *pgbackrest-env
+
+  # boot.sh runs postgres/major-upgrade.sh in this when the data is of an older Postgres
+  # major. All of /data, because it renames directories.
+  upgrade:
+    image: ${BRAIN_PG_IMAGE:?}
+    profiles: [tools]
+    command: ["/usr/local/lib/brain/major-upgrade.sh"]
+    volumes:
+      - type: bind
+        source: /data
+        target: /data
+        bind:
+          create_host_path: false
