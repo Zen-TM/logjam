@@ -14,6 +14,7 @@ import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
 import { apiFetch } from "../api/apiFetch";
+import { capabilityScreenBlock, type AccountState } from "../auth/capabilities";
 import { pushAvailable } from "./pushAvailable";
 
 const PUSH_TOKEN_KEY = "logjam_push_token";
@@ -25,7 +26,11 @@ const PUSH_TOKEN_KEY = "logjam_push_token";
  * permanently. Asking is `requestPushPermission()`'s job, from a
  * screen where the user knows what they are answering.
  */
-export async function registerForPushNotifications(): Promise<void> {
+export async function registerForPushNotifications(
+  accountState: AccountState,
+): Promise<void> {
+  // No account, no device row to register the token against (ADR 0007).
+  if (capabilityScreenBlock("pushNotifications", accountState)) return;
   const permission = await Notifications.getPermissionsAsync().catch(
     (err: unknown) => {
       console.error(err);
