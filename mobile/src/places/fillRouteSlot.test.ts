@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WayRemovalError } from "@logjam/shared";
+import { fillRouteSlot } from "./fillRouteSlot";
+import type { MirrorMedia } from "../sync/mirrorStore";
 
 const calls = vi.hoisted(() => ({
   confirm: vi.fn(async () => true),
@@ -15,9 +17,6 @@ vi.mock("../sync/mediaUpload", () => ({
 vi.mock("../sync/outbox", () => ({
   updateRouteLocal: calls.updateRouteLocal,
 }));
-
-import { fillRouteSlot } from "./fillRouteSlot";
-import type { MirrorMedia } from "../sync/mirrorStore";
 
 const file = (origin: MirrorMedia["origin"]) =>
   ({

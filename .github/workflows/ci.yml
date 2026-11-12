@@ -129,6 +129,11 @@ jobs:
       - name: Build
         working-directory: shared
         run: npm run build
+      # The build leaves the colocated tests out; this checks them too, so a
+      # test cannot keep asserting a shape the types no longer allow.
+      - name: Typecheck
+        working-directory: shared
+        run: npm run typecheck
       - name: Lint
         working-directory: shared
         run: npm run lint
