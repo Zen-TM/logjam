@@ -10,7 +10,7 @@ vi.mock("./placeUtils", () => ({
 }));
 vi.mock("./geoPdf/cache", () => ({ clearTileCache: vi.fn(async () => {}) }));
 
-import { CLEARED_ON_SIGN_OUT } from "./signOutStores";
+import { CLEARED_ON_SIGN_OUT, PENDING_DEEP_LINKS } from "./signOutStores";
 import { signOut } from "./useAuth";
 
 // Every key Logjam Web writes to localStorage or sessionStorage is either
@@ -58,16 +58,25 @@ const KEPT: Record<string, string> = {
 
 const SRC = join(__dirname);
 function sources(): string[] {
-  return (readdirSync(SRC, { recursive: true }) as string[])
-    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$|\.d\.ts$/.test(f))
-    .map((f) => readFileSync(join(SRC, f), "utf8"));
+  return (
+    (readdirSync(SRC, { recursive: true }) as string[])
+      // signOutStores.ts is the list under test: scanning it would "find" every
+      // listed key and the stale-entry check could never fail.
+      .filter(
+        (f) =>
+          /\.tsx?$/.test(f) &&
+          !/\.test\.tsx?$|\.d\.ts$/.test(f) &&
+          f !== "signOutStores.ts",
+      )
+      .map((f) => readFileSync(join(SRC, f), "utf8"))
+  );
 }
 
 function keysWritten(): Set<string> {
   const found = new Set<string>();
   const patterns = [
     // Every useStoredState key and key constant.
-    /["'](logjam\.[A-Za-z0-9.]+)["']/g,
+    /["'](logjam\.[\w.-]+)["']/g,
     // A key named at the storage call.
     /(?:session|local)Storage\.\w+Item\(\s*["']([^"']+)["']/g,
     // A key handed to the pending-invite factory.
@@ -83,6 +92,7 @@ describe("every stored key is decided at sign-out", () => {
   const found = keysWritten();
   const decided = [
     ...CLEARED_ON_SIGN_OUT,
+    ...PENDING_DEEP_LINKS,
     ...CLEARED_BY_OWN_MODULE,
     ...Object.keys(KEPT),
   ];
@@ -122,9 +132,17 @@ describe("sign-out", () => {
   });
 
   it("leaves none of the cleared keys behind in either store, and keeps the kept ones", async () => {
-    const cleared = [...CLEARED_ON_SIGN_OUT, ...CLEARED_BY_OWN_MODULE];
+    const cleared = [
+      ...CLEARED_ON_SIGN_OUT,
+      ...PENDING_DEEP_LINKS,
+      ...CLEARED_BY_OWN_MODULE,
+    ];
     // A module's own key lives in one store only; the rest are written to both.
-    for (const k of [...CLEARED_ON_SIGN_OUT, ...Object.keys(KEPT)]) {
+    for (const k of [
+      ...CLEARED_ON_SIGN_OUT,
+      ...PENDING_DEEP_LINKS,
+      ...Object.keys(KEPT),
+    ]) {
       localStorage.setItem(k, "1");
       sessionStorage.setItem(k, "1");
     }

@@ -135,7 +135,7 @@ function sourceFiles(dir: string): string[] {
     .filter(
       (f) =>
         /\.tsx?$/.test(f) &&
-        !/\.test\.tsx?$|\.d\.ts$|__tests__|__fixtures__|node_modules|dist/.test(
+        !/\.test\.tsx?$|\.d\.ts$|(^|\/)(__tests__|__fixtures__|node_modules|dist)\//.test(
           f,
         ),
     )

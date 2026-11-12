@@ -40,7 +40,7 @@ async function endSession() {
   // can't strand it.
   clearTripDraft();
   clearRecentSearches();
-  clearKeptStores();
+  clearKeptStores(true);
   // An invite waiting in this tab was for whoever opened its link; the next
   // account to sign in here must not be handed it.
   friendInvite.clear();
@@ -61,7 +61,9 @@ async function endSession() {
   }
   // Once more: a render or prefetch worker may have written while the
   // sign-out was in flight. Before the navigation, which would abort it
-  // (frontend/AGENTS.md, ADR 0043).
+  // (frontend/AGENTS.md, ADR 0043). The stored view and filters are
+  // rewritten by the mounted app the same way.
+  clearKeptStores(true);
   await clearTileCache();
   if (to) window.location.assign(to);
   else window.location.reload();
@@ -106,6 +108,7 @@ export function useAuth() {
     // Whoever signs in starts with an empty tile cache, even after a
     // failed session check that left the last user's in place.
     clearRecentSearches();
+    clearKeptStores();
     await clearTileCache();
     sessionCheckFailed.current = false;
     // Await provisioning before flipping to authenticated: GET /users/me
@@ -151,6 +154,7 @@ export function useAuth() {
           // session that lapsed while the tab was shut): their GeoPDF tiles
           // go with it.
           clearRecentSearches();
+          clearKeptStores();
           void clearTileCache();
           setState("signIn");
         }
@@ -173,6 +177,7 @@ export function useAuth() {
   useEffect(() => {
     if (state === "signIn" && !sessionCheckFailed.current) {
       clearRecentSearches();
+      clearKeptStores();
       void clearTileCache();
     }
   }, [state]);
@@ -185,6 +190,7 @@ export function useAuth() {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     setSessionExpiredHandler(() => {
       clearRecentSearches();
+      clearKeptStores();
       void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;

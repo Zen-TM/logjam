@@ -52,7 +52,7 @@ test.beforeEach(async ({ page, context }) => {
 test.afterEach(() => {
   expect(
     writes,
-    "an accessibility case wrote to the account: stop before the confirming click, or answer the request with a page.route stub (frontend/AGENTS.md, Testing)",
+    "an accessibility case sent a request that is not a read: stop before the confirming click, or, if the endpoint only reads, add its path to READ_ONLY_POSTS (frontend/AGENTS.md, Testing)",
   ).toEqual([]);
 });
 
