@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
 import { API_URL, BOB_ID, BOB_SUB, CAROL_ID, CAROL_SUB, as } from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Two people get one friendship row, whichever of them asked and however
 // close together they asked. Requires `make dev`.
@@ -79,6 +80,25 @@ describe("one friendship per pair", () => {
         where: { payload: { path: ["friendshipId"], equals: friendship.id } },
       }),
     ).toBe(0);
+  });
+
+  // Mutation that turns it red: drop the friendshipDeleteTombstones row from
+  // the decline transaction in PATCH /friends/:id/decline (routes/friends.ts).
+  it("declining a request tombstones the edge for both people", async () => {
+    const friendship = await prisma.friendship.create({
+      data: { requesterId: BOB_ID, addresseeId: CAROL_ID },
+    });
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const carolCursor = await deltaCursor(CAROL_SUB);
+
+    const res = await request(API_URL)
+      .patch(`/friends/${friendship.id}/decline`)
+      .set(as(CAROL_SUB));
+    expect(res.status).toBe(204);
+
+    const gone = { type: "friendship", id: friendship.id };
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
+    expect(await tombstonesSince(CAROL_SUB, carolCursor)).toContainEqual(gone);
   });
 
   it("accepts a waiting request when its addressee asks back", async () => {

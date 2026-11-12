@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID } from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 const CAROL = as(CAROL_SUB);
 
@@ -506,5 +507,28 @@ describe("GET /trips — query param validation", () => {
       .query({ dateFrom: "2024-01-01", dateTo: "2024-12-31" })
       .set(AUTH);
     expect(res.status).toBe(200);
+  });
+});
+
+describe("DELETE /trips/:id (acting as carol)", () => {
+  // Mutation that turns it red: skip the writeTombstones call in
+  // deleteTripsCascade (lib/bulkDelete.ts).
+  it("tombstones the trip for its owner", async () => {
+    const placeId = await createPlace(`${TAG}-del`, CAROL);
+    const trip = await createTrip(
+      { placeIds: [placeId], date: "2024-03-17" },
+      CAROL,
+    );
+    try {
+      const cursor = await deltaCursor(CAROL_SUB);
+      const res = await request(API_URL).delete(`/trips/${trip.id}`).set(CAROL);
+      expect(res.status).toBe(204);
+      expect(await tombstonesSince(CAROL_SUB, cursor)).toContainEqual({
+        type: "tripLog",
+        id: trip.id,
+      });
+    } finally {
+      await deletePlace(placeId, CAROL);
+    }
   });
 });
