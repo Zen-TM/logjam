@@ -18,7 +18,7 @@ const ERROR_MESSAGE_MSG =
   "An error's message can carry a place name. Show messageFromError(err, \"Couldn't save place.\") through ErrorBanner, FieldError or useToast().error (frontend/DESIGN.md §3).";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", "dist-e2e"] },
   {
     // Logjam Web draws icons through its own kit, never Lucide directly.
     files: ["src/**/*.{ts,tsx}"],

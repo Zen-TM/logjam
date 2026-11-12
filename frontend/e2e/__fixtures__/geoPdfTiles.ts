@@ -410,8 +410,15 @@ export function unreadableHeights(): Buffer {
   return pmtiles(tiles, 2);
 }
 
-/** The statewide archives round CENTRE, built once. */
+let statewide: ReturnType<typeof buildStatewideArchives> | undefined;
+
+/** The statewide archives round CENTRE. Building them takes seconds and a spec
+ *  file and the master stub each want them, so a process builds them once. */
 export function statewideArchives() {
+  return (statewide ??= buildStatewideArchives());
+}
+
+function buildStatewideArchives() {
   const tilesAt = (z: number, radius: number) => {
     const cx = lon2x(CENTRE.lon, z);
     const cy = lat2y(CENTRE.lat, z);

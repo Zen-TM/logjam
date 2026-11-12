@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+# Logjam Web builds the Playwright run serves (frontend `npm run build:e2e`)
+dist-e2e/
 # TypeScript incremental build cache (emitted by `tsc -b`)
 *.tsbuildinfo
 
