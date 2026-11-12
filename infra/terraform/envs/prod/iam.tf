@@ -734,9 +734,10 @@ locals {
         Resource = "*"
       },
       # The same logs by another route: a single record by pointer (no
-      # resource-level permission, hence "*"). Nothing in CI reads one. A
-      # service added later that keeps logs of its own (a managed database's
-      # log files, say) needs its read actions denied here in the same change.
+      # resource-level permission, hence "*"). Nothing in CI reads one.
+      # ReadOnlyAccess allows a new service's own log reads (a managed
+      # database's log files, say), so a service added later stays open
+      # until its read actions are listed here.
       {
         Sid      = "DenyLogsByOtherRoutes"
         Effect   = "Deny"
