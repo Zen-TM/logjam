@@ -95,6 +95,7 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
 
 // Mutation: drop the owner-only PlacePicker or the Unlink menu entry from the
 // "linkedPlaces" section, or the MediaUpload from "photos", in PlaceDetailPanel.
+// The link is taken back in a `finally`, so a red run leaves nothing behind.
 test("an owner links and unlinks places, and adds photos, on the place's page", async ({
   page,
 }) => {
@@ -106,11 +107,24 @@ test("an owner links and unlinks places, and adds photos, on the place's page", 
 
   await expect(aside.getByText("Drop files or click to upload")).toBeVisible();
 
+  const options = aside.getByRole("button", { name: `Options for ${other}` });
+  const unlink = async () => {
+    await options.click();
+    await page
+      .getByRole("menuitem", { name: "Unlink from this place" })
+      .click();
+  };
   await aside.getByRole("combobox", { name: "Link a place" }).fill(other);
   await page.getByRole("option", { name: other, exact: true }).first().click();
-  await expect(page.getByText(`Linked to ${other}.`)).toBeVisible();
-
-  await aside.getByRole("button", { name: `Options for ${other}` }).click();
-  await page.getByRole("menuitem", { name: "Unlink from this place" }).click();
-  await expect(page.getByText("Unlinked.")).toBeVisible();
+  try {
+    await expect(page.getByText(`Linked to ${other}.`)).toBeVisible();
+    await unlink();
+    await expect(page.getByText("Unlinked.")).toBeVisible();
+  } finally {
+    // The link is on the account the moment it is made: take it back whatever
+    // failed above, or the next run starts with it (and the menu lists differ).
+    if (await page.getByRole("menu").count())
+      await page.keyboard.press("Escape");
+    if (await options.count()) await unlink();
+  }
 });
