@@ -12,7 +12,7 @@ what it does.
 ## Who does what
 
 The session that runs this skill **orchestrates**: it gathers the inputs,
-launches every pass and every validation as its own fresh subagent, and
+launches every pass and every validation in a fresh subagent, and
 assembles the output. It judges nothing itself, so it may be the session that
 wrote the change. A subagent does its job directly and launches none of its
 own. Write each
@@ -67,10 +67,14 @@ severity from Output and the reason (the rule, or the bug).
 ## 3. Validate every finding
 
 First merge findings that share a `path:line` and a cause; that is
-bookkeeping, not judgement. Then launch one fresh subagent per finding,
-however small, with the finding, the change and the intent. It re-reads the
-code and confirms the issue is real; for a rule finding, it quotes the rule
-and confirms it is scoped to that file. It may lower a finding's severity,
+bookkeeping, not judgement. Then launch a fresh subagent for each finding
+that takes judgement to confirm (a bug, a boundary, how a rule reads), with
+the finding, the change and the intent. Findings that one look at one place
+settles (a missing note, a wrong path, a pattern that plainly matches too
+much) may share a subagent, four at most, each answered separately: a
+context apiece buys nothing there. A validator re-reads the code and confirms
+the issue is real; for a rule finding, it quotes the rule and confirms it is
+scoped to that file. It may lower a finding's severity,
 never raise it. Drop what does not survive; a finding that is plausible but
 unconfirmed is a `question` at most. False positives cost the author more
 than a miss costs the review.
