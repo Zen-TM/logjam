@@ -1055,6 +1055,7 @@ make_16_database() { # <bucket>: bootstraps a 16 database on the 16 image in a n
   check "the 16 image bootstraps a 16 database" [ "$(pg_major)" = 16 ]
   sql logjam "create table e2e_upg as select g as n from generate_series(1, 500) g; create table _prisma_migrations (id int)" > /dev/null
   force_wal
+  sleep 2 # whole seconds: the target must be later than the backup's stop time
   T16=$(date -u +%Y-%m-%dT%H:%M:%SZ) # a time before the upgrade, with WAL archived after it so that a restore to it can end
   sleep 2
   sql logjam "create table e2e_late as select 1 as n" > /dev/null
