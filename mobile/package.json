@@ -12,6 +12,7 @@
     "pretypecheck": "npm --prefix ../shared run build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "pretest": "npm --prefix ../shared run build",
     "test": "vitest run",
     "update:preview": "scripts/check-eas-env.sh preview && eas update --branch preview --environment preview --private-key-path keys/private-key.pem",
     "update:production": "node scripts/check-production-update.js && scripts/check-eas-env.sh production && eas update --branch production --environment production --private-key-path keys/private-key.pem",
