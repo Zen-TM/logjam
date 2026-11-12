@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
+import { waitForLockWaiter } from "./_waitForLock";
 import {
   hashFriendInviteToken,
   mintFriendInviteToken,
@@ -325,8 +326,9 @@ describe("redeeming while the plan changes", () => {
         pending = new Promise((resolve, reject) => {
           redeem(CAROL_SUB, token).then(resolve, reject);
         });
-        // Long enough for the redeem to read the link and reach touchPlan.
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Until the request is blocked behind the row this transaction holds
+        // (touchPlan), not for a guessed time.
+        await waitForLockWaiter();
         await during(tx);
       },
       { timeout: 10_000 },

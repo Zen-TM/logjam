@@ -201,9 +201,11 @@ jobs:
     # with AUTH_MODE=fake.
     #
     # The DB is a fresh service container every run, deliberately NOT cached:
-    # the suite is not idempotent against a reused database (sync_tombstones
-    # accumulate until syncBoundary's paged-pull assertions stop finding the
-    # tombstone they just wrote). Never cache the Postgres volume here.
+    # the suite snapshots the database `prisma db seed` leaves and refuses to
+    # run against one that differs (_globalSetup.ts), so it must be built from
+    # this commit's migrations and seed. A rerun on the same database is fine:
+    # each file sweeps it back to that snapshot. Never cache the Postgres
+    # volume here.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
