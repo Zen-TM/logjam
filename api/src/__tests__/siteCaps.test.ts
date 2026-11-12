@@ -23,7 +23,8 @@ import { AppError } from "../middleware/errorHandler";
 // cap"); remove the `siteCap === 0` line in either file ("0 turns the cap
 // off"); remove `where: { egressPeriodStart … }` in lib/egressQuota.ts ("counts
 // a stale period as zero"); remove the `siteEgressSpent` line in
-// `exhaustedEgressOwnerIds` ("the bulk download also stops").
+// `exhaustedEgressOwnerIds` ("returns no items once everyone together has
+// passed the cap" and "returns them with the cap at 0").
 
 const env = getEnv();
 const original = {
