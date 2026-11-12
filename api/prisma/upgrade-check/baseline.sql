@@ -24,26 +24,18 @@
 
 \set ON_ERROR_STOP on
 
--- 20261112000000_topo_job_wall_seconds_stamp: every finished job with a
--- started_at ends up with a numeric wallSeconds, the ones that had none get
--- updated_at - started_at, and no updated_at moves. Off once the base has it.
+-- 20261113000000_launch_limit_defaults: every account ends up with 800 compute
+-- credits and 10 GiB of download quota, overrides included. Off once the base
+-- has it.
 SELECT NOT EXISTS (
   SELECT 1 FROM _prisma_migrations
-   WHERE migration_name = '20261112000000_topo_job_wall_seconds_stamp'
-) AS stamp_applies \gset
-\if :stamp_applies
+   WHERE migration_name = '20261113000000_launch_limit_defaults'
+) AS limits_apply \gset
+\if :limits_apply
 \if :{?fixtures}
-INSERT INTO users (id, subject, username, email) VALUES
-  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid');
-INSERT INTO topo_jobs (id, user_id, status, started_at, updated_at, pipeline_metrics) VALUES
-  ('upgrade-fixture-1', 'upgrade-fixture-x', 'failed',   '2026-01-01 10:00:00', '2026-01-01 12:00:00', NULL),
-  ('upgrade-fixture-2', 'upgrade-fixture-x', 'failed',   '2026-01-01 10:00:00', '2026-01-08 12:00:00', 'null'),
-  ('upgrade-fixture-3', 'upgrade-fixture-x', 'complete', '2026-01-01 10:00:00', '2026-01-08 12:00:00', '{"phases": {"a": 1}}'),
-  ('upgrade-fixture-4', 'upgrade-fixture-x', 'complete', '2026-01-01 10:00:00', '2026-01-08 12:00:00', '{"wallSeconds": 99}'),
-  ('upgrade-fixture-5', 'upgrade-fixture-x', 'failed',   NULL,                  '2026-01-08 12:00:00', NULL);
+INSERT INTO users (id, subject, username, email, monthly_compute_credits, monthly_egress_quota_bytes) VALUES
+  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid', 5000, 107374182400);
 \endif
 CREATE SCHEMA IF NOT EXISTS upgrade_check;
-CREATE TABLE upgrade_check.topo_jobs AS
-  SELECT id, started_at, updated_at, pipeline_metrics FROM topo_jobs
-   WHERE status NOT IN ('pending', 'processing');
+CREATE TABLE upgrade_check.users AS SELECT id FROM users;
 \endif
