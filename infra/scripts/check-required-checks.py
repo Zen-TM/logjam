@@ -4,7 +4,8 @@
 The ruleset (infra/terraform/envs/github/rulesets.tf, required_checks) names
 check contexts as strings; nothing else ties them to the jobs that report
 them. A context no job reports, or one whose workflow does not start on every
-pull request (a `paths:` filter), never reports at all, and with strict
+pull request (a `paths:` filter, or a `types:` list without one of the
+default events), never reports at all, and with strict
 required checks and no bypass actors every PR waits on it forever.
 
 A job reports its `name:` if it has one, else its id. A matrix job reports
@@ -41,6 +42,8 @@ delete one job's `timeout-minutes`; remove
 `--retry` or the `-f` from one download in any workflow; change the gitleaks
 version in ci.yml or mise.toml but not the other; rename a required job (or its
 `name:`); add a `paths:` filter to rollback-compat.yml's pull_request trigger;
+drop `opened` from the `types:` of pr-closes.yml's; add `pull_request:` to
+expo-doctor-nightly.yml;
 turn terraform-ci.yml's `validate` back into a matrix.
 
 Usage: check-required-checks.py   (from anywhere in the repo; needs PyYAML)
@@ -67,6 +70,9 @@ FILTERS = {"paths", "paths-ignore", "branches-ignore"}
 # "<workflow>:<job id>", each with why. Matrix jobs are not listed: they are
 # reached through the gate job that needs them.
 NOT_REQUIRED = {
+    # A scope job gives no verdict. A failed one hides nothing: every job it
+    # gates runs unless it says 'false' (ci-scope.sh), and requiring it would
+    # only add a re-run of those jobs before the merge.
     "ci.yml:changes": "scope job: decides which heavy jobs run (ci-scope.sh)",
     "mobile-emulator.yml:changes": "scope job",
     "rollback-compat.yml:changes": "scope job",
@@ -77,7 +83,6 @@ NOT_REQUIRED = {
     "ota-plan.yml:plan": "ota-hotfix.yml reads the plan's result itself before it publishes",
     "ota-plan.yml:smoke": "part of the OTA plan, as above",
     "ota-plan.yml:ota-plan": "the OTA plan's summary, as above",
-    "expo-doctor.yml:nightly-issue": "runs on the nightly schedule only, to open an issue",
 }
 
 
@@ -108,6 +113,11 @@ def starts_on_every_pr(doc):
     if "pull_request" not in on:
         return False
     trigger = on["pull_request"] or {}
+    # `types` replaces the default events: a list without one of them leaves
+    # pull requests the check never reports on.
+    types = trigger.get("types")
+    if types is not None and not {"opened", "synchronize", "reopened"} <= set(types):
+        return False
     return not (FILTERS & set(trigger))
 
 
