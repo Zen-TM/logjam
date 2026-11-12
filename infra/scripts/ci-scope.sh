@@ -48,7 +48,7 @@ paths_for() {
     # otaHotfix.test.ts reads the two OTA workflows. The emulator smoke check
     # (mobile-emulator.yml) and the action that builds its APK are part of the
     # area they gate.
-    mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/(mobile-emulator|ota-hotfix|ota-rollback)\.yml$)' ;;
+    mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/(mobile-emulator|ota-hotfix|ota-plan|ota-rollback)\.yml$)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
     # upgraded to this commit (the head's seed never runs there), where the
     # snapshot scrub is then run over it (snapshot-scrub.sql and its canary).
@@ -172,6 +172,7 @@ self_test() {
   check "mobile: the action that builds its APK"          mobile true  0 '.github/actions/build-dev-apk/action.yml'
   check "mobile: the OTA publish workflow it reads"       mobile true  0 '.github/workflows/ota-hotfix.yml'
   check "mobile: the OTA rollback workflow it reads"      mobile true  0 '.github/workflows/ota-rollback.yml'
+  check "mobile: the OTA plan workflow it reads"          mobile true  0 '.github/workflows/ota-plan.yml'
   check "migrations: a migration"                         migrations true  0 'api/prisma/migrations/2026/migration.sql'
   check "migrations: upgrade checks"                      migrations true  0 'api/prisma/upgrade-check/verify.sql'
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'

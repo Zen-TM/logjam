@@ -246,31 +246,41 @@ describe("OTA hotfix plan", () => {
     );
   });
 
-  // `ota-plan` is a required check, and a skipped job passes one. So the plan
-  // must run on every event while the label is on: were it to skip on some
-  // (another label added, as it once did), that event would turn a red plan
-  // green for the ruleset. And one run at a time, so the newest is the result.
+  // `ota-plan` is a required check, and the ruleset reads the newest check of
+  // that name: a skipped one passes, and a job has no check until the jobs it
+  // `needs` finish. So the plan runs on every event while the label is on
+  // (were it to skip on some, as it once did when another label was added,
+  // that event would turn a red plan green), one run at a time, and the
+  // `ota-plan` job has no `needs`: it starts with the run and waits for
+  // `verdict`, so a plan in progress shows as one.
   // Mutation: add an event test such as `github.event.action != 'labeled'` to
-  // the plan's `if:`, drop `opened` or `unlabeled` from the trigger, or put
-  // anything but the PR number in the concurrency group.
-  it("plans on every event while the label is on, and only then", () => {
+  // the plan's `if:`, drop `opened` or `unlabeled` from the trigger, put
+  // anything but the PR number in the concurrency group, give the `ota-plan`
+  // job a `needs:`, or have it pass on anything but verdict's success.
+  it("plans on every event while the label is on, and shows as running until the verdict", () => {
     const plan = readFileSync(
       join(__dirname, "../../.github/workflows/ota-plan.yml"),
       "utf8",
     );
+    const labelled =
+      "    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')\n    runs-on:";
     expect(plan).toContain(
       "    types: [opened, reopened, synchronize, labeled, unlabeled]\n",
     );
-    expect(plan).toContain(
-      "\n  plan:\n    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')\n    runs-on:",
-    );
+    expect(plan).toContain(`\n  plan:\n${labelled}`);
     expect(plan).toContain(
       "concurrency:\n  group: ota-plan-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n",
     );
-    // The summary is the required check: it skips only when the plan did.
     expect(plan).toContain(
-      "\n  ota-plan:\n    needs: [plan, smoke]\n    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}\n",
+      "\n  verdict:\n    needs: [plan, smoke]\n    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}\n",
     );
+    const reporter = plan.slice(plan.indexOf(`\n  ota-plan:\n${labelled}`));
+    expect(reporter.startsWith("\n  ota-plan:\n")).toBe(true);
+    expect(reporter).not.toMatch(/^ {4}needs:/m);
+    expect(reporter).toContain(
+      'select(.name == "verdict" and .status == "completed") | .conclusion] | last // empty',
+    );
+    expect(reporter.trimEnd().endsWith('[ "$verdict" = success ]')).toBe(true);
   });
 });
 

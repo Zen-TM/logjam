@@ -4,7 +4,8 @@
 The ruleset (infra/terraform/envs/github/rulesets.tf, required_checks) names
 check contexts as strings; nothing else ties them to the jobs that report
 them. A context no job reports, or one whose workflow does not start on every
-pull request (a `paths:` filter), never reports at all, and with strict
+pull request (a `paths:` filter, or a `types:` list without one of the
+default events), never reports at all, and with strict
 required checks and no bypass actors every PR waits on it forever.
 
 A job reports its `name:` if it has one, else its id. A matrix job reports
@@ -41,6 +42,8 @@ delete one job's `timeout-minutes`; remove
 `--retry` or the `-f` from one download in any workflow; change the gitleaks
 version in ci.yml or mise.toml but not the other; rename a required job (or its
 `name:`); add a `paths:` filter to rollback-compat.yml's pull_request trigger;
+drop `opened` from the `types:` of ota-plan.yml's; add `pull_request:` to
+expo-doctor-nightly.yml;
 turn terraform-ci.yml's `validate` back into a matrix.
 
 Usage: check-required-checks.py   (from anywhere in the repo; needs PyYAML)
@@ -77,8 +80,9 @@ NOT_REQUIRED = {
     "terraform-ci.yml:changes": "scope job",
     "terraform-plan.yml:scope": "scope job",
     "mobile-emulator.yml:emulator": "not required until #723 promotes it, after 14 green nightlies",
-    "ota-plan.yml:plan": "its verdict is the `ota-plan` job's, which is required",
+    "ota-plan.yml:plan": "part of the plan: the required `ota-plan` job reports its verdict",
     "ota-plan.yml:smoke": "as above",
+    "ota-plan.yml:verdict": "as above",
 }
 
 

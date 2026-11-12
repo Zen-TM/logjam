@@ -7,13 +7,15 @@ name: ota-plan
 # emulator smoke on the patched tree. ota-hotfix.yml publishes only when this
 # passed on the PR's head. Procedure: docs/operations/mobile-release.md.
 #
-# A required check (the main ruleset). It runs whenever the label is on, on
-# every push and every change of labels, and skips, which passes, when it is
-# off. So a skipped run means no hotfix, a red or running plan stops the
-# merge, and a PR never reaches main under the label with nothing to publish:
-# fix the plan or take the label off. A trigger can't filter by label, so any
-# label change re-runs it; skipping there would pass the ruleset on a red
-# plan. No secrets: it runs the PR's own code.
+# `ota-plan`, its last job, is a required check (the main ruleset). It runs
+# whenever the label is on, on every push and every change of labels, and
+# skips, which passes, when it is off. So a skipped run means no hotfix, a red,
+# running or cancelled plan stops the merge, and a PR never reaches main under
+# the label with nothing to publish: fix the plan or take the label off. A
+# trigger can't filter by label, so any label change re-runs it; skipping
+# there would pass the ruleset on a red plan. The labels are the event's: two
+# events queued out of order (rare) can leave the older one's answer, which a
+# push or a re-run corrects. No secrets: it runs the PR's own code.
 
 on:
   pull_request:
@@ -110,8 +112,8 @@ jobs:
       ref: ${{ needs.plan.outputs.base }}
       patch: ota-hotfix-patch
 
-  # The one check ota-hotfix.yml reads, and the PR's comment.
-  ota-plan:
+  # The plan's result, and the PR's comment.
+  verdict:
     needs: [plan, smoke]
     if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
     runs-on: ubuntu-latest
@@ -151,3 +153,33 @@ jobs:
             fi
           fi
           [ -z "$REFUSAL" ] && [ "$PLAN" = success ] && [ "$SMOKE" = success ]
+
+  # The required check, and the one ota-hotfix.yml reads: `verdict`, reported
+  # by a job that starts with the run and ends with it. A job that waits on
+  # others (`needs`) has no check until they finish, and until then the
+  # ruleset would read an older run's, a skipped one included: a labelled PR
+  # could merge while its plan ran. This one waits by asking for the run's
+  # jobs instead, so it is in progress for as long as the plan is, and a
+  # cancelled run leaves it cancelled, which does not pass.
+  ota-plan:
+    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')
+    runs-on: ubuntu-latest
+    # Over the sum of the jobs it waits for (15 + 5 + 60 + 5) and their queues.
+    timeout-minutes: 120
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for this run's verdict, and report it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # A failed request reads as "not yet": the timeout is the bound.
+          until verdict=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "verdict" and .status == "completed") | .conclusion] | last // empty') \
+            && [ -n "$verdict" ]; do
+            sleep 30
+          done
+          echo "verdict: $verdict"
+          [ "$verdict" = success ]
