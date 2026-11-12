@@ -15,11 +15,12 @@ FROM postgres:18.6-trixie
 # a database at the old path. brain-entrypoint.sh reads the same variable.
 ENV PGDATA=/var/lib/postgresql/data
 
-# The base image already configures the PGDG apt repository.
-# postgresql-16 and its pgaudit are here only so major-upgrade.sh has the 16
-# binaries to read a 16 data directory with; they go once prod is on 18.
+# The base image already configures the PGDG apt repository. The previous
+# major's packages are not here: a major upgrade adds them for its transition
+# (docs/operations/brain.md, "Upgrading Postgres to a new major"), and the tests
+# add them in a layer of their own.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl jq openssl pgbackrest postgresql-18-pgaudit postgresql-16 postgresql-16-pgaudit \
+ && apt-get install -y --no-install-recommends ca-certificates curl jq openssl pgbackrest postgresql-18-pgaudit \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /etc/pgbackrest /etc/postgresql \
  && chown postgres:postgres /etc/pgbackrest
