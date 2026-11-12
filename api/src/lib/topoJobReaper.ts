@@ -267,8 +267,7 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * The status-guarded claim is the house dedup rule (root AGENTS.md): two API
  * instances sweeping concurrently both read the same overdue ids, but only one
  * `updateMany` per id reports `count === 1`. Notifying on the READ set instead would send the user
- * two notifications, two pushes and two emails per reaped job — prod runs the
- * API on Elastic Beanstalk, so >1 instance is a real configuration.
+ * two notifications, two pushes and two emails per reaped job.
  *
  * Winning the flip also proves the row was still `pending`/`queued`/overdue a
  * moment ago, which is why no confirm-read is needed.

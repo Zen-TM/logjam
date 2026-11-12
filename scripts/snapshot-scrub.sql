@@ -18,7 +18,16 @@ UPDATE users
 SET
   email      = 'user-' || id || '@local',
   subject    = 'sanitized-' || id,
-  username   = 'user-' || id;
+  username   = 'user-' || id,
+  -- The rest is settings. These three keys are the custom-field LABELS that
+  -- `custom_field_defs` was backfilled from, left in place by that migration
+  -- (20260905100000_custom_field_defs_table); `custom_field_defs.label` is
+  -- scrubbed below.
+  ui_preferences = ui_preferences - 'tripLogCustomFields' - 'canyonCustomFields' - 'placeCustomFields';
+
+-- A push token identifies one person's phone. The `'token-' || id` stand-in is
+-- no valid Expo token, so a dev API sends nothing to it.
+UPDATE device_tokens SET token = 'token-' || id;
 
 -- Everything a user typed. A place NAME is as sensitive as its notes under the
 -- NPWS guidance in AGENTS.md — "Claustral" and "the one below the third
@@ -28,10 +37,10 @@ SET
 -- same thing copied from someone else, labels included. Both are as sensitive
 -- as notes and neither is optional to scrub.
 --
--- The coverage test runs in both directions: it fails if a listed column does
--- not exist or if a user-authored String/Json column is missing from this file.
--- Note that arm reads String/Json columns only — a numeric that needs scrubbing
--- would have to be added here by hand.
+-- The coverage test runs in both directions: it fails if a column named here
+-- does not exist, or if a String/Json column of any model is neither assigned
+-- here nor declared safe. It reads String/Json columns only — a numeric that
+-- needs scrubbing would have to be added here by hand.
 UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
     "altNames" = '{}',
@@ -39,7 +48,13 @@ SET name = 'place-' || substring(id::text, 1, 8),
     gauge_id = NULL,
     field_values = '{}',
     foreign_fields = NULL,
-    type_name = NULL;
+    type_name = NULL,
+    import_key = NULL;
+
+-- `import_key` on places and trips is an unsalted hash of the name with the
+-- coordinates (or date and notes) the snapshot keeps, so a guessed name would
+-- confirm against it: NULL. A CSV imported into a snapshot no longer merges
+-- with the rows it was imported from.
 
 -- TRIP TYPES are user-authored tags ("Claustral recon", "with Dad"), held in two
 -- places that must keep MATCHING after the scrub: a trip's own `types`, and the
@@ -71,6 +86,7 @@ $$;
 UPDATE trip_logs
 SET notes = NULL,
     display_name = NULL,
+    import_key = NULL,
     custom_fields = '{}',
     types = pg_temp.scrub_trip_types(types);
 
@@ -81,12 +97,30 @@ UPDATE custom_field_defs
 SET label = 'field-' || substring(id::text, 1, 8),
     trip_types = pg_temp.scrub_trip_types(trip_types);
 
+-- A field's `key` is its label slugged, once, at creation. User-owned fields get
+-- a stand-in (the full id keeps the unique (owner_id, entity, key)); the system
+-- fields (owner_id NULL) keep the keys the code pins. The values that were keyed
+-- by it are blanked above and below.
+UPDATE custom_field_defs SET key = 'field-' || id WHERE owner_id IS NOT NULL;
+
 -- Undo's copies of the place and trip fields scrubbed above. Blank, Undo
 -- restores nothing.
 UPDATE import_snapshots SET before = '{}', after = '{}';
 
 UPDATE routes SET name = 'route-' || substring(id::text, 1, 8);
 UPDATE media SET display_name = NULL, filename = 'file-' || substring(id::text, 1, 8);
+
+-- User-owned place types are named by their owner ("Slot with a sting"); the
+-- shared system types (owner_id NULL: Canyon, Waypoint ...) are app copy and
+-- keep their names. The full id, as for usernames, keeps the unique
+-- (owner_id, name) when ids share a prefix.
+UPDATE place_types SET name = 'type-' || id WHERE owner_id IS NOT NULL;
+
+-- A LiDAR job's and a template's name say where ("Claustral LiDAR"); a sent
+-- file's name is the file ("Claustral.gpx").
+UPDATE topo_jobs SET name = 'job-' || substring(id::text, 1, 8);
+UPDATE topo_templates SET name = 'template-' || substring(id::text, 1, 8);
+UPDATE file_sends SET filename = 'file-' || substring(id::text, 1, 8);
 
 -- Plans: the write-up, the forms and every answer. Safety contacts are names
 -- and phone numbers of people who are not Logjam users.
@@ -108,7 +142,8 @@ UPDATE notifications
 SET payload = payload - 'planName' - 'filename' - 'jobName';
 
 -- DELIBERATELY NOT SCRUBBED, so the omission reads as a decision:
---   places.latitude/longitude, routes.points/anchors, media.metadata —
+--   places.latitude/longitude, routes.points/anchors, media.metadata,
+--   topo_jobs.footprint, topo_export_jobs.bbox —
 --   coordinates and geometry. A snapshot exists to give a dev real map data;
 --   scrubbing the coordinates leaves nothing to develop against. The operator's
 --   boundary here is identity plus free text, and the snapshot stays as

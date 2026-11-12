@@ -14,7 +14,7 @@ mock_provider "random" {}
 mock_provider "archive" {}
 
 # terraform test loads *.auto.tfvars from the root, so brain.auto.tfvars (prod's
-# switches, edited at the cutover) would otherwise decide what every run
+# switches) would otherwise decide what every run
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
@@ -1106,6 +1106,8 @@ run "brain_only_the_current_volume_is_attached_in_its_zone" {
   }
 }
 
+# The run's name predates the list: it began as the brain's data volume and
+# address, and the ADR and infra/AGENTS.md cite it by that name.
 run "brain_data_volume_and_address_keep_prevent_destroy" {
   command = plan
   variables {
@@ -1116,17 +1118,34 @@ run "brain_data_volume_and_address_keep_prevent_destroy" {
   }
 
   # A plan cannot show a lifecycle rule, and a mocked apply could not tear its
-  # resources down again, so this reads the source: each block must hold
-  # `prevent_destroy = true`. Mutation: removing it from either resource (the
-  # data volume holds the only copy of the database between backups; the
-  # address's DNS name is in the database certificate and every client's config).
+  # resources down again, so this reads the source: each block must hold a
+  # `prevent_destroy = true` line (a comment does not count). One list of every
+  # stateful resource that has it today; a new one is added here when it gets
+  # it. Mutation: `prevent_destroy = false` (or the line gone) in any of them.
+  # Why each is kept: the data volume holds the only copy of the database
+  # between backups; the address's DNS name is in the database certificate and
+  # every client's config; the backup bucket is the database's only other copy;
+  # the user pool is every account and sign-in (a replacement loses them all),
+  # and its client and domain are the sign-in URLs the apps ship with; the two
+  # distributions are the public domains and their certificate bindings; the
+  # storage module's bucket is media, topo tiles, the frontend and access logs.
   assert {
     condition = length(aws_eip.brain) == 1 && alltrue([
-      for r in ["aws_ebs_volume\" \"brain_data", "aws_eip\" \"brain"] :
-      can(regex("(?s)resource \"${r}\" \\{.*?\n\\}\n", file("brain_instance.tf"))) &&
-      strcontains(regex("(?s)resource \"${r}\" \\{.*?\n\\}\n", file("brain_instance.tf")), "prevent_destroy = true")
+      for r in [
+        { file = "brain_instance.tf", type = "aws_ebs_volume", name = "brain_data" },
+        { file = "brain_instance.tf", type = "aws_eip", name = "brain" },
+        { file = "brain_s3.tf", type = "aws_s3_bucket", name = "brain_backups" },
+        { file = "cognito.tf", type = "aws_cognito_user_pool", name = "main" },
+        { file = "cognito.tf", type = "aws_cognito_user_pool_client", name = "main" },
+        { file = "cognito.tf", type = "aws_cognito_user_pool_domain", name = "main" },
+        { file = "cloudfront.tf", type = "aws_cloudfront_distribution", name = "web" },
+        { file = "cloudfront.tf", type = "aws_cloudfront_distribution", name = "api" },
+        { file = "../../modules/storage/main.tf", type = "aws_s3_bucket", name = "this" },
+      ] :
+      can(regex("(?s)resource \"${r.type}\" \"${r.name}\" \\{.*?\n\\}\n", file(r.file))) &&
+      can(regex("(?m)^\\s*prevent_destroy = true$", regex("(?s)resource \"${r.type}\" \"${r.name}\" \\{.*?\n\\}\n", file(r.file))))
     ])
-    error_message = "The brain's data volume and Elastic IP must keep prevent_destroy (brain_instance.tf)."
+    error_message = "A stateful resource lost prevent_destroy. Restore it in the .tf file the list in guards.tftest.hcl names (never remove it to get past a plan that destroys one), or, for a new stateful resource, add it to that list."
   }
 }
 
@@ -2093,8 +2112,7 @@ run "prod_runs_on_the_brain" {
     error_message = "The API origin must keep its id, send X-Origin-Verify, and stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
   }
 
-  # Mutation: a filter pointed at another group (the old Elastic Beanstalk one),
-  # or the 5xx alarm's actions dropped.
+  # Mutation: a filter pointed at another group, or the 5xx alarm's actions dropped.
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/logjam/brain/api" &&

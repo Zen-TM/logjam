@@ -140,7 +140,8 @@ describe("hillshadePixels", () => {
   });
 
   it("is clear wherever a neighbour has no height", () => {
-    const grid = facingLight;
+    // Its own grid: this writes into it.
+    const grid = plane((x, y) => (x + y) * 1.2);
     grid.values[(SIZE / 2 - 1) * SIZE + SIZE / 2] = -32768;
     expect(centre(hillshadePixels(grid, ZOOM, TILE_Y)).alpha).toBe(0);
   });

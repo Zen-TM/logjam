@@ -21,12 +21,20 @@ on:
   schedule:
     - cron: "0 0 * * 0"
 
+# A newer push to a PR cancels that PR's older run. Anything else (a push to
+# main, the weekly run) gets a group of its own, since a shared one would also
+# cancel a queued run.
+concurrency:
+  group: setup-smoke-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       setup_smoke: ${{ steps.scope.outputs.setup_smoke }}
     steps:
@@ -50,6 +58,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.setup_smoke != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

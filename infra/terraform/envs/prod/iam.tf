@@ -591,8 +591,7 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 # NOTE: the broad AmazonS3FullAccess attachment was REMOVED (least-privilege).
 # The one S3 surface CI touches is scoped explicitly instead: the frontend SPA
 # bucket (aws_iam_role_policy.gha_frontend_deploy, below), plus the brain's
-# release pointer (brain_ecr.tf). The Elastic Beanstalk deploy attachment
-# (AdministratorAccess-AWSElasticBeanstalk) went with the environment.
+# release pointer (brain_ecr.tf).
 # VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role S3 call
 # outside these buckets; if found, widen the scoped grant, never re-add the
 # managed full-access policy.

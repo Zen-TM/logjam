@@ -29,10 +29,6 @@ import {
   updatePlaceType,
   visiblePlaceTypeWhere,
 } from "../lib/placeTypes";
-import {
-  placeTypeDeleteTombstones,
-  writeTombstones,
-} from "../lib/syncTombstones";
 
 const router = Router();
 
@@ -129,10 +125,6 @@ router.delete(
     if (!result.ok) {
       throw new AppError(409, placeTypeInUse(result.placeCount));
     }
-    await writeTombstones(
-      prisma,
-      placeTypeDeleteTombstones({ ownerId: user.id, placeTypeId: id }),
-    );
     res.json({ removedFieldCount: result.removedDefs });
   },
 );

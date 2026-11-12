@@ -38,7 +38,7 @@ describe("resolveDbCredentials", () => {
   });
 
   it("populates DB_USER/DB_PASSWORD from the secret when DB_SECRET_ID is set", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ username: "u", password: "p" }),
     });
@@ -48,7 +48,7 @@ describe("resolveDbCredentials", () => {
   });
 
   it("throws when the secret JSON is missing username or password", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ username: "only" }),
     });

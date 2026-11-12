@@ -5,7 +5,12 @@ import {
   STAT_PAIRS,
 } from "./statPairs.js";
 
-const stat = (label: string) => ({ label, value: "1" });
+const stat = (
+  label: string,
+): { label: string; value: string; span?: boolean } => ({
+  label,
+  value: "1",
+});
 
 describe("pairedStatLayout", () => {
   // Red when a pair is split (its second lands elsewhere) or a lone stat is

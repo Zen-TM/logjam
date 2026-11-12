@@ -1099,13 +1099,12 @@ export function AppShell({
   }, [accountRegions, accountLoaded, isGuest]);
 
   useEffect(() => {
-    // No account, no device row to register the push token against. The tap
-    // listener still mounts — it costs nothing and keeps this effect's shape
-    // identical either way.
+    // A guest registers no token (it checks). The tap listener still mounts —
+    // it costs nothing and keeps this effect's shape identical either way.
     //
     // This registers the token only when notification permission is ALREADY
     // granted; it never prompts (Settings → Notifications asks).
-    if (!isGuest) void registerForPushNotifications();
+    void registerForPushNotifications(accountState);
     const subscription =
       Notifications.addNotificationResponseReceivedListener(offerTap);
     // A tap that STARTED the app is not delivered to a listener added after it:
@@ -1143,7 +1142,7 @@ export function AppShell({
       ongoingSubscription.remove();
       received.remove();
     };
-  }, [isGuest, accountState]);
+  }, [accountState]);
 
   useEffect(() => {
     const id = `ongoing-launch-${launchMounts++}`;

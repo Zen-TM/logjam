@@ -65,6 +65,7 @@ jobs:
     name: Build ${{ matrix.platform }}
     environment: prod
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     needs: guard
     if: >-
       !cancelled() &&
@@ -120,6 +121,7 @@ jobs:
     # assume it.
     environment: prod
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [guard, build]
     # Only deploy when the triggering CI run passed, was a push (not a PR run),
     # and targeted main. Belt-and-suspenders with the workflow_run `branches`

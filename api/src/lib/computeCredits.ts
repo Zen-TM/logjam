@@ -198,7 +198,7 @@ export async function assertHasCredits(
   // running past it: at most MAX_CONCURRENT_WORKER_VCPUS (24) for the longest
   // reaper ceiling (TOPO_REAPER_PROCESSING_TIMEOUT_MS, 6 h), 8640 credits,
   // about US$8.60. Reserve each job's credits at its reaper deadline when that
-  // matters (issue #567).
+  // matters.
   if (await poolHasNoRoomFor(projected, db)) {
     throw new AppError(429, POOL_SPENT_SENTENCE, { resetAt: usage.resetAt });
   }

@@ -8,6 +8,9 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   CANYON_TYPE_ID,
+  CAROL_SUB,
+  OTHER_USER_KEYS,
+  keysOf,
 } from "./_actors";
 import prisma from "../services/prisma";
 
@@ -49,9 +52,9 @@ describe("sharing routes (fake auth = alice)", () => {
           (s: { sharedWith: { id: string } }) => s.sharedWith.id === BOB_ID,
         ),
       ).toBe(true);
-      // Owner-only share listing must not leak the recipient's email.
+      // The owner's share listing names the recipient by exactly these keys.
       for (const share of listRes.body) {
-        expect(share.sharedWith.email).toBeUndefined();
+        expect(keysOf(share.sharedWith)).toEqual(OTHER_USER_KEYS);
       }
 
       const unshareRes = await request(API_URL)
@@ -99,6 +102,42 @@ describe("sharing routes (fake auth = alice)", () => {
       );
       expect(unknown.status).toBe(403);
       expect(unknown.body.error).toBe(stranger.body.error);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
+    }
+  });
+
+  // Bob is alice's friend and carol is bob's, so the friendship check would
+  // let either grant through: only the owner check stops them.
+  // Mutation that turns it red: remove the requirePlaceOwnerAccess call from
+  // POST /places/:id/share in routes/sharing.ts.
+  it("POST share is the owner's alone: a sharee gets 403 and a stranger 404, and no row is made", async () => {
+    const placeId = await createPlace("owner-only share");
+    try {
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(AUTH)
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+
+      const sharee = await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(BOB_SUB))
+        .send({ sharedWithUserId: CAROL_ID });
+      expect(sharee.status).toBe(403);
+
+      const stranger = await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(CAROL_SUB))
+        .send({ sharedWithUserId: BOB_ID });
+      expect(stranger.status).toBe(404);
+
+      expect(
+        await prisma.placeShare.findMany({
+          where: { placeId },
+          select: { sharedWithId: true },
+        }),
+      ).toEqual([{ sharedWithId: BOB_ID }]);
     } finally {
       await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
     }
