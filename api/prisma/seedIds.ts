@@ -6,7 +6,7 @@
 // row parks blocked with a 400 nothing in the app surfaces.
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
-// places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
+// places (and from 200 up, the edge users' own), "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
 // "6" marker places and the links between places (the waypoint space —
 // waypoint ids are preserved as place ids), "7" routes, "8" direct (per-item)
 // shares, "9" user-created place types, "c" trip logs, "d" friendships, "e"
@@ -48,6 +48,22 @@ export const PLAN_PLACE_ID = seedId("6", 100);
 export const PLAN_ROUTE_ID = seedId("7", 100);
 /** Carol's plan, which she has invited alice to by username. */
 export const CAROL_PLAN_ID = seedId("f", 110);
+
+/** Accounts that each hold a state the three main users cannot: no data, no
+ *  consent, a consent from before the current text, a full quota, awkward text,
+ *  work in flight, a plan led and a plan edited. None is a friend of alice, bob
+ *  or carol, so nothing the suites assert about the friend graph or sharing
+ *  sees them. prisma/seedStates.ts names what each holds. */
+export const SEED_EDGE_USERS = {
+  empty: seedId("0", 4),
+  unconsented: seedId("0", 5),
+  staleConsent: seedId("0", 6),
+  atQuota: seedId("0", 7),
+  awkwardText: seedId("0", 8),
+  topoInFlight: seedId("0", 9),
+  planLeader: seedId("0", 10),
+  planEditor: seedId("0", 11),
+} as const;
 
 /** Every prefix the seed mints under — the list the guard test iterates. */
 export const SEED_ID_PREFIXES = [
