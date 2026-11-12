@@ -27,8 +27,14 @@ const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 // Mutation that turns it red: have a case click a confirming button (Delete
 // account, Save a copy), or `fetch(url, { method: "POST" })` from the page.
 const writes: string[] = [];
-// POSTs that only read: a batch of presigned GET urls, asked for on every boot.
-const READ_ONLY_POSTS = ["/media/download-urls"];
+// POSTs that only read: they carry a body too big or too long for a query
+// string (presigned GET urls, elevations along a line, a job's price quote).
+const READ_ONLY_POSTS = [
+  "/media/download-urls",
+  "/elevation/point",
+  "/elevation/profile",
+  "/compute-estimate",
+];
 
 test.beforeEach(async ({ page, context }) => {
   writes.length = 0;
