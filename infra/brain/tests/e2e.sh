@@ -40,7 +40,7 @@
 #   host/boot.sh: no upgrade for an older data directory (the same line -> `if false ||`; 14b reds too) [14]
 #   host/boot.sh: the refusal of data newer than the image deleted (`[ "$have" -le "$want" ] || die` -> `true`) [14]
 #   host/boot.sh: stanza-create always (the `if [ -n "$want" ] && ... ; then pgb stanza-upgrade; else` -> `if false; then ...`) [14, 14b]
-#   host/boot.sh: stanza-upgrade always in an existing boot (the same condition -> `if [ -n "$want" ]`) [14c]
+#   host/boot.sh: stanza-upgrade always in an existing boot (the same condition -> `if [ "$mode" = existing ] && [[ $sv =~ ^[0-9]*$ ]]`) [14c]
 #   host/boot.sh: the newest backup's major no longer compared (`[ "$repo_major" != "$want" ]` -> `false` in the `if`) [14, 14b]
 #   host/boot.sh: the failed upgrade not failing the boot (`|| die "the major upgrade failed ...` -> `|| true`) [14]
 #   host/boot.sh: the first `touch "$gate"` (before the upgrade container) -> `true` [14b]
