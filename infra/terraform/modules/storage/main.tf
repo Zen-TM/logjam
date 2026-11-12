@@ -94,6 +94,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       }
     }
   }
+
+  # The provider's own advice: enabling versioning and a noncurrent-version rule
+  # in one apply can race, so the rule waits for versioning.
+  depends_on = [aws_s3_bucket_versioning.this]
 }
 
 # Server access logs. These are the only record of how many BYTES actually left
