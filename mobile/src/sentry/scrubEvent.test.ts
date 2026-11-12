@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  SENSITIVE_KEYS,
   redactTilePathPatterns,
   stripArgsBlock,
   scrubMessage,
@@ -402,5 +403,139 @@ describe("sign-in secrets", () => {
     expect(
       scrubStructure({ token: "opaque-refresh", client_id: "client" }),
     ).toEqual({ token: "[redacted]", client_id: "client" });
+  });
+});
+
+// Every key the scrubber censors, written out here so that deleting one from
+// SENSITIVE_KEYS fails this test instead of passing unnoticed (a test that
+// iterated the exported set would shrink with it). Adding a key to the set
+// fails the equality check until it is listed here too.
+// Mutation that turns it red: delete any key from SENSITIVE_KEYS, or add one
+// without listing it here.
+const CENSORED_KEYS = [
+  "token",
+  "latitude",
+  "longitude",
+  "lat",
+  "lng",
+  "lon",
+  "coords",
+  "coordinates",
+  "name",
+  "altnames",
+  "notes",
+  "gaugeid",
+  "description",
+  "summary",
+  "comment",
+  "title",
+  "displayname",
+  "fieldvalues",
+  "customfields",
+  "foreignfields",
+  "fielddefssnapshot",
+  "types",
+  "triptypes",
+  "placename",
+  "label",
+  "tag",
+  "tags",
+  "address",
+  "region",
+  "bbox",
+  "slug",
+  "position",
+  "q",
+  "query",
+  "body",
+  "questions",
+  "answers",
+  "points",
+  "authorization",
+  "cookie",
+  "idtoken",
+  "accesstoken",
+  "refreshtoken",
+  "id_token",
+  "access_token",
+  "refresh_token",
+  "code",
+  "code_verifier",
+  "codeverifier",
+];
+
+describe("the censored key set", () => {
+  it("is exactly the list this test carries", () => {
+    expect([...SENSITIVE_KEYS].sort()).toEqual([...CENSORED_KEYS].sort());
+  });
+
+  it.each(CENSORED_KEYS)("censors %s", (key) => {
+    expect(scrubStructure({ [key]: "Secret Falls" })).toEqual({
+      [key]: "[redacted]",
+    });
+  });
+});
+
+describe("a coordinate under a key nobody listed", () => {
+  // Mutation that turns it red: drop the numeric branch in scrubStructure.
+  it("is redacted as a number, alone or in a pair of fields", () => {
+    const out = JSON.stringify(
+      scrubStructure({
+        marker: { x: 150.40171234, y: -33.5621234 },
+        pair: [150.40171234, -33.5621234],
+        zoom: 12.5,
+        status: 200,
+        elapsedMs: 1234.5,
+      }),
+    );
+    expect(out).not.toContain("150.4017");
+    expect(out).not.toContain("33.562");
+    expect(out).toContain('"zoom":12.5');
+    expect(out).toContain('"status":200');
+    expect(out).toContain('"elapsedMs":1234.5');
+  });
+});
+
+describe("event fields beyond message and extra", () => {
+  // Mutation that turns it red: drop the `contexts` scrub in scrubEvent.
+  it("censors contexts", () => {
+    const out = scrubEvent({
+      contexts: {
+        place: { name: "Secret Falls", latitude: -33.7 },
+        app: { build: "12" },
+      },
+    });
+    expect(JSON.stringify(out)).not.toContain("Secret Falls");
+    expect(out.contexts).toEqual({
+      place: { name: "[redacted]", latitude: "[redacted]" },
+      app: { build: "12" },
+    });
+  });
+
+  // Mutation that turns it red: drop the `tags`, `transaction` or `logentry`
+  // scrub in scrubEvent.
+  it("scrubs tags, the transaction name and the log entry", () => {
+    const out = scrubEvent({
+      tags: { place: "https://x.test/places/secret-falls", build: "12" },
+      transaction: "GET https://x.test/secret-falls at -33.5621, 150.4017",
+      logentry: {
+        message: "opened https://x.test/p/secret-falls",
+        params: [{ placeName: "Secret Falls", n: 2 }],
+      },
+    });
+    const text = JSON.stringify(out);
+    expect(text).not.toContain("secret-falls");
+    expect(text).not.toContain("Secret Falls");
+    expect(text).not.toContain("150.4017");
+    expect(out.tags).toEqual({ place: "[redacted-url]", build: "12" });
+  });
+
+  // The deny-list cannot know a key nobody has written yet: a place name
+  // under an invented key survives. It matters little today (the app sets no
+  // extra, context or tag itself), and this pins the limit so that changing it
+  // is a decision.
+  it("does not catch a place name under a key it has never heard of", () => {
+    const out = scrubEvent({ extra: { someNewKey: "Secret Falls" } });
+    expect(JSON.stringify(out)).toContain("Secret Falls");
   });
 });
