@@ -12,6 +12,11 @@ reachable DB exist — inside the worker Docker image, or any env that sets
 RUN_DB_IT=1 with the seeded local stack up (`make dev`). It uses the seeded
 alice user and inserts/cleans up its own topo_jobs row, leaving the seed intact.
 
+Mutations that turn it red: drop the `AND status = %s` clause from
+worker.update_status (the resurrection and the storage test both fail), or run
+the storage increment whether or not the UPDATE matched a row (the storage
+test fails).
+
 Run it from the worker image (psycopg2 present) against the dev DB:
     RUN_DB_IT=1 DB_HOST=postgres DB_NAME=logjam DB_USER=... DB_PASSWORD=... \
         DATABASE_SSL=disable JOB_ID=unused python3 -m unittest tests.test_status_guard_db
