@@ -7,26 +7,30 @@ name: ota-plan
 # emulator smoke on the patched tree. ota-hotfix.yml publishes only when this
 # passed on the PR's head. Procedure: docs/operations/mobile-release.md.
 #
-# Runs on any label event, since a trigger can't filter by label; the jobs
-# skip unless this one is on. No secrets: it runs the PR's own code.
+# A required check (the main ruleset). It runs whenever the label is on, on
+# every push and every change of labels, and skips, which passes, when it is
+# off. So a skipped run means no hotfix, a red or running plan stops the
+# merge, and a PR never reaches main under the label with nothing to publish:
+# fix the plan or take the label off. A trigger can't filter by label, so any
+# label change re-runs it; skipping there would pass the ruleset on a red
+# plan. No secrets: it runs the PR's own code.
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
 
 permissions:
   contents: read
 
-# Another label's event belongs to a separate group, so it can't cancel a plan.
+# One group for the PR: the newest event's run replaces any other, so the
+# result the ruleset and ota-hotfix.yml read is always the current one.
 concurrency:
-  group: ota-plan-${{ github.event.pull_request.number }}-${{ github.event.action != 'labeled' || github.event.label.name == 'ota-hotfix' }}
+  group: ota-plan-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   plan:
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'ota-hotfix') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ota-hotfix')
+    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:

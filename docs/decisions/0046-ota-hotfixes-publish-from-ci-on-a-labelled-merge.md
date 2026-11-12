@@ -60,6 +60,14 @@ somewhere a workflow can read: that is what changes from 0009.
 4. **Only admins and the deploy key in `mobile-ota` may push
    `release/mobile-v*`.** Guard: the `releases_stay_the_maintainers` run in
    `guards.tftest.hcl`.
+- **Update 2026-11-12: `ota-plan` is a required check.** A labelled PR whose
+  plan is red or still running cannot merge, so a PR no longer reaches `main`
+  under the label with nothing published; taking the label off turns the
+  check to skipped, which passes. For that to be true the plan runs on every
+  event while the label is on, a change of labels included (it used to skip
+  there), so a skipped run means only that the label is off. Rule 3's gate
+  still decides the publish. Guards: `mobile/src/otaHotfix.test.ts` and the
+  required-checks run in `guards.tftest.hcl`. Everything else above stands.
 
 ## Consequences
 
@@ -77,7 +85,8 @@ somewhere a workflow can read: that is what changes from 0009.
   automated lane promotes to `production` straight after `preview`, without
   the manual lane's check of the update on a release candidate; the emulator
   smoke runs the dev client against a local stack, not the store build. Every
-  push to a labelled PR runs the emulator, up to an hour. `EXPO_TOKEN`, which
+  push to a labelled PR, and every change to its labels, runs the emulator,
+  up to an hour (updated 2026-11-12). `EXPO_TOKEN`, which
   only `mobile-v*` tags could read, is now also readable on `main`. The
   `ota-plan` result is advisory against a PR that edits `ota-plan.yml`, since
   the check runs the PR's own workflow: its lint, tests and smoke can be made

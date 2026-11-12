@@ -55,6 +55,7 @@ locals {
     "expo-doctor",
     "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
     "brain-postgres", # ci.yml's one name for the brain-postgres-image matrix
+    "ota-plan",       # skips, which passes, unless the PR is labelled ota-hotfix
   ]
 }
 

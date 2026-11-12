@@ -157,7 +157,9 @@ stays X.Y.Z: the update must match the build.
    conflict or a change to the native fingerprint, and runs Logjam GPS's lint,
    typecheck, unit tests and the emulator smoke on the result
    (`.github/workflows/ota-plan.yml`, `mobile/scripts/ota-hotfix.js`). It
-   runs again on each push while the label is on. The comment says which
+   runs again on each push, and each change of labels, while the label is on,
+   and it is a required check: a red or running plan stops the merge. To
+   merge without publishing, take the label off. The comment says which
    version and runtime the merge would publish to, or why it can't. The smoke
    runs the release's own `mobile/scripts/emulator-smoke.sh` and
    `.github/actions/build-dev-apk` under today's `mobile-emulator.yml`: if

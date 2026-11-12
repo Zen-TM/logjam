@@ -67,6 +67,9 @@ FILTERS = {"paths", "paths-ignore", "branches-ignore"}
 # "<workflow>:<job id>", each with why. Matrix jobs are not listed: they are
 # reached through the gate job that needs them.
 NOT_REQUIRED = {
+    # A scope job gives no verdict. A failed one hides nothing: every job it
+    # gates runs unless it says 'false' (ci-scope.sh), and requiring it would
+    # only add a re-run of those jobs before the merge.
     "ci.yml:changes": "scope job: decides which heavy jobs run (ci-scope.sh)",
     "mobile-emulator.yml:changes": "scope job",
     "rollback-compat.yml:changes": "scope job",
@@ -74,10 +77,8 @@ NOT_REQUIRED = {
     "terraform-ci.yml:changes": "scope job",
     "terraform-plan.yml:scope": "scope job",
     "mobile-emulator.yml:emulator": "not required until #723 promotes it, after 14 green nightlies",
-    "ota-plan.yml:plan": "ota-hotfix.yml reads the plan's result itself before it publishes",
-    "ota-plan.yml:smoke": "part of the OTA plan, as above",
-    "ota-plan.yml:ota-plan": "the OTA plan's summary, as above",
-    "expo-doctor.yml:nightly-issue": "runs on the nightly schedule only, to open an issue",
+    "ota-plan.yml:plan": "its verdict is the `ota-plan` job's, which is required",
+    "ota-plan.yml:smoke": "as above",
 }
 
 
@@ -108,6 +109,11 @@ def starts_on_every_pr(doc):
     if "pull_request" not in on:
         return False
     trigger = on["pull_request"] or {}
+    # `types` replaces the default events: a list without one of them leaves
+    # pull requests the check never reports on.
+    types = trigger.get("types")
+    if types is not None and not {"opened", "synchronize", "reopened"} <= set(types):
+        return False
     return not (FILTERS & set(trigger))
 
 

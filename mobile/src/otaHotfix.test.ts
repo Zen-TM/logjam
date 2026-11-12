@@ -245,6 +245,33 @@ describe("OTA hotfix plan", () => {
       'refusal=$(node mobile/scripts/ota-hotfix.js gate rollback)\n          if [ -n "$refusal" ]; then echo "::error::$refusal"; exit 1; fi\n',
     );
   });
+
+  // `ota-plan` is a required check, and a skipped job passes one. So the plan
+  // must run on every event while the label is on: were it to skip on some
+  // (another label added, as it once did), that event would turn a red plan
+  // green for the ruleset. And one run at a time, so the newest is the result.
+  // Mutation: add an event test such as `github.event.action != 'labeled'` to
+  // the plan's `if:`, drop `opened` or `unlabeled` from the trigger, or put
+  // anything but the PR number in the concurrency group.
+  it("plans on every event while the label is on, and only then", () => {
+    const plan = readFileSync(
+      join(__dirname, "../../.github/workflows/ota-plan.yml"),
+      "utf8",
+    );
+    expect(plan).toContain(
+      "    types: [opened, reopened, synchronize, labeled, unlabeled]\n",
+    );
+    expect(plan).toContain(
+      "\n  plan:\n    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')\n    runs-on:",
+    );
+    expect(plan).toContain(
+      "concurrency:\n  group: ota-plan-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n",
+    );
+    // The summary is the required check: it skips only when the plan did.
+    expect(plan).toContain(
+      "\n  ota-plan:\n    needs: [plan, smoke]\n    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}\n",
+    );
+  });
 });
 
 // The CLI against a real repository, with a stand-in for expo-updates whose
