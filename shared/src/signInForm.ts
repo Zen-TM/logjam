@@ -10,7 +10,8 @@ import { USERNAME_RULE, isValidUsername } from "./username.js";
  * `frontend/src/linkPreview.test.ts` holds `intro` equal to index.html's.
  */
 export const SIGN_IN_COPY = {
-  /** The sign-in card's one description, and Logjam Web's link preview. */
+  /** Logjam Web's sign-in card description. It lives here so the page and its
+   *  link preview (index.html's tags) share one declaration. */
   intro: "Your private map and trips for canyoning in New South Wales.",
   createAccount: "Create account",
   creatingAccount: "Creating account…",
