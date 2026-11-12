@@ -33,3 +33,13 @@ jobs:
         run: |
           CLOSING=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json closingIssuesReferences --jq '.closingIssuesReferences | length') \
             scripts/pr-closes-check.sh
+      # "An issue, only while open" (root AGENTS.md, Comments): the pull request
+      # that closes an issue is the one change that can remove the comments
+      # citing it, so it is the one that fails. `edited` reruns this too.
+      - name: No comment still cites an issue this pull request closes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # shellcheck disable=SC2046 # one argument per issue number
+          infra/scripts/check-repo-hygiene.py --closes $(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json closingIssuesReferences --jq '[.closingIssuesReferences[].number] | join(" ")')

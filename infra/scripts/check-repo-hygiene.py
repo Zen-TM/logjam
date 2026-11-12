@@ -2,6 +2,9 @@
 """The comment and guard-note rules of the root AGENTS.md, held by a check.
 
     check-repo-hygiene.py            check the repo (run from anywhere in it)
+    check-repo-hygiene.py --closes N [N ...]
+                                     no comment cites an issue this pull
+                                     request closes (rule 2; pr-closes.yml)
     check-repo-hygiene.py --self-test
 
 Three rules, each a line of AGENTS.md that nothing else reads:
@@ -10,10 +13,10 @@ Three rules, each a line of AGENTS.md that nothing else reads:
    (SEC-001), no CLAUDE.md or CLAUDE.local.md, no private plan and no
    claude.ai link (CLAUDE.md only imports AGENTS.md, and the others cannot
    be opened by anyone else), and no tracked text names a home directory.
-2. "An issue, only while open": a comment that cites #N cites an open issue
-   or pull request. GitHub is asked for each number (once per run); a number
-   GitHub does not know is not an issue here, and an unreachable API only
-   warns, so the check still runs offline.
+2. "An issue, only while open": the pull request that closes #N removes the
+   comments that cite it. `--closes` is given the issues GitHub will close on
+   merge, so it fails the one change that can fix it and no other branch, and
+   it asks the network nothing. An issue closed by hand is not seen.
 3. "A new guard test names the mutation": every test file an AGENTS.md names
    in backticks exists and carries a "Mutation that turns it red" note.
 
@@ -21,13 +24,11 @@ Applied migrations are exempt from the first two: Prisma checksums them, so
 editing one for a comment would make every database that applied it disagree.
 
 Mutations that turn the self-test red: an audit code, a CLAUDE.md citation
-or a home path in a file; a `#N` citation of a closed issue; a named guard
+or a home path in a file; a `#N` citation of an issue the pull request closes; a named guard
 that does not exist or has no mutation note; and a pattern that matches
 nothing (a regex that stops matching must not pass by checking nothing).
 """
 
-import json
-import os
 import re
 import subprocess
 import sys
@@ -122,26 +123,17 @@ def issue_refs(path, text):
     return found
 
 
-def closed_refs(refs, lookup):
-    """Errors and warnings for `refs` ({path: [(line, n)]}). lookup(n) is
-    'open', 'closed', 'unknown' (not an issue here) or None (GitHub unreachable)."""
-    errors, warnings, state = [], [], {}
-    for path, cited in sorted(refs.items()):
-        for line, n in cited:
-            if n not in state:
-                state[n] = lookup(n)
-            if state[n] == "closed":
-                errors.append(
-                    f"{path}:{line}: cites #{n}, which is closed. A comment cites an "
-                    "issue only while it is open: say what the code cannot instead."
-                )
-    if None in state.values():
-        warnings.append(
-            "GitHub could not be asked about "
-            + ", ".join(f"#{n}" for n, s in sorted(state.items()) if s is None)
-            + ": the closed-issue check did not run for them."
-        )
-    return errors, warnings
+def closing_refs(refs, closes):
+    """Errors for every citation in `refs` ({path: [(line, n)]}) of an issue
+    this pull request closes."""
+    return [
+        f"{path}:{line}: cites #{n}, which this pull request closes. A comment "
+        "cites an issue only while it is open: remove the citation here, or say "
+        "what the code cannot instead."
+        for path, cited in sorted(refs.items())
+        for line, n in cited
+        if n in closes
+    ]
 
 
 def resolve(token, agents_path, tracked):
@@ -182,38 +174,6 @@ def guard_errors(agents, tracked, text_of):
                     "to break to turn it red, after running it."
                 )
     return errors, resolved
-
-
-def make_lookup():
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    cache = {}
-
-    def lookup(n):
-        if n in cache:
-            return cache[n]
-        cache[n] = None
-        if not repo:
-            return None
-        try:
-            done = subprocess.run(
-                ["gh", "api", f"repos/{repo}/issues/{n}"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        if done.returncode == 0:
-            try:
-                cache[n] = json.loads(done.stdout).get("state", "open")
-            except ValueError:
-                pass
-        elif "404" in done.stderr:
-            cache[n] = "unknown"
-        return cache[n]
-
-    return lookup
 
 
 def self_test():
@@ -265,20 +225,12 @@ def self_test():
         == [],
     )
 
-    states = {1: "open", 2: "closed", 3: "unknown"}
-    errors, warnings = closed_refs(
-        {"a.ts": [(1, 1), (2, 2), (3, 3), (4, 2)]}, states.get
-    )
+    errors = closing_refs({"a.ts": [(1, 1), (2, 2), (4, 2)], "b.ts": [(9, 3)]}, {2})
     check(
-        "only the closed issue is an error, at each site",
-        len(errors) == 2 and "#2" in errors[0],
+        "only the issue being closed is an error, at each site",
+        len(errors) == 2 and all("#2" in e for e in errors),
     )
-    check("no warning when GitHub answered", warnings == [])
-    errors, warnings = closed_refs({"a.ts": [(1, 1)]}, lambda n: None)
-    check(
-        "an unreachable GitHub warns and does not fail",
-        not errors and len(warnings) == 1,
-    )
+    check("closing nothing cited passes", closing_refs({"a.ts": [(1, 1)]}, {7}) == [])
 
     tracked = ["api/src/a.test.ts", "topo/tests/test_b.py", "infra/brain/tests/e2e.sh"]
     files = {
@@ -314,7 +266,7 @@ def self_test():
     return fails
 
 
-def main():
+def main(closes=None):
     tracked = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True, check=True
     ).stdout.split("\n")
@@ -329,46 +281,58 @@ def main():
                 texts[path] = ""
         return texts[path]
 
-    errors, refs, scanned = [], {}, 0
+    errors, refs, scanned, resolved = [], {}, 0, set()
     for path in tracked:
         text = text_of(path)
         if not text:
             continue
         scanned += 1
-        errors += [f"{path}:{n}: {msg}" for n, msg in scan_text(path, text)]
-        found = issue_refs(path, text)
-        if found:
+        if closes is None:
+            errors += [f"{path}:{n}: {msg}" for n, msg in scan_text(path, text)]
+        elif found := issue_refs(path, text):
             refs[path] = found
-    agents = {p: text_of(p) for p in tracked if p.endswith("AGENTS.md")}
-    guard_errs, resolved = guard_errors(agents, tracked, text_of)
-    errors += guard_errs
-    cited, closed_warnings = closed_refs(refs, make_lookup())
-    errors += cited
+    if closes is None:
+        agents = {p: text_of(p) for p in tracked if p.endswith("AGENTS.md")}
+        guard_errs, resolved = guard_errors(agents, tracked, text_of)
+        errors += guard_errs
+        if len(resolved) < 25:
+            errors.append(
+                f"resolved only {len(resolved)} named guards, expected 25 or more"
+            )
+    else:
+        errors += closing_refs(refs, closes)
 
-    # A pattern that stops matching must not pass by checking nothing.
+    # A pattern that stops matching must not pass by checking nothing. (The
+    # self-test holds ISSUE_REF to its fixtures: the count of live citations
+    # falls as issues close, so it has no floor.)
     if scanned < 500:
         errors.append(f"read only {scanned} tracked text files, expected 500 or more")
-    if len(resolved) < 25:
-        errors.append(
-            f"resolved only {len(resolved)} named guards, expected 25 or more"
-        )
-    if sum(len(v) for v in refs.values()) < 10:
-        errors.append(
-            "found fewer than 10 issue citations: did ISSUE_REF stop matching?"
-        )
 
-    for warning in closed_warnings:
-        print(f"::warning::{warning}")
     for error in errors:
         print(f"::error::{error}")
     if errors:
         return 1
-    print(
-        f"{scanned} files read, {len(resolved)} named guards resolved, "
-        f"{sum(len(v) for v in refs.values())} issue citations checked."
-    )
+    if closes is None:
+        print(f"{scanned} files read, {len(resolved)} named guards resolved.")
+    else:
+        print(
+            f"{sum(len(v) for v in refs.values())} issue citations read; "
+            + (
+                "none cites " + ", ".join(f"#{n}" for n in sorted(closes))
+                if closes
+                else "this pull request closes no issue"
+            )
+            + "."
+        )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(self_test() if sys.argv[1:] == ["--self-test"] else main())
+    args = sys.argv[1:]
+    if args == ["--self-test"]:
+        sys.exit(self_test())
+    if args[:1] == ["--closes"] and all(a.isdigit() for a in args[1:]):
+        sys.exit(main({int(a) for a in args[1:]}))
+    if args:
+        sys.exit("usage: check-repo-hygiene.py [--self-test | --closes N [N ...]]")
+    sys.exit(main())

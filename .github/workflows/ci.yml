@@ -1065,12 +1065,11 @@ jobs:
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
       # The root AGENTS.md's comment and guard rules: no citation a reader
-      # cannot open (audit codes, private files, a home path), no comment on a
-      # closed issue (GitHub is asked; unreachable only warns), and every test
-      # an AGENTS.md names exists and carries its mutation note.
+      # cannot open (audit codes, private files, a home path), and every test
+      # an AGENTS.md names exists and carries its mutation note. Its third
+      # rule, no comment on a closed issue, runs in pr-closes.yml, on the pull
+      # request that closes the issue.
       - name: Comments cite what a reader can open, named guards name their mutation
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           infra/scripts/check-repo-hygiene.py --self-test
           infra/scripts/check-repo-hygiene.py
