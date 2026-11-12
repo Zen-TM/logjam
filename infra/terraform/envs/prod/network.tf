@@ -58,3 +58,22 @@ resource "aws_security_group" "worker" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+# The group that takes over from logjam-worker-sg, whose description names a
+# database that is gone. AWS lets neither a group's description nor its name
+# be edited, and two groups in a VPC cannot share a name, so the group is
+# replaced under a new one. Both exist while the tasks move across, and the
+# brain admits both on 5432 (brain_network.tf), so no task is cut off from
+# the database at any step. Nothing launches into this one yet.
+resource "aws_security_group" "workers" {
+  name        = "logjam-workers"
+  description = "Fargate tasks (workers, migration, scheduled jobs) - the group the brain admits on 5432"
+  vpc_id      = data.aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
