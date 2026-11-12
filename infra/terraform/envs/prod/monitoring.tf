@@ -16,6 +16,7 @@ import {
 
 resource "aws_sns_topic" "alerts" {
   name = "logjam-alerts"
+  tags = { drill = "apply-refusal" }
 }
 
 # The pgaudit -> WORM pipeline's only health signal. If the log group or
