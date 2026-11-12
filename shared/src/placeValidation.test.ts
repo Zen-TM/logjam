@@ -317,8 +317,7 @@ describe("normalizeLinkedPlaceIds", () => {
       placeIds: ["a", "b"],
     });
     expect(
-      normalizeLinkedPlaceIds(Array.from({ length: 21 }, (_, i) => `p${i}`))
-        .error,
-    ).toMatch(/At most 20/);
+      normalizeLinkedPlaceIds(Array.from({ length: 21 }, (_, i) => `p${i}`)),
+    ).toEqual({ error: expect.stringMatching(/At most 20/) });
   });
 });

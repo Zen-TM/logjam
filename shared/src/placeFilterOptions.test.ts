@@ -5,7 +5,13 @@ import { SYSTEM_FIELD_DEFS } from "./placeTypes.js";
 const system = (key: string) => {
   const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key);
   if (!def) throw new Error(`no system field ${key}`);
-  return def;
+  // A system def holds null for "unbounded"; a user's own definition leaves
+  // the bound out, which is the shape the function takes.
+  return {
+    type: def.type,
+    min: def.min ?? undefined,
+    max: def.max ?? undefined,
+  };
 };
 
 describe("filterPillStops", () => {

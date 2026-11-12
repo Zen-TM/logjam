@@ -117,6 +117,12 @@ const LAUNCH_THEME_IMPORTS = [
 module.exports = defineConfig([
   expoConfig,
   {
+    // The import rules otherwise parse every export map under node_modules
+    // (react-native and friends), which is most of a lint run's time; tsc
+    // checks those named members. Our own files stay checked.
+    settings: { "import/ignore": ["node_modules"] },
+  },
+  {
     ignores: ["android/**", "ios/**", ".expo/**", "node_modules/**"],
   },
   {
