@@ -736,6 +736,7 @@ check "restore_seconds is a whole number of seconds, 0 or more" whole_number "$(
 lag=$(drill_field canary_lag_seconds)
 check "the canary was not 0 seconds old (lag $lag s)" [ "$lag" -ge 1 ]
 check "...and seconds old, not minutes" [ "$lag" -lt 120 ]
+[ "$lag" -lt 120 ] || { echo "canary now: $(sql postgres "select extract(epoch from now() - at) from brain.canary") s old; wal now: $(sql postgres 'select pg_walfile_name(pg_current_wal_lsn())')"; grep -v 'connection\|AUDIT' "$WORK/drill.log" | tail -40; }
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
 check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
@@ -1028,7 +1029,7 @@ make_16_database() { # <bucket>: bootstraps a 16 database on the 16 image in a n
   boot_limited; rc=$?
   [ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not bootstrap a 16 database (exit $rc)"; }
   check "the 16 image bootstraps a 16 database" [ "$(pg_major)" = 16 ]
-  sql logjam "create table e2e_upg as select g as n from generate_series(1, 500) g" > /dev/null
+  sql logjam "create table e2e_upg as select g as n from generate_series(1, 500) g; create table _prisma_migrations (id int)" > /dev/null
   force_wal
   cert16=$(fingerprint); fulls16=$(fulls)
   reboot
@@ -1053,7 +1054,7 @@ check "an upgrade that fails fails the boot (exit $rc)" [ "$rc" != 0 ]
 check "...saying so" grep -q "the major upgrade failed" "$WORK/boot.log"
 check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
 check "...no Postgres and no API container" [ -z "$(cid postgres)$(cid api)" ]
-check "...and the 16 cluster is where it was" [ "$(cat /data/postgres/PG_VERSION)" = 16 ]
+check "...and the 16 cluster is where it was" [ "$(r cat /data/postgres/PG_VERSION)" = 16 ]
 r rmdir /data/postgres-16
 reboot
 
@@ -1067,7 +1068,7 @@ check "...and says so" grep -q "upgraded 16 -> 18" "$WORK/boot.log"
 check "boot mode: upgraded" [ "$(cat /run/brain/boot-mode)" = upgraded ]
 check "the server is PostgreSQL 18" [ "$(pg_major)" = 18 ]
 check "the rows came across" [ "$(sql logjam 'select count(*) from e2e_upg')" = 500 ]
-check "the old cluster is kept at /data/postgres-16" [ "$(cat /data/postgres-16/PG_VERSION)" = 16 ]
+check "the old cluster is kept at /data/postgres-16" [ "$(r cat /data/postgres-16/PG_VERSION)" = 16 ]
 check "...and no postgres.new is left" [ ! -e /data/postgres.new ]
 check "the same certificate" [ "$(fingerprint)" = "$cert16" ]
 check "logjam_app still connects with the secret's password, verifying the name" app_connects
