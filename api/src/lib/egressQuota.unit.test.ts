@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 vi.mock("../services/prisma", () => ({
   default: {
-    user: { findUnique: vi.fn(), findMany: vi.fn() },
+    user: { findUnique: vi.fn(), findMany: vi.fn(), aggregate: vi.fn() },
   },
 }));
 
@@ -15,7 +15,7 @@ import {
 } from "./egressQuota";
 
 const users = prisma as unknown as {
-  user: { findUnique: Mock; findMany: Mock };
+  user: { findUnique: Mock; findMany: Mock; aggregate: Mock };
 };
 
 const QUOTA = 50n * 1024n * 1024n * 1024n;
@@ -27,6 +27,10 @@ const LAST_MONTH = new Date("2020-01-15T00:00:00Z");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The site-wide sum (siteCaps.test.ts has the cap's own tests).
+  users.user.aggregate.mockResolvedValue({
+    _sum: { monthlyEgressUsedBytes: null },
+  });
 });
 
 describe("getEgressUsage", () => {

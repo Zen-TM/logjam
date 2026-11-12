@@ -488,6 +488,18 @@ compute pool's polite refusals and should never fire in a normal month. The
 earlier warning is `logjam-monthly` in `budgets.tf`, which includes tax and is
 US$50.
 
+Two more polite refusals sit beside the compute pool, each a site-wide sum over
+every account. `SITE_STORAGE_BYTES` (default 500 GiB, in `lib/storageQuota.ts`)
+refuses an upload that would take all stored bytes past it, and
+`SITE_MONTHLY_EGRESS_BYTES` (default 300 GiB, in `lib/egressQuota.ts`) refuses
+an export or file download once everyone's downloads this month have passed it.
+Both answer 429 with a sentence that does not blame the user, `0` turns one off,
+and either is changed in `infra/brain/api.env` (not set there today). The
+download total comes from the egress meter, which reads S3 access logs hours
+late, so it overshoots by that much. No alarm watches them: a refusal logs the
+warn line `site_storage_cap_reached` or `site_egress_cap_reached`, and a metric
+filter on it is the way to add one.
+
 The policy denies `ecs:RunTask` on every task definition and `s3:PutObject` on
 `logjam-media` and `logjam-topo-jobs`, nothing else. So:
 
