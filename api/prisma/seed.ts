@@ -37,6 +37,7 @@ import {
   canonicalLinkPair,
   PLACE_REGISTRY_POINTER_PATH,
   PLACE_REGISTRY_PREFIX,
+  DEFAULT_MONTHLY_EGRESS_BYTES,
   SYSTEM_PLACE_TYPE_IDS,
   currentSeason,
   SYSTEM_PLACE_TYPES,
@@ -2626,7 +2627,7 @@ async function main() {
   // names are resolved at read time (routes/notifications.ts). The types are
   // NOTIFICATION_TYPES, and src/lib/seedCoverage.unit.test.ts holds the seed to
   // them. Bob's two place_shared rows predate this block.
-  const egressQuota = 53_687_091_200n; // the column default
+  const egressQuota = DEFAULT_MONTHLY_EGRESS_BYTES; // the column default
   // Made up, and using every piece of the Markdown subset the clients draw
   // (shared/src/announcementMarkdown.ts), all three heading levels included,
   // so the dialog shows them all.
