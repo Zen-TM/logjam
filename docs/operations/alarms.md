@@ -427,8 +427,8 @@ fires when two of the last three runs failed, so a single blip does not email.
 and read the latest line. It is `{"failed": ["wal_stale", ...]}`: codes only,
 never any data. While the brain is not serving, the line also has
 `"ready_probe"`: the HTTP status the public `/ready` answered to one try, or
-`null` if it could not connect. A `200` shows the firewall lets the watchdog
-through; a `403` means it does not.
+`null` if it could not connect. Any status but `403` shows the firewall lets
+the watchdog through; a `403` means it does not.
 The probe never fails a run. Then find each code below. The same line also shows when the
 alarm clears (`{"failed": []}`).
 
