@@ -49,6 +49,13 @@ variable "audit_log_retention_days" {
 resource "aws_s3_bucket" "audit" {
   bucket              = "logjam-audit-${local.account_id}"
   object_lock_enabled = true
+
+  # Object Lock already stops the bucket being emptied, so an apply could not
+  # delete it; this makes a plan that tries fail as a plan, not halfway
+  # through an apply. Guard: brain_data_volume_and_address_keep_prevent_destroy.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Object Lock requires versioning.
@@ -199,6 +206,13 @@ resource "aws_cloudtrail" "audit" {
   # END audit-trail-selector-blocks
 
   depends_on = [aws_s3_bucket_policy.audit]
+
+  # A destroyed trail stops the record, and a replaced one (a new name
+  # replaces it) leaves a gap in it. Guard:
+  # brain_data_volume_and_address_keep_prevent_destroy.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ── pgaudit (CloudWatch Logs) -> Firehose -> WORM bucket ────────────────────

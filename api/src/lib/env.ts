@@ -6,9 +6,9 @@ const baseSchema = z.object({
     .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
   // Proxies in front of the API that append to X-Forwarded-For (index.ts).
-  // 2 is CloudFront -> Elastic Beanstalk's nginx; a host with CloudFront
-  // straight to the container sets 1.
-  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(2),
+  // 1 is prod's chain, CloudFront straight to the container. A count above
+  // the real chain lets a client forge its own address.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -16,7 +16,7 @@ const baseSchema = z.object({
   // Postgres connection is composed at runtime from these discrete parts
   // (see lib/databaseUrl.ts) — never DATABASE_URL. DB_USER/DB_PASSWORD are
   // ECS-secrets-injected in Fargate workers, or resolved from DB_SECRET_ID
-  // by src/boot.ts before this schema is parsed in the EB API container.
+  // by src/boot.ts before this schema is parsed in the brain's API container.
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().int().positive().default(5432),
   DB_NAME: z.string(),
@@ -187,7 +187,8 @@ const baseSchema = z.object({
   // workers' same-region reads and CloudFront's basemap reads share the same
   // buckets and must not be charged to anyone. An empty value matches nothing
   // (fail closed — under-count rather than bill users for worker traffic). Guard: s3AccessLog.unit.test.ts ("charges nothing when the requester pattern is empty").
-  EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
+  // No default names a role: a host sets its own (infra/brain/api.env).
+  EGRESS_API_REQUESTER_PATTERN: z.string().default(""),
   // Ceiling on access-log objects consumed per sweep, so a backlog is worked
   // through over several passes instead of one unbounded run.
   EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce

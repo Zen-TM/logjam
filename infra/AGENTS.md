@@ -29,7 +29,7 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   the brain's release pointer and the frontend bucket's contents. Terraform
   ignores them; never make it manage them.
 - **A plan that destroys or replaces a stateful resource** (the brain's data
-  volume, S3, Cognito, CloudFront) is a stop: ask. Never remove `prevent_destroy`
+  volume, S3, Cognito, CloudFront, the audit trail) is a stop: ask. Never remove `prevent_destroy`
   to get past one.
 - **The CI roles' privacy Deny** (`local.ci_readonly_privacy_deny` in
   `terraform/envs/prod/iam.tf`) stays on every read-only role and in the apply

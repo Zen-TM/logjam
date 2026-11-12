@@ -14,7 +14,7 @@ mock_provider "random" {}
 mock_provider "archive" {}
 
 # terraform test loads *.auto.tfvars from the root, so brain.auto.tfvars (prod's
-# switches, edited at the cutover) would otherwise decide what every run
+# switches) would otherwise decide what every run
 # plans. These pin every setting that file carries to the dormant values, so
 # the suite says the same whatever the file says; a run that needs another
 # value sets it in its own variables block, which wins over this one. Guard:
@@ -138,7 +138,7 @@ run "ci_reads_no_secret_or_user_data" {
   # leaves the next bucket or log group readable until someone remembers to
   # add it. Changing the object Deny's condition (another account, a
   # negated operator, a second key) leaves buckets of ours readable; dropping
-  # it denies the AWS-owned objects an EB configuration change reads again.
+  # it denies the AWS-owned objects a service reads with the caller's credentials.
   assert {
     condition = alltrue([
       for p in [
@@ -152,7 +152,6 @@ run "ci_reads_no_secret_or_user_data" {
           toset(try(st.NotResource, [])) == toset([
             "arn:aws:s3:::logjam-tfstate-620853681701/*",
             "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
-            "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
           ]) &&
           try(st.Condition, null) == { StringEquals = { "aws:ResourceAccount" = "620853681701" } }
         ]) &&
@@ -163,7 +162,7 @@ run "ci_reads_no_secret_or_user_data" {
         ])
       )
     ])
-    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the three CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
+    error_message = "The CI privacy Deny must cover objects in every bucket of this account but the two CI reads, and events in every log group (local.ci_readonly_privacy_deny)."
   }
 
   # Mutation: dropping any of these from the Deny gives the plan and deploy
@@ -173,9 +172,7 @@ run "ci_reads_no_secret_or_user_data" {
     condition = alltrue([
       for a in [
         "cognito-idp:ListUsers", "cognito-idp:AdminGet*", "cognito-idp:AdminList*",
-        "rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile",
         "logs:StartLiveTail", "logs:GetLogRecord", "logs:GetLogEvents",
-        "elasticbeanstalk:RetrieveEnvironmentInfo",
         "sqs:ReceiveMessage", "ssm:GetParameter",
         ] : anytrue([
           for st in jsondecode(aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy).Statement :
@@ -1131,13 +1128,21 @@ run "brain_data_volume_and_address_keep_prevent_destroy" {
   # the user pool is every account and sign-in (a replacement loses them all),
   # and its client and domain are the sign-in URLs the apps ship with; the two
   # distributions are the public domains and their certificate bindings; the
-  # storage module's bucket is media, topo tiles, the frontend and access logs.
+  # storage module's bucket is media, topo tiles, the frontend and access logs;
+  # deploys write the signals bucket and the watchdog reads it; the audit
+  # bucket and its trail are the record of every route to user data, and a
+  # replaced trail leaves a gap in it. The sign-up counter table is not here:
+  # DynamoDB's own deletion protection holds it
+  # (signup_cap_counter_table_cannot_be_deleted).
   assert {
     condition = length(aws_eip.brain) == 1 && alltrue([
       for r in [
         { file = "brain_instance.tf", type = "aws_ebs_volume", name = "brain_data" },
         { file = "brain_instance.tf", type = "aws_eip", name = "brain" },
         { file = "brain_s3.tf", type = "aws_s3_bucket", name = "brain_backups" },
+        { file = "brain_s3.tf", type = "aws_s3_bucket", name = "brain_signals" },
+        { file = "audit.tf", type = "aws_s3_bucket", name = "audit" },
+        { file = "audit.tf", type = "aws_cloudtrail", name = "audit" },
         { file = "cognito.tf", type = "aws_cognito_user_pool", name = "main" },
         { file = "cognito.tf", type = "aws_cognito_user_pool_client", name = "main" },
         { file = "cognito.tf", type = "aws_cognito_user_pool_domain", name = "main" },
@@ -2115,8 +2120,7 @@ run "prod_runs_on_the_brain" {
     error_message = "The API origin must keep its id, send X-Origin-Verify, and stay plain HTTP on port 80: the brain's security group admits CloudFront on 80 only."
   }
 
-  # Mutation: a filter pointed at another group (the old Elastic Beanstalk one),
-  # or the 5xx alarm's actions dropped.
+  # Mutation: a filter pointed at another group, or the 5xx alarm's actions dropped.
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.api_5xx.log_group_name == "/logjam/brain/api" &&

@@ -101,6 +101,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_backups" {
 # (ci_reads_no_secret_or_user_data).
 resource "aws_s3_bucket" "brain_signals" {
   bucket = local.brain_signals_bucket
+
+  # Everything in it is rewritten (by a deploy, the brain's status timer, the
+  # nightly drill), but deploys write here and the watchdog reads here, so a
+  # plan that destroys it fails instead. Guard:
+  # brain_data_volume_and_address_keep_prevent_destroy.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "brain_signals" {

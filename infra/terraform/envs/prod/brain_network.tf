@@ -1,7 +1,7 @@
 # The brain's security group. Port 80 only from CloudFront's origin-facing
 # prefix list (the API's origin-verify header covers what a prefix list shared
 # with other customers cannot) and Postgres
-# only from the Fargate workers. Nothing is attached to it yet. No SSH: the
+# only from the Fargate workers. No SSH: the
 # host is reached through Session Manager. Guard: tests/guards.tftest.hcl
 # (brain_security_group_has_two_ingress_rules).
 resource "aws_security_group" "brain" {

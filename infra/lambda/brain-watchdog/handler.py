@@ -161,9 +161,9 @@ def check_ready(url, opener):
 def probe_ready(url, opener):
     """One attempt at /ready, never a failure: the HTTP status, or None.
 
-    Before the cutover the URL is answered by the old API, so a 200 proves the
-    WAF lets this function through. A 4xx/5xx is a status too (a WAF block is
-    a 403, which is what the probe is there to show).
+    Logged, not judged, while the brain is not serving or its status is
+    missing. A 4xx/5xx is a status too (a WAF block is a 403, which is what
+    the probe is there to show).
     """
     try:
         with opener(_request(url), timeout=READY_TIMEOUT) as response:

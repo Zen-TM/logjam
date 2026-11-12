@@ -14,7 +14,7 @@ name: terraform-apply
 #
 # envs/prod runs as the AWS apply role, which trusts only jobs in the `prod`
 # Environment (deployable from main only) and whose permission boundary denies
-# user-data reads, rds-db:connect, secret values and edits to itself
+# user-data reads, secret values and edits to itself
 # (infra/terraform/envs/prod/iam_apply.tf). envs/github runs as the GitHub
 # apply App, whose key is a secret of the same Environment
 # (docs/decisions/0025-github-settings-in-terraform.md).

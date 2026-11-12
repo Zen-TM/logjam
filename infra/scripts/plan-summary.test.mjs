@@ -309,6 +309,37 @@ test("a hand change to a resource the PR updates changes its value fingerprint",
   );
 });
 
+test("a value AWS moves by itself leaves the value fingerprint alone", () => {
+  // A sign-up between the PR's plan and the apply's moves the pool's user
+  // count; a deploy's invalidation, or a rollout still in progress, moves the
+  // distribution's. Mutation: dropping either type from prod's `movesAlone`
+  // refuses a good apply whenever one moves; naming the attribute for every
+  // type hides a real `status` elsewhere. Either turns this red.
+  const updated = (type, before, after) => ({
+    resource_changes: [
+      { address: `${type}.x`, type, change: { actions: ["update"], before, after, after_unknown: {}, after_sensitive: {} } },
+    ],
+  });
+  const cases = [
+    ["aws_cognito_user_pool", { estimated_number_of_users: 41 }, { estimated_number_of_users: 42 }],
+    [
+      "aws_cloudfront_distribution",
+      { status: "InProgress", in_progress_validation_batches: 1 },
+      { status: "Deployed", in_progress_validation_batches: 0 },
+    ],
+  ];
+  for (const [type, atPlan, atMerge] of cases) {
+    const plan = (moved, hand = {}) =>
+      updated(type, { name: "x", comment: "old", ...moved, ...hand }, { name: "x", comment: "new", ...moved });
+    const read = comment({ root: "prod", planText: "plan", status: "success", plan: plan(atPlan), sha: SHA, key: KEY }).body;
+    assert.equal(check("prod", plan(atMerge), read, SHA, { key: KEY, mode: "enforce" }).ok, true, type);
+    // A hand edit to the same resource is still seen.
+    assert.equal(check("prod", plan(atMerge, { name: "by-hand" }), read, SHA, { key: KEY, mode: "enforce" }).ok, false, type);
+  }
+  const elsewhere = (status) => updated("aws_budgets_budget_action", { status }, { status, name: "new" });
+  assert.notDeepEqual(valueFingerprints(elsewhere("STANDBY"), "prod", KEY), valueFingerprints(elsewhere("EXECUTION_SUCCESS"), "prod", KEY));
+});
+
 test("a sensitive value is neither in the comment nor in the fingerprint", () => {
   // Mutation: not stripping after_sensitive or before_sensitive puts the
   // secret into the HMAC and, if posted raw, into the comment.

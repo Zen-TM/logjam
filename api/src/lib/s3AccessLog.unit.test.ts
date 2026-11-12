@@ -21,7 +21,7 @@ const FIXTURE = resolve(here, "__fixtures__/s3-access-log-sample.log");
 const LOG = readFileSync(FIXTURE, "utf8");
 
 /** How the sweeper recognises "the API signed this URL" (see egressMeter.ts). */
-const API_REQUESTER = "logjam-eb-role";
+const API_REQUESTER = "assumed-role/logjam-brain/";
 
 describe("parseAccessLogLine", () => {
   const records = parseAccessLog(LOG);
@@ -42,7 +42,7 @@ describe("parseAccessLogLine", () => {
     );
     expect(first.httpStatus).toBe(200);
     expect(first.bytesSent).toBe(2841577);
-    expect(first.requester).toContain("logjam-eb-role");
+    expect(first.requester).toContain(API_REQUESTER);
   });
 
   it("does not let the quoted request URI shift later columns", () => {
