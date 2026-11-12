@@ -1,10 +1,10 @@
 name: CI
 
 # Test/lint/typecheck gate. Runs on every PR, on pushes to main and nightly.
-# This is the workflow branch protection should require (jobs: shared, api,
-# api-integration, frontend, mobile, topo). The api-integration job stands up
-# the live API + Postgres + MiniStack the integration suite needs, so
-# api/src/__tests__ gates PRs too; see api/AGENTS.md "Testing".
+# The main ruleset requires its jobs (infra/terraform/envs/github/rulesets.tf).
+# The api-integration job stands up the live API + Postgres + MiniStack the
+# integration suite needs, so api/src/__tests__ gates PRs too; see
+# api/AGENTS.md "Testing".
 #
 # On a pull request the heavy jobs run only when the diff touches what they
 # depend on (the `changes` job; infra/scripts/ci-scope.sh holds the paths).
@@ -21,9 +21,17 @@ on:
     - cron: "17 16 * * *"
   workflow_dispatch:
 
+# A newer push to a PR cancels that PR's older run. Anything else (a push to
+# main, which the deploys wait on, the nightly, a hand run) gets a group of its
+# own, since a shared one would also cancel a queued run.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       api_integration: ${{ steps.scope.outputs.api_integration }}
       mobile: ${{ steps.scope.outputs.mobile }}
@@ -52,28 +60,34 @@ jobs:
     # Scan for committed secrets (.gitleaks.toml allowlists public Cognito ids etc.).
     # Pin the CLI to an exact release rather than a mutable Action tag.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install gitleaks
         run: |
-          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
       - name: Scan for secrets
         # A PR or push scans HEAD's history only: checkout fetches every branch
         # and gitleaks's default is `git log --all`, so a finding on any other
         # branch would fail every PR. The nightly run keeps `--all`, since the
         # repo is public and a branch that never gets a PR is scanned nowhere else.
-        run: ./gitleaks detect --source . --no-banner --redact --exit-code 1 --log-opts="${{ github.event_name == 'schedule' && '--all' || 'HEAD' }}"
+        # -v prints each finding's file, rule and commit (--redact keeps the
+        # secret out of it): without it the log says only "leaks found: N".
+        run: ./gitleaks detect --source . --no-banner --redact -v --exit-code 1 --log-opts="${{ github.event_name == 'schedule' && '--all' || 'HEAD' }}"
 
   actionlint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install actionlint
         run: |
-          curl -sSL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
       # ShellCheck warnings and errors fail the job; its info and style notes
       # (quoting a value that never holds a space) do not.
@@ -86,6 +100,7 @@ jobs:
   # topo job.
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -100,6 +115,7 @@ jobs:
 
   shared:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -113,12 +129,22 @@ jobs:
       - name: Build
         working-directory: shared
         run: npm run build
+      # The build leaves the colocated tests out; this checks them too, so a
+      # test cannot keep asserting a shape the types no longer allow.
+      - name: Typecheck
+        working-directory: shared
+        run: npm run typecheck
       - name: Lint
         working-directory: shared
         run: npm run lint
       # ~27 MB of public NSW files (ELVIS tile, DEM, topo sheet) from the
       # hash-pinned sample-data-v1 release; the corpus tests in shared skip
-      # without SAMPLE_DATA_DIR.
+      # without SAMPLE_DATA_DIR, and fail instead under REQUIRE_SAMPLES below.
+      # Cached by the manifest, since sample-data.sh checks every file's hash.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/sample-data
+          key: sample-data-${{ hashFiles('scripts/sample-data.sha256') }}
       - name: Fetch public sample inputs
         run: |
           echo "SAMPLE_DATA_DIR=$GITHUB_WORKSPACE/.cache/sample-data" >> "$GITHUB_ENV"
@@ -131,6 +157,7 @@ jobs:
         env:
           RUN_GEOPDF_SAMPLES: "1"
           GEOPDF_SAMPLE_DIR: ${{ env.SAMPLE_DATA_DIR }}
+          REQUIRE_SAMPLES: "1"
         run: npm test
       # Every foreground/background pair both clients render, under all four
       # theme schemes. Bare node: it parses the token sources, no build.
@@ -139,6 +166,7 @@ jobs:
 
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -167,10 +195,10 @@ jobs:
         run: npm run test:unit
 
   api-integration:
-    # api/src/__tests__ (31 files / ~250 tests) hits a LIVE API over HTTP — it
-    # is the only coverage of the multi-actor privacy boundaries
-    # (shareBoundary / syncBoundary / directShare / shareRevocation), which the
-    # mocked-Prisma unit tests structurally cannot reach.
+    # api/src/__tests__ hits a LIVE API over HTTP — it is the only coverage of
+    # the multi-actor privacy boundaries (shareBoundary / syncBoundary /
+    # directShare / shareRevocation), which the mocked-Prisma unit tests
+    # structurally cannot reach.
     #
     # This job is `make dev` reduced to what the suite actually needs:
     # Postgres + MiniStack (S3 only — no test drives POST /topo-jobs/:id/start
@@ -178,16 +206,19 @@ jobs:
     # with AUTH_MODE=fake.
     #
     # The DB is a fresh service container every run, deliberately NOT cached:
-    # the suite is not idempotent against a reused database (sync_tombstones
-    # accumulate until syncBoundary's paged-pull assertions stop finding the
-    # tombstone they just wrote). Never cache the Postgres volume here.
+    # the suite snapshots the database `prisma db seed` leaves and refuses to
+    # run against one that differs (_globalSetup.ts), so it must be built from
+    # this commit's migrations and seed. A rerun on the same database is fine:
+    # each file sweeps it back to that snapshot. Never cache the Postgres
+    # volume here.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     services:
       # Mirrors the `migrations` job's config exactly.
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -200,13 +231,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       # Same emulator image as docker-compose.yml, so presign/PUT/confirm
-      # behaves as it does locally. media/canyonTracks/clientIds/fileSends and
+      # behaves as it does locally. That file holds the one pin (Dependabot
+      # updates it there, not here); rollback-compat-mirrors-ci.py fails on a
+      # copy that differs, and likewise on a Postgres that is not the version
+      # infra/brain/postgres/Dockerfile builds FROM. media/canyonTracks/clientIds/fileSends and
       # topoJobs' HeadObject check all do real S3 round-trips against it.
       # No /var/run/docker.sock mount (that is only for ECS RunTask) and no
       # healthcheck options — the image has no curl, so the wait step below
       # polls the health endpoint from the runner instead.
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3
           DEFAULT_REGION: ap-southeast-2
@@ -338,42 +372,33 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci
-      - name: Playwright smoke
+      # Both Logjam Web builds the Playwright steps serve (E2E_PREVIEW), made
+      # once here. A build that breaks fails this step, which nothing else in
+      # CI runs: deploy-frontend.yml builds only after a merge. `--mode e2e`
+      # leaves out the CSP meta, whose connect-src has no localhost API.
+      - name: Build Logjam Web
+        working-directory: frontend
+        run: npm run build:e2e
+      # Smoke, a11y, and the Make a map and confirm specs, in one run so the
+      # browser and the two servers start once. Playwright starts the second
+      # server on 5199 itself. None of them writes, so two workers can share the
+      # account; the list reporter puts each case's duration in the log.
+      - name: Playwright read-only specs
         working-directory: frontend
         env:
+          E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts
-      # Same job, not its own: it needs this seeded stack, and this job's
-      # area (api/, shared/, frontend/) is exactly what the spec can break.
-      # Serial, because a parallel run on a cold checkout times out on
-      # page.goto. Playwright starts the second server on 5199 itself.
-      - name: Playwright accessibility
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts --workers=2 --reporter=list,github,html
+      # These write to the seeded account and take it back, which leaves sync
+      # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
+      # later integration run): after the integration suite, never before it.
+      # Their own run, serial, so none writes while an a11y case reads.
+      - name: Playwright specs that write
         working-directory: frontend
         env:
+          E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/a11y.spec.ts --workers=1
-      # App's own state around Make a map's box pick, which no unit test
-      # reaches (App has no render harness). Writes nothing.
-      - name: Playwright Make a map
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts --workers=1
-      # Writes to the seeded account and Undoes it, which leaves sync
-      # tombstones (frontend/AGENTS.md): after the integration suite, never
-      # before it.
-      - name: Playwright CSV import
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/csv-import.spec.ts --workers=1
-      # Links and unlinks a way on a seeded place and takes it back, leaving
-      # sync tombstones (frontend/AGENTS.md): after the integration suite too.
-      - name: Playwright place route
-        working-directory: frontend
-        env:
-          VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/place-route.spec.ts --workers=1
+        run: npx playwright test e2e/csv-import.spec.ts e2e/ways-import.spec.ts e2e/discard.spec.ts e2e/place-verbs.spec.ts e2e/place-route.spec.ts --workers=1 --reporter=list,github,html
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
@@ -388,6 +413,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -424,6 +450,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -469,9 +496,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -516,9 +544,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.migrations != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -553,6 +582,13 @@ jobs:
         run: npm ci
       - name: Upgrade origin/main -> this commit
         run: scripts/migration-upgrade-test.sh seed origin/main
+      # The upgraded, seeded database is thrown away after this: the canary
+      # rewrites every row. Plants a marker in each column the prod-snapshot
+      # scrub covers, runs the scrub, and fails if a marker is still in a dump.
+      - name: Snapshot scrub canary
+        env:
+          CANARY_TARGET_IS_THROWAWAY: "yes"
+        run: scripts/snapshot-scrub-canary.sh
 
   brain-postgres-image:
     # The Postgres image local dev runs (docker-compose.yml) and prod's will.
@@ -562,6 +598,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.brain_postgres != 'false' }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -600,6 +637,7 @@ jobs:
     needs: brain-e2e
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Every architecture passed or was scoped out
         env:
@@ -612,6 +650,7 @@ jobs:
     needs: brain-postgres-image
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Every architecture passed or was scoped out
         env:
@@ -620,6 +659,7 @@ jobs:
 
   topo:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -653,9 +693,8 @@ jobs:
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
   # image is built from and the two API files that launch it (ci-scope.sh)
-  # rather than to the whole API, and its six minutes (ten with
-  # a cold image cache) run beside that suite instead of after it. The setup it
-  # repeats is about a minute.
+  # rather than to the whole API, and it runs beside that suite instead of
+  # after it.
   topo-e2e:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.topo_e2e != 'false' }}
@@ -663,7 +702,7 @@ jobs:
     timeout-minutes: 60
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15-trixie
         env:
           POSTGRES_USER: logjam
           POSTGRES_PASSWORD: logjam
@@ -679,7 +718,7 @@ jobs:
       # ECS and the Docker socket, as docker-compose.yml's does.
       # rollback-compat-mirrors-ci.py allows exactly these two differences.
       ministack:
-        image: ministackorg/ministack
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
         env:
           SERVICES: s3,ecs
           DEFAULT_REGION: ap-southeast-2
@@ -745,6 +784,28 @@ jobs:
           tags: ${{ env.IMAGE }}
           cache-from: type=gha,scope=topo-worker
           cache-to: type=gha,scope=topo-worker,mode=max
+      # The unit tests that skip in the `topo` job for want of GDAL (their
+      # skip reason says so), run for real in the image GDAL comes from. The
+      # image holds no tests: they are mounted, with the two shared/src files
+      # two of them read at their repo-relative path. A skip fails the step
+      # (infra/scripts/check-required-checks.py names every such test file and
+      # requires it here).
+      # Mutation that turns it red: break reproject_raster_to_web_mercator's
+      # output SRS in topo/pipeline.py (its dstSRS).
+      - name: Unit tests that need real GDAL
+        run: |
+          set -o pipefail
+          docker run --rm \
+            -v "$PWD/topo/tests:/app/tests:ro" \
+            -v "$PWD/shared/src:/shared/src:ro" \
+            -w /app --entrypoint python3 "$IMAGE" -m unittest \
+            tests/test_area_export.py tests/test_coverage.py \
+            tests/test_footprint_coverage.py tests/test_reprojection.py \
+            tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
+          if grep -q 'skipped=' "$RUNNER_TEMP/gdal-tests.log"; then
+            echo "::error::a test that needs GDAL skipped inside the worker image: it has nothing to skip for here"
+            exit 1
+          fi
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -929,6 +990,7 @@ jobs:
   # than half way through a prod deploy.
   infra-scripts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ECS task-definition pin filter
@@ -973,6 +1035,18 @@ jobs:
       # only, a fake S3 client and a fake URL opener.
       - name: Brain watchdog
         run: python3 -m unittest discover -s infra/lambda/brain-watchdog
+      # The Cognito Lambdas' tests (decrypt, and the pre sign-up guard that
+      # never auto-confirms): no AWS, so they also run on a Dependabot or fork
+      # PR, where terraform-plan.yml stops before it builds them.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Cognito email sender Lambda
+        working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm test
+      - name: Cognito pre sign-up Lambda
+        working-directory: infra/lambda/cognito-pre-signup
+        run: npm ci && npm test
       - name: rollback-compat mirrors api-integration
         run: |
           pip install pyyaml==6.0.3
@@ -990,6 +1064,15 @@ jobs:
         run: |
           infra/scripts/check-dependabot-ignores.py --self-test
           infra/scripts/check-dependabot-ignores.py
+      # The root AGENTS.md's comment and guard rules: no citation a reader
+      # cannot open (audit codes, private files, a home path), and every test
+      # an AGENTS.md names exists and carries its mutation note. Its third
+      # rule, no comment on a closed issue, runs in pr-closes.yml, on the pull
+      # request that closes the issue.
+      - name: Comments cite what a reader can open, named guards name their mutation
+        run: |
+          infra/scripts/check-repo-hygiene.py --self-test
+          infra/scripts/check-repo-hygiene.py
       # One Node for every toolchain: the workflows, the api image and the
       # @types/node pins must all equal mise.toml's. The Lambda's types are
       # checked against its own runtime instead.

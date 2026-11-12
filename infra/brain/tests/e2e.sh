@@ -183,7 +183,7 @@ docker tag "$API_IMAGE" "$API_REPO:release-b"
 
 docker network create brain-e2e > /dev/null
 docker run -d --name brain-e2e-ministack --network brain-e2e -p "$MS_PORT:4566" \
-  -e SERVICES=s3,secretsmanager -e DEFAULT_REGION=ap-southeast-2 ministackorg/ministack > /dev/null || fatal "MiniStack does not start"
+  -e SERVICES=s3,secretsmanager -e DEFAULT_REGION=ap-southeast-2 ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c > /dev/null || fatal "MiniStack does not start"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=host.docker.internal -addext subjectAltName=DNS:host.docker.internal \
   -keyout "$WORK/tls.key" -out "$WORK/tls.crt" 2> /dev/null
 cat > "$WORK/nginx.conf" <<EOF

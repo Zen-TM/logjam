@@ -33,7 +33,7 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   before changing a layer, a press handler or a camera write.
 - **A guest syncs nothing yet:** gate a new server call through
   `auth/capabilities.ts` so a guest makes none, and never add a guest-only
-  write path. [0007](../docs/decisions/0007-guest-mode-is-dont-sync-yet.md)
+  write path. Guard: `src/guestGate.test.ts`. [0007](../docs/decisions/0007-guest-mode-is-dont-sync-yet.md)
 
 ## Privacy and battery
 
@@ -46,12 +46,17 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
   our API: offline clips are cut on the phone (`offline/regionDownloads.ts`,
   guard `offline/regionDownloads.test.ts`). [0004](../docs/decisions/0004-mobile-sentry-and-scrubber.md), [0036](../docs/decisions/0036-the-phone-cuts-its-own-offline-clips.md)
 - **A new dependency can add Android permissions:** block each with
-  `tools:node="remove"` and check the built APK (`aapt2 dump permissions`).
+  `tools:node="remove"`. Guards: `src/androidPermissions.test.ts` for the
+  config, and `mobile-emulator.yml` diffs the built APK's permissions against
+  `android-permissions.expected`, so a permission you mean to keep is added
+  there.
 - **Nothing automatic wakes the radio or the CPU behind a dark screen:** a
   retry, poll or timer arms only in the foreground, and a sensor runs only
   while the screen that shows it is focused. The backgrounded recorder only
   appends points and a map download the user started keeps running; any other
-  background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
+  background work needs the maintainer's sign-off. Guard:
+  `src/batteryRules.test.ts`, where a new timer or sensor is declared with why
+  it is safe. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
 
 ## Builds and verify
 
@@ -63,9 +68,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
   native inputs listed in `.github/actions/build-dev-apk/action.yml`: add a
   new native directory to that key.
 
-- `npm run typecheck`, `lint` and `test` gate every change. Nothing in CI
+- `npm run typecheck`, `lint` (no warnings allowed) and `test` gate every change. Nothing in CI
   bundles: run `npx expo export --platform android` before a Gradle build.
-- **Metro does not rebuild `shared/`** (typecheck does): `make shared` first.
+- **Metro does not rebuild `shared/`** (typecheck and test do): `make shared` first.
 - **A fresh worktree needs real installs** (`npm ci` in `shared/` and `mobile/`):
   symlinked `node_modules` pass typecheck and vitest, then Metro fails. It also
   lacks the gitignored `.env`, `google-services.json` and `keys/`.

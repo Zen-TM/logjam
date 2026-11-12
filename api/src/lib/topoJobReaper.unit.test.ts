@@ -256,7 +256,7 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     expect(pendingUpdate.data.status).toBe("failed");
   });
 
-  it("pins the reaper messages to honest retry semantics (ARCH-008)", async () => {
+  it("pins the reaper messages to honest retry semantics", async () => {
     stageByStatus(jobFindMany, {
       pending: [{ id: "p1", userId: "u1", name: null }],
     });
@@ -381,7 +381,7 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
   });
 });
 
-describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
+describe("reapStuckTopoJobs — topo_export_jobs", () => {
   it("fails queued exports older than the queued timeout, anchored on createdAt", async () => {
     stageByStatus(exportFindMany, {
       queued: [{ id: "q1", userId: "u1", format: "geotiff" }],

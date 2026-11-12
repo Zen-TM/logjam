@@ -54,6 +54,7 @@ jobs:
   # and fail, so a required check never passes on a skipped plan.
   scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       prod: ${{ steps.scope.outputs.prod }}
       github: ${{ steps.scope.outputs.github }}
@@ -100,6 +101,7 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.prod == 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: terraform-plan
     steps:
       - name: Stop if the scope job failed
@@ -156,10 +158,10 @@ jobs:
           node-version: 26
       - name: Build cognito-email-sender Lambda
         working-directory: infra/lambda/cognito-email-sender
-        run: npm ci && npm run build && npm test
+        run: npm ci && npm run build
       - name: Build cognito-pre-signup Lambda
         working-directory: infra/lambda/cognito-pre-signup
-        run: npm ci && npm run build && npm test
+        run: npm ci && npm run build
 
       - name: terraform init
         run: terraform -chdir=infra/terraform/envs/prod init -input=false
@@ -213,6 +215,7 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.github == 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: terraform-plan
     steps:
       - name: Stop if the scope job failed

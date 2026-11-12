@@ -124,7 +124,7 @@ describe("single-writer discipline", () => {
   it("is the only place sync code opens a transaction", () => {
     // The rule, enforced: a bare db.withTransactionAsync in src/sync,
     // src/tracks or src/offline is a writer outside the lock, which is the whole
-    // bug back again (#694). Mutation: revert any of them to a bare call.
+    // bug back again. Mutation: revert any of them to a bare call.
     const offenders: string[] = [];
     for (const dir of ["sync", "tracks", "offline"]) {
       const full = join(__dirname, "..", dir);

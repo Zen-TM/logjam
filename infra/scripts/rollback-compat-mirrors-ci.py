@@ -18,16 +18,36 @@ api-integration's, less what only that suite needs (API_ONLY_ENV). Mutations
 that turn that red: drop the socket volume from topo-e2e's MiniStack, or ECS
 from its SERVICES.
 
+Every service image is pinned, and the pins agree. A floating image (no tag, or
+`latest`) changes under every PR and every nightly at once, a red main with no
+commit to blame. docker-compose.yml's MiniStack is the one pin (tag@sha256
+digest): every workflow service and infra/brain/tests/e2e.sh must equal it,
+because Dependabot updates the compose file and cannot read a workflow's
+`services:`. The Postgres service in each workflow is the minor and Debian
+release infra/brain/postgres/Dockerfile builds `FROM`, so CI tests the server
+prod runs.
+
+Mutations that turn that red: drop the tag from any service image in any
+workflow or from docker-compose.yml's; make one workflow's `postgres:` differ
+from the Dockerfile's FROM line; change the MiniStack digest in one workflow or
+in e2e.sh; drop the digest from docker-compose.yml's MiniStack.
+
 Usage: rollback-compat-mirrors-ci.py   (from anywhere in the repo; needs PyYAML)
 """
 
 import copy
+import re
 import sys
 from pathlib import Path
 
 import yaml
 
-WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS = ROOT / ".github" / "workflows"
+COMPOSE = ROOT / "docker-compose.yml"
+E2E = ROOT / "infra" / "brain" / "tests" / "e2e.sh"
+POSTGRES_DOCKERFILE = ROOT / "infra" / "brain" / "postgres" / "Dockerfile"
+MINISTACK = "ministackorg/ministack"
 # rollback-compat's own additions, which api-integration has no use for.
 OWN_ENV = {"PROD_API_URL", "LIVE_DIR"}
 # api-integration's env that topo-e2e leaves out on purpose: it sets its own ECS_*
@@ -54,6 +74,62 @@ def job(file, name):
 
 def step_runs(j):
     return {s["name"]: s.get("run") for s in j["steps"] if "name" in s}
+
+
+def unpinned(image):
+    """The image with no tag or `latest`: a name, or name:latest, with no digest."""
+    tag = image.partition("@")[0].partition(":")[2]
+    return tag in ("", "latest") and "@" not in image
+
+
+def check_images(failures):
+    compose = yaml.safe_load(COMPOSE.read_text())["services"]
+    pin = compose["ministack"]["image"]
+    if not pin.startswith(MINISTACK + ":") or "@sha256:" not in pin:
+        failures.append(
+            f"docker-compose.yml: MiniStack must be {MINISTACK}:<version>@sha256:<digest>, got {pin!r}"
+        )
+    for name, svc in compose.items():
+        if "image" in svc and unpinned(svc["image"]):
+            failures.append(
+                f"docker-compose.yml: {name} image {svc['image']!r} has no tag"
+            )
+
+    base = re.search(r"^FROM\s+(postgres:\S+)", POSTGRES_DOCKERFILE.read_text(), re.M)
+    postgres = base.group(1) if base else None
+    if not postgres:
+        failures.append(
+            f"no `FROM postgres:` line in {POSTGRES_DOCKERFILE.relative_to(ROOT)}"
+        )
+
+    seen = 0
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for job_id, j in (yaml.safe_load(path.read_text()).get("jobs") or {}).items():
+            for name, svc in (j.get("services") or {}).items():
+                seen += 1
+                image = svc.get("image", "")
+                where = f"{path.name} {job_id} service {name}: image {image!r}"
+                if unpinned(image):
+                    failures.append(
+                        f"{where} has no tag. Pin a version; MiniStack's is docker-compose.yml's."
+                    )
+                elif image.startswith(MINISTACK) and image != pin:
+                    failures.append(f"{where} must be docker-compose.yml's {pin!r}")
+                elif image.startswith("postgres:") and postgres and image != postgres:
+                    failures.append(
+                        f"{where} must be {postgres!r}, the version "
+                        "infra/brain/postgres/Dockerfile builds FROM (change both together)"
+                    )
+    if seen < 8:
+        failures.append(
+            f"found only {seen} workflow service images: did the scan stop matching?"
+        )
+
+    e2e = set(re.findall(re.escape(MINISTACK) + r"\S*", E2E.read_text()))
+    if e2e != {pin}:
+        failures.append(
+            f"{E2E.relative_to(ROOT)}: MiniStack must be docker-compose.yml's {pin!r}, found {sorted(e2e)}"
+        )
 
 
 def main():
@@ -113,6 +189,8 @@ def main():
                 f"topo-e2e {topo['env'].get(key)!r}"
             )
 
+    check_images(failures)
+
     for f in failures:
         print(f"FAIL — {f}")
     if failures:
@@ -121,7 +199,7 @@ def main():
         )
         return 1
     print(
-        "ok   — rollback-compat.yml and topo-e2e mirror api-integration's services, env and wait steps"
+        "ok   — rollback-compat.yml and topo-e2e mirror api-integration's services, env and wait steps; every service image is pinned and agrees"
     )
     return 0
 

@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "build:e2e": "VITE_AUTH_MODE=fake vite build --mode e2e --outDir dist-e2e/fake && VITE_AUTH_MODE=oidc VITE_OIDC_ISSUER=https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_e2e vite build --mode e2e --outDir dist-e2e/oidc",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "tokens": "node scripts/generate-tokens.mjs"

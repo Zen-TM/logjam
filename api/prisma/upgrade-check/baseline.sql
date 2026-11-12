@@ -11,8 +11,11 @@
 --
 -- RELEASE-SPECIFIC. The metrics below describe one release's data-moving
 -- migrations and switch themselves off once the base has them; the next
--- release that moves data replaces them. The generic half (migrations apply
--- over real rows; the result matches schema.prisma) lives in the script and
+-- release that moves data replaces them. Once the base has the migration
+-- named below, this file and verify.sql check nothing;
+-- api/src/lib/upgradeCheck.unit.test.ts turns red when a newer migration moves
+-- data and neither file names it. The generic half (migrations apply over
+-- real rows; the result matches schema.prisma) lives in the script and
 -- never goes stale.
 --
 -- `-v fixtures=1` first inserts made-up rows, so the check has something to

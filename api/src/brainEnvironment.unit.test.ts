@@ -5,10 +5,12 @@
 //
 // Mutation that turns it red: adding `LOGJAM_RUNTIME=prod`, `SMTP_PASSWORD=x`
 // or a variable the schema lacks to the file, or changing DB_HOST,
-// DATABASE_SSL_CA or TRUST_PROXY_HOPS.
+// DATABASE_SSL_CA or TRUST_PROXY_HOPS; deleting a variable prod needs
+// (S3_BUCKET_MEDIA, CORS_ORIGIN, OIDC_ISSUER) from the file.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { validateEnv } from "./lib/env";
 
 const api = join(import.meta.dirname, "..");
 const schema = readFileSync(join(api, "src", "lib", "env.ts"), "utf8");
@@ -73,5 +75,46 @@ describe("infra/brain/api.env", () => {
     expect(brainMap.get("DB_HOST")).toBe("postgres");
     expect(brainMap.get("DATABASE_SSL_CA")).toBe("/app/brain-ca.pem");
     expect(brainMap.get("TRUST_PROXY_HOPS")).toBe("1");
+  });
+
+  // What the host adds at boot: boot.ts resolves the database user and password
+  // and the origin-verify secret from Secrets Manager, and release-agent.sh
+  // adds LOGJAM_RUNTIME. Everything else prod needs must be in the file.
+  describe("boot", () => {
+    const original = { ...process.env };
+    afterEach(() => {
+      for (const key of Object.keys(process.env)) delete process.env[key];
+      Object.assign(process.env, original);
+    });
+
+    it("validates with exactly what api.env and the host's secrets provide", () => {
+      for (const key of Object.keys(process.env)) delete process.env[key];
+      Object.assign(process.env, Object.fromEntries(brain), {
+        LOGJAM_RUNTIME: "prod",
+        DB_USER: "host-resolved",
+        DB_PASSWORD: "host-resolved",
+        ORIGIN_VERIFY_SECRET: "host-resolved",
+      });
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("process.exit: prod would refuse to boot");
+      }) as never);
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        let refused = false;
+        try {
+          validateEnv();
+        } catch {
+          refused = true;
+        }
+        expect(
+          refused,
+          "infra/brain/api.env lacks a variable prod needs; add it there. " +
+            `validateEnv said: ${error.mock.calls.flat().join(" ")}`,
+        ).toBe(false);
+      } finally {
+        exit.mockRestore();
+        error.mockRestore();
+      }
+    });
   });
 });

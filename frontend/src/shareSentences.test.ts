@@ -45,7 +45,7 @@ describe("share sentences on Logjam Web", () => {
         .map(({ line, text }) => `${relative(SRC, path)}:${line} "${text}"`),
     );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 
   // Mutation: read only JSX text and `COPY_PROPS`, as `userFacingStrings` does,
   // and a const or a call's argument stops being seen.

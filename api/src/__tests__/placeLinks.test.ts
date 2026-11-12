@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
+import prisma from "../services/prisma";
 import {
   API_URL,
   ALICE_SUB,
@@ -11,6 +12,7 @@ import {
   CANYON_TYPE_ID,
   MARKER_TYPE_ID,
 } from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // The delta endpoint requires the client-version header (the forced-upgrade
 // lever reads it), so a sync request without one is a 400 before it ever
@@ -84,6 +86,36 @@ describe("place links over REST", () => {
     expect(afterClear.status).toBe(200);
 
     await del(ALICE_SUB, canyon.body.id as string);
+    await del(ALICE_SUB, carpark);
+  });
+
+  // Mutation that turns it red: skip the writeTombstones call in the stale
+  // branch of the link sync in lib/placeLinks.ts.
+  it("tombstones a link the whole-list write drops", async () => {
+    const carpark = await createMarker(ALICE_SUB, "Pruned carpark");
+    const canyon = await createMarker(ALICE_SUB, "Pruning marker");
+    const linked = await request(API_URL)
+      .patch(`/places/${canyon}`)
+      .set(as(ALICE_SUB))
+      .send({ linkedPlaceIds: [carpark] });
+    expect(linked.status).toBe(200);
+    const link = await prisma.placeLink.findFirstOrThrow({
+      where: { OR: [{ aPlaceId: canyon }, { bPlaceId: canyon }] },
+      select: { id: true },
+    });
+
+    const cursor = await deltaCursor(ALICE_SUB);
+    const cleared = await request(API_URL)
+      .patch(`/places/${canyon}`)
+      .set(as(ALICE_SUB))
+      .send({ linkedPlaceIds: [] });
+    expect(cleared.status).toBe(200);
+
+    expect(await tombstonesSince(ALICE_SUB, cursor)).toContainEqual({
+      type: "placeLink",
+      id: link.id,
+    });
+    await del(ALICE_SUB, canyon);
     await del(ALICE_SUB, carpark);
   });
 
@@ -347,6 +379,42 @@ describe("place links over the sync push protocol", () => {
     expect(stillThere.status).toBe(200);
     expect(stillThere.body.linkedPlaceIds).toEqual([]);
 
+    await del(ALICE_SUB, first);
+    await del(ALICE_SUB, second);
+  });
+
+  // Mutation that turns it red: skip the writeTombstones call in
+  // applyPlaceLinkOp's delete branch (routes/sync.ts).
+  it("tombstones a link deleted by a push op", async () => {
+    const first = await createMarker(ALICE_SUB, "Push marker D");
+    const second = await createMarker(ALICE_SUB, "Push marker E");
+    const linkId = randomUUID();
+    const send = (ops: unknown[]) =>
+      request(API_URL)
+        .post("/sync/push")
+        .set({ ...as(ALICE_SUB), ...CLIENT })
+        .send(opEnvelope(ops));
+    const created = await send([
+      {
+        opId: randomUUID(),
+        entity: "placeLink",
+        op: "create",
+        id: linkId,
+        fields: { aPlaceId: first, bPlaceId: second },
+      },
+    ]);
+    expect(created.body.results[0].status).toBe("applied");
+
+    const cursor = await deltaCursor(ALICE_SUB);
+    const removed = await send([
+      { opId: randomUUID(), entity: "placeLink", op: "delete", id: linkId },
+    ]);
+    expect(removed.body.results[0].status).toBe("applied");
+
+    expect(await tombstonesSince(ALICE_SUB, cursor)).toContainEqual({
+      type: "placeLink",
+      id: linkId,
+    });
     await del(ALICE_SUB, first);
     await del(ALICE_SUB, second);
   });
