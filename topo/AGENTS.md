@@ -19,7 +19,8 @@ covers flags, output format and troubleshooting.
 
 - `python -m unittest discover -s tests` from `topo/`. A pure-logic test
   imports `tests/_native_stub.py` first, so it runs without GDAL; a test of a
-  real native library skips when stubbed. GDAL/PDAL subprocess orchestration
+  real native library skips when stubbed and runs in the `topo-e2e` job's
+  image instead. GDAL/PDAL subprocess orchestration
   is not unit-tested: extract the pure part and test that.
 - `tests/test_status_guard_db.py` needs `RUN_DB_IT=1` and real `psycopg2`.
 - CI's `topo-e2e` job runs the worker image end to end on one real ELVIS tile
