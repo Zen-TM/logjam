@@ -45,7 +45,23 @@ import {
   trackPointsToGpx,
 } from "@logjam/shared";
 import { s3 } from "../src/services/awsClients";
-import { seedId, cid } from "./seedIds";
+import { SEED_NAMES } from "./seedNames";
+import {
+  ALICE_ID,
+  BOB_ID,
+  BOB_MARKER_PLACE_ID,
+  BOB_SHARED_PLACE_ID,
+  BOB_SHARED_ROUTE_ID,
+  BOB_SHARED_TOPO_JOB_ID,
+  CAROL_ID,
+  CAROL_PLAN_ID,
+  PLAN_PLACE_ID,
+  PLAN_ROUTE_ID,
+  SEED_PLAN_ID,
+  SHARED_PLACE_ID,
+  seedId,
+  cid,
+} from "./seedIds";
 import {
   flatPng,
   lineVectorTile,
@@ -248,10 +264,6 @@ const prisma = new PrismaClient({ adapter });
 // New data uses fresh ids and never mutates those invariants.
 // ---------------------------------------------------------------------------
 
-const ALICE_ID = seedId("0", 1);
-const BOB_ID = seedId("0", 2);
-const CAROL_ID = seedId("0", 3);
-
 // Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
 // .env.local (infra/terraform/templates/env.local.tftpl)
 const ALICE_SUB = "fake-alice-sub";
@@ -260,7 +272,7 @@ const CAROL_SUB = "fake-carol-sub";
 
 // Stable anchor place ids referenced by the integration suite.
 const PLACE_IDS = [
-  cid(1), // SHARED_PLACE_ID (shared w/ bob)
+  SHARED_PLACE_ID, // shared w/ bob
   cid(2), // shared w/ bob
   cid(3),
   cid(4),
@@ -278,13 +290,11 @@ const PLACE_IDS = [
 const wpid = (n: number) => seedId("6", n);
 const rtid = (n: number) => seedId("7", n);
 
-/**
- * The one place BOB shares WITH ALICE. Alice is the fake-auth dev user, so
- * without an incoming share every sharee-perspective surface in the phone app
- * is unreachable in dev — a read-only row, a "From bob" mark, a refused edit.
- * Bob's "Coin Slot" (seedId("2", 2)); see the share block in main().
- */
-const BOB_SHARED_PLACE_ID = seedId("2", 2);
+// BOB_SHARED_PLACE_ID is the one place BOB shares WITH ALICE. Alice is the
+// fake-auth dev user, so without an incoming share every sharee-perspective
+// surface in the phone app is unreachable in dev — a read-only row, a "From
+// bob" mark, a refused edit. It is bob's "Coin Slot"; see the share block in
+// main().
 
 // Route geometries, [lon, lat]. Short and plausible rather than traced: a
 // route's own validation caps length, and dev only needs a line that draws.
@@ -545,7 +555,7 @@ const ALICE_PLACES: SeedPlace[] = [
   {
     id: PLACE_IDS[1],
     ownerId: ALICE_ID,
-    name: "Claustral Canyon",
+    name: SEED_NAMES.claustral,
     latitude: -33.5603,
     longitude: 150.4033,
     numAbseils: 6,
@@ -576,7 +586,7 @@ const ALICE_PLACES: SeedPlace[] = [
   {
     id: PLACE_IDS[3],
     ownerId: ALICE_ID,
-    name: "Hidden Slot",
+    name: SEED_NAMES.hiddenSlot,
     latitude: -33.701,
     longitude: 150.302,
     quality: 3,
@@ -1764,7 +1774,7 @@ async function main() {
         notes: "Bob's note — a sharee must not be able to edit this.",
       },
       {
-        id: wpid(5),
+        id: BOB_MARKER_PLACE_ID,
         ownerId: BOB_ID,
         placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
         name: "Galah exit gully",
@@ -1825,7 +1835,7 @@ async function main() {
         id: rtid(2),
         ownerId: ALICE_ID,
         placeId: null,
-        name: "Du Faur Head approach",
+        name: SEED_NAMES.duFaurApproach,
         color: TRACK_COLORS[4],
         points: DU_FAUR_LINE,
         anchors: Prisma.DbNull,
@@ -1834,7 +1844,7 @@ async function main() {
       // below. It keeps its direct share to alice, which is the whole point of
       // it: a route shared with you on its own row, removable by you.
       {
-        id: rtid(3),
+        id: BOB_SHARED_ROUTE_ID,
         ownerId: BOB_ID,
         placeId: null,
         name: "Coin Slot approach",
@@ -1902,7 +1912,7 @@ async function main() {
       {
         id: seedId("8", 3),
         entityType: "route",
-        entityId: rtid(3),
+        entityId: BOB_SHARED_ROUTE_ID,
         sharedById: BOB_ID,
         sharedWithId: ALICE_ID,
       },
@@ -2141,7 +2151,7 @@ async function main() {
   });
 
   const aliceTopo = fid(1);
-  const bobTopo = fid(4);
+  const bobTopo = BOB_SHARED_TOPO_JOB_ID;
   const aliceTopoOutputs = sharpenedJob(aliceTopo);
   const bobTopoOutputs = sharpenedJob(bobTopo);
   // What a finished run costs the owner's monthly credits is its elapsed time
@@ -2364,13 +2374,13 @@ async function main() {
   // A made-up plan: alice leads, bob is in it, carol used alice's link and
   // waits to be let in. It holds one place and one route of its own, which
   // belong to no user.
-  const planId = fid(100);
+  const planId = SEED_PLAN_ID;
   const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
   await prisma.tripPlan.create({
     data: {
       id: planId,
       createdById: ALICE_ID,
-      name: "Wollangambe weekend",
+      name: SEED_NAMES.planWollangambe,
       startDate: inDays(21),
       endDate: inDays(22),
       tripTypes: ["canyoning"],
@@ -2413,12 +2423,12 @@ async function main() {
     },
   });
   // carol's plan, which she has invited alice to by username.
-  const carolPlanId = fid(110);
+  const carolPlanId = CAROL_PLAN_ID;
   await prisma.tripPlan.create({
     data: {
       id: carolPlanId,
       createdById: CAROL_ID,
-      name: "Kanangra Walls loop",
+      name: SEED_NAMES.planKanangra,
       startDate: inDays(35),
       endDate: inDays(36),
       tripTypes: ["bushwalking"],
@@ -2449,7 +2459,7 @@ async function main() {
     data: {
       id: fid(104),
       planId,
-      title: "Safety contacts",
+      title: SEED_NAMES.formSafetyContacts,
       preset: "safetyContacts",
       questions: [
         { id: "name", kind: "text", label: "Contact's name", required: true },
@@ -2470,30 +2480,30 @@ async function main() {
         id: fid(105),
         formId: fid(104),
         userId: BOB_ID,
-        answers: { name: "Sam Example", phone: "0400 000 000" },
+        answers: { name: "Sam Example", phone: "0491 570 156" },
       },
       {
         id: fid(108),
         formId: fid(104),
         userId: CAROL_ID,
-        answers: { name: "Jo Example", phone: "0400 000 001" },
+        answers: { name: "Jo Example", phone: "0491 570 157" },
       },
     ],
   });
   await prisma.place.create({
     data: {
-      id: wpid(100),
+      id: PLAN_PLACE_ID,
       planId,
       addedById: ALICE_ID,
       placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
-      name: "Wollangambe meeting point",
+      name: SEED_NAMES.planMeetingPoint,
       latitude: -33.4789,
       longitude: 150.3612,
     },
   });
   await prisma.route.create({
     data: {
-      id: rtid(100),
+      id: PLAN_ROUTE_ID,
       planId,
       addedById: ALICE_ID,
       name: "Walk in to the Wollangambe",
@@ -2551,7 +2561,7 @@ async function main() {
   const announcement = await prisma.announcement.create({
     data: {
       id: fid(20),
-      title: "Logjam is moving to a new server",
+      title: SEED_NAMES.announcement,
       body: [
         "Logjam will be **offline for about an hour** on Saturday morning while it moves.",
         "",
@@ -2616,7 +2626,11 @@ async function main() {
       {
         userId: ALICE_ID,
         type: "item_shared",
-        payload: { entityType: "route", entityId: rtid(3), sharedById: BOB_ID },
+        payload: {
+          entityType: "route",
+          entityId: BOB_SHARED_ROUTE_ID,
+          sharedById: BOB_ID,
+        },
         read: false,
         createdAt: ago(110),
       },

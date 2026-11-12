@@ -24,6 +24,31 @@ export const seedId = (prefix: string, n: number) =>
 
 export const cid = (n: number) => seedId("1", n);
 
+// The rows tests and specs name by id. One declaration, imported by the seed
+// and by src/__tests__/_actors.ts, so the two cannot disagree; a unit test
+// (src/lib/seedIds.unit.test.ts) holds that the seed uses every one.
+export const ALICE_ID = seedId("0", 1);
+export const BOB_ID = seedId("0", 2);
+export const CAROL_ID = seedId("0", 3);
+/** Alice's place shared with bob. */
+export const SHARED_PLACE_ID = cid(1);
+/** Bob's "Coin Slot" place, shared with alice. */
+export const BOB_SHARED_PLACE_ID = seedId("2", 2);
+/** Bob's own Marker place, shared with nobody; the "6" space is the waypoint
+ *  space (waypoint ids are preserved as place ids). */
+export const BOB_MARKER_PLACE_ID = seedId("6", 5);
+/** Bob's route, directly shared with alice. */
+export const BOB_SHARED_ROUTE_ID = seedId("7", 3);
+/** Bob's complete topo job, directly shared with alice. */
+export const BOB_SHARED_TOPO_JOB_ID = seedId("f", 4);
+/** The seed's plan (alice leads, bob is a member, carol asked to join) and the
+ *  place and route it owns, which belong to no user. */
+export const SEED_PLAN_ID = seedId("f", 100);
+export const PLAN_PLACE_ID = seedId("6", 100);
+export const PLAN_ROUTE_ID = seedId("7", 100);
+/** Carol's plan, which she has invited alice to by username. */
+export const CAROL_PLAN_ID = seedId("f", 110);
+
 /** Every prefix the seed mints under — the list the guard test iterates. */
 export const SEED_ID_PREFIXES = [
   "0",

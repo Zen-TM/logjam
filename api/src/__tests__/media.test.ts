@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
-import { ALICE_SUB, BOB_SUB, SHARED_PLACE_ID } from "./_actors";
+import {
+  ALICE_SUB,
+  BOB_SHARED_PLACE_ID,
+  BOB_SUB,
+  SHARED_PLACE_ID,
+} from "./_actors";
 import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
@@ -236,8 +241,13 @@ describe("media upload lifecycle (fake auth)", () => {
   it("forbids attaching media to a place the user does not own", async () => {
     const sharedRes = await request(API_URL).get("/places/shared").set(AUTH);
     expect(sharedRes.status).toBe(200);
-    if (sharedRes.body.length === 0) return; // no shared places in this seed
-    const sharedPlaceId: string = sharedRes.body[0].id;
+    // The premise, asserted: the seed gives alice bob's place. If it stops
+    // doing so this fails instead of passing without testing the 403.
+    const sharedPlaceId = BOB_SHARED_PLACE_ID;
+    expect(
+      sharedRes.body.map((p: { id: string }) => p.id),
+      "the seed no longer shares a place with alice: this test needs one",
+    ).toContain(sharedPlaceId);
     const res = await request(API_URL).post("/media/presign").set(AUTH).send({
       linkedType: "place",
       linkedId: sharedPlaceId,
