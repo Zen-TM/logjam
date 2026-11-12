@@ -52,8 +52,9 @@ export function customFieldDefDeleteTombstones(args: {
  * shared, and a place OF that type reaches a sharee carrying its type id
  * without the sharee ever holding the type row itself.
  *
- * The definitions the delete cascades away carry their own tombstones — this
- * one is only for the type row.
+ * The definitions scoped only to this type are hard-deleted with it, and
+ * deletePlaceType gives each its own `customFieldDefDeleteTombstones` row in
+ * the same call — this one is only for the type row.
  */
 export function placeTypeDeleteTombstones(args: {
   ownerId: string;
