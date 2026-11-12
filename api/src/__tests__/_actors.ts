@@ -73,3 +73,37 @@ export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
 export function as(sub: string): Record<string, string> {
   return { Authorization: "Bearer fake-token", "x-fake-sub": sub };
 }
+
+// Allow-lists of what one user may see of another. Literal on purpose: a field
+// added to a select or a serializer reaches these responses only once someone
+// reads this list and decides, which a deny-list on `email` never forces.
+
+/** The keys of another user wherever a response names one. */
+export const OTHER_USER_KEYS = ["id", "username"];
+
+/** The keys of a place row as its sharee receives it (REST and delta), before
+ *  the per-surface extras (`media`, `syncRole`, `fieldDefsSnapshot`). Mirrors
+ *  SHAREE_VISIBLE_PLACE_FIELDS in lib/placeVisibility.ts. */
+export const SHAREE_PLACE_KEYS = [
+  "altNames",
+  "createdAt",
+  "elevation",
+  "fieldValues",
+  "forkedFromId",
+  "gaugeId",
+  "id",
+  "latitude",
+  "longitude",
+  "name",
+  "notes",
+  "ownerId",
+  "placeTypeId",
+  "ropeWikiId",
+  "ropeWikiSnapshot",
+  "updatedAt",
+];
+
+/** Sorted own keys, for an exact-key assertion. */
+export function keysOf(value: unknown): string[] {
+  return Object.keys(value as Record<string, unknown>).sort();
+}

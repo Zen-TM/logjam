@@ -10,6 +10,9 @@ import {
   SHARED_PLACE_ID,
   as,
   CANYON_TYPE_ID,
+  OTHER_USER_KEYS,
+  SHAREE_PLACE_KEYS,
+  keysOf,
 } from "./_actors";
 
 // Multi-user / share-boundary coverage.
@@ -59,6 +62,26 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(Array.isArray(res.body.media)).toBe(true);
     // ...but the owner-private trip-log list must never be attached.
     expect(res.body.tripLogs).toBeUndefined();
+  });
+
+  // The sharee's place row is an allow-list of keys, not "everything but the
+  // fields we thought of": a column the serializer lets through, or a surface
+  // that spreads the raw row, shows up here as an extra key.
+  // Mutation that turns it red: make serializeSharedPlace (lib/placeVisibility.ts)
+  // skip its `continue`, or spread the raw place at GET /places/:id or
+  // GET /places/shared in routes/places.ts.
+  it("a sharee's place carries exactly the sharee-visible keys, on the detail and the shared list", async () => {
+    const detail = await request(API_URL)
+      .get(`/places/${SHARED_PLACE_ID}`)
+      .set(as(BOB_SUB));
+    expect(detail.status).toBe(200);
+    expect(keysOf(detail.body)).toEqual([...SHAREE_PLACE_KEYS, "media"].sort());
+
+    const list = await request(API_URL).get("/places/shared").set(as(BOB_SUB));
+    expect(list.status).toBe(200);
+    const row = list.body.find((c: { id: string }) => c.id === SHARED_PLACE_ID);
+    expect(row).toBeDefined();
+    expect(keysOf(row)).toEqual([...SHAREE_PLACE_KEYS].sort());
   });
 
   // Withholding the trip list while shipping its cardinality is not a
@@ -332,8 +355,9 @@ describe("friend-request lifecycle from the recipient side", () => {
     );
     expect(fromCarol).toBeDefined();
     expect(fromCarol.requester.username).toBe("carol");
-    // Friends routes are username-only — email must never appear.
-    expect(fromCarol.requester.email).toBeUndefined();
+    // Friends routes are username-only: exactly these keys, so a new column
+    // in the select is red until someone decides.
+    expect(keysOf(fromCarol.requester)).toEqual(OTHER_USER_KEYS);
   });
 
   it("full accept then unfriend cycle on the otherwise-empty carol↔bob pair", async () => {
@@ -357,7 +381,7 @@ describe("friend-request lifecycle from the recipient side", () => {
       );
       expect(fromBob).toBeDefined();
       expect(fromBob.requester.username).toBe("bob");
-      expect(fromBob.requester.email).toBeUndefined();
+      expect(keysOf(fromBob.requester)).toEqual(OTHER_USER_KEYS);
 
       // carol accepts
       const acceptRes = await request(API_URL)
