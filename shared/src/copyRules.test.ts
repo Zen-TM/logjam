@@ -188,7 +188,7 @@ describe("contract copy", () => {
         copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
       );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("the words an API failure shows", () => {

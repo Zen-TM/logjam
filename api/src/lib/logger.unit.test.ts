@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import pino from "pino";
@@ -27,6 +27,19 @@ function captureLog(obj: unknown): Record<string, unknown> {
 }
 
 describe("logger redaction", () => {
+  // Every line carries `"time":<Date.now()>`, and a clock reading can spell a
+  // 4-digit word the tests search for ("0400" is in 1794047704008). The
+  // searches below read only the logged `req`, and this fixed clock keeps a
+  // regression to the whole line from passing on an unlucky second.
+  // Mutation: search `JSON.stringify(captureLog(...))` instead of its `.req`
+  // in the plan test and it goes red.
+  beforeEach(() => {
+    vi.spyOn(Date, "now").mockReturnValue(1794047704008);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("censors place coordinates and name in a request body", () => {
     const out = captureLog({
       req: {
@@ -64,7 +77,9 @@ describe("logger redaction", () => {
     const query = "Hidden Gorge";
 
     it("is censored if a log line ever carries the request body", () => {
-      const line = JSON.stringify(captureLog({ req: { body: { q: query } } }));
+      const line = JSON.stringify(
+        captureLog({ req: { body: { q: query } } }).req,
+      );
       expect(line).not.toContain(query);
     });
 
@@ -145,7 +160,7 @@ describe("logger redaction", () => {
       { answers: { "form-1": { phone: "0400 000 000" } } },
     ];
     for (const body of bodies) {
-      const line = JSON.stringify(captureLog({ req: { body } }));
+      const line = JSON.stringify(captureLog({ req: { body } }).req);
       for (const word of words) expect(line).not.toContain(word);
     }
   });
@@ -172,7 +187,7 @@ describe("logger redaction", () => {
       { displayName: { from: null, to: "Secret Place exit" } },
     ];
     for (const body of bodies) {
-      const line = JSON.stringify(captureLog({ req: { body } }));
+      const line = JSON.stringify(captureLog({ req: { body } }).req);
       for (const word of ["Secret", "33.5", "150.4"])
         expect(line).not.toContain(word);
     }
