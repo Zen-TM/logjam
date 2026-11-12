@@ -8,7 +8,7 @@
 
 # The image of infra/brain/postgres. Non-empty creates the instance, its data
 # volume and address, the watchdog and the drill. Required by brain_serving.
-brain_pg_image_tag = "6c5e4cc1cdbf975b264ad12762b705b803b48af8"
+brain_pg_image_tag = "5c7cdaaaff6f41ee13148511577ab201c8a61909"
 
 # True for the one apply that creates the database from nothing, on a blank
 # volume with no backup in the repository; false again right after. A blank
