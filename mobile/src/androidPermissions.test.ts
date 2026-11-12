@@ -38,6 +38,8 @@ const MUST_BE_REMOVED = [
   "android.permission.VIBRATE",
   "android.permission.READ_MEDIA_AUDIO",
   "android.permission.ACTIVITY_RECOGNITION",
+  // expo-application, to ask Google Play how the app was installed.
+  "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE",
 ];
 
 type Entry = { $: Record<string, string> };
