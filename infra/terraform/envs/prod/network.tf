@@ -37,15 +37,9 @@ resource "aws_default_security_group" "default" {
   }
 }
 
-# Dedicated Fargate worker security group (logjam-worker-sg). Isolating worker
-# ENIs from the VPC default SG ensures only worker compute is let into the
-# brain's Postgres port (brain_network.tf names this group), rather than any
-# resource launched into the VPC without an explicit SG.
-# It is attached to the three Fargate worker ENIs at RunTask time
-# (awsvpcConfiguration, driven by the ECS_SECURITY_GROUPS env). No ingress
-# rules — workers only make outbound connections; egress-all lets them reach
-# the brain, S3, Secrets Manager, ECR and Resend over the internet gateway
-# (tasks run with assignPublicIp=ENABLED, see api/src/lib/ecsRunTask.ts).
+# The old worker group, being retired: nothing launches into it any more. It
+# stays, with its rule on the brain's Postgres port (brain_network.tf), until
+# the tasks that were already running in it have ended.
 resource "aws_security_group" "worker" {
   name        = "logjam-worker-sg"
   description = "Fargate worker ENIs (topo/export/geo-pdf) - RDS ingress source"
@@ -59,12 +53,17 @@ resource "aws_security_group" "worker" {
   }
 }
 
-# The group that takes over from logjam-worker-sg, whose description names a
-# database that is gone. AWS lets neither a group's description nor its name
-# be edited, and two groups in a VPC cannot share a name, so the group is
-# replaced under a new one. Both exist while the tasks move across, and the
-# brain admits both on 5432 (brain_network.tf), so no task is cut off from
-# the database at any step. Nothing launches into this one yet.
+# The Fargate worker group. It takes over from logjam-worker-sg, whose
+# description names a database that is gone: AWS lets neither a group's
+# description nor its name be edited, and two groups in a VPC cannot share a
+# name, so the group is replaced under a new one. The brain admits both on
+# 5432 (brain_network.tf) while the old one empties.
+# It is attached to the worker ENIs at RunTask time (awsvpcConfiguration,
+# driven by the ECS_SECURITY_GROUPS env), to the scheduled tasks and to the
+# deploy's migration task. No ingress rules: workers only make outbound
+# connections, and egress-all lets them reach the brain, S3, Secrets Manager,
+# ECR and Resend over the internet gateway (tasks run with
+# assignPublicIp=ENABLED, see api/src/lib/ecsRunTask.ts).
 resource "aws_security_group" "workers" {
   name        = "logjam-workers"
   description = "Fargate tasks (workers, migration, scheduled jobs) - the group the brain admits on 5432"

@@ -78,7 +78,7 @@ resource "aws_ecs_task_definition" "api_script" {
       # RunTask) but kept in sync so no stale default-SG id lingers in a
       # committed task def. The operative value is the API's own environment
       # (infra/brain/api.env, release.json's env).
-      value = aws_security_group.worker.id
+      value = aws_security_group.workers.id
       }, {
       name  = "ECS_SUBNETS"
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
@@ -438,7 +438,7 @@ resource "aws_scheduler_schedule" "place_registry" {
       # the task's only way out to Geofabrik and S3.
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -528,7 +528,7 @@ resource "aws_scheduler_schedule" "gauges" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -607,7 +607,7 @@ resource "aws_scheduler_schedule" "fire_history" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -689,7 +689,7 @@ resource "aws_scheduler_schedule" "coverage" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
