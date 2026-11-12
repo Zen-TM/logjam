@@ -6,9 +6,12 @@ import { USERNAME_RULE, isValidUsername } from "./username.js";
 /**
  * The words both clients' sign-up, verify and reset forms draw. The age line
  * is a legal attestation, so the two cannot word it differently. Guards:
- * `AccountForms.test.ts` and the Logjam Web form tests read these, not a copy.
+ * `AccountForms.test.ts` and the Logjam Web form tests read these, not a copy;
+ * `frontend/src/linkPreview.test.ts` holds `intro` equal to index.html's.
  */
 export const SIGN_IN_COPY = {
+  /** The sign-in card's one description, and Logjam Web's link preview. */
+  intro: "Your private map and trips for canyoning in New South Wales.",
   createAccount: "Create account",
   creatingAccount: "Creating account…",
   /** The link from the sign-in form to the sign-up form. */
