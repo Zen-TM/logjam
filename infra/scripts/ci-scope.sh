@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Which heavy CI jobs a pull request needs, so a docs change does not stand up
-# Postgres, MiniStack and the API. ci.yml, rollback-compat.yml, terraform-ci.yml
-# and setup-smoke.yml each run it in a `changes` job. Writes `<area>=true|false` for
-# every area to $GITHUB_OUTPUT (stdout when unset); ci.yml's `changes` job
-# passes them on, and each scoped job runs unless its area is `false`.
+# Postgres, MiniStack and the API. ci.yml, rollback-compat.yml, terraform-ci.yml,
+# setup-smoke.yml and mobile-emulator.yml each run it in a `changes` job. Writes
+# `<area>=true|false` for every area to $GITHUB_OUTPUT (stdout when unset);
+# ci.yml's `changes` job passes them on, and each scoped job runs unless its
+# area is `false`.
 #
 #   ci-scope.sh scope <base> <head>
 #   ci-scope.sh all              # every area true: pushes, schedule, dispatch
@@ -20,24 +21,16 @@
 # paths_for is the one declaration of what each area depends on: its own
 # package, everything it imports, and every file its tests read.
 #
-# Mutations that turn the self-test red: dropping shared/ from mobile fails
-# "mobile: shared source"; dropping frontend/public/ from mobile fails "mobile:
-# the legal documents it links to"; dropping frontend/ from api_integration
-# fails "api_integration: Logjam Web (Playwright smoke)"; dropping the stub
-# from api_integration fails "api_integration: the Expo push stub it starts";
-# dropping mobile-emulator.yml from mobile fails "mobile: the emulator smoke
-# workflow"; removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
-# fails "a rename out of an area"; dropping the worker image's paths from
-# topo_e2e fails "topo_e2e: worker source" and dropping the RunTask files fails
-# "topo_e2e: the start route"; dropping lockfiles from setup_smoke
-# fails "setup_smoke: a nested lockfile"; dropping docker-compose.yml from
-# brain_postgres fails "brain_postgres: the Compose file that builds it"; dropping
-# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/brain/ from terraform fails "terraform: a brain host file its guards read"; dropping infra/lambda/brain-watchdog/ from terraform fails "terraform: the watchdog source the plan zips"; a scoped job in any workflow whose
-# scripts/bootstrap-app-db-role.sql from brain_e2e fails "brain_e2e: the role script it reuses"; dropping
-# infra/scripts/brain-release.sh from brain_e2e fails "brain_e2e: the script that builds its release pointers"; narrowing terraform to .tf files fails "terraform: the brain's settings file"; a scoped job in any workflow whose
-# `if:` is not the fail-open expression, or a `changes` output wired to another
-# area's value, fails that workflow's checks.
+# Mutations that turn the self-test red: dropping a path from an area's
+# paths_for fails the case that names it (each case says which file it reads:
+# "mobile: shared source", "api_integration: the Expo push stub it starts",
+# "brain_e2e: the role script it reuses", ...); removing the ci.yml rule fails
+# "any area: ci.yml"; dropping --no-renames fails "a rename out of an area".
+# A test that reads a file outside its package (join(__dirname, "../../docs/x.md"))
+# that the area does not list fails "every file its tests read is in paths_for".
+# A scoped job in any workflow whose `if:` is not the fail-open expression, or
+# a `changes` output wired to another area's value, fails that workflow's
+# checks.
 set -uo pipefail
 
 AREAS="api_integration mobile migrations topo_e2e rollback_compat terraform setup_smoke brain_postgres brain_e2e"
@@ -51,21 +44,27 @@ paths_for() {
     # imports topo's top-level modules), the Playwright smoke spec and the Expo
     # push stub the job starts.
     api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
-    # legalLinks.test.ts checks the documents the consent screen links to.
-    # The emulator smoke check (mobile-emulator.yml) and the action that builds
-    # its APK are part of the area they gate.
-    mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/mobile-emulator\.yml$)' ;;
+    # legalLinks.test.ts checks the documents the consent screen links to, and
+    # otaHotfix.test.ts reads the three OTA workflows. The emulator smoke check
+    # (mobile-emulator.yml) and the action that builds its APK are part of the
+    # area they gate.
+    mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/(mobile-emulator|ota-hotfix|ota-plan|ota-rollback)\.yml$)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
-    # upgraded to this commit (the head's seed never runs there).
-    migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/migration-upgrade-test\.sh)' ;;
+    # upgraded to this commit (the head's seed never runs there), where the
+    # snapshot scrub is then run over it (snapshot-scrub.sql and its canary).
+    migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/(migration-upgrade-test\.sh|snapshot-scrub))' ;;
     # The worker image (image-build-scope.sh holds what it is built from), the
     # job's stubs and checks, its sample input, the task definition whose env
     # worker.env mirrors, and the settings the job submits (the worker
     # re-validates them in Python), and the API files that launch the worker
     # through RunTask: the helper, the route and the ECS client. lib/env.ts is
     # left out: its ECS_SUBNETS parsing has a unit test, and most env changes
-    # are for other variables.
-    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
+    # are for other variables. The schema and migrations, because the worker
+    # reads and writes the job, user and notification tables with raw SQL. And
+    # the topo tests that skip without GDAL, which this job runs in the image
+    # (check-required-checks.py requires each to be named here), with the
+    # shared sources they read.
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|topo/tests/(_native_stub|test_area_export|test_coverage|test_footprint_coverage|test_reprojection|test_tile_compose)\\.py$|shared/src/(areaExport|sharpen|nswCoverage|regions)\\.ts$|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/prisma/(schema\\.prisma|migrations/)|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
     # A migration, run under the live release (rollback-compat.yml).
     rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
     # Static Terraform checks and the plan-comment tests (terraform-ci.yml).
@@ -111,6 +110,37 @@ all() {
   for area in $AREAS; do emit "$area" true; done
 }
 
+# Every tracked file a test reads from outside its own folder, through
+# join(__dirname | import.meta.dirname, "..", ...) or new URL("..", import.meta.url):
+# one path per line, resolved from the repo root. A directory whose file names
+# are variables expands to the tracked files named by a string literal in the
+# test, else to every file in it. A read through another variable
+# (join(SRC, "..")) is not seen; this is the check on what the tests spell out.
+test_reads() {
+  python3 - "$@" <<'PY'
+import os, re, subprocess, sys
+tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split("\n")
+under = lambda d: [t for t in tracked if t == d or t.startswith(d.rstrip("/") + "/")]
+JOIN = re.compile(r'(?:join|resolve)\(\s*(?:__dirname|import\.meta\.dirname)\s*((?:,\s*"[^"\n]*")+)')
+URL = re.compile(r'new URL\(\s*"([^"\n]*)"\s*,\s*import\.meta\.url')
+found = set()
+for root in sys.argv[1:]:
+    for f in under(root):
+        if not re.search(r"\.(test|spec)\.tsx?$", f):
+            continue
+        lines = open(f).read().split("\n")
+        text = "\n".join(l for l in lines if not l.lstrip().startswith(("//", "*")))
+        names = set(re.findall(r'"([\w.-]+\.[a-z]+)"', text))
+        rels = [m.group(1) for m in URL.finditer(text)]
+        rels += ["/".join(re.findall(r'"([^"\n]*)"', m.group(1))) for m in JOIN.finditer(text)]
+        for rel in rels:
+            path = os.path.normpath(os.path.join(os.path.dirname(f), rel))
+            files = under(path) if path != "." and not path.startswith("..") else []
+            found.update([path] if path in tracked else [t for t in files if os.path.basename(t) in names] or files)
+print("\n".join(sorted(found)))
+PY
+}
+
 self_test() {
   local fails=0 tmp got
   tmp=$(mktemp)
@@ -140,10 +170,15 @@ self_test() {
   check "mobile: the legal documents it links to"         mobile true  0 'frontend/public/tos.html'
   check "mobile: the emulator smoke workflow"             mobile true  0 '.github/workflows/mobile-emulator.yml'
   check "mobile: the action that builds its APK"          mobile true  0 '.github/actions/build-dev-apk/action.yml'
+  check "mobile: the OTA publish workflow it reads"       mobile true  0 '.github/workflows/ota-hotfix.yml'
+  check "mobile: the OTA rollback workflow it reads"      mobile true  0 '.github/workflows/ota-rollback.yml'
+  check "mobile: the OTA plan workflow it reads"          mobile true  0 '.github/workflows/ota-plan.yml'
   check "migrations: a migration"                         migrations true  0 'api/prisma/migrations/2026/migration.sql'
   check "migrations: upgrade checks"                      migrations true  0 'api/prisma/upgrade-check/verify.sql'
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'
   check "migrations: the upgrade script"                  migrations true  0 'scripts/migration-upgrade-test.sh'
+  check "migrations: the snapshot scrub"                  migrations true  0 'scripts/snapshot-scrub.sql'
+  check "migrations: the snapshot scrub canary"           migrations true  0 'scripts/snapshot-scrub-canary.sh'
   check "migrations: api route"                           migrations false 0 'api/src/routes/a.ts'
   check "topo_e2e: worker source"                         topo_e2e true  0 'topo/pipeline.py'
   check "topo_e2e: worker image Dockerfile"               topo_e2e true  0 'topo/Dockerfile'
@@ -153,10 +188,16 @@ self_test() {
   check "topo_e2e: the settings it sends"                 topo_e2e true  0 'shared/src/topoSettings.ts'
   check "topo_e2e: another shared source"                 topo_e2e false 0 'shared/src/sync.ts'
   check "topo_e2e: a topo unit test"                      topo_e2e false 0 'topo/tests/test_labels.py'
+  check "topo_e2e: a topo test that needs real GDAL"      topo_e2e true  0 'topo/tests/test_reprojection.py'
+  check "topo_e2e: the stub those tests import"          topo_e2e true  0 'topo/tests/_native_stub.py'
+  check "topo_e2e: a shared source those tests read"     topo_e2e true  0 'shared/src/areaExport.ts'
   check "topo_e2e: the RunTask helper"                    topo_e2e true  0 'api/src/lib/ecsRunTask.ts'
   check "topo_e2e: the start route"                       topo_e2e true  0 'api/src/routes/topoJobs.ts'
   check "topo_e2e: the ECS client"                       topo_e2e true  0 'api/src/services/awsClients.ts'
   check "topo_e2e: api only"                              topo_e2e false 0 'api/src/routes/media.ts'
+  check "topo_e2e: the schema its SQL runs against"       topo_e2e true  0 'api/prisma/schema.prisma'
+  check "topo_e2e: a migration"                           topo_e2e true  0 'api/prisma/migrations/2026/migration.sql'
+  check "topo_e2e: the seed"                              topo_e2e false 0 'api/prisma/seed.ts'
   check "any area: ci.yml"                                mobile true  0 $'docs/a.md\n.github/workflows/ci.yml'
   check "any area: this script"                           migrations true  0 'infra/scripts/ci-scope.sh'
   check "other workflow is not the gate"                  mobile false 0 '.github/workflows/smoke.yml'
@@ -191,11 +232,29 @@ self_test() {
   check "empty diff"                                      api_integration false 0 ''
   check "diff unreadable"                                 mobile true  128 'fatal: bad revision'
 
-  # Every workflow that runs this script agrees with AREAS, in all three
-  # places a skip could go wrong.
   local wf declared yml all_reads="" bad needs reads outs
   declared=$(tr ' ' '\n' <<<"$AREAS" | sort -u | tr '\n' ' ')
   ok_if() { if [ -z "$2" ]; then echo "ok   — $1"; else echo "FAIL — $1: $2"; fails=1; fi; }
+
+  # Every file a test reads outside its package is in the area that runs the
+  # test, so a PR that changes only that file does not skip the job. Each scan
+  # must also find the reads we know of, or it has stopped matching.
+  # check_reads <area> <floor> <own files, a regex> <test folders...>
+  check_reads() {
+    local area=$1 floor=$2 own=$3 reads read n bad=""; shift 3
+    reads=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && test_reads "$@" | grep -vE "$own")
+    n=$(grep -c . <<<"$reads")
+    ok_if "$area: the scan of its tests' reads found at least $floor files outside its own" "$([ "$n" -ge "$floor" ] || echo "found $n; has the scan stopped matching?")"
+    while IFS= read -r read; do
+      [ -n "$read" ] && ! grep -qE "$(paths_for "$area")" <<<"$read" && bad="$bad $read"
+    done <<<"$reads"
+    ok_if "$area: every file its tests read is in paths_for $area" "${bad:+a test reads$bad: add it to paths_for $area and a case above}"
+  }
+  check_reads mobile 2 '^mobile/' mobile/src
+  check_reads api_integration 5 '^(api/|frontend/e2e/)' api/src/__tests__ frontend/e2e
+
+  # Every workflow that runs this script agrees with AREAS, in all three
+  # places a skip could go wrong.
   for wf in "$(dirname "${BASH_SOURCE[0]}")"/../../.github/workflows/*.yml; do
     grep -q 'ci-scope\.sh scope' "$wf" || continue
     local name; name=$(basename "$wf")

@@ -91,7 +91,7 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
 };
 
 /**
- * A3 landscape at 1:25 000 (about 17 MP, the #602 timing target) centred on
+ * A3 landscape at 1:25 000 (about 17 MP, the A3 timing target) centred on
  * the middle of the served height archive's coverage: for timing against a
  * dev copy of the statewide archives, so no coordinate is written down here.
  */

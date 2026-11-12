@@ -4,12 +4,14 @@
 // deleted by name in that purge or be listed below as removed only by the
 // schema's ON DELETE CASCADE. The failure mode is silence: a new table with a
 // `User` relation is wiped by the cascade, but nobody decided that, and its
-// recipients' or S3 side is forgotten. This does not cover the S3 prefixes.
-import { readdirSync, readFileSync } from "node:fs";
+// recipients' or S3 side is forgotten. The S3 prefixes are held below.
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { NOTIFICATION_TYPES } from "@logjam/shared";
 import { PLAN_PERSON_KEY } from "../lib/planMembership";
+import { attributeKey, USER_DATA_S3_HEADS } from "../lib/s3AccessLog";
 
 const read = (...p: string[]) =>
   readFileSync(join(import.meta.dirname, "..", "..", ...p), "utf8");
@@ -219,5 +221,101 @@ describe("account-delete purge of topo jobs", () => {
     expect(purgeSource).toMatch(
       /topoJobs\.map\(\(\{ id \}\) => deleteTopoJobObjects\(TOPO_BUCKET, id\)\)/,
     );
+  });
+});
+
+// Every object the API writes sits under a prefix declared in
+// USER_DATA_S3_HEADS (lib/s3AccessLog.ts, which also attributes its egress),
+// and the purge deletes each one. A cascade never deletes S3 objects.
+//
+// Mutations that turn this red: a key literal such as `avatars/${userId}/x` in
+// any file under src/ (red on the first test); removing the file-sends prefix
+// delete, the media keys delete or the exports prefix delete from the purge
+// in routes/users.ts, or the inputs/outputs/jobs prefixes from
+// deleteTopoJobObjects (red on the third); a head added to
+// USER_DATA_S3_HEADS that attributeKey does not switch on (red on the second).
+describe("account-delete purge covers every S3 prefix", () => {
+  const SRC = join(import.meta.dirname, "..");
+  const heads = new Map<string, string[]>();
+  const walkSources = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) {
+        if (name !== "__tests__" && name !== "__fixtures__") walkSources(path);
+      } else if (/\.ts$/.test(name) && !/\.test\.ts$/.test(name)) {
+        const sf = ts.createSourceFile(
+          path,
+          readFileSync(path, "utf8"),
+          ts.ScriptTarget.Latest,
+          true,
+        );
+        const visit = (node: ts.Node): void => {
+          // `<head>/${…}`: a key or prefix built from an id.
+          const head = ts.isTemplateExpression(node)
+            ? /^([a-z][a-z-]*)\/$/.exec(node.head.text)?.[1]
+            : undefined;
+          if (head) heads.set(head, [...(heads.get(head) ?? []), name]);
+          ts.forEachChild(node, visit);
+        };
+        visit(sf);
+      }
+    }
+  };
+  walkSources(SRC);
+
+  // Where the purge names each prefix: the file and what it must contain.
+  const PURGED_BY: Record<string, [file: string, pattern: RegExp]> = {
+    media: ["routes/users.ts", /deleteS3Keys\(\s*MEDIA_BUCKET,\s*mediaKeys/],
+    "file-sends": [
+      "routes/users.ts",
+      /deleteS3Prefix\(\s*MEDIA_BUCKET,\s*`file-sends\/\$\{user\.id\}\//,
+    ],
+    exports: [
+      "routes/users.ts",
+      /deleteS3Prefix\(\s*TOPO_BUCKET,\s*`exports\//,
+    ],
+    inputs: ["lib/topoUpload.ts", /\[\s*`inputs\/\$\{jobId\}\/`,/],
+    outputs: ["lib/topoUpload.ts", /`outputs\/\$\{jobId\}\/`,/],
+    jobs: ["lib/topoUpload.ts", /`jobs\/\$\{jobId\}\/`,?\s*\]/],
+  };
+
+  it("declares the head of every key the API builds", () => {
+    expect(heads.size, "the scan found too few key literals").toBeGreaterThan(
+      4,
+    );
+    const undeclared = [...heads.keys()].filter(
+      (head) => !(USER_DATA_S3_HEADS as readonly string[]).includes(head),
+    );
+    expect(
+      undeclared,
+      "a new S3 prefix holds user data: add it to USER_DATA_S3_HEADS " +
+        "(lib/s3AccessLog.ts), teach attributeKey to charge its egress, and " +
+        "delete it in the account purge (routes/users.ts)",
+    ).toEqual([]);
+  });
+
+  it("charges each declared head's egress to someone", () => {
+    const unattributed = USER_DATA_S3_HEADS.filter(
+      (head) => attributeKey(`${head}/id/object`) === null,
+    );
+    expect(
+      unattributed,
+      "make attributeKey (lib/s3AccessLog.ts) switch on the head",
+    ).toEqual([]);
+  });
+
+  it("deletes each declared head in the purge", () => {
+    expect(Object.keys(PURGED_BY).sort()).toEqual(
+      [...USER_DATA_S3_HEADS].sort(),
+    );
+    const missing = USER_DATA_S3_HEADS.filter((head) => {
+      const [file, pattern] = PURGED_BY[head];
+      return !pattern.test(readFileSync(join(SRC, file), "utf8"));
+    });
+    expect(
+      missing,
+      "the account purge (routes/users.ts, or deleteTopoJobObjects in " +
+        "lib/topoUpload.ts) must delete this prefix: a cascade never deletes S3 objects",
+    ).toEqual([]);
   });
 });
