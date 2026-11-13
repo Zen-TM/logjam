@@ -24,7 +24,7 @@ vi.mock("../services/awsClients", () => ({
 const declared = vi.hoisted(() => ({ uncompressedBytes: 0 }));
 vi.mock("@logjam/shared", async (original) => ({
   ...(await original<typeof import("@logjam/shared")>()),
-  parseZipCentralDirectory: () => [],
+  readZipEntries: async () => [],
   classifyElvisEntries: () => ({
     uncompressedBytes: declared.uncompressedBytes,
     tileCount: 1,
@@ -60,13 +60,9 @@ afterEach(() => {
   s3Send.mockReset();
 });
 
-/** S3 answers the size check (HeadObject), then the central directory's tail. */
+/** S3 answers the size check (HeadObject); the directory read is mocked above. */
 function uploaded(objectSize: number) {
-  s3Send.mockImplementation(async (cmd: { constructor: { name: string } }) =>
-    cmd.constructor.name === "HeadObjectCommand"
-      ? { ContentLength: objectSize }
-      : { Body: { transformToByteArray: async () => new Uint8Array(22) } },
-  );
+  s3Send.mockResolvedValue({ ContentLength: objectSize });
 }
 
 describe("POST /topo-jobs/:id/start refuses a ZIP over the caps", () => {

@@ -13,9 +13,10 @@ import {
   CreateMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
+import { readS3Range } from "../lib/readS3Range";
 import {
   say,
-  parseZipCentralDirectory,
+  readZipEntries,
   classifyElvisEntries,
   ElvisZipError,
   validateRasterTemplateSettings,
@@ -349,25 +350,15 @@ router.post(
       );
     }
 
-    // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
-    // Catches bypassed clients or corrupted uploads before paying ECS spin-up cost.
-    // 64 KB fits ~900 central-directory entries — sufficient for all realistic ELVIS zips.
-    const tailLen = Math.min(65536, objectSize);
-    const rangeStart = objectSize - tailLen;
-    const tail = await s3.send(
-      new GetObjectCommand({
-        Bucket: TOPO_BUCKET,
-        Key: job.s3InputKey!,
-        Range: `bytes=${rangeStart}-${objectSize - 1}`,
-      }),
-    );
-    const tailBytes = await tail.Body!.transformToByteArray();
+    // Re-validate the ZIP's central directory from S3 with ranged GETs: the end
+    // of the file (ZIP_TAIL_BYTES), plus the directory itself when that is
+    // larger (readZipEntries bounds it). Catches bypassed clients or corrupted uploads before paying
+    // ECS spin-up cost.
     let verifiedTileCount: number | null = null;
     let lazCount = 0;
     try {
-      const entries = parseZipCentralDirectory(
-        new Uint8Array(tailBytes),
-        objectSize,
+      const entries = await readZipEntries(objectSize, (start, end) =>
+        readS3Range(TOPO_BUCKET, job.s3InputKey!, start, end, objectSize),
       );
       const zipStats = classifyElvisEntries(entries);
       // Zip-bomb guard: reject if the declared uncompressed payload would

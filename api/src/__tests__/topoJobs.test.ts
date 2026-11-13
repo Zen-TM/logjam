@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
-import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import { RASTER_TEMPLATE_DEFAULTS, ZIP_TAIL_BYTES } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 import prisma from "../services/prisma";
 
@@ -102,26 +102,78 @@ describe("topo-jobs route (fake auth)", () => {
     expect(goneRes.status).toBe(404);
   });
 
-  // A stored ZIP of one empty point-cloud file: all /start reads of it is the
+  // A stored ZIP of empty files with these names: all /start reads of it is the
   // central directory.
-  function oneLazZip(name: string): Buffer {
-    const nameBytes = Buffer.from(name);
-    const local = Buffer.alloc(30 + nameBytes.length);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(nameBytes.length, 26);
-    nameBytes.copy(local, 30);
-    const central = Buffer.alloc(46 + nameBytes.length);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(nameBytes.length, 28);
-    nameBytes.copy(central, 46);
+  function zipOf(names: string[]): Buffer {
+    const locals: Buffer[] = [];
+    const centrals: Buffer[] = [];
+    let offset = 0;
+    for (const name of names) {
+      const nameBytes = Buffer.from(name);
+      const local = Buffer.alloc(30 + nameBytes.length);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(nameBytes.length, 26);
+      nameBytes.copy(local, 30);
+      const central = Buffer.alloc(46 + nameBytes.length);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE(nameBytes.length, 28);
+      central.writeUInt32LE(offset, 42);
+      nameBytes.copy(central, 46);
+      locals.push(local);
+      centrals.push(central);
+      offset += local.length;
+    }
     const eocd = Buffer.alloc(22);
     eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(1, 8);
-    eocd.writeUInt16LE(1, 10);
-    eocd.writeUInt32LE(central.length, 12);
-    eocd.writeUInt32LE(local.length, 16);
-    return Buffer.concat([local, central, eocd]);
+    eocd.writeUInt16LE(names.length, 8);
+    eocd.writeUInt16LE(names.length, 10);
+    eocd.writeUInt32LE(Buffer.concat(centrals).length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, ...centrals, eocd]);
   }
+  const oneLazZip = (name: string) => zipOf([name]);
+
+  // 5 m DEMs, whose central directory is bigger than the tail /start
+  // reads first. /start refuses 5 m DEMs after reading the directory, without
+  // launching anything, so the refusal says the directory was read.
+  const manyDemZip = (count: number) =>
+    zipOf(
+      Array.from(
+        { length: count },
+        (_, i) =>
+          `Madeup201801/DEM/5 Metre/Madeup201801-DEM_2400004_56_${String(i).padStart(4, "0")}_0001_5m.tif`,
+      ),
+    );
+
+  // Mutation: put back the one tail read and parseZipCentralDirectory
+  // in /start, and the refusal turns into "Logjam couldn't read that ZIP".
+  it("/start reads a central directory larger than the tail", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "topo-start-big-directory-test" });
+    expect(createRes.status).toBe(201);
+    const { jobId, uploadUrl } = createRes.body;
+    try {
+      const zip = manyDemZip(1200);
+      expect(zip.readUInt32LE(zip.length - 22 + 12)).toBeGreaterThan(
+        ZIP_TAIL_BYTES,
+      );
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/zip" },
+        body: zip,
+      });
+      expect(put.status).toBe(200);
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
+      expect(startRes.status).toBe(400);
+      expect(startRes.body.error).toContain("holds only 5 m DEMs");
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
+  });
 
   // The worker refuses a job with no mark (OLD_JOB), and only CI's topo-e2e
   // would otherwise notice /start forgetting it. This one does launch the
