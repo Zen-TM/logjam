@@ -11,7 +11,7 @@
 import proj4 from "proj4";
 
 import { GeoPdfParseError, type GeoPdfViewport } from "./parseGeoref.js";
-import { resolveCrs } from "./crs.js";
+import { resolveCrs, wrapDegrees } from "./crs.js";
 
 export interface XY {
   x: number;
@@ -216,10 +216,9 @@ function applyHomography(h: number[], p: XY): XY {
 function sheetCentre(vp: GeoPdfViewport): [number, number] {
   const pts = vp.controlPoints.map((cp) => cp.lonLat);
   const lon0 = pts[0].lon;
-  const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
   return [
-    lon0 + mean(pts.map((p) => wrap(p.lon - lon0))),
+    lon0 + mean(pts.map((p) => wrapDegrees(p.lon - lon0))),
     mean(pts.map((p) => p.lat)),
   ];
 }

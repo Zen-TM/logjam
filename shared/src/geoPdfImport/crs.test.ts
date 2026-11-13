@@ -271,6 +271,27 @@ describe("resolveCrs — a zoned code is checked against the sheet", () => {
     ).toThrow(GeoPdfParseError);
   });
 
+  // A WKT that parses but is undefined at the sheet (proj4 throws for this one
+  // in Sydney) places nothing, so the zone check runs. Mutation: returning
+  // true from assertCrsDescriptionsAgree when proj4 throws or gives a
+  // non-finite value turns the refusal red.
+  const ATLANTIC_WKT = wktOf(ATLANTIC_LAEA_SHEET);
+  const SYDNEY: [number, number] = [151, -33.5];
+
+  it("refuses a far zoned code whose WKT is undefined at the sheet", () => {
+    expect(() =>
+      resolveCrs({ kind: "PROJCS", epsg: 32760, wkt: ATLANTIC_WKT }, SYDNEY),
+    ).toThrow(GeoPdfParseError);
+  });
+
+  it("resolves a near zoned code whose WKT is undefined at the sheet", () => {
+    const r = resolveCrs(
+      { kind: "PROJCS", epsg: 7856, wkt: ATLANTIC_WKT },
+      SYDNEY,
+    );
+    expect(r.key).toBe("EPSG:7856");
+  });
+
   // Mutation: dropping the wrap in the longitude difference refuses these.
   it("accepts either end of a sheet across 180 degrees", () => {
     expect(code(32760, [179.95, -17]).key).toBe("EPSG:32760");

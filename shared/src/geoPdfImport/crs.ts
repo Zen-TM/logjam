@@ -86,9 +86,15 @@ function epsgEntry(epsg: number): EpsgEntry | undefined {
   return { def: utm(zone, family.south), isGeographic: false, zone };
 }
 
+/** A longitude difference in degrees, wrapped into [-180, 180). */
+export const wrapDegrees = (d: number): number =>
+  ((((d + 180) % 360) + 360) % 360) - 180;
+
 /** Refuse a zoned code whose zone is far from the sheet. Only for a sheet
- * with no usable WKT: nothing else places it, and its affine fits perfectly
- * in the wrong plane. A WKT that parses is compared by
+ * with no usable WKT, where nothing else places it and its affine fits
+ * perfectly in the wrong plane: an EPSG-only sheet, a WKT that does not
+ * parse, or a WKT that parses but is undefined (NaN or a throw) at the
+ * probe. A WKT that is defined there is compared by
  * assertCrsDescriptionsAgree instead, which also admits a correctly labelled
  * sheet far from its zone, such as a map of a whole continent. */
 function assertZoneNearSheet(
@@ -96,9 +102,7 @@ function assertZoneNearSheet(
   zone: number,
   probe: [number, number],
 ): void {
-  const offset = Math.abs(
-    ((((probe[0] - (6 * zone - 183) + 180) % 360) + 360) % 360) - 180,
-  );
+  const offset = Math.abs(wrapDegrees(probe[0] - (6 * zone - 183)));
   if (offset > MAX_ZONE_OFFSET_DEG) {
     throw new GeoPdfParseError(
       "UNSUPPORTED_CRS",
