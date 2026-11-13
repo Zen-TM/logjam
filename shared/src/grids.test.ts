@@ -243,6 +243,32 @@ describe("a longitude in another world copy", () => {
     ]);
   });
 
+  // 150.3 - wrapLon(150.3) is about 6e-14, not 0.
+  // Mutation: shift by that difference unrounded and the declared edges and
+  // meridian come back nudged, and these exact comparisons fail.
+  it("hands back an ordinary longitude's zone with its declared edges", () => {
+    const zone = gridZoneAt(150.3, -33.7);
+    expect([zone.west, zone.east, zone.centralMeridian]).toEqual([
+      150,
+      Infinity,
+      153,
+    ]);
+    const [z55, z56] = gridZonesFor({
+      west: 149.9,
+      east: 150.1,
+      south: -33.7,
+      north: -33.6,
+    });
+    expect([z55!.west, z55!.east, z55!.centralMeridian]).toEqual([
+      144, 150, 147,
+    ]);
+    expect([z56!.west, z56!.east, z56!.centralMeridian]).toEqual([
+      150,
+      Infinity,
+      153,
+    ]);
+  });
+
   it("takes the same grid and coordinates as the wrapped copy", () => {
     const here = toGridAt(-33.7, 150.3);
     const there = toGridAt(-33.7, 150.3 - 360);

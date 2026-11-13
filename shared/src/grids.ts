@@ -90,6 +90,9 @@ export function mgaZone(zone: 54 | 55 | 56): GridZone {
 
 const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
 
+/** Whole world copies from the wrapped longitude to `lon`: exactly 0 inside [-180, 180]. */
+const copyShift = (lon: number) => 360 * Math.round((lon - wrapLon(lon)) / 360);
+
 /** `zone` in the world copy `shift` degrees east of the one it is declared in. */
 const shifted = (zone: GridZone, shift: number): GridZone =>
   shift === 0
@@ -124,8 +127,7 @@ export function gridZoneAt(
 ): GridZone {
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return NZTM_ZONE;
-  if (id === "mga2020")
-    return shifted(mgaZoneAt(wrapLon(lon)), lon - wrapLon(lon));
+  if (id === "mga2020") return shifted(mgaZoneAt(wrapLon(lon)), copyShift(lon));
   return utmZone(Math.floor((lon + 180) / 6), lat < 0);
 }
 
@@ -146,7 +148,7 @@ export function gridZonesFor(
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return [NZTM_ZONE];
   if (id === "mga2020") {
-    const shift = lon - wrapLon(lon);
+    const shift = copyShift(lon);
     const [west, east] = [box.west - shift, box.east - shift];
     return MGA_ZONES.filter(
       (z) => Math.max(west, z.west) < Math.min(east, z.east),

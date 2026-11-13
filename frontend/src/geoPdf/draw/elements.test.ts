@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GeoPdfConfig } from "@logjam/shared";
 import type { Ctx } from "./common";
-import { drawGridLabel, drawGridLines } from "./elements";
+import { drawCompass, drawGridLabel, drawGridLines } from "./elements";
 
 type Op = {
   op: "line" | "stroke" | "fill";
@@ -165,5 +165,45 @@ describe("a sheet across a grid zone edge", () => {
   ])("draws vertical and horizontal lines across %s", (_name, box) => {
     // About 9 km wide and 11 km tall at 1 km spacing.
     expect(lines(box)).toBeGreaterThan(15);
+  });
+});
+
+// The compass prints the sheet's grid convergence from the zone at its centre.
+// A sheet near Sydney is 3 degrees west of MGA zone 56's meridian, so grid
+// north is east of true: as before. In Utah (UTM 13) the same offset west of
+// the meridian reads west, and south of the equator the sign flips back.
+// Mutation: take the zone from the wrong hemisphere or grid, or drop its
+// meridian, and a figure moves.
+describe("the compass's grid north", () => {
+  const gn = (extent: GeoPdfConfig["extent"]) => {
+    const { ctx, ops } = recorder();
+    // The compass draws curves and shapes the recorder has no use for.
+    const canvas = new Proxy(ctx as unknown as Record<string, unknown>, {
+      get: (target, key) => (key in target ? target[key as string] : () => {}),
+    }) as unknown as Ctx;
+    drawCompass(canvas, { extent } as GeoPdfConfig, 0, 10, 150);
+    const fills = ops.filter((o) => o.op === "fill").map((o) => o.text);
+    // The readout's last row is "GN" and its figure.
+    return fills[fills.length - 1];
+  };
+
+  it.each([
+    [
+      "near Sydney",
+      { north: -33.6, south: -33.7, east: 150.1, west: 150.0 },
+      "1.6° E",
+    ],
+    [
+      "in Utah",
+      { north: 37.55, south: 37.45, east: -107.95, west: -108.05 },
+      "1.8° W",
+    ],
+    [
+      "south of the equator in UTM 33",
+      { north: -10.0, south: -10.1, east: 12.05, west: 11.95 },
+      "0.5° E",
+    ],
+  ])("prints the figure for a sheet %s", (_name, extent, text) => {
+    expect(gn(extent)).toBe(text);
   });
 });
