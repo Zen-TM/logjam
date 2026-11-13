@@ -265,6 +265,7 @@ describe("rich", () => {
     ]);
   });
 
+  // Mutation: let a tag's text match across `<` (`([^<]*)` becomes `([\s\S]*?)`).
   it("leaves nested and unclosed tags in the text", async () => {
     const { rich } = await load();
     expect(rich`<a>one <b>two</b></a>`).toEqual([

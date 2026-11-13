@@ -50,8 +50,7 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
-`matchLanguage`). No test yet holds that call sites use it; the coverage tests
-of the extraction work do.
+`matchLanguage`). No test yet holds that call sites use it; a later change adds one.
 
 ## Consequences
 
@@ -60,10 +59,10 @@ of the extraction work do.
   loads at build time: `shared` and the API still build with plain `tsc`.
 - **Negative:** one English text cannot have two translations until a key gains
   a context. Rewording an English message orphans its `en-US` entry. No test
-  catches that yet; the scanner slice of the extraction work adds it. A language change
+  catches that yet; a later change adds one. A language change
   reloads Logjam Web and Logjam GPS. There are no translator tools: a
   translation platform would need a script that exports the catalogue.
-- **Neutral:** `en-US` is empty until the extraction moves the copy. With one
+- **Neutral:** `en-US` is empty until existing literals are moved into the catalogue. With one
   region in prod no language setting shows. A message in the topo worker, the
   sign-up code mail and the static pages stays English.
 

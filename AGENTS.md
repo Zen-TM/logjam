@@ -52,8 +52,8 @@ platform: privacy constrains every feature. Each package has its own
   app" or "the web app" where either could be meant. Guard:
   `shared/src/copyRules.test.ts`.
 - User-facing text is written through `t`, `plural`, `rich` or `say`
-  (`shared/src/i18n.ts`), so a language can replace it. Existing literals
-  move in a later extraction.
+  (`shared/src/i18n.ts`), so a language can replace it. Existing literals are not
+  converted yet, and a change does not convert them piecemeal.
   [0050](docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
   or `.github/pull_request_template.md` and use its headings and labels: `gh`

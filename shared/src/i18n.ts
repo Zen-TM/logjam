@@ -223,7 +223,7 @@ export type RichPart = string | { tag: string; text: string };
  * The tags are found in the message after the catalogue lookup and before the
  * holes go in, so a hole holding `<` or `<b>x</b>` is only ever text. A tag
  * holds text and holes, never another tag; a nested or unclosed tag stays in
- * the text as written (the scanner slice's guard refuses such a message).
+ * the text as written, which i18n.test.ts pins. Nothing refuses such a message yet.
  */
 export function rich(
   strings: TemplateStringsArray,
