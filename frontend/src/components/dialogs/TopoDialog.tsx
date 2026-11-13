@@ -22,6 +22,7 @@ import {
   estimateElvisTileCount,
   formatCreditsLike,
   formatCreditsOf,
+  formatArea,
   formatMinutes,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
@@ -40,7 +41,6 @@ import {
   Checkbox,
 } from "../../ui";
 import { nextTopoName } from "./jobName";
-import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
 import { submitFailureMessage, useTopoUpload } from "./topoUpload";
 import { sharpenJobRequest } from "./sharpenJob";
@@ -742,7 +742,7 @@ function ElvisInstructions({
               {pendingBbox ? "Draw it again" : "Draw the area"}
             </Button>
             {pendingBbox && area != null && (
-              <StatusPill label={formatAreaKm2(area)} />
+              <StatusPill label={formatArea(area)} />
             )}
             {pendingBbox && (
               <Button
