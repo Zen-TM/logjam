@@ -1,17 +1,15 @@
-// Every distance, height, speed, area, rain and wind figure Logjam writes
-// goes through this file, in metric or imperial. Stored values are always SI
-// (metres, km/h in a forecast, °C): units are a display and input conversion
-// only, and files Logjam writes (GPX, CSV, GeoPDF georeference) stay metric.
+// Writes a distance, height, speed, area, temperature, rain or wind figure in
+// metric or imperial. It converts at display and at input and never changes a
+// stored value: a distance is metres, a forecast is km/h, mm and °C, before and
+// after. Gauge readings and contour labels have no formatter here, because a
+// gauge reading is the agency's own number and a contour line is every 10 m of
+// height.
 //
-// The unit is module-level state, set by each client at start and on a
-// change, so call sites and the strings built several calls deep need no
-// parameter (ADR 0020's shared-decision rule; decision 15 of the regions run).
-// A formatter returns the value and its unit as ONE string, so a sentence
-// takes it as a hole and never spells a unit word itself.
-//
-// Gauge readings and contour labels are not converted: a gauge is the
-// agency's number, and the contour lines are every 10 m of height.
-// Guard: `units.test.ts` holds the metric output to what Logjam wrote before.
+// The unit is module-level state, set with `setDisplayUnits` (metric until a
+// client sets it), so a formatter takes no unit parameter (ADR 0020: the
+// decision is shared, each client draws it). A formatter returns the value and
+// its unit as one string.
+// Test: `units.test.ts` holds the metric output to what Logjam wrote before.
 
 import { formatNumber } from "./numberFormat.js";
 
@@ -29,7 +27,7 @@ const FEET_BELOW_METRES = 0.1 * METRES_PER_MILE;
 
 // A rain or wind figure and its unit are joined by a no-break space, so a
 // narrow weather card or a large font never strands the unit on a line of its
-// own. Every other figure here uses a plain space, as it always has.
+// own. Every other figure here uses a plain space.
 const NBSP = " ";
 
 const UNKNOWN = "—";

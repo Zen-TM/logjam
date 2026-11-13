@@ -116,12 +116,17 @@ export const WEATHER_NONE = "–";
 /** The least rain a figure is drawn for: below it "0.0 mm" would be noise. */
 const RAIN_SHOWN_MM = 0.05;
 
+// A figure that would be written as zero in the display units ("0.00 in",
+// "0 mph") is the dash instead, whichever unit that is.
+const figureOrNone = (text: string): string =>
+  /[1-9]/.test(text) ? text : WEATHER_NONE;
+
 const rainText = (mm: number): string =>
-  mm >= RAIN_SHOWN_MM ? formatRainMm(mm) : WEATHER_NONE;
+  mm >= RAIN_SHOWN_MM ? figureOrNone(formatRainMm(mm)) : WEATHER_NONE;
 const chanceText = (percent: number): string =>
   percent > 0 ? `${percent}%` : WEATHER_NONE;
 const windText = (kmh: number): string =>
-  Math.round(kmh) > 0 ? formatWind(kmh) : WEATHER_NONE;
+  Math.round(kmh) > 0 ? figureOrNone(formatWind(kmh)) : WEATHER_NONE;
 
 export function formatRainMm(mm: number): string {
   return formatRain(mm);

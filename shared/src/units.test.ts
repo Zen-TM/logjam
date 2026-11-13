@@ -171,6 +171,40 @@ describe("imperial", () => {
   });
 });
 
+describe("weather facts in imperial", () => {
+  const facts = (rainMm: number, windKmh: number) =>
+    weatherDayFacts(
+      {
+        date: "2026-11-20",
+        code: 3,
+        tempMinC: 4,
+        tempMaxC: 17,
+        rainMm,
+        rainChance: 40,
+        windMaxKmh: windKmh,
+      } as Parameters<typeof weatherDayFacts>[0],
+      Date.UTC(2026, 10, 19, 12),
+    );
+
+  it("draws the dash where the written figure would read zero", () => {
+    setDisplayUnits("imperial");
+    // 0.06 mm is 0.002 in ("0.00 in"); 0.6 km/h is 0.4 mph ("0 mph").
+    expect(facts(0.06, 0.6)).toMatchObject({ rain: "–", wind: "–" });
+    expect(facts(0.2, 1.2)).toMatchObject({
+      rain: `0.01${NBSP}in`,
+      wind: `1${NBSP}mph`,
+    });
+  });
+
+  it("still draws metric figures from 0.05 mm and 0.5 km/h", () => {
+    expect(facts(0.05, 0.5)).toMatchObject({
+      rain: `0.1${NBSP}mm`,
+      wind: `1${NBSP}km/h`,
+    });
+    expect(facts(0.04, 0.4)).toMatchObject({ rain: "–", wind: "–" });
+  });
+});
+
 describe("formatNumber", () => {
   it("is toFixed, with no grouping: grouping is the language's call", () => {
     expect(formatNumber(1203, 0)).toBe("1203");
