@@ -181,8 +181,16 @@ jobs:
         env:
           BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
           DISTRIBUTION: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          API_URL: ${{ vars.PROD_API_URL }}
         run: |
           set -euo pipefail
+          # A release built for another API address cannot work, and the smoke
+          # test would not notice: it loads the page and never calls the API.
+          # The page's CSP names the address its bundle calls.
+          aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "$RUNNER_TEMP/index.html" || true
+          if [ -z "$API_URL" ] || ! grep -qF "connect-src 'self' $API_URL " "$RUNNER_TEMP/index.html"; then
+            echo "::error::release $SHA has no page built for the API at '$API_URL' (PROD_API_URL): rolling back to it would serve a page that cannot reach the API"; exit 1
+          fi
           # Every file the release shipped must still be there.
           if ! aws s3 cp "s3://$BUCKET/releases/$SHA/files.txt" "$RUNNER_TEMP/files.txt"; then
             echo "::error::no releases/$SHA/ in the bucket: never deployed, deployed before releases were kept, or pruned"; exit 1
