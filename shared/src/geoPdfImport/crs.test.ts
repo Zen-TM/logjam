@@ -2,6 +2,11 @@ import proj4 from "proj4";
 import { describe, expect, it } from "vitest";
 
 import { resolveCrs, type ResolvedCrs } from "./crs";
+import {
+  ATLANTIC_LAEA_SHEET,
+  UTM12N_SHEET,
+  type TestPdfValue,
+} from "./__fixtures__/buildTestPdf";
 import { GeoPdfParseError, type GeoPdfCrs } from "./parseGeoref";
 
 const WGS84 = "+proj=longlat +datum=WGS84 +no_defs";
@@ -36,9 +41,10 @@ describe("resolveCrs — EPSG table", () => {
     for (const epsg of [
       28354, 28355, 28356, 7854, 7855, 7856, 32754, 32755, 32756,
     ]) {
-      const r = nsw({ kind: "EPSG_ONLY", epsg });
+      // 147 E is the middle of zone 55, within reach of zones 54 and 56.
+      const r = resolveCrs({ kind: "EPSG_ONLY", epsg }, [147, -33.65]);
       expect(r.isGeographic).toBe(false);
-      const [x, y] = proj4(WGS84, r.def, [150.25, -33.65]);
+      const [x, y] = proj4(WGS84, r.def, [147, -33.65]);
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
     }
@@ -128,13 +134,15 @@ describe("resolveCrs — EPSG ↔ WKT cross-check", () => {
 });
 
 describe("resolveCrs — EPSG rules", () => {
-  const epsgOnly = (epsg: number) =>
-    resolveCrs({ kind: "EPSG_ONLY", epsg }, [0, 0]);
+  const epsgOnly = (epsg: number, probe: [number, number] = [0, 0]) =>
+    resolveCrs({ kind: "EPSG_ONLY", epsg }, probe);
 
   // Easting 500000 on the central meridian is true of every UTM zone; the
   // central meridian of zone z is 6z - 183.
-  const onCentralMeridian = (epsg: number, zone: number, lat: number) =>
-    proj4(WGS84, epsgOnly(epsg).def, [6 * zone - 183, lat]);
+  const onCentralMeridian = (epsg: number, zone: number, lat: number) => {
+    const meridian = 6 * zone - 183;
+    return proj4(WGS84, epsgOnly(epsg, [meridian, lat]).def, [meridian, lat]);
+  };
 
   it.each([
     [32601, 1, 10, 500000],
@@ -174,11 +182,13 @@ describe("resolveCrs — EPSG rules", () => {
   );
 });
 
+const wktOf = (sheet: Record<string, TestPdfValue>) =>
+  (sheet.GCS as { WKT: string }).WKT;
+
 describe("resolveCrs — the probe is where the sheet is", () => {
   // proj4 throws for a point at the antipode of a Lambert azimuthal
   // equal-area centre, so a probe in Sydney cannot validate this WKT.
-  const ATLANTIC_LAEA_WKT =
-    'PROJCS["Atlantic LAEA",GEOGCS["GRS80 sphere",DATUM["D_GRS80",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["latitude_of_center",33.5],PARAMETER["longitude_of_center",-29],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1]]';
+  const ATLANTIC_LAEA_WKT = wktOf(ATLANTIC_LAEA_SHEET);
 
   it("accepts a WKT that is undefined in Sydney when the probe is on the sheet", () => {
     const r = resolveCrs(
@@ -194,11 +204,11 @@ describe("resolveCrs — the probe is where the sheet is", () => {
     ).toThrow(GeoPdfParseError);
   });
 
-  // A zone-12N sheet whose /EPSG says zone 13N: caught only if the probe is
-  // inside the sheet's own zone.
-  it("refuses an EPSG code for the wrong UTM zone, probed on the sheet", () => {
-    const wkt12n =
-      'PROJCS["WGS 84 / UTM zone 12N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-111],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]';
+  // At a probe on the sheet, the cross-check refuses the neighbouring zone's
+  // code and accepts the right one. Mutation: deleting the
+  // assertCrsDescriptionsAgree call in resolveCrs turns it red.
+  it("refuses an EPSG code for the next UTM zone over, accepts the right one", () => {
+    const wkt12n = wktOf(UTM12N_SHEET);
     const probe: [number, number] = [-111.9, 40.7];
     expect(() =>
       resolveCrs({ kind: "PROJCS", epsg: 32613, wkt: wkt12n }, probe),
@@ -206,5 +216,41 @@ describe("resolveCrs — the probe is where the sheet is", () => {
     expect(
       resolveCrs({ kind: "PROJCS", epsg: 32612, wkt: wkt12n }, probe).key,
     ).toBe("EPSG:32612");
+  });
+});
+
+describe("resolveCrs — a zoned code is checked against the sheet", () => {
+  const code = (epsg: number, probe: [number, number]) =>
+    resolveCrs({ kind: "EPSG_ONLY", epsg }, probe);
+
+  it("refuses a fractional code", () => {
+    expect(() => code(32601.5, [-177, 10])).toThrow(GeoPdfParseError);
+  });
+
+  it("refuses a code for a zone on the far side of the world", () => {
+    // A New South Wales sheet labelled UTM zone 1N.
+    expect(() => code(32601, NSW_PROBE)).toThrow(GeoPdfParseError);
+    expect(code(32756, NSW_PROBE).key).toBe("EPSG:32756");
+  });
+
+  it("accepts either zone at an edge", () => {
+    // 150.1 E: zone 55 (144 to 150) and zone 56 (150 to 156) both cover it
+    // to within 3.1 degrees of their central meridians.
+    for (const epsg of [7855, 7856]) {
+      expect(code(epsg, [150.1, -33.65]).key).toBe(`EPSG:${epsg}`);
+    }
+  });
+
+  // Zone 55's central meridian is 147 E. Mutation: changing 9 in crs.ts moves
+  // this edge and turns it red.
+  it("allows 9 degrees from the central meridian and no more", () => {
+    expect(code(7855, [155.9, -33.65]).key).toBe("EPSG:7855");
+    expect(() => code(7855, [156.1, -33.65])).toThrow(GeoPdfParseError);
+  });
+
+  // Mutation: dropping the wrap in the longitude difference refuses these.
+  it("accepts either end of a sheet across 180 degrees", () => {
+    expect(code(32760, [179.95, -17]).key).toBe("EPSG:32760");
+    expect(code(32701, [179.95, -17]).key).toBe("EPSG:32701");
   });
 });

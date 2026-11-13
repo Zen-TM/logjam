@@ -66,15 +66,33 @@ const UTM_FAMILIES: {
   { first: 26901, last: 26923, firstZone: 1, south: false }, // NAD83 UTM 1N to 23N
 ];
 
-function epsgEntry(epsg: number): EpsgEntry | undefined {
+/** Longitude, in degrees, a sheet's centre may lie from its zone's central
+ * meridian. A zone spans 6° (3° each side), but real sheets sit in the next
+ * zone over near an edge, and Norway's and Svalbard's widened zones reach 6°
+ * from theirs. A sheet labelled with a code further out is mislabelled. */
+const MAX_ZONE_OFFSET_DEG = 9;
+
+function epsgEntry(
+  epsg: number,
+  probe: [number, number],
+): EpsgEntry | undefined {
   const fixed = EPSG_TABLE[epsg];
   if (fixed) return fixed;
+  if (!Number.isInteger(epsg)) return undefined;
   const family = UTM_FAMILIES.find((f) => epsg >= f.first && epsg <= f.last);
   if (!family) return undefined;
-  return {
-    def: utm(family.firstZone + epsg - family.first, family.south),
-    isGeographic: false,
-  };
+  const zone = family.firstZone + epsg - family.first;
+  // Without a WKT nothing else places the sheet, and the affine fits
+  // perfectly in the wrong plane (see resolveCrs).
+  const wrapped =
+    ((((probe[0] - (6 * zone - 183) + 180) % 360) + 360) % 360) - 180;
+  if (Math.abs(wrapped) > MAX_ZONE_OFFSET_DEG) {
+    throw new GeoPdfParseError(
+      "UNSUPPORTED_CRS",
+      `EPSG:${epsg} is UTM zone ${zone}, ${Math.round(Math.abs(wrapped))}° from the sheet`,
+    );
+  }
+  return { def: utm(zone, family.south), isGeographic: false };
 }
 
 /** Metres of disagreement tolerated between an /EPSG code and a /WKT that
@@ -90,7 +108,7 @@ export function resolveCrs(
 ): ResolvedCrs {
   const epsg = crs.epsg;
   if (epsg !== undefined) {
-    const entry = epsgEntry(epsg);
+    const entry = epsgEntry(epsg, probe);
     if (entry) {
       // If the EPSG code wins outright without consulting the WKT, a producer
       // that writes the wrong code — a zone-54 code on a zone-56 sheet, say —
