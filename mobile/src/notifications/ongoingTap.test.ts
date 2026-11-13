@@ -66,6 +66,6 @@ describe("the native notifications", () => {
         "node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt",
       ),
     );
-    lines(read("patches/expo-location+58.0.20.patch"));
+    lines(read("patches/expo-location+58.0.22.patch"));
   });
 });
