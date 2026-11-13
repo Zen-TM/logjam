@@ -66,5 +66,41 @@ class TestRenderVegetation(unittest.TestCase):
         self.assertEqual(int(out[0, 0, 3]), 200)
 
 
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestRenderTileJob(unittest.TestCase):
+    """Red if the tile goes back to Pillow's `optimize` (level 9), which was
+    most of the time a tile took to write."""
+
+    def test_a_tile_is_written_at_the_vegetation_png_level(self):
+        import io
+        from unittest import mock
+
+        import pipeline
+        from PIL import Image
+
+        density = np.random.default_rng(3).random((256, 256)).astype(np.float32)
+        cfg = pipeline.RenderConfig(
+            density_path="d.tif",
+            output_dir=".",
+            lon_min=0,
+            lat_min=0,
+            lon_max=1,
+            lat_max=1,
+        )
+        with mock.patch.object(pipeline, "read_raster_window", return_value=density):
+            *_, tile = pipeline.render_tile_job((14, 1, 2, cfg.__dict__.copy()))
+        png = tile["vegetation"]
+        image = Image.open(io.BytesIO(png))
+
+        def encoded(**how):
+            out = io.BytesIO()
+            image.save(out, format="PNG", **how)
+            return out.getvalue()
+
+        self.assertEqual(png, encoded(compress_level=pipeline.VEGETATION_PNG_LEVEL))
+        # The premise: on this tile the two settings' bytes differ.
+        self.assertNotEqual(png, encoded(optimize=True))
+
+
 if __name__ == "__main__":
     unittest.main()

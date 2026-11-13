@@ -382,30 +382,7 @@ def tin_workers(cpus: int, window_points: int, memory_bytes: int) -> int:
     need = TIN_BYTES_PER_POINT * max(window_points, 1)
     if need > memory_bytes:
         raise CannotSharpen(TOO_BIG)
-    return max(1, min(cpus, int(TIN_MEMORY_SHARE * memory_bytes // need)))
-
-
-def available_memory(
-    meminfo: Path = Path("/proc/meminfo"), cgroup: Path = Path("/sys/fs/cgroup")
-) -> int:
-    """Bytes the job can still take, never below zero: the host's
-    MemAvailable or, when the container has a cgroup v2 memory limit and it
-    is lower, that limit less what the cgroup holds that it can't give back
-    (memory.current less memory.stat's page cache: the extracted ZIP and the
-    ground files are written before this is asked. Both of its lists, as
-    MemAvailable counts them: a ground file read by each neighbour's strips
-    cut is on the active one). Tests: tests/test_sharpen.py `TestTinWorkers`."""
-    found = dict(line.split(":", 1) for line in meminfo.read_text().splitlines())
-    free = int(found["MemAvailable"].split()[0]) * 1024
-    with contextlib.suppress(OSError, ValueError, KeyError):
-        limit = int((cgroup / "memory.max").read_text())  # "max": no limit
-        stat = dict(
-            line.split() for line in (cgroup / "memory.stat").read_text().splitlines()
-        )
-        cache = int(stat["inactive_file"]) + int(stat["active_file"])
-        held = int((cgroup / "memory.current").read_text()) - cache
-        free = min(free, limit - held)
-    return max(0, free)
+    return pipeline.jobs_in_memory(cpus, need, memory_bytes, TIN_MEMORY_SHARE)
 
 
 def read_parts(points: int) -> List[Tuple[int, int]]:
@@ -521,7 +498,7 @@ def laz_ground(
             out_i = str(work / f"tin-{i}.tif")
             jobs.append((str(i), b, files, float(cell), out_i, str(work)))
             pipeline._write_progress(i + 1, len(cuts), "strips")
-    n = tin_workers(workers, largest, available_memory())
+    n = tin_workers(workers, largest, pipeline.available_memory())
     log.info(
         f"{len(tiles)} of {len(paths)} tile(s) with ground, "
         f"{total / area:.2f} pts/m² → {cell} m cell, {n} TIN job(s) at a time"

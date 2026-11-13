@@ -509,11 +509,6 @@ python3 build_coverage.py publish --bucket logjam-topo-jobs
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
 
-**Empty or patchy output tiles**
-This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step
-fills gaps up to 50 m across. For larger holes, increase `max_distance` in
-`fill_nodata()`.
-
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
 limit in `docker-compose.yml`.

@@ -48,7 +48,7 @@ class TestBuildPipelineFull(unittest.TestCase):
         # Rasters are produced in the LAZ's native CRS; reprojection happens
         # later as a raster warp (reproject_raster_to_web_mercator). Reprojecting
         # points here would rasterize a rotated quad into an axis-aligned grid →
-        # edge wedges that fill_nodata fabricates data into.
+        # edge wedges of no data.
         self.assertEqual(_stages_of_type(self.p, "filters.reprojection"), [])
 
     def test_drops_asprs_noise_and_overlap_before_smrf(self):
@@ -137,37 +137,74 @@ class TestGroundPerTile(unittest.TestCase):
     Red if one ground is chosen for the whole job: a ZIP mixing a classified
     tile with an unclassified one (a water-only tile, a second survey) then
     either runs height above ground on a tile with no ground points, which
-    fails the job, or wipes the survey's classes everywhere."""
+    fails the job, or wipes the survey's classes everywhere. Red too if the
+    tiles are gridded one a CPU whatever their size (eight dense tiles at
+    once run the task out of memory), by the first tile's size instead of
+    the largest's, or one at a time when several fit."""
 
-    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+    def grid(self, points, memory):
+        """run_pdal_per_tile on two made-up tiles with PDAL mocked. Returns
+        (the pipelines run, how many at a time)."""
         import tempfile
+        from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
         import pipeline
 
         run = mock.Mock()
+        pools = []
+
+        def pool(n):
+            pools.append(n)
+            return ThreadPoolExecutor(n)
+
         with (
             tempfile.TemporaryDirectory() as work,
             mock.patch.object(
                 pipeline, "has_class2", side_effect=lambda p: p == "classified.laz"
             ),
+            mock.patch.object(pipeline, "point_count", side_effect=points.get),
+            mock.patch.object(pipeline, "available_memory", return_value=memory),
+            mock.patch.object(pipeline, "ThreadPoolExecutor", side_effect=pool),
             mock.patch.object(pipeline, "run_pdal_pipeline", run),
             mock.patch.object(pipeline, "_merge_raster_tiles"),
             mock.patch.object(pipeline.os, "remove"),
         ):
-            pipeline.run_pdal_sequential_full(
-                ["classified.laz", "unclassified.laz"],
-                ["classified.laz", "unclassified.laz"],
+            pipeline.run_pdal_per_tile(
+                list(points),
+                list(points),
                 *(os.path.join(work, f"{n}.tif") for n in "abcde"),
                 work,
+                workers=8,
             )
+        return [c.args[0] for c in run.call_args_list], pools[0]
+
+    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+        pipelines, _ = self.grid(
+            {"classified.laz": 1_000_000, "unclassified.laz": 1_000_000}, 2**34
+        )
         smrf = {
             next(
                 s["filename"] for s in p["pipeline"] if s.get("type") == "readers.las"
             ): bool(_stages_of_type(p["pipeline"], "filters.smrf"))
-            for p in (c.args[0] for c in run.call_args_list)
+            for p in pipelines
         }
         self.assertEqual(smrf, {"classified.laz": False, "unclassified.laz": True})
+
+    def test_as_many_tiles_at_a_time_as_the_largest_fits_in_memory_with(self):
+        import pipeline
+
+        per_point = pipeline.GRID_BYTES_PER_POINT
+        self.assertGreater(per_point, 0)
+        tiles = {"classified.laz": 1_000_000, "unclassified.laz": 50_000_000}
+        # Room for three of the largest in the share of memory the tiles get.
+        memory = int(3.5 * 50_000_000 * per_point / pipeline.GRID_MEMORY_SHARE)
+        self.assertEqual(self.grid(tiles, memory)[1], 3)
+        # No room for one: still one, as before.
+        self.assertEqual(self.grid(tiles, 1)[1], 1)
+        # Small tiles: one a CPU.
+        small = {"classified.laz": 1000, "unclassified.laz": 1000}
+        self.assertEqual(self.grid(small, 2**34)[1], 8)
 
 
 if __name__ == "__main__":

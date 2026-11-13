@@ -380,7 +380,7 @@ class TestGroundSteps(unittest.TestCase):
             mock.patch.object(sharpen.pipeline, "select_surveys_by_layer") as select,
             mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
             mock.patch.object(sharpen, "_tin_tile", side_effect=tin),
-            mock.patch.object(sharpen, "available_memory", return_value=2**34),
+            mock.patch.object(sharpen.pipeline, "available_memory", return_value=2**34),
             mock.patch.object(
                 sharpen, "tin_workers", tin_workers or sharpen.tin_workers
             ),
@@ -561,7 +561,7 @@ class TestGroundSteps(unittest.TestCase):
             mock.patch.object(sharpen.pipeline, "select_surveys_by_layer") as select,
             mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
             mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
-            mock.patch.object(sharpen, "available_memory", return_value=2**34),
+            mock.patch.object(sharpen.pipeline, "available_memory", return_value=2**34),
             mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
             mock.patch.object(sharpen.pipeline, "_write_progress") as progress,
         ):
@@ -673,10 +673,10 @@ class TestTinWorkers(unittest.TestCase):
             meminfo.write_text("MemTotal: 16000000 kB\nMemAvailable: 10000000 kB\n")
             cgroup = root / "cg"
             cgroup.mkdir()
-            free = sharpen_module.available_memory(meminfo, cgroup)
+            free = pipeline.available_memory(meminfo, cgroup)
             self.assertEqual(free, 10_000_000 * 1024)  # no cgroup files: the host's
             self.write(cgroup, {"memory.max": "max\n"})
-            self.assertEqual(sharpen_module.available_memory(meminfo, cgroup), free)
+            self.assertEqual(pipeline.available_memory(meminfo, cgroup), free)
             # A 4 GiB limit, 3 GiB charged of which 2 GiB is page cache, half
             # of it read more than once.
             self.write(
@@ -688,11 +688,9 @@ class TestTinWorkers(unittest.TestCase):
                     f"active_file {2**30}\n",
                 },
             )
-            self.assertEqual(
-                sharpen_module.available_memory(meminfo, cgroup), 3 * 2**30
-            )
+            self.assertEqual(pipeline.available_memory(meminfo, cgroup), 3 * 2**30)
             self.write(cgroup, {"memory.current": f"{9 * 2**30}\n"})
-            self.assertEqual(sharpen_module.available_memory(meminfo, cgroup), 0)
+            self.assertEqual(pipeline.available_memory(meminfo, cgroup), 0)
 
 
 class TestMosaic(unittest.TestCase):
