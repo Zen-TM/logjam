@@ -3004,7 +3004,11 @@ function Map({
       if (fmt === "coverage") {
         const carrier = coverageCarrierRef.current;
         if (!carrier) return;
-        const layer = coverageLayerSpec(srcId, carrier);
+        const layer = coverageLayerSpec(
+          NSW_REGION.terrain.coverage,
+          srcId,
+          carrier,
+        );
         if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
@@ -3012,7 +3016,11 @@ function Map({
       if (fmt === "fire") {
         // The tint ages by the month: a map left open for weeks is at most
         // that stale.
-        for (const layer of fireLayerSpecs(srcId, new Date()))
+        for (const layer of fireLayerSpecs(
+          NSW_REGION.terrain.fire,
+          srcId,
+          new Date(),
+        ))
           if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
@@ -3038,7 +3046,9 @@ function Map({
             "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
-              "line-color": landColor() as maplibregl.ExpressionSpecification,
+              "line-color": landColor(
+                NSW_REGION.terrain.land,
+              ) as maplibregl.ExpressionSpecification,
               "line-width": width,
               "line-offset": offset,
               "line-blur": blur,
@@ -3189,7 +3199,10 @@ function Map({
     if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
       mapRef.current.setFilter(
         COVERAGE_FILL_LAYER,
-        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+        coverageFilter(
+          NSW_REGION.terrain.coverage,
+          coverageCarrier,
+        ) as maplibregl.FilterSpecification,
       );
   }, [topoLayers, coverageCarrier, mapLoaded]);
 
@@ -3744,6 +3757,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
+          region={NSW_REGION}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

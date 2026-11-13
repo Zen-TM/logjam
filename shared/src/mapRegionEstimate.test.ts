@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { TERRARIUM } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
-import { landClip } from "./nswLand.js";
+import { landClip } from "./land.js";
 import {
   DEM_SOURCE_ID,
   DOWNLOADABLE_BASEMAP_IDS,
@@ -399,8 +399,9 @@ describe("planRegionForBasemaps", () => {
           expect(tileBytes, `${region.id} at z${z}`).toHaveProperty(`${z}`);
       }
     }
-    // Six of NSW, three of each simulated region, the world's heights.
-    expect(archives).toBeGreaterThanOrEqual(6 + 3 + 3 + 1);
+    // Six of NSW, six of simulated New Zealand, five of simulated Utah (no
+    // coverage), the world's heights.
+    expect(archives).toBeGreaterThanOrEqual(6 + 6 + 5 + 1);
   });
 
   // Mutation: read the clips from `REGIONS` instead of the `regions` argument,
@@ -412,6 +413,9 @@ describe("planRegionForBasemaps", () => {
       ["simnz-heights", "heights"],
       ["simnz-slope", "slope"],
       ["simnz-contours", "contours"],
+      ["simnz-land", "land"],
+      ["simnz-fire", "fire"],
+      ["simnz-coverage", "coverage"],
     ]);
     // Placeholder figures, 30 KB a tile at every zoom: the tile counts say the rest.
     const tiles = (min: number, max: number) =>
@@ -420,6 +424,9 @@ describe("planRegionForBasemaps", () => {
       tiles(8, 15) * 30_000,
       tiles(8, 15) * 30_000,
       tiles(11, 14) * 30_000,
+      tiles(12, 13) * 30_000,
+      tiles(8, 12) * 30_000,
+      tiles(12, 12) * 30_000,
     ]);
     // NSW is not touched, so none of its archives are priced.
     expect(job.clips.some((c) => c.archive.id.startsWith("nsw"))).toBe(false);
@@ -437,7 +444,7 @@ describe("planRegionForBasemaps", () => {
     expect(
       job.clips.filter((c) => c.kind === "slope").map((c) => c.archive.id),
     ).toEqual(["nsw-5m-slope", "simutah-slope"]);
-    // Utah's heights lie far from this box, so only its slope and contours add.
+    // Utah's heights lie far from this box, so its other archives add and its heights do not.
     expect(job.clips.filter((c) => c.kind === "heights")).toHaveLength(1);
   });
 

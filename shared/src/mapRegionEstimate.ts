@@ -4,7 +4,7 @@
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
-import { landClip } from "./nswLand.js";
+import { landClip } from "./land.js";
 import {
   REGIONS,
   regionsTouching,

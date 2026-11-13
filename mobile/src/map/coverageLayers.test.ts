@@ -5,6 +5,7 @@ import {
   COVERAGE_MIN_ZOOM,
   coverageFilter,
   coverageOpacity,
+  NSW_REGION,
   zoomFadeIn,
 } from "@logjam/shared";
 import { describe, expect, it, vi } from "vitest";
@@ -18,14 +19,16 @@ import {
   pickCoverageCarrier,
 } from "./coverageLayers";
 
+const COVERAGE = NSW_REGION.terrain.coverage;
+
 describe("coverageLayerPaint", () => {
   // Mutation: build the pattern or the opacity from anything but shared's,
   // and the map hatches where the legend says there is reception, or draws a
   // hatch it doesn't key; drop the fade, and it pops in at its first zoom.
   it("paints with exactly shared's expressions", () => {
-    expect(coverageLayerPaint()).toEqual({
+    expect(coverageLayerPaint(COVERAGE)).toEqual({
       "fill-pattern": COVERAGE_HATCH_IMAGE,
-      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity()),
+      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity(COVERAGE)),
     });
   });
 });
@@ -33,9 +36,11 @@ describe("coverageLayerPaint", () => {
 describe("coverageLayerFilter", () => {
   // Mutation: ignore `carrier` and the map draws every carrier's gaps at once.
   it("keeps one carrier's areas", () => {
-    expect(coverageLayerFilter("optus")).toEqual(coverageFilter("optus"));
-    expect(coverageLayerFilter("optus")).not.toEqual(
-      coverageLayerFilter("telstra"),
+    expect(coverageLayerFilter(COVERAGE, "optus")).toEqual(
+      coverageFilter(COVERAGE, "optus"),
+    );
+    expect(coverageLayerFilter(COVERAGE, "optus")).not.toEqual(
+      coverageLayerFilter(COVERAGE, "telstra"),
     );
   });
 });
@@ -91,7 +96,14 @@ describe("coverageAtTap", () => {
   it("reads the drawn layers at the press, for the drawn carrier", async () => {
     queried.length = 0;
     expect(
-      await coverageAtTap(map, [100, 50], [150, -33], ["a", "b"], "optus"),
+      await coverageAtTap(
+        map,
+        [100, 50],
+        [150, -33],
+        ["a", "b"],
+        "optus",
+        COVERAGE,
+      ),
     ).toBe("Optus: no mobile reception");
     expect(queried).toEqual([[[100, 50], { layers: ["a", "b"] }]]);
   });
@@ -130,7 +142,14 @@ describe("coverageAtTap", () => {
       ],
     };
     expect(
-      await coverageAtTap(native, [1, 2], [150.5, -33.5], ["a"], "telstra"),
+      await coverageAtTap(
+        native,
+        [1, 2],
+        [150.5, -33.5],
+        ["a"],
+        "telstra",
+        COVERAGE,
+      ),
     ).toBe("Telstra: mobile reception");
   });
 
@@ -139,13 +158,13 @@ describe("coverageAtTap", () => {
   it("answers nothing with no carrier or no layer", async () => {
     queried.length = 0;
     expect(
-      await coverageAtTap(map, [1, 2], [150, -33], ["a"], null),
+      await coverageAtTap(map, [1, 2], [150, -33], ["a"], null, COVERAGE),
     ).toBeNull();
     expect(
-      await coverageAtTap(map, [1, 2], [150, -33], [], "optus"),
+      await coverageAtTap(map, [1, 2], [150, -33], [], "optus", COVERAGE),
     ).toBeNull();
     expect(
-      await coverageAtTap(null, [1, 2], [150, -33], ["a"], "optus"),
+      await coverageAtTap(null, [1, 2], [150, -33], ["a"], "optus", COVERAGE),
     ).toBeNull();
     expect(queried).toEqual([]);
   });

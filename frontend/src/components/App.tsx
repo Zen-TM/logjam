@@ -135,6 +135,7 @@ import {
   drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
+  carriersOf,
   drawsCoverage,
   normalizeUserUiPreferences,
   type TerrainSwitchKey,
@@ -245,7 +246,7 @@ function App() {
     "logjam.coverageCarrier",
     null,
   );
-  const coverageCarrier = normalizeCarrier(storedCarrier);
+  const coverageCarrier = normalizeCarrier(storedCarrier, carriersOf());
   const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
     setStoredTerrainLayers((prev: unknown) => ({
       ...normalizeTerrainLayers(prev),
