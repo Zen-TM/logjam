@@ -129,6 +129,7 @@ const chanceText = (percent: number): string =>
 const windText = (kmh: number): string =>
   Math.round(kmh) > 0 ? figureOrNone(formatWind(kmh)) : WEATHER_NONE;
 
+/** Rain in the display units: `formatRain` in `units.ts`. */
 export function formatRainMm(mm: number): string {
   return formatRain(mm);
 }
