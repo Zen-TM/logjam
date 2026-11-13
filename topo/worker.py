@@ -45,6 +45,8 @@ from pmtiles.convert import mbtiles_to_pmtiles
 
 from worker_common import (
     TOO_BIG,
+    VEGETATION_LEFT_OUT,
+    VEGETATION_LEFT_OUT_EXIT,
     compose_database_url,
     create_notification,
     get_user_email,
@@ -64,6 +66,11 @@ GENERIC_FAILURE = "This LiDAR map couldn't be made. Make it again."
 
 class JobInputError(Exception):
     """A ZIP the job cannot use; the message is the sentence its owner reads."""
+
+
+class VegetationLeftOut(Exception):
+    """The vegetation pass could not fit the area in memory: the job finishes
+    without that layer."""
 
 
 # A job /start never marked to sharpen: from before new jobs sharpened their
@@ -267,7 +274,12 @@ def get_job(conn, job_id: str) -> dict:
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 
-def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
+def send_completion_email(
+    to_email: str,
+    job_id: str,
+    output_keys: list[dict],
+    vegetation_left_out: bool = False,
+):
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping completion email")
         return
@@ -275,9 +287,11 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
     base = FRONTEND_URL.rstrip("/")
     # The link opens the job in Logjam Web, whose map draws the area.
     open_url = f"{base}/?topoJob={job_id}"
+    note = [VEGETATION_LEFT_OUT] if vegetation_left_out else []
     text_body = "\n".join(
         [
             "Your sharpened area is ready.",
+            *note,
             "",
             f"Open it in Logjam Web: {open_url}",
         ]
@@ -290,12 +304,25 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
             f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
             'style="display:block" /></p>',
             "    <p>Your sharpened area is ready.</p>",
+            *[f"    <p>{line}</p>" for line in note],
             f'    <p><a href="{open_url}">Open it in Logjam Web</a></p>',
             "  </body>",
             "</html>",
         ]
     )
     send_email(to_email, "Sharpened area ready — Logjam", text_body, html_body)
+
+
+def completion_payload(job: dict, footprint: Optional[dict], left_out: bool) -> dict:
+    """The `topo_complete` notification's payload. `vegetationLeftOut` is what
+    gives the row its second line (shared/src/notificationLabel.ts); the push
+    carries none of it."""
+    return {
+        "jobId": job["id"],
+        "jobName": job.get("name"),
+        "footprint": footprint,
+        **({"vegetationLeftOut": True} if left_out else {}),
+    }
 
 
 def send_failure_email(to_email: str, job_id: str, error_message: str):
@@ -465,13 +492,21 @@ def process_sharpen(
         total_output_bytes += local.stat().st_size
 
     vegetation = bool(job["sharpen"].get("vegetation"))
+    left_out = False
     output_keys: list[dict] = []
     if vegetation:
         veg_dir = Path(tmp) / "vegetation"
         veg_dir.mkdir()
-        output_keys, veg_bytes, veg_metrics = process_vegetation(
-            job, str(veg_dir), zip_path
-        )
+        try:
+            output_keys, veg_bytes, veg_metrics = process_vegetation(
+                job, str(veg_dir), zip_path
+            )
+        except VegetationLeftOut:
+            # No seconds are added: a pass that was refused or killed is not
+            # charged (tests/test_worker_helpers.py `TestProcessSharpen`).
+            log.warning("Finishing the job without the vegetation layer.")
+            left_out = True
+            veg_bytes, veg_metrics = 0, None
         total_output_bytes += veg_bytes
         # Charged with the job: credits come from wallSeconds
         # (api/src/lib/computeCredits.ts), and so does the next estimate
@@ -490,7 +525,12 @@ def process_sharpen(
                 "fireStaleFraction": veg_metrics.get("fireStaleFraction"),
             }
 
-    sharpen = {**result, "keys": keys, "vegetation": vegetation}
+    sharpen = {
+        **result,
+        "keys": keys,
+        "vegetation": vegetation,
+        "vegetationLeftOut": left_out,
+    }
     return (
         output_keys,
         out / "footprint.geojson",
@@ -506,7 +546,9 @@ def process_vegetation(
     """A ticked job's vegetation layer: `pipeline.py` renders it from the
     ZIP's point clouds, and its PMTiles is uploaded for display. Returns
     (output_keys, output_bytes, pipeline_metrics); no layer for a ZIP with no
-    point clouds. No styled COG: nothing reads one any more."""
+    point clouds. No styled COG: nothing reads one any more. Raises
+    VegetationLeftOut when the pass exits with its out-of-memory code or is
+    killed for memory."""
     job_id = job["id"]
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
@@ -530,6 +572,8 @@ def process_vegetation(
     # The heartbeat refreshes the job's progress columns from progress.json
     # while the pipeline runs (see _heartbeat_loop).
     code = run_with_heartbeat(cmd, job_id, progress_path)
+    if code in (VEGETATION_LEFT_OUT_EXIT, -9):
+        raise VegetationLeftOut()
     if code != 0:
         raise RuntimeError(
             f"pipeline.py exited with code {code} "
@@ -656,16 +700,13 @@ def main():
         completed = True
 
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
+        left_out = bool(sharpen.get("vegetationLeftOut"))
 
         create_notification(
             conn,
             job["user_id"],
             "topo_complete",
-            {
-                "jobId": JOB_ID,
-                "jobName": job.get("name"),
-                "footprint": extra.get("footprint"),
-            },
+            completion_payload(job, extra.get("footprint"), left_out),
         )
         # Best-effort push — generic title + opaque IDs only (privacy rule:
         # job name/footprint stay in the in-app notification, never in a push).
@@ -675,7 +716,7 @@ def main():
 
         email = get_user_email(conn, job["user_id"])
         if email and wants_email(conn, job["user_id"], "topoEmail"):
-            send_completion_email(email, JOB_ID, output_keys)
+            send_completion_email(email, JOB_ID, output_keys, left_out)
 
     except Exception as e:
         if completed:

@@ -14,18 +14,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    import pipeline  # noqa: E402
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+import pipeline  # noqa: E402
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestBenchmarkMetrics(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -73,9 +64,6 @@ class TestBenchmarkMetrics(unittest.TestCase):
         self.assertEqual(json.loads(open(path).read())["phases"], {})
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestWriteProgress(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
