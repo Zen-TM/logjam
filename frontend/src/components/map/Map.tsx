@@ -238,15 +238,11 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 
-/** Everything on the map that has a press of its own. */
-const PRESSABLE = [
-  "place-circles",
-  "shared-place-halos",
-  "shared-place-circles",
-  "routes-hit",
-  "place-tracks-hit",
-  "standalone-tracks-hit",
-];
+/**
+ * Everything on the map that has a press of its own: a press there is not a
+ * "What is here?", and the creeks-upstream hover gives way to it.
+ */
+const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
 const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
@@ -2198,8 +2194,6 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    // Everything on the map that has a press of its own.
-    const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
     let pending: ReturnType<typeof setTimeout> | null = null;

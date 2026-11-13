@@ -22,7 +22,7 @@ import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import {
   FLOW_NETWORK_SNAP_M,
   FLOW_NETWORK_UPSTREAM_CAP,
-  NSW_5M,
+  NSW_REGION,
   say,
   type FlowNetworkLookup,
   type FlowNetworkSegmentFeature,
@@ -77,7 +77,7 @@ let failedAt: number | null = null;
  */
 let refreshing: Promise<void> | null = null;
 
-const UNAVAILABLE = say`Catchment sizes aren't available right now. Please try again later.`;
+const UNAVAILABLE = say`Couldn't check the catchment. Try again later.`;
 
 /** A flow network GeoPackage on local disk, opened read-only. */
 export function openFlowNetwork(path: string, etag?: string): FlowNetworkLayer {
@@ -335,7 +335,7 @@ export function lookupIn(
   point: Position,
   withUpstream: boolean,
 ): FlowNetworkLookup {
-  const attribution = NSW_5M.credit;
+  const attribution = NSW_REGION.terrain.heights.credit;
   const { west, south, east, north } = boxAround(point, FLOW_NETWORK_SNAP_M);
   const candidates = current.candidates
     .all(east, west, north, south)

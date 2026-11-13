@@ -6,7 +6,7 @@ import request from "supertest";
 import {
   FLOW_NETWORK_SNAP_M,
   FLOW_NETWORK_UPSTREAM_CAP,
-  NSW_5M,
+  NSW_REGION,
 } from "@logjam/shared";
 
 import { s3 } from "../services/awsClients";
@@ -72,7 +72,7 @@ describe("POST /flow-network/lookup", () => {
       Math.abs(res.body.snapped.latitude - ON_GOVETTS.latitude),
     ).toBeLessThan(0.0002);
     expect(res.body.upstream).toBeUndefined();
-    expect(res.body.attribution).toBe(NSW_5M.credit);
+    expect(res.body.attribution).toBe(NSW_REGION.terrain.heights.credit);
   });
 
   it("says when no creek is near, and when the layer does not reach", async () => {
@@ -81,13 +81,13 @@ describe("POST /flow-network/lookup", () => {
     expect(ridge.status).toBe(200);
     expect(ridge.body).toEqual({
       status: "no-creek",
-      attribution: NSW_5M.credit,
+      attribution: NSW_REGION.terrain.heights.credit,
     });
     const sydney = await lookup(SYDNEY);
     expect(sydney.status).toBe(200);
     expect(sydney.body).toEqual({
       status: "not-covered",
-      attribution: NSW_5M.credit,
+      attribution: NSW_REGION.terrain.heights.credit,
     });
   });
 

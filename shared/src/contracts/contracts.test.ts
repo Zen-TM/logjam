@@ -1268,8 +1268,14 @@ describe("the map point panel", () => {
     expect(contractSectionsFor(MAP_POINT, "web", false)).not.toContain(
       "accuracy",
     );
+    // A one-client section says why: a `reason` for a choice, a `gap` for
+    // what the other client has not built yet (the catchment).
     for (const section of MAP_POINT.sections)
-      if ("on" in section) expect(section.reason ?? "").not.toBe("");
+      if ("on" in section)
+        expect(
+          ("reason" in section ? section.reason : "") ||
+            ("gap" in section ? section.gap : ""),
+        ).not.toBe("");
   });
 
   // Mutation: change either client's placeholder away from this one.

@@ -2,6 +2,10 @@ import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// getEnv() parses once and caches; the 401 case switches AUTH_MODE, so this
+// reads the live process.env.
+vi.mock("../lib/env", () => ({ getEnv: () => process.env }));
+
 vi.mock("../services/flowNetwork", () => ({
   lookupFlowNetwork: vi.fn(async () => ({
     status: "no-creek",
@@ -81,7 +85,7 @@ describe("POST /flow-network/lookup", () => {
   // the route.
   it("refuses a request that is not signed in", async () => {
     const mode = process.env.AUTH_MODE;
-    process.env.AUTH_MODE = "cognito";
+    process.env.AUTH_MODE = "oidc";
     try {
       const log = { warn: vi.fn(), error: vi.fn() };
       const res = await request(app(log))

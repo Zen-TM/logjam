@@ -14,7 +14,7 @@ import {
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import {
   FLOW_NETWORK_SNAP_M,
-  NSW_5M,
+  NSW_REGION,
   type FlowNetworkLookup,
 } from "@logjam/shared";
 
@@ -66,7 +66,7 @@ describe("lookupIn, against the fixture", () => {
     expect(found.distanceM).toBeLessThan(15);
     expect(found.upstream).toBeUndefined();
     expect(found.biggerNearby).toBeUndefined();
-    expect(found.attribution).toBe(NSW_5M.credit);
+    expect(found.attribution).toBe(NSW_REGION.terrain.heights.credit);
   });
 
   // Mutation: return "not-covered" whenever no creek is in range (skip the
@@ -74,11 +74,11 @@ describe("lookupIn, against the fixture", () => {
   it("tells a ridge in the basin from a place outside it", () => {
     expect(lookupIn(layer, RIDGE, true)).toEqual({
       status: "no-creek",
-      attribution: NSW_5M.credit,
+      attribution: NSW_REGION.terrain.heights.credit,
     });
     expect(lookupIn(layer, SYDNEY, true)).toEqual({
       status: "not-covered",
-      attribution: NSW_5M.credit,
+      attribution: NSW_REGION.terrain.heights.credit,
     });
   });
 

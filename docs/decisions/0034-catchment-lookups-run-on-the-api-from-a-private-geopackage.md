@@ -38,7 +38,7 @@ and the API has Postgres without PostGIS.
   deploy publishes a new layer. The API's Node is at least 22.13, where
   `node:sqlite` is unflagged: CI's api jobs run 22, `api/Dockerfile` 26.
 - **The credit** of [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md)
-  comes with every answer (`NSW_5M.credit`) and on the map sources that draw
+  comes with every answer (`NSW_REGION.terrain.heights.credit`) and on the map sources that draw
   it.
 
 ## Consequences

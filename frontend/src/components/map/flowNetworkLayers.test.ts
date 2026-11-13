@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAP_INK,
-  NSW_5M,
+  NSW_REGION,
   type FlowNetworkSegmentFeature,
   type FlowNetworkUpstream,
 } from "@logjam/shared";
@@ -262,10 +262,10 @@ describe("the creeks upstream on the map", () => {
     const map = fakeMap();
     showUpstream(map, upstream);
     expect(map.sources.get(UPSTREAM_SOURCE)?.attribution).toBe(
-      NSW_5M.creditHtml,
+      NSW_REGION.terrain.heights.creditHtml,
     );
     expect(map.sources.get(CATCHMENT_SOURCE)?.attribution).toBe(
-      NSW_5M.creditHtml,
+      NSW_REGION.terrain.heights.creditHtml,
     );
     expect(map.getLayer(CATCHMENT_EDGE_LAYER)).toBeTruthy();
     clearUpstream(map);
@@ -311,7 +311,9 @@ describe("the line to the creek point a catchment was measured at", () => {
   it("is dashed, credited, and gone with the panel", () => {
     const map = fakeMap();
     showSnap(map, from, creek, "#abc");
-    expect(map.sources.get(SNAP_SOURCE)?.attribution).toBe(NSW_5M.creditHtml);
+    expect(map.sources.get(SNAP_SOURCE)?.attribution).toBe(
+      NSW_REGION.terrain.heights.creditHtml,
+    );
     expect(map.getLayer(SNAP_LINE_LAYER)).toMatchObject({
       paint: { "line-dasharray": [2, 2] },
     });

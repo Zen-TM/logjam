@@ -15,7 +15,7 @@ import type {
 } from "maplibre-gl";
 import {
   MAP_INK,
-  NSW_5M,
+  NSW_REGION,
   catchmentOutline,
   type FlowNetworkSegmentFeature,
   type FlowNetworkUpstream,
@@ -222,7 +222,11 @@ export function snapData(
 }
 
 function geojson(data: GeoJSON.GeoJSON): GeoJSONSourceSpecification {
-  return { type: "geojson", data, attribution: NSW_5M.creditHtml };
+  return {
+    type: "geojson",
+    data,
+    attribution: NSW_REGION.terrain.heights.creditHtml,
+  };
 }
 
 function remove(map: OverlayMap, source: string, layers: string[]) {
