@@ -1,8 +1,12 @@
 # CloudFront distributions (config pinned to live via -generate-config-out).
-#   web (E22J79PHZM2K): logjamnsw.com + www — multi-origin, serves the frontend
+#   web (E22J79PHZM2K): logjam.earth + www, and logjamnsw.com + www until that
+#     name is retired — multi-origin, serves the frontend
 #     SPA bucket (default behavior) AND topo tiles from logjam-topo-jobs under
 #     /master/* (ordered behavior). This is TOPO_CDN_BASE_URL (https://logjamnsw.com).
-#   api (E29GLTTDM6CXX4): api.logjamnsw.com — fronts the API on the brain.
+#   api (E29GLTTDM6CXX4): api.logjam.earth and api.logjamnsw.com — fronts the
+#     API on the brain.
+# One certificate (us-east-1, requested by hand) names all six hosts: a
+# distribution takes one, so it covers both domains while both answer.
 #
 # The OAC ids (E1WNCNLBS8VU / E23DDV2YT80WV) and the CloudFront-created WAF web
 # ACLs are referenced as literals, not managed here (optional later adoption).
@@ -10,7 +14,7 @@
 # is needed. prevent_destroy guards the public domains + cert bindings.
 
 resource "aws_cloudfront_distribution" "web" {
-  aliases             = ["logjamnsw.com", "www.logjamnsw.com"]
+  aliases             = ["logjam.earth", "www.logjam.earth", "logjamnsw.com", "www.logjamnsw.com"]
   default_root_object = "index.html"
   enabled             = true
   http_version        = "http2"
@@ -87,7 +91,7 @@ resource "aws_cloudfront_distribution" "web" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/8dd40670-1feb-46fe-8878-eac0097b0582"
+    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/aa1fde03-c0f4-4363-b204-d58eb7ad3c13"
     minimum_protocol_version = "TLSv1.2_2021"
     ssl_support_method       = "sni-only"
   }
@@ -98,7 +102,7 @@ resource "aws_cloudfront_distribution" "web" {
 }
 
 resource "aws_cloudfront_distribution" "api" {
-  aliases          = ["api.logjamnsw.com"]
+  aliases          = ["api.logjam.earth", "api.logjamnsw.com"]
   enabled          = true
   http_version     = "http2"
   is_ipv6_enabled  = true
@@ -165,7 +169,7 @@ resource "aws_cloudfront_distribution" "api" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/8dd40670-1feb-46fe-8878-eac0097b0582"
+    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/aa1fde03-c0f4-4363-b204-d58eb7ad3c13"
     minimum_protocol_version = "TLSv1.2_2021"
     ssl_support_method       = "sni-only"
   }
