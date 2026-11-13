@@ -9,7 +9,6 @@ skip on a host without it; the `topo-e2e` job's image has it.
 Mutations that turn each red are named on its class.
 """
 
-import json
 import os
 import sys
 import tempfile
