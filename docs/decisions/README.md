@@ -154,3 +154,4 @@ supersede instead.
 | [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
 | [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) | Database connections verify the brain's certificate and never fall back to plain | 2026-11-11 | Accepted |
 | [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md) | What a map offers follows the ground it shows; an account's chosen regions only set defaults | 2026-11-14 | Accepted |
+| [0050](0050-user-facing-text-goes-through-one-catalogue-function.md) | User-facing text goes through one catalogue function, keyed by its English | 2026-11-14 | Accepted |
