@@ -67,6 +67,32 @@ class TestBilateralBands(unittest.TestCase):
         self.assertTrue(np.isnan(out[11, 11]))
 
 
+class TestBoxSum(unittest.TestCase):
+    """The window sums are taken a band of rows at a time. Red if a band's
+    sums come from another band's rows of the table (its offset dropped) or
+    the last, short band is left out."""
+
+    def test_a_cell_is_the_same_whatever_band_it_falls_in(self):
+        from unittest import mock
+
+        import pipeline
+
+        rng = np.random.default_rng(11)
+        arr = rng.integers(0, 9, (23, 17)).astype(np.float32)
+        k, half = 5, 2
+        # The sums as one whole-area expression.
+        padded = np.pad(arr, half, mode="reflect")
+        sat = np.zeros((padded.shape[0] + 1, padded.shape[1] + 1), dtype=np.float64)
+        sat[1:, 1:] = padded.cumsum(axis=0).cumsum(axis=1)
+        whole = (sat[k:, k:] - sat[:-k, k:] - sat[k:, :-k] + sat[:-k, :-k]).astype(
+            np.float32
+        )
+        self.assertEqual(whole[0, 0], padded[:k, :k].sum())
+        for rows in (1, 7, 23, 1024):
+            with mock.patch.object(pipeline, "WHOLE_AREA_BAND", rows):
+                np.testing.assert_array_equal(pipeline._box_sum_2d(arr, k), whole)
+
+
 class TestCombineScrubStrata(unittest.TestCase):
     def test_weighted_combine_stays_within_zero_one_and_at_most_total_near(self):
         rng = np.random.default_rng(42)
