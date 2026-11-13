@@ -20,11 +20,12 @@
 #   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin);
 #   Dockerfile: dropping task-lib.sh or drill.sh from the task scripts' COPY;
 #   Dockerfile: dropping `ENV PGDATA` (the cluster is made outside the mount, as #932 showed);
+#   Dockerfile: `FROM postgres:18.7-trixie` back to 18.6 (apt lifts the server to 18.7 for pgaudit: the version check);
 #   Dockerfile: a hard-coded `postgresql-16` in the install line (the image carries a major no OLD_MAJOR default asks for);
 #   the test layer (below): its build without `--build-arg OLD_MAJOR=16` (no 16 packages: no 16 database can be made);
 #   brain-entrypoint.sh: dropping the major-version guard, or moving it above the init/restore
 #     block (a 16 directory crashes the 18 server; a restored 16 backup does too);
-#   major-upgrade.sh: `--copy` -> `--link` (the old cluster is no longer a rollback);
+#   major-upgrade.sh: `--copy` -> `--link` (the old cluster stops being the failed upgrade's fallback);
 #   major-upgrade.sh: dropping `-c archive_mode=off` from the old server's start or from
 #     --old-options (an old cluster archives into the repository);
 #   major-upgrade.sh: dropping the server.crt/server.key copy (a new certificate);
@@ -103,6 +104,10 @@ check "PGDATA is the mounted path" [ "$(docker image inspect -f '{{range .Config
 check "the cluster is in the mount" [ "$(sql -c 'show data_directory')" = "$DATA" ]
 check "the image runs the Postgres major the Dockerfile pins" \
   [ "$(sql -c 'show server_version_num' | cut -c1-2)" = "$(sed -n 's/^FROM postgres:\([0-9]*\)\..*/\1/p' Dockerfile)" ]
+# A package that depends on a newer server (pgaudit has) makes apt lift the one the base image brought; the FROM line names the
+# version the image runs, so such a lift fails here instead of drifting.
+check "the server's version is the FROM line's" \
+  [ "$(sql -c 'show server_version' | cut -d' ' -f1)" = "$(sed -n 's/^FROM postgres:\([0-9.]*\)-.*/\1/p' Dockerfile)" ]
 # The default image carries its own major and the Dockerfile's OLD_MAJOR default, which is empty between upgrades and set
 # for a transition (docs/operations/brain.md). The default is read from the Dockerfile, so a transition sets it deliberately,
 # in that one place; a package no default asks for fails here.
@@ -394,7 +399,7 @@ else
 fi
 docker rm -f -v $C > /dev/null
 
-# The old cluster is the rollback: the 16 server still starts on it and finds its row, and not the new one.
+# The old cluster is what a failed upgrade leaves for the old tag: the 16 server still starts on it and finds its row, and not the new one.
 check "the 16 server starts on the kept old cluster and finds its row" \
   [ "$(docker run --rm -v $V:/data --entrypoint bash "$UPIMG" -c '
     B=/usr/lib/postgresql/16/bin

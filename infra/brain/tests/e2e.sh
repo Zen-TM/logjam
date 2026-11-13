@@ -42,9 +42,10 @@
 #   host/boot.sh: the refusal of data newer than the image deleted (`[ "$have" -le "$want" ] || die` -> `true`) [14]
 #   host/boot.sh: stanza-create always (the `if [ -n "$want" ] && ... ; then pgb stanza-upgrade; else` -> `if false; then ...`) [14, 14b]
 #   host/boot.sh: stanza-upgrade always in an existing boot (the same condition -> `if [ "$mode" = existing ] && [[ $sv =~ ^[0-9]*$ ]]`) [14c]
-#   host/boot.sh: the newest backup's major no longer compared (`[ "$repo_major" != "$want" ]` -> `false` in the `if`) [14, 14b]
+#   host/boot.sh: the newest backup's major not compared (`[ "$repo_major" != "$want" ]` -> `false` in the `if`) [14, 14b]
 #   host/boot.sh: the failed upgrade not failing the boot (`|| die "the major upgrade failed ...` -> `|| true`) [14]
-#   host/boot.sh: the first `touch "$gate"` (before the upgrade container) -> `true` [14b]
+#   host/boot.sh: `touch "$gate"` (before the upgrade container) -> `true` [14b]
+#   host/boot.sh: the `rm -f "$gate"` after the full backup deleted (the marker outlives it, so the check below it dies) [14]
 #   host/boot.sh: `[ "$repo_major" != "$want" ] || rm -f "$gate"` deleted (the old tag put back keeps the marker) [14]
 #   host/boot.sh: `[ ! -e "$gate" ] || die ...` deleted (a boot that cannot confirm a backup exits 0) [14b]
 #   host/release-agent.sh: not honouring the marker (its `[ ! -e "$gate" ] ||` line deleted) [14b]
@@ -1131,7 +1132,7 @@ drill e2e-backups-16a -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-cre
 check "the restore drill passes on the upgraded repository (exit $rc)" [ "$rc" = 0 ]
 check "...and says ok" [ "$(drill_field ok)" = True ]
 
-# The 18 data under the 16 image again (the tag put back after the upgrade): refused before anything starts.
+# 18 data under the 16 image: refused before anything starts.
 fulls_after=$(fulls)
 reboot
 brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"

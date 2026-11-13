@@ -247,14 +247,10 @@ fails when it is broken.
   starts nothing; data of a newer major than the image is refused; and a server
   start on another major's directory, including a restored old backup, stops
   with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
-  The image carries the old major's binaries only for the transition, and they
-  go once prod is on the new one (updated 2026-11-13: the Dockerfile carries 18
-  only, the old major's packages come in through its `OLD_MAJOR` argument, which
-  the tests pass, and prod's pinned image keeps both until its tag next moves). Going back
-  to the old major after a successful upgrade is not supported, and neither is a
-  rewind to a time before one (updated 2026-11-13: the maintainer's call, the app
-  is not released); a failed upgrade still leaves the old cluster intact for the
-  old tag to boot. Guards: scenarios 14 to 14c of `e2e.sh`, and the major-version
+  The image carries the old major's binaries only for a transition: the
+  Dockerfile's `OLD_MAJOR` argument, empty by default, installs them, and the
+  tests pass it. A failed upgrade leaves the old cluster intact for the old tag
+  to boot. Guards: scenarios 14 to 14c of `e2e.sh`, and the major-version
   guard and upgrade checks in `infra/brain/postgres/tests/test.sh`. What still holds the
   decision up: boot.sh is the only thing that starts Postgres, and it never
   deletes a cluster. Everything else above stands.
@@ -306,8 +302,7 @@ fails when it is broken.
   `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
   each process's memory, are not.
 - **Negative: the host files are 90 % of what EC2 allows.** They travel in the
-  instance's user data, 14,766 bytes gzipped of EC2's 16,384 (updated
-  2026-11-12: 13,839 before the major upgrade step in `infra/brain/host/boot.sh`), and a guard
+  instance's user data, 14,769 bytes gzipped of EC2's 16,384, and a guard
   stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose
   plugin.
@@ -399,21 +394,14 @@ fails when it is broken.
   requests a second (15 held) against 80 with burst. Rejected for `unlimited`, accepting the worst case above.
 - **For the major upgrade: `pg_upgrade --link`, or a dump and restore.** Link
   mode is faster and needs no free space, and the official 18 image's layout
-  (`/var/lib/postgresql/18/docker`) is made for it, but it leaves the old
-  cluster unusable once the new server has run, so it is no rollback; a
+  (`/var/lib/postgresql/18/docker`) is made for it, but a failed
+  upgrade could not be counted on to leave the old cluster intact for the old tag
+  to boot, since both clusters share its files; a
   `pg_dump`/restore keeps the old cluster but takes a long outage on a large
   database, and a restore of the repository's newest backup under the new
   server is impossible. Rejected for copy mode between two directories of the
   data volume, which is why the image sets `PGDATA` to the path every mount
   here uses instead of 18's default.
-- **A way back to the old major after an upgrade, or a restore from before
-  one.** Built in #950 (a runbook procedure and e2e scenarios 14d and 14e: the
-  old cluster put back by hand, the old tag pinned, `stanza-upgrade` moving the
-  stanza back down, which pgBackRest allows as a new history entry) and then
-  removed: the app is not released, so the rollback is not worth keeping tested
-  and documented. Do not rebuild it in passing. The old cluster stays at
-  `/data/postgres-<N>` until a human deletes it, but a way back is unsupported
-  and untested: its being kept is no promise of one.
 - **WAL-G instead of pgBackRest.** Compared on paper only. pgBackRest passed
   every requirement in a spike on real S3 with Object Lock (archiving, full
   backups, expiry by delete marker, restore after expiry, a restore as of a

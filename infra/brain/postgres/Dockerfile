@@ -5,7 +5,9 @@
 # No arch-specific steps: it builds for linux/amd64 and linux/arm64 as is.
 # A new major needs more than this line: docs/operations/brain.md ("Upgrading
 # Postgres to a new major"). Guard: infra/scripts/rollback-compat-mirrors-ci.py.
-FROM postgres:18.6-trixie
+# The server this image runs is this tag's version: tests/test.sh ("the server's
+# version is the FROM line's") fails when a package lifts it.
+FROM postgres:18.7-trixie
 
 # The data stays where every mount in this repository puts it. 18's own default,
 # /var/lib/postgresql/18/docker under a VOLUME at /var/lib/postgresql, is made for
