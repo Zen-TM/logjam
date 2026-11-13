@@ -9,7 +9,7 @@
 // simulated-region archives are built, which sets the real values; the archive
 // paths follow `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
-import type { Region, RegionTerrain, Ring } from "./regions.js";
+import type { Region, RegionTerrain, Ring, TileBytes } from "./regions.js";
 
 type Box = readonly [number, number, number, number];
 
@@ -21,6 +21,19 @@ function ringAround([west, south, east, north]: Box, margin = 0.02): Ring {
     [east + margin, north + margin],
     [west - margin, north + margin],
   ];
+}
+
+/**
+ * Placeholder figures, not measurements: one size for every zoom of an archive,
+ * until the simulated archives are built and their tiles measured.
+ */
+function placeholderTileBytes(minzoom: number, maxzoom: number): TileBytes {
+  return Object.fromEntries(
+    Array.from({ length: maxzoom - minzoom + 1 }, (_, i) => [
+      minzoom + i,
+      { meanBytes: 30_000, p90Bytes: 45_000 },
+    ]),
+  );
 }
 
 /** The heights, slope, hillshade and contours of a simulated region. */
@@ -35,8 +48,9 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
     sampleZoom: 15,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
+    tileBytes: placeholderTileBytes(8, 15),
     ...credit("Elevation"),
-  } as const satisfies DemSource;
+  } as const satisfies DemSource & { tileBytes: TileBytes };
   return {
     heights,
     slope: {
@@ -44,6 +58,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: `master/dem/${id}-slope.pmtiles`,
       minzoom: 8,
       maxzoom: 15,
+      tileBytes: placeholderTileBytes(8, 15),
       ...credit("Slope"),
     },
     hillshade: {
@@ -51,6 +66,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: heights.archivePath,
       minzoom: 8,
       maxzoom: heights.sampleZoom,
+      tileBytes: heights.tileBytes,
       ...credit("Hillshade"),
     },
     contours: {
@@ -58,6 +74,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: `master/contours/${id}-10m.pmtiles`,
       minzoom: 11,
       maxzoom: 14,
+      tileBytes: placeholderTileBytes(11, 14),
       ...credit("Contours"),
     },
   };

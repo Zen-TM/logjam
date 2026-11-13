@@ -171,9 +171,8 @@ Nothing new calls it.
   lacks, and only that", which covers the slope too, and "files a slope clip
   as the DEM the map colours"). A 40 km Katoomba box's slope clip, planned
   with `planExtract` from a local copy of the Katoomba sheet's slope, is
-  64 MB in 53 requests, and `SLOPE_TILE_BYTES` in
-  `shared/src/mapRegionEstimate.ts` prices the statewide archive's at about
-  71 MB.
+  64 MB in 53 requests, and `NSW_REGION.terrain.slope.tileBytes` in
+  `shared/src/regions.ts` prices the statewide archive's at about 71 MB.
 - **Update 2026-10-24: the NSW 5 m height clip is cut from z8 to z15, so
   Logjam GPS draws the Terrain group's Hillshade offline.** MapLibre shades the
   height archive itself, and a z15-only clip would shade only close in, so

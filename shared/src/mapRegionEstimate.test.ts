@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
+import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
+import { landClip } from "./nswLand.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_AREA_KM2,
@@ -18,10 +20,13 @@ import {
   planRegionTiles,
   regionEdgesKm,
   xyzToTmsRow,
+  type MultiSourceRegionPlan,
   type OfflineBasemapId,
   type RegionBbox,
+  type SaveClipKind,
 } from "./mapRegionEstimate.js";
-import { NSW_REGION } from "./regions.js";
+import { NSW_REGION, REGIONS, type Region } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
@@ -217,15 +222,28 @@ describe("estimateRegionSize", () => {
 
   it("throws on an unknown source rather than guessing a size", () => {
     const plan = planRegionTiles(TEN_KM, 12, 12);
-    expect(() =>
-      estimateRegionSize(plan, "six-nope" as OfflineBasemapId),
-    ).toThrow();
+    expect(() => estimateRegionSize(plan, "six-nope")).toThrow();
+  });
+
+  // Mutation: drop the offline-capable raster check in `pyramidTileBytes` and
+  // the refusal is a TypeError on missing figures, not the named error.
+  it("refuses a basemap that is not a downloadable raster", () => {
+    const plan = planRegionTiles(TEN_KM, 12, 12);
+    const refused = BASEMAP_CATALOG.filter(
+      (e) => !(e.offlineCapable && e.kind === "raster"),
+    );
+    expect(refused.map((e) => e.id)).toContain("osm");
+    expect(refused.map((e) => e.id)).toContain("protomaps");
+    for (const { id } of refused)
+      expect(() => estimateRegionSize(plan, id)).toThrow(/Unknown offline/);
   });
 });
 
 describe("planRegionForBasemaps", () => {
   const maxZoomFor = (id: OfflineBasemapId) =>
-    ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id];
+    ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id]!;
+  const clip = (job: MultiSourceRegionPlan, kind: SaveClipKind) =>
+    job.clips.find((c) => c.kind === kind)!.size;
 
   /** The basemap pyramids only — every plan also carries the DEM (see below). */
   const basemapSources = (job: ReturnType<typeof planRegionForBasemaps>) =>
@@ -235,20 +253,25 @@ describe("planRegionForBasemaps", () => {
   // leaves it offline has no height, and no source to measure the seam in.
   it("saves a clip of every DEM archive the area touches, on top of the worldwide tiles", () => {
     const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
-    expect(job.demArchives.map((a) => a.sourceId)).toEqual(["nsw-5m"]);
+    expect(
+      job.clips.filter((c) => c.kind === "heights").map((c) => c.archive.id),
+    ).toEqual(["nsw-5m"]);
     expect(job.perSource.map((s) => s.basemapId)).toEqual([DEM_SOURCE_ID]);
     // The clips count toward the bytes the free-space check reads, not the
     // tiles the politeness cap counts.
     const tiles = job.perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
     expect(job.totalTiles).toBe(tiles);
+    expect(job.clips.map((c) => c.kind)).toEqual([
+      "heights",
+      "slope",
+      "contours",
+      "land",
+      "fire",
+      "coverage",
+    ]);
     expect(job.p90Bytes).toBe(
       job.perSource[0].size.p90Bytes +
-        job.demArchives[0].size.p90Bytes +
-        job.contours.p90Bytes +
-        job.slope.p90Bytes +
-        job.land.p90Bytes +
-        job.fire.p90Bytes +
-        job.coverage.p90Bytes,
+        job.clips.reduce((sum, c) => sum + c.size.p90Bytes, 0),
     );
   });
 
@@ -256,9 +279,12 @@ describe("planRegionForBasemaps", () => {
   // undercounts the z8-14 tiles the hillshade is drawn from offline.
   it("prices the height clip at every zoom the hillshade is drawn at", () => {
     const b = { west: 150.2, south: -33.78, east: 150.3, north: -33.69 };
-    const [clip] = planRegionForBasemaps(b, [], 15, maxZoomFor).demArchives;
+    const heights = clip(
+      planRegionForBasemaps(b, [], 15, maxZoomFor),
+      "heights",
+    );
     const z15 = planRegionTiles(b, 15, 15).totalTiles;
-    expect(clip!.size.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
+    expect(heights.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
     expect(demClipMinZoom(NSW_REGION.terrain.heights)).toBe(8);
     expect(demClipMinZoom(TERRARIUM)).toBe(TERRARIUM.sampleZoom);
   });
@@ -268,84 +294,145 @@ describe("planRegionForBasemaps", () => {
   it("counts the contour clip in the bytes", () => {
     const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
     // A real clip of 10 km of the Grose gorge is 1.7 MB.
-    expect(job.contours.meanBytes).toBeGreaterThan(1_200_000);
-    expect(job.contours.p90Bytes).toBeLessThan(2_500_000);
+    expect(clip(job, "contours").meanBytes).toBeGreaterThan(1_200_000);
+    expect(clip(job, "contours").p90Bytes).toBeLessThan(2_500_000);
     expect(job.meanBytes).toBe(
       job.perSource[0].size.meanBytes +
-        job.demArchives[0].size.meanBytes +
-        job.contours.meanBytes +
-        job.slope.meanBytes +
-        job.land.meanBytes +
-        job.fire.meanBytes +
-        job.coverage.meanBytes,
+        job.clips.reduce((sum, c) => sum + c.size.meanBytes, 0),
     );
   });
 
-  // Mutation: halve FIRE_TILE_BYTES, and the estimate no longer brackets the
+  // Mutation: halve the fire archive's `tileBytes`, and the estimate no longer brackets the
   // measured clip. (Leaving it out of the totals turns the two sum tests
   // above red.)
   it("prices the fire clip from its measured tiles", () => {
     // A real clip of 40 km of the Blue Mountains is 795 KB.
     const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
-    const { fire } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    const fire = clip(planRegionForBasemaps(box, [], 15, maxZoomFor), "fire");
     expect(fire.meanBytes).toBeGreaterThan(650_000);
     expect(fire.meanBytes).toBeLessThan(950_000);
     expect(fire.p90Bytes).toBeGreaterThan(795_000);
     expect(fire.p90Bytes).toBeLessThan(2_500_000);
   });
 
-  // Mutation: halve COVERAGE_TILE_BYTES, and the estimate no longer brackets
+  // Mutation: halve the coverage archive's `tileBytes`, and the estimate no longer brackets
   // the measured clip. (Leaving it out of the totals turns the two sum tests
   // above red.)
   it("prices the coverage clip from its measured tiles", () => {
     // A real clip of 40 km of the Blue Mountains is 346 KB: 42 z12 tiles.
     const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
-    const { coverage } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    const coverage = clip(
+      planRegionForBasemaps(box, [], 15, maxZoomFor),
+      "coverage",
+    );
     expect(coverage.meanBytes).toBeGreaterThan(300_000);
     expect(coverage.meanBytes).toBeLessThan(400_000);
     expect(coverage.p90Bytes).toBeGreaterThan(400_000);
     expect(coverage.p90Bytes).toBeLessThan(700_000);
   });
 
-  // Mutation: halve LAND_TILE_BYTES, and the estimate no longer brackets the
+  // Mutation: halve the land archive's `tileBytes`, and the estimate no longer brackets the
   // measured clip. (Leaving Land out of the totals turns the two sum tests
   // above red.)
   it("prices the land clip from its measured tiles", () => {
     // A real clip of 40 km of the Blue Mountains is 769 KB.
     const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
-    const { land } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    const land = clip(planRegionForBasemaps(box, [], 15, maxZoomFor), "land");
     expect(land.meanBytes).toBeGreaterThan(600_000);
     expect(land.meanBytes).toBeLessThan(950_000);
     expect(land.p90Bytes).toBeGreaterThan(769_000);
     expect(land.p90Bytes).toBeLessThan(2_000_000);
   });
 
-  // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets
+  // Mutation: halve the slope archive's `tileBytes`, and the estimate no longer brackets
   // the measured clip. (Leaving the slope out of the totals
   // turns the two sum tests above red.)
   it("prices the slope clip from its measured tiles", () => {
     const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
     // A real clip of this area, from the Katoomba sheet's slope, is 6.0 MB.
-    expect(job.slope.meanBytes).toBeGreaterThan(4_500_000);
-    expect(job.slope.meanBytes).toBeLessThan(6_000_000);
-    expect(job.slope.p90Bytes).toBeGreaterThan(6_000_000);
-    expect(job.slope.p90Bytes).toBeLessThan(8_000_000);
+    const slope = clip(job, "slope");
+    expect(slope.meanBytes).toBeGreaterThan(4_500_000);
+    expect(slope.meanBytes).toBeLessThan(6_000_000);
+    expect(slope.p90Bytes).toBeGreaterThan(6_000_000);
+    expect(slope.p90Bytes).toBeLessThan(8_000_000);
   });
 
-  // Mutation: add an archive source to DEM_SOURCES without its measured tile
-  // size, and planning any area inside it throws.
-  it("has a measured tile size for every archive source", () => {
-    for (const source of DEM_SOURCES.filter((s) => s.archivePath != null)) {
-      const [west, south] = source.coverage ?? [150, -34];
-      const inside = {
-        west,
-        south,
-        east: west + 0.05,
-        north: south + 0.05,
-      };
-      const job = planRegionForBasemaps(inside, [], 15, maxZoomFor);
-      expect(job.demArchives.map((a) => a.sourceId)).toContain(source.id);
+  // Mutation: delete one zoom from an archive's `tileBytes` and planning an
+  // area inside it throws, whichever archive it is.
+  it("holds figures for every zoom a save clips", () => {
+    let archives = 0;
+    for (const region of [NSW_REGION, ...SIM_REGIONS, SIM_WORLD]) {
+      const { heights, slope, contours, land, fire, coverage } = region.terrain;
+      const zooms = [
+        heights && [
+          demClipMinZoom(heights, [region]),
+          heights.sampleZoom,
+          heights,
+        ],
+        slope && [slope.minzoom, slope.maxzoom, slope],
+        contours && [contours.minzoom, contours.maxzoom, contours],
+        land && [landClip(land).minzoom, land.maxzoom, land],
+        fire && [fire.minzoom, fire.maxzoom, fire],
+        coverage && [coverage.minzoom, coverage.maxzoom, coverage],
+      ].filter((z) => !!z) as [number, number, { tileBytes: object }][];
+      for (const [min, max, { tileBytes }] of zooms) {
+        archives++;
+        for (let z = min; z <= max; z++)
+          expect(tileBytes, `${region.id} at z${z}`).toHaveProperty(`${z}`);
+      }
     }
+    // Six of NSW, three of each simulated region, the world's heights.
+    expect(archives).toBeGreaterThanOrEqual(6 + 3 + 3 + 1);
+  });
+
+  // Mutation: read the clips from `REGIONS` instead of the `regions` argument,
+  // and a simulated box is priced as a box in the sea.
+  it("clips the archives of the simulated region a box lies in, and only those", () => {
+    const wanaka = { west: 169.05, south: -44.65, east: 169.15, north: -44.6 };
+    const job = planRegionForBasemaps(wanaka, [], 15, maxZoomFor, SIM_REGIONS);
+    expect(job.clips.map((c) => [c.archive.id, c.kind])).toEqual([
+      ["simnz-heights", "heights"],
+      ["simnz-slope", "slope"],
+      ["simnz-contours", "contours"],
+    ]);
+    // Placeholder figures, 30 KB a tile at every zoom: the tile counts say the rest.
+    const tiles = (min: number, max: number) =>
+      planRegionTiles(wanaka, min, max).totalTiles;
+    expect(job.clips.map((c) => c.size.meanBytes)).toEqual([
+      tiles(8, 15) * 30_000,
+      tiles(8, 15) * 30_000,
+      tiles(11, 14) * 30_000,
+    ]);
+    // NSW is not touched, so none of its archives are priced.
+    expect(job.clips.some((c) => c.archive.id.startsWith("nsw"))).toBe(false);
+  });
+
+  // Mutation: stop at the first region touching the box, and the second
+  // region's archives are never saved.
+  it("clips the archives of every region a box touches", () => {
+    // Utah's declaration with NSW's border: two regions over the same ground.
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, [
+      NSW_REGION,
+      overlap,
+    ]);
+    expect(
+      job.clips.filter((c) => c.kind === "slope").map((c) => c.archive.id),
+    ).toEqual(["nsw-5m-slope", "simutah-slope"]);
+    // Utah's heights lie far from this box, so only its slope and contours add.
+    expect(job.clips.filter((c) => c.kind === "heights")).toHaveLength(1);
+  });
+
+  it("saves the clips of the one region in a box that touches only it, with every region on", () => {
+    const only = (box: RegionBbox) =>
+      planRegionForBasemaps(box, [], 15, maxZoomFor, [
+        NSW_REGION,
+        ...SIM_REGIONS,
+      ]).clips.map((c) => c.archive.id.split("-")[0]);
+    expect(new Set(only(TEN_KM))).toEqual(new Set(["nsw"]));
+    expect(
+      new Set(only({ west: -110.85, south: 38.25, east: -110.8, north: 38.3 })),
+    ).toEqual(new Set(["simutah"]));
   });
 
   it("saves no archive for an area outside every archive's coverage", () => {
@@ -424,4 +511,120 @@ describe("planRegionForBasemaps", () => {
     const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 14, maxZoomFor);
     expect(job.perSource[0].plan.perZoom[0].z).toBe(REGION_MIN_ZOOM);
   });
+});
+
+// What a save cost before the figures moved onto the archives, measured from
+// that code for four boxes and three basemap choices. A save in New South Wales
+// must cost the same to the byte; outside it, only what the box's own tiles
+// cost. Mutation: drop one NSW clip from `planRegionForBasemaps` (the slope, say)
+// and the inside and border rows go red; clip NSW's archives for every box
+// again and the outside rows go red.
+describe("what a save costs, by the archives that cover its box", () => {
+  const ids = {
+    none: [],
+    topo: ["six-topo"],
+    all: ["six-topo", "six-base", "six-imagery"],
+  } as const;
+  const maxZoomFor = (id: string) =>
+    ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id]!;
+  const cost = (box: RegionBbox, which: keyof typeof ids) => {
+    const job = planRegionForBasemaps(box, [...ids[which]], 17, maxZoomFor);
+    return [job.meanBytes, job.p90Bytes, job.totalTiles, job.seconds];
+  };
+
+  const INSIDE = TEN_KM;
+  const BLUE_MOUNTAINS_40_KM = {
+    west: 150.05,
+    south: -33.95,
+    east: 150.5,
+    north: -33.55,
+  };
+  // Two corners in Victoria, across the Murray from Albury.
+  const ACROSS_BORDER = {
+    west: 146.85,
+    south: -36.3,
+    east: 147.05,
+    north: -36.15,
+  };
+  const PERTH = { west: 115.8, south: -32.0, east: 115.9, north: -31.9 };
+  // The Victorian Alps: inside the height archive's box, outside NSW's border.
+  const VICTORIAN_ALPS = {
+    west: 146.0,
+    south: -37.2,
+    east: 146.1,
+    north: -37.1,
+  };
+
+  it.each([
+    ["inside NSW", "none", INSIDE, [13_222_297, 17_837_433, 9, 3]],
+    ["inside NSW", "topo", INSIDE, [25_052_493, 35_611_765, 629, 210]],
+    ["inside NSW", "all", INSIDE, [103_419_819, 139_675_896, 5231, 1744]],
+    [
+      "a 40 km box in the Blue Mountains",
+      "none",
+      BLUE_MOUNTAINS_40_KM,
+      [178_903_827, 237_371_346, 132, 44],
+    ],
+    [
+      "a 40 km box in the Blue Mountains",
+      "topo",
+      BLUE_MOUNTAINS_40_KM,
+      [370_595_289, 527_154_577, 10_117, 3373],
+    ],
+    [
+      "a 40 km box in the Blue Mountains",
+      "all",
+      BLUE_MOUNTAINS_40_KM,
+      [1_685_931_572, 2_276_367_514, 88_167, 29_389],
+    ],
+    [
+      "across NSW's border",
+      "none",
+      ACROSS_BORDER,
+      [35_295_924, 47_008_242, 30, 10],
+    ],
+    [
+      "across NSW's border",
+      "topo",
+      ACROSS_BORDER,
+      [69_522_119, 98_594_391, 1818, 606],
+    ],
+    [
+      "across NSW's border",
+      "all",
+      ACROSS_BORDER,
+      [302_863_872, 408_758_584, 15_606, 5202],
+    ],
+  ] as const)(
+    "costs %s with %s maps as it did before",
+    (_name, which, box, figures) => {
+      expect(cost(box, which)).toEqual(figures);
+    },
+  );
+
+  // Mutation: clip NSW's archives for every box, as the estimate did, and a
+  // save outside New South Wales is priced for archives it will not cut.
+  it.each([
+    ["Perth", "none", PERTH, [443_330, 489_777, 12, 4]],
+    ["Perth", "topo", PERTH, [12_147_523, 18_090_081, 625, 209]],
+    ["Perth", "all", PERTH, [88_576_708, 119_540_702, 5107, 1703]],
+    ["the Victorian Alps", "none", VICTORIAN_ALPS, [443_330, 489_777, 12, 4]],
+    [
+      "the Victorian Alps",
+      "topo",
+      VICTORIAN_ALPS,
+      [12_694_149, 18_885_968, 655, 219],
+    ],
+    [
+      "the Victorian Alps",
+      "all",
+      VICTORIAN_ALPS,
+      [95_416_085, 128_712_616, 5513, 1838],
+    ],
+  ] as const)(
+    "costs %s with %s maps for its own tiles and the worldwide heights only",
+    (_name, which, box, figures) => {
+      expect(cost(box, which)).toEqual(figures);
+    },
+  );
 });

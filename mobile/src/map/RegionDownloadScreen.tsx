@@ -48,7 +48,6 @@ import {
   NSW_COVERAGE,
   NSW_FIRE,
   planRegionForBasemaps,
-  type OfflineBasemapId,
   type RegionBbox,
   MAP_TERRAIN,
 } from "@logjam/shared";
@@ -126,7 +125,7 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * against tens for one raster, and the route and measure tools snap to it, so
  * leaving it optional would mean a tool that quietly stops working in the field.
  */
-type SelectableId = OfflineBasemapId;
+type SelectableId = "six-topo" | "six-base" | "six-imagery";
 const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
 
 /**
@@ -507,7 +506,9 @@ export function RegionDownloadScreen({
         })),
         ...regionClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
-          job.demArchives.map(({ sourceId }) => sourceId),
+          job.clips
+            .filter(({ kind }) => kind === "heights")
+            .map(({ archive }) => archive.id),
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
       ]);

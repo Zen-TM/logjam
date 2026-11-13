@@ -30,6 +30,15 @@ import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 /** One closed outline of [lon, lat]; the last vertex joins the first. */
 export type Ring = readonly (readonly [lon: number, lat: number])[];
 
+/**
+ * Measured bytes of one stored tile at each zoom an archive holds: what an
+ * offline save of it costs (`planRegionForBasemaps`). Guard:
+ * `mapRegionEstimate.test.ts` ("holds figures for every zoom a save clips").
+ */
+export type TileBytes = Readonly<
+  Record<number, { meanBytes: number; p90Bytes: number }>
+>;
+
 /** A layer archive Logjam builds and serves under the CDN's `/master`. */
 export type TerrainArchive = {
   /** A saved clip is filed under this, beside the area it was saved with. */
@@ -40,12 +49,14 @@ export type TerrainArchive = {
   coverage: readonly [number, number, number, number];
   credit: string;
   creditHtml: string;
+  tileBytes: TileBytes;
 };
 
 /** The height source the other archives are cut from; one of the region's `dem`. */
 export type HeightsArchive = DemSource & {
   archivePath: string;
   coverage: TerrainArchive["coverage"];
+  tileBytes: TileBytes;
 };
 export type LandArchive = TerrainArchive & {
   sourceLayer: string;
@@ -139,13 +150,31 @@ const NSW_HEIGHTS = {
   coverage: [140.9, -37.6, 153.7, -28.0],
   urlTemplate: null,
   archivePath: "master/dem/nsw-5m.pmtiles",
+  // z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
+  // 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
+  // so the p90 is the rugged figure, not a statistical one. z8–z14: one figure
+  // for all seven, from clips of the Katoomba sheet (single zooms, tiles of
+  // 43–56 KB) and of the Katoomba Falls box (the 15 tiles under z15 averaged
+  // 59 KB), a rugged place, so it is the p90; the mean is the same 0.72 of it
+  // that z15's is. Low zooms have too few whole tiles on the sheet to say more.
+  // A save clips z8 to z15, the hillshade's zooms (`demClipMinZoom`).
+  tileBytes: {
+    8: { meanBytes: 42_000, p90Bytes: 60_000 },
+    9: { meanBytes: 42_000, p90Bytes: 60_000 },
+    10: { meanBytes: 42_000, p90Bytes: 60_000 },
+    11: { meanBytes: 42_000, p90Bytes: 60_000 },
+    12: { meanBytes: 42_000, p90Bytes: 60_000 },
+    13: { meanBytes: 42_000, p90Bytes: 60_000 },
+    14: { meanBytes: 42_000, p90Bytes: 60_000 },
+    15: { meanBytes: 24_000, p90Bytes: 36_000 },
+  },
   // The licence asks for the credit, the licence's name, a note that this is
   // derived, and the date it was extracted from Spatial Services.
   credit:
     "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
   creditHtml:
     'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
-} as const satisfies DemSource;
+} as const satisfies DemSource & { tileBytes: TileBytes };
 
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({
@@ -215,6 +244,19 @@ export const NSW_REGION = {
       archivePath: "master/dem/nsw-5m-slope.pmtiles",
       minzoom: 8,
       maxzoom: 15,
+      // Measured from every whole tile of the Katoomba sheet, one of the most
+      // rugged, so the mean is already a mountain figure: 1° steps, PNG level
+      // 6. Zooms under 11 take z11's, as the sheet holds no whole tile there.
+      tileBytes: {
+        8: { meanBytes: 39_000, p90Bytes: 64_000 },
+        9: { meanBytes: 39_000, p90Bytes: 64_000 },
+        10: { meanBytes: 39_000, p90Bytes: 64_000 },
+        11: { meanBytes: 39_000, p90Bytes: 64_000 },
+        12: { meanBytes: 40_000, p90Bytes: 58_000 },
+        13: { meanBytes: 42_000, p90Bytes: 53_000 },
+        14: { meanBytes: 36_000, p90Bytes: 45_000 },
+        15: { meanBytes: 28_000, p90Bytes: 33_000 },
+      },
       ...derived("Slope"),
     },
     // MapLibre's own `hillshade` layer on the height archive itself, at the
@@ -224,6 +266,9 @@ export const NSW_REGION = {
       archivePath: NSW_HEIGHTS.archivePath,
       minzoom: 8,
       maxzoom: NSW_HEIGHTS.sampleZoom,
+      // Shaded from the height archive itself, so a save clips it once, as the
+      // heights.
+      tileBytes: NSW_HEIGHTS.tileBytes,
       ...derived("Hillshade"),
     },
     // 10 m contours cut from the heights by `topo/build_nsw_dem.py contours`,
@@ -235,6 +280,18 @@ export const NSW_REGION = {
       archivePath: "master/contours/nsw-10m.pmtiles",
       minzoom: 11,
       maxzoom: 14,
+      // Measured from single-zoom clips of the Katoomba and Port Hacking
+      // sheets. A clip is whole tiles, so a small area costs far more per
+      // square kilometre than a large one, and only a tile count says so.
+      // People save rugged ground: the p90 is the Grose gorge, the mean leans
+      // toward the mountains and away from the coastal plain, which is a third
+      // to a quarter of it.
+      tileBytes: {
+        11: { meanBytes: 110_000, p90Bytes: 147_000 },
+        12: { meanBytes: 40_000, p90Bytes: 47_000 },
+        13: { meanBytes: 15_000, p90Bytes: 18_000 },
+        14: { meanBytes: 24_000, p90Bytes: 28_000 },
+      },
       ...derived("Contours"),
     },
     // Who holds the land, from the NSW Land Tenure layer, built by
@@ -249,6 +306,12 @@ export const NSW_REGION = {
       /** The build script's zooms (test_land_tenure.py): z13 is about a metre, and deeper ones overzoom. */
       minzoom: 8,
       maxzoom: 13,
+      // Measured as stored (gzip), from every tile of a 40 km Blue Mountains
+      // box. A save keeps z12 and z13 (`landClip`).
+      tileBytes: {
+        12: { meanBytes: 7_000, p90Bytes: 15_000 },
+        13: { meanBytes: 3_600, p90Bytes: 8_500 },
+      },
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
@@ -275,6 +338,16 @@ export const NSW_REGION = {
        *  finer than that. Deeper zooms overzoom. */
       minzoom: 8,
       maxzoom: 12,
+      // Measured as stored (gzip), from every tile of a 40 km Blue Mountains
+      // box, in the November 2026 build. A coarse tile holds every fire under
+      // it, so it weighs most.
+      tileBytes: {
+        8: { meanBytes: 89_000, p90Bytes: 136_000 },
+        9: { meanBytes: 49_000, p90Bytes: 83_000 },
+        10: { meanBytes: 23_000, p90Bytes: 64_000 },
+        11: { meanBytes: 9_700, p90Bytes: 33_000 },
+        12: { meanBytes: 3_100, p90Bytes: 9_000 },
+      },
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
@@ -298,6 +371,9 @@ export const NSW_REGION = {
        *  spacing (about 190 m at z12). Deeper zooms overzoom. */
       minzoom: 12,
       maxzoom: 12,
+      // Measured as stored (gzip), every carrier's together, from every tile
+      // of a 40 km Blue Mountains box, in the 2026 release's build.
+      tileBytes: { 12: { meanBytes: 8_300, p90Bytes: 13_900 } },
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",

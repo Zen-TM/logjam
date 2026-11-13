@@ -44,7 +44,6 @@ const STILL_NAMING = [
   "shared/src/demSources.ts",
   "shared/src/geoPdfBaseLayers.ts",
   "shared/src/geocode.ts",
-  "shared/src/mapRegionEstimate.ts",
   "shared/src/nswContours.ts",
   "shared/src/nswCoverage.ts",
   "shared/src/nswFire.ts",
