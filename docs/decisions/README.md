@@ -144,4 +144,4 @@ supersede instead.
 | [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
 | [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
 | [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
-| [0034](0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md) | Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix | 2026-10-15 | Accepted |
+| [0048](0048-catchment-lookups-run-on-the-api-from-a-private-geopackage.md) | Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix | 2026-10-15 | Accepted |

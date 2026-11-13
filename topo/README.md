@@ -583,7 +583,7 @@ Then press a creek inside the basin on Logjam Web's map.
 
 Publishing is a prod change and the maintainer's to make. The layer goes to
 the topo bucket outside `master/`, so the CDN never serves it; only the API
-reads it ([ADR 0034](../docs/decisions/0034-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
+reads it ([ADR 0048](../docs/decisions/0048-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
 
 ```bash
 aws s3 cp dem/flow-network.gpkg \

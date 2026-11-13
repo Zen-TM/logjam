@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FLOW_NETWORK_KEY } from "./objectKey";
 
-// docs/decisions/0034: the layer is read by the API alone, so the CDN must
+// docs/decisions/0048: the layer is read by the API alone, so the CDN must
 // never serve it, or anyone could download the whole network.
 describe("FLOW_NETWORK_KEY", () => {
   // Mutation: move the layer under master/ (beside the DEM archive), and

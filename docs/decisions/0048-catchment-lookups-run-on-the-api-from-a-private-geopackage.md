@@ -1,4 +1,4 @@
-# 0034. Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix
+# 0048. Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix
 
 - **Date:** 2026-10-15
 - **Status:** Accepted
