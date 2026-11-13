@@ -13,7 +13,8 @@
 # on a CI runner or in a throwaway container, never on a real brain.
 # E2E_FAIL_FAST=1 stops at the first failure (for applying a mutation);
 # E2E_KEEP=1 leaves the host as it ends, for debugging (remove it by hand);
-# E2E_PREBUILT=1 skips the image builds (PG_IMAGE and API_IMAGE must exist);
+# E2E_PREBUILT=1 skips the image builds (PG_IMAGE and API_IMAGE must exist), but not the 16 test layer, which is built from the
+# working tree's Dockerfile, not layered on PG_IMAGE;
 # E2E_MS_PORT and E2E_TLS_PORT move the two ports it publishes (default 56010
 # and 56011); the API listens on port 80 of the host, as on the brain.
 #
@@ -192,7 +193,8 @@ if [ -z "${E2E_PREBUILT:-}" ]; then
   docker build -q -f api/Dockerfile --build-arg GIT_SHA=e2e -t "$API_IMAGE" . > /dev/null || fatal "the API image does not build"
 fi
 # The test layer scenario 14 needs: the Dockerfile built with OLD_MAJOR=16, which adds the previous major's packages
-# that prod's image does not carry (a major upgrade adds them for its transition: docs/operations/brain.md). UP_IMAGE is the pinned image of an
+# that prod's image does not carry (a major upgrade adds them for its transition: docs/operations/brain.md); built from the
+# working tree even under E2E_PREBUILT. UP_IMAGE is the pinned image of an
 # upgrade, since boot.sh runs major-upgrade.sh in it and that needs the 16 binaries. PG16_IMAGE is the previous image
 # as far as the scenario needs it: the same with the 16 server first on PATH and PG_MAJOR=16, so the real
 # entrypoints and boot.sh make a real 16 database the way prod's was made. The next major's upgrade changes the 16 here.

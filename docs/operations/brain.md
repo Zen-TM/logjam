@@ -298,7 +298,10 @@ sends you here):
 - The tests' layer: `postgres/tests/test.sh` (`UPIMG`, `IMG16`) and `tests/e2e.sh`
   (`UP_IMAGE`, `PG16_IMAGE`) build the Dockerfile with `--build-arg OLD_MAJOR=16`
   and use that image where old binaries are needed (to make old data and to
-  run the upgrade). Their `16` becomes the old major.
+  run the upgrade). Their `16` becomes the old major, and so does everything in
+  `test.sh` named for the majors: the new major in "upgraded 16 -> 18" and "the 18
+  server starts", the made-up older and newer versions (15 and 19) and the
+  "this image runs 18" grep.
 - `docs/dev-setup.md`: a developer's old volume meets the entrypoint's refusal
   and runs `make reset`.
 
@@ -511,7 +514,10 @@ On the host (run on a scratch copy):
   `brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
   lists each backup with its start and stop times and the archive's WAL range.
   The target must be after the oldest backup's stop and not after the newest
-  WAL. Fulls are nightly at 03:00 Sydney time and eight are kept.
+  WAL. Fulls are nightly at 03:00 Sydney time and eight are kept. A target
+  before the last major upgrade is not supported ("Upgrading Postgres to a new
+  major", "Going back is not supported"), though `info` lists the old major's
+  backups until they expire.
 - When it happened: the Postgres log group (`/logjam/brain/postgres`) has pgaudit
   lines in UTC for every write and DDL statement, with no values; a `DELETE` or a
   migration's statements show the time. The API log (`/logjam/brain/api`) shows

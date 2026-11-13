@@ -20,6 +20,7 @@
 #   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin);
 #   Dockerfile: dropping task-lib.sh or drill.sh from the task scripts' COPY;
 #   Dockerfile: dropping `ENV PGDATA` (the cluster is made outside the mount, as #932 showed);
+#   Dockerfile: a hard-coded `postgresql-16` in the install line (the image carries a major no OLD_MAJOR default asks for);
 #   the test layer (below): its build without `--build-arg OLD_MAJOR=16` (no 16 packages: no 16 database can be made);
 #   brain-entrypoint.sh: dropping the major-version guard, or moving it above the init/restore
 #     block (a 16 directory crashes the 18 server; a restored 16 backup does too);
@@ -102,6 +103,12 @@ check "PGDATA is the mounted path" [ "$(docker image inspect -f '{{range .Config
 check "the cluster is in the mount" [ "$(sql -c 'show data_directory')" = "$DATA" ]
 check "the image runs the Postgres major the Dockerfile pins" \
   [ "$(sql -c 'show server_version_num' | cut -c1-2)" = "$(sed -n 's/^FROM postgres:\([0-9]*\)\..*/\1/p' Dockerfile)" ]
+# The default image carries its own major and the Dockerfile's OLD_MAJOR default, which is empty between upgrades and set
+# for a transition (docs/operations/brain.md). The default is read from the Dockerfile, so a transition sets it deliberately,
+# in that one place; a package no default asks for fails here.
+carried=$(docker run --rm --entrypoint ls "$IMAGE" /usr/lib/postgresql | sort | tr '\n' ' ')
+wanted=$(printf '%s\n' "$(docker run --rm --entrypoint printenv "$IMAGE" PG_MAJOR)" "$(sed -n 's/^ARG OLD_MAJOR=//p' Dockerfile)" | grep . | sort | tr '\n' ' ')
+check "the image carries the Postgres majors it runs and OLD_MAJOR's default, no other (carries: $carried, wants: $wanted)" [ "$carried" = "$wanted" ]
 
 while IFS='|' read -r name want; do
   got=$(sql -c "show $name")
@@ -239,7 +246,8 @@ cleanup
 # --- the major-version guard, and upgrading a 16 database ----------------------------
 # The test layer: the Dockerfile built with OLD_MAJOR=16, which adds the previous major's packages that prod's image
 # does not carry (a major upgrade adds them for its transition: docs/operations/brain.md). UPIMG is that and nothing
-# else: it runs major-upgrade.sh and the 16 tools. IMG16 is the previous image as far as these tests need it: the same with the
+# else: it runs major-upgrade.sh and the 16 tools; it is built from the working tree's Dockerfile even under IMAGE_PREBUILT,
+# not layered on the prebuilt image. IMG16 is the previous image as far as these tests need it: the same with the
 # 16 server first on PATH and PG_MAJOR=16, so the real entrypoints make a real 16 database the way prod's was made.
 # The next major's upgrade changes the 16 here (and the 18 and OLD_MAJOR's default in the Dockerfile).
 UPIMG=$IMAGE-with-16

@@ -411,9 +411,9 @@ fails when it is broken.
   old cluster put back by hand, the old tag pinned, `stanza-upgrade` moving the
   stanza back down, which pgBackRest allows as a new history entry) and then
   removed: the app is not released, so the rollback is not worth keeping tested
-  and documented. Do not rebuild it in passing; the old cluster stays at
-  `/data/postgres-<N>` until a human deletes it, so a way back is still
-  possible by hand while it exists.
+  and documented. Do not rebuild it in passing. The old cluster stays at
+  `/data/postgres-<N>` until a human deletes it, but a way back is unsupported
+  and untested: its being kept is no promise of one.
 - **WAL-G instead of pgBackRest.** Compared on paper only. pgBackRest passed
   every requirement in a spike on real S3 with Object Lock (archiving, full
   backups, expiry by delete marker, restore after expiry, a restore as of a

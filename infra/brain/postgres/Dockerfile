@@ -19,7 +19,8 @@ ENV PGDATA=/var/lib/postgresql/data
 # the image carries one major. A major upgrade sets its default to the old major
 # for the transition, which adds that major's two packages for major-upgrade.sh to
 # read the old data with (docs/operations/brain.md, "Upgrading Postgres to a new
-# major"); the tests pass it as a build argument.
+# major"); the tests pass it as a build argument. Guard: tests/test.sh ("the image carries
+# the Postgres majors it runs and OLD_MAJOR's default, no other").
 ARG OLD_MAJOR=
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl jq openssl pgbackrest postgresql-18-pgaudit \
