@@ -5,13 +5,15 @@
 // The file is public and the same for everyone (ADR 0044), so it holds
 // nothing per user; Logjam GPS keeps its last copy for use offline.
 import {
-  aestDay,
+  gaugeDay,
   gaugeReadingOnDay,
   gaugeSeries,
   tripGaugeDay,
   type Gauge,
   type GaugeDayReading,
+  type GaugeFeedFormat,
   type GaugeHistoryFile,
+  type GaugeUnits,
 } from "../gauges.js";
 import type { ProfileSeries } from "../profileSeries.js";
 import { PAIRED_STAT_LABELS, pairedStatLayout } from "../statPairs.js";
@@ -168,19 +170,24 @@ export function gaugeAges(latest: GaugeLatest, now: number): GaugeAges {
 
 /** A gauge's figures: its level beside its flow (`STAT_PAIRS`), or the level
  *  alone on a gauge with no flow, each saying its own age when the two differ. */
-export function gaugeStats(gauge: Gauge, latest: GaugeLatest, now: number) {
+export function gaugeStats(
+  gauge: Gauge,
+  latest: GaugeLatest,
+  now: number,
+  units: GaugeUnits,
+) {
   const ages = gaugeAges(latest, now);
   const level = {
     label: GAUGES.copy.level,
     value:
       latest.level === null
         ? GAUGES.copy.noLevel
-        : formatGaugeLevel(latest.level),
+        : formatGaugeLevel(latest.level, units),
     age: ages.level,
   };
   const flow = {
     label: GAUGES.copy.flow,
-    value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow),
+    value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow, units),
     age: ages.flow,
   };
   return pairedStatLayout(gauge.hasFlow ? [level, flow] : [level]).map(
@@ -203,13 +210,14 @@ export function gaugeWeekCharts(
   });
 }
 
-export function formatGaugeLevel(metres: number): string {
-  return `${metres.toFixed(2)} m`;
+/** A level as the feed publishes it, in the feed's unit: never converted. */
+export function formatGaugeLevel(value: number, units: GaugeUnits): string {
+  return `${value.toFixed(2)} ${units.level}`;
 }
 
-export function formatGaugeFlow(megalitresPerDay: number): string {
-  const v = megalitresPerDay;
-  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ML/d`;
+/** A flow as the feed publishes it, in the feed's unit: never converted. */
+export function formatGaugeFlow(value: number, units: GaugeUnits): string {
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units.flow}`;
 }
 
 /** "45 min ago": how long before `now` a moment was. */
@@ -232,10 +240,14 @@ export function gaugeFileNote(generatedAt: string, now: number): string | null {
     : `${GAUGES.copy.staleFile} ${gaugeAgo(at, now)}`;
 }
 
-const values = (gauge: Gauge, r: GaugeDayReading | null): string =>
+const values = (
+  gauge: Gauge,
+  r: GaugeDayReading | null,
+  units: GaugeUnits,
+): string =>
   [
-    r?.level != null ? formatGaugeLevel(r.level) : null,
-    gauge.hasFlow && r?.flow != null ? formatGaugeFlow(r.flow) : null,
+    r?.level != null ? formatGaugeLevel(r.level, units) : null,
+    gauge.hasFlow && r?.flow != null ? formatGaugeFlow(r.flow, units) : null,
   ]
     .filter(Boolean)
     .join(" and ");
@@ -251,8 +263,10 @@ export function tripGaugeLines(
   dates: string[],
   when: "trip" | "lastTrip",
   now: number,
+  feed: GaugeFeedFormat,
 ): string[] {
-  const today = aestDay(now);
+  const { units, dayOffsetMinutes } = feed;
+  const today = gaugeDay(now, dayOffsetMinutes);
   const past = dates
     .flatMap((d) => tripGaugeDay(d) ?? [])
     .filter((day) => when === "trip" || day <= today)
@@ -261,11 +275,17 @@ export function tripGaugeLines(
   const days = when === "lastTrip" ? past.slice(0, 1) : past;
   const lines = inputs.flatMap(({ gauge, history }) => {
     for (const day of days) {
-      const then = gaugeReadingOnDay(gauge, history, day, now);
+      const then = gaugeReadingOnDay(
+        gauge,
+        history,
+        day,
+        now,
+        dayOffsetMinutes,
+      );
       if (!then) continue;
-      const current = values(gauge, latestGaugeReading(gauge, now));
+      const current = values(gauge, latestGaugeReading(gauge, now), units);
       return [
-        `${gaugeDisplayName(gauge.name)}: ${values(gauge, then)} ${
+        `${gaugeDisplayName(gauge.name)}: ${values(gauge, then, units)} ${
           when === "trip" ? GAUGES.copy.onThisTrip : GAUGES.copy.onLastTrip
         }, ${current ? `${current} ${GAUGES.copy.now}` : GAUGES.copy.noneNow}.`,
       ];

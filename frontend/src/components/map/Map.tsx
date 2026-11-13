@@ -3758,6 +3758,7 @@ function Map({
           gauge={openGauge}
           attribution={gaugeFile.attribution}
           generatedAt={gaugeFile.generatedAt}
+          units={gaugeFile.units}
           onClose={closeGauge}
         />
       )}
