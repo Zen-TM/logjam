@@ -6,6 +6,7 @@ import {
   areaExportTooLarge,
   AREA_EXPORT_OUTSIDE_TERRAIN,
   areaInTerrainRegion,
+  AREA_EXPORT_TOO_LARGE,
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
@@ -162,5 +163,12 @@ describe("areaExportStyleSnapshot", () => {
       {},
     );
     expect(areaExportStyleSnapshot("gpkg", { slopeBands: bands })).toEqual({});
+  });
+});
+
+describe("AREA_EXPORT_TOO_LARGE", () => {
+  // Mutation: change AREA_EXPORT_MAX_SIDE_KM to 120 without the sentence.
+  it("says the limit it enforces", () => {
+    expect(AREA_EXPORT_TOO_LARGE).toContain(`${AREA_EXPORT_MAX_SIDE_KM} km`);
   });
 });

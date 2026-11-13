@@ -10,6 +10,7 @@
 import { routeLengthM, type RoutePoint } from "../routeValidation.js";
 import { PAIRED_STAT_LABELS } from "../statPairs.js";
 import { formatDistanceM } from "../trackStats.js";
+import { formatHeight, formatHeightRange } from "../units.js";
 import type { IconIdea } from "../icons.js";
 import type { SnapMode } from "../snapToPath.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
@@ -148,13 +149,13 @@ export function mapMeasureFacts(input: {
       {
         key: "ascent",
         label: copy.ascent,
-        value: `↑ ${gain} m`,
+        value: `↑ ${formatHeight(terrain.gainM)}`,
         spoken: `${copy.ascent} ${gain} metres`,
       },
       {
         key: "descent",
         label: copy.descent,
-        value: `↓ ${loss} m`,
+        value: `↓ ${formatHeight(terrain.lossM)}`,
         spoken: `${copy.descent} ${loss} metres`,
       },
     );
@@ -167,5 +168,5 @@ export function mapMeasureRange(
   terrain: MapMeasureTerrain | null,
 ): string | null {
   if (terrain?.minM == null || terrain.maxM == null) return null;
-  return `${Math.round(terrain.minM)}–${Math.round(terrain.maxM)} m`;
+  return formatHeightRange(terrain.minM, terrain.maxM);
 }
