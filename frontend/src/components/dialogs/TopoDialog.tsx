@@ -16,7 +16,7 @@ import {
 import type { TBbox } from "../map/Map";
 import {
   abandonConfirm,
-  parseZipCentralDirectory,
+  readZipEntries,
   classifyElvisEntries,
   ElvisZipError,
   estimateElvisTileCount,
@@ -279,13 +279,10 @@ export default function TopoDialog({
     let cancelled = false;
     (async () => {
       try {
-        const tailSize = Math.min(65536, file.size);
-        const tail = await file
-          .slice(file.size - tailSize, file.size)
-          .arrayBuffer();
-        const entries = parseZipCentralDirectory(
-          new Uint8Array(tail),
+        const entries = await readZipEntries(
           file.size,
+          async (start, end) =>
+            new Uint8Array(await file.slice(start, end).arrayBuffer()),
         );
         const s = classifyElvisEntries(entries);
         if (!cancelled) setStats(s);

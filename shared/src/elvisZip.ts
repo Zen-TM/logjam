@@ -4,6 +4,7 @@ export type ElvisZipErrorCode =
   | "NO_USABLE_FILES"
   | "EMPTY_ZIP"
   | "UNSAFE_PATH"
+  | "TOO_MANY_FILES"
   | "ONLY_5M";
 
 /**
@@ -34,6 +35,7 @@ import { say, type UserSentence } from "./userSentence.js";
 
 const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP that ELVIS sent you.`;
 const TRUNCATED = say`Logjam couldn't read that ZIP. It may be damaged, so download it from ELVIS again.`;
+const TOO_MANY_FILES = say`That ZIP lists more files than Logjam can check. Choose a smaller area in ELVIS.`;
 const NO_USABLE_FILES = say`That ZIP has no point clouds or elevation rasters in it.`;
 /** topo/sharpen.py's ONLY_5M, word for word (elvisZip.test.ts holds them equal). */
 const ONLY_5M = say`This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. Choose the 1 m or 2 m DEM, or the point clouds, in ELVIS.`;
@@ -91,32 +93,69 @@ export const DERIVATIVE_STEM_TOKENS = [
   "rgb",
 ] as const;
 
+/** How much of a ZIP's end `readZipEntries` reads first. */
+export const ZIP_TAIL_BYTES = 65536;
+
 /**
- * Parses the ZIP central directory from the trailing bytes of a zip file.
- *
- * `tailBytes` must be the last N bytes of the file (N ≥ 22, typically 65536).
- * `totalFileSize` is the full file size so we can compute absolute offsets.
- *
- * Throws ElvisZipError if the data is not a valid ZIP or the central directory
- * does not fit within tailBytes (zip too large — increase tail window).
+ * The most central directory `readZipEntries` will fetch. The directory is
+ * attacker-controlled on the API, so its size is bounded before it is read;
+ * 16 MiB is about 100,000 ELVIS entries, far past any real download
+ * (elvisZip.test.ts holds the refusal).
  */
-export function parseZipCentralDirectory(
+export const MAX_ZIP_DIRECTORY_BYTES = 16 * 1024 * 1024;
+
+const EOCD_SIGNATURE = 0x06054b50;
+const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
+const ZIP64_EOCD_SIGNATURE = 0x06064b50;
+const CENTRAL_ENTRY_SIGNATURE = 0x02014b50;
+const ZIP64_EXTRA_ID = 0x0001;
+const EOCD_BYTES = 22;
+const ZIP64_LOCATOR_BYTES = 20;
+const ZIP64_EOCD_BYTES = 56;
+const CENTRAL_ENTRY_BYTES = 46;
+const SATURATED_16 = 0xffff;
+const SATURATED_32 = 0xffffffff;
+
+/** Where a ZIP's central directory is, in absolute file offsets. */
+export interface ZipDirectoryLocation {
+  offset: number;
+  size: number;
+  count: number;
+}
+
+/** A 64-bit little-endian field as a number; a value past 2^53 is not a real ZIP. */
+function readUint64(view: DataView, pos: number): number {
+  const high = view.getUint32(pos + 4, true);
+  if (high > 0x1fffff) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+  return high * 2 ** 32 + view.getUint32(pos, true);
+}
+
+/**
+ * Finds the central directory from the trailing bytes of a ZIP: the classic
+ * end record, or the Zip64 one when the classic fields are saturated
+ * (APPNOTE 4.3.14 to 4.3.16). Does not need the directory itself.
+ *
+ * `tailBytes` is the last N bytes of the file and `totalFileSize` its size.
+ * Throws ElvisZipError if the data is not a ZIP or a record points outside the
+ * file.
+ */
+export function locateZipCentralDirectory(
   tailBytes: Uint8Array,
   totalFileSize: number,
-): ZipEntry[] {
-  if (tailBytes.length < 22) {
+): ZipDirectoryLocation {
+  if (tailBytes.length < EOCD_BYTES) {
     throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
   }
 
-  // Search backward for EOCD signature (0x06054b50) — handles zip comments up to tail length
-  const tailView = new DataView(
+  // Search backward for EOCD signature — handles zip comments up to tail length
+  const view = new DataView(
     tailBytes.buffer,
     tailBytes.byteOffset,
     tailBytes.byteLength,
   );
   let eocdPos = -1;
-  for (let i = tailBytes.length - 22; i >= 0; i--) {
-    if (tailView.getUint32(i, true) === 0x06054b50) {
+  for (let i = tailBytes.length - EOCD_BYTES; i >= 0; i--) {
+    if (view.getUint32(i, true) === EOCD_SIGNATURE) {
       eocdPos = i;
       break;
     }
@@ -125,41 +164,166 @@ export function parseZipCentralDirectory(
     throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
   }
 
-  const cdSize = tailView.getUint32(eocdPos + 12, true);
-  const cdOffset = tailView.getUint32(eocdPos + 16, true); // absolute offset in file
-  const cdCount = tailView.getUint16(eocdPos + 10, true);
+  let count = view.getUint16(eocdPos + 10, true);
+  let size = view.getUint32(eocdPos + 12, true);
+  let offset = view.getUint32(eocdPos + 16, true);
 
-  // cdOffset is absolute; our tailBytes start at: totalFileSize - tailBytes.length
   const tailStart = totalFileSize - tailBytes.length;
-  if (cdOffset < tailStart || cdOffset + cdSize > totalFileSize) {
-    throw new ElvisZipError("TRUNCATED", TRUNCATED);
+  const saturated =
+    count === SATURATED_16 || size === SATURATED_32 || offset === SATURATED_32;
+  const locatorPos = eocdPos - ZIP64_LOCATOR_BYTES;
+  if (
+    saturated &&
+    locatorPos >= 0 &&
+    view.getUint32(locatorPos, true) === ZIP64_LOCATOR_SIGNATURE
+  ) {
+    // The Zip64 end record sits just before its locator; one that starts
+    // before the tail we were given is refused rather than guessed at.
+    const recordPos = readUint64(view, locatorPos + 8) - tailStart;
+    if (
+      recordPos < 0 ||
+      recordPos + ZIP64_EOCD_BYTES > tailBytes.length ||
+      view.getUint32(recordPos, true) !== ZIP64_EOCD_SIGNATURE
+    ) {
+      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
+    count = readUint64(view, recordPos + 32);
+    size = readUint64(view, recordPos + 40);
+    offset = readUint64(view, recordPos + 48);
   }
 
-  const cdRelStart = cdOffset - tailStart;
-  if (cdRelStart + cdSize > tailBytes.length) {
+  if (offset + size > totalFileSize) {
     throw new ElvisZipError("TRUNCATED", TRUNCATED);
   }
+  return { offset, size, count };
+}
 
+/**
+ * Reads `location.count` entries from the central directory bytes.
+ * An entry size of 0xFFFFFFFF is the real value in the entry's Zip64 extra
+ * field (APPNOTE 4.5.3), uncompressed size first.
+ */
+function parseDirectoryEntries(
+  directory: Uint8Array,
+  count: number,
+): ZipEntry[] {
+  const view = new DataView(
+    directory.buffer,
+    directory.byteOffset,
+    directory.byteLength,
+  );
   const dec = new TextDecoder();
   const entries: ZipEntry[] = [];
-  let pos = cdRelStart;
+  let pos = 0;
 
-  for (let i = 0; i < cdCount; i++) {
-    if (pos + 46 > cdRelStart + cdSize) break;
-    if (tailView.getUint32(pos, true) !== 0x02014b50) break;
+  for (let i = 0; i < count; i++) {
+    if (
+      pos + CENTRAL_ENTRY_BYTES > directory.length ||
+      view.getUint32(pos, true) !== CENTRAL_ENTRY_SIGNATURE
+    ) {
+      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
 
-    const compressedSize = tailView.getUint32(pos + 20, true);
-    const uncompressedSize = tailView.getUint32(pos + 24, true);
-    const fnLen = tailView.getUint16(pos + 28, true);
-    const extraLen = tailView.getUint16(pos + 30, true);
-    const commentLen = tailView.getUint16(pos + 32, true);
+    let compressedSize = view.getUint32(pos + 20, true);
+    let uncompressedSize = view.getUint32(pos + 24, true);
+    const nameLen = view.getUint16(pos + 28, true);
+    const extraLen = view.getUint16(pos + 30, true);
+    const commentLen = view.getUint16(pos + 32, true);
+    const nameEnd = pos + CENTRAL_ENTRY_BYTES + nameLen;
+    const entryEnd = nameEnd + extraLen + commentLen;
+    if (entryEnd > directory.length) {
+      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
 
-    const filename = dec.decode(tailBytes.slice(pos + 46, pos + 46 + fnLen));
+    if (uncompressedSize === SATURATED_32 || compressedSize === SATURATED_32) {
+      let found = false;
+      const extraEnd = nameEnd + extraLen;
+      for (let x = nameEnd; x + 4 <= extraEnd; ) {
+        const id = view.getUint16(x, true);
+        const length = view.getUint16(x + 2, true);
+        const data = x + 4;
+        x = data + length;
+        if (x > extraEnd) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+        if (id !== ZIP64_EXTRA_ID) continue;
+        let at = data;
+        const take = () => {
+          if (at + 8 > data + length) {
+            throw new ElvisZipError("TRUNCATED", TRUNCATED);
+          }
+          at += 8;
+          return readUint64(view, at - 8);
+        };
+        if (uncompressedSize === SATURATED_32) uncompressedSize = take();
+        if (compressedSize === SATURATED_32) compressedSize = take();
+        found = true;
+        break;
+      }
+      if (!found) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
+
+    const filename = dec.decode(
+      directory.subarray(pos + CENTRAL_ENTRY_BYTES, nameEnd),
+    );
     entries.push({ filename, compressedSize, uncompressedSize });
-    pos += 46 + fnLen + extraLen + commentLen;
+    pos = entryEnd;
   }
 
   return entries;
+}
+
+/**
+ * Parses the ZIP central directory when it lies wholly inside `tailBytes`,
+ * the last N bytes of the file. A directory that starts earlier throws
+ * TRUNCATED; `readZipEntries` is the form that fetches it.
+ */
+export function parseZipCentralDirectory(
+  tailBytes: Uint8Array,
+  totalFileSize: number,
+): ZipEntry[] {
+  const { offset, size, count } = locateZipCentralDirectory(
+    tailBytes,
+    totalFileSize,
+  );
+  const start = offset - (totalFileSize - tailBytes.length);
+  if (start < 0) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+  return parseDirectoryEntries(tailBytes.subarray(start, start + size), count);
+}
+
+/**
+ * The entries of a ZIP of `totalFileSize` bytes, reading it through
+ * `readRange(start, end)` (end exclusive; an S3 ranged GET or `File.slice`).
+ * Reads the last `ZIP_TAIL_BYTES` first and, if the central directory starts
+ * before them, one more range of at most `MAX_ZIP_DIRECTORY_BYTES`.
+ */
+export async function readZipEntries(
+  totalFileSize: number,
+  readRange: (start: number, end: number) => Promise<Uint8Array>,
+): Promise<ZipEntry[]> {
+  if (totalFileSize < EOCD_BYTES) {
+    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
+  }
+  const read = async (start: number, end: number) => {
+    const bytes = await readRange(start, end);
+    if (bytes.length !== end - start) {
+      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
+    return bytes;
+  };
+
+  const tailStart = Math.max(0, totalFileSize - ZIP_TAIL_BYTES);
+  const tail = await read(tailStart, totalFileSize);
+  const { offset, size, count } = locateZipCentralDirectory(
+    tail,
+    totalFileSize,
+  );
+  if (offset >= tailStart) {
+    const start = offset - tailStart;
+    return parseDirectoryEntries(tail.subarray(start, start + size), count);
+  }
+  if (size > MAX_ZIP_DIRECTORY_BYTES) {
+    throw new ElvisZipError("TOO_MANY_FILES", TOO_MANY_FILES);
+  }
+  return parseDirectoryEntries(await read(offset, offset + size), count);
 }
 
 /**

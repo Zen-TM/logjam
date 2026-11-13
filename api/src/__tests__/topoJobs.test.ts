@@ -123,6 +123,69 @@ describe("topo-jobs route (fake auth)", () => {
     return Buffer.concat([local, central, eocd]);
   }
 
+  // A stored ZIP of 5 m DEMs, whose central directory is bigger than the 64 KiB
+  // tail /start reads first. /start refuses 5 m DEMs after reading the
+  // directory, without launching anything, so the refusal says the directory
+  // was read.
+  function manyDemZip(count: number): Buffer {
+    const locals: Buffer[] = [];
+    const centrals: Buffer[] = [];
+    let offset = 0;
+    for (let i = 0; i < count; i++) {
+      const nameBytes = Buffer.from(
+        `Madeup201801/DEM/5 Metre/Madeup201801-DEM_2400004_56_${String(i).padStart(4, "0")}_0001_5m.tif`,
+      );
+      const local = Buffer.alloc(30 + nameBytes.length);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(nameBytes.length, 26);
+      nameBytes.copy(local, 30);
+      const central = Buffer.alloc(46 + nameBytes.length);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE(nameBytes.length, 28);
+      central.writeUInt32LE(offset, 42);
+      nameBytes.copy(central, 46);
+      locals.push(local);
+      centrals.push(central);
+      offset += local.length;
+    }
+    const directory = Buffer.concat(centrals);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(count, 8);
+    eocd.writeUInt16LE(count, 10);
+    eocd.writeUInt32LE(directory.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, directory, eocd]);
+  }
+
+  // Mutation: put back the one 64 KiB tail read and parseZipCentralDirectory
+  // in /start, and the refusal turns into "Logjam couldn't read that ZIP".
+  it("/start reads a central directory larger than the first 64 KiB", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "topo-start-big-directory-test" });
+    expect(createRes.status).toBe(201);
+    const { jobId, uploadUrl } = createRes.body;
+    try {
+      const zip = manyDemZip(1200);
+      expect(zip.readUInt32LE(zip.length - 22 + 12)).toBeGreaterThan(65536);
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/zip" },
+        body: zip,
+      });
+      expect(put.status).toBe(200);
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
+      expect(startRes.status).toBe(400);
+      expect(startRes.body.error).toContain("holds only 5 m DEMs");
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
+  });
+
   // The worker refuses a job with no mark (OLD_JOB), and only CI's topo-e2e
   // would otherwise notice /start forgetting it. This one does launch the
   // worker (on a ZIP it cannot read), so it runs where the stack has ECS.

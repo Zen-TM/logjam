@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   parseZipCentralDirectory,
+  readZipEntries,
+  MAX_ZIP_DIRECTORY_BYTES,
+  ZIP_TAIL_BYTES,
   classifyElvisEntries,
   ElvisZipError,
   isUnsafeZipEntryName,
@@ -111,6 +114,321 @@ describe("parseZipCentralDirectory", () => {
     const zip = buildZip([]);
     const entries = parse(zip);
     expect(entries).toHaveLength(0);
+  });
+});
+
+// Real Python `zipfile` output (made-up names, no data). Python only writes the
+// Zip64 records when a size or offset passes 4 GiB, so each fixture is the
+// structure Python wrote for one: a 6 GiB entry in a small archive, and the
+// tail of an archive whose central directory starts at 4,718,592,530.
+const PYTHON_BIG_ENTRY_ZIP = fromBase64(
+  "UEsDBBQAAAAAAIBkbV0AAAAAAAAAAAAAAAAnAAAATWFkZXVwMjAxODAxL2FfMjQwMDAwNF81Nl8wMDAxXzAwMDEubGF6UEsDBBQAAAAAAIBkbV0AAAAAAAAAAAAAAAAnAAAATWFkZXVwMjAxODAxL2FfMjQwMDAwNF81Nl8wMDAxXzAwMDIubGF6UEsBAi0DLQAAAAAAgGRtXQAAAAD//////////ycAFAAAAAAAAAAAAIABAAAAAE1hZGV1cDIwMTgwMS9hXzI0MDAwMDRfNTZfMDAwMV8wMDAxLmxhegEAEAAAAACAAQAAAAAAAMAAAAAAUEsBAhQDFAAAAAAAgGRtXQAAAAAAAAAAAAAAACcAAAAAAAAAAAAAAIABRQAAAE1hZGV1cDIwMTgwMS9hXzI0MDAwMDRfNTZfMDAwMV8wMDAyLmxhelBLBQYAAAAAAgACAL4AAACKAAAAAAA=",
+);
+const PYTHON_ZIP64_TAIL = fromBase64(
+  "UEsBAi0DLQAAAAAAAAAhAL5SE/D//////////0sAFAAAAAAAAAAAAIABAAAAAE1hZGV1cDIwMTgwMS9Qb2ludCBDbG91ZHMvTWFkZXVwMjAxODAxLUxJRDItQzMtQUhEXzI0MDAwMDRfNTZfMDAwMV8wMDAxLmxhegEAEAAAAEAZAQAAAAAAQBkBAAAAUEsBAi0DLQAAAAAAAAAhAHdH344KAAAACgAAAEsADAAAAAAAAAAAAIAB/////01hZGV1cDIwMTgwMS9Qb2ludCBDbG91ZHMvTWFkZXVwMjAxODAxLUxJRDItQzMtQUhEXzI0MDAwMDRfNTZfMDAwMV8wMDAyLmxhegEACAB9AEAZAQAAAFBLAQItAy0AAAAAAAAAIQB3R9+OCgAAAAoAAABLAAwAAAAAAAAAAACAAf////9NYWRldXAyMDE4MDEvUG9pbnQgQ2xvdWRzL01hZGV1cDIwMTgwMS1MSUQyLUMzLUFIRF8yNDAwMDA0XzU2XzAwMDFfMDAwMy5sYXoBAAgABAFAGQEAAABQSwECLQMtAAAAAAAAACEAd0ffjgoAAAAKAAAASwAMAAAAAAAAAAAAgAH/////TWFkZXVwMjAxODAxL1BvaW50IENsb3Vkcy9NYWRldXAyMDE4MDEtTElEMi1DMy1BSERfMjQwMDAwNF81Nl8wMDAxXzAwMDQubGF6AQAIAIsBQBkBAAAAUEsGBiwAAAAAAAAALQAtAAAAAAAAAAAABAAAAAAAAAAEAAAAAAAAABwCAAAAAAAAEgJAGQEAAABQSwYHAAAAAC4EQBkBAAAAAQAAAFBLBQYAAAAABAAEABwCAAD/////AAA=",
+);
+const PYTHON_ZIP64_TAIL_FILE_SIZE = 4718593168;
+
+function fromBase64(text: string): Uint8Array {
+  return Uint8Array.from(Buffer.from(text, "base64"));
+}
+
+describe("parseZipCentralDirectory on Zip64 archives", () => {
+  it("reads an entry of 4 GiB or more from the Zip64 extra field", () => {
+    const entries = parse(PYTHON_BIG_ENTRY_ZIP);
+    expect(entries.map((e) => e.filename)).toEqual([
+      "Madeup201801/a_2400004_56_0001_0001.laz",
+      "Madeup201801/a_2400004_56_0001_0002.laz",
+    ]);
+    expect(entries[0].uncompressedSize).toBe(6 * 2 ** 30);
+    expect(entries[0].compressedSize).toBe(3 * 2 ** 30);
+    expect(entries[1].uncompressedSize).toBe(0);
+  });
+
+  it("reads a directory that starts past 4 GiB", () => {
+    const entries = parseZipCentralDirectory(
+      PYTHON_ZIP64_TAIL,
+      PYTHON_ZIP64_TAIL_FILE_SIZE,
+    );
+    expect(entries).toHaveLength(4);
+    expect(entries[0].uncompressedSize).toBe(4_718_592_000);
+    expect(entries[0].compressedSize).toBe(4_718_592_000);
+    // The next three declare only a header offset in their Zip64 extra field,
+    // so their real sizes sit in the classic fields and must not be skipped.
+    expect(entries.slice(1).map((e) => e.uncompressedSize)).toEqual([
+      10, 10, 10,
+    ]);
+  });
+});
+
+// A file's bytes as `readRange` serves them: only what is held, the rest zeros.
+function virtualFile(
+  totalFileSize: number,
+  held: { at: number; bytes: Uint8Array }[],
+) {
+  const reads: [number, number][] = [];
+  const readRange = async (start: number, end: number) => {
+    reads.push([start, end]);
+    const out = new Uint8Array(end - start);
+    for (const { at, bytes } of held) {
+      const from = Math.max(start, at);
+      const to = Math.min(end, at + bytes.length);
+      if (from < to) out.set(bytes.subarray(from - at, to - at), from - start);
+    }
+    return out;
+  };
+  return { totalFileSize, readRange, reads };
+}
+
+/** The central directory bytes of buildZip's output. */
+function directoryOf(zip: Uint8Array): Uint8Array {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const size = view.getUint32(zip.length - 22 + 12, true);
+  const offset = view.getUint32(zip.length - 22 + 16, true);
+  return zip.subarray(offset, offset + size);
+}
+
+/**
+ * APPNOTE 4.3.14 to 4.3.16 around a directory: the Zip64 end record, its
+ * locator, then an end record with every field saturated. The sizes in the
+ * directory's own entries stay as they are. Same layout as the Python tail.
+ */
+function zip64Tail(
+  directory: Uint8Array,
+  count: number,
+  directoryOffset: number,
+): Uint8Array {
+  const tail = new Uint8Array(directory.length + 56 + 20 + 22);
+  tail.set(directory);
+  const view = new DataView(tail.buffer);
+  const record = directory.length;
+  view.setUint32(record, 0x06064b50, true);
+  view.setBigUint64(record + 4, 44n, true);
+  view.setUint16(record + 12, 45, true);
+  view.setUint16(record + 14, 45, true);
+  view.setBigUint64(record + 24, BigInt(count), true);
+  view.setBigUint64(record + 32, BigInt(count), true);
+  view.setBigUint64(record + 40, BigInt(directory.length), true);
+  view.setBigUint64(record + 48, BigInt(directoryOffset), true);
+  const locator = record + 56;
+  view.setUint32(locator, 0x07064b50, true);
+  view.setBigUint64(locator + 8, BigInt(directoryOffset + record), true);
+  view.setUint32(locator + 16, 1, true);
+  const eocd = locator + 20;
+  view.setUint32(eocd, 0x06054b50, true);
+  view.setUint16(eocd + 8, 0xffff, true);
+  view.setUint16(eocd + 10, 0xffff, true);
+  view.setUint32(eocd + 12, 0xffffffff, true);
+  view.setUint32(eocd + 16, 0xffffffff, true);
+  return tail;
+}
+
+const elvisNames = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    name: `Madeup201801/Point Clouds/Madeup201801-LID2-C3-AHD_${2400000 + i}_56_${String(i).padStart(4, "0")}_0001.laz`,
+  }));
+
+describe("readZipEntries", () => {
+  it("reads a directory larger than the tail with one more read", async () => {
+    // Mutation: return the tail's entries without the second read, or make
+    // locateZipCentralDirectory throw when the directory starts before the tail.
+    const zip = buildZip(elvisNames(1200));
+    const directory = directoryOf(zip);
+    expect(directory.length).toBeGreaterThan(ZIP_TAIL_BYTES);
+    const file = virtualFile(zip.length, [{ at: 0, bytes: zip }]);
+    const entries = await readZipEntries(file.totalFileSize, file.readRange);
+    expect(entries).toHaveLength(1200);
+    expect(entries[1199].filename).toBe(elvisNames(1200)[1199].name);
+    expect(file.reads).toEqual([
+      [zip.length - ZIP_TAIL_BYTES, zip.length],
+      [zip.length - 22 - directory.length, zip.length - 22],
+    ]);
+  });
+
+  it("reads a small zip with the tail alone", async () => {
+    const zip = buildZip(elvisNames(3));
+    const file = virtualFile(zip.length, [{ at: 0, bytes: zip }]);
+    expect(await readZipEntries(zip.length, file.readRange)).toHaveLength(3);
+    expect(file.reads).toEqual([[0, zip.length]]);
+  });
+
+  it("reads a Zip64 directory at 5 GiB that is larger than the tail", async () => {
+    const directory = directoryOf(buildZip(elvisNames(1200)));
+    const at = 5 * 2 ** 30;
+    const tail = zip64Tail(directory, 1200, at);
+    const file = virtualFile(at + tail.length, [{ at, bytes: tail }]);
+    const entries = await readZipEntries(file.totalFileSize, file.readRange);
+    expect(entries).toHaveLength(1200);
+    expect(file.reads[1]).toEqual([at, at + directory.length]);
+  });
+
+  it("reads a real Python Zip64 archive whose directory starts past 4 GiB", async () => {
+    const file = virtualFile(PYTHON_ZIP64_TAIL_FILE_SIZE, [
+      {
+        at: PYTHON_ZIP64_TAIL_FILE_SIZE - PYTHON_ZIP64_TAIL.length,
+        bytes: PYTHON_ZIP64_TAIL,
+      },
+    ]);
+    const entries = await readZipEntries(file.totalFileSize, file.readRange);
+    expect(entries).toHaveLength(4);
+    expect(classifyElvisEntries(entries).uncompressedBytes).toBe(
+      4_718_592_000 + 30,
+    );
+    expect(file.reads).toHaveLength(1);
+  });
+
+  it("refuses a directory over the cap without fetching it", async () => {
+    // Mutation: delete the MAX_ZIP_DIRECTORY_BYTES check in readZipEntries.
+    const at = 5 * 2 ** 30;
+    const size = MAX_ZIP_DIRECTORY_BYTES + 1;
+    // An empty directory's records, then the size and the locator moved out
+    // to where a directory of `size` bytes would end.
+    const tail = zip64Tail(new Uint8Array(0), 0, at);
+    const view = new DataView(tail.buffer);
+    view.setBigUint64(40, BigInt(size), true);
+    view.setBigUint64(56 + 8, BigInt(at + size), true);
+    const file = virtualFile(at + size + tail.length, [
+      { at: at + size, bytes: tail },
+    ]);
+    await expect(
+      readZipEntries(file.totalFileSize, file.readRange),
+    ).rejects.toMatchObject({ code: "TOO_MANY_FILES" });
+    expect(file.reads).toHaveLength(1);
+  });
+
+  it("is NOT_A_ZIP for a file shorter than an end record, without reading", async () => {
+    const file = virtualFile(10, []);
+    await expect(readZipEntries(10, file.readRange)).rejects.toMatchObject({
+      code: "NOT_A_ZIP",
+    });
+    expect(file.reads).toHaveLength(0);
+  });
+
+  it("is TRUNCATED when a read comes back short", async () => {
+    // Mutation: drop the length check on a read.
+    const zip = buildZip(elvisNames(1200));
+    await expect(
+      readZipEntries(zip.length, async (start, end) =>
+        zip.slice(start, end - 1),
+      ),
+    ).rejects.toMatchObject({ code: "TRUNCATED" });
+  });
+});
+
+describe("a lying Zip64 record is refused, never crashes", () => {
+  /** PYTHON_ZIP64_TAIL with `patch` applied; offsets are from the tail's end. */
+  function lie(
+    patch: (view: DataView, record: number, locator: number) => void,
+  ) {
+    const tail = PYTHON_ZIP64_TAIL.slice();
+    patch(
+      new DataView(tail.buffer),
+      tail.length - 22 - 20 - 56,
+      tail.length - 22 - 20,
+    );
+    return () => parseZipCentralDirectory(tail, PYTHON_ZIP64_TAIL_FILE_SIZE);
+  }
+  const refused = (code: string) => expect.objectContaining({ code });
+
+  it("takes the count from the Zip64 record when the classic count is saturated", () => {
+    // Mutation: read the count from the classic record only.
+    const run = lie((view) => {
+      const eocd = PYTHON_ZIP64_TAIL.length - 22;
+      view.setUint16(eocd + 10, 0xffff, true);
+      view.setUint16(eocd + 8, 0xffff, true);
+    });
+    expect(run()).toHaveLength(4);
+  });
+
+  it("refuses a locator that points outside the file", () => {
+    // Mutation: use the locator's offset without checking it is in the tail.
+    expect(
+      lie((view, _record, locator) =>
+        view.setBigUint64(
+          locator + 8,
+          BigInt(PYTHON_ZIP64_TAIL_FILE_SIZE),
+          true,
+        ),
+      ),
+    ).toThrow(refused("TRUNCATED"));
+    expect(
+      lie((view, _record, locator) => view.setBigUint64(locator + 8, 0n, true)),
+    ).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses a locator that points at something else", () => {
+    // Mutation: skip the Zip64 end record's signature check.
+    expect(lie((view, record) => view.setUint32(record, 0, true))).toThrow(
+      refused("TRUNCATED"),
+    );
+  });
+
+  it("refuses a directory that ends past the file", () => {
+    expect(
+      lie((view, record) =>
+        view.setBigUint64(
+          record + 48,
+          BigInt(PYTHON_ZIP64_TAIL_FILE_SIZE),
+          true,
+        ),
+      ),
+    ).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses a size or offset past 2^53", () => {
+    expect(
+      lie((view, record) => view.setBigUint64(record + 48, 2n ** 60n, true)),
+    ).toThrow(refused("TRUNCATED"));
+    expect(
+      lie((view, record) => view.setBigUint64(record + 40, 2n ** 53n, true)),
+    ).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses an entry size that is not a safe integer", () => {
+    // Mutation: delete the high-word check in readUint64 (the 2^60 would come
+    // back as a rounded number).
+    const zip = PYTHON_BIG_ENTRY_ZIP.slice();
+    const view = new DataView(zip.buffer);
+    const cd = view.getUint32(zip.length - 22 + 16, true);
+    view.setBigUint64(cd + 46 + 39 + 4, 2n ** 60n, true);
+    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses a count above the entries the directory has", () => {
+    // Mutation: break out of the entry loop instead of throwing.
+    expect(
+      lie((view, record) => view.setBigUint64(record + 32, 5n, true)),
+    ).toThrow(refused("TRUNCATED"));
+    expect(
+      lie((view, record) => view.setBigUint64(record + 32, 2n ** 40n, true)),
+    ).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses an entry whose 4 GiB size has no Zip64 extra field", () => {
+    // Mutation: keep 0xFFFFFFFF as the size when the extra field is missing.
+    const zip = buildZip([{ name: "a/b_2400004_56_0001_0001.laz" }]);
+    const entry = zip.length - 22 - (46 + 28);
+    new DataView(zip.buffer).setUint32(entry + 24, 0xffffffff, true);
+    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses a Zip64 extra field cut short", () => {
+    // Mutation: read the 8 bytes without checking the field's length.
+    const zip = PYTHON_BIG_ENTRY_ZIP.slice();
+    const view = new DataView(zip.buffer);
+    const cd = view.getUint32(zip.length - 22 + 16, true);
+    // First entry: the extra field header's length, 16 down to 4 bytes.
+    view.setUint16(cd + 46 + 39 + 2, 4, true);
+    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses an extra field longer than the entry", () => {
+    // Mutation: delete the `x > extraEnd` check.
+    const zip = PYTHON_BIG_ENTRY_ZIP.slice();
+    const view = new DataView(zip.buffer);
+    const cd = view.getUint32(zip.length - 22 + 16, true);
+    view.setUint16(cd + 46 + 39 + 2, 0xffff, true);
+    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
   });
 });
 

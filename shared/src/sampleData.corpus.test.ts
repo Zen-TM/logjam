@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyElvisEntries,
   ElvisZipError,
-  parseZipCentralDirectory,
+  readZipEntries,
 } from "./elvisZip";
 import {
   chooseMainViewport,
@@ -58,12 +58,15 @@ function render(value: unknown): string {
   );
 }
 
-/** What the web client does: the last 64 KiB holds the central directory. */
-function elvisReport(path: string): unknown {
+/** What both clients do: read the entries through ranges of the file. */
+async function elvisReport(path: string): Promise<unknown> {
   const bytes = new Uint8Array(readFileSync(path));
-  const tail = bytes.subarray(Math.max(0, bytes.length - 65536));
   try {
-    return classifyElvisEntries(parseZipCentralDirectory(tail, bytes.length));
+    return classifyElvisEntries(
+      await readZipEntries(bytes.length, async (start, end) =>
+        bytes.subarray(start, end),
+      ),
+    );
   } catch (err) {
     if (err instanceof ElvisZipError)
       return { error: err.code, sentence: err.sentence };
@@ -79,7 +82,7 @@ describe.runIf(sampleDir)("public sample inputs", () => {
     "elvis-katoomba-2506258-dem2m.zip",
   ]) {
     it(`ELVIS checks report the golden for ${name}`, async () => {
-      await expect(render(elvisReport(file(name)))).toMatchFileSnapshot(
+      await expect(render(await elvisReport(file(name)))).toMatchFileSnapshot(
         golden(name),
       );
     });
