@@ -20,7 +20,7 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.logjamnsw.mobile",
+      "bundleIdentifier": "earth.logjam.gps",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -28,7 +28,7 @@
       }
     },
     "android": {
-      "package": "com.logjamnsw.mobile",
+      "package": "earth.logjam.gps",
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
@@ -95,7 +95,14 @@
         }
       ],
       "expo-secure-store",
-      "@sentry/react-native",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "logjam-qb",
+          "project": "react-native",
+          "experimental_android": { "enableAndroidGradlePlugin": true }
+        }
+      ],
       "expo-sqlite",
       [
         "expo-location",

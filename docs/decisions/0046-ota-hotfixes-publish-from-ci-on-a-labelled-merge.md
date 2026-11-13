@@ -73,6 +73,14 @@ somewhere a workflow can read: that is what changes from 0009.
   `mobile/src/otaHotfix.test.ts`, the `main_admits_only_green_squashed_prs`
   run in `guards.tftest.hcl`, and `infra/scripts/check-required-checks.py`
   (the check reports on every pull request). Everything else above stands.
+- **Update 2026-11-13: rule 3 uploads the update's sourcemaps to Sentry after
+  publishing to `preview` and before promoting to `production`.** A crash in
+  an OTA update is unreadable without its map; the reason, and what is
+  uploaded, are in [0004](0004-mobile-sentry-and-scrubber.md). A failed upload
+  stops the run with the update still on `preview`, so none reaches
+  `production` without its maps. Guard: `mobile/src/sentryUpload.test.ts`,
+  which holds the upload's place between the two steps. Everything else above
+  stands.
 
 ## Consequences
 
@@ -81,7 +89,8 @@ somewhere a workflow can read: that is what changes from 0009.
   `ota-plan`) happen before the merge. Undoing an update no longer depends on
   which machine holds the key.
 - **Negative:** code that runs in `mobile-ota` can sign JavaScript every
-  phone of a release runs. That is the trust a merge to `main` already has
+  phone of a release runs, and holds the Sentry upload token (updated
+  2026-11-13). That is the trust a merge to `main` already has
   for prod, whose AWS deploy roles trust the `prod` Environment, but a leaked
   GitHub secret now reaches phones, not only servers. The key now has two
   copies to replace on rotation, and rotating still needs a new build and
