@@ -1,12 +1,13 @@
-// User-facing text goes through `t`, `plural`, `rich` or `say`, which look the English
-// up in the catalogue of the language in force. The reasoning, and why there
-// is no library, is docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
-// Guard: shared/src/i18n.test.ts.
+// User-facing text goes through `t`, `plural`, `rich` or `say`, which look the
+// English up in the catalogue of the language in force. The reasoning, and why
+// there is no library, is docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
+// shared/src/i18n.test.ts holds how these functions behave; nothing yet holds
+// that text is routed through them (the ADR says so).
 import { enUS } from "./i18nCatalogues/en-US.js";
 
 /** The language the code is written in: a message with no entry reads as itself. */
 export const SOURCE_LANGUAGE = "en-AU";
-/** Computed, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧. Dev only. */
+/** Generated, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧, for development. `language()` accepts it anywhere; nothing refuses it in a prod runtime yet. */
 export const PSEUDO_LANGUAGE = "en-XA";
 export const LANGUAGES = ["en-AU", "en-US", "en-XA"] as const;
 export type Language = (typeof LANGUAGES)[number];
@@ -34,7 +35,7 @@ const BUILT_IN_PLURAL_RULE: Record<Language, (n: number) => PluralCategory> = {
 type Resolver = () => string | undefined;
 let resolver: Resolver = () => undefined;
 
-/** The API sets this once, to read the request's language from AsyncLocalStorage. Clients never call it. */
+/** The API sets this once, to read the language of the request in hand from AsyncLocalStorage. */
 export function setLanguageResolver(read: Resolver): void {
   resolver = read;
 }
@@ -152,7 +153,8 @@ export function fillHoles(
 /**
  * The template for `say`: its English looked up, holes still `{0}`. `say` adds
  * the “ ” round a quoted hole after this, so no catalogue can change the marks
- * `withoutQuoted` depends on.
+ * `withoutQuoted` depends on (held by "keeps the user's words and their “ ” in
+ * every language" in i18n.test.ts).
  */
 export function localisedTemplate(strings: TemplateStringsArray): string {
   return localise(keyOf(strings));
@@ -223,7 +225,7 @@ export type RichPart = string | { tag: string; text: string };
  * The tags are found in the message after the catalogue lookup and before the
  * holes go in, so a hole holding `<` or `<b>x</b>` is only ever text. A tag
  * holds text and holes, never another tag; a nested or unclosed tag stays in
- * the text as written, which i18n.test.ts pins. Nothing refuses such a message yet.
+ * the text as written, which i18n.test.ts pins.
  */
 export function rich(
   strings: TemplateStringsArray,

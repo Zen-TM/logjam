@@ -1,4 +1,4 @@
-// The catalogue function (docs/decisions/0050-…). Each guard names the
+// The catalogue function (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md). Each guard names the
 // mutation that turns it red.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as I18n from "./i18n";
@@ -247,7 +247,7 @@ describe("rich", () => {
     expect(rich``).toEqual([]);
   });
 
-  // Mutation: split the message after the holes are filled (the old `richParts(t`…`)`).
+  // Mutation: split the message after the holes are filled.
   it("never reads a hole as markup", async () => {
     const { rich } = await load();
     expect(rich`<a>${"a<b"}</a>`).toEqual([{ tag: "a", text: "a<b" }]);
@@ -278,7 +278,7 @@ describe("rich", () => {
 });
 
 describe("say", () => {
-  // Mutation: fill the holes before the lookup, or set the “ ” inside the lookup.
+  // Mutation: fill the holes before the lookup, set the “ ” inside the lookup, or stop looking `say`'s template up.
   it("keeps the user's words and their “ ” in every language", async () => {
     const { LANGUAGES, say, quote, withoutQuoted } = await load();
     for (const lang of LANGUAGES) {
@@ -296,7 +296,7 @@ describe("say", () => {
     );
   });
 
-  // Mutation: stop looking `say`'s template up.
+  // Mutation: stop trimming a quoted hole in `say` (`hole.quoted.trim()` becomes `hole.quoted`).
   it("reads as the English in the source language, with numbers and sentences as holes", async () => {
     const { say, quote } = await load();
     const inner = say`inner`;
