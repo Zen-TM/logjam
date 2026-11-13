@@ -7,10 +7,10 @@ import type { AuthenticatedRequest } from "./auth";
 // Every limiter below uses express-rate-limit's default in-process MemoryStore
 // (no `store` configured). The counters live in this process's memory, so the
 // limits are only correct while exactly ONE API instance runs — which holds
-// today (single EB container per api/Dockerrun.aws.json). A container restart
+// today (one API container on the brain, infra/brain/compose.yaml). A container restart
 // also resets all counters.
 //
-// If the deployment ever scales horizontally (multiple EB instances, or an ECS
+// If the deployment ever scales horizontally (more than one API process or host, or an ECS
 // service with >1 task), each instance keeps its own counters and every limit
 // is silently multiplied by the instance count — making the abuse caps
 // (friendsSearchLimiter / ropeWikiHeavyLimiter) ineffective. The fix at that

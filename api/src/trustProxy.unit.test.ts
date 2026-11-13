@@ -48,8 +48,10 @@ async function reqIp(hops: number, xff: string): Promise<string> {
 }
 
 describe("TRUST_PROXY_HOPS", () => {
-  it("defaults to 2, so Elastic Beanstalk is unchanged", () => {
-    expect(hopsFor()).toBe(2);
+  // Mutation: a default of 2 in lib/env.ts, which would let a client behind
+  // prod's one proxy forge its address on a host that forgot to set the count.
+  it("defaults to 1, prod's chain", () => {
+    expect(hopsFor()).toBe(1);
   });
 
   it("reads the hop count from the environment", () => {

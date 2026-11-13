@@ -22,9 +22,8 @@ import { decrementStorageUsed } from "./storageQuota";
  *
  * The double-refund guard is the DELETE ITSELF, not a status column: two API
  * instances sweeping the same row both issue `deleteMany`, Postgres serialises
- * them, and the loser sees `count === 0` and refunds nothing. This is the
- * claim-marker pattern from root CLAUDE.md with the row's own existence as the
- * marker — no extra column, same guarantee.
+ * them, and the loser sees `count === 0` and refunds nothing. The row's own
+ * existence is the claim marker — no extra column, same guarantee.
  *
  * Per-row failures are logged and skipped so one bad row cannot wedge the rest
  * (the convention expireCompletedExports follows).

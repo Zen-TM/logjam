@@ -26,9 +26,45 @@ from pipeline import (  # noqa: E402
     SCRUB_DENSITY_REFERENCE_ALL_RETURNS,
     SCRUB_STRATUM_WEIGHT_HIGH,
     SCRUB_STRATUM_WEIGHT_LOW,
+    _bilateral_filter_weighted,
     _combine_scrub_strata,
     _density_normalized_min_pulses,
 )
+
+
+class TestBilateralBands(unittest.TestCase):
+    """The filter works a band of rows at a time, on several threads. Red if
+    a band reads the rows of another (its offset dropped), stops short of
+    its neighbours' rows at its edge, or leaves the last, short band out."""
+
+    def test_a_pixel_is_the_same_whatever_band_it_falls_in(self):
+        from unittest import mock
+
+        import pipeline
+
+        rng = np.random.default_rng(7)
+        value = rng.random((45, 31)).astype(np.float32)
+        confidence = rng.integers(0, 6, (45, 31)).astype(np.float32)
+        confidence[10:14, 5:9] = 0  # a hole: no pulse to weigh by
+
+        def run(rows, workers):
+            with mock.patch.object(pipeline, "BILATERAL_BAND_ROWS", rows):
+                return _bilateral_filter_weighted(
+                    value, confidence, 9, 3.0, 0.15, workers=workers
+                )
+
+        whole = run(10**6, 1)
+        self.assertTrue(np.isfinite(whole).any())
+        for rows in (1, 7, 45):
+            np.testing.assert_array_equal(run(rows, 3), whole)
+
+    def test_a_cell_with_no_pulse_near_it_has_no_value(self):
+        value = np.full((12, 12), 0.5, np.float32)
+        confidence = np.zeros((12, 12), np.float32)
+        confidence[0, 0] = 1
+        out = _bilateral_filter_weighted(value, confidence, 9, 3.0, 0.15)
+        self.assertEqual(out[0, 0], np.float32(0.5))
+        self.assertTrue(np.isnan(out[11, 11]))
 
 
 class TestCombineScrubStrata(unittest.TestCase):

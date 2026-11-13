@@ -6,9 +6,8 @@
 # than debugging (var.audit_log_retention_days, audit.tf).
 #
 # Everything that must agree with this local: every retention_in_days in this
-# directory, the access-logs lifecycle rule (s3.tf), RetentionInDays in
-# api/.ebextensions/cloudwatch-logs.config (EB-owned groups Terraform cannot
-# name), and privacy.html's Retention section. Guard:
+# directory, the access-logs lifecycle rule (s3.tf) and privacy.html's
+# Retention section. Guard:
 # api/src/logRetention.unit.test.ts.
 #
 # Container Insights groups remain unmanaged (AWS default, 1 day).
@@ -58,22 +57,6 @@ resource "aws_cloudwatch_log_group" "api_script" {
 # only migration names, no user data.
 resource "aws_cloudwatch_log_group" "api_migrate" {
   name              = "/ecs/logjam-api-migrate"
-  retention_in_days = local.operational_log_retention_days
-}
-
-# The RDS log export (pgaudit and connection lines; see audit.tf and rds.tf).
-# RDS creates the group when the export starts (the AWS default keeps events
-# forever); managing it here bounds its retention. The subscription filter in
-# audit.tf copies each line to the audit bucket within minutes, and the
-# pgaudit_delivery_stalled alarm fires after 24 h without a delivery, so this
-# copy only has to outlive a stalled pipeline long enough to be noticed.
-import {
-  to = aws_cloudwatch_log_group.rds_postgresql
-  id = "/aws/rds/instance/logjam-db-enc/postgresql"
-}
-
-resource "aws_cloudwatch_log_group" "rds_postgresql" {
-  name              = local.rds_log_group
   retention_in_days = local.operational_log_retention_days
 }
 

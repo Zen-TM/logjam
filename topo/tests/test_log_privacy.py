@@ -3,14 +3,17 @@ export's where they mean to go (root AGENTS.md, Privacy): no coordinate,
 bbox, tile index, footprint id or survey name. Their stdout goes to
 CloudWatch.
 
-Four guards. A scan of every `log.*()` call in the modules that handle a
-place for the
-names that hold such a value; the overlapping-survey pick run for real
+Four guards. A scan of every logging call and `print` in every Python module
+the worker image ships (the Dockerfile's COPY list, which test_docker_image_files
+already parses) for the names that hold such a value; the overlapping-survey pick run for real
 under assertLogs, since its footprint id and survey labels are the values
 most tempting to log; and pipeline.py's GDAL handler, which logs a message's
 class and number, never its text (`TestGdalMessages`, whose mutations its
 own docstring names); and a failed job's last line (`TestUncaughtFailure`,
-likewise). Mutations of the first two that turn it red: restoring pipeline.py's
+likewise). Mutations of the first two that turn it red: `print(f"at {lat}")` or
+`logging.getLogger().info(f"at {lat}")` in worker.py, `log.info(f"box {lon_min}")`
+in renderers/tile_compose.py, renaming `log` to `logger` in a module (the scan's
+floor of calls found), restoring pipeline.py's
 `Coverage: lon …, lat …` line, putting `{footprint}` or a survey label back
 in the overlapping-surveys log, logging a tile's `{z}/{x}/{y}`, restoring
 the filename in the PDAL tile log, or logging an area export's `{rect}`.
@@ -18,22 +21,54 @@ the filename in the PDAL tile log, or logging an area export's `{rect}`.
 
 import ast
 import os
+from collections import Counter
 import unittest
 from unittest import mock
 
 import _native_stub  # noqa: F401  (stubs osgeo when absent on the host)
 import pipeline
+from test_docker_image_files import _ROOT, _copied_sources
 
-_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-# Every module that handles a place: a topo job's worker and the two pipelines
-# it starts, and the export worker with the area export it runs on a box.
-_MODULES = (
-    "worker.py",
-    "pipeline.py",
-    "sharpen.py",
-    "export_worker.py",
-    "area_export.py",
-)
+_LOG_LEVELS = {"debug", "info", "warning", "warn", "error", "exception", "critical"}
+
+
+# Today's calls per module, rounded down: 59, 26, 15, 26.
+_MIN_CALLS = {
+    "pipeline.py": 50,
+    "worker.py": 20,
+    "export_worker.py": 12,
+    "build_fire_history.py": 20,
+}
+
+
+def _shipped_modules():
+    """Every .py file the Dockerfile copies into the worker image, repo-relative."""
+    found = []
+    for src in sorted(_copied_sources()):
+        path = os.path.join(_ROOT, src)
+        if src.endswith("/"):
+            for dirpath, _, names in os.walk(path):
+                found += [
+                    os.path.relpath(os.path.join(dirpath, n), _ROOT)
+                    for n in sorted(names)
+                    if n.endswith(".py")
+                ]
+        elif src.endswith(".py"):
+            found.append(src)
+    return found
+
+
+def _is_output_call(node):
+    """`print(...)`, or `.debug/.info/...(...)` on any receiver: stdout and
+    stderr reach CloudWatch the same as a logger does."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "print"
+    return isinstance(func, ast.Attribute) and func.attr in _LOG_LEVELS
+
+
 # Names that hold where a place is, in those modules.
 _PLACE_NAMES = {
     "lon", "lat", "lon_min", "lat_min", "lon_max", "lat_max",
@@ -70,20 +105,20 @@ def _names(node):
 
 
 class TestNoPlaceInLogCalls(unittest.TestCase):
-    def test_no_log_call_names_a_place(self):
+    def test_no_output_call_names_a_place(self):
         found = []
-        for module in _MODULES:
+        calls = Counter()
+        modules = _shipped_modules()
+        # A Dockerfile that stopped COPYing the workers would empty the scan.
+        self.assertGreaterEqual(len(modules), 15, modules)
+        for module in modules:
             path = os.path.join(_ROOT, module)
             with open(path) as f:
                 tree = ast.parse(f.read())
             for node in ast.walk(tree):
-                if not (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "log"
-                ):
+                if not _is_output_call(node):
                     continue
+                calls[module] += 1
                 used = set()
                 for arg in [*node.args, *(k.value for k in node.keywords)]:
                     used |= _names(arg)
@@ -91,7 +126,23 @@ class TestNoPlaceInLogCalls(unittest.TestCase):
                     found.append(
                         f"{module}:{node.lineno} {sorted(used & _PLACE_NAMES)}"
                     )
-        self.assertEqual(found, [])
+        # A matcher that stops matching, or a module that renames its logger,
+        # reads 0 or far fewer than today's count (see _MIN_CALLS).
+        for module, floor in _MIN_CALLS.items():
+            self.assertGreaterEqual(
+                calls[module],
+                floor,
+                f"the scan found {calls[module]} log/print calls in {module}, "
+                f"expected at least {floor}: it no longer matches how the "
+                "worker logs. Fix _is_output_call in topo/tests/test_log_privacy.py.",
+            )
+        self.assertEqual(
+            found,
+            [],
+            "a log or print call in the worker image names a place (coordinate, "
+            "bbox, tile index, footprint, survey or file name). Log a count or "
+            "an id instead; this reaches CloudWatch.",
+        )
 
 
 class TestOverlappingSurveysLog(unittest.TestCase):

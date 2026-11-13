@@ -44,11 +44,16 @@ import type { DbClient } from "./storageQuota";
  * export, never lowers usage. Guard: `__tests__/computeUsageCarryover.test.ts`.
  *
  * Elapsed time per job, in priority order:
- *  1. topo only — `pipeline_metrics.wallSeconds`, the worker's own measurement.
- *     Preferred because topo_jobs has no completed_at and `updated_at` keeps
- *     moving after completion, which would inflate the charge.
+ *  1. topo only — `pipeline_metrics.wallSeconds`: the worker's own measurement,
+ *     or, for a job that ended without one (a failure, mostly), the elapsed
+ *     time the `stamp_wall_seconds` trigger records when the job leaves flight
+ *     (migration 20261112000000_topo_job_wall_seconds_stamp). Preferred because
+ *     topo_jobs has no completed_at and `updated_at` keeps moving after the job
+ *     ends, which would inflate the charge. Guard: the "a finished job's
+ *     charge stops growing" tests in `__tests__/computeUsageCarryover.test.ts`.
  *  2. still running — NOW() - started_at, so in-flight work counts immediately.
- *  3. finished without metrics (a failure, mostly) — the row's end timestamp.
+ *  3. finished with no wallSeconds (a row the trigger could not stamp) — the
+ *     row's end timestamp, `updated_at`.
  *
  * started_at IS NULL means the task never launched, so uploading/pending/queued
  * rows contribute nothing and cost the user nothing.
@@ -193,7 +198,7 @@ export async function assertHasCredits(
   // running past it: at most MAX_CONCURRENT_WORKER_VCPUS (24) for the longest
   // reaper ceiling (TOPO_REAPER_PROCESSING_TIMEOUT_MS, 6 h), 8640 credits,
   // about US$8.60. Reserve each job's credits at its reaper deadline when that
-  // matters (issue #567).
+  // matters.
   if (await poolHasNoRoomFor(projected, db)) {
     throw new AppError(429, POOL_SPENT_SENTENCE, { resetAt: usage.resetAt });
   }

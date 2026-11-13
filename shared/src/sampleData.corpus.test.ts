@@ -16,9 +16,10 @@
 // for that file, numbers rounded to 6 places. After an intended change, rerun
 // with `-u` and read the diff. The ZIP-slip and empty-ZIP guards are in
 // elvisZip.test.ts.
-// Mutation that turns it red: changing DERIVATIVE_STEM_TOKENS (the ELVIS
-// goldens change), or the control-point transform in buildGeoTransform (the
-// sheet golden changes).
+// Mutation that turns it red: running with REQUIRE_SAMPLES=1 and no
+// SAMPLE_DATA_DIR (the file fails instead of skipping three cases); changing
+// DERIVATIVE_STEM_TOKENS (the ELVIS goldens change), or the control-point
+// transform in buildGeoTransform (the sheet golden changes).
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -36,6 +37,13 @@ import { buildTilePlan } from "./geoPdfImport/tilePlan";
 import { buildGeoTransform } from "./geoPdfImport/transform";
 
 const sampleDir = process.env.SAMPLE_DATA_DIR;
+// ci.yml's `shared` job sets REQUIRE_SAMPLES: there a missing directory fails
+// the run rather than skipping every case below. setup-smoke.yml runs these
+// tests without the samples and does not set it.
+if (process.env.REQUIRE_SAMPLES && !sampleDir)
+  throw new Error(
+    "REQUIRE_SAMPLES is set but SAMPLE_DATA_DIR is not: the corpus tests would skip. Fetch the samples (see the top of this file) before the tests.",
+  );
 const golden = (name: string) =>
   join(__dirname, "__fixtures__", "sample-data", `${name}.golden`);
 

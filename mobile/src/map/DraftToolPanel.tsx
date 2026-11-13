@@ -64,9 +64,9 @@ import {
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
+import { useElevationProfile } from "./useElevationProfile";
 
 const SAVING = "Saving…";
-import { useElevationProfile } from "./useElevationProfile";
 const VERBS = Object.fromEntries(
   mapMeasureVerbs("gps").map((verb) => [verb.id, verb]),
 ) as Record<MapMeasureVerbId, MapMeasureVerb>;

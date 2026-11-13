@@ -132,7 +132,7 @@ export function parseAccessLog(contents: string): AccessLogRecord[] {
  * their first topo job.
  *
  * `requester` is the IAM principal, which separates them cleanly:
- *   - the API's EB instance role  → it signed a presigned URL for a browser or
+ *   - the API's role (the brain's) → it signed a presigned URL for a browser or
  *     phone. This is the one we charge.
  *   - the topo worker role        → same-region task read. Free.
  *   - a CloudFront service principal → the shared basemap under master/*, not
@@ -179,6 +179,20 @@ export type KeyAttribution =
       table: "topoJob" | "topoExportJob";
       jobId: string;
     };
+
+/**
+ * Every top-level S3 prefix that holds a user's data, the ones attributeKey
+ * switches on. routes/accountPurge.unit.test.ts requires each key the API
+ * builds to start with one, and the account purge to delete each.
+ */
+export const USER_DATA_S3_HEADS = [
+  "media",
+  "file-sends",
+  "inputs",
+  "outputs",
+  "jobs",
+  "exports",
+] as const;
 
 export function attributeKey(key: string): KeyAttribution | null {
   const segments = key.split("/");

@@ -11,7 +11,7 @@ import { getEnv } from "../lib/env";
 // of it, so a bug in either still fails closed.
 // Four independent signals — any one is sufficient to refuse:
 //   1. NODE_ENV is not "development" or "test"
-//   2. AWS runtime env vars present (ECS/EB inject these)
+//   2. AWS runtime env vars present (ECS and Lambda inject these)
 //   3. DB_HOST points to a non-local host
 //   4. LOGJAM_RUNTIME=prod, which a host with no AWS-injected variables (a
 //      plain Docker Compose host) sets itself
@@ -36,7 +36,7 @@ if (process.env.AUTH_MODE === "fake") {
   }
 }
 
-// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate),
+// Positive fail-closed assertion: any ECS task,
 // or a host that declares LOGJAM_RUNTIME=prod, MUST run real auth ("oidc").
 // This catches a
 // misconfigured prod task even if the AUTH_MODE=fake heuristics above were

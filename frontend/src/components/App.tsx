@@ -1521,7 +1521,7 @@ function App() {
         } catch (err) {
           // The route is in; only the old way stayed.
           if (!(err instanceof WayRemovalError)) throw err;
-          toast.error(err.message);
+          toast.error(ADD_WAY.copy.removalFailed);
         }
       } else result = await createRoute(payload);
       setNamingRoute(false);

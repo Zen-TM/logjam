@@ -35,8 +35,8 @@ resource "aws_ecr_repository" "topo_worker" {
 #
 # Why a count and not an age: deploys are pinned by git SHA (deploy-api.yml
 # tags <sha> and latest), and what must never be expired is the image the
-# CURRENTLY DEPLOYED version references — EB re-pulls it on instance
-# replacement, and the ECS task defs are sha-pinned too. That image is by
+# CURRENTLY DEPLOYED version references — the brain's release agent re-pulls it
+# on a replacement host, and the ECS task defs are sha-pinned too. That image is by
 # definition the newest, so "keep the newest N" is safe in a way that "expire
 # older than N days" is not: a quiet month with no deploys would age the live
 # image out.

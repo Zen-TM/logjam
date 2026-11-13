@@ -32,7 +32,8 @@
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -114,7 +115,7 @@
       [
         "expo-media-library",
         {
-          "savePhotosPermission": "Logjam saves photos and videos you take in the app to your device's gallery.",
+          "savePhotosPermission": "Logjam saves photos and videos you take in Logjam GPS to your device's gallery.",
           "isAccessMediaLocationEnabled": false
         }
       ],

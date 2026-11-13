@@ -30,7 +30,7 @@ runs:
         path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
         key: dev-apk-v1-${{ inputs.legacy_root }}-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json', 'mobile/app.config.ts', 'mobile/assets/**', 'mobile/certs/**', 'mobile/plugins/**', 'mobile/patches/**', 'mobile/modules/**', 'mobile/maplibre/**', '.github/actions/build-dev-apk/action.yml') }}
     - if: steps.cache.outputs.cache-hit != 'true'
-      uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
       with:
         distribution: temurin
         java-version: "17"

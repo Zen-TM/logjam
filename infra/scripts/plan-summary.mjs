@@ -54,6 +54,18 @@ export const ROOTS = {
     // The CloudFront origin header's value: CloudFront returns it to any
     // read-only identity, so state adds no reader it lacks.
     stateSecrets: ["random_password.origin_verify"],
+    // What AWS moves with nobody changing the resource: a sign-up counts
+    // into the pool, and a deploy's invalidation or a rollout still in
+    // progress shows on the distribution. Left out of the value
+    // fingerprints, or a good apply is refused whenever one moves between
+    // the PR's plan and the apply's
+    // (docs/decisions/0026-plan-fingerprint-covers-planned-values.md strips
+    // such an attribute for its resource type). Guard: "a value AWS moves by
+    // itself leaves the value fingerprint alone" (plan-summary.test.mjs).
+    movesAlone: {
+      aws_cloudfront_distribution: ["in_progress_validation_batches", "status"],
+      aws_cognito_user_pool: ["estimated_number_of_users"],
+    },
     changedOutside: "AWS changed outside Terraform",
     handChange: "If AWS was changed by hand",
     touch: "infra/terraform",
@@ -239,7 +251,11 @@ export function valueFingerprints(plan, name, key) {
   for (const c of changes(plan, name)) {
     if (!["create", "update", "replace"].includes(c.kind)) continue;
     const change = c.rc.change;
-    const unseen = [...(r.perViewer ?? []), ...(r.unreadable?.[c.rc.type] ?? [])];
+    const unseen = [
+      ...(r.perViewer ?? []),
+      ...(r.unreadable?.[c.rc.type] ?? []),
+      ...(r.movesAlone?.[c.rc.type] ?? []),
+    ];
     const seen = (v) =>
       v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([k]) => !unseen.includes(k))) : v;
     out[c.address] = createHmac("sha256", key)

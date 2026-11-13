@@ -11,7 +11,7 @@
 # refreshed on purpose, ideally as its own commit:
 #     docker buildx imagetools inspect ubuntu:24.04
 # Digest below verified against the live registry as `ubuntu:24.04` 2026-08-29.
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS base
 
 LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
@@ -21,7 +21,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # ------------------------------------------------------------
-# 1. Bootstrap: add UbuntuGIS PPA
+# Stages. Only the last one is the image: a Fargate task pulls and unpacks every
+# byte of it before the worker's first log line, so what is only needed to
+# build, or to add the PPA, is done in an earlier stage and left there.
+#   base        the pinned Ubuntu above
+#   ppa         base + the UbuntuGIS PPA's apt source
+#   tippecanoe  the compiler, and tippecanoe built with it
+#   (last)      base + runtime packages + the PPA's source + tippecanoe's binary
+# ------------------------------------------------------------
+
+# ------------------------------------------------------------
+# 1. ppa: add the UbuntuGIS PPA
 #    PDAL is NOT in Ubuntu 24.04's default apt repos.
 #    UbuntuGIS also provides a more up-to-date GDAL build.
 #    ubuntugis-*unstable* is not a preference: ubuntugis-stable publishes no
@@ -29,65 +39,83 @@ ENV PYTHONUNBUFFERED=1
 #    The base image cannot move to a newer Ubuntu until the PPA publishes that
 #    release's suite: on 26.04 (`resolute`) `apt-get update` fails with a 404 for
 #    the PPA's Release file (2026-09-30).
+#    add-apt-repository fetches the PPA's signing key from Launchpad's API, which
+#    answers 500/503 when Launchpad is down, so that one step retries with a backoff.
+#    add-apt-repository and its Python stack (software-properties-common,
+#    gpg-agent) stay in this stage: the last stage copies only the source and key
+#    files it wrote.
 #    Residual reproducibility risk accepted: apt has no digest pin, so a PPA
 #    package bump still changes a rebuild even with the pins below. Snapshot the
 #    PPA or vendor .debs if a bad upstream build ever needs bisecting.
 # ------------------------------------------------------------
+FROM base AS ppa
 RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common \
         gpg-agent \
         ca-certificates \
-    && add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable \
-    && apt-get update \
+    && for i in 1 2 3 4; do add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable && break; [ "$i" -lt 4 ] || exit 1; sleep $((i * 15)); done \
     && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# 2. System packages (GDAL + PDAL now available via UbuntuGIS)
-# ------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Python
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3-venv \
-    # GDAL (CLI tools + dev headers + pre-built Python bindings)
-    gdal-bin \
-    libgdal-dev \
-    python3-gdal \
-    # PDAL
-    pdal \
-    libpdal-dev \
-    # Fonts for tile labels
-    fonts-dejavu-core \
-    fonts-dejavu-extra \
-    # Utilities
-    curl \
-    wget \
-    unzip \
-    # Build tools (needed for tippecanoe)
-    build-essential \
-    libsqlite3-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# ------------------------------------------------------------
-# 2b. tippecanoe – GeoJSON → vector MBTiles (MVT format)
-#     Used by the export worker's MBTiles renderer for an old
-#     job's contours and features (renderers/mbtiles.py).
+# 2. tippecanoe – GeoJSON → vector MBTiles (MVT format)
+#    Used by the export worker's MBTiles renderer for an old
+#    job's contours and features (renderers/mbtiles.py), and by the
+#    statewide archive builds (build_coverage.py, build_fire_history.py,
+#    build_land_tenure.py).
 # ------------------------------------------------------------
 #     Pinned to a released tag — `main` HEAD would silently change the
 #     vector-tile renderer on every rebuild, with nothing to bisect.
+#     The last stage copies the one binary the code runs, which links libstdc++,
+#     libsqlite3 and zlib. It installs none of them itself: GDAL's own
+#     dependencies bring them. The build-time `tippecanoe --version` in the last
+#     stage fails the build if one of them stops coming.
+FROM base AS tippecanoe
 ARG TIPPECANOE_VERSION=2.79.0
-RUN mkdir -p /tmp/tippecanoe \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        libsqlite3-dev \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/tippecanoe \
     && curl -fsSL https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz | tar -xz -C /tmp/tippecanoe --strip-components=1 \
     && cd /tmp/tippecanoe \
     && make -j$(nproc) \
-    && make install \
-    && rm -rf /tmp/tippecanoe
+    && make install
+# The Makefile builds with -g: the debug symbols are most of the file.
+RUN strip /usr/local/bin/tippecanoe
 
 # ------------------------------------------------------------
-# 3. Python environment
+# 3. The image: runtime packages only (GDAL + PDAL, via UbuntuGIS)
+#    No compiler, no -dev header package, no apt-installed pip: the Python
+#    dependencies below are all wheels. Every apt step ends by deleting the
+#    package lists, so no layer keeps them. tests/test_docker_image_files.py
+#    holds this: `test_the_last_stage_installs_runtime_packages_only` and
+#    `test_every_apt_step_is_lean_and_cleans_its_lists`.
 # ------------------------------------------------------------
+FROM base
+# apt reaches the PPA over https, so the CA bundle goes in before its source does.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=ppa /etc/apt/sources.list.d/ /etc/apt/sources.list.d/
+COPY --from=ppa /etc/apt/keyrings/ /etc/apt/keyrings/
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python (python3-venv bundles the pip the venv below installs with)
+    python3 \
+    python3-venv \
+    # GDAL (CLI tools + pre-built Python bindings)
+    gdal-bin \
+    python3-gdal \
+    # PDAL (the `pdal` command line; the code never imports it)
+    pdal \
+    # Fonts for tile labels (pipeline.py names DejaVuSans and DejaVuSans-Bold)
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=tippecanoe /usr/local/bin/tippecanoe /usr/local/bin/tippecanoe
+
 # --system-site-packages lets the venv see python3-gdal installed
 # by apt above. This avoids compiling GDAL from source (which
 # would need g++, SWIG, etc.) — the apt bindings are already
@@ -97,20 +125,27 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install pure-Python dependencies only.
 # Do NOT pip install GDAL — we use the system package via the venv above.
+# --only-binary: the image has no compiler, so a dependency that ships no wheel
+# fails the build here instead of compiling.
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip && \
-    pip install -r /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt
 
 # Fail the build, not a job, if the venv's NumPy cannot load the apt GDAL
 # bindings (a NumPy 2 in the venv does exactly that).
 RUN python -c "from osgeo import gdal_array"
 
+# Fail the build, not a job, if a binary the workers run is missing or cannot
+# load a shared library.
+RUN pdal --version && gdalinfo --version && ogr2ogr --version && tippecanoe --version
+
 # ------------------------------------------------------------
 # 4. Application
 # ------------------------------------------------------------
 WORKDIR /app
-# The brain's Postgres certificate, which DATABASE_SSL_CA points at when
-# brain_serving is on (ecs.tf). A build cannot reach outside its context, and
+# The brain's Postgres certificate: the default for DATABASE_SSL_CA
+# (worker_common.py), and what ecs.tf points it at. A build cannot reach outside its context, and
 # this image's is topo/, so the certificate is committed twice: at
 # infra/brain/brain-ca.pem (what Terraform and the API image read) and here.
 # CI fails when the two differ (ci.yml, infra-scripts). The build fails without it.
@@ -153,7 +188,7 @@ COPY icons/ /app/icons/
 # Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected
-#  from the RDS-managed Secrets Manager secret)
+#  from the Secrets Manager secret)
 # Optional: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM,
 #  FRONTEND_URL, AWS_REGION (email is a no-op if any SMTP setting is unset —
 #  see email_send.py)

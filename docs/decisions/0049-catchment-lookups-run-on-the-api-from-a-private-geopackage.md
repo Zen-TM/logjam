@@ -1,4 +1,4 @@
-# 0048. Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix
+# 0049. Catchment lookups run on the API, from a GeoPackage it copies out of a private prefix
 
 - **Date:** 2026-10-15
 - **Status:** Accepted
@@ -40,7 +40,7 @@ and the API has Postgres without PostGIS.
   tables and columns it reads are declared once in the writer; guard:
   `topo/tests/test_flow_network_schema.py`. The API's Node is at least
   22.13, where `node:sqlite` is unflagged: no test holds that floor; CI's api
-  jobs (Node 22) and `api/Dockerfile` (Node 26) are the check.
+  jobs and `api/Dockerfile` (both Node 26) are the check.
 - **The credit** of [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md)
   comes with every answer (`NSW_REGION.terrain.heights.credit`) and on the
   map sources that draw it. Guards: `api/src/services/flowNetwork.unit.test.ts`,
@@ -62,7 +62,7 @@ and the API has Postgres without PostGIS.
   offline; it has no catchment yet (a gap recorded in
   `shared/src/contracts/mapPoint.ts`).
 - **Negative:** `node:sqlite` prints an ExperimentalWarning on Node 22, and
-  the api CI jobs can no longer run on Node 20.
+  the API can no longer run on Node 20.
 - **Neutral:** the layer must be uploaded by hand after a build, by whoever
   holds prod access (`topo/README.md`). Until then the route answers 503.
 

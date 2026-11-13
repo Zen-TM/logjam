@@ -41,6 +41,12 @@ adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 # is a lighter one, and `input text` needs none.
 for ime in $(adb shell ime list -s | tr -d '\r'); do adb shell ime disable "$ime" > /dev/null || true; done
 
+# The software GPU can starve the system launcher until Android raises "Pixel
+# Launcher isn't responding" over the app. That dialog is the system's, so it
+# hides "Not now" from Maestro, outlives the app's force-stop and fails the
+# retry the same way. Dialogs hidden, it never covers the app.
+adb shell settings put global hide_error_dialogs 1
+
 # A 320x640 screen at 160 dpi cannot show the add-place form, and a sheet that
 # scrolls under Maestro's swipes is a flake to chase. Pack more dp into the same
 # pixels, which also costs the software GPU nothing.

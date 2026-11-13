@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TripPlanFormVisibility } from "./tripPlans.js";
 import {
   TRIP_PLAN_FIELD_GROUPS,
   tripPlanAdoptTheirs,
@@ -131,7 +132,7 @@ describe("a form's edits", () => {
   const form = {
     title: "Gear",
     preset: null,
-    visibleTo: "leaders" as const,
+    visibleTo: "leaders" as TripPlanFormVisibility,
     questions: [
       { id: "q1", kind: "text" as const, label: "Boots", required: false },
     ],

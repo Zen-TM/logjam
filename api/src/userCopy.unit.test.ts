@@ -91,7 +91,12 @@ for (const file of [...sourceFiles(API_SRC), ...sourceFiles(SHARED_SRC)]) {
 
 describe("the sentences the API sends", () => {
   it("are found at all — a silent zero would pass forever", () => {
-    expect(sentences.length).toBeGreaterThan(150);
+    // About 295 sentences today: 245 in api/src, 50 in shared/src. The floors
+    // sit well under each, so a few sentences can go, but a directory the
+    // scan stops reaching cannot.
+    const inShared = sentences.filter((s) => s.where.startsWith("shared/"));
+    expect(sentences.length - inShared.length).toBeGreaterThan(200);
+    expect(inShared.length).toBeGreaterThan(40);
   });
 
   it("recognises developer wording", () => {

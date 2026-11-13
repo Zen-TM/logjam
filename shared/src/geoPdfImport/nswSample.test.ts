@@ -16,6 +16,14 @@ import { buildTilePlan } from "./tilePlan";
 const enabled = process.env.RUN_GEOPDF_SAMPLES === "1";
 const sampleDir = process.env.GEOPDF_SAMPLE_DIR;
 
+// ci.yml's `shared` job sets REQUIRE_SAMPLES, so there the cases below cannot
+// silently register nothing; setup-smoke.yml runs without the samples.
+// Mutation that turns it red: REQUIRE_SAMPLES=1 without RUN_GEOPDF_SAMPLES=1.
+if (process.env.REQUIRE_SAMPLES && !enabled)
+  throw new Error(
+    "REQUIRE_SAMPLES is set but RUN_GEOPDF_SAMPLES=1 is not: the sample sheets would not be tested.",
+  );
+
 describe.runIf(enabled)("NSW Spatial Services sample sheets", () => {
   if (!enabled) return;
   if (!sampleDir)

@@ -1,10 +1,10 @@
 # shellcheck shell=bash
-# Sourced by the one-off task scripts (drill.sh, copy.sh): the ECS task role's
+# Sourced by the one-off task script (drill.sh): the ECS task role's
 # credentials and one signed request to S3. The image has no aws CLI, and
 # pgBackRest cannot write or read an arbitrary object, so curl signs it.
 # BRAIN_BACKUP_ENDPOINT and BRAIN_BACKUP_VERIFY_TLS=n point it at an S3
-# stand-in, as in pgbackrest-conf.sh. Guard: tests/e2e.sh (the drill and copy
-# scenarios).
+# stand-in, as in pgbackrest-conf.sh. Guard: tests/e2e.sh (the drill
+# scenario).
 
 # Fargate has no instance metadata: the task role is behind a local URL.
 # Exports AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN.

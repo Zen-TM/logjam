@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
+import { waitForLockWaiter } from "./_waitForLock";
 import {
   API_URL,
   ALICE_ID,
@@ -302,8 +303,9 @@ describe("a plan keeps a leader", () => {
         pending = new Promise((resolve, reject) => {
           act().then(resolve, reject);
         });
-        // Long enough for the request to pass its checks and reach touchPlan.
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Until the request is blocked behind the row this transaction holds
+        // (touchPlan), not for a guessed time.
+        await waitForLockWaiter();
         const alice = { planId_userId: { planId, userId: ALICE_ID } };
         if (change === "demoted")
           await tx.tripPlanMember.update({

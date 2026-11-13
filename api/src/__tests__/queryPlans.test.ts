@@ -221,17 +221,31 @@ describe("key read paths use an index", () => {
   });
 });
 
-// Reads the router.get routes of ROUTER_MOUNTS; /health and /ready sit in
-// index.ts and read no table. Mutation: add a router.get, or rename one.
+// Reads every route of ROUTER_MOUNTS that answers a GET (`router.get`,
+// `router.route(..).get`, `router.all`); /health and /ready sit in index.ts and
+// read no table. Mutation: add a router.get or router.all, or rename one; mount
+// a sub-router with router.use (its routes would go unread, so it fails here).
 it("every router GET is EXPLAINed or left out for a reason", () => {
-  type Layer = { route?: { path: string; methods: Record<string, boolean> } };
-  const routes = ROUTER_MOUNTS.flatMap(([mount, router]) =>
-    (router as unknown as { stack: Layer[] }).stack
-      .filter((layer) => layer.route?.methods.get)
-      .map(
-        (layer) => mount + (layer.route!.path === "/" ? "" : layer.route!.path),
-      ),
-  );
+  type Layer = {
+    route?: { path: string; methods: Record<string, boolean> };
+    handle?: { stack?: Layer[] };
+  };
+  const routes: string[] = [];
+  const nested: string[] = [];
+  for (const [mount, router] of ROUTER_MOUNTS) {
+    for (const layer of (router as unknown as { stack: Layer[] }).stack) {
+      if (layer.handle?.stack && !layer.route) nested.push(mount);
+      // `_all` is what router.all sets: it answers GET too.
+      if (layer.route?.methods.get || layer.route?.methods._all)
+        routes.push(mount + (layer.route.path === "/" ? "" : layer.route.path));
+    }
+  }
+  expect(
+    nested,
+    "A router mounts a sub-router, whose GETs this test cannot read the paths of. Mount it as its own entry in routes/mounts.ts instead.",
+  ).toEqual([]);
+  // A scan that stopped matching would pass vacuously.
+  expect(routes.length).toBeGreaterThan(35);
   const declared = [...Object.keys(READ_PATHS), ...Object.keys(LEFT_OUT)];
   expect(routes.filter((route) => !declared.includes(route))).toEqual([]);
   expect(declared.filter((route) => !routes.includes(route))).toEqual([]);

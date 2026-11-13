@@ -1,11 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { WORKER_SPECS, currentMonthStart } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 import prisma from "../services/prisma";
 import { getSiteCreditUsage } from "../lib/computeCredits";
 import { reapStuckTopoJobs } from "../lib/topoJobReaper";
+import { IN_FLIGHT_STATUSES } from "../lib/fargateCapacity";
 
 // Requires the API (AUTH_MODE=fake). Usage of rows that exist is derived from
 // the job tables; what a delete would erase is carried over by a trigger
@@ -36,9 +38,13 @@ function topoJob(userId: string, startedAt: Date | null = new Date()) {
   });
 }
 
-/** An export that ran 10 minutes: 4 vCPU x 10 = 40 credits. */
+/** An export that ran 10 minutes: 4 vCPU x 10 = 40 credits. It starts no
+ * earlier than this month, or in the month's first 10 minutes it would count
+ * toward the last one and the tests' arithmetic would not move. */
 function exportJob(userId: string) {
-  const startedAt = new Date(Date.now() - MINUTES * 60_000);
+  const startedAt = new Date(
+    Math.max(Date.now() - MINUTES * 60_000, currentMonthStart().getTime()),
+  );
   return prisma.topoExportJob.create({
     data: {
       userId,
@@ -191,6 +197,212 @@ describe("only a job in flight accrues against the clock", () => {
     });
     expect(row.status).toBe("failed");
     expect(row.completedAt).not.toBeNull();
+  });
+});
+
+describe("a finished job's charge stops growing", () => {
+  const HOUR = 60 * 60_000;
+  const metricsOf = async (id: string) =>
+    (await prisma.topoJob.findUniqueOrThrow({ where: { id } }))
+      .pipelineMetrics as Record<string, unknown> | null;
+
+  /** A job that started an hour ago and is finished by `to`, with the metrics
+   * the worker had written while it ran (undefined = SQL NULL). */
+  async function finish(
+    pipelineMetrics: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined,
+    opts: {
+      startedAt?: Date | null;
+      to?: { status: string; pipelineMetrics?: Prisma.InputJsonValue };
+    } = {},
+  ) {
+    const startedAt =
+      opts.startedAt === undefined
+        ? new Date(Date.now() - HOUR)
+        : opts.startedAt;
+    const job = await prisma.topoJob.create({
+      data: {
+        userId: BOB_ID,
+        status: startedAt ? "processing" : "pending",
+        startedAt,
+        pipelineMetrics,
+      },
+    });
+    await prisma.topoJob.update({
+      where: { id: job.id },
+      data: opts.to ?? { status: "failed" },
+    });
+    return job.id;
+  }
+
+  // Mutations that turn this red: drop the stamp_topo_job_wall_seconds trigger,
+  // or stamp only when the new status is `failed`.
+  it("is the same after a later write moves updated_at, whoever ended the job", async () => {
+    for (const status of ["failed", "complete"]) {
+      const before = await bobUsed();
+      const id = await finish(undefined, { to: { status } });
+      const charged = await bobUsed();
+      // An hour of 8 vCPUs, rounded up (the job is a few ms past the hour).
+      expect(charged - before, status).toBeGreaterThanOrEqual(
+        WORKER_SPECS.topo.vcpus * 60,
+      );
+      expect(charged - before, status).toBeLessThanOrEqual(
+        WORKER_SPECS.topo.vcpus * 60 + 2,
+      );
+
+      // A rename a week later.
+      await prisma.$executeRaw`UPDATE topo_jobs SET updated_at = updated_at + interval '7 days' WHERE id = ${id}`;
+      expect(await bobUsed(), status).toBe(charged);
+      await prisma.topoJob.delete({ where: { id } });
+    }
+  });
+
+  // Mutation that turns this red: build the elapsed time from NOW()::timestamp
+  // (the session's zone) instead of NOW() AT TIME ZONE 'UTC'.
+  it("measures from started_at in UTC whatever the session's time zone", async () => {
+    const job = await prisma.topoJob.create({
+      data: {
+        userId: BOB_ID,
+        status: "processing",
+        startedAt: new Date(Date.now() - HOUR),
+      },
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL TIME ZONE 'Australia/Sydney'`;
+      await tx.topoJob.update({
+        where: { id: job.id },
+        data: { status: "failed" },
+      });
+    });
+    expect((await metricsOf(job.id))?.wallSeconds).toBeCloseTo(3600, -1);
+    await prisma.topoJob.delete({ where: { id: job.id } });
+  });
+
+  // Mutation that turns this red: build the result with jsonb_set on
+  // pipeline_metrics (it raises on a scalar, and the guard swallows the stamp).
+  it.each([
+    ["SQL NULL", undefined],
+    ["JSON null", Prisma.JsonNull],
+    ["an object without wallSeconds", { schemaVersion: 1, phases: { a: 2 } }],
+  ])("stamps the elapsed time when the metrics are %s", async (_, metrics) => {
+    const id = await finish(metrics);
+    const got = await metricsOf(id);
+    expect(got?.wallSeconds).toBeCloseTo(3600, -1);
+    if (metrics && typeof metrics === "object") {
+      expect(got).toMatchObject(metrics);
+    }
+    await prisma.topoJob.delete({ where: { id } });
+  });
+
+  // Mutation that turns this red: drop the numeric-wallSeconds guard from the
+  // trigger, so it overwrites the worker's own measurement.
+  it("leaves the worker's own wallSeconds alone, early or in the same update", async () => {
+    const early = await finish({ wallSeconds: 123 });
+    expect((await metricsOf(early))?.wallSeconds).toBe(123);
+    const same = await finish(undefined, {
+      to: { status: "complete", pipelineMetrics: { wallSeconds: 42 } },
+    });
+    expect((await metricsOf(same))?.wallSeconds).toBe(42);
+    await prisma.topoJob.deleteMany({ where: { id: { in: [early, same] } } });
+  });
+
+  // Mutation that turns this red: drop the started_at check from the trigger.
+  it("stamps nothing on a job that never started, or while it is still in flight", async () => {
+    const never = await finish(undefined, { startedAt: null });
+    expect(await metricsOf(never)).toBeNull();
+
+    const running = await prisma.topoJob.create({
+      data: {
+        userId: BOB_ID,
+        status: "pending",
+        startedAt: new Date(Date.now() - HOUR),
+      },
+    });
+    await prisma.topoJob.update({
+      where: { id: running.id },
+      data: { status: "processing", errorMessage: "heartbeat" },
+    });
+    expect(await metricsOf(running.id)).toBeNull();
+    await prisma.topoJob.deleteMany({
+      where: { id: { in: [never, running.id] } },
+    });
+  });
+
+  // Mutation that turns this red: remove the EXCEPTION handler from
+  // stamp_topo_job_wall_seconds. The stamp is made to fail for one marked row by
+  // putting a public.jsonb_typeof ahead of pg_catalog's in the function's search
+  // path: no data fails the stamp on every Postgres version (an infinite
+  // started_at raised on 16 and, since 17, stamps 0). The shim delegates for
+  // every other row, so a stamp running at the same time is unaffected.
+  it("a stamp that fails never blocks a status write", async () => {
+    const job = await prisma.topoJob.create({
+      data: {
+        userId: BOB_ID,
+        status: "processing",
+        startedAt: new Date(Date.now() - HOUR),
+        pipelineMetrics: { failTheStamp: true },
+      },
+    });
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION public.jsonb_typeof(j jsonb) RETURNS text LANGUAGE plpgsql AS $$
+        BEGIN
+          IF j ? 'failTheStamp' THEN RAISE EXCEPTION 'injected'; END IF;
+          RETURN pg_catalog.jsonb_typeof(j);
+        END $$`);
+      await prisma.$executeRawUnsafe(
+        "ALTER FUNCTION stamp_topo_job_wall_seconds() SET search_path = public, pg_catalog",
+      );
+      await prisma.$executeRaw`UPDATE topo_jobs SET status = 'failed' WHERE id = ${job.id}`;
+      const [row] = await prisma.$queryRaw<
+        { status: string; pipeline_metrics: unknown }[]
+      >`SELECT status, pipeline_metrics FROM topo_jobs WHERE id = ${job.id}`;
+      expect(row).toEqual({
+        status: "failed",
+        pipeline_metrics: { failTheStamp: true },
+      });
+    } finally {
+      await prisma.$executeRaw`DELETE FROM topo_jobs WHERE id = ${job.id}`;
+      await prisma.$executeRawUnsafe(
+        "ALTER FUNCTION stamp_topo_job_wall_seconds() RESET search_path",
+      );
+      await prisma.$executeRawUnsafe(
+        "DROP FUNCTION IF EXISTS public.jsonb_typeof(jsonb)",
+      );
+    }
+  });
+
+  // Mutations that turn this red: add a status to IN_FLIGHT_STATUSES.topo
+  // (fargateCapacity.ts) without the SQL lists, or remove one from the trigger's
+  // list (or from topo_job_credits's). A job is "in flight" for the vCPU cap, the
+  // stamp and the charge's NOW() alike.
+  it("the SQL's in-flight statuses are IN_FLIGHT_STATUSES.topo", async () => {
+    const startedAt = new Date(Date.now() - HOUR);
+    const stampedOnLeaving = async (from: string) => {
+      const job = await prisma.topoJob.create({
+        data: { userId: BOB_ID, status: from, startedAt },
+      });
+      await prisma.topoJob.update({
+        where: { id: job.id },
+        data: { status: "failed" },
+      });
+      const wallSeconds = (await metricsOf(job.id))?.wallSeconds;
+      await prisma.topoJob.delete({ where: { id: job.id } });
+      return typeof wallSeconds === "number";
+    };
+    // Credits of a job whose updated_at is its started_at: 0 unless priced
+    // against NOW().
+    const pricedAgainstNow = async (status: string) => {
+      const [{ credits }] = await prisma.$queryRaw<{ credits: bigint }[]>`
+        SELECT topo_job_credits(${status}, NULL, ${startedAt}::timestamp, ${startedAt}::timestamp)::bigint AS credits`;
+      return Number(credits) > 0;
+    };
+
+    for (const status of IN_FLIGHT_STATUSES.topo) {
+      expect(await stampedOnLeaving(status), status).toBe(true);
+      expect(await pricedAgainstNow(status), status).toBe(true);
+    }
+    expect(await stampedOnLeaving("complete")).toBe(false);
+    expect(await pricedAgainstNow("complete")).toBe(false);
   });
 });
 

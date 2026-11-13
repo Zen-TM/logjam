@@ -7,7 +7,7 @@ Closes #
 
 ## Testing
 
-<!-- What you ran, and the test that shows the change works. If no test changed, say why. -->
+<!-- What you ran, and the test that shows the change works. If no test changed, say why. For a new guard test: the change to the code that turns it red, and that you saw it red. -->
 
 ## Privacy
 

@@ -66,13 +66,15 @@ describe("coordinates copy where they are pressed", () => {
     expect(roots.flatMap(sourceFiles).length).toBeGreaterThan(100);
   });
 
+  // Parses every .tsx of both clients: 4 s on a loaded laptop, so the 5 s
+  // default is too close.
   it("has no copy-coordinates button in either client", () => {
     expect(
       roots
         .flatMap(sourceFiles)
         .flatMap((file) => scan(file, readFileSync(file, "utf8"))),
     ).toEqual([]);
-  });
+  }, 30_000);
 
   it.each([
     `<IconButton icon="copy" label="Copy the coordinates of X" />`,

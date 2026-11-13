@@ -1,18 +1,14 @@
 # The brain's instance role. Containers on the host use it through the
-# instance metadata service, as the API does on its Elastic Beanstalk instance
-# today (hop limit 2).
+# instance metadata service (hop limit 2).
 #
-# It carries what the API uses of logjam-eb-role (the secrets, the S3 grant,
-# Cognito, the worker launch grant), the backup and signals buckets, image pull
-# and the brain's two log groups. It leaves out what the live role also has:
+# It carries what the API uses: the secrets, the S3 grant, Cognito, the worker
+# launch grant (with ecs:StopTask, which topoJobs.ts and topoJobReaper.ts
+# call), the backup and signals buckets, image pull and the brain's two log
+# groups. It leaves out the broad grants an instance role often carries:
 #   - CloudWatchFullAccess, CloudWatchAgentServerPolicy: no agent runs; the
 #     awslogs driver needs only CreateLogStream and PutLogEvents on two groups.
 #   - AmazonEC2ContainerRegistryReadOnly: pull is scoped to two repositories.
-#   - DatabasePasswordAccess (the RDS master secret): the API runs as logjam_app.
-#   - The Elastic Beanstalk platform bucket grant: there is no Elastic Beanstalk.
-#   - ecs:RunTask on logjam-geo-pdf-worker: that task definition no longer exists.
-# and adds ecs:StopTask, which the API calls (topoJobs.ts, topoJobReaper.ts) and
-# the live role never allowed.
+#   - The database's master secret: the API runs as logjam_app.
 #
 # Only the inline policy below may be on the role: the exclusive resource
 # undoes any other inline policy added by hand. Managed policies are not

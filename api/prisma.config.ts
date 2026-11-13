@@ -20,15 +20,24 @@ export function composeDatabaseUrl(parts: {
 // The schema engine behind `migrate deploy` ignores node-postgres's ssl
 // settings and reads its own URL parameters: without `sslaccept=strict` it
 // accepts any certificate, and `sslrootcert` / `sslmode=verify-full` are
-// ignored. `sslcert` names the CA to trust (hostname checked too). Only an
-// explicit DATABASE_SSL_CA turns this on, so the RDS path keeps its URL as it
-// is. These parameters must never reach the runtime URL (src/lib/databaseUrl.ts):
-// node-postgres would misread them. Guard: src/lib/databaseUrl.unit.test.ts.
+// ignored. `sslcert` names the CA to trust (hostname checked too). It is the
+// brain's certificate in production unless DATABASE_SSL_CA names another, so a
+// production run never connects in the clear (an empty DATABASE_SSL_CA is
+// unset, and DATABASE_SSL=disable throws, as validateEnv does for the API);
+// elsewhere only an explicit DATABASE_SSL_CA turns it on. These parameters must never reach the runtime
+// URL (src/lib/databaseUrl.ts): node-postgres would misread them. Guard:
+// src/lib/databaseUrl.unit.test.ts.
 export function migrateDatabaseUrl(
   url: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const ca = env.DATABASE_SSL_CA;
+  const production = env.NODE_ENV === "production";
+  if (production && env.DATABASE_SSL === "disable") {
+    throw new Error("DATABASE_SSL=disable is forbidden in production.");
+  }
+  // `||`, not `??`: an empty DATABASE_SSL_CA must not read as "no certificate".
+  const ca =
+    env.DATABASE_SSL_CA || (production ? "/app/brain-ca.pem" : undefined);
   if (!ca || env.DATABASE_SSL === "disable") return url;
   return `${url}?sslmode=require&sslaccept=strict&sslcert=${encodeURIComponent(resolve(ca))}`;
 }

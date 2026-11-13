@@ -36,7 +36,6 @@
 import {
   Fragment,
   useEffect,
-  useMemo,
   useState,
   useSyncExternalStore,
   type ComponentProps,
@@ -711,7 +710,6 @@ function LayersTab({
   choices: Partial<Record<OverlayTerrainKey, string | null>>;
 }) {
   const theme = useTheme();
-  const { assetHue } = useHues();
   const styles = useStyles();
 
   const overlayRow = (key: OverlayTerrainKey) => {

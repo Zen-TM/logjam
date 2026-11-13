@@ -148,7 +148,7 @@ function formatCustomFieldValue(
   if (type === "boolean") return value ? "Yes" : "No";
   if (type === "date" && typeof value === "string") {
     // Date-typed attributes are stored as UTC-midnight (date-only); format in
-    // UTC so AEST (UTC+10/+11) doesn't render the prior day.
+    // UTC so a zone behind UTC (the Americas) doesn't render the prior day.
     return new Date(value).toLocaleDateString("en-AU", {
       year: "numeric",
       month: "long",

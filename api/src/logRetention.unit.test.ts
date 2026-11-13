@@ -1,13 +1,11 @@
 // One retention figure for every operational log, declared once as
 // local.operational_log_retention_days (infra/terraform/envs/prod/logging.tf).
-// privacy.html states it, EB applies it from .ebextensions, and Terraform
-// applies it everywhere else; this holds all of them to the one local, and the
-// published audit figure to var.audit_log_retention_days.
+// privacy.html states it and Terraform applies it; this holds both to the one
+// local, and the published audit figure to var.audit_log_retention_days.
 //
 // Mutations that turn it red: a literal `retention_in_days = 90` on any log
-// group, a literal `expiration_days` on the access-logs rule, RetentionInDays
-// in cloudwatch-logs.config changed alone, or either figure in privacy.html
-// edited without the Terraform that enforces it.
+// group, a literal `expiration_days` on the access-logs rule, or either figure
+// in privacy.html edited without the Terraform that enforces it.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -69,15 +67,6 @@ describe("log retention", () => {
         s3,
       )?.[1];
     expect(rule).toBe("local.operational_log_retention_days");
-  });
-
-  it("gives the EB-owned API log groups the same figure", () => {
-    const config = read("api", ".ebextensions", "cloudwatch-logs.config");
-    const values = [...config.matchAll(/RetentionInDays:\s*(\d+)/g)].map(
-      (match) => Number(match[1]),
-    );
-    expect(values.length).toBeGreaterThan(0);
-    expect(values.every((days) => days === operationalDays)).toBe(true);
   });
 
   it("publishes the figures Terraform enforces", () => {

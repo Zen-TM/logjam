@@ -55,9 +55,6 @@ resource "aws_iam_policy" "github_actions_apply_boundary" {
     Statement = concat(
       [
         { Sid = "AllowWithinBoundary", Effect = "Allow", Action = "*", Resource = "*" },
-        # Terraform never connects to the database; IAM DB auth would bypass
-        # the app role's and the operator's audited paths (db_app_role.tf).
-        { Sid = "DenyDbConnect", Effect = "Deny", Action = "rds-db:connect", Resource = "*" },
         {
           Sid    = "DenySelfEdit"
           Effect = "Deny"

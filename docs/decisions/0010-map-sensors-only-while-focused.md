@@ -25,7 +25,7 @@ starting" flags that disagreed about whether the dot was on. The user's
 *intention* (`dotWanted`) is separate state from the subscription handle;
 anything asking "is the dot on" must read the intention. The RECORDER is exempt
 and must stay exempt: it is a foreground service and running in the background
-is its whole job. **No executable check.**
+is its whole job. **Guard: `mobile/src/batteryRules.test.ts` (updated 2026-11-12).**
 
 **The compass heading never goes back into a screen's state.** It lives in
 `map/heading.ts` behind `publishHeading`/`useLiveHeading` and is read by exactly

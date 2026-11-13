@@ -82,7 +82,6 @@ import {
   directShareRevokeTombstones,
   routeDeleteTombstones,
   placeLinkDeleteTombstones,
-  placeTypeDeleteTombstones,
   writeTombstones,
 } from "../lib/syncTombstones";
 import {
@@ -1632,10 +1631,6 @@ async function applyPlaceTypeOp(
     if (!result.ok) {
       throw new AppError(409, placeTypeInUse(result.placeCount));
     }
-    await writeTombstones(
-      prisma,
-      placeTypeDeleteTombstones({ ownerId: userId, placeTypeId: op.id }),
-    );
     return { opId: op.opId, status: "applied" };
   }
 

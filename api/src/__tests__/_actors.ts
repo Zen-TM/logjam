@@ -6,6 +6,11 @@
 // onto a supertest `.set(...)`.
 
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import {
+  BOB_SHARED_PLACE_ID,
+  BOB_SHARED_ROUTE_ID,
+  BOB_SHARED_TOPO_JOB_ID,
+} from "../../prisma/seedIds";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
@@ -14,35 +19,22 @@ export const ALICE_SUB = "fake-alice-sub";
 export const BOB_SUB = "fake-bob-sub";
 export const CAROL_SUB = "fake-carol-sub";
 
-// Seed user row IDs (api/prisma/seed.ts — these mirror its `seedId` helper and
-// like it MUST stay real UUIDv4s; see src/lib/seedIds.unit.test.ts).
-export const ALICE_ID = "00000000-0000-4000-8000-000000000001";
-export const BOB_ID = "00000000-0000-4000-8000-000000000002";
-export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
-
-// Seed place IDs (all alice-owned). Places 0 and 1 are shared with bob;
-// carol is shared nothing (the stranger).
-export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
-
-// What bob shares WITH alice — bob's "Coin Slot" place. Named here rather than
-// assumed absent: assert against these instead of against `[]` (see
-// friendShares.test.ts), so a seed change fails loudly here.
-export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
-/** Bob's own Marker place, shared with nobody — the seed's "6" space is the
- *  waypoint space: waypoint ids are preserved as place ids. */
-export const BOB_MARKER_PLACE_ID = "60000000-0000-4000-8000-000000000005";
-/** Bob's route, DIRECTLY shared with alice — the incoming half of the seed's
- *  sharing, and one of three things in alice's received `Share` list (below). */
-export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
-/** Bob's complete topo job, DIRECTLY shared with alice too. */
-export const BOB_SHARED_TOPO_JOB_ID = "f0000000-0000-4000-8000-000000000004";
-/** The seed's plan (alice leads, bob is a member, carol asked to join) and the place
- *  and route it owns, which belong to no user. */
-export const SEED_PLAN_ID = "f0000000-0000-4000-8000-000000000100";
-export const PLAN_PLACE_ID = "60000000-0000-4000-8000-000000000100";
-export const PLAN_ROUTE_ID = "70000000-0000-4000-8000-000000000100";
-/** carol's plan, which she has invited alice to by username. */
-export const CAROL_PLAN_ID = "f0000000-0000-4000-8000-000000000110";
+// Seed row ids come from the seed's own declaration (prisma/seedIds.ts), so a
+// test cannot name a row the seed does not write.
+export {
+  ALICE_ID,
+  BOB_ID,
+  CAROL_ID,
+  SHARED_PLACE_ID,
+  BOB_SHARED_PLACE_ID,
+  BOB_MARKER_PLACE_ID,
+  BOB_SHARED_ROUTE_ID,
+  BOB_SHARED_TOPO_JOB_ID,
+  SEED_PLAN_ID,
+  PLAN_PLACE_ID,
+  PLAN_ROUTE_ID,
+  CAROL_PLAN_ID,
+} from "../../prisma/seedIds";
 /** Everything bob shares with alice, in the seed: the exact set the friend
  *  audit reports in each direction. */
 export const BOB_SHARES_WITH_ALICE = [
@@ -72,4 +64,38 @@ export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
 //   request(API_URL).get("/places").set(as(BOB_SUB))
 export function as(sub: string): Record<string, string> {
   return { Authorization: "Bearer fake-token", "x-fake-sub": sub };
+}
+
+// Allow-lists of what one user may see of another. Literal on purpose: a field
+// added to a select or a serializer reaches these responses only once someone
+// reads this list and decides, which a deny-list on `email` never forces.
+
+/** The keys of another user wherever a response names one. */
+export const OTHER_USER_KEYS = ["id", "username"];
+
+/** The keys of a place row as its sharee receives it (REST and delta), before
+ *  the per-surface extras (`media`, `syncRole`, `fieldDefsSnapshot`). Mirrors
+ *  SHAREE_VISIBLE_PLACE_FIELDS in lib/placeVisibility.ts. */
+export const SHAREE_PLACE_KEYS = [
+  "altNames",
+  "createdAt",
+  "elevation",
+  "fieldValues",
+  "forkedFromId",
+  "gaugeId",
+  "id",
+  "latitude",
+  "longitude",
+  "name",
+  "notes",
+  "ownerId",
+  "placeTypeId",
+  "ropeWikiId",
+  "ropeWikiSnapshot",
+  "updatedAt",
+];
+
+/** Sorted own keys, for an exact-key assertion. */
+export function keysOf(value: unknown): string[] {
+  return Object.keys(value as Record<string, unknown>).sort();
 }

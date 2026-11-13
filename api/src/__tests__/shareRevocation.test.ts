@@ -162,7 +162,7 @@ async function inbox(sub: string) {
   return res.body as { fileSendId: string; status: string }[];
 }
 
-describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
+describe("unfriend revokes every share type", () => {
   beforeAll(async () => {
     await ensureFriends(BOB_SUB, CAROL_ID, CAROL_SUB);
   });
@@ -338,7 +338,7 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
   });
 });
 
-describe("revoked place share stops resolving the place name (APIR-012)", () => {
+describe("revoked place share stops resolving the place name", () => {
   it("drops the recipient's place_shared notification once the share is gone", async () => {
     // Alice shares a throwaway place with bob, then revokes it. The place row
     // survives under alice, so only a live-share check can drop the notification
@@ -401,7 +401,7 @@ describe("revoked place share stops resolving the place name (APIR-012)", () => 
   });
 });
 
-describe("foreign notification ids answer 404, never 403 (APIR-013 / PRIV-105)", () => {
+describe("foreign notification ids answer 404, never 403", () => {
   it("a stranger's notification id is indistinguishable from a missing one", async () => {
     const mine = await request(API_URL)
       .get("/notifications")

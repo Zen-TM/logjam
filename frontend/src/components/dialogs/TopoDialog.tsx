@@ -293,7 +293,7 @@ export default function TopoDialog({
         if (!cancelled) {
           setValidationError(
             e instanceof ElvisZipError
-              ? e.message
+              ? e.sentence
               : "Could not read this ZIP file.",
           );
         }

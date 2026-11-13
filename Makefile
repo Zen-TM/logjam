@@ -106,8 +106,9 @@ announce:
 
 ## Dump + sanitize prod DB into snapshots/latest.sql
 ## Requires DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD env
-## vars pointing at the prod RDS instance (DB_PORT_PROD optional, default 5432).
+## vars pointing at the prod database (DB_PORT_PROD optional, default 5432).
 ## Password lives in Secrets Manager — fetch it manually before running this.
+## Needs a pg_dump at least as new as prod's Postgres (scripts/snapshot.sh).
 snapshot:
 	@if [ -z "$$DB_HOST_PROD" ] || [ -z "$$DB_NAME_PROD" ] || [ -z "$$DB_USER_PROD" ] || [ -z "$$DB_PASSWORD_PROD" ]; then \
 		echo "ERROR: DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD must all be set."; \

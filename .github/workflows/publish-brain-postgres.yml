@@ -30,6 +30,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: prod
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     permissions:
       id-token: write
       contents: read
@@ -75,6 +76,7 @@ jobs:
     needs: build
     environment: prod
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: read

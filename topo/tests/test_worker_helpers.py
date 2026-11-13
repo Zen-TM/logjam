@@ -187,10 +187,12 @@ class TestComposeDatabaseUrl(unittest.TestCase):
                 "DB_PASSWORD",
                 "DATABASE_SSL",
                 "DATABASE_SSL_CA",
+                "NODE_ENV",
             )
         }
         os.environ.pop("DATABASE_SSL", None)
         os.environ.pop("DATABASE_SSL_CA", None)
+        os.environ.pop("NODE_ENV", None)
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -200,6 +202,7 @@ class TestComposeDatabaseUrl(unittest.TestCase):
                 os.environ[k] = v
 
     def test_url_encodes_special_characters(self):
+        os.environ["DATABASE_SSL"] = "disable"  # the TLS parameters are tested below
         os.environ["DB_HOST"] = "db.example.com"
         os.environ["DB_PORT"] = "5432"
         os.environ["DB_NAME"] = "logjam"
@@ -224,11 +227,15 @@ class TestComposeDatabaseUrl(unittest.TestCase):
         os.environ["DB_USER"] = "u"
         os.environ["DB_PASSWORD"] = "p"
 
-    def test_unset_ca_adds_no_ssl_parameters(self):
+    # Mutation: default to no certificate again (the `or BRAIN_CA_PATH`), or
+    # change the path: a worker with no DATABASE_SSL_CA would connect in the
+    # clear.
+    def test_unset_ca_verifies_against_the_brains_certificate(self):
         self._basic_env()
         self.assertEqual(
             compose_database_url(),
-            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}",
+            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}"
+            "&sslmode=verify-full&sslrootcert=/app/brain-ca.pem",
         )
 
     # Mutation: drop the sslmode/sslrootcert parameters, or let
@@ -245,6 +252,33 @@ class TestComposeDatabaseUrl(unittest.TestCase):
     def test_ssl_disable_stays_plain_even_with_a_ca(self):
         self._basic_env()
         os.environ["DATABASE_SSL_CA"] = "/etc/logjam/ca.pem"
+        os.environ["DATABASE_SSL"] = "disable"
+        self.assertEqual(
+            compose_database_url(),
+            f"postgresql://u:p@db:5432/logjam?{self.HYGIENE}",
+        )
+
+    # Mutation: `os.environ.get("DATABASE_SSL_CA", BRAIN_CA_PATH)` in place of
+    # the `or`: an empty value is then a certificate named "".
+    def test_an_empty_ca_is_unset(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL_CA"] = ""
+        self.assertIn(
+            "sslrootcert=/app/brain-ca.pem",
+            compose_database_url(),
+        )
+
+    # Mutation: drop the NODE_ENV check on DATABASE_SSL=disable in
+    # compose_database_url: a production worker then connects in the clear.
+    def test_ssl_disable_is_refused_in_production(self):
+        self._basic_env()
+        os.environ["DATABASE_SSL"] = "disable"
+        os.environ["NODE_ENV"] = "production"
+        with self.assertRaisesRegex(RuntimeError, "forbidden in production"):
+            compose_database_url()
+
+    def test_ssl_disable_stays_plain_without_a_ca(self):
+        self._basic_env()
         os.environ["DATABASE_SSL"] = "disable"
         self.assertEqual(
             compose_database_url(),

@@ -2,8 +2,7 @@
 #   web (E22J79PHZM2K): logjamnsw.com + www — multi-origin, serves the frontend
 #     SPA bucket (default behavior) AND topo tiles from logjam-topo-jobs under
 #     /master/* (ordered behavior). This is TOPO_CDN_BASE_URL (https://logjamnsw.com).
-#   api (E29GLTTDM6CXX4): api.logjamnsw.com — fronts the Elastic Beanstalk API,
-#     or the brain's once var.brain_public is set (brain.auto.tfvars).
+#   api (E29GLTTDM6CXX4): api.logjamnsw.com — fronts the API on the brain.
 #
 # The OAC ids (E1WNCNLBS8VU / E23DDV2YT80WV) and the CloudFront-created WAF web
 # ACLs are referenced as literals, not managed here (optional later adoption).
@@ -122,7 +121,7 @@ resource "aws_cloudfront_distribution" "api" {
     min_ttl                  = 0
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
     smooth_streaming         = false
-    target_origin_id         = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl"
+    target_origin_id         = "logjam-brain"
     trusted_key_groups       = []
     trusted_signers          = []
     viewer_protocol_policy   = "redirect-to-https"
@@ -134,18 +133,15 @@ resource "aws_cloudfront_distribution" "api" {
   origin {
     connection_attempts = 3
     connection_timeout  = 10
-    # Elastic Beanstalk until brain_public, then the brain's Elastic IP name
-    # (brain.auto.tfvars). Only the domain moves: the origin id stays the one
-    # the default behavior names, because renaming it would show as a diff to
-    # both, and the header, port and policies are the same for both origins.
-    # Guards: brain_public_points_cloudfront_at_the_brain (and
-    # brain_is_dormant_for_cloudfront_and_tasks for the default).
-    domain_name = var.brain_public ? aws_eip.brain[0].public_dns : "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com"
-    origin_id   = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl"
+    # The brain's Elastic IP name, unconditionally: with no brain (empty
+    # brain_pg_image_tag) this does not plan, which is the point. Guard:
+    # prod_runs_on_the_brain.
+    domain_name = aws_eip.brain[0].public_dns
+    origin_id   = "logjam-brain"
     # Origin-verify (WAF-bypass guard). Only CloudFront knows this token; the API
     # rejects origin fetches whose X-Origin-Verify doesn't match, so a client
-    # hitting the EB CNAME directly (skipping this distribution + its WAF) is
-    # refused. Value is the managed random_password in origin_verify.tf. Never
+    # hitting the brain's address directly (skipping this distribution + its WAF)
+    # is refused. Value is the managed random_password in origin_verify.tf. Never
     # exposed to viewers — CloudFront adds it server-side on the origin request.
     custom_header {
       name  = "X-Origin-Verify"

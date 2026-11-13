@@ -26,8 +26,10 @@ console):
   `infra/terraform/envs/prod/iam.tf`): the same grant, plus the state
   bucket. The state's one secret value is `random_password.origin_verify`,
   which CloudFront also returns to any read-only identity as the origin's
-  `X-Origin-Verify` header. The RDS master password is RDS-managed and the
-  secret versions are write-only (`secret_string_wo`), so neither is in state.
+  `X-Origin-Verify` header. The database's superuser has no password, the
+  application role's password is set outside Terraform, and the secret
+  versions Terraform writes are write-only (`secret_string_wo`), so none is in
+  state (updated 2026-11-12: this named RDS's managed master password).
 - **The plan App's key** (`SETTINGS_PLAN_APP_KEY`): nothing
   ([0025](0025-github-settings-in-terraform.md)).
 - **`PLAN_FINGERPRINT_KEY`**: whoever holds it can sign a plan comment that
@@ -79,9 +81,9 @@ jobs fail if `PLAN_FINGERPRINT_KEY` is a secret of their Environment, and the
 `scope` job if it is a repository secret. `infra/scripts/plan-summary.test.mjs`
 covers unsigned and edited comments, the attribute names in the summary, and
 a new secret in state. Nothing checks that `ReadOnlyAccess` minus the Deny
-stays within what a collaborator should read (0032's gap), or that the EB
-environment's properties, which CI sets and the state holds, carry no
-secret.
+stays within what a collaborator should read (0032's gap) (updated
+2026-11-12: a second gap, the Elastic Beanstalk environment's properties in
+state, went with the environment).
 
 ## Consequences
 

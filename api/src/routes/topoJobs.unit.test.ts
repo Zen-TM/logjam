@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { TOPO_JOB_SELECT, serializeTopoJobFor, sharpenMark } from "./topoJobs";
+import {
+  OWNER_ONLY_TOPO_JOB_FIELDS,
+  SHAREE_VISIBLE_TOPO_JOB_FIELDS,
+  TOPO_JOB_SELECT,
+  serializeTopoJobFor,
+  sharpenMark,
+} from "./topoJobs";
 
 // The job view is the one place three endpoints agree on what a client may see
 // of a TopoJob.
@@ -66,6 +72,49 @@ describe("serializeTopoJobFor", () => {
       }
       expect(emitted.has(column)).toBe(true);
     }
+  });
+});
+
+// The sharee half of the job view is an allow-list too. serializeTopoJobFor
+// spreads every selected column, so a column added to TOPO_JOB_SELECT would
+// reach every sharee by default; the lists in routes/topoJobs.ts make it a
+// decision.
+//
+// Mutation that turns it red: adding `pipelineMetrics: true` (or any column) to
+// TOPO_JOB_SELECT without classifying it, emitting userId or s3OutputKeys to a
+// recipient, or dropping a visible column from the view.
+describe("what a sharee sees of a job", () => {
+  // A row carrying every column a handler can select.
+  const everything = Object.fromEntries(
+    Object.keys({ ...TOPO_JOB_SELECT, s3OutputKeys: true }).map((key) => [
+      key,
+      key === "userId" ? OWNER : null,
+    ]),
+  ) as { userId: string } & Record<string, unknown>;
+
+  it("is exactly the declared fields", () => {
+    expect(
+      Object.keys(serializeTopoJobFor(everything, SHAREE)).sort(),
+      "a job's recipient sees SHAREE_VISIBLE_TOPO_JOB_FIELDS, no more: add " +
+        "the column there, or to OWNER_ONLY_TOPO_JOB_FIELDS with the reason, " +
+        "in routes/topoJobs.ts",
+    ).toEqual([...SHAREE_VISIBLE_TOPO_JOB_FIELDS].sort());
+  });
+
+  it("classifies every selected column", () => {
+    const classified = new Set([
+      ...SHAREE_VISIBLE_TOPO_JOB_FIELDS,
+      ...Object.keys(OWNER_ONLY_TOPO_JOB_FIELDS),
+    ]);
+    expect(
+      Object.keys(everything).filter((key) => !classified.has(key)),
+      "classify each column in routes/topoJobs.ts: sharee-visible or owner-only",
+    ).toEqual([]);
+    expect(
+      Object.keys(OWNER_ONLY_TOPO_JOB_FIELDS).filter((key) =>
+        SHAREE_VISIBLE_TOPO_JOB_FIELDS.includes(key),
+      ),
+    ).toEqual([]);
   });
 });
 

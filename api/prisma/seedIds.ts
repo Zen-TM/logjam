@@ -6,7 +6,7 @@
 // row parks blocked with a 400 nothing in the app surfaces.
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
-// places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
+// places (and from 200 up, the edge users' own), "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
 // "6" marker places and the links between places (the waypoint space —
 // waypoint ids are preserved as place ids), "7" routes, "8" direct (per-item)
 // shares, "9" user-created place types, "c" trip logs, "d" friendships, "e"
@@ -23,6 +23,47 @@ export const seedId = (prefix: string, n: number) =>
   `${prefix}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 export const cid = (n: number) => seedId("1", n);
+
+// The rows tests and specs name by id. One declaration, imported by the seed
+// and by src/__tests__/_actors.ts, so the two cannot disagree; a unit test
+// (src/lib/seedIds.unit.test.ts) holds that the seed uses every one.
+export const ALICE_ID = seedId("0", 1);
+export const BOB_ID = seedId("0", 2);
+export const CAROL_ID = seedId("0", 3);
+/** Alice's place shared with bob. */
+export const SHARED_PLACE_ID = cid(1);
+/** Bob's "Coin Slot" place, shared with alice. */
+export const BOB_SHARED_PLACE_ID = seedId("2", 2);
+/** Bob's own Marker place, shared with nobody; the "6" space is the waypoint
+ *  space (waypoint ids are preserved as place ids). */
+export const BOB_MARKER_PLACE_ID = seedId("6", 5);
+/** Bob's route, directly shared with alice. */
+export const BOB_SHARED_ROUTE_ID = seedId("7", 3);
+/** Bob's complete topo job, directly shared with alice. */
+export const BOB_SHARED_TOPO_JOB_ID = seedId("f", 4);
+/** The seed's plan (alice leads, bob is a member, carol asked to join) and the
+ *  place and route it owns, which belong to no user. */
+export const SEED_PLAN_ID = seedId("f", 100);
+export const PLAN_PLACE_ID = seedId("6", 100);
+export const PLAN_ROUTE_ID = seedId("7", 100);
+/** Carol's plan, which she has invited alice to by username. */
+export const CAROL_PLAN_ID = seedId("f", 110);
+
+/** Accounts that each hold a state the three main users cannot: no data, no
+ *  consent, a consent from before the current text, a full quota, awkward text,
+ *  work in flight, a plan led and a plan edited. None is a friend of alice, bob
+ *  or carol, so nothing the suites assert about the friend graph or sharing
+ *  sees them. prisma/seedStates.ts names what each holds. */
+export const SEED_EDGE_USERS = {
+  empty: seedId("0", 4),
+  unconsented: seedId("0", 5),
+  staleConsent: seedId("0", 6),
+  atQuota: seedId("0", 7),
+  awkwardText: seedId("0", 8),
+  topoInFlight: seedId("0", 9),
+  planLeader: seedId("0", 10),
+  planEditor: seedId("0", 11),
+} as const;
 
 /** Every prefix the seed mints under — the list the guard test iterates. */
 export const SEED_ID_PREFIXES = [

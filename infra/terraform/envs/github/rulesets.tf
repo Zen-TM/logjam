@@ -18,10 +18,12 @@ locals {
   # gitleaks also flags generic high-entropy secrets. The heavy jobs
   # (api-integration, mobile, migrations, migration-upgrade, topo-e2e,
   # rollback-compat's "Live release on this schema", terraform-ci's,
-  # setup-smoke, brain-e2e behind brain-e2e-gate) skip, and so pass, on a PR
+  # setup-smoke, brain-e2e behind brain-e2e-gate, the Postgres image's tests
+  # behind brain-postgres) skip, and so pass, on a PR
   # that touches nothing they test (infra/scripts/ci-scope.sh);
-  # dependency-review passes when no manifest changed, and expo-doctor when
-  # the PR is not a Logjam GPS release. Each workflow starts on every PR: a
+  # dependency-review passes when no manifest changed, expo-doctor when
+  # the PR is not a Logjam GPS release, and ota-plan when it is not labelled
+  # ota-hotfix. Each workflow starts on every PR: a
   # required check whose workflow never starts leaves the PR waiting.
   required_checks = [
     "shared",
@@ -53,6 +55,8 @@ locals {
     "pr-closes",
     "expo-doctor",
     "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
+    "brain-postgres", # ci.yml's one name for the brain-postgres-image matrix
+    "ota-plan",       # skips, which passes, unless the PR is labelled ota-hotfix
   ]
 }
 

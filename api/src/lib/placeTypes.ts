@@ -26,6 +26,11 @@ import {
 
 import { AppError, malformed } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
+import {
+  customFieldDefDeleteTombstones,
+  placeTypeDeleteTombstones,
+  writeTombstones,
+} from "./syncTombstones";
 
 /** Types this user may put a place into: their own plus the system ones. */
 export function visiblePlaceTypeWhere(userId: string) {
@@ -432,6 +437,12 @@ export async function deletePlaceType(
       await tx.customFieldDef.deleteMany({ where: { id: { in: orphanIds } } });
     }
     await tx.placeType.delete({ where: { id } });
+    await writeTombstones(tx, [
+      ...orphanIds.flatMap((defId) =>
+        customFieldDefDeleteTombstones({ ownerId: userId, defId }),
+      ),
+      ...placeTypeDeleteTombstones({ ownerId: userId, placeTypeId: id }),
+    ]);
     return { ok: true as const, removedDefs: orphanIds.length };
   });
 }

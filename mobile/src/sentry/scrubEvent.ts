@@ -28,6 +28,8 @@
 // more precision than that, not less.
 const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
 
+const NUMERIC_COORDINATE = /^-?\d{1,3}\.\d{4,}$/;
+
 export function redactTilePathPatterns(message: string): string {
   return (
     message
@@ -61,7 +63,7 @@ export function scrubMessage(message: string): string {
 
 // Keys whose values could carry place coordinates or names. Mirrors the
 // intent of logger.ts redactPaths; matched case-insensitively at any depth.
-const SENSITIVE_KEYS = new Set([
+export const SENSITIVE_KEYS = new Set([
   // The token revoke call sends an opaque `token` (a Cognito refresh token has
   // no `eyJ` prefix for the JWT pattern to catch).
   "token",
@@ -96,6 +98,18 @@ const SENSITIVE_KEYS = new Set([
   // over-censoring is the safe direction for a crash report.
   "types",
   "triptypes",
+  // Names a place can sit under when a caller invents its own key: a deny-list
+  // cannot enumerate them all, so these are the ones the app's
+  // own models use. `position` is a numeric {x, y} fix on a map marker.
+  "placename",
+  "label",
+  "tag",
+  "tags",
+  "address",
+  "region",
+  "bbox",
+  "slug",
+  "position",
   // What the user typed into search: often the name of a place they would
   // rather not publish (ADR 0034). `q` is the body of POST /places/search.
   "q",
@@ -128,6 +142,11 @@ const MAX_DEPTH = 8;
 export function scrubStructure(value: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH) return "[redacted-depth]";
   if (typeof value === "string") return redactTilePathPatterns(value);
+  // A coordinate under a key nobody listed ({x: 150.40171, y: -33.5621}): the
+  // same four-decimal floor as COORDINATE_PAIR, one half at a time.
+  if (typeof value === "number") {
+    return NUMERIC_COORDINATE.test(String(value)) ? "[redacted-coords]" : value;
+  }
   if (typeof value !== "object" || value === null) return value;
   if (Array.isArray(value)) {
     return value.map((item) => scrubStructure(item, depth + 1));
@@ -181,6 +200,9 @@ export type ScrubbableEvent = {
   request?: unknown;
   extra?: { [key: string]: unknown };
   contexts?: { [key: string]: unknown };
+  tags?: { [key: string]: unknown };
+  transaction?: string;
+  logentry?: { message?: string; params?: unknown };
   user?: unknown;
 };
 
@@ -227,6 +249,23 @@ export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
       string,
       unknown
     >;
+  }
+  if (scrubbed.tags) {
+    scrubbed.tags = scrubStructure(scrubbed.tags) as Record<string, unknown>;
+  }
+  if (typeof scrubbed.transaction === "string") {
+    scrubbed.transaction = scrubMessage(scrubbed.transaction);
+  }
+  if (scrubbed.logentry) {
+    scrubbed.logentry = {
+      ...scrubbed.logentry,
+      ...(typeof scrubbed.logentry.message === "string" && {
+        message: scrubMessage(scrubbed.logentry.message),
+      }),
+      ...("params" in scrubbed.logentry && {
+        params: scrubStructure(scrubbed.logentry.params),
+      }),
+    };
   }
   return scrubbed as E;
 }

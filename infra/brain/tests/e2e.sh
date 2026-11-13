@@ -13,7 +13,8 @@
 # on a CI runner or in a throwaway container, never on a real brain.
 # E2E_FAIL_FAST=1 stops at the first failure (for applying a mutation);
 # E2E_KEEP=1 leaves the host as it ends, for debugging (remove it by hand);
-# E2E_PREBUILT=1 skips the image builds (PG_IMAGE and API_IMAGE must exist);
+# E2E_PREBUILT=1 skips the image builds (PG_IMAGE and API_IMAGE must exist), but not the 16 test layer, which is built from the
+# working tree's Dockerfile, not layered on PG_IMAGE;
 # E2E_MS_PORT and E2E_TLS_PORT move the two ports it publishes (default 56010
 # and 56011); the API listens on port 80 of the host, as on the brain.
 #
@@ -36,6 +37,20 @@
 #   host/release-agent.sh: keeping the new api.env after a failed `compose up` (no `rm -f`) [7]
 #   host/boot.sh: ignoring the setup marker (`if [ -e "$marker" ]` -> `if false`) [8c]
 #   host/boot.sh: not writing the marker for a bootstrap (`echo "$mode" > "$marker"` -> `true`) [1]
+#   host/boot.sh: the upgrade run on every boot (`if [ "$have" -lt "$want" ] ||` -> `if true ||`) [14]
+#   host/boot.sh: no upgrade for an older data directory (the same line -> `if false ||`; 14b reds too) [14]
+#   host/boot.sh: the refusal of data newer than the image deleted (`[ "$have" -le "$want" ] || die` -> `true`) [14]
+#   host/boot.sh: stanza-create always (the `if [ -n "$want" ] && ... ; then pgb stanza-upgrade; else` -> `if false; then ...`) [14, 14b]
+#   host/boot.sh: stanza-upgrade always in an existing boot (the same condition -> `if [ "$mode" = existing ] && [[ $sv =~ ^[0-9]*$ ]]`) [14c]
+#   host/boot.sh: the newest backup's major not compared (`[ "$repo_major" != "$want" ]` -> `false` in the `if`) [14, 14b]
+#   host/boot.sh: the failed upgrade not failing the boot (`|| die "the major upgrade failed ...` -> `|| true`) [14]
+#   host/boot.sh: `touch "$gate"` (before the upgrade container) -> `true` [14b]
+#   host/boot.sh: the `rm -f "$gate"` after the full backup deleted (the marker outlives it, so the check below it dies) [14]
+#   host/boot.sh: `[ "$repo_major" != "$want" ] || rm -f "$gate"` deleted (the old tag put back keeps the marker) [14]
+#   host/boot.sh: `[ ! -e "$gate" ] || die ...` deleted (a boot that cannot confirm a backup exits 0) [14b]
+#   host/release-agent.sh: not honouring the marker (its `[ ! -e "$gate" ] ||` line deleted) [14b]
+#   the test layer (setup): the UP_IMAGE build without `--build-arg OLD_MAJOR=16` (no 16 packages: the 16 database is not made) [14]
+#   compose.yaml: the upgrade service's /data mount narrowed to /data/postgres (the swap cannot rename) [14]
 # shellcheck disable=SC2329,SC2317 # functions run through check and wait_for
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit
@@ -108,7 +123,7 @@ reboot() { # containers die, the mount goes, the volume stays attached
 cleanup() {
   [ -z "${E2E_KEEP:-}" ] || return 0 # leave everything up to debug a failure
   [ -x /opt/brain/host/lib.sh ] && lcompose --profile '*' down -v --remove-orphans > /dev/null 2>&1
-  r docker rm -fv brain-e2e-ministack brain-e2e-tls brain-e2e-creds brain-e2e-src brain-e2e-copy > /dev/null 2>&1
+  r docker rm -fv brain-e2e-ministack brain-e2e-tls brain-e2e-creds > /dev/null 2>&1
   r docker network rm brain-e2e > /dev/null 2>&1
   detach_disk
   r rm -rf /opt/brain /etc/brain /run/brain /run/brain-e2e-data /run/brain-e2e-serving /run/brain-e2e-bootstrap /run/brain-release.lock
@@ -178,12 +193,23 @@ if [ -z "${E2E_PREBUILT:-}" ]; then
   docker build -q -t "$PG_IMAGE" infra/brain/postgres > /dev/null || fatal "the Postgres image does not build"
   docker build -q -f api/Dockerfile --build-arg GIT_SHA=e2e -t "$API_IMAGE" . > /dev/null || fatal "the API image does not build"
 fi
+# The test layer scenario 14 needs: the Dockerfile built with OLD_MAJOR=16, which adds the previous major's packages
+# that prod's image does not carry (a major upgrade adds them for its transition: docs/operations/brain.md); built from the
+# working tree even under E2E_PREBUILT. UP_IMAGE is the pinned image of an
+# upgrade, since boot.sh runs major-upgrade.sh in it and that needs the 16 binaries. PG16_IMAGE is the previous image
+# as far as the scenario needs it: the same with the 16 server first on PATH and PG_MAJOR=16, so the real
+# entrypoints and boot.sh make a real 16 database the way prod's was made. The next major's upgrade changes the 16 here.
+UP_IMAGE=brain-e2e-postgres:with-16
+PG16_IMAGE=brain-e2e-postgres:16
+docker build -q --build-arg OLD_MAJOR=16 -t "$UP_IMAGE" infra/brain/postgres > /dev/null || fatal "the test layer with the 16 packages does not build"
+printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$UP_IMAGE" "$(docker run --rm --entrypoint printenv "$PG_IMAGE" PATH)" |
+  docker build -q -t "$PG16_IMAGE" - > /dev/null || fatal "the 16 stand-in image does not build"
 docker tag "$API_IMAGE" "$API_REPO:release-a"
 docker tag "$API_IMAGE" "$API_REPO:release-b"
 
 docker network create brain-e2e > /dev/null
 docker run -d --name brain-e2e-ministack --network brain-e2e -p "$MS_PORT:4566" \
-  -e SERVICES=s3,secretsmanager -e DEFAULT_REGION=ap-southeast-2 ministackorg/ministack > /dev/null || fatal "MiniStack does not start"
+  -e SERVICES=s3,secretsmanager -e DEFAULT_REGION=ap-southeast-2 ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c > /dev/null || fatal "MiniStack does not start"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=host.docker.internal -addext subjectAltName=DNS:host.docker.internal \
   -keyout "$WORK/tls.key" -out "$WORK/tls.crt" 2> /dev/null
 cat > "$WORK/nginx.conf" <<EOF
@@ -683,6 +709,9 @@ serving off; agent # the API's own connections would hide a drill that reached t
 sql logjam "create table e2e_secret (v text); insert into e2e_secret values ('e2e-secret-value-7731')" > /dev/null
 canary_segment=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 r /opt/brain/host/status.sh || bad "status.sh failed" # a fresh canary row
+# status.sh switched the segment with the canary; this row puts WAL in the next one, so that the switch below has
+# something to close (a switch of an empty segment does nothing, and on 18 nothing else writes into it for minutes).
+sql logjam "insert into e2e_secret values ('e2e-tick')" > /dev/null
 want=$(sql logjam "select pg_walfile_name(pg_current_wal_lsn())")
 sql postgres "select pg_switch_wal()" > /dev/null
 check "the WAL with the canary is archived" wait_for 120 archived "$want"
@@ -726,6 +755,7 @@ check "...and seconds old, not minutes" [ "$lag" -lt 120 ]
 check "it read every table in public ($live_tables)" [ "$(drill_field tables_read)" = "$live_tables" ]
 check "the repository is byte for byte what it was (keys, sizes, times)" [ "$(repo_list)" = "$listing" ]
 check "the live Postgres saw no connection while the drill ran" [ "$(live_connections)" = 0 ]
+[ "$(live_connections)" = 0 ] || r docker logs "$(cid postgres)" 2>&1 | tail -n +$((log_lines + 1)) | grep -v AUDIT | tail -20
 sql postgres "select 1" > /dev/null
 check "...and that check does see a connection when there is one" [ "$(live_connections)" = 1 ]
 check "the output has no value from the database" not grep -q 'e2e-secret-value-7731' "$WORK/drill.log"
@@ -779,7 +809,7 @@ stub nomig; rc=$?
 check "tables but no _prisma_migrations: exit non-zero (got $rc)" [ "$rc" != 0 ]
 check "...and migrations_unreadable" [ "$(drill_field error)" = migrations_unreadable ]
 stub empty; rc=$?
-check "an empty public (a brain before the cutover's copy): exit 0 (got $rc)" [ "$rc" = 0 ]
+check "an empty public (a brain with no tables yet): exit 0 (got $rc)" [ "$rc" = 0 ]
 check "...ok, with no error" [ "$(drill_field ok)/$(drill_field error)" = True/None ]
 check "...and no table read" [ "$(drill_field tables_read)" = 0 ]
 stub stdin_fails; rc=$?
@@ -805,315 +835,6 @@ check "an empty repository: the drill exits non-zero (got $rc)" [ "$rc" != 0 ]
 check "...and drill.json says ok false" [ "$(drill_field ok)" = False ]
 check "...with the fixed code for no backup" [ "$(drill_field error)" = no_backup ]
 check "...and nothing measured" [ "$(drill_field restore_seconds)/$(drill_field tables_read)" = None/None ]
-
-# --- 12. the cutover's data copy ---------------------------------------------------------------------------------------
-# infra/brain/postgres/copy.sh, as the one-off task runs it: its own container, the brain by its name through the
-# published port with its certificate pinned, the source a second container of this image in dev mode (TLS, pgaudit,
-# the real schema from `prisma migrate deploy`) standing in for RDS. Mutations (each applied once and seen red):
-#   postgres/copy.sh: the body of brain_is_dormant replaced by `return 0` (serving, stale, unreadable);
-#   postgres/copy.sh: the second `brain_is_dormant` call, after the dump, removed;
-#   postgres/copy.sh: `unset BRAIN_BACKUP_VERIFY_TLS` removed (status.json read without verifying the bucket's certificate);
-#   postgres/copy.sh: the `held` refusal removed (a second run without COPY_REPLACE);
-#   postgres/copy.sh: PGSSLMODE=verify-full -> prefer (either CA wrong), and -> verify-ca (a target under another name);
-#     (`require` is no mutation: with a root certificate given, libpq verifies the chain anyway);
-#   postgres/copy.sh: `--single-transaction` removed from pg_restore (a restore that fails half way);
-#   postgres/copy.sh: `--no-owner` removed from pg_restore (the table owned by another role);
-#   postgres/copy.sh: the schema entry not filtered out of the restore list;
-#   postgres/copy.sh: `--clean --if-exists` removed (a row deleted on the source);
-#   postgres/copy.sh: `[ "$readonly_source" = on ]` -> `false` in differ (a count mismatch from a read-only source);
-#   postgres/copy.sh: the same condition -> `true` (a count mismatch from a live source is only a warning);
-#   postgres/copy.sh: pg_restore's stderr printed whole (a message that quotes a value);
-#   postgres/copy.sh: the `show default_transaction_read_only` check inverted;
-#   postgres/copy.sh: the `|| { ...; die "cannot list the dump..." }` after `pg_restore -l` dropped (a dump that cannot be listed);
-#   postgres/copy.sh: the sequence name-set check removed (a sequence missing from the brain, source live);
-#   postgres/copy.sh: `coalesce(last_value::text, 'unset')` -> `coalesce(last_value::text, '')` (an unused sequence missing on one side);
-#   postgres/copy.sh: the `COPY_ALLOW_LIVE_SOURCE` refusal removed (a live source, no flag);
-#   postgres/copy.sh: the closing `[ "$readonly_source" = on ]` made `true` (a live source ending `every check held`);
-#   postgres/copy.sh: ` or .api_sha != null` dropped from brain_is_dormant (serving false, an API running);
-#   postgres/copy.sh: the `unowned` check removed (an object the brain's role does not own);
-#   postgres/copy.sh: the table-set check removed (a table missing from the brain, source live);
-#   postgres/copy.sh: `last_value` dropped from sequence_values, names only (a sequence value that differs, source read-only);
-#   postgres/copy.sh: the last-migration check removed (a migration missing from the brain, source read-only).
-S="12 the data copy"
-SRC=brain-e2e-src
-r docker run -d --name "$SRC" --network brain-e2e -e BRAIN_DEV=1 -e BRAIN_INIT=bootstrap -e POSTGRES_PASSWORD=e2e-src-superuser \
-  -e POSTGRES_DB=logjam -e BRAIN_TLS_SANS="$SRC" "$PG_IMAGE" postgres -c archive_mode=off > /dev/null || fatal "the stand-in source does not start"
-src_up() { r docker exec "$SRC" pg_isready -q -h 127.0.0.1; }
-wait_for 90 src_up || fatal "the stand-in source does not answer"
-src_sql() { r docker exec -i -e PGOPTIONS='-c default_transaction_read_only=off' "$SRC" psql -U postgres -d logjam -v ON_ERROR_STOP=1 -tAXq "$@"; }
-r docker exec -i "$SRC" psql -U postgres -d logjam -v app_password="$APP_PW" -q -f - < scripts/bootstrap-app-db-role.sql > /dev/null || fatal "no app role on the source"
-r docker cp "$SRC:/var/lib/postgresql/data/server.crt" "$WORK/src.crt" && r chmod 644 "$WORK/src.crt"
-r docker run --rm --network brain-e2e -e DB_HOST="$SRC" -e DB_NAME=logjam -e DB_USER=logjam_app -e DB_PASSWORD="$APP_PW" \
-  -e DATABASE_SSL_CA=/ca.pem -v "$WORK/src.crt:/ca.pem:ro" "$API_IMAGE" npx prisma migrate deploy > "$WORK/src-migrate.log" 2>&1 \
-  || { tail -15 "$WORK/src-migrate.log"; fatal "the source's schema does not migrate"; }
-# Made-up rows in several tables, a sequence advanced, and a table owned by another role, as old tables on RDS may be.
-src_sql <<'SQL' || fatal "the source does not take its rows"
-insert into users (id, username, email, subject) values
-  ('u1', 'alice-copy', 'alice-copy@example.test', 'sub-1'), ('u2', 'bob-copy', 'bob-copy@example.test', 'sub-2');
-insert into announcements (id, title, body) values
-  ('a1', 'Made up title', 'made-up body copy-secret-7731'), ('a2', 'Another one', 'second made-up body');
-insert into sync_tombstones (user_id, entity_type, entity_id) values ('u1', 'place', 'p1'), ('u1', 'place', 'p2'), ('u2', 'place', 'p3');
-select setval('sync_tombstones_id_seq', 500);
-create role legacy_owner nologin;
-create table public.legacy_things (id serial primary key, note text);
-insert into public.legacy_things (note) values ('legacy copy-secret-7731');
-alter table public.legacy_things owner to legacy_owner;
-alter sequence public.legacy_things_id_seq owner to legacy_owner;
-grant all on public.legacy_things, public.legacy_things_id_seq to logjam_app;
-create sequence public.e2e_unused_seq;
-alter sequence public.e2e_unused_seq owner to logjam_app;
-SQL
-VALUE=copy-secret-7731
-QUOTED=e2e-quoted-4471
-# A certificate that no side has ever heard of, valid for every name used here: only trust can fail.
-openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=other -addext subjectAltName=DNS:brain.e2e.test,DNS:$SRC \
-  -keyout "$WORK/copy-other.key" -out "$WORK/copy-other.pem" 2> /dev/null
-
-# The brain's public schema, emptied: what a freshly bootstrapped brain holds. Not only tables:
-# a migration may create functions, standalone sequences or types, and the copy counts those
-# too. An extension's own objects (pgaudit's functions live in public) stay. The names are
-# collected before anything is dropped: a cascade may already have taken a later one.
-sql logjam "do \$\$ declare o text; begin
-  foreach o in array array(select format('table if exists public.%I', tablename) from pg_tables where schemaname = 'public')
-  loop execute 'drop ' || o || ' cascade'; end loop;
-  foreach o in array array(
-    select 'routine if exists ' || p.oid::regprocedure from pg_proc p where p.pronamespace = 'public'::regnamespace
-      and not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
-    union all select format('sequence if exists public.%I', sequencename) from pg_sequences where schemaname = 'public'
-    union all select 'type if exists ' || t.oid::regtype from pg_type t where t.typnamespace = 'public'::regnamespace and t.typtype in ('e', 'd')
-      and not exists (select 1 from pg_depend d where d.classid = 'pg_type'::regclass and d.objid = t.oid and d.deptype = 'e'))
-  loop execute 'drop ' || o || ' cascade'; end loop; end \$\$" > /dev/null || fatal "the brain's public schema does not empty"
-
-fresh() { r /opt/brain/host/status.sh || bad "status.sh failed"; } # a status.json that says serving false, just now
-signal() { # <serving true|false> <age in seconds> [api_sha as JSON, default null]
-  printf '{"schema":1,"time":"%s","serving":%s,"api_sha":%s}' "$(date -u -d "-$2 seconds" +%Y-%m-%dT%H:%M:%SZ)" "$1" "${3:-null}" | aws s3 cp - "s3://$SIGNALS/status.json" --only-show-errors
-}
-# Every copy but the read-only-source ones and the refusal runs against a live source, as a rehearsal does.
-live=(-e COPY_ALLOW_LIVE_SOURCE=1)
-copy_raw() { # [docker args]: the task, on the test network; the brain at its own name through the host's published port
-  r docker run --rm --network brain-e2e --name brain-e2e-copy \
-    --add-host brain.e2e.test:host-gateway --add-host host.docker.internal:host-gateway \
-    -e COPY_SOURCE_HOST="$SRC" -e COPY_TARGET_HOST=brain.e2e.test -e COPY_TARGET_CA="$(r cat /data/postgres/server.crt)" \
-    -e COPY_SOURCE_CA_FILE=/source-ca.pem -v "$WORK/src.crt:/source-ca.pem:ro" \
-    -e DB_USER=logjam_app -e DB_PASSWORD="$APP_PW" -e BRAIN_SIGNALS_BUCKET="$SIGNALS" -e AWS_REGION=ap-southeast-2 \
-    -e BRAIN_BACKUP_ENDPOINT=host.docker.internal:"$TLS_PORT" -e CURL_CA_BUNDLE=/tls.crt -v "$WORK/tls.crt:/tls.crt:ro" \
-    -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test "${live[@]}" "$@" "$PG_IMAGE" /usr/local/lib/brain/copy.sh > "$WORK/copy.log" 2>&1
-  local rc=$?
-  cat "$WORK/copy.log" >> "$WORK/copy-all.log"
-  return "$rc"
-}
-copy() { fresh; copy_raw "$@"; }
-# What a run must leave alone when it refuses or fails: the objects (identity and file) and the rows.
-brain_state() {
-  sql logjam "select md5(string_agg(c.relname || c.oid || c.relfilenode, ',' order by c.relname)) from pg_class c where c.relnamespace = 'public'::regnamespace"
-  sql logjam "select count(*) from users" 2> /dev/null; sql logjam "select count(*) from announcements" 2> /dev/null
-}
-refuses() { # <what>: the last run exited non-zero, said why, copied nothing and left the brain as it was
-  check "$1: exits non-zero (got $rc)" [ "$rc" != 0 ]
-  check "$1: the brain is exactly as it was" [ "$(brain_state)" = "$state0" ]
-  check "$1: stopped before the dump" not grep -q 'dumped' "$WORK/copy.log"
-}
-
-# The first copy: an empty brain.
-copy; rc=$?
-[ "$rc" = 0 ] || tail -20 "$WORK/copy.log"
-check "an empty brain: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
-check "...and says the source was live, not that every check held" grep -q 'ok: the source was live' "$WORK/copy.log"
-check "...a live source never ends on \`every check held\`" not grep -q 'every check held' "$WORK/copy.log"
-for t in users announcements sync_tombstones legacy_things; do
-  check "...$t has the source's rows" [ "$(sql logjam "select count(*) from $t")" = "$(src_sql -c "select count(*) from $t")" ]
-done
-check "...a value arrived intact" [ "$(sql logjam "select body from announcements where id = 'a1'")" = "made-up body $VALUE" ]
-check "...the table another role owned is owned by logjam_app" [ "$(sql logjam "select tableowner from pg_tables where tablename = 'legacy_things'")" = logjam_app ]
-check "...every relation in public is owned by logjam_app" [ "$(sql logjam "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relowner <> 'logjam_app'::regrole")" = 0 ]
-check "...the advanced sequence carries on from the source's value" [ "$(sql logjam "select last_value from pg_sequences where sequencename = 'sync_tombstones_id_seq'")" = 500 ]
-check "...the brain is not read-only" [ "$(sql logjam "show default_transaction_read_only")" = off ]
-check "...a sequence never used on the source arrives, still unused" [ "$(sql logjam "select last_value is null from pg_sequences where sequencename = 'e2e_unused_seq'")" = t ]
-check "...it lists the tables with their counts" grep -q '^  users 2$' "$WORK/copy.log"
-check "...and the last migration matches" [ "$(sql logjam "select migration_name from _prisma_migrations order by migration_name desc limit 1")" = "$(src_sql -c "select migration_name from _prisma_migrations order by migration_name desc limit 1")" ]
-as_app() { # the next `prisma migrate deploy` runs as this role and needs to own what it changes
-  r docker exec -e PGPASSWORD="$APP_PW" "$(cid postgres)" psql "host=localhost user=logjam_app dbname=logjam sslmode=verify-full sslrootcert=/var/lib/postgresql/data/server.crt" -tAXqc "$1"
-}
-check "...and logjam_app can alter the table another role owned on the source" as_app "alter table legacy_things add column probe int; alter table legacy_things drop column probe"
-if command -v shellcheck > /dev/null; then
-  check "the copy script and its library pass shellcheck" bash -c 'cd infra/brain/postgres && shellcheck -x copy.sh task-lib.sh'
-elif [ -n "${CI:-}" ]; then bad "shellcheck is not installed"; fi
-
-# The brain now holds tables: a second run without COPY_REPLACE refuses, whatever else is true.
-state0=$(brain_state)
-copy; rc=$?
-check "a second run says the brain already holds tables" grep -q 'already holds' "$WORK/copy.log"
-refuses "a second run without COPY_REPLACE"
-
-# With COPY_REPLACE, the target becomes the source: a row deleted there is gone here.
-src_sql -c "delete from announcements where id = 'a2'"
-copy -e COPY_REPLACE=1; rc=$?
-check "with COPY_REPLACE the copy exits 0 (got $rc)" [ "$rc" = 0 ]
-check "...and the row deleted on the source is gone" [ "$(sql logjam "select count(*) from announcements")" = 1 ]
-state0=$(brain_state)
-
-# A serving brain is never copied into, and a status.json that cannot be trusted is no different.
-signal true 0
-copy_raw -e COPY_REPLACE=1; rc=$?
-check "serving true: the copy says so" grep -q 'does not say serving is false' "$WORK/copy.log"
-refuses "serving true"
-# One status tick that could not read instance metadata says serving false with the API up: the API running counts.
-signal false 0 '"e2e-sha"'
-copy_raw -e COPY_REPLACE=1; rc=$?
-check "serving false with an API running: the copy says so" grep -q 'does not say serving is false' "$WORK/copy.log"
-refuses "serving false with an API running"
-signal false 600
-copy_raw -e COPY_REPLACE=1; rc=$?
-check "a status.json ten minutes old: the copy says it is stale" grep -q 'stale' "$WORK/copy.log"
-refuses "a stale status.json"
-aws s3 rm "s3://$SIGNALS/status.json" --only-show-errors
-copy_raw -e COPY_REPLACE=1; rc=$?
-check "no status.json: the copy says it cannot read it" grep -q 'cannot be read' "$WORK/copy.log"
-refuses "no status.json"
-fresh
-# The bucket's certificate is checked, and no setting turns that off.
-openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=host.docker.internal -addext subjectAltName=DNS:host.docker.internal \
-  -keyout "$WORK/other-tls.key" -out "$WORK/other-tls.crt" 2> /dev/null
-copy_raw -e COPY_REPLACE=1 -e BRAIN_BACKUP_VERIFY_TLS=n -e CURL_CA_BUNDLE=/other.pem -v "$WORK/other-tls.crt:/other.pem:ro"; rc=$?
-check "a bucket certificate that is not trusted, with verification switched off: the copy cannot read status.json" grep -q 'cannot be read' "$WORK/copy.log"
-refuses "an untrusted bucket certificate"
-copy_raw -e COPY_REPLACE=1 -e COPY_TARGET_CA=; rc=$?
-check "no CA for the brain: the copy says so" grep -q 'no CA for the brain' "$WORK/copy.log"
-refuses "no CA for the brain"
-
-# Both ends are verified against the CA they were given.
-copy -e COPY_REPLACE=1 -e COPY_SOURCE_CA_FILE=/other.pem -v "$WORK/copy-other.pem:/other.pem:ro"; rc=$?
-check "a wrong source CA: the copy says it cannot connect to the source" grep -q 'cannot connect to the source' "$WORK/copy.log"
-refuses "a wrong source CA"
-copy -e COPY_REPLACE=1 -e "COPY_TARGET_CA=$(cat "$WORK/copy-other.pem")"; rc=$?
-check "a wrong target CA: the copy says it cannot connect to the brain" grep -q 'cannot connect to the brain' "$WORK/copy.log"
-refuses "a wrong target CA"
-# The certificate must also name the host that was dialled: the brain's certificate is valid, the address is another's.
-copy -e COPY_REPLACE=1 -e COPY_TARGET_HOST=elsewhere.e2e.test --add-host elsewhere.e2e.test:host-gateway; rc=$?
-check "a target whose name the certificate does not carry: the copy says it cannot connect to the brain" grep -q 'cannot connect to the brain' "$WORK/copy.log"
-refuses "a target under another name"
-
-# A brain that starts serving while the dump runs: a stand-in pg_dump writes that to status.json when it ends.
-cat > "$WORK/stub-dump" <<'EOF'
-#!/bin/sh
-/usr/bin/pg_dump "$@"; rc=$?
-sh -c "${AFTER_DUMP:-true}"
-exit $rc
-EOF
-chmod 755 "$WORK/stub-dump"
-stub=(-v "$WORK/stub-dump:/usr/local/bin/pg_dump:ro")
-src_write() { echo "PGPASSWORD=\$DB_PASSWORD PGOPTIONS='-c default_transaction_read_only=off' psql 'host=$SRC dbname=logjam user=logjam_app sslmode=verify-full sslrootcert=/source-ca.pem' -qc \"$1\""; }
-# shellcheck disable=SC2016 # runs inside the task
-flip='printf "{\"schema\":1,\"time\":\"%s\",\"serving\":true}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/s.json; curl -fsSk -T /tmp/s.json https://host.docker.internal:'"$TLS_PORT/$SIGNALS"'/status.json'
-copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$flip"; rc=$?
-check "serving true after the dump: the copy says so" grep -q 'does not say serving is false' "$WORK/copy.log"
-check "...it had dumped, and did not restore" bash -c "grep -q dumped '$WORK/copy.log' && ! grep -q restored '$WORK/copy.log'"
-check "...exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "...and the brain is exactly as it was" [ "$(brain_state)" = "$state0" ]
-
-# A restore that fails half way leaves nothing behind. A view that depends on a table stops the restore's DROP;
-# its name stands in for a server message that quotes a value.
-sql logjam "create view public.\"view-$QUOTED\" as select id from public.users" > /dev/null
-state0=$(brain_state)
-copy -e COPY_REPLACE=1; rc=$?
-check "a restore that fails half way: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "...says it was rolled back" grep -q 'rolled back' "$WORK/copy.log"
-check "...and the brain is exactly as it was" [ "$(brain_state)" = "$state0" ]
-check "...and its output quotes nothing from the server's message" not grep -q "$QUOTED" "$WORK/copy.log"
-sql logjam "drop view public.\"view-$QUOTED\"" > /dev/null
-state0=$(brain_state)
-
-# A read-only source, as in the window: its setting does not travel, and its counts must match exactly.
-src_sql -c "alter database logjam set default_transaction_read_only = on"
-live=()
-copy -e COPY_REPLACE=1; rc=$?
-check "a read-only source: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
-check "...and says the source is read-only" grep -q 'source default_transaction_read_only = on' "$WORK/copy.log"
-check "...and says every check held" grep -q 'ok: every check held' "$WORK/copy.log"
-check "...and the brain is not read-only" [ "$(sql logjam "show default_transaction_read_only")" = off ]
-state0=$(brain_state)
-copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$(src_write "delete from announcements where id = 'a1'")"; rc=$?
-check "a read-only source that changed after the dump: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "...names the counts that differ" grep -q 'announcements: source 0, brain 1' "$WORK/copy.log"
-check "...and says not to serve from the copy" grep -q 'do not serve' "$WORK/copy.log"
-# A live source keeps writing: the same difference is only a warning, and the copy refuses to start unless it is told
-# the source is live.
-src_sql -c "alter database logjam reset default_transaction_read_only" -c "insert into announcements (id, title, body) values ('a3', 'Third', 'third made-up body')"
-state0=$(brain_state)
-copy -e COPY_REPLACE=1; rc=$?
-check "a live source, no COPY_ALLOW_LIVE_SOURCE: the copy says the source is not read-only" grep -q 'the source is not read-only' "$WORK/copy.log"
-refuses "a live source without the flag"
-live=(-e COPY_ALLOW_LIVE_SOURCE=1)
-copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP="$(src_write "delete from announcements where id = 'a3'")"; rc=$?
-check "a live source that changed after the dump: the copy exits 0 (got $rc)" [ "$rc" = 0 ]
-check "...with a warning" grep -q 'warning: row counts differ' "$WORK/copy.log"
-check "...and a last line that says the source was live" grep -q 'ok: the source was live' "$WORK/copy.log"
-check "...never \`every check held\`" not grep -q 'every check held' "$WORK/copy.log"
-
-# A dump that cannot be listed stops the copy before the restore: the stand-in pg_dump empties the file it wrote.
-state0=$(brain_state)
-# shellcheck disable=SC2016 # runs inside the task
-copy -e COPY_REPLACE=1 "${stub[@]}" -e AFTER_DUMP=': > "$(ls /tmp/tmp.*/dump)"'; rc=$?
-check "a dump that cannot be listed: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "...says it cannot list the dump" grep -q 'cannot list the dump' "$WORK/copy.log"
-check "...restores nothing, and the brain is exactly as it was" bash -c "! grep -q 'copy: restored' '$WORK/copy.log'"
-check "...the brain is exactly as it was" [ "$(brain_state)" = "$state0" ]
-
-# A sequence that is gone from the brain after the copy fails the verification even when the source is live (a live
-# source only excuses differing values): a stand-in pg_restore drops it right after the restore. It was never used, so
-# its value is the word `unset` on the source and the difference must still be listed.
-cat > "$WORK/stub-restore" <<'EOF'
-#!/bin/sh
-/usr/bin/pg_restore "$@"; rc=$?
-case " $* " in *" -l "*) ;; *) sh -c "${AFTER_RESTORE:-true}" ;; esac
-exit $rc
-EOF
-chmod 755 "$WORK/stub-restore"
-brain_write() {
-  echo "echo \"\$COPY_TARGET_CA\" > /tmp/t.pem; PGPASSWORD=\$DB_PASSWORD psql \"host=\$COPY_TARGET_HOST dbname=logjam user=logjam_app sslmode=verify-full sslrootcert=/tmp/t.pem\" -qc \"$1\""
-}
-copy -e COPY_REPLACE=1 -v "$WORK/stub-restore:/usr/local/bin/pg_restore:ro" -e AFTER_RESTORE="$(brain_write "drop sequence public.e2e_unused_seq")"; rc=$?
-check "a sequence missing from the brain, source live: the copy says the source is live" grep -q 'source default_transaction_read_only = off' "$WORK/copy.log"
-check "...the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
-check "...names the sequence the brain lacks" grep -q 'only in the source: e2e_unused_seq' "$WORK/copy.log"
-check "...and lists its difference, though both sides read unset or missing" grep -q 'e2e_unused_seq: source unset, brain missing' "$WORK/copy.log"
-
-# The checks between "restored" and "verified", each with the one thing it exists for broken right after the restore
-# (the stand-in pg_restore runs the change). A role the brain's own role may become, for the ownership check:
-sql logjam "create role legacy_owner nologin; grant legacy_owner to logjam_app; grant create on schema public to legacy_owner" > /dev/null || fatal "no second role on the brain"
-restored_but() { # <what>: the copy exits non-zero, with the verdict that the copy must not be used
-  check "$1: the copy exits non-zero (got $rc)" [ "$rc" != 0 ]
-  check "...and says not to serve from it" grep -q 'RESTORED BUT NOT VERIFIED' "$WORK/copy.log"
-}
-stub_restore=(-e COPY_REPLACE=1 -v "$WORK/stub-restore:/usr/local/bin/pg_restore:ro")
-copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "alter table public.legacy_things owner to legacy_owner")"; rc=$?
-restored_but "an object the brain's role does not own"
-check "...names it" grep -q 'objects in public are not owned by logjam_app' "$WORK/copy.log"
-copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "drop table public.legacy_things")"; rc=$?
-restored_but "a table missing from the brain, source live"
-check "...says the tables are not the source's" grep -q "the brain's tables are not the source's" "$WORK/copy.log"
-# With the source read-only, so a difference is a failure and not a warning.
-src_sql -c "alter database logjam set default_transaction_read_only = on"
-live=()
-copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "select setval('sync_tombstones_id_seq', 1)")"; rc=$?
-restored_but "a sequence value that differs, source read-only"
-check "...names the sequence and both values" grep -q 'sync_tombstones_id_seq: source 500, brain 1' "$WORK/copy.log"
-copy "${stub_restore[@]}" -e AFTER_RESTORE="$(brain_write "delete from _prisma_migrations where migration_name = (select max(migration_name) from _prisma_migrations)")"; rc=$?
-restored_but "a migration missing from the brain, source read-only"
-check "...says the last migration differs" grep -q 'the last migration differs' "$WORK/copy.log"
-copy -e COPY_REPLACE=1; rc=$?
-check "a plain copy afterwards puts it all right and says every check held (got $rc)" bash -c "[ '$rc' = 0 ] && grep -q 'ok: every check held' '$WORK/copy.log'"
-src_sql -c "alter database logjam reset default_transaction_read_only"
-live=(-e COPY_ALLOW_LIVE_SOURCE=1)
-sql logjam "drop owned by legacy_owner; drop role legacy_owner" > /dev/null || bad "the second role is still in use on the brain"
-
-# Nothing a run printed holds a value, a row or the password; the brain's audit log records the restore as
-# statements, never rows.
-check "no run printed a value from the database" not grep -q "$VALUE" "$WORK/copy-all.log"
-check "...or the password" not grep -q "$APP_PW" "$WORK/copy-all.log"
-check "the brain's audit log has the restore's COPY statements" bash -c "$SUDO docker logs '$(cid postgres)' 2>&1 | grep -q 'AUDIT: SESSION,.*,WRITE,COPY,,,\"COPY public.announcements'"
-check "...and no value in any line" bash -c "! $SUDO docker logs '$(cid postgres)' 2>&1 | grep -q '$VALUE'"
-
 
 # --- 13. restore to a point in time -----------------------------------------------------------------------------------------
 # The same boot as losing the disk, with BRAIN_RESTORE_TARGET (Terraform: the current volume's restore_to) set to a time.
@@ -1294,6 +1015,209 @@ check "a reboot of an existing database starts it (exit $rc)" [ "$rc" = 0 ]
 check "...takes no backup" [ "$(newest_label)" = "$before" ]
 check "...and says nothing about one" not grep -q "taking a full backup" "$WORK/boot.log"
 reboot
+
+# --- 14. a major upgrade --------------------------------------------------------------------------------------------------
+# Prod's database is 16 and the pinned image becomes 18: boot.sh upgrades it before anything starts, in a container of its
+# own, keeps the old cluster, moves the stanza and takes a full backup before the API can start. Each part has a bucket of
+# its own, so the stanzas of the scenarios above do not mix in. The mutations are in the header.
+S="14 major upgrade"
+serving off; agent
+shim="$WORK/shim"; mkdir "$shim"
+# shellcheck disable=SC2016 # the shim's $@ and $DOCKER_CALLS are meant literal
+# The shim records every docker call and, on request, fails one: FAIL_INFO=n the nth `pgbackrest info`.
+cat > "$shim/docker" <<'SHIM'
+#!/bin/sh
+echo "$@" >> "$DOCKER_CALLS"
+case "$*" in
+  *"pgbackrest --stanza=logjam info"*)
+    n=$(($(cat "$DOCKER_CALLS.info" 2> /dev/null || echo 0) + 1)); echo "$n" > "$DOCKER_CALLS.info"
+    [ "$n" != "$FAIL_INFO" ] || exit 1 ;;
+esac
+exec __DOCKER__ "$@"
+SHIM
+sed -i "s#__DOCKER__#$(command -v docker)#" "$shim/docker"; chmod +x "$shim/docker"
+boot_logged() {
+  : > "$WORK/docker-calls"; rm -f "$WORK/docker-calls.info"
+  r env PATH="$shim:$PATH" DOCKER_CALLS="$WORK/docker-calls" FAIL_INFO="${FAIL_INFO:-0}" /opt/brain/host/boot.sh > "$WORK/boot.log" 2>&1
+}
+ran_upgrade() { has -E ' run .* upgrade( |$)' "$WORK/docker-calls"; }
+pg_major() { sql postgres 'show server_version_num' | cut -c1-2; }
+stanza_majors() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+print(*sorted(d["version"] for s in json.load(sys.stdin) for d in s["db"]))'; }
+newest_major() { r docker exec -u postgres "$(cid postgres)" pgbackrest --stanza=logjam info --output=json | python3 -c '
+import json, sys
+s = json.load(sys.stdin)[0]
+b = s["backup"][-1]
+print(next(d["version"] for d in s["db"] if d["id"] == b["database"]["id"]))'; }
+api_created() { date -d "$(r docker inspect -f '{{.Created}}' "$(cid api)")" +%s; }
+make_16_database() { # <bucket>: bootstraps a 16 database on the 16 image in a new repository, then shuts the host down
+  aws s3 mb "s3://$1" > /dev/null
+  brain_env BRAIN_BACKUP_BUCKET "$1"
+  brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+  reboot; new_disk
+  boot_limited; rc=$?
+  [ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not bootstrap a 16 database (exit $rc)"; }
+  check "the 16 image bootstraps a 16 database" [ "$(pg_major)" = 16 ]
+  sql logjam "create table e2e_upg as select g as n from generate_series(1, 500) g; create table _prisma_migrations (id int)" > /dev/null
+  force_wal
+  cert16=$(fingerprint); fulls16=$(fulls)
+  reboot
+}
+bootstrap_flag 1
+make_16_database e2e-backups-16a
+
+# The same major: nothing is upgraded and no container is started for it.
+boot_logged; rc=$?
+check "a 16 database on the 16 image starts as an existing one (exit $rc)" [ "$rc" = 0 ]
+check "...in mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+check "...with no upgrade container started" not ran_upgrade
+check "...and no word of an upgrade" not grep -qi upgrad "$WORK/boot.log"
+reboot
+
+# An upgrade that cannot run fails the boot and starts nothing: here a directory in its way (it never replaces the old cluster).
+brain_env BRAIN_PG_IMAGE "$UP_IMAGE"
+r mount "$LOOP" "$WORK/m" && r mkdir "$WORK/m/postgres-16" && r umount "$WORK/m"
+point release-a; serving on
+boot_logged; rc=$?
+check "an upgrade that fails fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...saying so" grep -q "the major upgrade failed" "$WORK/boot.log"
+check "...boot mode failed" [ "$(cat /run/brain/boot-mode)" = failed ]
+check "...no Postgres and no API container" [ -z "$(cid postgres)$(cid api)" ]
+check "...and the 16 cluster is where it was" [ "$(r cat /data/postgres/PG_VERSION)" = 16 ]
+r rmdir /data/postgres-16
+# The failed upgrade left the marker. The old tag put back finds the repository's newest backup of its own
+# major, clears the marker and lets the API start.
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+reboot
+boot_logged; rc=$?
+check "the old tag put back after the failed upgrade boots (exit $rc)" [ "$rc" = 0 ]
+check "...clears the marker" [ ! -e /data/brain/backup-pending ]
+check "...and the API starts" [ "$(api_tag)" = "$API_REPO:release-a" ]
+serving off; agent; serving on
+brain_env BRAIN_PG_IMAGE "$UP_IMAGE"
+reboot
+
+# The upgrade, with serving on so that the API's start is the last thing boot.sh does.
+boot_logged; rc=$?
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; dump; }
+check "boot.sh upgrades a 16 database under the 18 image (exit $rc)" [ "$rc" = 0 ]
+[ "$rc" = 0 ] || fatal "boot.sh did not upgrade"
+check "...in an upgrade container" ran_upgrade
+check "...and says so" grep -q "upgraded 16 -> 18" "$WORK/boot.log"
+check "boot mode: upgraded" [ "$(cat /run/brain/boot-mode)" = upgraded ]
+check "the server is PostgreSQL 18" [ "$(pg_major)" = 18 ]
+check "the rows came across" [ "$(sql logjam 'select count(*) from e2e_upg')" = 500 ]
+check "the old cluster is kept at /data/postgres-16" [ "$(r cat /data/postgres-16/PG_VERSION)" = 16 ]
+check "...and no postgres.new is left" [ ! -e /data/postgres.new ]
+check "the same certificate" [ "$(fingerprint)" = "$cert16" ]
+check "logjam_app still connects with the secret's password, verifying the name" app_connects
+check "the agent works" as_agent postgres -c 'update brain.canary set at = now()'
+check "the stanza knows both majors" [ "$(stanza_majors)" = "16 18" ]
+check "the API's marker is gone once the backup is taken" [ ! -e /data/brain/backup-pending ]
+check "the WAL archive has the new id" bash -c "aws s3 ls s3://e2e-backups-16a/logjam/archive/logjam/ | grep -q 18-2/"
+check "a full backup was taken" [ "$(fulls)" = "$((fulls16 + 1))" ]
+check "...of the 18 database" [ "$(newest_major)" = 18 ]
+check "serving was on: the API is at the pointer's release" [ "$(api_tag)" = "$API_REPO:release-a" ]
+check "...and started after the backup finished, not before" [ "$(newest_full_stop)" -le "$(api_created)" ]
+r /opt/brain/host/status.sh || bad "status.sh failed"
+check "status.json says upgraded" [ "$(status_field boot_mode)" = upgraded ]
+
+# The restore drill on the new repository: its archive id is 18-2 and its newest backup is the 18 one.
+serving off; agent
+r /opt/brain/host/status.sh || bad "status.sh failed"
+force_wal
+drill e2e-backups-16a -e AWS_CONTAINER_CREDENTIALS_FULL_URI=http://brain-e2e-creds/creds; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/drill.log"
+check "the restore drill passes on the upgraded repository (exit $rc)" [ "$rc" = 0 ]
+check "...and says ok" [ "$(drill_field ok)" = True ]
+
+# 18 data under the 16 image: refused before anything starts.
+fulls_after=$(fulls)
+reboot
+brain_env BRAIN_PG_IMAGE "$PG16_IMAGE"
+boot_logged; rc=$?
+check "18 data under the 16 image fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...saying to pin the image of 18 again" grep -q "pin the image of 18 again" "$WORK/boot.log"
+check "...with no Postgres container started" [ -z "$(cid postgres)" ]
+check "...and no upgrade container run" not ran_upgrade
+check "...and the cluster untouched" [ "$(r cat /data/postgres/PG_VERSION)" = 18 ]
+brain_env BRAIN_PG_IMAGE "$UP_IMAGE"
+reboot
+
+# A later ordinary reboot does nothing special.
+boot_logged; rc=$?
+check "an ordinary reboot after the upgrade succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...in mode existing" [ "$(cat /run/brain/boot-mode)" = existing ]
+check "...with no upgrade container" not ran_upgrade
+check "...no extra full backup" [ "$(fulls)" = "$fulls_after" ]
+check "...and no word of an upgrade or a backup" not grep -qi 'upgrad\|full backup' "$WORK/boot.log"
+
+# The disk lost after the upgrade restores from the 18 backup, not the 16 one.
+force_wal
+lose_disk
+boot_limited; rc=$?
+check "a blank disk after the upgrade restores (exit $rc)" [ "$rc" = 0 ]
+check "...boot mode restore, PostgreSQL 18" [ "$(cat /run/brain/boot-mode)/$(pg_major)" = restore/18 ]
+check "...with the rows" [ "$(sql logjam 'select count(*) from e2e_upg')" = 500 ]
+check "...and the same certificate" [ "$(fingerprint)" = "$cert16" ]
+reboot
+
+# A database of the stanza's own major but another system id (a wrong disk or bucket) is not adopted: stanza-create stops it.
+# The repository is 16a's, whose stanza is at 18 at this point.
+S="14c a foreign cluster of the same major"
+aws s3 mb "s3://e2e-backups-18c" > /dev/null
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-18c
+new_disk
+boot_limited; rc=$?
+[ "$rc" = 0 ] || { tail -20 "$WORK/boot.log"; fatal "boot.sh did not bootstrap an 18 database (exit $rc)"; }
+reboot
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-16a
+listing=$(aws s3 ls "s3://e2e-backups-16a" --recursive | sort)
+boot_logged; rc=$?
+check "an 18 cluster against another cluster's 18 stanza fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...at the stanza step, which says the database does not match" grep -q "do not match the database" "$WORK/boot.log"
+check "...not upgrading" not ran_upgrade
+check "...and the repository is untouched: no backup, no WAL, no changed stanza" [ "$(aws s3 ls "s3://e2e-backups-16a" --recursive | sort)" = "$listing" ]
+reboot
+
+# An upgrade whose boot dies after it (the repository unreachable): the next boot finishes the stanza and the backup.
+S="14b a boot that dies after the upgrade"
+make_16_database e2e-backups-16b
+brain_env BRAIN_PG_IMAGE "$UP_IMAGE"
+brain_env BRAIN_BACKUP_BUCKET e2e-no-such-bucket
+serving on
+boot_logged; rc=$?
+check "an upgrade whose repository is unreachable fails the boot (exit $rc)" [ "$rc" != 0 ]
+check "...after upgrading: the server is PostgreSQL 18" [ "$(pg_major)" = 18 ]
+check "...with no API" [ -z "$(cid api)" ]
+# The release timer runs whatever the boot did (it is only ordered after it): the marker keeps the API down.
+agent
+check "the release agent starts no API while the repository has no backup of this major" [ -z "$(cid api)" ]
+check "...and says why" grep -q "not starting the API" "$WORK/agent.log"
+# A repository that answers the stanza step but not the question after it (the shim fails the second `pgbackrest info`):
+# no backup of this major is confirmed, so the boot fails and the marker still keeps the API down.
+brain_env BRAIN_BACKUP_BUCKET e2e-backups-16b
+FAIL_INFO=2 boot_logged; rc=$?
+check "a boot that cannot confirm the newest backup's major fails (exit $rc)" [ "$rc" != 0 ]
+check "...saying no full backup is confirmed" grep -q "no full backup of PostgreSQL 18 is confirmed" "$WORK/boot.log"
+agent
+check "...and the release agent still starts no API" [ -z "$(cid api)" ]
+boot_logged; rc=$?
+[ "$rc" = 0 ] || tail -20 "$WORK/boot.log"
+check "the next boot succeeds (exit $rc)" [ "$rc" = 0 ]
+check "...without upgrading again" not ran_upgrade
+check "...the stanza follows the new major" [ "$(stanza_majors)" = "16 18" ]
+check "...it says the newest backup is the old major's" grep -q "newest backup is of PostgreSQL 16" "$WORK/boot.log"
+check "...a full backup was taken" [ "$(fulls)" = "$((fulls16 + 1))" ]
+check "...of the 18 database" [ "$(newest_major)" = 18 ]
+check "...and the API is up after it" [ "$(newest_full_stop)" -le "$(api_created)" ]
+check "...and the marker is gone" [ ! -e /data/brain/backup-pending ]
+serving off; agent
+reboot
+
+brain_env BRAIN_PG_IMAGE "$PG_IMAGE"
+brain_env BRAIN_BACKUP_BUCKET "$BACKUPS"
 
 [ "$fails" = 0 ] || dump
 exit "$fails"

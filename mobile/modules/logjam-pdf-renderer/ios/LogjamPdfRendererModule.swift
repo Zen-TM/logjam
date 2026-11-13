@@ -9,7 +9,7 @@ public class LogjamPdfRendererModule: Module {
     Name("LogjamPdfRenderer")
 
     // Keep local data out of iCloud backup — the iOS half of Android's
-    // allowBackup=false (mobile/CLAUDE.md privacy mandate). NSDocumentDirectory
+    // allowBackup=false (ADR 0006). NSDocumentDirectory
     // is backed up by default, which would hand canyon names, coordinates,
     // notes and photos to Apple. The flag applies to everything under the
     // directory, so one call on the Documents root is the whole fix.

@@ -458,6 +458,8 @@ describe("arming and marking", () => {
   // Mutation: back to `now.toLocaleDateString()` and a US phone names it
   // "Track 11/3/2026", which reads as March elsewhere.
   it("names a new track from the shared date formatter, not the numeric locale date", async () => {
+    // A fixed clock, so a midnight between the two reads cannot split them.
+    vi.setSystemTime(1_700_000_000_000);
     await startTrackRecording();
     const name = insertTrack.mock.calls.at(-1)?.[0].name;
     expect(name).toBe(defaultTrackName(new Date()));

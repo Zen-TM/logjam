@@ -70,6 +70,7 @@ jobs:
     # assume it.
     environment: prod
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: guard
     # `!cancelled()` is load-bearing: with a plain `needs`, a guard job that
     # went red after deciding (say the scope lookup failed) would skip this

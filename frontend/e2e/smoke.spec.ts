@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubMaster } from "./__fixtures__/stubMaster";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const isLocal = baseURL.startsWith("http://localhost");
@@ -8,6 +9,7 @@ const isLocal = baseURL.startsWith("http://localhost");
 // visit lands on the sign-in screen. Keep prod smoke auth-free — no committed
 // credentials, no private user data touched (privacy rule).
 test("app loads", async ({ page }) => {
+  if (isLocal) await stubMaster(page);
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error") errors.push(msg.text());

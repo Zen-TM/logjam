@@ -64,7 +64,10 @@ def check_boot_and_postgres(status):
     codes = []
     if status.get("boot_mode") in ("failed", "refused"):
         codes.append("boot_failed")
-    if not status.get("postgres_up") and status.get("boot_mode") != "restoring":
+    if not status.get("postgres_up") and status.get("boot_mode") not in (
+        "restoring",
+        "upgrading",
+    ):
         codes.append("postgres_down")
     return codes
 
@@ -112,11 +115,15 @@ def _listing(s3, bucket, prefix):
 
 
 def _archive_id_order(prefix):
-    # "16-1" -> (16, 1): the newest archive id, not the lexicographic last.
+    # "<major>-<history>", as "16-1" or "18-2": the newest is the highest history number, which
+    # only ever grows, not the highest major and not the lexicographic last ("9-1" after "10-1").
     try:
-        return tuple(int(n) for n in prefix.rstrip("/").rsplit("/", 1)[1].split("-"))
+        major, history = (
+            int(n) for n in prefix.rstrip("/").rsplit("/", 1)[1].split("-")
+        )
+        return (history, major)
     except ValueError:
-        return (-1,)
+        return (-1, -1)
 
 
 def newest_wal_time(s3, bucket, wal_prefix):
@@ -161,9 +168,9 @@ def check_ready(url, opener):
 def probe_ready(url, opener):
     """One attempt at /ready, never a failure: the HTTP status, or None.
 
-    Before the cutover the URL is answered by the old API, so a 200 proves the
-    WAF lets this function through. A 4xx/5xx is a status too (a WAF block is
-    a 403, which is what the probe is there to show).
+    Logged, not judged, while the brain is not serving or its status is
+    missing. A 4xx/5xx is a status too (a WAF block is a 403, which is what
+    the probe is there to show).
     """
     try:
         with opener(_request(url), timeout=READY_TIMEOUT) as response:

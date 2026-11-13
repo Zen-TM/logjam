@@ -6,9 +6,9 @@ import { logger } from "./logger";
 
 // Per-connection DB password resolution (rotation-proof).
 //
-// The RDS master password rotates via the RDS-managed Secrets Manager secret.
-// Anything that captures the password once at boot (ECS secrets injection, EB
-// secret-referenced env vars, boot.ts) goes stale on rotation until the
+// The database password rotates by a new version of its Secrets Manager secret.
+// Anything that captures the password once at boot (ECS secrets injection,
+// boot.ts) goes stale on rotation until the
 // process restarts. node-postgres accepts `password` as an async function
 // evaluated each time the pool opens a NEW physical connection, so resolving
 // it here means a long-running API picks up the rotated password without a

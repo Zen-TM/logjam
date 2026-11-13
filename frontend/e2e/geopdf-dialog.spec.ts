@@ -23,11 +23,15 @@ test.skip(
 );
 test.use({ viewport: { width: 1440, height: 900 } });
 
-const archives = statewideArchives();
-const ARCHIVE_PATHS: Record<string, Buffer> = {
-  [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
-  [NSW_REGION.terrain.slope.archivePath]: archives.slope,
-  [NSW_REGION.terrain.contours.archivePath]: archives.contours,
+// Built on the first request, not at import: the runner imports this file just
+// to list its cases, and the archives take seconds to make.
+const archivePaths = (): Record<string, Buffer> => {
+  const archives = statewideArchives();
+  return {
+    [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
+    [NSW_REGION.terrain.slope.archivePath]: archives.slope,
+    [NSW_REGION.terrain.contours.archivePath]: archives.contours,
+  };
 };
 
 /** Every origin a render may reach once Make it is pressed: the stubbed tile
@@ -59,7 +63,7 @@ async function stubTiles(page: Page) {
   });
   await page.route("**/master/**", async (route: Route) => {
     const body =
-      ARCHIVE_PATHS[new URL(route.request().url()).pathname.slice(1)];
+      archivePaths()[new URL(route.request().url()).pathname.slice(1)];
     if (!body) return route.fallback();
     const m = /bytes=(\d+)-(\d+)/.exec(
       route.request().headers()["range"] ?? "",
@@ -115,6 +119,9 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     await field.blur();
   }
 
+  // The SIX tiles are the ones stubbed above; the default OSM Vector base layer
+  // reads the basemap archive, which holds nothing out west.
+  await dialog.getByRole("radio", { name: "SIX Maps Base Map" }).click();
   await dialog.getByRole("textbox", { name: "File name" }).fill("Far west.pdf");
 
   const download = page.waitForEvent("download", { timeout: 90_000 });

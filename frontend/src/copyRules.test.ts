@@ -183,6 +183,18 @@ describe("copy on Logjam Web", () => {
     expect(first.text).toBe("Open it");
   });
 
+  // A toast's sentence is passed as the first argument, not a prop. Mutation:
+  // drop `COPY_CALLS` from `userFacingStrings` in shared/src/copyRules.ts, and
+  // `toast.error("…the web app…")` anywhere in src/ goes unread.
+  it("reads the sentence passed to a toast", () => {
+    const found = userFacingStrings(
+      ts,
+      "x.tsx",
+      'toast.error("Could not copy in the web app."); toast.done(`Saved ${n}`); toast.error(messageFromError(e, "No."));',
+    ).map(({ text }) => text);
+    expect(found).toEqual(["Could not copy in the web app.", "Saved "]);
+  });
+
   it("breaks no copy rule", () => {
     const offenders = hits()
       .filter(({ file, rule, text }) => !baselined(file, rule, text))

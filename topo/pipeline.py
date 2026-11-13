@@ -46,8 +46,8 @@ import tempfile
 import time
 import traceback
 import zipfile
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from contextlib import contextmanager
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
@@ -144,6 +144,56 @@ def _write_progress(done: int, total: int, phase: str) -> None:
         os.replace(tmp, _PROGRESS_PATH)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Memory
+# ---------------------------------------------------------------------------
+
+
+def available_memory(
+    meminfo: Path = Path("/proc/meminfo"), cgroup: Path = Path("/sys/fs/cgroup")
+) -> int:
+    """Bytes the job can still take, never below zero: the host's
+    MemAvailable or, when the container has a cgroup v2 memory limit and it
+    is lower, that limit less what the cgroup holds that it can't give back
+    (memory.current less memory.stat's page cache: the extracted ZIP and the
+    ground files are written before this is asked. Both of its lists, as
+    MemAvailable counts them: a ground file read by each neighbour's strips
+    cut is on the active one). Tests: tests/test_sharpen.py `TestTinWorkers`."""
+    found = dict(line.split(":", 1) for line in meminfo.read_text().splitlines())
+    free = int(found["MemAvailable"].split()[0]) * 1024
+    with suppress(OSError, ValueError, KeyError):
+        limit = int((cgroup / "memory.max").read_text())  # "max": no limit
+        stat = dict(
+            line.split() for line in (cgroup / "memory.stat").read_text().splitlines()
+        )
+        cache = int(stat["inactive_file"]) + int(stat["active_file"])
+        held = int((cgroup / "memory.current").read_text()) - cache
+        free = min(free, limit - held)
+    return max(0, free)
+
+
+def _call(job: tuple):
+    function, *arguments = job
+    return function(*arguments)
+
+
+def side_by_side(jobs: List[tuple], workers: int) -> None:
+    """Run (function, *arguments) jobs that each write their own file, each
+    in a process of its own. Not threads: what GDAL's warps allocate then
+    stays in this process, under the whole-area arrays that come later
+    (1.1 GiB held before the first of them on a four-tile area, against
+    0.24 GiB this way)."""
+    with ProcessPoolExecutor(min(workers, len(jobs))) as pool:
+        list(pool.map(_call, jobs))
+
+
+def jobs_in_memory(cpus: int, job_bytes: int, memory_bytes: int, share: float) -> int:
+    """Jobs at a time: one a CPU, and as many of the largest as fit in `share`
+    of the memory, but always one (tests/test_sharpen.py `TestTinWorkers`,
+    tests/test_pipeline_build.py `TestGroundPerTile`)."""
+    return max(1, min(cpus, int(share * memory_bytes // max(job_bytes, 1))))
 
 
 # ---------------------------------------------------------------------------
@@ -350,17 +400,14 @@ SCRUB_STRATUM_WEIGHT_HIGH = (
 # distributions when available.
 SCRUB_DENSITY_REFERENCE_ALL_RETURNS = 4.0
 
-# Data-footprint construction (compute_data_footprint). The footprint trims the
-# false outward fringe that fill_nodata extrapolates (up to FILL_NODATA_MAX_DIST_M
-# beyond true extent) WITHOUT clipping real data. The DTM's 1 m ground mask is
+# Data-footprint construction (compute_data_footprint). The DTM's 1 m ground mask is
 # naturally sparse (~40% of cells carry a ground return), so the coarse mask must
 # be built by COVERAGE (any 1 m ground pixel in a coarse cell → valid), never by
 # nearest-neighbour sampling which erodes the sparse perimeter inward.
 FOOTPRINT_DOWNSAMPLE_SCALE = 10  # coarse-mask cell size in metres (1 m grid → 10 m)
 # Morphological-close radius in coarse cells. Bridges groundless voids (water,
-# dense canopy) up to 2*radius wide so the footprint matches what fill_nodata
-# reconstructs as interior data; close does not net-expand the outer edge.
-# 10 cells × 10 m = ~100 m → bridges ~200 m, matching fill_nodata's 100 px reach.
+# dense canopy) up to 2*radius wide; close does not net-expand the outer edge.
+# 10 cells × 10 m = ~100 m → bridges ~200 m.
 FOOTPRINT_CLOSE_RADIUS_CELLS = 10
 # Keep every connected component whose area is ≥ this fraction of the largest
 # component's area (drops stray-point noise without deleting valid data lobes).
@@ -1233,10 +1280,10 @@ def build_pipeline_full(
     Rasters are produced in the LAZ's NATIVE CRS (no filters.reprojection):
     ELVIS tiles are axis-aligned squares in MGA/UTM, so rasterizing natively
     yields a clean axis-aligned grid with no rotation wedge. The whole stack is
-    warped to Web Mercator once, as a raster, after fill/footprint (see
+    warped to Web Mercator once, as a raster, after the footprint (see
     reproject_raster_to_web_mercator). Reprojecting points first instead would
     rasterize a rotated quad into an axis-aligned 3857 grid, leaving triangular
-    nodata wedges that fill_nodata then fabricates ("spaghetti") data into.
+    nodata wedges.
     """
     # Note on classification: for SMRF, filters.assign wipes incoming
     # Classification to 0 so smrf has a clean slate to assign 1 (unclassified)
@@ -1423,7 +1470,40 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
     log.info("PDAL pipeline complete.")
 
 
-def run_pdal_sequential_full(
+# Peak memory of one tile's PDAL pipeline per point it reads, by its ground:
+# PDAL holds the whole cloud, its height above ground, the index hag_nn
+# searches and five rasters, and SMRF its own grids over the tile as well.
+# Measured on one Category 2 tile of 2.58 M points: 466 MiB on its class 2
+# (~190 bytes a point), 1,122 MiB through SMRF (~455). A 57.6 M point
+# Category 1 tile passed 4.6 GB on a box that was swapping, so its peak is
+# not known: the small tile's figure, which carries the rasters' fixed share,
+# is the cautious one for it.
+GRID_BYTES_PER_POINT = {"class2": 190, "smrf": 460}
+# The rasters and SMRF's grids are sized by the tile's extent, not its points:
+# a tile with fewer points than the measured one is counted as that one.
+GRID_MEASURED_POINTS = 2_600_000
+# Of the memory the container may still use, the share the tiles' PDAL
+# pipelines may take.
+GRID_MEMORY_SHARE = 0.7
+
+
+def _grid_tile(job: Tuple[int, str, str, Dict[str, str], str, float]) -> None:
+    """One point cloud to its five rasters, on its own class 2 or SMRF's."""
+    i, laz, ground, tile, work_dir, resolution = job
+    pipeline = build_pipeline_full(
+        [laz],
+        tile["dtm"],
+        tile["scrub_low"],
+        tile["scrub_high"],
+        tile["below"],
+        tile["all"],
+        resolution,
+        ground=ground,
+    )
+    run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
+
+
+def run_pdal_per_tile(
     terrain_tiles: List[str],
     veg_tiles: List[str],
     out_dtm: str,
@@ -1433,8 +1513,9 @@ def run_pdal_sequential_full(
     out_all_count: str,
     work_dir: str,
     resolution: float = 1.0,
+    workers: int = 1,
 ):
-    """Process LAZ files one at a time (DTM + strata/below/all counts), then
+    """Each LAZ file to its own rasters (DTM + strata/below/all counts), then
     merge. Each tile is grounded on its own class 2 where it has any, and on
     SMRF's where it has none (tests/test_pipeline_build.py `TestGroundPerTile`).
 
@@ -1446,77 +1527,80 @@ def run_pdal_sequential_full(
     "last-raster-in-VRT-wins" ambiguity when surveys overlap. The union of the
     two selections is gridded exactly once — a tile chosen by both policies is
     not re-run.
+
+    Tiles are gridded side by side, as many as the largest fits in memory
+    with (`TestGroundPerTile`): each is its own PDAL process, so a thread
+    only waits on it.
     """
     union = list(dict.fromkeys(terrain_tiles + veg_tiles))  # ordered-unique
     # laz path → its five per-tile GeoTIFF paths.
-    grids: Dict[str, Dict[str, str]] = {}
-    for i, laz in enumerate(union):
-        log.info(f"PDAL tile {i + 1}/{len(union)}")
-        # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
-        # each tile keeps last_progress_at fresh through the whole PDAL pass so
-        # the stall-reaper doesn't false-kill a big job before render starts.
-        _write_progress(i, len(union), "pdal")
-        tile = {
+    grids: Dict[str, Dict[str, str]] = {
+        laz: {
             "dtm": os.path.join(work_dir, f"dtm_tile_{i}.tif"),
             "scrub_low": os.path.join(work_dir, f"scrub_low_tile_{i}.tif"),
             "scrub_high": os.path.join(work_dir, f"scrub_high_tile_{i}.tif"),
             "below": os.path.join(work_dir, f"below_tile_{i}.tif"),
             "all": os.path.join(work_dir, f"all_tile_{i}.tif"),
         }
-        pipeline = build_pipeline_full(
-            [laz],
-            tile["dtm"],
-            tile["scrub_low"],
-            tile["scrub_high"],
-            tile["below"],
-            tile["all"],
-            resolution,
-            ground="class2" if has_class2(laz) else "smrf",
-        )
-        run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
-        grids[laz] = tile
+        for i, laz in enumerate(union)
+    }
+    # Each tile's ground is found first: it sets what the tile's pipeline
+    # holds in memory. The search streams, so every tile is asked at once.
+    with ThreadPoolExecutor(workers) as pool:
+        grounds = [
+            "class2" if found else "smrf" for found in pool.map(has_class2, union)
+        ]
+    largest = max(
+        (
+            GRID_BYTES_PER_POINT[ground] * max(point_count(laz), GRID_MEASURED_POINTS)
+            for laz, ground in zip(union, grounds)
+        ),
+        default=0,
+    )
+    n = jobs_in_memory(workers, largest, available_memory(), GRID_MEMORY_SHARE)
+    log.info(f"PDAL: {len(union)} tile(s), {n} at a time")
+    jobs = [
+        (i, laz, grounds[i], grids[laz], work_dir, resolution)
+        for i, laz in enumerate(union)
+    ]
+    # Heartbeat: PDAL is the other long phase. A report as each tile ends
+    # keeps last_progress_at fresh through the whole PDAL pass, so the
+    # stall-reaper doesn't false-kill a big job before render starts.
+    _write_progress(0, len(union), "pdal")
+    with ThreadPoolExecutor(n) as pool:
+        futures = [pool.submit(_grid_tile, job) for job in jobs]
+        try:
+            for k, done in enumerate(as_completed(futures), 1):
+                done.result()
+                _write_progress(k, len(union), "pdal")
+        except BaseException:
+            # A tile failed: the tiles still queued are not gridded first.
+            # Left to the `with`, they all would be, with no progress
+            # written meanwhile (`TestGroundPerTile`).
+            pool.shutdown(cancel_futures=True)
+            raise
 
-    dtm_tiles = [grids[t]["dtm"] for t in terrain_tiles]
-    scrub_low_tiles = [grids[t]["scrub_low"] for t in veg_tiles]
-    scrub_high_tiles = [grids[t]["scrub_high"] for t in veg_tiles]
-    below_tiles = [grids[t]["below"] for t in veg_tiles]
-    all_tiles = [grids[t]["all"] for t in veg_tiles]
+    merges = [
+        ("DTM", terrain_tiles, "dtm", out_dtm, -9999, "cubic"),
+        ("scrub-low-count", veg_tiles, "scrub_low", out_scrub_low, 0, "bilinear"),
+        ("scrub-high-count", veg_tiles, "scrub_high", out_scrub_high, 0, "bilinear"),
+        ("below-count", veg_tiles, "below", out_below_count, 0, "bilinear"),
+        ("all-return-count", veg_tiles, "all", out_all_count, 0, "bilinear"),
+    ]
 
-    log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
-    _merge_raster_tiles(dtm_tiles, out_dtm, nodata=-9999)
-    log.info(f"Merging {len(scrub_low_tiles)} scrub-low-count tiles …")
-    _merge_raster_tiles(scrub_low_tiles, out_scrub_low, nodata=0, resample="bilinear")
-    log.info(f"Merging {len(scrub_high_tiles)} scrub-high-count tiles …")
-    _merge_raster_tiles(scrub_high_tiles, out_scrub_high, nodata=0, resample="bilinear")
-    log.info(f"Merging {len(below_tiles)} below-count tiles …")
-    _merge_raster_tiles(below_tiles, out_below_count, nodata=0, resample="bilinear")
-    log.info(f"Merging {len(all_tiles)} all-return-count tiles …")
-    _merge_raster_tiles(all_tiles, out_all_count, nodata=0, resample="bilinear")
+    for name, tiles, *_ in merges:
+        log.info(f"Merging {len(tiles)} {name} tiles …")
+    side_by_side(
+        [
+            (_merge_raster_tiles, [grids[t][key] for t in tiles], out, nodata, resample)
+            for _, tiles, key, out, nodata, resample in merges
+        ],
+        workers,
+    )
 
     for tile in grids.values():
         for p in tile.values():
             os.remove(p)
-
-
-def fill_nodata(src_path: str, dst_path: str, max_distance: int = 100):
-    """Fill nodata holes (e.g. under dense canopy, water, LAZ-tile seams) using GDAL.
-
-    Default search distance is 100 pixels (= 100 m at 1 m DTM resolution), enough to
-    bridge typical canopy gaps and river ribbons without smearing detail across true
-    edge boundaries — fill_nodata only interpolates from valid pixels surrounding a
-    hole, so it cannot extend the data outward beyond the original footprint.
-    """
-    log.info(f"Filling nodata in {os.path.basename(src_path)} …")
-    ds = gdal.Open(src_path)
-    driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.CreateCopy(dst_path, ds, options=["COMPRESS=LZW"])
-    band = out_ds.GetRasterBand(1)
-    gdal.FillNodata(
-        band, maskBand=None, maxSearchDist=max_distance, smoothingIterations=2
-    )
-    out_ds.FlushCache()
-    out_ds = None
-    ds = None
 
 
 def _binary_close(mask: np.ndarray, radius: int = 5) -> np.ndarray:
@@ -1589,9 +1673,6 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     """Polygonize the valid-pixel mask of a DTM raster → tight WGS84 footprint GeoJSON.
 
     Produces a single connected outer footprint with no interior holes.
-    Assumes the input DTM has already been hole-filled (fill_nodata) so the
-    valid-pixel mask is close to the true data extent — this keeps the
-    footprint tight against the rendered tiles instead of expanding beyond it.
     Pipeline:
       1. Build a 1 m valid-pixel binary mask.
       2. Downsample 10× for speed (~10 m effective resolution).
@@ -1623,8 +1704,7 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     # warp the 0/1 mask as Float32 with averaging, then treat any cell with a
     # nonzero fraction as valid. This keeps a coarse cell whenever *any* 1 m
     # ground return falls in it — essential because the ground mask is sparse
-    # (~40% valid), so NN sampling would erode the perimeter inward and drop the
-    # very edges that fill_nodata legitimately reconstructs.
+    # (~40% valid), so NN sampling would erode the perimeter inward.
     scale = FOOTPRINT_DOWNSAMPLE_SCALE
     new_x = max(1, ds.RasterXSize // scale)
     new_y = max(1, ds.RasterYSize // scale)
@@ -1637,9 +1717,8 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     frac_ds = None
 
     # Morphological close: dilate then erode by FOOTPRINT_CLOSE_RADIUS_CELLS.
-    # Bridges groundless voids (water, dense canopy) up to 2*radius wide so the
-    # footprint covers what fill_nodata reconstructs, without net-expanding the
-    # outer edge into the false fill fringe.
+    # Bridges groundless voids (water, dense canopy) up to 2*radius wide,
+    # without net-expanding the outer edge.
     closed_arr = _binary_close(small_arr, radius=FOOTPRINT_CLOSE_RADIUS_CELLS)
     small_ds = mem_drv.Create("", new_x, new_y, 1, gdal.GDT_Byte)
     small_ds.SetGeoTransform((gt[0], gt[1] * scale, 0, gt[3], 0, gt[5] * scale))
@@ -2000,10 +2079,8 @@ def parse_elvis_filename(path: str) -> TileInfo:
     )
 
 
-def _measure_tile_density(laz_path: str) -> float:
-    """Points per square metre from PDAL's summary (header/stats only — no full
-    point read, so this is seconds, not minutes). Used to rank overlapping
-    surveys by real captured density rather than the LID-category floor."""
+def _las_summary(laz_path: str) -> dict:
+    """PDAL's summary of a point cloud, from its header: no point is read."""
     result = subprocess.run(
         ["pdal", "info", "--summary", laz_path],
         capture_output=True,
@@ -2014,7 +2091,18 @@ def _measure_tile_density(laz_path: str) -> float:
             f"`pdal info --summary` failed for {os.path.basename(laz_path)}:\n"
             f"{result.stderr}"
         )
-    summary = json.loads(result.stdout)["summary"]
+    return json.loads(result.stdout)["summary"]
+
+
+def point_count(laz_path: str) -> int:
+    return int(_las_summary(laz_path)["num_points"])
+
+
+def _measure_tile_density(laz_path: str) -> float:
+    """Points per square metre from PDAL's summary (header/stats only — no full
+    point read, so this is seconds, not minutes). Used to rank overlapping
+    surveys by real captured density rather than the LID-category floor."""
+    summary = _las_summary(laz_path)
     num_points = int(summary["num_points"])
     bounds = summary["bounds"]
     area = (bounds["maxx"] - bounds["minx"]) * (bounds["maxy"] - bounds["miny"])
@@ -2147,8 +2235,8 @@ def _box_blur(
             pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
             c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis, dtype=np.float64)
             n = (n_rows, n_cols)[axis]
-            hi = np.take(c, np.arange(w, w + n), axis=axis)
-            lo = np.take(c, np.arange(0, n), axis=axis)
+            hi = c[w : w + n] if axis == 0 else c[:, w : w + n]
+            lo = c[:n] if axis == 0 else c[:, :n]
             out = ((hi - lo) / w).astype(np.float32)
     return out
 
@@ -2316,12 +2404,18 @@ def apply_fire_history(
     return density_arr
 
 
+# Rows the bilateral filter works on at a time: a band's dozen float arrays
+# of a few megabytes each stay in a core's cache.
+BILATERAL_BAND_ROWS = 64
+
+
 def _bilateral_filter_weighted(
     value_arr: np.ndarray,
     confidence_arr: np.ndarray,
     window: int,
     sigma_spatial: float,
     sigma_range: float,
+    workers: int = 1,
 ) -> np.ndarray:
     """Confidence-weighted bilateral filter on a 2-D float raster.
 
@@ -2335,7 +2429,11 @@ def _bilateral_filter_weighted(
     surrounding high-pulse cells rather than dominating the average.
 
     Vectorised: for each offset (dy, dx) in the window we shift the arrays and
-    accumulate. O(N · window²) numpy ops; ~10–30 s on a 10k×10k raster.
+    accumulate. O(N · window²) numpy ops, done a band of rows at a time: a
+    band's arrays stay in the processor's cache, and numpy lets go of the
+    interpreter inside each op, so `workers` threads each take bands. A
+    pixel's sums are the same whatever band it falls in
+    (tests/test_scrub_strata.py `TestBilateralBands`).
     """
     if window % 2 != 1:
         raise ValueError("window size must be odd")
@@ -2347,53 +2445,36 @@ def _bilateral_filter_weighted(
     cnf_p = np.pad(confidence_arr, half, mode="reflect")
 
     h, w = value_arr.shape
-    num = np.zeros((h, w), dtype=np.float64)
-    denom = np.zeros((h, w), dtype=np.float64)
-
     inv_2_s2 = 1.0 / (2.0 * sigma_spatial * sigma_spatial)
     inv_2_r2 = 1.0 / (2.0 * sigma_range * sigma_range)
+    out = np.empty((h, w), dtype=np.float32)
 
-    for dy in range(-half, half + 1):
-        for dx in range(-half, half + 1):
-            spatial_w = math.exp(-(dy * dy + dx * dx) * inv_2_s2)
-            if spatial_w < 1e-4:
-                continue
-            v_shift = val_p[half + dy : half + dy + h, half + dx : half + dx + w]
-            c_shift = cnf_p[half + dy : half + dy + h, half + dx : half + dx + w]
-            diff = value_arr - v_shift
-            range_w = np.exp(-(diff * diff) * inv_2_r2)
-            w_combined = spatial_w * range_w * c_shift
-            num += w_combined * v_shift
-            denom += w_combined
+    def band(top: int) -> None:
+        rows = min(BILATERAL_BAND_ROWS, h - top)
+        centre = value_arr[top : top + rows]
+        num = np.zeros((rows, w), dtype=np.float64)
+        denom = np.zeros((rows, w), dtype=np.float64)
+        for dy in range(-half, half + 1):
+            for dx in range(-half, half + 1):
+                spatial_w = math.exp(-(dy * dy + dx * dx) * inv_2_s2)
+                if spatial_w < 1e-4:
+                    continue
+                y, x = top + half + dy, half + dx
+                v_shift = val_p[y : y + rows, x : x + w]
+                c_shift = cnf_p[y : y + rows, x : x + w]
+                diff = centre - v_shift
+                range_w = np.exp(-(diff * diff) * inv_2_r2)
+                w_combined = spatial_w * range_w * c_shift
+                num += w_combined * v_shift
+                denom += w_combined
+        valid = denom > 0
+        part = np.full((rows, w), np.nan, dtype=np.float32)
+        part[valid] = (num[valid] / denom[valid]).astype(np.float32)
+        out[top : top + rows] = part
 
-    out = np.zeros_like(value_arr, dtype=np.float32)
-    valid = denom > 0
-    out[valid] = (num[valid] / denom[valid]).astype(np.float32)
-    out[~valid] = np.nan
+    with ThreadPoolExecutor(workers) as pool:
+        list(pool.map(band, range(0, h, BILATERAL_BAND_ROWS)))
     return out
-
-
-def _run_gdaldem_hillshade(
-    out_path: str, dtm_path: str, settings: Dict[str, Any]
-) -> None:
-    """Centralised hillshade invocation. Honours per-job overrides."""
-    hs = settings.get("hillshade", {})
-    azimuth = float(hs.get("azimuth", HILLSHADE_DEFAULTS["azimuth"]))
-    altitude = float(hs.get("altitude", HILLSHADE_DEFAULTS["altitude"]))
-    z_factor = float(hs.get("zFactor", HILLSHADE_DEFAULTS["zFactor"]))
-    multidirectional = bool(
-        hs.get("multidirectional", HILLSHADE_DEFAULTS["multidirectional"])
-    )
-    kwargs = dict(
-        zFactor=z_factor,
-        creationOptions=["COMPRESS=LZW"],
-    )
-    if multidirectional:
-        kwargs["multiDirectional"] = True
-    else:
-        kwargs["azimuth"] = azimuth
-        kwargs["altitude"] = altitude
-    gdal.DEMProcessing(out_path, dtm_path, "hillshade", **kwargs)
 
 
 def _combine_scrub_strata(
@@ -2460,10 +2541,11 @@ def compute_rasters(
     work_dir: str,
     settings: Dict[str, Any],
     capture_year: Optional[int] = None,
+    workers: int = 1,
 ) -> dict:
     """
-    From DTM + strata/below/all-return count rasters produce hillshade.tif,
-    slope.tif, scrub_density.tif.
+    From the DTM's grid and the strata/below/all-return count rasters produce
+    scrub_density.tif.
 
     The count rasters are first warped onto the DTM pixel grid so array shapes
     are guaranteed to match, even if the DTM and counts were produced on
@@ -2504,24 +2586,6 @@ def compute_rasters(
     """
     paths = {}
 
-    # Hillshade from DTM
-    hs_path = os.path.join(work_dir, "hillshade.tif")
-    log.info("Computing hillshade …")
-    _run_gdaldem_hillshade(hs_path, dtm_path, settings)
-    paths["hillshade"] = hs_path
-
-    # Slope from DTM
-    sl_path = os.path.join(work_dir, "slope.tif")
-    log.info("Computing slope …")
-    gdal.DEMProcessing(
-        sl_path,
-        dtm_path,
-        "slope",
-        slopeFormat="degree",
-        creationOptions=["COMPRESS=LZW"],
-    )
-    paths["slope"] = sl_path
-
     # Scrub density: weighted-strata NRD + count-weighted bilateral filter.
     # Step 1: align count rasters onto the DTM grid
     scrub_low_aligned = os.path.join(work_dir, "scrub_low_count_aligned.tif")
@@ -2529,10 +2593,13 @@ def compute_rasters(
     below_aligned = os.path.join(work_dir, "below_count_aligned.tif")
     all_aligned = os.path.join(work_dir, "all_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
-    align_raster_to_reference(scrub_low_path, dtm_path, scrub_low_aligned)
-    align_raster_to_reference(scrub_high_path, dtm_path, scrub_high_aligned)
-    align_raster_to_reference(below_count_path, dtm_path, below_aligned)
-    align_raster_to_reference(all_count_path, dtm_path, all_aligned)
+    aligns = [
+        (scrub_low_path, dtm_path, scrub_low_aligned),
+        (scrub_high_path, dtm_path, scrub_high_aligned),
+        (below_count_path, dtm_path, below_aligned),
+        (all_count_path, dtm_path, all_aligned),
+    ]
+    side_by_side([(align_raster_to_reference, *a) for a in aligns], workers)
 
     log.info(
         f"Computing weighted-strata NRD + bilateral filter "
@@ -2580,6 +2647,7 @@ def compute_rasters(
         window=SCRUB_DENSITY_FILTER_WINDOW_M,
         sigma_spatial=SCRUB_DENSITY_SIGMA_SPATIAL_M,
         sigma_range=SCRUB_DENSITY_SIGMA_RANGE,
+        workers=workers,
     )
 
     # Density-normalize the confidence-mask threshold: a sparse capture
@@ -2605,6 +2673,11 @@ def compute_rasters(
     windowed_pulses = _box_sum_2d(total_near, SCRUB_DENSITY_FILTER_WINDOW_M)
     valid = (windowed_pulses >= min_pulses_eff) & np.isfinite(nrd_smoothed)
     density = np.where(valid, nrd_smoothed, np.nan).astype(np.float32)
+    # Nine whole-area arrays that only the density came from. Held to the end
+    # of this function they sit under the fire step, the pass's peak in
+    # memory: 2.0 GiB on a four-tile area, against 1.5 GiB without them.
+    del low_arr, high_arr, below_arr, all_arr, total_near, raw_nrd
+    del nrd_smoothed, windowed_pulses, valid
 
     # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
     # (sclerophyll/heath) vegetation of equal LiDAR density. No-op if the
@@ -3348,6 +3421,12 @@ class RenderConfig:
     stale_path: str = ""  # fire_stale.tif window path; "" when fire-staleness detection is disabled (mirrors density_path)
 
 
+# Not Pillow's `optimize`, which is level 9: on 366 tiles of a Category 2
+# survey that took 35 ms a tile against 8 ms, for a layer 4 % smaller
+# (tests/test_render_tiles.py `TestRenderTileJob`).
+VEGETATION_PNG_LEVEL = 6
+
+
 def render_tile_job(args) -> Tuple[int, int, int, dict]:
     """
     Worker function (runs in subprocess): one vegetation tile.
@@ -3381,7 +3460,7 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     from io import BytesIO
 
     buf = BytesIO()
-    veg_img.save(buf, format="PNG", optimize=True)
+    veg_img.save(buf, format="PNG", compress_level=VEGETATION_PNG_LEVEL)
     return z, x, y, {"vegetation": buf.getvalue()}
 
 
@@ -3612,25 +3691,40 @@ def main():
         sys.exit(1)
 
 
+# Points `has_class2` reads at a time.
+CLASS_PROBE_POINTS = 1_000_000
+
+
 def has_class2(path: str) -> bool:
-    """Whether a point cloud holds any ground (ASPRS class 2) points."""
-    out = subprocess.run(
-        [
-            "pdal",
-            "info",
-            "--stats",
-            "--dimensions",
-            "Classification",
-            "--enumerate",
-            "Classification",
-            path,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    stats = json.loads(out)["stats"]["statistic"]
-    return any(2 in [int(v) for v in s.get("values", [])] for s in stats)
+    """Whether a point cloud holds any ground (ASPRS class 2) points.
+
+    Read a part at a time, stopping at the first part with one: a classified
+    survey has ground among its first points (0.25 s for 200,000 points
+    against 2.4 s for a 2.6 M point tile read whole), and only a cloud with
+    none is read to its end (tests/test_pipeline_build.py `TestHasClass2`)."""
+    total = point_count(path)
+    for start in range(0, total, CLASS_PROBE_POINTS):
+        out = subprocess.run(
+            [
+                "pdal",
+                "info",
+                "--stats",
+                "--dimensions",
+                "Classification",
+                "--enumerate",
+                "Classification",
+                f"--readers.las.start={start}",
+                f"--readers.las.count={min(CLASS_PROBE_POINTS, total - start)}",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        stats = json.loads(out)["stats"]["statistic"]
+        if any(2 in [int(v) for v in s.get("values", [])] for s in stats):
+            return True
+    return False
 
 
 def run():
@@ -3649,7 +3743,10 @@ def run():
         "--workers",
         type=int,
         default=max(1, multiprocessing.cpu_count() - 1),
-        help="Parallel tile-render workers (default: CPU count − 1)",
+        help=(
+            "How many tiles are gridded, rasters warped and tiles rendered at "
+            "once (default: CPU count − 1)"
+        ),
     )
     parser.add_argument(
         "--work-dir",
@@ -3725,7 +3822,7 @@ def run():
 
         # Native-CRS rasters, warped to Web Mercator as rasters after the
         # footprint (see reproject_raster_to_web_mercator): rasterizing
-        # natively leaves no rotation wedge for fill_nodata to fabricate into.
+        # natively leaves no rotation wedge.
         native = {
             name: os.path.join(work_dir, f"{name}_native.tif")
             for name in (
@@ -3737,8 +3834,10 @@ def run():
         }
         mercator = {name: os.path.join(work_dir, f"{name}_raw.tif") for name in native}
         dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
-        dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
-        dtm_filled = os.path.join(work_dir, "dtm_filled.tif")
+        # The grid every later raster is aligned to: compute_rasters and
+        # get_raster_bbox_wgs84 read its size, transform and projection.
+        # Its holes are left unfilled.
+        dtm_grid = os.path.join(work_dir, "dtm_grid.tif")
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
         # Overlapping surveys per footprint: densest → ground, most recent →
@@ -3749,7 +3848,7 @@ def run():
             survey_selection = select_surveys_by_layer(contents.las_files)
         capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
         with bench.step("PDAL: LAZ → DTM + vegetation counts", key="pdal"):
-            run_pdal_sequential_full(
+            run_pdal_per_tile(
                 survey_selection.terrain_tiles,
                 survey_selection.veg_tiles,
                 dtm_raw,
@@ -3759,25 +3858,23 @@ def run():
                 native["all_count"],
                 work_dir,
                 resolution=1.0,
+                workers=args.workers,
             )
-        with bench.step("Fill DTM nodata holes", key="fill"):
-            fill_nodata(dtm_raw, dtm_native_filled)
-        # Footprint from dtm_raw (pre-fill) in the native grid, so it hugs the
-        # true data extent (compute_data_footprint reprojects to WGS84).
+        # Footprint from dtm_raw in the native grid, so it hugs the true data
+        # extent (compute_data_footprint reprojects to WGS84).
         with bench.step("Compute data footprint", key="footprint"):
             compute_data_footprint(dtm_raw, footprint_path)
         with bench.step("Reproject to Web Mercator", key="reproject"):
-            reproject_raster_to_web_mercator(
-                dtm_native_filled, dtm_filled, -9999, "cubic"
+            warps = [(dtm_raw, dtm_grid, -9999, "cubic")] + [
+                (native[name], mercator[name], 0, "bilinear") for name in native
+            ]
+            side_by_side(
+                [(reproject_raster_to_web_mercator, *w) for w in warps], args.workers
             )
-            for name in native:
-                reproject_raster_to_web_mercator(
-                    native[name], mercator[name], 0, "bilinear"
-                )
 
         with bench.step("Compute scrub density (vegetation)", key="derivatives"):
             raster_paths = compute_rasters(
-                dtm_filled,
+                dtm_grid,
                 mercator["scrub_low_count"],
                 mercator["scrub_high_count"],
                 mercator["below_count"],
@@ -3785,6 +3882,7 @@ def run():
                 work_dir,
                 settings,
                 capture_year,
+                workers=args.workers,
             )
 
         # Fold fire_stale_summary.json (written by apply_fire_history, inside
@@ -3799,7 +3897,7 @@ def run():
                 fire_stale_summary["capture_year"],
             )
 
-        lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
+        lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_grid)
         cfg = RenderConfig(
             density_path=raster_paths["scrub_density"],
             stale_path=raster_paths.get("fire_stale", ""),

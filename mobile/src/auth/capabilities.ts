@@ -147,7 +147,7 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
 /**
  * The screen-level counterpart of `capabilityRowProps`: copy for a whole screen
  * a guest cannot use, and the signal that its mount-time fetches must not fire
- * (mobile/CLAUDE.md — a guaranteed-401 per screen open is a battery cost and a
+ * (ADR 0007 — a guaranteed-401 per screen open is a battery cost and a
  * permanently red sync health line). Null means "go ahead".
  *
  * Only `needs-account` blocks a whole screen. A linked user offline keeps the

@@ -1,7 +1,7 @@
 # 0001. The API image connects to RDS over verified TLS using a bundled CA
 
 - **Date:** 2026-06-11
-- **Status:** Accepted
+- **Status:** Superseded by [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md)
 - **Supersedes:** —
 
 ## Context

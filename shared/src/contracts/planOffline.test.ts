@@ -13,6 +13,7 @@ const summary = (over: Partial<TripPlanSummary>): TripPlanSummary => ({
   updatedAt: "2026-10-01T00:00:00.000Z",
   status: "active",
   role: "member",
+  unansweredForms: 0,
   ...over,
 });
 

@@ -133,7 +133,7 @@ export default function AddWayDialog({
         if (err instanceof WayRemovalError) {
           // The new way is in; only the old one stayed. Nothing left to retry
           // here, so leave the dialog and say so.
-          toast.error(err.message);
+          toast.error(ADD_WAY.copy.removalFailed);
           close();
         } else {
           setError(wayFailureMessage(err));

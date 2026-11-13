@@ -1,6 +1,6 @@
 # A cost ceiling with a breaker AWS itself pulls: when a month's actual spend
-# reaches var.cost_ceiling_usd, AWS Budgets attaches a deny policy to the roles
-# that launch workers and sign uploads. No code of ours has to be alive for it.
+# reaches var.cost_ceiling_usd, AWS Budgets attaches a deny policy to the role
+# that launches workers and signs uploads. No code of ours has to be alive for it.
 # It is a backstop under the compute pool's polite refusals, and crude on
 # purpose: a job request then fails instead of being refused nicely. It should
 # never fire in a normal month. budgets.tf's `logjam-monthly` is the early
@@ -16,10 +16,9 @@ variable "cost_ceiling_usd" {
 }
 
 locals {
-  # Literal, as everywhere else in this root: the role is Elastic Beanstalk's
-  # (iam.tf), not a resource here.
+  # The role that launches workers and signs uploads: the brain's, shared by
+  # the API and by pgBackRest.
   cost_ceiling_roles = {
-    eb    = { name = "logjam-eb-role", arn = "arn:aws:iam::620853681701:role/logjam-eb-role" }
     brain = { name = aws_iam_role.brain.name, arn = aws_iam_role.brain.arn }
   }
 }
@@ -92,8 +91,8 @@ resource "aws_iam_policy" "cost_ceiling_deny" {
   })
 }
 
-# The role Budgets assumes. It can attach and detach this one policy on the two
-# roles above and nothing else; the trust names Budgets in this account only
+# The role Budgets assumes. It can attach and detach this one policy on the role
+# above and nothing else; the trust names Budgets in this account only
 # (AWS documents the SourceArn as budget/* for Budgets):
 #   https://docs.aws.amazon.com/cost-management/latest/userguide/cross-service-confused-deputy-prevention.html
 # Guard: tests/guards.tftest.hcl (cost_ceiling_role_attaches_only_the_deny).

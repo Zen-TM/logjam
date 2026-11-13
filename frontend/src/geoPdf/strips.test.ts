@@ -25,7 +25,7 @@ const IPHONE = {
 const DESKTOP = { maxCanvasPx: 128e6, maxTotalPx: 256e6, maxWidth: 65_473 };
 
 describe("planStrips", () => {
-  const a3 = mapPx("A3", 320); // ~17.6 MP: the A3 case from #602
+  const a3 = mapPx("A3", 320); // ~17.6 MP: the A3 case
   const a4 = mapPx("A4", 320); // ~8.7 MP
   it("is one strip when the map fits", () => {
     const s = planStrips(a3.w, a3.h, 20e6);

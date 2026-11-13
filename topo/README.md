@@ -66,7 +66,7 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--workers N` | CPU count − 1 | How many things run at once: tiles gridded (fewer if memory is short), rasters warped, filter threads, tiles rendered |
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |
@@ -245,11 +245,12 @@ The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
 downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
 `master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
 fails (nothing is uploaded from a build that did not finish). Its default disk
-is 20 GiB, so the run asks for 120: about 17 GB of input, 13 GB of block files,
-and a further 13 GB each for the MBTiles the packer builds, its spool and the
-result. Run it once *Deploy topo worker* has pushed an image that has `slope-s3`.
-Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
-first one that prints an error.
+(set in `ecs.tf`, sized for an input ZIP) is smaller than that, so the run asks
+for 120: about 17 GB of input, 13 GB of block files, and a further 13 GB each for
+the MBTiles the packer builds, its spool and the result. Run it once *Deploy
+topo worker* has pushed an image that has `slope-s3`. Run the blocks below in
+order, from `topo/` of a fresh clone, and stop at the first one that prints an
+error.
 
 The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the
 API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
@@ -586,7 +587,7 @@ Then press a creek inside the basin on Logjam Web's map.
 
 Publishing is a prod change and the maintainer's to make. The layer goes to
 the topo bucket outside `master/`, so the CDN never serves it; only the API
-reads it ([ADR 0048](../docs/decisions/0048-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
+reads it ([ADR 0049](../docs/decisions/0049-catchment-lookups-run-on-the-api-from-a-private-geopackage.md)):
 
 ```bash
 aws s3 cp dem/flow-network.gpkg \
@@ -603,11 +604,6 @@ they aren't available.
 
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
-
-**Empty or patchy output tiles**
-This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step
-fills gaps up to 50 m across. For larger holes, increase `max_distance` in
-`fill_nodata()`.
 
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
