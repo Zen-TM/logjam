@@ -3,6 +3,15 @@ import { join } from "node:path";
 import proj4 from "proj4";
 import { describe, expect, it } from "vitest";
 
+import {
+  ATLANTIC_LAEA_SHEET,
+  buildTestPdf,
+  NZTM_SHEET,
+  pdfName,
+  UTM12N_SHEET,
+  validVp,
+  type TestPdfValue,
+} from "./__fixtures__/buildTestPdf";
 import { parseGeoPdfGeoref, type GeoPdfViewport } from "./parseGeoref";
 import { buildGeoTransform } from "./transform";
 
@@ -192,5 +201,60 @@ describe("buildGeoTransform — homography fallback on a keystone georef", () =>
       expect(Math.abs(back.x - cp.pagePt.x)).toBeLessThan(1e-6);
       expect(Math.abs(back.y - cp.pagePt.y)).toBeLessThan(1e-6);
     }
+  });
+});
+
+describe("buildGeoTransform — projections that do not cover Sydney", () => {
+  // GPTS is (lat, lon) in BL, BR, TR, TL order; the BBox corners are
+  // (28,28), (393,28), (393,270), (28,270).
+  const bboxCorners = [
+    { x: 28, y: 28 },
+    { x: 393, y: 28 },
+    { x: 393, y: 270 },
+    { x: 28, y: 270 },
+  ];
+
+  const cases: [string, Record<string, TestPdfValue>, string][] = [
+    ["NZTM2000", NZTM_SHEET, "EPSG:2193"],
+    ["UTM zone 12N", UTM12N_SHEET, "EPSG:32612"],
+    ["mid-Atlantic LAEA, WKT only", ATLANTIC_LAEA_SHEET, "WKT"],
+  ];
+
+  for (const [label, sheet, planeCrs] of cases) {
+    it(`reads a ${label} sheet and places its corners`, async () => {
+      const parsed = await parseGeoPdfGeoref(
+        buildTestPdf({ vp: [validVp({}, sheet)] }),
+      );
+      const t = buildGeoTransform(parsed.pages[0].viewports[0]);
+      expect(t.planeCrs).toBe(planeCrs);
+      const gpts = sheet.GPTS as number[];
+      bboxCorners.forEach((pagePt, i) => {
+        const g = t.pageToLonLat(pagePt);
+        expect(Math.abs(g.lat - gpts[i * 2]!)).toBeLessThan(1e-3);
+        expect(Math.abs(g.lon - gpts[i * 2 + 1]!)).toBeLessThan(1e-3);
+      });
+    });
+  }
+
+  // Centred on the date line, so its antipode is lon 0: a probe that averaged
+  // longitudes without wrapping would land there and proj4 would throw.
+  it("probes a sheet across 180° on the sheet", async () => {
+    const wkt = (NZTM_SHEET.GCS as { WKT: string }).WKT.replace(
+      /PROJCS\["[^"]*"/,
+      'PROJCS["Date line LAEA"',
+    ).replace(
+      /PROJECTION\["Transverse_Mercator"\].*\],UNIT\["metre",1\]\]$/,
+      'PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["latitude_of_center",0],PARAMETER["longitude_of_center",180],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1]]',
+    );
+    const sheet = {
+      GPTS: [-0.05, 179.95, -0.05, -179.95, 0.05, -179.95, 0.05, 179.95],
+      GCS: { Type: pdfName("PROJCS"), WKT: wkt },
+    };
+    const parsed = await parseGeoPdfGeoref(
+      buildTestPdf({ vp: [validVp({}, sheet)] }),
+    );
+    expect(buildGeoTransform(parsed.pages[0].viewports[0]).planeCrs).toBe(
+      "WKT",
+    );
   });
 });
