@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
+import { TERRARIUM } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { landClip } from "./nswLand.js";
 import {
@@ -25,8 +25,8 @@ import {
   type RegionBbox,
   type SaveClipKind,
 } from "./mapRegionEstimate.js";
-import { NSW_REGION, REGIONS, type Region } from "./regions.js";
-import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
+import { NSW_REGION, type Region } from "./regions.js";
+import { SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
