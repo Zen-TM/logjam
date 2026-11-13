@@ -55,7 +55,10 @@ export type LandArchive = TerrainArchive & {
    * The source's classes, in the order a legend lists them, each with what a
    * person reads and its colour. A class not listed is left undrawn.
    */
-  classes: readonly { source: string; name: string; colour: string }[];
+  classes: readonly [
+    { source: string; name: string; colour: string },
+    ...{ source: string; name: string; colour: string }[],
+  ];
   /** What the source gets wrong, said beside the legend it qualifies. */
   caveat: string;
 };
@@ -74,7 +77,10 @@ export type CoverageArchive = TerrainArchive & {
   carrierProperty: string;
   levelProperty: string;
   /** The networks a user picks from; `id` is the `carrierProperty` value. */
-  carriers: readonly { id: string; name: string }[];
+  carriers: readonly [
+    { id: string; name: string },
+    ...{ id: string; name: string }[],
+  ];
   /** What the source gets wrong, said beside the legend it qualifies. */
   caveat: string;
 };

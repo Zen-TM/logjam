@@ -9,7 +9,13 @@
 // simulated-region archives are built, which sets the real values; the archive
 // paths follow `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
-import type { Region, RegionTerrain, Ring } from "./regions.js";
+import { t } from "./i18n.js";
+import type {
+  CoverageArchive,
+  Region,
+  RegionTerrain,
+  Ring,
+} from "./regions.js";
 
 type Box = readonly [number, number, number, number];
 
@@ -72,14 +78,14 @@ function simOverlays(
   id: string,
   name: string,
   coverage: Box,
-  carriers?: readonly { id: string; name: string }[],
+  carriers?: CoverageArchive["carriers"],
 ): Pick<RegionTerrain, "land" | "fire" | "coverage"> {
   const credit = (layer: string) => ({
     coverage,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
-  const caveat = `Simulated data for ${name}: it describes no real ground.`;
+  const caveat = t`Simulated data for ${name}: it describes no real ground.`;
   return {
     land: {
       id: `${id}-land`,
@@ -89,9 +95,9 @@ function simOverlays(
       minzoom: 8,
       maxzoom: 13,
       classes: [
-        { source: "Public", name: "Simulated public land", colour: "#2a9d8f" },
-        { source: "Leased", name: "Simulated leased land", colour: "#e9c46a" },
-        { source: "Owned", name: "Simulated owned land", colour: "#9b5de5" },
+        { source: "Public", name: t`Simulated public land`, colour: "#2a9d8f" },
+        { source: "Leased", name: t`Simulated leased land`, colour: "#e9c46a" },
+        { source: "Owned", name: t`Simulated owned land`, colour: "#9b5de5" },
       ],
       caveat,
       ...credit("Land"),
@@ -105,7 +111,7 @@ function simOverlays(
       typeProperty: "burntType",
       minzoom: 8,
       maxzoom: 12,
-      types: { 1: "Simulated wildfire", 3: "Simulated clearing burn" },
+      types: { 1: t`Simulated wildfire`, 3: t`Simulated clearing burn` },
       caveat,
       ...credit("Fire history"),
     },
@@ -139,8 +145,8 @@ const NZ_COVERAGE: Box = [
 const NZ_TERRAIN: RegionTerrain = {
   ...simTerrain("simnz", "New Zealand", NZ_COVERAGE),
   ...simOverlays("simnz", "New Zealand", NZ_COVERAGE, [
-    { id: "simone", name: "Simulated One" },
-    { id: "simtwo", name: "Simulated Two" },
+    { id: "simone", name: t`Simulated One` },
+    { id: "simtwo", name: t`Simulated Two` },
   ]),
 };
 

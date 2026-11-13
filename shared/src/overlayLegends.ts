@@ -59,7 +59,7 @@ export function overlayLegends(
       land: {
         title: copy.land,
         about: copy.landAbout,
-        hue: land.classes[0]!.colour,
+        hue: land.classes[0].colour,
         intro: copy.landLegend,
         rows: land.classes.map(({ name, colour }) => ({ label: name, colour })),
         caveat: land.caveat,
