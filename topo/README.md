@@ -124,7 +124,7 @@ the topo bucket at the path `NSW_REGION.terrain.land.archivePath` names, and nee
 ```bash
 aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/land/nsw-tenure.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/land/nsw-tenure.pmtiles   # 206
 ```
 
 ---
@@ -203,7 +203,7 @@ the topo bucket at the path `NSW_REGION.terrain.heights.archivePath` names in
 ```bash
 aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m.pmtiles   # 206
 ```
 
 No deploy is needed. The API looks for the archive every five minutes and
@@ -355,7 +355,7 @@ there is no resuming across tasks. Check the result as for the height archive;
 it should print `206`:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m-slope.pmtiles
 ```
 
 ---
@@ -414,7 +414,7 @@ the one it replaces. Publishing is a prod change and the maintainer's to make:
 
 ```bash
 python3 build_place_registry.py publish --bucket logjam-topo-jobs
-curl -s https://logjamnsw.com/master/places/v1/latest.json
+curl -s https://logjam.earth/master/places/v1/latest.json
 ```
 
 After changing the file's shape, regenerate the fixture both sides test
