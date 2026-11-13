@@ -50,6 +50,10 @@ Limits:
   and the one before it. Releases deployed before
   this mechanism existed have no `releases/<sha>/` copy and cannot be rolled
   back to.
+- **API and frontend, releases from before the move to `logjam.earth`**
+  (November 2026) cannot be rolled back to: that frontend calls
+  `api.logjamnsw.com`, which no longer answers, and that API's environment
+  names the old domain for its map files and email links.
 - **Worker shas:** a worker image exists only for commits that changed `topo/`.
   The sha to roll back to is the tag the task definition carried before.
 - **The next deploy undoes a rollback.** The next green push to `main`

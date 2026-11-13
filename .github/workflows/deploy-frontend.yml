@@ -126,7 +126,15 @@ jobs:
           VITE_AUTH_MODE: oidc
           VITE_OIDC_ISSUER: https://cognito-idp.${{ secrets.VITE_COGNITO_REGION }}.amazonaws.com/${{ secrets.VITE_COGNITO_USER_POOL_ID }}
           VITE_OIDC_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
-        run: npm run build
+        # PROD_API_URL is set by the github root's apply, a separate job that
+        # may not have caught up with this commit: a bundle built with the
+        # previous address would deploy and pass the smoke test.
+        run: |
+          grep -qE "PROD_API_URL += +\"$VITE_API_URL\"" ../infra/terraform/envs/github/variables.tf || {
+            echo "::error::PROD_API_URL is '$VITE_API_URL', not what infra/terraform/envs/github/variables.tf declares at this commit. Rerun this deploy once the github apply has finished."
+            exit 1
+          }
+          npm run build
 
       # No --delete: the previous release's hashed chunks stay, so a rollback
       # is one index.html copy and an open tab lazy-loading an old chunk still
