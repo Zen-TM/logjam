@@ -102,8 +102,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // fetched and downloadable, so the name says which rendering it is.
     name: "OSM Vector",
     kind: "vector",
-    urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
-    maxNativeZoom: 15,
+    urlTemplate: NSW_REGION.vector.archivePath,
+    maxNativeZoom: NSW_REGION.vector.maxzoom,
     displayMaxZoom: 15,
     attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
     attributionHtml:

@@ -14,7 +14,7 @@ const publicDir = join(import.meta.dirname, "..", "..", "frontend", "public");
 describe("legal document links", () => {
   it.each([TERMS_URL, PRIVACY_POLICY_URL])("%s is published", (url) => {
     const { origin, pathname } = new URL(url);
-    expect(origin).toBe("https://logjamnsw.com");
+    expect(origin).toBe("https://logjam.earth");
     expect(existsSync(join(publicDir, pathname))).toBe(true);
   });
 });

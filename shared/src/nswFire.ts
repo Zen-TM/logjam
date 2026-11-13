@@ -9,29 +9,8 @@
 import { SHORT_MONTHS } from "./dateNames.js";
 import { NSW_REGION } from "./regions.js";
 
-export const NSW_FIRE = {
-  /** A saved clip is filed under this, beside the area it was saved with. */
-  id: "nsw-fire",
-  /** A PMTiles archive under the CDN's `/master`, beside Land. */
-  archivePath: "master/fire/nsw-fire-history.pmtiles",
-  /** The build script's `OVERLAY_LAYER` (test_fire_overlay.py). */
-  sourceLayer: "fire",
-  /** The fire's year and month (1 to 12), from its end date, or its start
-   *  date while it has none: the vegetation layer's rule. */
-  yearProperty: "year",
-  monthProperty: "month",
-  /** The source's `FireType` code, absent where it had none: `FIRE_TYPES`. */
-  typeProperty: "type",
-  /** The build script's zooms: fires are mapped to tens of metres, and z12 is
-   *  finer than that. Deeper zooms overzoom. */
-  minzoom: 8,
-  maxzoom: 12,
-  coverage: NSW_REGION.terrain.heights.coverage,
-  credit:
-    "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
-  creditHtml:
-    'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)',
-} as const;
+/** NSW's archive, declared in the region (regions.ts). */
+export const NSW_FIRE = NSW_REGION.terrain.fire;
 
 /**
  * The source's `FireType` codes, as "What is here?" names them. A code not

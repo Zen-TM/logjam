@@ -28,7 +28,7 @@ export const config = {
   // CDN serving master topo tiles + (future) Protomaps basemap/glyphs —
   // parallels the web TOPO_CDN_BASE_URL.
   topoCdnBaseUrl:
-    process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
+    process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjam.earth",
   // Where Logjam Web lives: a friend invite link made here opens there.
   // Required, with no default, so a dev build cannot hand out a link to prod
   // (Guard: config.test.ts).
