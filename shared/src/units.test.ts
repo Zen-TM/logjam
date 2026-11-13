@@ -1,0 +1,180 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { formatNumber } from "./numberFormat.js";
+import { formatElevationM } from "./profileSeries.js";
+import { formatDistanceM, formatSpeedMps } from "./trackStats.js";
+import { formatRainMm, weatherDayFacts } from "./contracts/weather.js";
+import {
+  displayUnits,
+  formatArea,
+  formatDistance,
+  formatHeight,
+  formatRain,
+  formatSpeed,
+  formatTemperature,
+  formatTemperatureRange,
+  formatWind,
+  lengthFromInput,
+  lengthToInput,
+  lengthUnitLabel,
+  setDisplayUnits,
+} from "./units.js";
+
+afterEach(() => setDisplayUnits("metric"));
+
+// What Logjam wrote before this module, copied verbatim, so the metric branch
+// cannot drift from it. Mutation: change a threshold or a decimal in the
+// metric branch of units.ts and the sweep below turns red.
+const NBSP = " ";
+const was = {
+  distance: (m: number) =>
+    !Number.isFinite(m)
+      ? "—"
+      : m < 1000
+        ? `${Math.round(m)} m`
+        : `${(m / 1000).toFixed(1)} km`,
+  speed: (mps: number | null) =>
+    mps == null || !Number.isFinite(mps) || mps < 0
+      ? "—"
+      : `${(mps * 3.6).toFixed(1)} km/h`,
+  elevation: (m: number) => `${Math.round(m)} m`,
+  rain: (mm: number) =>
+    `${mm > 0 && mm < 1 ? mm.toFixed(1) : Math.round(mm)}${NBSP}mm`,
+  wind: (kmh: number) => `${Math.round(kmh)}${NBSP}km/h`,
+  area: (km2: number) =>
+    km2 >= 10
+      ? `${km2.toFixed(0)} km²`
+      : km2 > 0 && km2 < 0.005
+        ? "<0.01 km²"
+        : `${km2.toFixed(2)} km²`,
+  degrees: (c: number) => `${Math.round(c)}°`,
+};
+
+// Values on and around every threshold, negatives, and a spread of decimals.
+const SWEEP: number[] = [
+  -1234.5, -50, -0.6, -0.4, 0, 0.001, 0.004, 0.005, 0.049, 0.05, 0.4, 0.5, 0.95,
+  1, 1.5, 9.994, 9.995, 10, 14.5, 99.5, 849.5, 850, 999, 999.4, 999.5, 1000,
+  1049, 1050, 1203.4, 1203.5, 5000.04, 123456.789,
+];
+for (let i = 0; i < 200; i++) SWEEP.push(i * 13.37 + (i % 7) * 0.113);
+
+describe("metric output is what Logjam wrote before", () => {
+  it("is the default", () => {
+    expect(displayUnits()).toBe("metric");
+  });
+
+  it("matches the old formatters over a sweep, through the old names too", () => {
+    expect(SWEEP.length).toBeGreaterThan(200);
+    for (const n of SWEEP) {
+      expect(formatDistance(n)).toBe(was.distance(n));
+      expect(formatDistanceM(n)).toBe(was.distance(n));
+      expect(formatHeight(n)).toBe(was.elevation(n));
+      expect(formatElevationM(n)).toBe(was.elevation(n));
+      expect(formatSpeed(n)).toBe(was.speed(n));
+      expect(formatSpeedMps(n)).toBe(was.speed(n));
+      expect(formatRain(n)).toBe(was.rain(n));
+      expect(formatRainMm(n)).toBe(was.rain(n));
+      expect(formatWind(n)).toBe(was.wind(n));
+      expect(formatTemperature(n)).toBe(was.degrees(n));
+      if (n >= 0) expect(formatArea(n)).toBe(was.area(n));
+    }
+    expect(formatDistance(NaN)).toBe("—");
+    expect(formatDistance(Infinity)).toBe("—");
+    expect(formatSpeed(null)).toBe("—");
+    expect(formatSpeed(-1)).toBe("—");
+  });
+
+  it("keeps the weather card's literal strings", () => {
+    const day = weatherDayFacts(
+      {
+        date: "2026-11-20",
+        code: 3,
+        tempMinC: 4.4,
+        tempMaxC: 17.2,
+        rainMm: 6.2,
+        rainChance: 40,
+        windMaxKmh: 23.4,
+      } as Parameters<typeof weatherDayFacts>[0],
+      Date.UTC(2026, 10, 19, 12),
+    );
+    expect(day.temperature).toBe("4–17°");
+    expect(day.rain).toBe(`6${NBSP}mm`);
+    expect(day.wind).toBe(`23${NBSP}km/h`);
+    expect(formatTemperatureRange(4.4, 17.2)).toBe("4–17°");
+  });
+
+  it("writes literal examples", () => {
+    expect(formatDistance(850)).toBe("850 m");
+    expect(formatDistance(1250)).toBe("1.3 km");
+    expect(formatHeight(1203.4)).toBe("1203 m");
+    expect(formatSpeed(1)).toBe("3.6 km/h");
+    expect(formatArea(0.3)).toBe("0.30 km²");
+    expect(formatArea(0.001)).toBe("<0.01 km²");
+    expect(formatArea(152.6)).toBe("153 km²");
+    expect(formatRain(0.3)).toBe(`0.3${NBSP}mm`);
+    expect(formatRain(6.2)).toBe(`6${NBSP}mm`);
+    expect(formatWind(23.4)).toBe(`23${NBSP}km/h`);
+    expect(lengthUnitLabel()).toBe("m");
+  });
+
+  it("throws on an invalid area, as before", () => {
+    expect(() => formatArea(-1)).toThrow();
+    expect(() => formatArea(NaN)).toThrow();
+  });
+});
+
+describe("imperial", () => {
+  it("writes feet below 0.1 mi and miles from it", () => {
+    setDisplayUnits("imperial");
+    expect(formatDistance(0)).toBe("0 ft");
+    expect(formatDistance(100)).toBe("328 ft");
+    expect(formatDistance(160)).toBe("525 ft");
+    expect(formatDistance(161)).toBe("0.1 mi");
+    expect(formatDistance(850)).toBe("0.5 mi");
+    expect(formatDistance(1609.344)).toBe("1.0 mi");
+    expect(formatDistance(1930)).toBe("1.2 mi");
+    expect(formatDistance(42195)).toBe("26.2 mi");
+    expect(formatDistance(NaN)).toBe("—");
+  });
+
+  it("writes the other figures", () => {
+    setDisplayUnits("imperial");
+    expect(displayUnits()).toBe("imperial");
+    expect(formatHeight(1203.4)).toBe("3948 ft");
+    expect(formatElevationM(100)).toBe("328 ft");
+    expect(formatSpeed(1)).toBe("2.2 mph");
+    expect(formatSpeedMps(null)).toBe("—");
+    expect(formatWind(16.09344)).toBe(`10${NBSP}mph`);
+    expect(formatRain(6)).toBe(`0.24${NBSP}in`);
+    expect(formatRain(0)).toBe(`0.00${NBSP}in`);
+    expect(formatRain(30)).toBe(`1.2${NBSP}in`);
+    expect(formatTemperature(0)).toBe("32°");
+    expect(formatTemperature(14)).toBe("57°");
+    expect(formatTemperature(-10)).toBe("14°");
+    expect(formatTemperatureRange(4, 17)).toBe("39–63°");
+    expect(formatArea(26)).toBe("10 sq mi");
+    expect(formatArea(1)).toBe("0.39 sq mi");
+    expect(formatArea(0.0005)).toBe("<0.01 sq mi");
+    expect(formatArea(0)).toBe("0.00 sq mi");
+    expect(() => formatArea(-1)).toThrow();
+    expect(lengthUnitLabel()).toBe("ft");
+  });
+
+  it("converts what a length field holds both ways", () => {
+    expect(lengthFromInput(35)).toBe(35);
+    expect(lengthToInput(35)).toBe(35);
+    setDisplayUnits("imperial");
+    expect(lengthFromInput(100)).toBeCloseTo(30.48, 10);
+    expect(lengthToInput(30.48)).toBeCloseTo(100, 10);
+    for (const metres of [0, 1, 12.5, 30, 250.25]) {
+      expect(lengthFromInput(lengthToInput(metres))).toBeCloseTo(metres, 10);
+    }
+  });
+});
+
+describe("formatNumber", () => {
+  it("is toFixed, with no grouping: grouping is the language's call", () => {
+    expect(formatNumber(1203, 0)).toBe("1203");
+    expect(formatNumber(1234567.891, 1)).toBe("1234567.9");
+    expect(formatNumber(0.5, 2)).toBe("0.50");
+  });
+});
