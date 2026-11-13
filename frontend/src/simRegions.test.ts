@@ -7,19 +7,21 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-// Mutation that turns this red: drop the fake-auth check in simRegionsFor
-// (a real-auth build would then take the simulated regions).
 describe("simRegionsFor", () => {
+  // Mutation: test `!flag` in place of `flag !== "1"` in simRegionsFor.
   it("is off unless the flag is exactly 1", () => {
     expect(simRegionsFor(undefined, "oidc")).toBe(false);
     expect(simRegionsFor("", "fake")).toBe(false);
     expect(simRegionsFor("true", "fake")).toBe(false);
   });
 
+  // Mutation: return false after the fake-auth check in simRegionsFor.
   it("is on with fake auth", () => {
     expect(simRegionsFor("1", "fake")).toBe(true);
   });
 
+  // Mutation: drop the fake-auth check in simRegionsFor (a real-auth build
+  // would then take the simulated regions).
   it.each(["oidc", undefined, "Fake"])(
     "refuses a build whose auth mode is %s",
     (mode) => {

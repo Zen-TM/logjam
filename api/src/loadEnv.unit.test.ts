@@ -25,14 +25,13 @@ function importsOf(file: string): string[] {
 }
 
 // shared reads the switch when it loads, so the switch has to be set before.
-// Mutations that turn these red: move `import "./loadEnv"` below the shared
-// import in index.ts; import @logjam/shared (or a file that does) from
-// loadEnv.ts; delete the line that sets LOGJAM_SIM_REGIONS.
 describe("loadEnv (the first import of index.ts)", () => {
+  // Mutation: move `import "./loadEnv"` below the shared import in index.ts.
   it("is the first import of index.ts", () => {
     expect(importsOf(join(__dirname, "index.ts"))[0]).toBe("./loadEnv");
   });
 
+  // Mutation: import @logjam/shared (or a file that does) from loadEnv.ts.
   it("loads nothing that reaches @logjam/shared", () => {
     const seen = new Set<string>();
     const walk = (file: string) => {
@@ -50,6 +49,7 @@ describe("loadEnv (the first import of index.ts)", () => {
     expect(seen.size).toBeGreaterThanOrEqual(2);
   });
 
+  // Mutation: replace `if (runtime.nonDev)` with `if (false)` in loadEnv.ts.
   it("refuses SIM_REGIONS=1 in a prod runtime", async () => {
     process.env.SIM_REGIONS = "1";
     process.env.LOGJAM_RUNTIME = "prod";
@@ -57,18 +57,22 @@ describe("loadEnv (the first import of index.ts)", () => {
     expect(global_[SIM]).toBeUndefined();
   });
 
+  // Mutation: drop `|| dbHostNonLocal` from `nonDev` in lib/runtime.ts.
   it("refuses SIM_REGIONS=1 beside a non-local database", async () => {
     process.env.SIM_REGIONS = "1";
     process.env.DB_HOST = "db.example.com";
     await expect(import("./loadEnv")).rejects.toThrow(/SIM_REGIONS=1 refused/);
   });
 
+  // Mutation: test `process.env.SIM_REGIONS !== "0"` in loadEnv.ts (the switch
+  // would then be on whenever the variable is unset).
   it("leaves the switch off without SIM_REGIONS", async () => {
     delete process.env.SIM_REGIONS;
     await import("./loadEnv");
     expect(global_[SIM]).toBeUndefined();
   });
 
+  // Mutation: delete the line that sets LOGJAM_SIM_REGIONS in loadEnv.ts.
   it("puts the simulated regions in shared when it loads after", async () => {
     process.env.SIM_REGIONS = "1";
     process.env.NODE_ENV = "development";

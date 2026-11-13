@@ -9,14 +9,14 @@ afterEach(() => {
   delete (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS;
 });
 
-// Mutation that turns this red: drop the isLocalApi check in simRegionsFor (a
-// build for the prod API would then take the simulated regions).
 describe("simRegionsFor", () => {
+  // Mutation: test `!flag` in place of `flag !== "1"` in simRegionsFor.
   it("is off unless the flag is exactly 1", () => {
     expect(simRegionsFor(undefined, "https://api.logjam.earth")).toBe(false);
     expect(simRegionsFor("true", "http://127.0.0.1:8080")).toBe(false);
   });
 
+  // Mutation: return false after the local-API check in simRegionsFor.
   it.each([
     "http://127.0.0.1:8080",
     "http://10.0.2.2:8080",
@@ -25,6 +25,8 @@ describe("simRegionsFor", () => {
     expect(simRegionsFor("1", url)).toBe(true);
   });
 
+  // Mutation: drop the isLocalApi check in simRegionsFor (a build for the prod
+  // API would then take the simulated regions).
   it.each(["https://api.logjam.earth", "http://127.0.0.1.evil.com", undefined])(
     "refuses an API at %s",
     (url) => {
@@ -36,9 +38,6 @@ describe("simRegionsFor", () => {
 });
 
 describe("the entry and the builds", () => {
-  // Mutations that turn the first two red: move `import "./src/simRegions"`
-  // below another import in index.ts; import @logjam/shared (or a file that
-  // does) from simRegions.ts.
   const imports = (file: string) =>
     [
       ...readFileSync(join(__dirname, file), "utf8").matchAll(
@@ -46,6 +45,7 @@ describe("the entry and the builds", () => {
       ),
     ].map((m) => m[1]);
 
+  // Mutation: move `import "./src/simRegions"` below another import in index.ts.
   it("index.ts imports nothing but the polyfills before the switch", () => {
     expect(imports("../index.ts").slice(0, 3)).toEqual([
       "react-native-get-random-values",
@@ -54,11 +54,13 @@ describe("the entry and the builds", () => {
     ]);
   });
 
+  // Mutation: import @logjam/shared (or a file that does) from simRegions.ts.
   it("the switch loads nothing that reaches @logjam/shared", () => {
     expect(imports("simRegions.ts")).toEqual(["./authMode"]);
     expect(imports("authMode.ts")).toEqual([]);
   });
 
+  // Mutation: delete the line that sets LOGJAM_SIM_REGIONS in simRegions.ts.
   it("sets the switch before shared loads", async () => {
     vi.stubEnv("EXPO_PUBLIC_SIM_REGIONS", "1");
     vi.stubEnv("EXPO_PUBLIC_API_URL", "http://127.0.0.1:8080");
