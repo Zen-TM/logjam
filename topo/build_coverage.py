@@ -2,7 +2,7 @@
 """
 build_coverage.py
 ------------------
-The Coverage overlay's archive (`NSW_COVERAGE` in shared/src/nswCoverage.ts):
+The Coverage overlay's archive (`NSW_REGION.terrain.coverage` in shared/src/regions.ts):
 for each carrier, where its own model predicts a phone works in the hand
 outdoors, works only with an external antenna, or has no coverage, over the
 land of the NSW box.

@@ -446,7 +446,7 @@ export async function fetchAndParseRopeWiki(source: RopeWikiSource): Promise<{
     signal: AbortSignal.timeout(15000),
     headers: {
       "User-Agent":
-        "Logjam/1.0 (canyoning logbook; https://logjamnsw.com; noreply@notifications.logjamnsw.com)",
+        "Logjam/1.0 (canyoning logbook; https://logjam.earth; noreply@notifications.logjamnsw.com)",
     },
   });
   if (!response.ok) {

@@ -6,7 +6,7 @@ import http from "node:http";
 import https from "node:https";
 
 const LOCAL = "http://127.0.0.1:4566/logjam-topo-local";
-const CDN = "https://logjamnsw.com";
+const CDN = "https://logjam.earth";
 const PORT = 4567;
 
 http

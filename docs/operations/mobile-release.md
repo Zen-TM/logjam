@@ -74,7 +74,7 @@ Needed before the first release tag.
      `release/mobile-v*`, so this must stay the repository's only deploy key
      with write access. Delete the local files once both are set.
 8. **Account deletion URL:** in the Play Console Data safety form, enter
-   `https://logjamnsw.com/delete-account.html` (`frontend/public/delete-account.html`).
+   `https://logjam.earth/delete-account.html` (`frontend/public/delete-account.html`).
 9. **`SENTRY_AUTH_TOKEN`, so a crash report from a release is readable.** Every
    `preview` and `production` build uploads its JavaScript sourcemaps and
    native debug symbols to Sentry (organisation `logjam-qb`, project
