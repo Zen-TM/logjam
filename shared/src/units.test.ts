@@ -58,6 +58,7 @@ const SWEEP: number[] = [
 for (let i = 0; i < 200; i++) SWEEP.push(i * 13.37 + (i % 7) * 0.113);
 
 describe("metric output is what Logjam wrote before", () => {
+  // Mutation: `let current: Units = "imperial"` in units.ts.
   it("is the default", () => {
     expect(displayUnits()).toBe("metric");
   });
@@ -83,6 +84,7 @@ describe("metric output is what Logjam wrote before", () => {
     expect(formatSpeed(-1)).toBe("—");
   });
 
+  // Mutation: `NBSP` in units.ts becomes a plain space.
   it("keeps the weather card's literal strings", () => {
     const day = weatherDayFacts(
       {
@@ -102,6 +104,7 @@ describe("metric output is what Logjam wrote before", () => {
     expect(formatTemperatureRange(4.4, 17.2)).toBe("4–17°");
   });
 
+  // Mutation: `lengthUnitLabel` returns "ft" in both branches.
   it("writes literal examples", () => {
     expect(formatDistance(850)).toBe("850 m");
     expect(formatDistance(1250)).toBe("1.3 km");
@@ -116,6 +119,7 @@ describe("metric output is what Logjam wrote before", () => {
     expect(lengthUnitLabel()).toBe("m");
   });
 
+  // Mutation: drop `!Number.isFinite(km2)` from `formatArea`'s guard (NaN passes), or its `km2 < 0` half (-1 passes).
   it("throws on an invalid area, as before", () => {
     expect(() => formatArea(-1)).toThrow();
     expect(() => formatArea(NaN)).toThrow();
@@ -123,6 +127,7 @@ describe("metric output is what Logjam wrote before", () => {
 });
 
 describe("imperial", () => {
+  // Mutation: `FEET_BELOW_METRES = 0.2 * METRES_PER_MILE` in units.ts.
   it("writes feet below 0.1 mi and miles from it", () => {
     setDisplayUnits("imperial");
     expect(formatDistance(0)).toBe("0 ft");
@@ -136,6 +141,7 @@ describe("imperial", () => {
     expect(formatDistance(NaN)).toBe("—");
   });
 
+  // Mutation: drop `+ 32` from the temperature conversion, or the area boundary `>= 10` becomes `>= 11`.
   it("writes the other figures", () => {
     setDisplayUnits("imperial");
     expect(displayUnits()).toBe("imperial");
@@ -159,6 +165,7 @@ describe("imperial", () => {
     expect(lengthUnitLabel()).toBe("ft");
   });
 
+  // Mutation: `lengthFromInput` divides by `METRES_PER_FOOT` where it should multiply.
   it("converts what a length field holds both ways", () => {
     expect(lengthFromInput(35)).toBe(35);
     expect(lengthToInput(35)).toBe(35);
@@ -186,6 +193,7 @@ describe("weather facts in imperial", () => {
       Date.UTC(2026, 10, 19, 12),
     );
 
+  // Mutation: `figureOrNone` in weather.ts returns `text` unconditionally.
   it("draws the dash where the written figure would read zero", () => {
     setDisplayUnits("imperial");
     // 0.06 mm is 0.002 in ("0.00 in"); 0.6 km/h is 0.4 mph ("0 mph").
@@ -196,6 +204,7 @@ describe("weather facts in imperial", () => {
     });
   });
 
+  // Mutation: `RAIN_SHOWN_MM = 0.1` in weather.ts.
   it("still draws metric figures from 0.05 mm and 0.5 km/h", () => {
     expect(facts(0.05, 0.5)).toMatchObject({
       rain: `0.1${NBSP}mm`,
@@ -206,6 +215,7 @@ describe("weather facts in imperial", () => {
 });
 
 describe("formatNumber", () => {
+  // Mutation: `formatNumber` goes through `toLocaleString("en-US", …)`, which groups 1234567.9.
   it("is toFixed, with no grouping: grouping is the language's call", () => {
     expect(formatNumber(1203, 0)).toBe("1203");
     expect(formatNumber(1234567.891, 1)).toBe("1234567.9");
