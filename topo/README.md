@@ -19,10 +19,10 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 |--------|----------|---------|-----------------|
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
-| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_FIRE.credit` in `shared/src/nswFire.ts` |
+| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_REGION.terrain.fire.credit` in `shared/src/regions.ts` |
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_REGION.terrain.land.credit` in `shared/src/regions.ts` |
-| **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
-| **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
+| **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_REGION.terrain.coverage.credit` in `shared/src/regions.ts` |
+| **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_REGION.terrain.coverage.credit` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -433,8 +433,8 @@ REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 `build_fire_history.py` turns NPWS Fire History into two files from one read:
 the most-recent-fire-year raster the vegetation pass marks burnt ground from
 (`fire/fire_history_year.tif` in the topo bucket, with its legend beside it),
-and the Fire history overlay's vector archive (`NSW_FIRE.archivePath` in
-`shared/src/nswFire.ts`), which holds each area once, with its most recent
+and the Fire history overlay's vector archive (`NSW_REGION.terrain.fire.archivePath` in
+`shared/src/regions.ts`), which holds each area once, with its most recent
 fire's year, month and type. A scheduled ECS task runs `publish` monthly; these
 commands are for trying a change by hand, from `topo/`, in the worker image:
 
@@ -481,7 +481,7 @@ of the month.
 ## Refreshing the coverage overlay
 
 `build_coverage.py` turns the ACCC's mobile coverage maps into the Coverage
-overlay's archive (`NSW_COVERAGE.archivePath` in `shared/src/nswCoverage.ts`).
+overlay's archive (`NSW_REGION.terrain.coverage.archivePath` in `shared/src/regions.ts`).
 For each of Telstra, Optus and TPG it holds where a phone works in the hand
 outdoors, works only with an external antenna, or has no predicted coverage,
 over the land of the NSW box. Its docstring says which of the release's maps

@@ -1,6 +1,6 @@
 """The Coverage overlay's build: which of the release's maps count for each
 carrier, the class of a cell, the monthly publish, and the build's agreement
-with the clients (`NSW_COVERAGE` in shared/src/nswCoverage.ts)."""
+with the clients (`NSW_REGION.terrain.coverage` in shared/src/regions.ts)."""
 
 import io
 import json
@@ -20,6 +20,8 @@ import build_coverage as bc  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (ROOT / "shared/src/nswCoverage.ts").read_text()
 REGIONS = (ROOT / "shared/src/regions.ts").read_text()
+# The archive is declared in the region: only its `coverage: {` entry.
+ARCHIVE = REGIONS[REGIONS.index("    coverage: {") :].split("\n    },", 1)[0]
 
 
 def _resource(name, rid=None, modified="2026-09-21T05:41:27"):
@@ -389,11 +391,11 @@ class TestClients(unittest.TestCase):
     # Mutation: change a value here alone, and the clients draw nothing, or ask
     # for tiles the archive doesn't hold.
     def test_the_clients_read_what_the_build_writes(self):
-        self.assertIn(f'sourceLayer: "{bc.SOURCE_LAYER}"', SHARED)
-        self.assertIn(f'archivePath: "{bc.ARCHIVE_KEY}"', SHARED)
-        self.assertIn(f"minzoom: {bc.ZMIN},", SHARED)
-        self.assertIn(f"maxzoom: {bc.ZMAX},", SHARED)
-        self.assertIn(f'"{bc.CREDIT}"', SHARED)
+        self.assertIn(f'sourceLayer: "{bc.SOURCE_LAYER}"', ARCHIVE)
+        self.assertIn(f'archivePath: "{bc.ARCHIVE_KEY}"', ARCHIVE)
+        self.assertIn(f"minzoom: {bc.ZMIN},", ARCHIVE)
+        self.assertIn(f"maxzoom: {bc.ZMAX},", ARCHIVE)
+        self.assertIn(f'"{bc.CREDIT}"', ARCHIVE)
 
     # Mutation: rename a carrier or a level on one side, and the map draws no
     # hatch for it, or a tap names nothing.

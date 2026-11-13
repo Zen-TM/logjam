@@ -9,8 +9,8 @@ Build NPWS Fire History's two products from one read of the polygons:
   ground has never burned or has no usable date on record. The vegetation
   layer reads it at job time (FIRE_HISTORY_S3_PATH in pipeline.py) to mark
   ground burnt since its survey.
-- the Fire history overlay's vector archive (`NSW_FIRE` in
-  shared/src/nswFire.ts): each area with its most recent fire's year, month
+- the Fire history overlay's vector archive (`NSW_REGION.terrain.fire` in
+  shared/src/regions.ts): each area with its most recent fire's year, month
   and type.
 
     python3 build_fire_history.py publish --bucket B           # the monthly ECS task
@@ -90,7 +90,7 @@ HTTP_TRIES = 4
 RASTER_KEY = "fire/fire_history_year.tif"
 LEGEND_KEY = "fire/fire_history_year_legend.json"
 # The overlay's archive, its source layer and properties, and its zooms are
-# NSW_FIRE's in shared/src/nswFire.ts. Guard: tests/test_fire_overlay.py.
+# `NSW_REGION.terrain.fire`'s in shared/src/regions.ts. Guard: tests/test_fire_overlay.py.
 ARCHIVE_KEY = "master/fire/nsw-fire-history.pmtiles"
 OVERLAY_LAYER = "fire"
 OVERLAY_ZMIN = 8
