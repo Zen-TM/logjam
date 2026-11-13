@@ -32,10 +32,12 @@ stays one.
 import argparse
 import dataclasses
 import functools
+import http.client
 import io
 import json
 import sys
 import time
+import urllib.error
 import urllib.request
 from multiprocessing import Pool
 from pathlib import Path
@@ -51,7 +53,9 @@ DOWNLOAD_URLS = "https://download.mapterhorn.com/download_urls.json"
 # Not the project's name: this goes to somebody else's server.
 USER_AGENT = "pmtiles-python-client"
 SOURCE_TILE = 512  # Mapterhorn's tile size, in pixels
-RETRIES = 4
+ATTEMPTS = 8  # a range read, waiting 1, 2, 4 ... 60 s between
+MAX_WAIT_S = 60
+MAX_RETRY_AFTER_S = 300
 BLOCK_LEVELS = 3  # a block is 2**3 tiles across at the deepest zoom
 
 
@@ -125,28 +129,69 @@ def block_tiles(grid: np.ndarray, zmax: int, zb: int, bx: int, by: int):
 # ── Reading Mapterhorn ───────────────────────────────────────────────────────
 
 
+class NotRangeable(Exception):
+    """The server answered a range request with something else (a whole file,
+    or an error that asking again will not change)."""
+
+
+def fetch_range(
+    url: str,
+    offset: int,
+    length: int,
+    opener=urllib.request.urlopen,
+    sleep=time.sleep,
+) -> bytes:
+    """Exactly `length` bytes at `offset`, or an exception.
+
+    Retried with a growing wait (to a minute) on a dropped or short reply, a
+    5xx and a 429 or 503, which wait as long as `Retry-After` says. Any other
+    4xx, and a reply that is not 206, is raised at once: asking again changes
+    nothing, and a 200 would be a whole file read into memory.
+    """
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Range": f"bytes={offset}-{offset + length - 1}",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    for attempt in range(ATTEMPTS):
+        wait = min(2**attempt, MAX_WAIT_S)
+        try:
+            with opener(request, timeout=60) as response:
+                if response.status != 206:
+                    raise NotRangeable(f"{url}: {response.status}, not 206")
+                data = response.read()
+            if len(data) == length:
+                return data
+            error: Exception = OSError(f"short read: {len(data)} of {length}")
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503):
+                retry_after = (e.headers or {}).get("Retry-After", "")
+                if retry_after.isdigit():
+                    wait = min(int(retry_after), MAX_RETRY_AFTER_S)
+            elif e.code < 500:
+                raise NotRangeable(f"{url}: {e.code}") from e
+            error = e
+        except (OSError, http.client.HTTPException) as e:
+            error = e
+        if attempt == ATTEMPTS - 1:
+            raise error
+        sleep(wait)
+    raise AssertionError("unreachable")
+
+
 def http_reader(url: str):
-    """A PMTiles reader of a file served over HTTP, by byte range. Ranges are
-    cached: the reader asks for the header and directories on every tile."""
+    """A PMTiles reader of a file served over HTTP, by byte range."""
     from pmtiles.reader import Reader
 
-    @functools.lru_cache(maxsize=4096)
+    # The reader asks for the header and the directories on every tile, so
+    # they are worth keeping. The cache is small because it also gets every
+    # tile body, which is read exactly once: a large one would hold hundreds
+    # of megabytes per worker for nothing.
+    @functools.lru_cache(maxsize=128)
     def get_bytes(offset: int, length: int) -> bytes:
-        request = urllib.request.Request(
-            url,
-            headers={
-                "Range": f"bytes={offset}-{offset + length - 1}",
-                "User-Agent": USER_AGENT,
-            },
-        )
-        for attempt in range(RETRIES):
-            try:
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    return response.read()
-            except OSError:
-                if attempt == RETRIES - 1:
-                    raise
-                time.sleep(2**attempt)
+        return fetch_range(url, offset, length)
 
     return Reader(get_bytes)
 
@@ -213,24 +258,6 @@ def build_block(job: Tuple[int, int, int, int, list]):
     return rows, (bx, by, grid)
 
 
-def coarse_rows(level: Dict[Tuple[int, int], np.ndarray], zb: int, zmin: int):
-    """(z, x, y, png) for each zoom from zb - 1 to zmin, each the mean of the
-    one below, made from the tiles of zoom zb."""
-    t = dem.TILE
-    for z in range(zb - 1, zmin - 1, -1):
-        parents: Dict[Tuple[int, int], np.ndarray] = {}
-        for px, py in {(x // 2, y // 2) for x, y in level}:
-            quad = np.full((2 * t, 2 * t), np.nan, np.float32)
-            for dx in (0, 1):
-                for dy in (0, 1):
-                    child = level.get((2 * px + dx, 2 * py + dy))
-                    if child is not None:
-                        quad[dy * t : (dy + 1) * t, dx * t : (dx + 1) * t] = child
-            parents[(px, py)] = dem.halve(quad)
-            yield from dem.tiles_of(parents[(px, py)], z, px, py, rounding_for(z))
-        level = parents
-
-
 def heights(args: argparse.Namespace) -> None:
     bbox = tuple(float(v) for v in args.bbox.split(","))
     if len(bbox) != 4 or bbox[0] >= bbox[2] or bbox[1] >= bbox[3]:
@@ -259,7 +286,7 @@ def heights(args: argparse.Namespace) -> None:
                 yield from block_rows
         if not count:
             sys.exit(f"Mapterhorn has no tile at zoom {zmax - 1} over {args.bbox}")
-        for row in coarse_rows(level, zb, zmin):
+        for row in dem.coarse_levels(level, zb, zmin, rounding_for):
             count += 1
             yield row
 

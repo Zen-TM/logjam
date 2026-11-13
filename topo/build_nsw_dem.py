@@ -391,13 +391,17 @@ def tile(src: Path, work: Path, jobs: int) -> None:
 # ── pack ─────────────────────────────────────────────────────────────────────
 
 
-def coarse_tiles(work: Path, layer: Layer):
-    """z9 and z8, reduced from the blocks' own z10 grids."""
-    level: Dict[Tuple[int, int], np.ndarray] = {}
-    for path in work.glob("*.npy"):
-        bx, by = (int(n) for n in path.stem.split("-"))
-        level[(bx, by)] = np.load(path)
-    for z in range(BLOCK_ZOOM - 1, ZMIN - 1, -1):
+def coarse_levels(
+    level: Dict[Tuple[int, int], np.ndarray],
+    zb: int,
+    zmin: int,
+    layer_at: Callable[[int], Layer],
+):
+    """(z, x, y, png) for each zoom from zb - 1 down to zmin, each reduced from
+    the one below. `level` holds the tiles' grids at zb; `layer_at` gives the
+    layer a zoom is reduced and encoded with."""
+    for z in range(zb - 1, zmin - 1, -1):
+        layer = layer_at(z)
         parents: Dict[Tuple[int, int], np.ndarray] = {}
         for px, py in {(x // 2, y // 2) for x, y in level}:
             quad = np.full((2 * TILE, 2 * TILE), np.nan, np.float32)
@@ -411,6 +415,15 @@ def coarse_tiles(work: Path, layer: Layer):
             parents[(px, py)] = layer.reduce(quad)
             yield from tiles_of(parents[(px, py)], z, px, py, layer)
         level = parents
+
+
+def coarse_tiles(work: Path, layer: Layer):
+    """z9 and z8, reduced from the blocks' own z10 grids."""
+    level: Dict[Tuple[int, int], np.ndarray] = {}
+    for path in work.glob("*.npy"):
+        bx, by = (int(n) for n in path.stem.split("-"))
+        level[(bx, by)] = np.load(path)
+    yield from coarse_levels(level, BLOCK_ZOOM, ZMIN, lambda z: layer)
 
 
 def pack(work: Path, out: Path, extracted: str, layer: Layer) -> None:

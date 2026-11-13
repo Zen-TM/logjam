@@ -5,6 +5,7 @@ build_nsw_dem.py imports osgeo at module top, so it is stubbed first (the
 topo/tests/_native_stub.py convention).
 """
 
+import hashlib
 import io
 import json
 import math
@@ -31,6 +32,7 @@ from build_nsw_dem import (  # noqa: E402
     TILE,
     ZMAX,
     block_slope,
+    coarse_tiles,
     blocks_for,
     credit,
     CONTOUR_KEY,
@@ -55,6 +57,46 @@ def decode(rgb: np.ndarray) -> np.ndarray:
     """The decode in shared/src/demTiles.ts, written out again on purpose."""
     r, g, b = (rgb[..., i].astype(np.float64) for i in range(3))
     return r * 256 + g + b / 256 - 32768
+
+
+class TestCoarseTiles(unittest.TestCase):
+    """The NSW build's z9 and z8 are the bytes they were before `coarse_levels`
+    was shared with build_region_dem.py (the digests were taken from the loop
+    it replaced). Mutations that turn it red: a child placed in the wrong
+    quarter, a zoom skipped, the reduce swapped (mean for max or the reverse)."""
+
+    DIGESTS = {
+        "heights": (
+            4,
+            "3a5b57f0899bb313e895082f0b4cb0348163ae8bb5d470585f247e1db13f34f1",
+        ),
+        "slope": (
+            4,
+            "6bc4a498aa667301b31024d37086299d72c6ba90e41813a26651648d5b9893e5",
+        ),
+    }
+
+    def digest(self, layer):
+        import tempfile
+
+        rng = np.random.default_rng(7)
+        with tempfile.TemporaryDirectory() as tmp:
+            for bx, by in ((5, 5), (5, 6), (6, 5)):
+                grid = (500 + rng.random((TILE, TILE)) * 300).astype(np.float32)
+                grid[:40, :40] = np.nan
+                np.save(Path(tmp) / f"{bx}-{by}.npy", grid)
+            h, n = hashlib.sha256(), 0
+            for z, x, y, png in coarse_tiles(Path(tmp), layer):
+                h.update(f"{z},{x},{y},".encode())
+                h.update(png)
+                n += 1
+        return n, h.hexdigest()
+
+    def test_heights_are_the_bytes_they_were(self):
+        self.assertEqual(self.digest(HEIGHTS), self.DIGESTS["heights"])
+
+    def test_slope_is_the_bytes_it_was(self):
+        self.assertEqual(self.digest(SLOPE), self.DIGESTS["slope"])
 
 
 class TestEncodeTerrarium(unittest.TestCase):

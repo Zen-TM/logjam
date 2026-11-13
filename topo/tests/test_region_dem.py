@@ -7,11 +7,14 @@ convention).
 """
 
 import argparse
+import http.client
 import io
 import os
 import sys
 import tempfile
 import unittest
+import urllib.error
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -188,12 +191,173 @@ class TestCoarse(unittest.TestCase):
             (0, 0): np.full((256, 256), 100.0, np.float32),
             (1, 0): np.full((256, 256), 200.0, np.float32),
         }
-        (z, x, y, png), *rest = list(region.coarse_rows(level, 1, 0))
+        (z, x, y, png), *rest = list(
+            dem.coarse_levels(level, 1, 0, region.rounding_for)
+        )
         self.assertEqual((z, x, y, rest), (0, 0, 0, []))
         got = png_heights(png)
         self.assertTrue((got[:128, :128] == 100).all())
         self.assertTrue((got[:128, 128:] == 200).all())
         self.assertTrue(np.isnan(got[128:]).all())
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class TestMapterhornIsOnlyTheBuildsToRead(unittest.TestCase):
+    """Guards for the rules of ADR 0052 that a test can hold: no client or
+    API code names Mapterhorn's hosts (so nothing reads them at run time), and
+    the build's requests carry no project or person. No check holds "the build
+    never runs from CI": review does. Mutations that turn it red: a
+    `https://tiles.mapterhorn.com/...` URL in any file under shared/src,
+    frontend/src, mobile/src or api/src; `USER_AGENT` set to a string naming
+    the project, or carrying an address."""
+
+    SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+    DIRS = ("shared/src", "frontend/src", "mobile/src", "api/src")
+
+    def test_no_client_or_api_file_names_mapterhorn(self):
+        found = {d: 0 for d in self.DIRS}
+        named = []
+        for d in self.DIRS:
+            for path in (ROOT / d).rglob("*"):
+                if path.suffix in self.SUFFIXES and path.is_file():
+                    found[d] += 1
+                    if "mapterhorn.com" in path.read_text(errors="ignore").lower():
+                        named.append(str(path.relative_to(ROOT)))
+        # A floor: a moved directory or a changed suffix must not pass this
+        # by scanning nothing.
+        for d, n in found.items():
+            self.assertGreater(n, 50, f"{d}: only {n} source files scanned")
+        self.assertEqual(
+            named,
+            [],
+            "ADR 0052: a region's heights are a Logjam archive; nothing reads"
+            " Mapterhorn at run time",
+        )
+
+    def test_the_user_agent_names_no_project_or_person(self):
+        agent = region.USER_AGENT.lower()
+        self.assertTrue(agent)
+        for word in ("logjam", "zen", "@", "http", "mailto"):
+            self.assertNotIn(word, agent)
+
+
+class FakeResponse:
+    def __init__(self, body: bytes, status: int = 206):
+        self.body, self.status = body, status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        if isinstance(self.body, Exception):
+            raise self.body
+        return self.body
+
+
+def scripted(*replies):
+    """An opener that gives each call the next reply: a response, or an
+    exception to raise. Returns the opener and the list of its calls."""
+    calls, queue = [], list(replies)
+
+    def opener(request, timeout):
+        calls.append(request)
+        reply = queue.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    return opener, calls
+
+
+def http_error(code: int, retry_after: str = ""):
+    headers = {"Retry-After": retry_after} if retry_after else {}
+    return urllib.error.HTTPError("https://x/f", code, "m", headers, None)
+
+
+class TestFetchRange(unittest.TestCase):
+    """Mutations that turn it red: `HTTPException` dropped from the retried
+    errors (a short read with a Content-Length kills the worker); a 429 waited
+    out for a fixed second instead of Retry-After; a 404 retried; a 200 (a
+    whole file) accepted; a short body returned; the retries never giving up;
+    the cache holding more than a few dozen bodies."""
+
+    def fetch(self, *replies, length=4):
+        opener, calls = scripted(*replies)
+        waits = []
+        got = region.fetch_range(
+            "https://x/f", 10, length, opener=opener, sleep=waits.append
+        )
+        return got, calls, waits
+
+    def test_the_range_asked_for_is_the_range_read(self):
+        got, calls, waits = self.fetch(FakeResponse(b"abcd"))
+        self.assertEqual((got, waits), (b"abcd", []))
+        self.assertEqual(calls[0].get_header("Range"), "bytes=10-13")
+        self.assertEqual(calls[0].get_header("User-agent"), region.USER_AGENT)
+
+    def test_a_dropped_reply_is_read_again(self):
+        got, _, waits = self.fetch(
+            FakeResponse(http.client.IncompleteRead(b"ab", 2)),
+            ConnectionResetError(),
+            FakeResponse(b"ab"),  # short
+            FakeResponse(b"abcd"),
+        )
+        self.assertEqual(got, b"abcd")
+        self.assertEqual(waits, [1, 2, 4])
+
+    def test_a_429_waits_as_long_as_retry_after_says(self):
+        got, _, waits = self.fetch(http_error(429, "30"), FakeResponse(b"abcd"))
+        self.assertEqual((got, waits), (b"abcd", [30]))
+
+    def test_a_503_waits_as_long_as_retry_after_says_up_to_a_cap(self):
+        _, _, waits = self.fetch(http_error(503, "99999"), FakeResponse(b"abcd"))
+        self.assertEqual(waits, [region.MAX_RETRY_AFTER_S])
+
+    def test_a_429_with_no_usable_retry_after_backs_off(self):
+        _, _, waits = self.fetch(
+            http_error(429), http_error(429, "soon"), FakeResponse(b"abcd")
+        )
+        self.assertEqual(waits, [1, 2])
+
+    def test_a_5xx_is_retried_and_the_wait_stops_growing_at_a_minute(self):
+        replies = [http_error(502)] * 7 + [FakeResponse(b"abcd")]
+        _, _, waits = self.fetch(*replies)
+        self.assertEqual(waits, [1, 2, 4, 8, 16, 32, 60])
+
+    def test_another_4xx_is_not_retried(self):
+        opener, calls = scripted(http_error(404), FakeResponse(b"abcd"))
+        with self.assertRaises(region.NotRangeable):
+            region.fetch_range(
+                "https://x/f", 0, 4, opener=opener, sleep=lambda s: 1 / 0
+            )
+        self.assertEqual(len(calls), 1)
+
+    def test_a_whole_file_is_refused_without_being_read(self):
+        opener, calls = scripted(FakeResponse(b"x" * 100, status=200))
+        with self.assertRaises(region.NotRangeable):
+            region.fetch_range(
+                "https://x/f", 0, 4, opener=opener, sleep=lambda s: 1 / 0
+            )
+        self.assertEqual(len(calls), 1)
+
+    def test_it_gives_up_after_its_attempts(self):
+        opener, calls = scripted(*[http_error(500)] * region.ATTEMPTS)
+        with self.assertRaises(urllib.error.HTTPError):
+            region.fetch_range("https://x/f", 0, 4, opener=opener, sleep=lambda s: None)
+        self.assertEqual(len(calls), region.ATTEMPTS)
+
+    def test_the_reader_keeps_few_bodies(self):
+        # The reader's cache is the lru_cache on get_bytes: small, because it
+        # also holds each tile body, which is read once.
+        with mock.patch.object(region, "fetch_range", lambda *a: b"x") as _:
+            reader = region.http_reader("https://x/f")
+        cache = reader.get_bytes
+        self.assertLessEqual(cache.cache_parameters()["maxsize"], 256)
 
 
 class FakeSource:

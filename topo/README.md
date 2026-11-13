@@ -395,9 +395,10 @@ result with `pmtiles show example.pmtiles`: `bounds` is the box's tiles, and
 source and its licence; the credit lists those the box draws on. Mapterhorn
 keeps no mark of where a fine survey ends: a tile over ground with no survey is
 made from the next coarser source and has the same zoom (30 m Copernicus data
-at zoom 16, in places). Say in the credit that the finest heights exist only
-where the survey covers. A pixel Mapterhorn marks as no height is written as
-no-data; sea is 0 m.
+at zoom 16, over Makarora). Say in the credit that the finest heights exist
+only where the survey covers, and name the coarser source the rest of the box
+draws on, which may be a 10 m or a 5 m one. A pixel Mapterhorn marks as no
+height is written as no-data; sea is 0 m.
 
 Do not run it from CI: Mapterhorn states no terms for ranged reads of its
 download host, and the build is the only thing that should make them.

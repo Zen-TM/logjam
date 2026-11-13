@@ -16,8 +16,8 @@ as one tile set per zoom range: `planet.pmtiles` (zoom 0 to 12) and a
 `6-x-y.pmtiles` file for each zoom-6 tile with finer data (zoom 13 and up), in
 `download_urls.json` on `download.mapterhorn.com`. The tiles are 512 px
 terrarium in lossless WebP, and each source's credit is in `attribution.json`.
-The pixels are the finest source's own, down to 1 m in New Zealand and the
-United States, so a region's heights are a cut of it.
+Mapterhorn states that the pixels are the finest source's own, down to 1 m in
+New Zealand and the United States, so a region's heights are a cut of it.
 
 Mapterhorn is not used for NSW. Its Australian source is Geoscience
 Australia's 5 m LiDAR composite, which covers part of the state, not the
@@ -36,19 +36,31 @@ Utah the four PNG tiles were 1.36 to 1.58 times the WebP's size, the ratio
 [0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md) measured (34 KB against
 23 KB) and accepted.
 
-What Mapterhorn does where a fine survey ends, read on real tiles in New
-Zealand's South Island (`topo/build_region_dem.py` over the Makarora valley):
+What Mapterhorn does where a fine survey ends, read on real tiles
+(2026-11-14). The land tiles are from New Zealand's South Island, the Makarora
+valley, as `topo/build_region_dem.py` built them. Which ground is which was
+told from a tile's size and smoothness, not from a survey's own extent, and the
+built archive was compared with Mapterhorn's tiles, not with a survey's model.
 
-- It writes no no-data. A tile is RGB with no alpha, and no pixel in any tile
-  read was the terrarium value for -32768 m. Where it has no data at all it
-  has no tile; open sea inside a tile is exactly 0 m.
+- In the box read it wrote no no-data: a tile is RGB with no alpha, and none of
+  the 2,208 zoom 17 tiles built (the box's whole archive) has a pixel at the
+  terrarium value for -32768 m. No void inside a survey was met, so what it
+  does at one is unverified. The builder still maps a transparent pixel and
+  that value to no-data, in case another region's sources write them. Where it
+  has no data at all it has no tile: a Tasman Sea tile at zoom 12 is absent.
+- Open sea is exactly 0 m. Read on a real tile off the Sydney coast (the
+  planet file, zoom 12 and zoom 8: 52 bytes, one value); a coast tile
+  at Sydney Heads has 0 m as its lowest height.
 - Where a fine survey does not cover, the tile is still there, at the same
-  zoom, made from the next coarser source: at zoom 16 (1.7 m a pixel) a tile
-  on Copernicus GLO-30 is 70 to 80 KB and shows nothing finer than that 30 m source,
-  and a tile on the 1 m LiDAR is 130 to 200 KB. The two meet along the
-  survey's edge, inside one tile, with no step in height and no marker. Mean
-  second difference across a row is 0.016 m on the 30 m side and 0.05 to 0.2 m
-  on the 1 m side.
+  zoom, made from the next coarser source. Over Makarora that is Copernicus
+  GLO-30: at zoom 16 (1.7 m a pixel) a tile that looks like 30 m data is 70 to
+  80 KB and shows nothing finer than it, and a tile that looks like 1 m LiDAR
+  is 130 to 200 KB. The two meet along an edge inside one tile. Mean second
+  difference across a row is 0.016 m on the smooth side and 0.05 to 0.2 m on
+  the other. Across the edge in one tile, the difference to Mapterhorn's own
+  zoom 12 tile upsampled averaged -0.01 m on the smooth side and +0.02 m on the
+  other: no offset between the sides against Mapterhorn's coarse tile. The survey's own vertical
+  datum against GLO-30's was not examined.
 
 So a tile's zoom says nothing about how fine its ground is.
 
@@ -66,7 +78,8 @@ So a tile's zoom says nothing about how fine its ground is.
 - **Hosted by Logjam.** The archive is built once and served from Logjam's own
   bucket like `nsw-5m`. No client or worker reads `tiles.mapterhorn.com` or
   `download.mapterhorn.com` at run time. The build is the only caller, from a
-  host, never from CI, and its requests carry a generic client name.
+  host, never from CI, and its requests carry a generic client name
+  (`USER_AGENT` in `topo/build_region_dem.py`).
 - **No-data is 0030's.** A pixel Mapterhorn marks as no height (a transparent
   pixel, or the terrarium value for -32768 m) is written as `(0, 0, 0)`. Sea
   stays 0 m, as published.
@@ -74,12 +87,23 @@ So a tile's zoom says nothing about how fine its ground is.
   coarse.** It lists each of Mapterhorn's sources the box draws on (from
   `attribution.json`) with its licence, and, because the archive holds no mark
   of where a fine survey ends, says that the finest heights exist only where
-  that survey covers and that the rest is the worldwide 30 m model.
-- Guard: `topo/tests/test_region_dem.py` decodes what the builder writes with
-  the clients' formula, and checks the quarter addressing, the rounding per
-  zoom, the no-data cases and the written archive's zoom range, bounds and
-  attribution. No test enforces a credit's wording: it is an argument of the
-  build, kept by whoever declares the region.
+  that survey covers and names the coarser source the rest comes from. Over
+  Makarora that was Copernicus GLO-30 at 30 m; elsewhere it may be a 10 m or a
+  5 m source, and the credit says what the box draws on.
+- **Rounding.** A region's archive is rounded as a sharpened area's is, in
+  step with
+  [0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md)'s update of the same
+  date.
+- **Guards.** `topo/tests/test_region_dem.py` decodes what the builder writes
+  with the clients' formula, and checks the quarter addressing, the rounding
+  per zoom, the no-data cases, the range reads (a short or dropped reply, a 429's
+  `Retry-After`, a reply that is not the range asked for) and the written
+  archive's zoom range, bounds and attribution. In the same file
+  `TestMapterhornIsOnlyTheBuildsToRead` holds that no file under `shared/src`,
+  `frontend/src`, `mobile/src` or `api/src` names `mapterhorn.com` (with a
+  floor on the files scanned) and that `USER_AGENT` names no project or person.
+  No check holds "the build never runs from CI", and none holds the wording of
+  a credit, which is an argument of the build: review holds both.
 
 ## Consequences
 
