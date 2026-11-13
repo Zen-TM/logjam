@@ -5,9 +5,9 @@
 // is offered where its data covers the view, and the regions an account chose
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
 // first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
-// one question a map asks; `regionsTouching` answers for a box that is saved,
-// printed or exported. `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by
-// the chosen regions. Heights, gauges and the area-export check never took a
+// question a map is to ask and `regionsTouching` the one for a box that is
+// saved, printed or exported; nothing draws from either yet, and
+// `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by the chosen regions. Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
 // (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
@@ -63,7 +63,7 @@ export type CoverageArchive = TerrainArchive & {
   levelProperty: string;
 };
 
-/** The Terrain group's archives. A member a region lacks reads "not available here". */
+/** The Terrain group's archives. A member a region lacks is absent: `layerIn` is null. */
 export type RegionTerrain = {
   heights?: HeightsArchive;
   slope?: TerrainArchive;
@@ -336,9 +336,10 @@ export const REGIONS: readonly Region[] = simRegionsOn()
 
 /**
  * What answers outside every region: no border, so never in `REGIONS` and
- * never returned by `regionAt`. It declares nothing in prod. The map's layers
- * read this entry; the height sampler does not yet, because `DEM_SOURCES` is
- * built from `REGIONS` alone. Switching the worldwide tier on means setting
+ * never returned by `regionAt`. It declares nothing in prod. Guards:
+ * `regions.test.ts` ("declares only NSW unless the simulated-regions flag is
+ * set", "never returns the world"). Nothing reads it yet. `DEM_SOURCES` is
+ * built from `REGIONS` alone, so switching the worldwide tier on means setting
  * `vector` and `terrain` here and also adding its heights to `DEM_SOURCES`.
  */
 const EMPTY_WORLD: Region = {
@@ -348,7 +349,8 @@ const EMPTY_WORLD: Region = {
   timeZone: "UTC",
   borders: [],
   basemaps: [],
-  // Worldwide entries belong to no region's list.
+  // Worldwide entries belong to no region's list (regions.test.ts, "opens each
+  // region on one of its own basemaps").
   defaultBasemap: "osm-topo",
   vector: null,
   dem: [],
@@ -488,7 +490,11 @@ export function regionTouchesBox(region: Region, box: LonLatBox): boolean {
   return region.borders.some((ring) => ringTouchesBox(ring, box));
 }
 
-/** The region whose border holds a point, in `REGIONS` order, or null. Never `WORLD`. */
+/**
+ * The region whose border holds a point, in `REGIONS` order, or null. Never
+ * `WORLD`, which has no border. Guard: `regions.test.ts` ("never returns the
+ * world").
+ */
 export function regionAt(
   lon: number,
   lat: number,
@@ -523,9 +529,9 @@ function declaresAnything(region: Region): boolean {
 /**
  * The one region a map draws from: the one holding the view's centre, else the
  * first touching the view, else `world` when it declares anything, else null.
- * // ponytail: with two regions on screen at once only this one draws its
- * Terrain group and vector basemap. Upgrade: a source per region per layer.
- * No planned region is adjacent to NSW.
+ * // ponytail: a map that draws from this answer draws one region's Terrain
+ * group and vector basemap at a time, so with two regions on screen the one
+ * under the centre wins. Upgrade: a source per region per layer.
  */
 export function regionInView(
   view: LonLatBox,

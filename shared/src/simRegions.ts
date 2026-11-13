@@ -1,8 +1,9 @@
 // Simulated regions: made-up declarations that stand in for a second and third
 // region so every place-aware path can be run and tested without a real one.
 // They hold published or invented values only, never a user's. `REGIONS`
-// includes them only where `simRegionsOn()` (regions.ts) says so; a unit test
-// passes `SIM_REGIONS` as `regions` instead.
+// includes them only where `simRegionsOn()` (regions.ts) says so (guard:
+// regions.test.ts, "declares only NSW unless the simulated-regions flag is
+// set"); a unit test passes `SIM_REGIONS` as `regions` instead.
 //
 // Every box, id, path, zoom and credit here is a placeholder until the
 // simulated-region archives are built, which sets the real values; the archive
@@ -118,8 +119,8 @@ export const SIM_UTAH: Region = {
   canyons: null,
 };
 
-// Placeholder: the everywhere tier. Real heights and vector are the planet
-// archives; a dev stack holds a small extract and the rest is absent.
+// Placeholder for the everywhere tier: whole-world coverage, where a tile the
+// build did not make is absent.
 const WORLD_TERRAIN = simTerrain(
   "simworld",
   "the world",

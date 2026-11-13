@@ -27,7 +27,9 @@ Proposal: #359.
 - **One declaration.** `DEM_SOURCES` in `shared/src/demSources.ts` lists every
   source, finest first; the order is the precedence. It is derived: each
   region's sources (`shared/src/regions.ts`), then the worldwide one. No file
-  but those two names a source's URL, zoom or credit (updated 2026-11-07).
+  but those two and the simulated regions' declaration
+  (`shared/src/simRegions.ts`) names a source's URL, zoom or credit (updated
+  2026-11-14). Guard: `shared/src/demSources.test.ts`.
 - **One sampler.** `sampleDem` in the same file decides which source answers.
   The API and Logjam GPS supply only tile I/O (a `DemTileReader`), following
   [0020](0020-share-the-decision-not-the-drawing.md).
