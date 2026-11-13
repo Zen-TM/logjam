@@ -72,18 +72,19 @@ class TestBilateralBands(unittest.TestCase):
 
 class TestWindowSums(unittest.TestCase):
     """Red if a row's sum is carried into the next (one running sum for the
-    whole block), a window is a row or column off, or the sums are worked in
-    float32: counts of pulses add up exactly."""
+    whole block), a window is a row or column off, a band of rows is summed
+    from the first band's rows, or the sums are worked in float32: counts of
+    pulses add up exactly."""
 
     def test_a_window_s_sum_is_the_sum_of_its_cells(self):
         rng = np.random.default_rng(11)
         k = 5
-        padded = rng.integers(0, 9, (27, 21)).astype(np.float32)
+        padded = rng.integers(0, 9, (75, 21)).astype(np.float32)  # two bands of rows
         padded[3, 4] = 2.0**25  # a float32 running sum would lose the 1s after it
         want = np.array(
             [
                 [padded[i : i + k, j : j + k].sum(dtype=np.float64) for j in range(17)]
-                for i in range(23)
+                for i in range(71)
             ]
         ).astype(np.float32)
         np.testing.assert_array_equal(_window_sums(padded, k), want)

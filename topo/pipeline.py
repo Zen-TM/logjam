@@ -1929,14 +1929,20 @@ def _window_sums(padded: np.ndarray, k: int) -> np.ndarray:
     the whole area, in float32, was wrong by as much as the confidence
     threshold at the far corner of a four-tile area, and by more the larger
     the area."""
-    c = np.zeros((padded.shape[0], padded.shape[1] + 1), dtype=np.float64)
-    np.cumsum(padded, axis=1, dtype=np.float64, out=c[:, 1:])
-    along = c[:, k:] - c[:, :-k]
     rows = padded.shape[0] - k + 1
-    out = along[:rows].copy()
-    for dy in range(1, k):
-        out += along[dy : dy + rows]
-    return out.astype(np.float32)
+    out = np.empty((rows, padded.shape[1] - k + 1), dtype=np.float32)
+    # A band of rows at a time, to keep the float64 workings small.
+    for top in range(0, rows, BILATERAL_BAND_ROWS):
+        part = padded[top : top + BILATERAL_BAND_ROWS + k - 1]
+        c = np.zeros((part.shape[0], part.shape[1] + 1), dtype=np.float64)
+        np.cumsum(part, axis=1, dtype=np.float64, out=c[:, 1:])
+        along = c[:, k:] - c[:, :-k]
+        n = part.shape[0] - k + 1
+        band = along[:n].copy()
+        for dy in range(1, k):
+            band += along[dy : dy + n]
+        out[top : top + n] = band
+    return out
 
 
 def _positive_median(blocks: Callable[[], Iterable[np.ndarray]]) -> Optional[float]:
@@ -2308,6 +2314,13 @@ def _compute_stale_mask(
     return stale_mask, stale_fraction
 
 
+# Cells of the area the fire step reads at a time. Each of the blurs' thirty
+# stages holds a block coming in and one going out, so blocks the size of the
+# density's strips made the step the pass's peak in memory (2.3 GiB on a
+# four-tile area).
+FIRE_BLOCK_CELLS = 250_000
+
+
 def _blur_down(blocks: Iterable[np.ndarray], w: int) -> Iterator[np.ndarray]:
     """Box blur of width `w` down the columns of float32 rows that arrive in
     blocks, edge-padded at the first and last row. Each column's running sum
@@ -2492,7 +2505,7 @@ def apply_fire_history(
     density_band = density_ds.GetRasterBand(1)
     nodata = density_band.GetNoDataValue()
     h, w = fire_ds.RasterYSize, fire_ds.RasterXSize
-    rows = strip_rows(w)
+    rows = max(1, FIRE_BLOCK_CELLS // w)
 
     def strips(read):
         return (read(top, min(rows, h - top)) for top in range(0, h, rows))
@@ -2546,6 +2559,7 @@ def apply_fire_history(
     ):
         band.WriteArray(block, 0, top)
         top += len(block)
+        _write_progress(top, h, "fire")
     out_ds.FlushCache()
     out_ds = None
     dtm_ds = None
@@ -2913,6 +2927,10 @@ def compute_rasters(
             )
         density[~np.isfinite(density)] = -9999
         band.WriteArray(density, 0, top)
+        # A large area spends longer here than the reaper lets a job go
+        # without reporting (api/src/lib/topoJobReaper.ts), as it does in the
+        # fire step.
+        _write_progress(top + len(density), h, "density")
     out_ds.FlushCache()
     out_ds = None
     paths["scrub_density"] = density_path
