@@ -1,7 +1,7 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
 // from the 5 m DEM, with no LiDAR job, and three overlays from statewide
-// archives of their own: Coverage (nswCoverage.ts), Fire history (nswFire.ts)
-// and Land (nswLand.ts). The height-derived archives and Land are the region's
+// archives of their own: Coverage (coverage.ts), Fire history (fireHistory.ts)
+// and Land (land.ts). The height-derived archives and Land are the region's
 // (`NSW_REGION.terrain`, regions.ts); each client only draws these.
 //
 // Slope is baked once as a fake DEM, a terrarium archive whose "height" is the

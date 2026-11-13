@@ -7,8 +7,6 @@
 // 200 carrying an error page being written into the archive as a tile.
 import {
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   type RegionBbox,
   type RegionTilePlan,
 } from "@logjam/shared";
@@ -100,8 +98,8 @@ export function regionClipSpecs(
     clip(NSW_REGION.terrain.contours.id, { contours: true }),
     clip(NSW_REGION.terrain.slope.id, { slope: true }),
     clip(NSW_REGION.terrain.land.id, { land: true }),
-    clip(NSW_FIRE.id, { fire: true }),
-    clip(NSW_COVERAGE.id, { coverage: true }),
+    clip(NSW_REGION.terrain.fire.id, { fire: true }),
+    clip(NSW_REGION.terrain.coverage.id, { coverage: true }),
     clip("protomaps"),
   ];
 }

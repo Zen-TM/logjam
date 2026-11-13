@@ -45,8 +45,6 @@ import {
   checkRegionCaps,
   DEM_SOURCE_ID,
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -174,8 +172,9 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_REGION.terrain.contours.id) return "Contours";
   if (basemapId === NSW_REGION.terrain.slope.id) return "Slope";
   if (basemapId === NSW_REGION.terrain.land.id) return MAP_TERRAIN.copy.land;
-  if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
-  if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
+  if (basemapId === NSW_REGION.terrain.fire.id) return MAP_TERRAIN.copy.fire;
+  if (basemapId === NSW_REGION.terrain.coverage.id)
+    return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return name ?? "Map";
 }

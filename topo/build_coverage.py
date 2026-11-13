@@ -15,7 +15,7 @@ Source: the ACCC Mobile Infrastructure Report data release on data.gov.au,
 one KML per carrier, technology and level each year, as at 31 January. Its
 licence there is CC BY 2.5 AU. The coastline that keeps the sea unhatched is
 the ABS's Australia outline (ASGS Edition 3), CC BY 4.0. `CREDIT` credits
-both, as shared's `NSW_COVERAGE.credit` does.
+both, as the region's coverage archive `credit` (shared/src/regions.ts) does.
 
 How the release maps to a carrier (its data interpretation guide, v6):
 
@@ -83,8 +83,9 @@ USER_AGENT = "logjam-coverage-build"
 COASTLINE = "coastline.zip"
 HTTP_TRIES = 4
 
-# The release's network names, for each carrier a user picks: `CARRIERS` in
-# shared/src/nswCoverage.ts lists the same ids (test_coverage.py).
+# The release's network names, for each carrier a user picks: the `carriers`
+# of the NSW region's coverage archive (shared/src/regions.ts) list the same ids
+# (test_coverage.py).
 NETWORKS = {
     "telstra": ("Telstra",),
     "optus": ("Optus", "Optus-TPG MOCN"),
@@ -101,7 +102,7 @@ NAME_PATTERN = re.compile(
 )
 
 # The class each cell gets, traced into the `level` attribute. `LEVELS` in
-# shared/src/nswCoverage.ts lists the same names (test_coverage.py).
+# shared/src/coverage.ts lists the same names (test_coverage.py).
 LEVELS = {1: "outdoor", 2: "external", 3: "none"}
 # The NSW box, `NSW_REGION.terrain.heights.coverage` in
 # shared/src/regions.ts: west, south,

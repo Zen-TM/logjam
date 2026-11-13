@@ -18,7 +18,7 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 import build_coverage as bc  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARED = (ROOT / "shared/src/nswCoverage.ts").read_text()
+SHARED = (ROOT / "shared/src/coverage.ts").read_text()
 REGIONS = (ROOT / "shared/src/regions.ts").read_text()
 # The archive is declared in the region: only its `coverage: {` entry.
 ARCHIVE = REGIONS[REGIONS.index("    coverage: {") :].split("\n    },", 1)[0]
@@ -401,7 +401,7 @@ class TestClients(unittest.TestCase):
     # hatch for it, or a tap names nothing.
     def test_carriers_and_levels_match(self):
         self.assertEqual(
-            re.findall(r'\{ id: "(\w+)", name:', SHARED), list(bc.NETWORKS)
+            re.findall(r'\{ id: "(\w+)", name:', ARCHIVE), list(bc.NETWORKS)
         )
         (levels,) = re.findall(r"COVERAGE_LEVELS = \[([^\]]*)\]", SHARED)
         self.assertEqual(re.findall(r'"(\w+)"', levels), list(bc.LEVELS.values()))

@@ -95,8 +95,6 @@ import {
   NSW_REGION,
   drawsCoverage,
   fireNameOf,
-  NSW_COVERAGE,
-  NSW_FIRE,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
@@ -1643,7 +1641,10 @@ export function MapScreen({
   );
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
-  const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
+  const firePaints = useMemo(
+    () => fireLayerPaints(NSW_REGION.terrain.fire, fireNow),
+    [fireNow],
+  );
   const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
   const coverageResolved = useMemo(
     () =>
@@ -1662,9 +1663,15 @@ export function MapScreen({
     () => coverageResolved.map((r) => coverageLayerId(r.key)),
     [coverageResolved],
   );
-  const coveragePaint = useMemo(() => coverageLayerPaint(), []);
+  const coveragePaint = useMemo(
+    () => coverageLayerPaint(NSW_REGION.terrain.coverage),
+    [],
+  );
   const coverageFilterExpr = useMemo(
-    () => (coverageCarrier ? coverageLayerFilter(coverageCarrier) : undefined),
+    () =>
+      coverageCarrier
+        ? coverageLayerFilter(NSW_REGION.terrain.coverage, coverageCarrier)
+        : undefined,
     [coverageCarrier],
   );
   const slopeResolved = useMemo(
@@ -2370,7 +2377,7 @@ export function MapScreen({
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
+              setTappedLand(landNameOf(NSW_REGION.terrain.land, features));
           })
           // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
@@ -2382,7 +2389,7 @@ export function MapScreen({
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
+              setTappedFire(fireNameOf(NSW_REGION.terrain.fire, features));
           })
           .catch(() => undefined);
       }
@@ -2392,6 +2399,7 @@ export function MapScreen({
         [lon, lat],
         coverageLayerIdList,
         coverageCarrier,
+        NSW_REGION.terrain.coverage,
       )
         .then((name) => {
           if (landAskedFor.current === tapped) setTappedCoverage(name);
@@ -5270,7 +5278,7 @@ export function MapScreen({
                 minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
                 paint={{
-                  "line-color": landColor() as LineColor,
+                  "line-color": landColor(NSW_REGION.terrain.land) as LineColor,
                   "line-width": width,
                   "line-offset": offset,
                   "line-blur": blur,
@@ -5288,7 +5296,7 @@ export function MapScreen({
                 key={fillId}
                 type="fill"
                 id={fillId}
-                source-layer={NSW_FIRE.sourceLayer}
+                source-layer={NSW_REGION.terrain.fire.sourceLayer}
                 beforeId={groundBefore[fillId]}
                 minzoom={fireMinZoom(r.layerMinZoom)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5298,7 +5306,7 @@ export function MapScreen({
                 key={edgeId}
                 type="line"
                 id={edgeId}
-                source-layer={NSW_FIRE.sourceLayer}
+                source-layer={NSW_REGION.terrain.fire.sourceLayer}
                 beforeId={groundBefore[edgeId]}
                 minzoom={fireMinZoom(r.layerMinZoom)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5318,7 +5326,7 @@ export function MapScreen({
                 key={id}
                 type="fill"
                 id={id}
-                source-layer={NSW_COVERAGE.sourceLayer}
+                source-layer={NSW_REGION.terrain.coverage.sourceLayer}
                 filter={coverageFilterExpr}
                 beforeId={groundBefore[id]}
                 minzoom={coverageMinZoom(r.layerMinZoom)}

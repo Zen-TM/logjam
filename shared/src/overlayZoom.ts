@@ -29,7 +29,7 @@ export const FIRE_MIN_ZOOM = 10;
  * or the far side of a ridge, a few hundred metres across, and the hatch
  * shows one only as lines 12 px apart: in NSW that is about 760 m between
  * lines at z10, 380 m at z11 and 190 m at z12, the first zoom that puts a few
- * lines across such a gap. The archive holds z12 alone (`NSW_COVERAGE`).
+ * lines across such a gap. The archive holds z12 alone (NSW's `coverage` archive, regions.ts).
  */
 export const COVERAGE_MIN_ZOOM = 12;
 

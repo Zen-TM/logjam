@@ -1,7 +1,8 @@
 // The Fire history overlay's two layers, as MapScreen mounts them: the tint,
-// and a 1 px edge in the same colour (shared nswFire.ts holds the ramp).
+// and a 1 px edge in the same colour (shared fireHistory.ts holds the ramp).
 import {
   FIRE_MIN_ZOOM,
+  type FireArchive,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
@@ -21,24 +22,27 @@ export function fireLayerIds(sourceKey: string): [fill: string, edge: string] {
 }
 
 /** The paint as of `now`, which a mount takes once. */
-export function fireLayerPaints(now: Date): {
+export function fireLayerPaints(
+  fire: FireArchive,
+  now: Date,
+): {
   fill: FillPaint;
   edge: LinePaint;
 } {
   return {
     fill: {
-      "fill-color": fireColor(now) as FillPaint["fill-color"],
+      "fill-color": fireColor(fire, now) as FillPaint["fill-color"],
       "fill-opacity": zoomFadeIn(
         FIRE_MIN_ZOOM,
-        fireFillOpacity(now),
+        fireFillOpacity(fire, now),
       ) as FillPaint["fill-opacity"],
     },
     edge: {
-      "line-color": fireColor(now) as LinePaint["line-color"],
+      "line-color": fireColor(fire, now) as LinePaint["line-color"],
       "line-width": 1,
       "line-opacity": zoomFadeIn(
         FIRE_MIN_ZOOM,
-        fireEdgeOpacity(now),
+        fireEdgeOpacity(fire, now),
       ) as LinePaint["line-opacity"],
     },
   };

@@ -3,9 +3,7 @@
 // all derive from the same deterministic plan so they can never disagree.
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
-import { NSW_COVERAGE } from "./nswCoverage.js";
-import { NSW_FIRE } from "./nswFire.js";
-import { landClip } from "./nswLand.js";
+import { landClip } from "./land.js";
 import { NSW_REGION } from "./regions.js";
 
 export type RegionBbox = {
@@ -470,11 +468,15 @@ export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
 }
 
 export function estimateFireClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_FIRE, FIRE_TILE_BYTES);
+  return estimateStatewideClip(bbox, NSW_REGION.terrain.fire, FIRE_TILE_BYTES);
 }
 
 export function estimateCoverageClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_COVERAGE, COVERAGE_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.coverage,
+    COVERAGE_TILE_BYTES,
+  );
 }
 
 export interface MultiSourceRegionPlan {
