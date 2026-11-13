@@ -4,7 +4,7 @@
 locals {
   actions_variables = {
     PROD_API_URL = "https://api.logjamnsw.com"
-    PROD_WEB_URL = "https://logjam.earth"
+    PROD_WEB_URL = "https://logjamnsw.com"
   }
 }
 
