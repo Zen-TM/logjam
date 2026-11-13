@@ -331,8 +331,9 @@ class TestGroundSteps(unittest.TestCase):
     DEM upsampled nearest (2 x 2 blocks in the hillshade), whether dem_ground
     stops asking or merge_dem_tiles stops forwarding; require_ground's call
     removed, so a ground grid with no height goes on to claim the whole area;
-    TIN results collected without a progress write (the reaper fails a
-    long dense job while it works); a tile read whole by one process; the
+    a phase's results (the parts read, the strips cut, the TINs) collected
+    without a progress write (the reaper fails a long dense job while it
+    works); a tile read whole by one process; the
     strips cut without `--stream`, from a part of the neighbour's ground
     only, from the tile's own ground as well (its points meshed twice), or
     from a tile that is not beside it; a TIN job handed its neighbours'
@@ -543,7 +544,7 @@ class TestGroundSteps(unittest.TestCase):
         self.assertEqual(sharpened["resolution"], "highest")
         self.assertEqual(sharpened["resampleAlg"], "bilinear")
 
-    def test_the_tin_phase_reports_progress_per_job(self):
+    def test_each_phase_reports_progress_per_job(self):
         from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
@@ -569,8 +570,14 @@ class TestGroundSteps(unittest.TestCase):
                 tile.touch()
             select.return_value = mock.Mock(terrain_tiles=[str(t) for t in tiles])
             sharpen.laz_ground(tiles, "g.tif", Path(tmp), 2)
-        tin = [c.args for c in progress.call_args_list if c.args[2] == "tin"]
-        self.assertEqual(tin, [(1, 3, "tin"), (2, 3, "tin"), (3, 3, "tin")])
+        by_phase = {}
+        for call in progress.call_args_list:
+            by_phase.setdefault(call.args[2], []).append(call.args[:2])
+        # Each long phase reports as it goes: a part read, a cut, a TIN.
+        self.assertEqual(
+            by_phase,
+            {phase: [(1, 3), (2, 3), (3, 3)] for phase in ("ground", "strips", "tin")},
+        )
 
 
 LEAK = "Katoomba201804-LID2-C3-AHD_2506258_56_0002_0002.laz"
@@ -636,7 +643,7 @@ class TestTinWorkers(unittest.TestCase):
 
     def test_bounded_by_memory_as_well_as_cpus(self):
         gib = 2**30
-        # A Category 1 tile and its eight neighbours: ~45 M ground points.
+        # A job of ~45 M ground points: nine Category 1 tiles' worth.
         self.assertEqual(tin_workers(8, 45_000_000, 16 * gib), 1)
         self.assertEqual(tin_workers(8, 5_000_000, 16 * gib), 8)
         self.assertEqual(tin_workers(8, 5_000_000, 4 * gib), 2)

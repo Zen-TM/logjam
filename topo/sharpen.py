@@ -93,9 +93,10 @@ MARGIN_PX = 16
 NODATA = dem.NODATA
 
 # The statewide archives' encodings (ADR 0030, ADR 0039), under their own
-# names, but for the heights' PNG level: 6, as the slope. Level 9 was most of
-# a job: on a 1 m survey's 336 height tiles, level 6 took 19 ms a tile against
-# 205 ms, for an archive 12 % larger (tests/test_sharpen.py `TestPyramid`).
+# names, but for the heights' PNG level: 6, as the slope
+# (tests/test_sharpen.py `TestPyramid`). Level 9 was most of the time a block
+# took, and level 6 makes the archive 12 % larger: ADR 0039's update of
+# 2026-11-13 has the measurements.
 HEIGHTS = dataclasses.replace(
     dem.HEIGHTS, name="Sharpened heights", derived="", png_level=dem.SLOPE.png_level
 )
@@ -309,11 +310,11 @@ def _strips(job: Tuple[List[str], dict, str]) -> int:
     returns its point count, 0 and no file for a tile with no neighbour.
 
     Cut on its own, streamed, so a TIN job holds its own tile and the strips:
-    in one pipeline with the TIN, PDAL held every neighbour whole, and an
-    area of dense tiles had memory for one job at a time. `--stream` fails
-    the cut rather than hold a file, should a stage that cannot stream be
-    added: `tin_workers` counts on a job never holding a neighbour
-    (tests/test_sharpen.py `TestGroundSteps`)."""
+    a TIN pipeline that read the neighbours itself would hold each whole,
+    and an area of dense tiles would have memory for one job at a time.
+    `--stream` fails the cut rather than hold a file, should a stage that
+    cannot stream be added: `tin_workers` counts on a job never holding a
+    neighbour (tests/test_sharpen.py `TestGroundSteps`)."""
     files, bounds, out = job
     if not files:
         return 0
@@ -495,7 +496,7 @@ def laz_ground(
         )
 
     # Nothing reads the point clouds again: deleted, they leave more room
-    # than the strips take.
+    # than the strips take (tests/test_sharpen.py `TestGroundSteps`).
     for f in las_files:
         Path(f).unlink()
     cuts = [

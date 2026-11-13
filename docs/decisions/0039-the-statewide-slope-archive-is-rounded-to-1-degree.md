@@ -82,9 +82,10 @@ level 9.
   stands.
 - **Update 2026-11-13: a sharpened area's heights are PNG level 6 too.**
   `topo/sharpen.py` encodes its height tiles at the slope's level. At level 9
-  they were most of a job: 205 ms a tile against 19 ms on a 1 m survey, for
-  an archive 12 % smaller. The statewide height archive keeps level 9: it is
-  built once, and its published bytes do not change. Guard:
+  they were most of the time a block of tiles took: 205 ms a tile against
+  19 ms on a 1 m survey. Level 6 makes the archive 12 % larger. The statewide
+  height archive keeps level 9: it is built once, and its published bytes do
+  not change. Guard:
   `topo/tests/test_sharpen.py` `TestPyramid`. Everything else above stands.
 
 Guard: `topo/tests/test_nsw_dem.py` holds the terrarium encoding with
@@ -129,9 +130,9 @@ client drawing the archive.
   you zoom out; ¼° made the Katoomba archive a third larger than the heights for no
   visible gain; level 9 costs about 85 core-hours (about 11 h on 8 vCPU)
   instead of 8 for about 7–11 % fewer bytes.
-- **Keep a sharpened area's heights at PNG level 9** (2026-11-13). 12 %
-  fewer bytes in the owner's storage, for ten times the encoding time on a
-  job its owner waits for and pays for by the minute.
+- **Keep a sharpened area's heights at PNG level 9** (2026-11-13). An
+  archive 11 % smaller in the owner's storage, for ten times the encoding
+  time on a job its owner waits for and pays for by the minute.
 - **Bake the default bands into the tiles as colour.** Simplest to draw,
   and rejected because a user's own bands would need a rebuild of the whole
   archive. Keeping slope as a "fake DEM" lets MapLibre colour it per user, and
