@@ -1,7 +1,7 @@
 # CloudFront distributions (config pinned to live via -generate-config-out).
-#   web (E22J79PHZM2K): logjamnsw.com + www — multi-origin, serves the frontend
+#   web (E22J79PHZM2K): logjam.earth + www — multi-origin, serves the frontend
 #     SPA bucket (default behavior) AND topo tiles from logjam-topo-jobs under
-#     /master/* (ordered behavior). This is TOPO_CDN_BASE_URL (https://logjamnsw.com).
+#     /master/* (ordered behavior).
 #   api (E29GLTTDM6CXX4): api.logjamnsw.com — fronts the API on the brain.
 # Both are on CloudFront's Free pricing plan (set in the console, not here),
 # which takes aliases from one root domain only: UpdateDistribution refused a
@@ -14,7 +14,7 @@
 # is needed. prevent_destroy guards the public domains + cert bindings.
 
 resource "aws_cloudfront_distribution" "web" {
-  aliases             = ["logjamnsw.com", "www.logjamnsw.com"]
+  aliases             = ["logjam.earth", "www.logjam.earth"]
   default_root_object = "index.html"
   enabled             = true
   http_version        = "http2"
@@ -91,7 +91,7 @@ resource "aws_cloudfront_distribution" "web" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/8dd40670-1feb-46fe-8878-eac0097b0582"
+    acm_certificate_arn      = "arn:aws:acm:us-east-1:620853681701:certificate/f1924a39-45ff-48fa-b9fa-34ba5cbb5934"
     minimum_protocol_version = "TLSv1.2_2021"
     ssl_support_method       = "sni-only"
   }
