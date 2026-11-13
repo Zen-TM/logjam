@@ -21,7 +21,9 @@ export const MAX_INPUT_ZIP_COMPRESSED_BYTES = 15 * 1024 * 1024 * 1024; // 15 GB
 // GeoTIFFs barely compress, so a real ZIP extracts to close to its own size
 // and this leaves headroom, while rejecting a pathological archive before the
 // worker launches. The worker's disk in infra/terraform/envs/prod/ecs.tf is
-// sized from both caps; guard: topoUpload.unit.test.ts.
+// sized from both caps for a forested, classified survey, whose ground files
+// are the smallest; an open-country or unclassified one can need more disk than
+// that and fails as "too big" (sharpen.py). Guard: topoUpload.unit.test.ts.
 export const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
 
 // Logjam Web sends the ZIP as an S3 multipart upload in parts of this size, so

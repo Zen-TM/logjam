@@ -52,6 +52,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -778,11 +779,34 @@ def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
     }
 
 
+# Free space under which a failed job is read as a full disk.
+DISK_FULL_BYTES = 256 * 1024**2
+
+
+@contextlib.contextmanager
+def too_big_if_disk_full(path: str):
+    """A job that fills the task's disk dies in a PDAL or GDAL child with
+    nothing to say why. A failure while `path`'s filesystem is nearly full is
+    the owner's area being too big (tests/test_sharpen.py `TestDiskFull`).
+    The failure's message is not logged: it can quote an input file's name."""
+    try:
+        yield
+    except CannotSharpen:
+        raise
+    except Exception as e:
+        if shutil.disk_usage(path).free < DISK_FULL_BYTES:
+            raise CannotSharpen(TOO_BIG) from e
+        raise
+
+
 def sharpen(args) -> dict:
     bench = pipeline.Benchmark()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="sharpen_") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix="sharpen_") as tmp,
+        too_big_if_disk_full(tmp),  # exits first, while tmp still exists
+    ):
         work = Path(tmp)
         with bench.step("Extract", key="extract"):
             contents = pipeline.extract_elvis_zip(args.zip, str(work / "zip"))

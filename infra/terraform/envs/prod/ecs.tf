@@ -229,11 +229,13 @@ resource "aws_ecs_task_definition" "topo_worker" {
     operating_system_family = "LINUX"
   }
 
-  # 15 (ZIP) + 20 (extracted) + 0.75 * 20 (ground files and neighbour strips)
-  # = 50: the caps in api/src/lib/topoUpload.ts, held to this size by
-  # topoUpload.unit.test.ts. Fargate's default is 20, which a full ZIP overruns.
+  # Sized for a survey at the upload caps (api/src/lib/topoUpload.ts): the
+  # ZIP, its extraction, the ground files of a forested, classified survey and
+  # a fixed overhead, as topoUpload.unit.test.ts spells out and holds. Open
+  # country or an unclassified survey can need more, and then fails with the
+  # "too big" sentence. Fargate's default of 20 GiB is overrun by a full ZIP.
   ephemeral_storage {
-    size_in_gib = 50
+    size_in_gib = 60
   }
 }
 

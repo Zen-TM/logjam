@@ -79,6 +79,13 @@ describe("signTopoParts over the cap", () => {
     });
     expect(getSignedUrl).not.toHaveBeenCalled();
   });
+
+  // Mutation: `>` to `>=` in signTopoParts' cap check.
+  it("accepts a size of exactly the cap", async () => {
+    await expect(
+      signTopoParts("b", "k", "u", MAX_INPUT_ZIP_COMPRESSED_BYTES, [1]),
+    ).resolves.toHaveLength(1);
+  });
 });
 
 describe("joinTopoUpload", () => {
@@ -185,14 +192,20 @@ describe("deleteTopoJobObjects", () => {
 });
 
 describe("the topo worker's disk fits the upload caps", () => {
-  // At its peak the worker holds the ZIP, its extracted contents, and
-  // uncompressed ground files and neighbour strips that measured up to 0.75 of
-  // the extracted size. ecs.tf is read as text: it is the value prod runs.
-  //
+  // At its peak the worker holds the ZIP, its extraction, and the ground files
+  // (uncompressed LAS) of the extracted point clouds. Those measured up to 0.75
+  // of the extracted size for a forested, classified survey; open country or an
+  // unclassified one is larger, and fails as "too big" instead (sharpen.py).
+  // On top of that sit the pulled image, the TIN rasters, the tile files and
+  // the archives being packed. ecs.tf is read as text: it is the value prod runs.
+  const EXTRACTED_AND_GROUND_FACTOR = 1 + 0.75;
+  const OVERHEAD_GIB = 10;
+  const GiB = 1024 ** 3;
+
   // Mutation that turns it red: lower ephemeral_storage in the topo_worker
-  // block of ecs.tf below 50, delete the block, or raise either cap in
+  // block of ecs.tf below 60, delete the block, or raise either cap in
   // topoUpload.ts without raising the disk.
-  it("is no smaller than the ZIP plus 1.75 times its extracted size", () => {
+  it("is no smaller than the ZIP, its extraction and ground files, and the overhead", () => {
     const ecs = readFileSync(
       join(import.meta.dirname, "../../../infra/terraform/envs/prod/ecs.tf"),
       "utf8",
@@ -206,9 +219,10 @@ describe("the topo worker's disk fits the upload caps", () => {
       block!,
     )?.[1];
     expect(gib, "topo_worker sets no ephemeral_storage").toBeDefined();
-    const GiB = 1024 ** 3;
     expect(Number(gib) * GiB).toBeGreaterThanOrEqual(
-      MAX_INPUT_ZIP_COMPRESSED_BYTES + 1.75 * MAX_INPUT_ZIP_UNCOMPRESSED_BYTES,
+      MAX_INPUT_ZIP_COMPRESSED_BYTES +
+        EXTRACTED_AND_GROUND_FACTOR * MAX_INPUT_ZIP_UNCOMPRESSED_BYTES +
+        OVERHEAD_GIB * GiB,
     );
   });
 });
