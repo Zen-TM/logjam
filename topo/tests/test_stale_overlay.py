@@ -1,10 +1,10 @@
 """Amber marking of ground burnt since the survey, drawn into the vegetation tile
 (pure numpy/PIL, no GDAL).
 
-Covers render_vegetation_tile's stale_arr drawing and _encode_fire_stale, which
-apply_fire_history runs once over the whole AOI before tiles are cut. The
-raster write itself (GDAL warp) is integration-tested in
-test_fire_history_apply.py. Same _native_stub convention as
+Covers render_vegetation_tile's stale_arr drawing and _fire_stale_blocks, which
+apply_fire_history runs once over the whole AOI, a block of rows at a time,
+before tiles are cut (`_encode_fire_stale` here feeds it whole masks). The
+raster write itself (GDAL warp) is not unit-tested. Same _native_stub convention as
 test_render_tiles.py: pipeline.py imports osgeo at module top, so we stub it
 first; numpy/PIL must be real since these tests do real array/image maths.
 """
@@ -180,8 +180,9 @@ class TestBurntGroundMarking(unittest.TestCase):
 
     def test_tiles_sharing_a_boundary_agree_on_band_values(self):
         # The encoding must not depend on where a tile cut falls. Mutation:
-        # make _box_blur work in 256 px blocks (or encode per tile) -> a seam at
-        # a multiple of 256 that the shifted raster below does not have.
+        # restart _blur_down's running sum every 256 rows or _blur_across's every
+        # 256 columns (or encode per tile) -> a seam at a multiple of 256 that the
+        # shifted raster below does not have.
         mask = np.zeros((TILE_SIZE, 3 * TILE_SIZE), dtype=bool)
         mask[:, TILE_SIZE - 3 :] = True  # fire edge 3 px left of the first cut
         a = _encode_fire_stale(mask, np.ones_like(mask), CELL_M)
@@ -227,8 +228,9 @@ class TestBurntGroundMarking(unittest.TestCase):
 
     def test_burnt_all_over_gets_stripes_and_no_band(self):
         # An area sharpened wholly inside a fire: the AOI edge is not a fire
-        # edge. Mutation: zero-pad instead of edge-pad in _box_blur (mode="edge"
-        # -> "constant") -> a band and line appear along the raster edge.
+        # edge. Mutation: zero-pad instead of edge-pad in _blur_across
+        # (mode="edge" -> "constant"), or zeros for the rows _blur_down repeats
+        # past the first and last -> a band and line appear along the raster edge.
         ones = np.ones((300, 300), dtype=bool)
         enc = _encode_fire_stale(ones, ones, CELL_M)
         np.testing.assert_array_equal(enc, np.ones_like(enc))

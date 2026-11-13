@@ -195,9 +195,8 @@ def _call(job: tuple):
 def side_by_side(jobs: List[tuple], workers: int) -> None:
     """Run (function, *arguments) jobs that each write their own file, each
     in a process of its own. Not threads: what GDAL's warps allocate then
-    stays in this process, under the whole-area arrays that come later
-    (1.1 GiB held before the first of them on a four-tile area, against
-    0.24 GiB this way)."""
+    stays in this process for the rest of the pass (1.1 GiB held before the
+    density step on a four-tile area, against 0.24 GiB this way)."""
     with ProcessPoolExecutor(min(workers, len(jobs))) as pool:
         list(pool.map(_call, jobs))
 
@@ -1886,10 +1885,11 @@ def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
     ref_ds = None
 
 
-# Cells of the area the density and fire steps hold at a time: a strip of
-# whole rows. Every array they make is a strip in size, so the pass's memory
-# follows the area's width and not its extent, and an area of tiles that is
-# not a compact block costs no more memory than its tiles.
+# Cells of the area the density step holds at a time: a strip of whole rows.
+# Its arrays are a strip in size (tests/test_scrub_strata.py `TestDensityStrips`
+# holds what a strip reads), so they follow the area's width and not its
+# extent: tiles that do not form a compact block cost it no more memory than a
+# block of them.
 STRIP_CELLS = 4_000_000
 
 
@@ -2421,6 +2421,34 @@ def _fire_stale_blocks(
         yield k
 
 
+def _fire_stale_summary(
+    blocks: Iterable[Tuple[np.ndarray, np.ndarray]], capture_year: int
+) -> dict:
+    """fire_stale_summary.json from the area's (fire years, valid mask) blocks:
+    the share of valid cells burnt since `capture_year`, counted over every
+    block, and the first and last fire year on record in the area
+    (tests/test_fire_history_apply.py `TestFireStaleSummary`)."""
+    stale_cells = valid_cells = 0
+    fire_years_min = fire_years_max = None
+    for fire_year_arr, valid_mask in blocks:
+        stale_mask, _ = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
+        stale_cells += int(stale_mask.sum())
+        valid_cells += int(valid_mask.sum())
+        burned_years = fire_year_arr[fire_year_arr != 0]
+        if burned_years.size:
+            low, high = int(burned_years.min()), int(burned_years.max())
+            fire_years_min = low if fire_years_min is None else min(fire_years_min, low)
+            fire_years_max = (
+                high if fire_years_max is None else max(fire_years_max, high)
+            )
+    return {
+        "capture_year": capture_year,
+        "stale_fraction": float(stale_cells) / max(valid_cells, 1),
+        "fire_years_min": fire_years_min,
+        "fire_years_max": fire_years_max,
+    }
+
+
 def apply_fire_history(
     density_path: str,
     dtm_path: str,
@@ -2516,20 +2544,7 @@ def apply_fire_history(
     def valid(top, n):
         return density_band.ReadAsArray(0, top, w, n) != nodata
 
-    stale_cells = valid_cells = 0
-    fire_years_min = fire_years_max = None
-    for fire_year_arr, valid_mask in zip(strips(fire_years), strips(valid)):
-        stale_mask, _ = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
-        stale_cells += int(stale_mask.sum())
-        valid_cells += int(valid_mask.sum())
-        burned_years = fire_year_arr[fire_year_arr != 0]
-        if burned_years.size:
-            low, high = int(burned_years.min()), int(burned_years.max())
-            fire_years_min = low if fire_years_min is None else min(fire_years_min, low)
-            fire_years_max = (
-                high if fire_years_max is None else max(fire_years_max, high)
-            )
-    stale_fraction = float(stale_cells) / max(valid_cells, 1)
+    summary = _fire_stale_summary(zip(strips(fire_years), strips(valid)), capture_year)
 
     # The boundary comes from the fire alone: gating by data would draw a band
     # along the survey edge.
@@ -2566,18 +2581,10 @@ def apply_fire_history(
 
     summary_path = os.path.join(work_dir, "fire_stale_summary.json")
     with open(summary_path, "w") as f:
-        json.dump(
-            {
-                "capture_year": capture_year,
-                "stale_fraction": stale_fraction,
-                "fire_years_min": fire_years_min,
-                "fire_years_max": fire_years_max,
-            },
-            f,
-        )
+        json.dump(summary, f)
 
     log.info(
-        f"Fire-history: {stale_fraction * 100:.1f}% of AOI burned after LiDAR "
+        f"Fire-history: {summary['stale_fraction'] * 100:.1f}% of AOI burned after LiDAR "
         f"capture ({capture_year}) — veg layer may be stale there."
     )
 

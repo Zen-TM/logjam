@@ -147,6 +147,7 @@ class TestDensityStrips(unittest.TestCase):
         )
 
     def counts(self, first, end):
+        self.most_rows_read = max(getattr(self, "most_rows_read", 0), end - first)
         return self.low[first:end], self.high[first:end], self.below[first:end]
 
     def density(self, rows, threshold=365.0):
@@ -184,6 +185,14 @@ class TestDensityStrips(unittest.TestCase):
         for rows in (1, 3, 16, 70, 500):
             np.testing.assert_array_equal(self.density(rows), whole)
 
+    def test_a_strip_reads_its_own_rows_and_the_rows_its_windows_reach(self):
+        # Red if a strip reads the grid from its first row, or to its last:
+        # the density's arrays would then be the area's size, not a strip's.
+        from pipeline import SCRUB_DENSITY_FILTER_WINDOW_M as k
+
+        self.density(8)
+        self.assertEqual(self.most_rows_read, 8 + k - 1)
+
     def test_ground_with_no_pulse_is_left_out_of_the_work_and_has_no_density(self):
         # Pulses in one block of columns in the top rows and another lower
         # down, as tiles that do not form a rectangle leave them.
@@ -196,6 +205,40 @@ class TestDensityStrips(unittest.TestCase):
         self.assertTrue(np.isnan(whole[:36, 40:]).all())
         for rows in (4, 16, 70):
             np.testing.assert_array_equal(self.density(rows, 5.0), whole)
+
+
+class TestStripRows(unittest.TestCase):
+    """Red if a wide grid's strip has fewer rows than give each of 8 threads
+    a band of the bilateral filter, or a narrow grid's strip holds more cells
+    than STRIP_CELLS."""
+
+    def test_a_strip_holds_strip_cells_but_never_fewer_than_eight_bands(self):
+        from pipeline import BILATERAL_BAND_ROWS, STRIP_CELLS, strip_rows
+
+        self.assertEqual(strip_rows(2000), STRIP_CELLS // 2000)
+        self.assertGreater(strip_rows(2000), 8 * BILATERAL_BAND_ROWS)
+        self.assertEqual(strip_rows(10**6), 8 * BILATERAL_BAND_ROWS)
+
+
+class TestSvtmWeighted(unittest.TestCase):
+    """Red if the formation's μ is not applied, a density pushed past 1 is
+    not clamped, a cell with no finite density gets one, or the caller's
+    density is written to."""
+
+    def test_density_times_its_formation_s_mu_clamped_and_no_density_kept(self):
+        from pipeline import _svtm_weighted
+
+        mu = np.ones(256, dtype=np.float32)
+        mu[3], mu[7] = 0.5, 4.0
+        cells = [0.4, 0.4, 0.4, np.nan, np.inf]
+        density = np.array([cells], dtype=np.float32)
+        formation = np.array([[0, 3, 7, 7, 7]], dtype=np.uint8)
+        out = _svtm_weighted(density, formation, mu)
+        np.testing.assert_array_equal(
+            out, np.array([[0.4, 0.2, 1.0, np.nan, np.nan]], dtype=np.float32)
+        )
+        self.assertEqual(out.dtype, np.float32)
+        np.testing.assert_array_equal(density, np.array([cells], dtype=np.float32))
 
 
 class TestCombineScrubStrata(unittest.TestCase):

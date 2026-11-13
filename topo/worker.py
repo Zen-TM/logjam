@@ -547,8 +547,8 @@ def process_vegetation(
     ZIP's point clouds, and its PMTiles is uploaded for display. Returns
     (output_keys, output_bytes, pipeline_metrics); no layer for a ZIP with no
     point clouds. No styled COG: nothing reads one any more. Raises
-    VegetationLeftOut when the pass declines the area for its memory or is
-    killed for it."""
+    VegetationLeftOut when the pass exits with its out-of-memory code or is
+    killed for memory."""
     job_id = job["id"]
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()

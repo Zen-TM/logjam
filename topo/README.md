@@ -78,10 +78,12 @@ A ZIP with no point clouds writes nothing.
 
 ### Memory
 
-The density and fire steps work a strip of rows at a time (`STRIP_CELLS` in
-`pipeline.py`), so the pass's memory follows the width of the area and not its
-extent: tiles that do not form a rectangle cost no more memory than a block of
-them. If the pass still runs out of memory it exits with a declared code
+The density and fire steps work a strip of rows at a time (`STRIP_CELLS` and
+`FIRE_BLOCK_CELLS` in `pipeline.py`), so their arrays follow the width of the
+area and not its extent: tiles that do not form a rectangle cost them no more
+memory than a block of them. What else the pass holds (GDAL's block cache,
+which GDAL caps at a share of the machine's memory) is not sized by the
+strips. If the pass still runs out of memory it exits with a declared code
 (`worker_common.py`). `worker.py` reads that code, or a kill (-9), as "leave
 the layer out": the job still completes with its height, slope and contour
 archives, records `vegetationLeftOut` in its `sharpen` result, and its
