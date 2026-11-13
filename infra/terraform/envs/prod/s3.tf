@@ -110,7 +110,7 @@ module "media" {
   cors_rules = [{
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "GET", "HEAD"]
-    allowed_origins = ["https://logjam.earth", "https://www.logjam.earth", "https://logjamnsw.com", "https://www.logjamnsw.com"]
+    allowed_origins = ["https://logjam.earth", "https://www.logjam.earth"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }]
@@ -144,7 +144,7 @@ module "topo_jobs" {
   cors_rules = [{
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "HEAD"]
-    allowed_origins = ["http://localhost:5173", "https://logjam.earth", "https://www.logjam.earth", "https://logjamnsw.com", "https://www.logjamnsw.com"]
+    allowed_origins = ["http://localhost:5173", "https://logjam.earth", "https://www.logjam.earth"]
     expose_headers  = ["ETag", "Content-Range", "Accept-Ranges", "Content-Length"]
   }]
 

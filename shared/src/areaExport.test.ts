@@ -10,7 +10,7 @@ import {
   type AreaBbox,
 } from "./areaExport.js";
 import { nswContourStyle } from "./nswContours.js";
-import { NSW_REGION, REGIONS } from "./regions.js";
+import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 // A square of `sideKm` centred near Katoomba.
@@ -58,16 +58,16 @@ describe("areaInTerrainRegion", () => {
     expect(areaInTerrainRegion(bendigo)).toBe(false);
   });
 
-  // Mutation: drop the `terrain !== null` test.
+  // Mutation: drop the heights test.
   it("skips a region with no terrain", () => {
     expect(
-      areaInTerrainRegion(square(10), [{ ...NSW_REGION, terrain: null }]),
+      areaInTerrainRegion(square(10), [{ ...NSW_REGION, terrain: {} }]),
     ).toBe(false);
   });
 
   // Mutation: add terrain to a region and leave the sentence alone.
   it("names every region with terrain in its refusal", () => {
-    for (const region of REGIONS.filter((r) => r.terrain))
+    for (const region of REGIONS.filter((r) => layerIn(r, "heights")))
       expect(AREA_EXPORT_OUTSIDE_TERRAIN).toContain(region.name);
   });
 });
