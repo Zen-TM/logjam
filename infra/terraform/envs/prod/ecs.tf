@@ -228,6 +228,13 @@ resource "aws_ecs_task_definition" "topo_worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
+
+  # 15 (ZIP) + 20 (extracted) + 0.75 * 20 (ground files and neighbour strips)
+  # = 50: the caps in api/src/lib/topoUpload.ts, held to this size by
+  # topoUpload.unit.test.ts. Fargate's default is 20, which a full ZIP overruns.
+  ephemeral_storage {
+    size_in_gib = 50
+  }
 }
 
 # One-shot task that runs `prisma migrate deploy` against the brain as the

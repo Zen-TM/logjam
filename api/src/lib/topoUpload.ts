@@ -12,13 +12,21 @@ import { s3 } from "../services/awsClients";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { abortS3MultipartUploads, deleteS3Prefix } from "./s3Cleanup";
 
-// Compressed input-ZIP cap: bounds wasted S3 transfer and storage. A typical
-// ELVIS export (tens of tiles, ~22 MB each) is far below it.
-export const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
+// Compressed input-ZIP cap: ELVIS lets nobody download more than 15 GB, so
+// this is the largest ZIP that exists; it also bounds wasted S3 transfer and
+// storage. A typical export (tens of tiles, ~22 MB each) is far below it.
+export const MAX_INPUT_ZIP_COMPRESSED_BYTES = 15 * 1024 * 1024 * 1024; // 15 GB
+
+// Uncompressed cap, the zip-bomb / disk-DoS guard: point clouds and ELVIS
+// GeoTIFFs barely compress, so a real ZIP extracts to close to its own size
+// and this leaves headroom, while rejecting a pathological archive before the
+// worker launches. The worker's disk in infra/terraform/envs/prod/ecs.tf is
+// sized from both caps; guard: topoUpload.unit.test.ts.
+export const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
 
 // Logjam Web sends the ZIP as an S3 multipart upload in parts of this size, so
 // a dropped connection costs one part, not the file. 32 MiB keeps the cap to
-// 800 parts, well under S3's 10,000.
+// 480 parts, well under S3's 10,000.
 export const TOPO_UPLOAD_PART_BYTES = 32 * 1024 * 1024;
 export const TOPO_UPLOAD_MAX_PARTS = Math.ceil(
   MAX_INPUT_ZIP_COMPRESSED_BYTES / TOPO_UPLOAD_PART_BYTES,

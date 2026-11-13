@@ -34,6 +34,7 @@ import { assertGlobalCapacity } from "../lib/fargateCapacity";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import {
   MAX_INPUT_ZIP_COMPRESSED_BYTES,
+  MAX_INPUT_ZIP_UNCOMPRESSED_BYTES,
   TOPO_UPLOAD_MAX_PARTS,
   TOPO_UPLOAD_PART_BYTES,
   joinTopoUpload,
@@ -137,11 +138,6 @@ export function serializeTopoJobFor<
   };
 }
 
-// Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
-// worker. A legitimate ELVIS export is ~17 MB compressed LAZ + ~5 MB DEM per
-// tile; this sits well above any realistic one while rejecting pathological
-// archives before the worker is launched.
-const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list

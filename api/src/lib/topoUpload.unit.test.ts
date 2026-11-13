@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 vi.mock("../services/awsClients", () => ({ s3: { send: vi.fn() } }));
@@ -12,6 +14,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import {
   MAX_INPUT_ZIP_COMPRESSED_BYTES,
+  MAX_INPUT_ZIP_UNCOMPRESSED_BYTES,
   TOPO_UPLOAD_PART_BYTES as PART,
   deleteTopoJobObjects,
   joinTopoUpload,
@@ -178,5 +181,34 @@ describe("deleteTopoJobObjects", () => {
       UploadId: "u1",
     });
     expect(names.indexOf("ListObjectsV2Command")).toBeGreaterThan(abort);
+  });
+});
+
+describe("the topo worker's disk fits the upload caps", () => {
+  // At its peak the worker holds the ZIP, its extracted contents, and
+  // uncompressed ground files and neighbour strips that measured up to 0.75 of
+  // the extracted size. ecs.tf is read as text: it is the value prod runs.
+  //
+  // Mutation that turns it red: lower ephemeral_storage in the topo_worker
+  // block of ecs.tf below 50, delete the block, or raise either cap in
+  // topoUpload.ts without raising the disk.
+  it("is no smaller than the ZIP plus 1.75 times its extracted size", () => {
+    const ecs = readFileSync(
+      join(import.meta.dirname, "../../../infra/terraform/envs/prod/ecs.tf"),
+      "utf8",
+    );
+    const block =
+      /resource "aws_ecs_task_definition" "topo_worker" \{[\s\S]*?\n\}/.exec(
+        ecs,
+      )?.[0];
+    expect(block, "no topo_worker task definition in ecs.tf").toBeDefined();
+    const gib = /ephemeral_storage \{\s*size_in_gib\s*=\s*(\d+)/.exec(
+      block!,
+    )?.[1];
+    expect(gib, "topo_worker sets no ephemeral_storage").toBeDefined();
+    const GiB = 1024 ** 3;
+    expect(Number(gib) * GiB).toBeGreaterThanOrEqual(
+      MAX_INPUT_ZIP_COMPRESSED_BYTES + 1.75 * MAX_INPUT_ZIP_UNCOMPRESSED_BYTES,
+    );
   });
 });
