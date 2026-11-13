@@ -403,7 +403,8 @@ class Listing(unittest.TestCase):
         )
 
     def test_the_newest_archive_id_is_the_highest_history_not_the_highest_major(self):
-        # A major upgrade (16-1 to 18-2), and the way back (18-2 to 16-3).
+        # The highest history number is the newest archive id, whatever its major: 16-1 then 18-2,
+        # and a history entry added after both whose major is the lowest (16-3).
         for ids, newest in (
             (("16-1", "18-2"), "18-2"),
             (("16-1", "18-2", "16-3"), "16-3"),

@@ -247,9 +247,14 @@ fails when it is broken.
   starts nothing; data of a newer major than the image is refused; and a server
   start on another major's directory, including a restored old backup, stops
   with a message (`brain-entrypoint.sh`). Equal majors start no extra container.
-  The image carries the old major's binaries only for this, and they go once
-  prod is on the new one; restoring from before an upgrade needs the image tag
-  of that time. Guards: scenarios 14 to 14e of `e2e.sh`, and the major-version
+  The image carries the old major's binaries only for the transition, and they
+  go once prod is on the new one (updated 2026-11-13: the Dockerfile carries 18
+  only, the old major's packages come in through its `OLD_MAJOR` argument, which
+  the tests pass, and prod's pinned image keeps both until its tag next moves). Going back
+  to the old major after a successful upgrade is not supported, and neither is a
+  rewind to a time before one (updated 2026-11-13: the maintainer's call, the app
+  is not released); a failed upgrade still leaves the old cluster intact for the
+  old tag to boot. Guards: scenarios 14 to 14c of `e2e.sh`, and the major-version
   guard and upgrade checks in `infra/brain/postgres/tests/test.sh`. What still holds the
   decision up: boot.sh is the only thing that starts Postgres, and it never
   deletes a cluster. Everything else above stands.
@@ -401,6 +406,14 @@ fails when it is broken.
   server is impossible. Rejected for copy mode between two directories of the
   data volume, which is why the image sets `PGDATA` to the path every mount
   here uses instead of 18's default.
+- **A way back to the old major after an upgrade, or a restore from before
+  one.** Built in #950 (a runbook procedure and e2e scenarios 14d and 14e: the
+  old cluster put back by hand, the old tag pinned, `stanza-upgrade` moving the
+  stanza back down, which pgBackRest allows as a new history entry) and then
+  removed: the app is not released, so the rollback is not worth keeping tested
+  and documented. Do not rebuild it in passing. The old cluster stays at
+  `/data/postgres-<N>` until a human deletes it, but a way back is unsupported
+  and untested: its being kept is no promise of one.
 - **WAL-G instead of pgBackRest.** Compared on paper only. pgBackRest passed
   every requirement in a spike on real S3 with Object Lock (archiving, full
   backups, expiry by delete marker, restore after expiry, a restore as of a

@@ -20,7 +20,8 @@
 #   Dockerfile: dropping the docker-compose COPY (the host's Compose plugin);
 #   Dockerfile: dropping task-lib.sh or drill.sh from the task scripts' COPY;
 #   Dockerfile: dropping `ENV PGDATA` (the cluster is made outside the mount, as #932 showed);
-#   Dockerfile: dropping postgresql-16 (the upgrade has no 16 binaries to read the old cluster);
+#   Dockerfile: a hard-coded `postgresql-16` in the install line (the image carries a major no OLD_MAJOR default asks for);
+#   the test layer (below): its build without `--build-arg OLD_MAJOR=16` (no 16 packages: no 16 database can be made);
 #   brain-entrypoint.sh: dropping the major-version guard, or moving it above the init/restore
 #     block (a 16 directory crashes the 18 server; a restored 16 backup does too);
 #   major-upgrade.sh: `--copy` -> `--link` (the old cluster is no longer a rollback);
@@ -28,7 +29,8 @@
 #     --old-options (an old cluster archives into the repository);
 #   major-upgrade.sh: dropping the server.crt/server.key copy (a new certificate);
 #   major-upgrade.sh: the checksum setting fixed to `--data-checksums` (an old cluster without them);
-#   major-upgrade.sh: the refusals for a newer cluster, missing binaries, too little space, an
+#   major-upgrade.sh: the refusals for a newer cluster, missing binaries (a made-up 15 cluster, given to the real
+#     image), too little space, an
 #     existing postgres-<N> and a foreign postgres.new (one with a PG_VERSION of another major, one with
 #     files and none), each deleted in turn;
 #   major-upgrade.sh: dropping the finish-the-rename branch (the rerun after a crash does nothing);
@@ -101,6 +103,12 @@ check "PGDATA is the mounted path" [ "$(docker image inspect -f '{{range .Config
 check "the cluster is in the mount" [ "$(sql -c 'show data_directory')" = "$DATA" ]
 check "the image runs the Postgres major the Dockerfile pins" \
   [ "$(sql -c 'show server_version_num' | cut -c1-2)" = "$(sed -n 's/^FROM postgres:\([0-9]*\)\..*/\1/p' Dockerfile)" ]
+# The default image carries its own major and the Dockerfile's OLD_MAJOR default, which is empty between upgrades and set
+# for a transition (docs/operations/brain.md). The default is read from the Dockerfile, so a transition sets it deliberately,
+# in that one place; a package no default asks for fails here.
+carried=$(docker run --rm --entrypoint ls "$IMAGE" /usr/lib/postgresql | sort | tr '\n' ' ')
+wanted=$(printf '%s\n' "$(docker run --rm --entrypoint printenv "$IMAGE" PG_MAJOR)" "$(sed -n 's/^ARG OLD_MAJOR=//p' Dockerfile)" | grep . | sort | tr '\n' ' ')
+check "the image carries the Postgres majors it runs and OLD_MAJOR's default, no other (carries: $carried, wants: $wanted)" [ "$carried" = "$wanted" ]
 
 while IFS='|' read -r name want; do
   got=$(sql -c "show $name")
@@ -236,11 +244,19 @@ fi
 cleanup
 
 # --- the major-version guard, and upgrading a 16 database ----------------------------
-# The previous image, as far as these tests need it: this image with the 16 server first on PATH and
-# PG_MAJOR=16, so the real entrypoints make a real 16 database the way prod's was made.
-PG16=(-e PG_MAJOR=16 -e PATH=/usr/lib/postgresql/16/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+# The test layer: the Dockerfile built with OLD_MAJOR=16, which adds the previous major's packages that prod's image
+# does not carry (a major upgrade adds them for its transition: docs/operations/brain.md). UPIMG is that and nothing
+# else: it runs major-upgrade.sh and the 16 tools; it is built from the working tree's Dockerfile even under IMAGE_PREBUILT,
+# not layered on the prebuilt image. IMG16 is the previous image as far as these tests need it: the same with the
+# 16 server first on PATH and PG_MAJOR=16, so the real entrypoints make a real 16 database the way prod's was made.
+# The next major's upgrade changes the 16 here (and the 18 and OLD_MAJOR's default in the Dockerfile).
+UPIMG=$IMAGE-with-16
+IMG16=$IMAGE-as-16
+docker build -q --provenance=false --sbom=false --build-arg OLD_MAJOR=16 -t "$UPIMG" . > /dev/null || { bad "the test layer with the 16 packages builds"; exit 1; }
+printf 'FROM %s\nENV PG_MAJOR=16\nENV PATH=/usr/lib/postgresql/16/bin:%s\n' "$UPIMG" "$(docker run --rm --entrypoint printenv "$IMAGE" PATH)" |
+  docker build -q -t "$IMG16" - > /dev/null || { bad "the 16 image builds"; exit 1; }
 SUB() { echo "type=volume,src=$1,dst=$DATA,volume-subpath=postgres"; } # the host mounts /data/postgres at $DATA
-vol_sh() { local v=$1; shift; docker run --rm -v "$v":/data --entrypoint bash "$IMAGE" -c "$@"; } # root, on a whole volume
+vol_sh() { local v=$1; shift; docker run --rm -v "$v":/data --entrypoint bash "$UPIMG" -c "$@"; } # root, on a whole volume
 sqlj() { docker exec -u postgres "$C" psql -U postgres -d logjam -tAXq "$@"; }
 # make16 <volume> <stop|kill>: a 16 cluster as prod made it, with a row, a role with a password and the
 # certificate; its own config archives (starting it without archive_mode=off shows, the command runs in the
@@ -249,8 +265,8 @@ make16() {
   docker volume create "$1" > /dev/null
   vol_sh "$1" 'mkdir -p /data/postgres'
   C=brain-pg-test-16
-  docker run -d --name $C --mount "$(SUB "$1")" "${PG16[@]}" -e BRAIN_INIT=bootstrap -e POSTGRES_DB=logjam -e POSTGRES_HOST_AUTH_METHOD=trust \
-    -e BRAIN_TLS_SANS=brain.test,localhost "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_ENDPOINT=localhost:9 "$IMAGE" > /dev/null
+  docker run -d --name $C --mount "$(SUB "$1")" -e BRAIN_INIT=bootstrap -e POSTGRES_DB=logjam -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -e BRAIN_TLS_SANS=brain.test,localhost "${BUCKET_ENV[@]}" -e BRAIN_BACKUP_ENDPOINT=localhost:9 "$IMG16" > /dev/null
   wait_up $C && [ "$(sql -c 'show server_version_num' | cut -c1-2)" = 16 ] || return 1
   sqlj -c "create table t (v text); insert into t values ('row16'); create role logjam_app login password 'secret-pw'; grant connect on database logjam to logjam_app" > /dev/null &&
     sqlj -c "alter system set work_mem = '7MB'" > /dev/null &&
@@ -259,10 +275,12 @@ make16() {
   if [ "$2" = kill ]; then docker kill $C > /dev/null; else docker stop $C > /dev/null; fi
   docker rm -f -v $C > /dev/null
 }
-# upgrade <volume> [docker args]: stdout to $WORK/out, stderr to $WORK/err, the exit status in $rc.
+# upgrade <volume> [docker args]: stdout to $WORK/out, stderr to $WORK/err, the exit status in $rc. UPG_IMAGE is the image
+# it runs in: the test layer, unless a test gives it prod's.
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"; cleanup' EXIT
-upgrade() { local v=$1; shift; docker run --rm -v "$v":/data "$@" "$IMAGE" /usr/local/lib/brain/major-upgrade.sh > "$WORK/out" 2> "$WORK/err"; rc=$?; }
+UPG_IMAGE=$UPIMG
+upgrade() { local v=$1; shift; docker run --rm -v "$v":/data "$@" "$UPG_IMAGE" /usr/local/lib/brain/major-upgrade.sh > "$WORK/out" 2> "$WORK/err"; rc=$?; }
 silent() { bash -c '[ ! -s "$1" ] && [ ! -s "$2" ]' _ "$WORK/out" "$WORK/err"; }
 untouched() { [ "$(vol_sh "$1" 'cat /data/postgres/PG_VERSION; ls /data | tr "\n" " "')" = "$(printf '16\npostgres ')" ]; }
 
@@ -287,7 +305,7 @@ R16=(-e POSTGRES_PASSWORD=pw "${BUCKET_ENV[@]}" -e PGBACKREST_REPO1_TYPE=posix -
 docker volume create brain-pg-test-repo16 > /dev/null
 docker run --rm -v brain-pg-test-repo16:/repo --entrypoint chmod "$IMAGE" 777 /repo
 C=brain-pg-test-src16
-docker run -d --name $C -v brain-pg-test-src16:$DATA "${PG16[@]}" -e BRAIN_INIT=bootstrap "${R16[@]}" "$IMAGE" > /dev/null
+docker run -d --name $C -v brain-pg-test-src16:$DATA -e BRAIN_INIT=bootstrap "${R16[@]}" "$IMG16" > /dev/null
 if wait_up $C; then
   quiet docker exec -u postgres $C pgbackrest --stanza=logjam stanza-create
   quiet docker exec -u postgres $C pgbackrest --stanza=logjam --type=full backup
@@ -309,6 +327,11 @@ refuses() { # <what> <message fragment>
   check "...saying why" grep -q -- "$2" "$WORK/err"
   check "...and nothing on stdout" [ ! -s "$WORK/out" ]
 }
+# The real image has no binaries for a major older than the one it was made to upgrade from, whatever that is: no real cluster
+# is needed, major-upgrade.sh looks for the binaries before it reads anything else.
+vol_sh brain-pg-test-up-old 'mkdir -p /data/postgres && echo 15 > /data/postgres/PG_VERSION'
+UPG_IMAGE=$IMAGE upgrade brain-pg-test-up-old; refuses "a 15 cluster, given to the real image, which has no binaries for it" "no PostgreSQL 15 binaries"
+check "...and it is untouched" [ "$(vol_sh brain-pg-test-up-old 'cat /data/postgres/PG_VERSION; ls /data')" = "$(printf '15\npostgres')" ]
 V=brain-pg-test-up-refuse
 upgrade $V -e BRAIN_UPGRADE_MARGIN=1125899906842624; refuses "too little free space" "not upgrading"
 check "...and nothing was made" untouched $V
@@ -326,8 +349,6 @@ vol_sh $V 'rm -rf /data/postgres.new'
 vol_sh brain-pg-test-up-newer 'mkdir -p /data/postgres && echo 19 > /data/postgres/PG_VERSION'
 upgrade brain-pg-test-up-newer; refuses "a cluster newer than the image" "this image runs 18"
 check "...and it is untouched" [ "$(vol_sh brain-pg-test-up-newer 'cat /data/postgres/PG_VERSION; ls /data')" = "$(printf '19\npostgres')" ]
-vol_sh brain-pg-test-up-old 'mkdir -p /data/postgres && echo 15 > /data/postgres/PG_VERSION'
-upgrade brain-pg-test-up-old; refuses "a 15 cluster, which this image has no binaries for" "no PostgreSQL 15 binaries"
 
 # What an unfinished run left (a new cluster, here a marker file) is removed, and the upgrade goes ahead.
 vol_sh $V 'mkdir /data/postgres.new && echo 18 > /data/postgres.new/PG_VERSION && touch /data/postgres.new/junk'
@@ -375,7 +396,7 @@ docker rm -f -v $C > /dev/null
 
 # The old cluster is the rollback: the 16 server still starts on it and finds its row, and not the new one.
 check "the 16 server starts on the kept old cluster and finds its row" \
-  [ "$(docker run --rm -v $V:/data --entrypoint bash "$IMAGE" -c '
+  [ "$(docker run --rm -v $V:/data --entrypoint bash "$UPIMG" -c '
     B=/usr/lib/postgresql/16/bin
     gosu postgres $B/pg_ctl -D /data/postgres-16 -w -o "-c listen_addresses= -c unix_socket_directories=/tmp" -l /tmp/log start > /dev/null &&
     gosu postgres $B/psql -h /tmp -U postgres -d logjam -tAXqc "select min(v) from t"

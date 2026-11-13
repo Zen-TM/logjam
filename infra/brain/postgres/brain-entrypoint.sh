@@ -78,7 +78,7 @@ if [ "$server" = 1 ]; then
   # A server of another major refuses it with a crash; this says why and what to do.
   if [ -s "$PGDATA/PG_VERSION" ] && [ "$(tr -d '[:space:]' < "$PGDATA/PG_VERSION")" != "$PG_MAJOR" ]; then
     echo "brain-entrypoint: $PGDATA holds a PostgreSQL $(tr -d '[:space:]' < "$PGDATA/PG_VERSION") database and this image runs PostgreSQL $PG_MAJOR: refusing to start." \
-      "Prod: the host's boot upgrades it (host/boot.sh), and a restore from before an upgrade needs the image tag of that time." \
+      "Prod: the host's boot upgrades it (host/boot.sh)." \
       "Dev: run make reset." >&2
     exit 1
   fi
