@@ -24,11 +24,13 @@ const region = (
   ...NSW_REGION,
   id: `made-up-${grid}`,
   grid: grid as never,
-  border: [
-    [west, south],
-    [east, south],
-    [east, north],
-    [west, north],
+  borders: [
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+    ],
   ],
 });
 const NZ = region("nztm2000", [166, -48, 179, -34]);

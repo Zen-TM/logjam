@@ -9,12 +9,7 @@
 // published values, not only a round trip.
 import proj4 from "proj4";
 
-import {
-  REGIONS,
-  regionTouchesBox,
-  type LonLatBox,
-  type Region,
-} from "./regions.js";
+import { REGIONS, regionAt, type LonLatBox, type Region } from "./regions.js";
 
 export type GridId = "mga2020" | "nztm2000" | "utm";
 
@@ -110,9 +105,7 @@ export function gridIdAt(
   lat: number,
   regions: readonly Region[] = REGIONS,
 ): GridId {
-  const at = wrapLon(lon);
-  const point = { west: at, east: at, south: lat, north: lat };
-  return regions.find((r) => regionTouchesBox(r, point))?.grid ?? "utm";
+  return regionAt(wrapLon(lon), lat, regions)?.grid ?? "utm";
 }
 
 /** The MGA zone for a longitude in [-180, 180], where the outer two run on past NSW. */
