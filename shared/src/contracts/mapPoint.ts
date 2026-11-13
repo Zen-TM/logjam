@@ -22,7 +22,7 @@ import {
   initialBearingDegrees,
 } from "../trackStats.js";
 import type { IconIdea } from "../icons.js";
-import { FLOW_NETWORK_SNAP_M, type FlowNetworkLookup } from "../flowNetwork.js";
+import type { FlowNetworkLookup } from "../flowNetwork.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 import { WEATHER } from "./weather.js";
@@ -57,7 +57,8 @@ export const MAP_POINT = {
     // Logjam GPS; both say nothing where the fine DEM cannot tell.
     { key: "slope" },
     // How much land drains through the nearest creek: a measurement of the
-    // ground, never a rating of how dangerous the creek is.
+    // ground, never a rating of how dangerous the creek is. Only once a creek
+    // is found: no creek, a basin not built yet or a failed lookup show no row.
     { key: "catchment", on: "web", gap: FLOW_NETWORK_GAP },
     // Read from the Land overlay's own tiles on the device, only while it is
     // drawn: no coordinate goes anywhere for this.
@@ -97,15 +98,6 @@ export const MAP_POINT = {
     markerSavedHere: "Saved on this phone",
     coordinatesCopied: "Coordinates copied.",
     catchment: "Catchment",
-    catchmentChecking: "Checking…",
-    catchmentNoCreek: `No creek within ${FLOW_NETWORK_SNAP_M} m`,
-    // The layer is built basin by basin, so "none here" would be false.
-    catchmentNotCovered: "Not covered yet",
-    catchmentFailed: "Couldn't check the catchment.",
-    // Strahler order: 1 for a creek with no tributaries, one more where two of
-    // the same order meet. A count of how branched the network above is.
-    streamOrder: "Order",
-    streamOrderSpoken: "Stream order",
     upstreamFinding: "Finding the creeks upstream…",
     upstreamFailed: "Couldn't show the creeks upstream.",
     upstreamClear: "Clear the creeks upstream",
@@ -288,39 +280,26 @@ export type MapPointElevation =
   | { state: "checking" }
   | { state: "unavailable" };
 
-/**
- * What the flow network says about the creek nearest the point. `failed`
- * carries the sentence `messageFromError` chose: the API's own, as it is.
- */
-export type MapPointCatchment =
-  | { state: "checking" }
-  | {
-      state: "found";
-      catchmentKm2: number;
-      streamOrder: number;
-      biggerNearbyKm2: number | null;
-    }
-  | { state: "noCreek" }
-  | { state: "notCovered" }
-  | { state: "failed"; message: string };
+/** The creek a lookup found near the point, as the panel shows it. */
+export type MapPointCatchment = {
+  catchmentKm2: number;
+  biggerNearbyKm2: number | null;
+};
 
-/** A lookup's answer, as the panel shows it. */
+/**
+ * A lookup's answer, as the panel shows it: only a found creek. Anything
+ * else (no creek in range, a basin not built yet, a lookup still running or
+ * failed) shows nothing: while the layer covers a few basins, most of NSW
+ * would otherwise read "not covered".
+ */
 export function mapPointCatchment(
-  lookup: FlowNetworkLookup,
-): MapPointCatchment {
-  switch (lookup.status) {
-    case "found":
-      return {
-        state: "found",
-        catchmentKm2: lookup.catchmentKm2,
-        streamOrder: lookup.streamOrder,
-        biggerNearbyKm2: lookup.biggerNearby?.catchmentKm2 ?? null,
-      };
-    case "no-creek":
-      return { state: "noCreek" };
-    case "not-covered":
-      return { state: "notCovered" };
-  }
+  lookup: FlowNetworkLookup | null,
+): MapPointCatchment | null {
+  if (lookup?.status !== "found") return null;
+  return {
+    catchmentKm2: lookup.catchmentKm2,
+    biggerNearbyKm2: lookup.biggerNearby?.catchmentKm2 ?? null,
+  };
 }
 
 /**
@@ -341,51 +320,30 @@ export function formatCatchmentKm2(km2: number): string {
 }
 
 /**
- * A creek's Strahler order as a short tag, and the words a screen reader
- * says for it: "Order" alone means nothing out loud.
- */
-export function mapPointStreamOrder(order: number): {
-  text: string;
-  spoken: string;
-} {
-  const copy = MAP_POINT.copy;
-  return {
-    text: `${copy.streamOrder} ${order}`,
-    spoken: `${copy.streamOrderSpoken} ${order}`,
-  };
-}
-
-/**
  * The line under the figures when a much bigger creek is also in range: near
  * a confluence the nearest creek may not be the one the user meant.
  */
 export function mapPointCatchmentNote(
-  catchment: MapPointCatchment | undefined,
+  catchment: MapPointCatchment | null | undefined,
 ): string | null {
-  if (catchment?.state !== "found" || catchment.biggerNearbyKm2 == null)
-    return null;
+  if (catchment?.biggerNearbyKm2 == null) return null;
   return `A creek draining ${formatCatchmentKm2(catchment.biggerNearbyKm2)} is also nearby.`;
 }
 
 /**
  * The notice over the map while the creeks upstream of a point are drawn.
- * `creeks`: how many creek segments are drawn (a zero is left out).
+ * No count: the API answers in segments (creek between two junctions), and
+ * a count of those would overstate the creeks.
  * `trimmed`: the API left the smallest creeks out to fit the response.
  */
 export function mapPointUpstreamNotice({
   catchmentKm2,
-  creeks,
   trimmed,
 }: {
   catchmentKm2: number;
-  creeks: number;
   trimmed: boolean;
 }): string {
   const parts = ["Creeks upstream", formatCatchmentKm2(catchmentKm2)];
-  if (creeks > 0)
-    parts.push(
-      `${creeks.toLocaleString("en-AU")} ${creeks === 1 ? "creek" : "creeks"}`,
-    );
   if (trimmed) parts.push("smaller ones left out");
   return parts.join(" · ");
 }
@@ -411,8 +369,6 @@ export type MapPointFact = {
   note?: string;
   /** Pressing the figure copies it, on both clients. */
   copyable?: true;
-  /** A short tag beside the figure, and its words out loud. */
-  tag?: { text: string; spoken: string };
 };
 
 /** The position as shown and as copied: five places is under two metres. */
@@ -444,14 +400,15 @@ export type MapPointFix = {
  * with the overlay off or nothing there, and then there is no land figure.
  * `fire` is `fireNameOf`'s answer from the Fire history overlay, the same way,
  * and `coverage` `coverageNameOf`'s from the Coverage overlay.
- * `catchment` is absent on a client that does not look it up.
+ * `catchment` is `mapPointCatchment`'s answer, absent on a client that does
+ * not look it up; no row unless a creek was found.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
   elevation: MapPointElevation;
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
-  catchment?: MapPointCatchment;
+  catchment?: MapPointCatchment | null;
   land?: string | null;
   fire?: string | null;
   coverage?: string | null;
@@ -541,28 +498,11 @@ export function mapPointFacts(input: {
       label: copy.slope,
       value: `${Math.round(slopeDegrees)}°`,
     });
-  if (catchment?.state === "found") {
+  if (catchment)
     facts.push({
       key: "catchment",
       label: copy.catchment,
       value: formatCatchmentKm2(catchment.catchmentKm2),
-      tag: mapPointStreamOrder(catchment.streamOrder),
-    });
-  } else if (catchment)
-    facts.push({
-      key: "catchment",
-      label: copy.catchment,
-      ...(catchment.state === "failed"
-        ? // A sentence, not a figure: it takes the line.
-          { value: catchment.message, span: true as const }
-        : {
-            value:
-              catchment.state === "checking"
-                ? copy.catchmentChecking
-                : catchment.state === "noCreek"
-                  ? copy.catchmentNoCreek
-                  : copy.catchmentNotCovered,
-          }),
     });
   if (land) facts.push({ key: "land", label: copy.land, value: land });
   if (fire) facts.push({ key: "fire", label: copy.fire, value: fire });

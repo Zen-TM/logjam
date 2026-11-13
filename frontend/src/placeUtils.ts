@@ -662,19 +662,17 @@ export function getFlowNetworkLookup(
 
 /**
  * The catchment lookup for one point, without the upstream lines. A new point
- * starts again; a late answer about an old one is dropped. `fallback` is the
- * caller's words for a failure that carried no sentence of the API's.
+ * starts again; a late answer about an old one is dropped. A failure is
+ * logged and reads as no answer: the panel shows a catchment or nothing.
  */
 export function useFlowNetworkLookup(
   point: { longitude: number; latitude: number } | null,
-  fallback: string,
 ) {
   const key = point ? `${point.longitude},${point.latitude}` : null;
   const [state, setState] = useState<{
     key: string | null;
     lookup: FlowNetworkLookup | null;
-    error: string | null;
-  }>({ key: null, lookup: null, error: null });
+  }>({ key: null, lookup: null });
 
   useEffect(() => {
     if (!key) return;
@@ -682,28 +680,22 @@ export function useFlowNetworkLookup(
     const [longitude, latitude] = key.split(",").map(Number);
     getFlowNetworkLookup({ longitude, latitude })
       .then((lookup) => {
-        if (current) setState({ key, lookup, error: null });
+        if (current) setState({ key, lookup });
       })
       .catch((err) => {
         // Never the point itself: an ApiError names only the route.
         console.error(err);
-        if (current)
-          setState({
-            key,
-            lookup: null,
-            error: messageFromError(err, fallback),
-          });
+        if (current) setState({ key, lookup: null });
       });
     return () => {
       current = false;
     };
-  }, [key, fallback]);
+  }, [key]);
 
   // An answer about another point is no answer about this one.
   const settled = state.key === key && key !== null;
   return {
     lookup: settled ? state.lookup : null,
-    error: settled ? state.error : null,
     loading: key !== null && !settled,
   };
 }

@@ -71,10 +71,8 @@ import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import { readCssVar } from "./cssVar";
-import { CreekPointMarker } from "./CreekPointMarker";
 import {
   clearUpstream,
-  paintFlowNetwork,
   revealUpstream,
   showUpstream,
 } from "./flowNetworkLayers";
@@ -943,11 +941,8 @@ function Map({
     | {
         state: "shown";
         catchmentKm2: number;
-        creeks: number;
         trimmed: boolean;
         bbox: [number, number, number, number];
-        snapped: MapPointCoord;
-        bearing?: number;
       }
     | null
   >(null);
@@ -995,11 +990,8 @@ function Map({
           setUpstream({
             state: "shown",
             catchmentKm2: lookup.catchmentKm2,
-            creeks: lookup.upstream.lines.features.length,
             trimmed: lookup.upstream.trimmedBelowOrder != null,
             bbox: lookup.upstream.bbox,
-            snapped: lookup.snapped,
-            bearing: lookup.downstreamBearing,
           });
           fitToBox(map, lookup.upstream.bbox);
         })
@@ -1929,7 +1921,6 @@ function Map({
     const map = mapRef.current;
     const onThemeChange = () => {
       applyPlaceThemePaint(map);
-      paintFlowNetwork(map, readCssVar("--color-accent", "#deb188"));
     };
 
     window.addEventListener("logjam-theme-change", onThemeChange);
@@ -3889,18 +3880,11 @@ function Map({
         }
       />
       {upstream?.state === "shown" && drawableMap && (
-        <>
-          <CreekPointMarker
-            map={drawableMap}
-            point={upstream.snapped}
-            bearing={upstream.bearing}
-          />
-          <UpstreamHover
-            map={drawableMap}
-            pressable={PRESSABLE}
-            armed={armedForHover}
-          />
-        </>
+        <UpstreamHover
+          map={drawableMap}
+          pressable={PRESSABLE}
+          armed={armedForHover}
+        />
       )}
       {asked && drawableMap && (
         <MapPointPopover

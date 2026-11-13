@@ -1475,7 +1475,6 @@ test.describe("desktop", () => {
           distanceM: 18,
           catchmentKm2: 4.23,
           streamOrder: 3,
-          downstreamBearing: 90,
           biggerNearby: { catchmentKm2: 14.2 },
           attribution: "NSW 5 m DEM",
           ...(upstream && {
@@ -1501,17 +1500,16 @@ test.describe("desktop", () => {
     });
     await openApp(page);
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
-    const canvas = page.locator("canvas.maplibregl-canvas");
-    const box = (await canvas.boundingBox())!;
-    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
-      button: "right",
-    });
+    // Enter on the map asks about its centre, and opens on the facts (a
+    // right-click opens on Options, with no figures).
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
     const panel = page.getByRole("dialog", { name: "This point" });
     await expect(panel.getByText("4.2 km²")).toBeVisible();
-    await expect(panel.getByText("Order 3", { exact: true })).toBeVisible();
     await expect(
       panel.getByText("A creek draining 14 km² is also nearby."),
     ).toBeVisible();
+    await panel.getByRole("button", { name: "Options" }).click();
     const verb = panel.getByRole("button", {
       name: "Show the creeks upstream",
     });
@@ -1522,11 +1520,11 @@ test.describe("desktop", () => {
     await verb.click();
     await expect(panel).toHaveCount(0);
     const notice = page.getByText(
-      "Creeks upstream · 4.2 km² · 2 creeks · smaller ones left out",
+      "Creeks upstream · 4.2 km² · smaller ones left out",
     );
     await expect(notice).toBeVisible();
-    // The creek point stays marked with the creeks, as a drop and an arrow.
-    await expect(page.locator(".maplibregl-marker")).toHaveCount(2);
+    // Nothing is drawn at the creek point: the creeks say where it is.
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
     // Focus is back on the map, so the notice must be read out on its own.
     await expect(
       page.getByRole("status").filter({ hasText: "Creeks upstream" }),
@@ -1540,12 +1538,36 @@ test.describe("desktop", () => {
       .click();
     await expect(notice).toBeVisible();
 
-    // Cleared from its notice, and the creek point with it.
+    // Cleared from its notice.
     await page
       .getByRole("button", { name: "Clear the creeks upstream" })
       .click();
     await expect(notice).toHaveCount(0);
-    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
+  });
+
+  test("What is here?: no Catchment row where no creek is found", async ({
+    page,
+  }) => {
+    // Answered here, as above: outside the basins built so far.
+    await page.route("**/flow-network/lookup", (route) =>
+      route.fulfill({
+        json: { status: "not-covered", attribution: "NSW 5 m DEM" },
+      }),
+    );
+    const answered = page.waitForResponse("**/flow-network/lookup");
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    // Enter on the map asks about its centre, and opens on the facts.
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel.getByText("Elevation")).toBeVisible();
+    await answered;
+    await expect(panel.getByText("Catchment")).toHaveCount(0);
+    await panel.getByRole("button", { name: "Options" }).click();
+    await expect(
+      panel.getByRole("button", { name: "Show the creeks upstream" }),
+    ).toHaveCount(0);
   });
 
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({

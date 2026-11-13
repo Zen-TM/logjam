@@ -12,7 +12,6 @@ import {
   mapPointVerbs,
   type MapPointView,
   type CarrierId,
-  type MapPointCatchment,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
@@ -29,9 +28,6 @@ import {
   StatGrid,
   type Stat,
 } from "../../ui";
-import { readCssVar } from "./cssVar";
-import { CreekPointMarker } from "./CreekPointMarker";
-import { clearSnap, showSnap } from "./flowNetworkLayers";
 import { coverageAt, fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
 import classes from "./MapPointPopover.module.css";
@@ -131,22 +127,9 @@ export default function MapPointPopover({
         ?.focus();
   }, [view]);
 
-  const flow = useFlowNetworkLookup(point, MAP_POINT.copy.catchmentFailed);
-  const catchment: MapPointCatchment = flow.lookup
-    ? mapPointCatchment(flow.lookup)
-    : flow.error
-      ? { state: "failed", message: flow.error }
-      : { state: "checking" };
-  const found = flow.lookup?.status === "found" ? flow.lookup : null;
-  const snapped = found?.snapped ?? null;
-
-  // The line to the creek point the figure was measured at, while the figure
-  // is on show.
-  useEffect(() => {
-    if (!snapped) return;
-    showSnap(map, point, snapped, readCssVar("--color-accent", "#deb188"));
-    return () => clearSnap(map);
-  }, [map, point, snapped]);
+  // The Catchment row appears once a creek is found, and not at all
+  // otherwise: the panel may grow by a line a moment after it opens.
+  const catchment = mapPointCatchment(useFlowNetworkLookup(point).lookup);
 
   // Pressed too soon, the weather would be asked without a height and answer
   // for the cell's own DEM, which in canyon country can be far from the spot.
@@ -177,7 +160,6 @@ export default function MapPointPopover({
     value: fact.value,
     ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
-    ...(fact.tag ? { tag: fact.tag } : {}),
     ...(fact.copyable ? { onCopy: copyPosition } : {}),
   }));
 
@@ -214,13 +196,6 @@ export default function MapPointPopover({
         element={anchorEl}
         onClose={onClose}
       />
-      {snapped && (
-        <CreekPointMarker
-          map={map}
-          point={snapped}
-          bearing={found?.downstreamBearing}
-        />
-      )}
       <Popover
         open
         onClose={close}
@@ -284,7 +259,7 @@ export default function MapPointPopover({
               ) : (
                 <div className={classes.verbs}>
                   {mapPointVerbs("web", false, {
-                    creekFound: catchment.state === "found",
+                    creekFound: catchment !== null,
                   }).map((verb) => (
                     <Row
                       key={verb.id}

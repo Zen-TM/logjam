@@ -55,8 +55,6 @@ export {
 export {
   MapButton,
   MapButtonGroup,
-  MapCreekPoint,
-  MapFlowArrow,
   MapPointDot,
   MapTip,
   Notice,

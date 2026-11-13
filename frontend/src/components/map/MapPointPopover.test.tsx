@@ -49,9 +49,10 @@ const terrain = vi.hoisted(() => ({
     demSourceIds: [],
   } as ElevationPoint | null,
 }));
+// What `useFlowNetworkLookup` gives: a 503 or a failed request is a null
+// lookup once settled (placeUtils.flowNetwork.test.ts).
 const flow = vi.hoisted(() => ({
   lookup: null as FlowNetworkLookup | null,
-  error: null as string | null,
   loading: true,
 }));
 vi.mock("../../placeUtils", () => ({
@@ -61,8 +62,6 @@ vi.mock("../../placeUtils", () => ({
   }),
   useFlowNetworkLookup: () => ({ ...flow }),
 }));
-const layers = vi.hoisted(() => ({ showSnap: vi.fn(), clearSnap: vi.fn() }));
-vi.mock("./flowNetworkLayers", () => layers);
 vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
 const toast = vi.hoisted(() => ({ done: vi.fn(), error: vi.fn() }));
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -141,10 +140,7 @@ afterEach(() => {
   terrain.reading = { elevationM: 1013, slopeDegrees: null, demSourceIds: [] };
   cleanup();
   flow.lookup = null;
-  flow.error = null;
   flow.loading = true;
-  layers.showSnap.mockClear();
-  layers.clearSnap.mockClear();
   markers.length = 0;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -505,8 +501,7 @@ describe("MapPointPopover coverage", () => {
 const snapped = { latitude: -33.7123, longitude: 150.3119 };
 const attribution = "credit";
 
-const catchmentValue = () =>
-  screen.getByText(MAP_POINT.copy.catchment).nextSibling?.textContent;
+const catchmentRow = () => screen.queryByText(MAP_POINT.copy.catchment);
 const upstreamVerb = () =>
   screen.queryByRole("button", {
     name: /Show the creeks upstream/,
@@ -527,67 +522,32 @@ function found(over: Partial<FlowNetworkLookup & { status: "found" }> = {}) {
 }
 
 // Mutations that turn these red: leave the figure out of the panel, show a
-// dash for "no creek" or "not built here yet", reword the API's sentence, or
-// offer the creeks upstream of a point with no creek.
+// row for any answer but a found creek, put the stream order or a creek point
+// back, or offer the creeks upstream of a point with no creek.
 describe("What is here?: the catchment", () => {
-  it("says it is checking until the lookup answers, with nothing upstream yet", () => {
-    mount();
-    expect(catchmentValue()).toBe("Checking…");
-    expect(layers.showSnap).not.toHaveBeenCalled();
+  function expectNothing() {
+    expect(catchmentRow()).toBeNull();
+    expect(screen.queryByText(/is also nearby/)).toBeNull();
     openOptions();
     expect(upstreamVerb()).toBeNull();
-  });
+  }
 
-  it("shows the catchment, marks the creek point, and offers the creeks upstream", () => {
+  it("shows the catchment as one figure, and offers the creeks upstream", () => {
     found();
     const onShowUpstream = vi.fn();
     const onClose = vi.fn();
     mount({ onShowUpstream, onClose });
-    expect(catchmentValue()).toContain("4.2 km²");
-    // The order is a tag on the figure, said in full out loud.
-    expect(screen.getByText("Stream order 3")).toBeTruthy();
-    expect(layers.showSnap).toHaveBeenCalledWith(
-      map,
-      point,
-      snapped,
-      expect.any(String),
-    );
+    expect(catchmentRow()!.nextSibling?.textContent).toBe("4.2 km²");
+    expect(screen.queryByText(/order/i)).toBeNull();
+    // Nothing is drawn at the creek point: only the press's own dot.
+    expect(
+      markers.filter((marker) => marker.at?.[0] === snapped.longitude),
+    ).toEqual([]);
     openOptions();
     fireEvent.click(upstreamVerb()!);
     expect(onShowUpstream).toHaveBeenCalledWith(point);
     // The map moves to fit the creeks, so the panel goes first.
     expect(onClose).toHaveBeenCalled();
-  });
-
-  // Mutation: draw the arrow at a fixed angle, or turn it with the screen
-  // rather than the map, and it points somewhere the water does not run.
-  it("marks the creek point with a drop, and an arrow the way the water runs", () => {
-    found({ downstreamBearing: 120 });
-    mount();
-    const atCreek = markers.filter(
-      (marker) => marker.at?.[0] === snapped.longitude,
-    );
-    expect(atCreek).toHaveLength(2);
-    expect(atCreek.map((marker) => marker.options)).toContainEqual(
-      expect.objectContaining({ rotation: 120, rotationAlignment: "map" }),
-    );
-  });
-
-  it("leaves the arrow off when the API cannot tell which way", () => {
-    found();
-    mount();
-    const atCreek = markers.filter(
-      (marker) => marker.at?.[0] === snapped.longitude,
-    );
-    expect(atCreek).toHaveLength(1);
-    expect(atCreek[0].options).not.toHaveProperty("rotation");
-  });
-
-  it("takes the creek point away with the panel", () => {
-    found();
-    mount();
-    cleanup();
-    expect(layers.clearSnap).toHaveBeenCalled();
   });
 
   it("mentions a much bigger creek in range", () => {
@@ -598,33 +558,29 @@ describe("What is here?: the catchment", () => {
     ).toBeTruthy();
   });
 
-  it("says when no creek is near, and offers nothing upstream", () => {
+  it("shows nothing while the lookup is running", () => {
+    mount();
+    expectNothing();
+  });
+
+  it("shows nothing when no creek is near", () => {
     flow.loading = false;
     flow.lookup = { status: "no-creek", attribution };
     mount();
-    expect(catchmentValue()).toBe("No creek within 50 m");
-    expect(layers.showSnap).not.toHaveBeenCalled();
-    openOptions();
-    expect(upstreamVerb()).toBeNull();
+    expectNothing();
   });
 
-  it("says when the point is outside what has been built so far", () => {
+  it("shows nothing outside the basins built so far", () => {
     flow.loading = false;
     flow.lookup = { status: "not-covered", attribution };
     mount();
-    expect(catchmentValue()).toBe("Not covered yet");
-    openOptions();
-    expect(upstreamVerb()).toBeNull();
+    expectNothing();
   });
 
-  it("shows the API's sentence as it is when the lookup fails", () => {
+  it("shows nothing when the lookup failed (a 503, or no connection)", () => {
     flow.loading = false;
-    flow.error = "Too many requests. Wait a minute and try again.";
+    flow.lookup = null;
     mount();
-    expect(catchmentValue()).toBe(
-      "Too many requests. Wait a minute and try again.",
-    );
-    openOptions();
-    expect(upstreamVerb()).toBeNull();
+    expectNothing();
   });
 });
