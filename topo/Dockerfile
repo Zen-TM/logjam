@@ -81,6 +81,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && cd /tmp/tippecanoe \
     && make -j$(nproc) \
     && make install
+# The Makefile builds with -g: the debug symbols are most of the file.
+RUN strip /usr/local/bin/tippecanoe
 
 # ------------------------------------------------------------
 # 3. The image: runtime packages only (GDAL + PDAL, via UbuntuGIS)
