@@ -373,8 +373,9 @@ SMRF's ground for a survey with no class 2 at all; a ZIP with only 5 m DEMs
 fails with a sentence for its owner. A survey in feet or in degrees is made
 metric first: its grid is warped to the UTM zone of its centre and its heights
 scaled to metres (a point cloud is reprojected and scaled as its class 2 is
-cut); one with no coordinate system, or a unit Logjam does not know, fails with
-a sentence too.
+cut); a unit Logjam does not know fails with a sentence. A file with no
+coordinate system is read as metres, so a survey in feet that carries none is
+not told apart.
 
 To run it by hand, put the two statewide archives in `./output/statewide`,
 or a clip of them over the area (the [NSW 5 m DEM

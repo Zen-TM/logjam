@@ -4,7 +4,9 @@ ground a DEM or a point cloud gives, in metres whatever the survey measured.
 Everything downstream of the Ground step (the zoom, TIN_BUFFER_M, the TIN's
 resolution and longest edge, the footprint's simplification) is in metres, so
 the Ground step is where a survey is made metric. The `Real` tests use GDAL and
-skip on a host without it; the `topo-e2e` job's image has it.
+skip on a host without it; the `topo-e2e` job runs them in the worker image
+(infra/scripts/check-required-checks.py requires this file there, and the
+step fails on a skip).
 
 Mutations that turn each red are named on its class.
 """
@@ -26,28 +28,52 @@ import _native_stub  # noqa: F401,E402
 import sharpen  # noqa: E402
 from sharpen import CannotSharpen  # noqa: E402
 
-REAL_GDAL = not _native_stub.is_stubbed("osgeo")
+_REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 
 US_FOOT = 1200 / 3937
 FOOT = 0.3048
 
-# What `pdal info --summary` reports as `srs.units` and `srs.isgeographic`
-# (PDAL 2.6.2). METRIC, US_FEET and DEGREES are as it wrote them for one
-# window of a published USGS point cloud, cut to metres, to feet (State Plane
-# Utah Central, ftUS, with and without a vertical CRS) and to degrees;
-# FEET_OVER_METRES is made up. A LAS file with no vertical CRS reports ""
-# for the vertical unit and has its Z in the horizontal unit; a geographic
-# one reports its horizontal unit as "unknown".
-METRIC = {"units": {"horizontal": "metre", "vertical": ""}, "isgeographic": False}
+# What `pdal info --summary` reports as `srs` (PDAL 2.6.2), for one window of a
+# published USGS point cloud, cut to metres (METRIC), to State Plane Utah
+# Central in US survey feet with no vertical CRS (US_FEET) and with one
+# (US_FEET_COMPOUND), to degrees (DEGREES), and to metres with its Z in feet
+# and a vertical CRS saying so (METRES_OVER_FEET). A file with no vertical CRS
+# reports "" for the vertical, and its Z is in the horizontal unit; a
+# geographic one reports its horizontal unit as "unknown". METRES_OVER_FEET
+# is the one PDAL gets wrong: `units.vertical` says "metre" beside a `vertical`
+# WKT in feet, so the WKT is what is read. A file with no CRS at all has no
+# `srs` key.
+VERTICAL_FTUS = (
+    'VERT_CS["NAVD88 height (ftUS)",VERT_DATUM["North American Vertical Datum '
+    '1988",2005,AUTHORITY["EPSG","5103"]],UNIT["US survey foot",0.304800609601219,'
+    'AUTHORITY["EPSG","9003"]],AXIS["Gravity-related height",UP],'
+    'AUTHORITY["EPSG","6360"]]'
+)
+METRIC = {
+    "units": {"horizontal": "metre", "vertical": ""},
+    "isgeographic": False,
+    "vertical": "",
+}
 US_FEET = {
+    "units": {"horizontal": "US survey foot", "vertical": ""},
+    "isgeographic": False,
+    "vertical": "",
+}
+US_FEET_COMPOUND = {
     "units": {"horizontal": "US survey foot", "vertical": "US survey foot"},
     "isgeographic": False,
+    "vertical": VERTICAL_FTUS,
 }
-FEET_OVER_METRES = {
-    "units": {"horizontal": "foot", "vertical": "metre"},
+METRES_OVER_FEET = {
+    "units": {"horizontal": "metre", "vertical": "metre"},
     "isgeographic": False,
+    "vertical": VERTICAL_FTUS,
 }
-DEGREES = {"units": {"horizontal": "unknown", "vertical": ""}, "isgeographic": True}
+DEGREES = {
+    "units": {"horizontal": "unknown", "vertical": ""},
+    "isgeographic": True,
+    "vertical": "",
+}
 
 
 class TestCellMetres(unittest.TestCase):
@@ -117,35 +143,46 @@ class TestUnitNames(unittest.TestCase):
 
 class TestCloudUnits(unittest.TestCase):
     """The unit decision from a point cloud's `srs`. Mutations: a vertical ""
-    taken as metres when the horizontal is in feet; a tile in feet or degrees
-    passed through; a metric tile reprojected (NSW's bytes would change); the
-    Z scale left off, or applied when only the horizontal is in feet; a file
-    with no CRS taken as metres."""
+    taken as metres when the horizontal is in feet; the height unit read from
+    `units.vertical` instead of the `vertical` WKT (METRES_OVER_FEET turns
+    it red); a metric tile reprojected (NSW's bytes would change); the Z scale
+    left off, or applied when only the horizontal is in feet; the
+    reprojection left off a cloud whose Z alone is in feet (its heights are
+    scaled twice downstream); a file with no `srs` refused or reprojected."""
 
     def test_a_metric_cloud_needs_nothing(self):
         self.assertEqual(sharpen.cloud_units(METRIC), (1.0, 1.0))
-        self.assertIsNone(sharpen.metre_filters(METRIC, 153.0, -34.0))
+        self.assertIsNone(sharpen.metre_filters(METRIC, 32756))
+
+    def test_a_file_with_no_crs_is_read_as_metres(self):
+        # `pdal info --summary` of a LAS file written with no SRS has no `srs`.
+        self.assertEqual(sharpen.cloud_units(None), (1.0, 1.0))
+        self.assertEqual(sharpen.cloud_units({}), (1.0, 1.0))
+        self.assertIsNone(sharpen.metre_filters({}, 32756))
 
     def test_a_vertical_unit_that_is_not_named_is_the_horizontal_one(self):
         self.assertEqual(sharpen.cloud_units(US_FEET), (US_FOOT, US_FOOT))
-        self.assertEqual(
-            sharpen.cloud_units(
-                {"units": {"horizontal": "foot", "vertical": ""}, "isgeographic": False}
-            ),
-            (FOOT, FOOT),
-        )
 
-    def test_a_vertical_unit_of_its_own_is_kept(self):
-        self.assertEqual(sharpen.cloud_units(FEET_OVER_METRES), (FOOT, 1.0))
+    def test_the_vertical_wkt_gives_the_height_unit(self):
+        flat, z = sharpen.cloud_units(US_FEET_COMPOUND)
+        self.assertEqual(flat, US_FOOT)
+        self.assertAlmostEqual(z, US_FOOT, places=9)
+        # PDAL says "metre" in units.vertical here; the WKT says feet.
+        flat, z = sharpen.cloud_units(METRES_OVER_FEET)
+        self.assertEqual(flat, 1.0)
+        self.assertAlmostEqual(z, US_FOOT, places=9)
 
     def test_degrees_have_no_horizontal_metres(self):
         self.assertEqual(sharpen.cloud_units(DEGREES), (None, 1.0))
 
-    def test_no_crs_is_refused_with_a_sentence(self):
-        for srs in ({}, {"units": {"horizontal": "", "vertical": ""}}):
-            with self.assertRaises(CannotSharpen) as raised:
-                sharpen.cloud_units(srs)
-            self.assertIn("coordinate system", str(raised.exception))
+    def test_an_unknown_horizontal_unit_is_refused(self):
+        srs = {
+            "units": {"horizontal": "furlong", "vertical": ""},
+            "isgeographic": False,
+        }
+        with self.assertRaises(CannotSharpen) as raised:
+            sharpen.cloud_units(srs)
+        self.assertIn("furlong", str(raised.exception))
 
     def test_utm_zone_of_a_point(self):
         self.assertEqual(sharpen.utm_epsg(-112.95, 37.28), 32612)
@@ -153,9 +190,8 @@ class TestCloudUnits(unittest.TestCase):
         self.assertEqual(sharpen.utm_epsg(-179.9, 10), 32601)
         self.assertEqual(sharpen.utm_epsg(179.9, -10), 32760)
 
-    def test_feet_are_reprojected_to_the_zone_of_the_centre_and_scaled_in_z(self):
-        # UTM 12 N: easting 330 km, northing 4.13 Mm is near -112.9, 37.3.
-        names, options = sharpen.metre_filters(US_FEET, -112.9, 37.3)
+    def test_feet_are_reprojected_to_the_zone_and_scaled_in_z(self):
+        names, options = sharpen.metre_filters(US_FEET, 32612)
         self.assertEqual(names, ["reprojection", "transformation"])
         self.assertIn("--filters.reprojection.out_srs=EPSG:32612", options)
         matrix = [
@@ -167,14 +203,60 @@ class TestCloudUnits(unittest.TestCase):
         self.assertAlmostEqual(values[10], US_FOOT)
         self.assertEqual(values[15], 1)
 
-    def test_z_is_left_alone_when_only_the_horizontal_is_in_feet(self):
-        names, _ = sharpen.metre_filters(FEET_OVER_METRES, -112.9, 37.3)
+    def test_metres_over_feet_is_reprojected_too(self):
+        # The reprojection rewrites the header with no vertical part; a header
+        # left with feet in it makes GDAL's warp scale the heights a second time.
+        names, options = sharpen.metre_filters(METRES_OVER_FEET, 32612)
+        self.assertEqual(names, ["reprojection", "transformation"])
+        self.assertIn("--filters.reprojection.out_srs=EPSG:32612", options)
+
+    def test_feet_over_metres_is_not_scaled_in_z(self):
+        srs = {
+            "units": {"horizontal": "foot", "vertical": "metre"},
+            "isgeographic": False,
+            "vertical": 'VERT_CS["h",VERT_DATUM["d",2005],UNIT["metre",1]]',
+        }
+        names, _ = sharpen.metre_filters(srs, 32612)
         self.assertEqual(names, ["reprojection"])
 
-    def test_degrees_are_reprojected_from_their_own_bounds(self):
-        names, options = sharpen.metre_filters(DEGREES, -112.9, 37.3)
+    def test_degrees_are_reprojected(self):
+        names, options = sharpen.metre_filters(DEGREES, 32612)
         self.assertEqual(names, ["reprojection"])
         self.assertIn("--filters.reprojection.out_srs=EPSG:32612", options)
+
+
+class TestSurveyZone(unittest.TestCase):
+    """Mutations: the zone taken from the first tile alone, or per tile (a
+    survey across a zone edge is cut in two grids); a survey of metric tiles
+    given a zone, or a tile with Z in feet left out of it."""
+
+    def zone(self, summaries, lonlats):
+        by_id = {id(s): ll for s, ll in zip(summaries, lonlats)}
+        with mock.patch.object(
+            sharpen, "lonlat_of", side_effect=lambda s: by_id[id(s)]
+        ):
+            return sharpen.survey_zone(summaries)
+
+    def test_a_survey_of_metric_tiles_has_no_zone(self):
+        summaries = [{"srs": METRIC}, {"srs": {}}]
+        self.assertIsNone(self.zone(summaries, [(150, -34)] * 2))
+
+    def test_the_zone_is_the_surveys_not_a_tiles(self):
+        summaries = [{"srs": US_FEET}, {"srs": US_FEET}, {"srs": US_FEET}]
+        # One tile west of the zone 11/12 edge (-114°), two east of it.
+        zone = self.zone(summaries, [(-114.1, 37), (-113.95, 37), (-113.9, 37)])
+        self.assertEqual(zone, 32612)
+        # The mean decides, not the first tile.
+        zone = self.zone(summaries[::-1], [(-113.9, 37), (-113.95, 37), (-114.1, 37)])
+        self.assertEqual(zone, 32612)
+
+    def test_a_tile_with_z_in_feet_has_a_zone(self):
+        self.assertEqual(
+            self.zone([{"srs": METRES_OVER_FEET}], [(-112.9, 37.3)]), 32612
+        )
+
+    def test_the_southern_hemisphere_has_its_own_zones(self):
+        self.assertEqual(self.zone([{"srs": US_FEET}], [(150.3, -33.7)]), 32756)
 
 
 def _write_dem(path, srs, geotransform, values, band_unit=None, nodata=-9999.0):
@@ -199,12 +281,15 @@ def _write_dem(path, srs, geotransform, values, band_unit=None, nodata=-9999.0):
     ds = None
 
 
-@unittest.skipIf(not REAL_GDAL, "needs GDAL")
+@unittest.skipIf(not _REAL_GDAL, "needs GDAL")
 class TestRealDem(unittest.TestCase):
     """`dem_cell` and `dem_ground` on small made-up GeoTIFFs. Mutations: the
     cell read from the geotransform alone; a DEM in feet or degrees left in its
-    own CRS; heights left in feet; the nodata scaled with the heights; a DEM
-    with no CRS taken as metres; a metric DEM warped (its cells would move)."""
+    own CRS; heights left in feet; the nodata scaled with the heights; a metric
+    DEM warped (its cells would move); a DEM whose CRS has a vertical part in
+    feet scaled by hand and by the warp; an unknown band unit on a metric DEM
+    refused; one on a DEM in feet taken as metres; the DEMs of a survey warped
+    to a zone each."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -235,17 +320,20 @@ class TestRealDem(unittest.TestCase):
         )
         self.assertAlmostEqual(sharpen.dem_cell(path), 3.2808 * US_FOOT, places=6)
 
-    def test_a_dem_with_no_crs_is_refused(self):
+    def bare(self, name):
         from osgeo import gdal
 
-        path = self.dir / "bare.tif"
+        path = self.dir / name
         ds = gdal.GetDriverByName("GTiff").Create(str(path), 4, 4, 1, gdal.GDT_Float32)
-        ds.SetGeoTransform((0, 1, 0, 0, 0, -1))
+        ds.SetGeoTransform((0, 2, 0, 0, 0, -2))
         ds.GetRasterBand(1).WriteArray(np.ones((4, 4), dtype=np.float32))
         ds = None
-        with self.assertRaises(CannotSharpen) as raised:
-            sharpen.dem_cell(path)
-        self.assertIn("coordinate system", str(raised.exception))
+        return path
+
+    def test_a_dem_with_no_crs_is_read_as_metres(self):
+        path = self.bare("bare.tif")
+        self.assertEqual(sharpen.dem_cell(path), 2.0)
+        self.assertEqual(self.ground([path]).GetGeoTransform(), (0, 2, 0, 0, 0, -2))
 
     def ground(self, files):
         out = str(self.dir / "ground.tif")
@@ -305,6 +393,29 @@ class TestRealDem(unittest.TestCase):
             ds.GetRasterBand(1).ReadAsArray(), 100 * FOOT, atol=1e-3
         )
 
+    def test_a_dem_with_a_vertical_crs_in_feet_is_scaled_once(self):
+        # GDAL's warp scales heights by a vertical CRS's unit by itself: a DEM
+        # whose CRS says feet must be scaled once, and leave with no vertical CRS.
+        path = self.dem(
+            "cf.tif",
+            "EPSG:32612+6360",
+            (330_000.0, 1, 0, 4_130_000.0, 0, -1),
+            np.full((8, 8), 100.0),
+        )
+        ds = self.ground([path])
+        from osgeo import osr
+
+        self.assertFalse(osr.SpatialReference(wkt=ds.GetProjection()).IsCompound())
+        np.testing.assert_allclose(
+            ds.GetRasterBand(1).ReadAsArray(), 100 * US_FOOT, atol=1e-3
+        )
+        # And a later warp, as the block worker's, does not scale it again.
+        from osgeo import gdal
+
+        warped = gdal.Warp("", ds, format="MEM", dstSRS="EPSG:3857")
+        grid = warped.GetRasterBand(1).ReadAsArray()
+        np.testing.assert_allclose(grid[grid > -9000], 100 * US_FOOT, atol=1e-3)
+
     def test_a_degree_dem_becomes_metres_in_utm(self):
         path = self.dem(
             "deg.tif",
@@ -321,29 +432,80 @@ class TestRealDem(unittest.TestCase):
         grid = ds.GetRasterBand(1).ReadAsArray()
         np.testing.assert_allclose(grid[grid != -9999], 1500.0, atol=0.01)
 
-    def test_an_unknown_height_unit_is_refused(self):
+    def test_an_unknown_band_unit_on_a_metric_dem_is_read_as_metres(self):
+        values = np.arange(64, dtype=np.float32).reshape(8, 8)
         path = self.dem(
             "odd.tif",
             "EPSG:32612",
             (330_000.0, 1, 0, 4_130_000.0, 0, -1),
+            values,
+            band_unit="furlong",
+        )
+        ds = self.ground([path])
+        self.assertEqual(ds.GetRasterBand(1).ReadAsArray().tolist(), values.tolist())
+
+    def test_an_unknown_band_unit_on_a_dem_in_feet_is_refused(self):
+        path = self.dem(
+            "odd.tif",
+            "EPSG:3566",
+            (1_650_000.0, 3.2808, 0, 4_400_000.0, 0, -3.2808),
             np.ones((8, 8)),
             band_unit="furlong",
         )
-        with self.assertRaises(CannotSharpen):
+        with self.assertRaises(CannotSharpen) as raised:
             self.ground([path])
+        self.assertIn("furlong", str(raised.exception))
+
+    def test_a_dem_in_feet_with_no_band_unit_has_heights_in_feet(self):
+        path = self.dem(
+            "ft.tif",
+            "EPSG:3566",
+            (1_650_000.0, 3.2808, 0, 4_400_000.0, 0, -3.2808),
+            np.full((40, 40), 1000.0),
+        )
+        ds = self.ground([path])
+        grid = ds.GetRasterBand(1).ReadAsArray()
+        np.testing.assert_allclose(grid[grid != -9999], 1000 * US_FOOT, atol=0.01)
+
+    def test_the_dems_of_a_survey_share_one_zone(self):
+        # Either side of the zone 11/12 edge at -114°.
+        west = self.dem(
+            "w.tif",
+            "EPSG:4326",
+            (-114.0004, 1e-5, 0, 37.3, 0, -1e-5),
+            np.full((30, 30), 1000.0),
+        )
+        east = self.dem(
+            "e.tif",
+            "EPSG:4326",
+            (-113.9996, 1e-5, 0, 37.3, 0, -1e-5),
+            np.full((30, 30), 1000.0),
+        )
+        self.assertEqual(sharpen.dem_zone([west, east]), 32612)
+        from osgeo import osr
+
+        for n, path in enumerate((west, east)):
+            out = sharpen.metric_dem(path, self.dir / f"m{n}.tif", 32612)
+            srs = osr.SpatialReference(wkt=pipeline_open(out).GetProjection())
+            self.assertEqual(srs.GetAuthorityCode(None), "32612")
+
+
+def pipeline_open(path):
+    from osgeo import gdal
+
+    return gdal.Open(str(path))
 
 
 class TestCloudGround(unittest.TestCase):
-    """`class2_tiles` and `smrf_classify` on a tile in feet: PDAL mocked.
-    Mutations: the tile's own bounds (feet) handed to the TIN; the conversion
-    left off the class 2 read or off the SMRF read; added to a metric tile."""
+    """The class 2 and SMRF reads of a tile in feet, PDAL mocked. Mutations:
+    the tile's own bounds (feet) handed to the TIN; the conversion left off
+    the class 2 read or off the SMRF read; added to a metric tile or to a file
+    with no CRS, on either read; the SMRF output converted again by the class 2
+    read (Z scaled twice: the ground comes out 3.28 times too low); the tiles
+    of a survey reprojected to a zone each."""
 
     def run_class2(self, srs, converted_bounds=None):
         calls = []
-
-        def fake_run(*command):
-            calls.append(command)
-            return ""
 
         def summary(path):
             name = Path(path).name
@@ -355,30 +517,35 @@ class TestCloudGround(unittest.TestCase):
                     "maxy": 2000,
                 }
                 return {"bounds": bounds, "num_points": 10, "srs": METRIC}
-            return {
+            made = {
                 "bounds": {"minx": 1, "maxx": 6562, "miny": 1, "maxy": 6562},
                 "num_points": 10,
-                "srs": srs,
             }
+            return {**made, "srs": srs} if srs is not None else made
 
         with (
             tempfile.TemporaryDirectory() as tmp,
-            mock.patch.object(sharpen, "run", side_effect=fake_run),
+            mock.patch.object(
+                sharpen, "run", side_effect=lambda *c: calls.append(c) or ""
+            ),
             mock.patch.object(sharpen, "las_summary", side_effect=summary),
             mock.patch.object(sharpen, "lonlat_of", return_value=(-112.9, 37.3)),
             mock.patch.object(sharpen.pipeline, "_write_progress"),
         ):
-            tiles = sharpen.class2_tiles(["a.laz"], Path(tmp), "", 1)
+            summaries = [sharpen.las_summary("a.laz")]
+            zone = sharpen.survey_zone(summaries)
+            tiles = sharpen.class2_tiles(["a.laz"], Path(tmp), "", 1, summaries, zone)
         return [" ".join(c) for c in calls], tiles
 
-    def test_a_metric_tile_is_read_as_it_always_was(self):
-        calls, tiles = self.run_class2(METRIC)
-        self.assertEqual(len(calls), 1)
-        self.assertNotIn("reprojection", calls[0])
-        self.assertNotIn("transformation", calls[0])
-        self.assertEqual(
-            tiles[0][1], {"minx": 1, "maxx": 6562, "miny": 1, "maxy": 6562}
-        )
+    def test_a_metric_tile_is_read_unconverted(self):
+        for srs in (METRIC, None):
+            calls, tiles = self.run_class2(srs)
+            self.assertEqual(len(calls), 1)
+            self.assertNotIn("reprojection", calls[0])
+            self.assertNotIn("transformation", calls[0])
+            self.assertEqual(
+                tiles[0][1], {"minx": 1, "maxx": 6562, "miny": 1, "maxy": 6562}
+            )
 
     def test_a_tile_in_feet_is_converted_before_its_class_2_is_cut(self):
         calls, tiles = self.run_class2(US_FEET)
@@ -393,31 +560,118 @@ class TestCloudGround(unittest.TestCase):
             tiles[0][1], {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000}
         )
 
-    def test_smrf_reads_a_tile_in_feet_in_metres_too(self):
+    def smrf_commands(self, srs):
         calls = []
+        summary = {"bounds": {"minx": 1, "maxx": 2, "miny": 1, "maxy": 2}}
+        if srs is not None:
+            summary["srs"] = srs
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(
+                sharpen, "run", side_effect=lambda *c: calls.append(c) or ""
+            ),
+            mock.patch.object(sharpen, "las_summary", return_value=summary),
+            mock.patch.object(sharpen, "lonlat_of", return_value=(-112.9, 37.3)),
+            mock.patch.object(sharpen.pipeline, "_write_progress"),
+        ):
+            summaries = [sharpen.las_summary("a.laz")]
+            zone = sharpen.survey_zone(summaries)
+            sharpen.smrf_classify(["a.laz"], Path(tmp), summaries, zone)
+        return [list(c) for c in calls]
+
+    def test_smrf_reads_a_tile_in_feet_in_metres_too(self):
+        (words,) = self.smrf_commands(US_FEET)
+        self.assertLess(words.index("reprojection"), words.index("smrf"))
+        self.assertLess(words.index("transformation"), words.index("smrf"))
+        self.assertIn("--filters.reprojection.out_srs=EPSG:32612", words)
+
+    def test_smrf_reads_a_metric_tile_unconverted(self):
+        for srs in (METRIC, None):
+            (words,) = self.smrf_commands(srs)
+            self.assertEqual(
+                words[:5], ["pdal", "translate", "a.laz", words[3], "range"]
+            )
+            self.assertFalse([w for w in words if "reprojection" in w])
+            self.assertFalse([w for w in words if "transformation" in w])
+
+    def laz_ground(self, srs_of, lonlats, classes):
+        """`laz_ground` on tiles a.laz and b.laz with PDAL mocked: `srs_of(tile)`
+        is a tile's `srs` (a file SMRF wrote keeps the header of its input, as
+        PDAL 2.6.2 does when Z alone is scaled), `lonlats[tile]` its centre, and
+        `classes` is "class-2" or "smrf" (no class 2 in the survey). Returns
+        the PDAL translate commands."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        calls = []
+        bounds = {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000}
+
+        def summary(path):
+            name = Path(path).name
+            if name in ("a.laz", "b.laz"):
+                tile = name[0]
+                return {
+                    "bounds": bounds,
+                    "num_points": 6_000_000,
+                    "srs": srs_of(tile),
+                    "tile": tile,
+                }
+            has_ground = classes == "class-2" or "smrf" in name
+            points = 5_000_000 if has_ground or name.startswith("smrf-") else 0
+            return {"bounds": bounds, "num_points": points, "srs": srs_of("a")}
 
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(
                 sharpen, "run", side_effect=lambda *c: calls.append(c) or ""
             ),
+            mock.patch.object(sharpen, "las_summary", side_effect=summary),
             mock.patch.object(
-                sharpen,
-                "las_summary",
-                return_value={
-                    "bounds": {"minx": 1, "maxx": 2, "miny": 1, "maxy": 2},
-                    "srs": US_FEET,
-                },
+                sharpen, "lonlat_of", side_effect=lambda s: lonlats[s["tile"]]
             ),
-            mock.patch.object(sharpen, "lonlat_of", return_value=(-112.9, 37.3)),
+            mock.patch.object(sharpen.pipeline, "select_surveys_by_layer") as select,
+            mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
+            mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
+            mock.patch.object(sharpen.pipeline, "available_memory", return_value=2**34),
+            mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
             mock.patch.object(sharpen.pipeline, "_write_progress"),
         ):
-            sharpen.smrf_classify(["a.laz"], Path(tmp))
-        words = list(calls[0])
-        self.assertLess(words.index("reprojection"), words.index("smrf"))
-        self.assertLess(words.index("transformation"), words.index("smrf"))
-        # SMRF's own window and slope are in metres.
-        self.assertIn("--filters.reprojection.out_srs=EPSG:32612", words)
+            clouds = [Path(tmp) / "a.laz", Path(tmp) / "b.laz"]
+            for cloud in clouds:
+                cloud.touch()
+            select.return_value = mock.Mock(terrain_tiles=[str(c) for c in clouds])
+            sharpen.laz_ground(clouds, "g.tif", Path(tmp), 1)
+        return [" ".join(c) for c in calls if "translate" in c]
+
+    def test_smrf_output_is_not_scaled_twice(self):
+        # Horizontal metres, Z in feet, no class 2 anywhere: only the SMRF
+        # read scales Z. Its output keeps the feet header, so the class 2 read
+        # of it must not convert again.
+        commands = self.laz_ground(
+            lambda tile: METRES_OVER_FEET,
+            {"a": (-112.9, 37), "b": (-112.9, 37)},
+            "smrf",
+        )
+        smrf = [c for c in commands if " smrf " in c]
+        self.assertEqual(len(smrf), 2)
+        self.assertTrue(all("transformation" in c for c in smrf))
+        # The class 2 read of what SMRF wrote: SMRF's files are named smrf-N.
+        again = [c for c in commands if "/smrf-" in c and "Classification[2:2]" in c]
+        self.assertEqual(len(again), 2)
+        self.assertFalse([c for c in again if "transformation" in c])
+        self.assertFalse([c for c in again if "reprojection" in c])
+
+    def test_a_survey_across_a_zone_edge_is_reprojected_to_one_zone(self):
+        commands = self.laz_ground(
+            lambda tile: US_FEET, {"a": (-114.1, 37.3), "b": (-113.9, 37.3)}, "class-2"
+        )
+        zones = {
+            w.split("=", 1)[1]
+            for c in commands
+            for w in c.split()
+            if w.startswith("--filters.reprojection.out_srs=")
+        }
+        self.assertEqual(zones, {"EPSG:32612"})
+        self.assertEqual(len([c for c in commands if "reprojection" in c]), 4)
 
 
 if __name__ == "__main__":

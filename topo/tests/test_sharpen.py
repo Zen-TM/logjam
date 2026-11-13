@@ -500,8 +500,9 @@ class TestGroundSteps(unittest.TestCase):
         files = [Path("a.tif"), Path("b.tif"), Path("c.tif")]
         with (
             mock.patch.object(sharpen.pipeline, "merge_dem_tiles") as merge,
+            mock.patch.object(sharpen, "dem_zone", return_value=None),
             mock.patch.object(
-                sharpen, "metric_dem", side_effect=lambda path, out: path
+                sharpen, "metric_dem", side_effect=lambda path, out, zone: path
             ),
         ):
             sharpen.dem_ground(files, [2, 0], "g.tif")
