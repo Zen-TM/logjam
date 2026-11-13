@@ -90,6 +90,17 @@ export function mgaZone(zone: 54 | 55 | 56): GridZone {
 
 const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
 
+/** `zone` in the world copy `shift` degrees east of the one it is declared in. */
+const shifted = (zone: GridZone, shift: number): GridZone =>
+  shift === 0
+    ? zone
+    : {
+        ...zone,
+        west: zone.west + shift,
+        east: zone.east + shift,
+        centralMeridian: zone.centralMeridian + shift,
+      };
+
 /** The grid used at a place: the region's there, UTM anywhere else. */
 export function gridIdAt(
   lon: number,
@@ -101,6 +112,11 @@ export function gridIdAt(
   return regions.find((r) => regionTouchesBox(r, point))?.grid ?? "utm";
 }
 
+/** The MGA zone for a longitude in [-180, 180], where the outer two run on past NSW. */
+const mgaZoneAt = (lon: number) =>
+  MGA_ZONES.find((z) => lon < z.east) ?? MGA_ZONES[MGA_ZONES.length - 1]!;
+
+/** A longitude in any world copy (MapLibre reports one panned past 180° as such) is answered in that copy. */
 export function gridZoneAt(
   lon: number,
   lat: number,
@@ -109,16 +125,16 @@ export function gridZoneAt(
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return NZTM_ZONE;
   if (id === "mga2020")
-    return (
-      MGA_ZONES.find((z) => lon < z.east) ?? MGA_ZONES[MGA_ZONES.length - 1]!
-    );
+    return shifted(mgaZoneAt(wrapLon(lon)), lon - wrapLon(lon));
   return utmZone(Math.floor((lon + 180) / 6), lat < 0);
 }
 
 /**
  * The zones of the grid at the box's centre that the box touches, west to
  * east. A box over two grids gets the centre's one. The box is unwrapped: one
- * across the date line has `east` past 180.
+ * across the date line has `east` past 180, and the zones come back in the
+ * world copy the box is in, so a clip against their edges lands on the map.
+ * A box with no width gets the one zone at its point.
  */
 export function gridZonesFor(
   box: LonLatBox,
@@ -126,12 +142,16 @@ export function gridZonesFor(
 ): GridZone[] {
   const lon = (box.west + box.east) / 2;
   const lat = (box.south + box.north) / 2;
+  if (box.west === box.east) return [gridZoneAt(lon, lat, regions)];
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return [NZTM_ZONE];
-  if (id === "mga2020")
+  if (id === "mga2020") {
+    const shift = lon - wrapLon(lon);
+    const [west, east] = [box.west - shift, box.east - shift];
     return MGA_ZONES.filter(
-      (z) => Math.max(box.west, z.west) < Math.min(box.east, z.east),
-    );
+      (z) => Math.max(west, z.west) < Math.min(east, z.east),
+    ).map((z) => shifted(z, shift));
+  }
   const first = Math.floor((box.west + 180) / 6);
   const last = Math.min(
     Math.max(first, Math.ceil((box.east + 180) / 6) - 1),

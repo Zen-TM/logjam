@@ -1,8 +1,10 @@
-// The MGA grid on the live map: GDA2020 / MGA lines, as GeoJSON in lon/lat.
-// A view across a zone edge gets both zones' grids, each cut at the edge
-// meridian, since the two grids sit at different angles there. Both clients
-// draw it from this one function (ADR 0020); the printed grid in the GeoPDF
-// follows the same two-digit label convention. Guard: mgaGrid.test.ts.
+// The map grid on the live map, as GeoJSON in lon/lat: the grid of the ground
+// at the view's centre (MGA in NSW, NZTM in an NZTM region, UTM elsewhere;
+// grids.ts). The overlay's name and this file's keep "MGA". A view across a
+// zone edge gets both zones' grids, each cut at the edge meridian, since the
+// two grids sit at different angles there. Both clients draw it from this one
+// function (ADR 0020); the printed grid in the GeoPDF follows the same
+// two-digit label convention. Guard: mgaGrid.test.ts.
 import { fromGrid, gridZonesFor, toGrid, type GridZone } from "./grids.js";
 
 export interface GridBbox {
@@ -112,7 +114,10 @@ function zoneGrid(out: MgaGrid, bbox: GridBbox, zone: GridZone, step: number) {
 
   const at = (e: number, n: number): Pt => {
     const { lat, lon } = fromGrid(e, n, zone);
-    return [lon, lat];
+    // fromGrid answers in [-180, 180]; a view in another world copy (MapLibre
+    // past the date line) wants the copy it is in, or the clip drops the line.
+    const copy = Math.round(((bbox.west + bbox.east) / 2 - lon) / 360);
+    return [lon + 360 * copy, lat];
   };
   const run = (from: number, to: number) =>
     Array.from(

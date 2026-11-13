@@ -48,6 +48,48 @@ describe("mgaGrid", () => {
     }
   });
 
+  // The overlay draws the grid of the ground at the view's centre, which is
+  // UTM outside NSW. Mutation: build only NSW's MGA zones and a view centred
+  // outside it has no lines.
+  it("draws UTM lines for a view centred outside NSW", () => {
+    // Around Melbourne (UTM 55 south).
+    const melbourne = {
+      west: 144.9,
+      south: -37.84,
+      east: 144.96,
+      north: -37.8,
+    };
+    const g = mgaGrid(melbourne, 14);
+    expect(g.features.length).toBeGreaterThan(8);
+    for (const f of g.features) {
+      const [lon, lat] = f.geometry.coordinates[0];
+      const { easting, northing, zone } = toGridAt(lat, lon);
+      expect(zone.name).toBe("UTM 55");
+      const offStep = (m: number) => Math.abs(m / 1e3 - Math.round(m / 1e3));
+      expect(Math.min(offStep(easting), offStep(northing))).toBeLessThan(1e-3);
+    }
+  });
+
+  // Mutation: filter the zones against the unshifted view and a view in
+  // another world copy has no lines, or lines cut at the wrong meridian.
+  it("cuts a view in another world copy at that copy's zone edge", () => {
+    const edge = 150 - 360;
+    const g = mgaGrid(
+      { west: edge - 0.1, south: -33.7, east: edge + 0.1, north: -33.6 },
+      11,
+    );
+    expect(g.features.length).toBeGreaterThanOrEqual(2);
+    const west = g.features.filter((f) =>
+      f.geometry.coordinates.every(([lon]) => lon <= edge),
+    );
+    const east = g.features.filter((f) =>
+      f.geometry.coordinates.every(([lon]) => lon >= edge),
+    );
+    expect(west.length).toBeGreaterThan(0);
+    expect(east.length).toBeGreaterThan(0);
+    expect(west.length + east.length).toBeGreaterThanOrEqual(g.features.length);
+  });
+
   it("labels with the map-margin digits", () => {
     expect(mgaGridLabel(6284000, 1000)).toBe("84");
     expect(mgaGridLabel(6284300, 100)).toBe("843");

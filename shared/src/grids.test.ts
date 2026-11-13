@@ -71,6 +71,16 @@ describe("NSW's MGA zones", () => {
     expect(mgaZone(55).name).toBe("MGA 55");
   });
 
+  // Lord Howe Island lies outside NSW's border ring, so it gets UTM: zone 57
+  // south, whose 159 °E meridian is MGA's own zone 57 there (MGA 56 would be
+  // the wrong meridian). Mutation: widen the border over the island and it
+  // reads MGA 56.
+  it("gives Lord Howe Island UTM 57 south, which draws as MGA 57 would", () => {
+    const zone = gridZoneAt(159.1, -31.5);
+    expect(zone).toMatchObject({ grid: "utm", name: "UTM 57", epsg: 32757 });
+    expect(zone.centralMeridian).toBe(159);
+  });
+
   it("round-trips lat/lon through easting and northing", () => {
     for (const [lat, lon, name] of [
       [-33.685, 150.315, "MGA 56"],
@@ -203,7 +213,57 @@ describe("UTM", () => {
   });
 });
 
+describe("a longitude in another world copy", () => {
+  // MapLibre reports a view panned west past -180 as -210 for 150 °E.
+  // Mutation: pick the zone by the raw longitude and -210 reads MGA 54.
+  it("picks NSW's zone by the wrapped longitude and answers in its own copy", () => {
+    const zone = gridZoneAt(-209.7, -33.7);
+    expect(zone).toMatchObject({ grid: "mga2020", name: "MGA 56", epsg: 7856 });
+    expect([zone.west, zone.east]).toEqual([-210, Infinity]);
+    expect(zone.centralMeridian).toBe(153 - 360);
+    expect(gridZoneAt(-216.1, -33.7).name).toBe("MGA 54");
+    expect(gridZoneAt(150.3 + 360, -33.7).name).toBe("MGA 56");
+  });
+
+  // Mutation: filter the zones against the unshifted box and none match.
+  it("lists NSW's zones with their edges in the box's copy", () => {
+    const edges = (west: number, east: number) =>
+      gridZonesFor({ west, east, south: -33.7, north: -33.6 }).map((z) => [
+        z.name,
+        z.west,
+        z.east,
+      ]);
+    expect(edges(-210.1, -209.9)).toEqual([
+      ["MGA 55", -216, -210],
+      ["MGA 56", -210, Infinity],
+    ]);
+    expect(edges(149.9 + 360, 150.1 + 360)).toEqual([
+      ["MGA 55", 504, 510],
+      ["MGA 56", 510, Infinity],
+    ]);
+  });
+
+  it("takes the same grid and coordinates as the wrapped copy", () => {
+    const here = toGridAt(-33.7, 150.3);
+    const there = toGridAt(-33.7, 150.3 - 360);
+    expect(there.zone.name).toBe(here.zone.name);
+    expect(there.easting).toBeCloseTo(here.easting, 3);
+    expect(there.northing).toBeCloseTo(here.northing, 3);
+  });
+});
+
 describe("gridZonesFor", () => {
+  // Mutation: filter with `<` alone, and a box with no width lists no MGA zone.
+  it("gives a box with no width the one MGA zone at its point", () => {
+    const at = (lon: number) =>
+      gridZonesFor({ west: lon, east: lon, south: -33.7, north: -33.7 }).map(
+        (z) => z.name,
+      );
+    expect(at(150.3)).toEqual(["MGA 56"]);
+    expect(at(144)).toEqual(["MGA 55"]);
+    expect(at(-209.7)).toEqual(["MGA 56"]);
+  });
+
   // Mutation: return only the centre's zone and the far side has no lines.
   it("lists NSW's zones the box touches, west to east", () => {
     const box = (west: number, east: number) => ({
