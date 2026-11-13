@@ -29,7 +29,7 @@ const FEET_BELOW_METRES = 0.1 * METRES_PER_MILE;
 // narrow weather card or a large font never strands the unit on a line of its
 // own. Every other figure here uses a plain space. Tests: `units.test.ts`, the
 // metric sweep and "imperial" (literal strings in both).
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 const UNKNOWN = "—";
 
