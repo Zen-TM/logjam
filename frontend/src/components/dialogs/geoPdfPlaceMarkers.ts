@@ -1,4 +1,4 @@
-import type { PlaceMarker } from "@logjam/shared";
+import { isPlaceInArea, type PlaceMarker } from "@logjam/shared";
 
 /**
  * Minimal place shape needed to build a GeoPDF marker — keeps this module a
@@ -31,11 +31,7 @@ export function buildPlaceMarkers(
   extent: MarkerExtent,
   options: { includeOwned: boolean; includeShared: boolean },
 ): PlaceMarker[] {
-  const inExtent = (c: MarkerPlace): boolean =>
-    c.latitude >= extent.south &&
-    c.latitude <= extent.north &&
-    c.longitude >= extent.west &&
-    c.longitude <= extent.east;
+  const inExtent = (c: MarkerPlace): boolean => isPlaceInArea(c, extent);
 
   const markers: PlaceMarker[] = [];
   if (options.includeOwned && owned) {

@@ -58,4 +58,14 @@ describe("regionCovering", () => {
   it("is empty-safe", () => {
     expect(regionCovering([], INSIDE_A, INSIDE_B)).toBeNull();
   });
+
+  it("covers both ends of a segment across 180 when the region's box runs past it", () => {
+    // A saved area drawn over a view panned past the line has an east edge
+    // above 180; the route's own longitudes are always inside [-180, 180].
+    const across = region({ bbox: [178, -18, 182, -16] });
+    expect(regionCovering([across], [179.5, -17], [-179.5, -17])?.id).toBe(
+      "r1",
+    );
+    expect(regionCovering([across], [179.5, -17], [170, -17])).toBeNull();
+  });
 });

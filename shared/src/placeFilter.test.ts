@@ -320,6 +320,31 @@ describe("isPlaceInArea", () => {
   });
 });
 
+describe("passesFilters — area across 180°", () => {
+  // Made-up positions either side of the date line.
+  const east = place({ latitude: -17, longitude: 179.5 });
+  const west = place({ latitude: -17, longitude: -179.5 });
+  const far = place({ latitude: -17, longitude: 170 });
+  const bands = { south: -18, north: -16 };
+
+  it.each([
+    ["unwrapped, east above 180", { west: 178, east: 182 }],
+    ["wrapped, west above east", { west: 178, east: -178 }],
+  ])("keeps places on both sides of the line (%s)", (_name, lon) => {
+    const f = filters({ area: { ...bands, ...lon } });
+    expect(passesFilters(east, f, true)).toBe(true);
+    expect(passesFilters(west, f, true)).toBe(true);
+    expect(passesFilters(far, f, true)).toBe(false);
+  });
+
+  it("keeps the places of a box wholly in another world copy", () => {
+    const f = filters({ area: { ...bands, west: 538, east: 542 } });
+    expect(passesFilters(east, f, true)).toBe(true);
+    expect(passesFilters(west, f, true)).toBe(true);
+    expect(passesFilters(far, f, true)).toBe(false);
+  });
+});
+
 describe("passesFilters — date range", () => {
   it("created_at start bound excludes earlier places", () => {
     const f = filters({ created_at: ["2026-02-01", null] });
