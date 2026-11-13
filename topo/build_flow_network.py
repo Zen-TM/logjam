@@ -60,6 +60,24 @@ ogr.UseExceptions()
 ALBERS = "EPSG:3577"
 LAYER = "flow_network"
 BASINS_LAYER = "basins"
+# The layer's schema, as the API reads it (api/src/services/flowNetwork.ts):
+# a rename here and a rebuilt layer uploaded by hand would fail every lookup
+# while the API's tests, which read the committed fixture, stay green.
+# Guard: tests/test_flow_network_schema.py.
+FID = "fid"
+GEOMETRY = "geom"
+SEGMENT_FIELDS = (
+    ("id", ogr.OFTInteger64),
+    ("flows_into", ogr.OFTInteger64),
+    ("catchment_start_km2", ogr.OFTReal),
+    ("catchment_end_km2", ogr.OFTReal),
+    ("stream_order", ogr.OFTInteger),
+)
+# Carried over from each basin's part as they are; the ids are renumbered.
+COPIED_FIELDS = ("catchment_start_km2", "catchment_end_km2", "stream_order")
+MERGED_FIELDS = SEGMENT_FIELDS + (("basin", ogr.OFTString),)
+BASIN_FIELDS = (("name", ogr.OFTString),)
+LAYER_OPTIONS = [f"FID={FID}", f"GEOMETRY_NAME={GEOMETRY}"]
 
 # ESRI D8 codes, as WhiteboxTools writes them with --esri_pntr: the
 # neighbour a cell drains into, as (row step, column step). Rows grow
@@ -625,14 +643,8 @@ def segments(
 def write_segments(path, lines, flows_into, start_km2, end_km2, order) -> None:
     """One basin's segments, ids 1..n, still in Albers (the merge reprojects)."""
     ds = ogr.GetDriverByName("GPKG").CreateDataSource(str(path))
-    layer = ds.CreateLayer(LAYER, srs(ALBERS), ogr.wkbLineString)
-    for name, kind in (
-        ("id", ogr.OFTInteger64),
-        ("flows_into", ogr.OFTInteger64),
-        ("catchment_start_km2", ogr.OFTReal),
-        ("catchment_end_km2", ogr.OFTReal),
-        ("stream_order", ogr.OFTInteger),
-    ):
+    layer = ds.CreateLayer(LAYER, srs(ALBERS), ogr.wkbLineString, options=LAYER_OPTIONS)
+    for name, kind in SEGMENT_FIELDS:
         layer.CreateField(ogr.FieldDefn(name, kind))
     ids, into = global_ids(flows_into, 1)
     wkb = shapely.to_wkb(lines)
@@ -677,20 +689,14 @@ def merge(
         ogr.wkbLineString,
         # The licence asks a derived product to say when the data was taken
         # (docs/decisions/0031-nsw-heights-come-from-the-spatial-services-5m-dem.md).
-        options=[
+        options=LAYER_OPTIONS
+        + [
             "DESCRIPTION=Creek segments and catchment areas derived from the NSW"
             " 5 m Digital Elevation Model, © State of New South Wales (Spatial"
             f" Services), extracted {extracted}. CC BY 3.0 AU."
         ],
     )
-    for name, kind in (
-        ("id", ogr.OFTInteger64),
-        ("flows_into", ogr.OFTInteger64),
-        ("catchment_start_km2", ogr.OFTReal),
-        ("catchment_end_km2", ogr.OFTReal),
-        ("stream_order", ogr.OFTInteger),
-        ("basin", ogr.OFTString),
-    ):
+    for name, kind in MERGED_FIELDS:
         layer.CreateField(ogr.FieldDefn(name, kind))
     to_wgs84 = osr.CoordinateTransformation(srs(ALBERS), wgs84)
 
@@ -714,7 +720,7 @@ def merge(
             g.SetField("id", int(new_id))
             if new_into >= 0:
                 g.SetField("flows_into", int(new_into))
-            for field in ("catchment_start_km2", "catchment_end_km2", "stream_order"):
+            for field in COPIED_FIELDS:
                 g.SetField(field, f.GetField(field))
             g.SetField("basin", name)
             geom = f.GetGeometryRef().Clone()
@@ -727,8 +733,11 @@ def merge(
 
     # What the layer covers. Without it, a click outside every basin built so
     # far would read "no creek here" when the truth is "not built here".
-    outlines = ds.CreateLayer(BASINS_LAYER, wgs84, ogr.wkbMultiPolygon)
-    outlines.CreateField(ogr.FieldDefn("name", ogr.OFTString))
+    outlines = ds.CreateLayer(
+        BASINS_LAYER, wgs84, ogr.wkbMultiPolygon, options=LAYER_OPTIONS
+    )
+    for field, kind in BASIN_FIELDS:
+        outlines.CreateField(ogr.FieldDefn(field, kind))
     for name, basin in basins:
         g = ogr.Feature(outlines.GetLayerDefn())
         g.SetField("name", name)
