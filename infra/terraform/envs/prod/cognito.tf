@@ -120,7 +120,9 @@ resource "aws_cognito_user_pool_client" "main" {
   allowed_oauth_scopes  = ["aws.cognito.signin.user.admin", "email", "openid", "phone", "profile"]
   auth_session_validity = 3
   # Logjam Web redirects to location.origin + "/" and the site answers on the
-  # bare and www hosts of both domains; logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
+  # bare and www hosts of logjamnsw.com. The logjam.earth pair is here ahead of
+  # the move to that domain: nothing answers there yet (cloudfront.tf says
+  # why). logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
   callback_urls                                 = ["https://logjam.earth/", "https://www.logjam.earth/", "https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
   enable_propagate_additional_user_context_data = false
   enable_token_revocation                       = true
