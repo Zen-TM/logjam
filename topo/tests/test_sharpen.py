@@ -242,7 +242,7 @@ class TestResult(unittest.TestCase):
             stored["ground"],
             stored["extracted"],
         )
-        added_by_the_worker = {"keys", "vegetation"}
+        added_by_the_worker = {"keys", "vegetation", "vegetationLeftOut"}
         self.assertEqual(
             reported, {k: v for k, v in stored.items() if k not in added_by_the_worker}
         )

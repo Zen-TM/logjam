@@ -73,6 +73,11 @@ from shapely.geometry import shape, mapping, Polygon, box as shapely_box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
 
+from worker_common import (
+    VEGETATION_LEFT_OUT_EXIT,
+    vegetation_memory_estimate,
+)
+
 gdal.UseExceptions()
 ogr.UseExceptions()
 
@@ -2127,6 +2132,44 @@ def point_count(laz_path: str) -> int:
     return int(_las_summary(laz_path)["num_points"])
 
 
+def union_area_m2(clouds: List[Tuple[str, dict]]) -> float:
+    """Ground area, in square metres, of the bounding box around point clouds,
+    given as (CRS, PDAL header bounds) pairs. Clouds in one CRS share one box;
+    clouds in different CRSs (an area across two MGA zones) are boxed apart
+    and their areas added, which counts the strip where the zones overlap
+    twice: an overestimate, never an under (tests/test_pipeline_build.py
+    `TestUnionArea`). Bounds are metres, as every ELVIS point cloud is."""
+    boxes: Dict[str, List[float]] = {}
+    for crs, b in clouds:
+        box = boxes.setdefault(crs, [b["minx"], b["miny"], b["maxx"], b["maxy"]])
+        box[:] = [
+            min(box[0], b["minx"]),
+            min(box[1], b["miny"]),
+            max(box[2], b["maxx"]),
+            max(box[3], b["maxy"]),
+        ]
+    return sum((x1 - x0) * (y1 - y0) for x0, y0, x1, y1 in boxes.values())
+
+
+def _cloud_extent(path: str) -> Tuple[str, dict]:
+    summary = _las_summary(path)
+    srs = summary.get("srs") or {}
+    return str(srs.get("horizontal") or srs.get("wkt") or ""), summary["bounds"]
+
+
+def leave_out_if_too_big(paths: List[str]) -> None:
+    """Exit with VEGETATION_LEFT_OUT_EXIT, before any gridding, when the pass
+    would not fit in the memory the container has left. The worker then
+    finishes the job without this layer (tests/test_worker_helpers.py
+    `TestProcessSharpen`). Logs sizes only: no coordinate, name or tile id."""
+    need = vegetation_memory_estimate(union_area_m2([_cloud_extent(p) for p in paths]))
+    have = available_memory()
+    log.info(f"The vegetation pass needs about {need >> 20} MiB; {have >> 20} MiB free")
+    if need > have:
+        log.warning("The area is too large for the vegetation layer: leaving it out")
+        sys.exit(VEGETATION_LEFT_OUT_EXIT)
+
+
 def _measure_tile_density(laz_path: str) -> float:
     """Points per square metre from PDAL's summary (header/stats only — no full
     point read, so this is seconds, not minutes). Used to rank overlapping
@@ -3731,6 +3774,10 @@ def report_failure(error: BaseException, program: str) -> str:
 def main():
     try:
         run()
+    except MemoryError:
+        # The estimate was too low: the worker finishes the job without the layer.
+        log.warning("The vegetation pass ran out of memory: leaving the layer out")
+        sys.exit(VEGETATION_LEFT_OUT_EXIT)
     except Exception as e:  # noqa: BLE001 - every failure, told without its message
         print(report_failure(e, "pipeline"), file=sys.stderr)
         sys.exit(1)
@@ -3891,6 +3938,7 @@ def run():
             "Select surveys per footprint (density vs recency)", key="survey_select"
         ):
             survey_selection = select_surveys_by_layer(contents.las_files)
+        leave_out_if_too_big(survey_selection.gridded_paths)
         capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
         with bench.step("PDAL: LAZ → DTM + vegetation counts", key="pdal"):
             run_pdal_per_tile(

@@ -317,10 +317,12 @@ class TestProcessSharpen(unittest.TestCase):
     Mutations that turn it red: an unmarked job run instead of refused, the
     archives' keys left out of the result, the vegetation tick ignored, a
     missing contour archive uploaded anyway (or failing the job), and exit 2
-    reported as the generic failure instead of sharpen.py's sentence.
+    reported as the generic failure instead of sharpen.py's sentence. For a
+    pass left out: `except worker.VegetationLeftOut` removed (the job fails),
+    or `vegetationLeftOut` left false.
     """
 
-    def run_job(self, mark, write, veg_metrics=None):
+    def run_job(self, mark, write, veg_metrics=None, veg_raises=None):
         import tempfile
         from pathlib import Path
         from unittest import mock
@@ -332,7 +334,10 @@ class TestProcessSharpen(unittest.TestCase):
             out.mkdir(parents=True, exist_ok=True)
             return write(out)
 
-        vegetation = mock.Mock(return_value=([{"name": "vegetation"}], 7, veg_metrics))
+        vegetation = mock.Mock(
+            return_value=([{"name": "vegetation"}], 7, veg_metrics),
+            side_effect=veg_raises,
+        )
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(worker, "s3") as s3,
@@ -383,7 +388,11 @@ class TestProcessSharpen(unittest.TestCase):
         with open(path) as f:
             example = json.load(f)
         stored = example["stored"]
-        reported = {k: v for k, v in stored.items() if k not in ("keys", "vegetation")}
+        reported = {
+            k: v
+            for k, v in stored.items()
+            if k not in ("keys", "vegetation", "vegetationLeftOut")
+        }
 
         def finished(out):
             (out / "sharpen.json").write_text(json.dumps(reported))
@@ -471,6 +480,116 @@ class TestProcessSharpen(unittest.TestCase):
             self.run_job(None, self.finished)
         self.assertEqual(safe_error_message(ctx.exception), worker.OLD_JOB)
         self.assertEqual(self.downloads, 0)
+
+    def test_a_pass_left_out_leaves_the_job_complete_without_it(self):
+        import json
+
+        def finished(out):
+            (out.parent / "sharpen-metrics.json").write_text(
+                json.dumps({"wallSeconds": 13.0})
+            )
+            return self.finished(out)
+
+        result, uploads, _ = self.run_job(
+            {"v": 1, "vegetation": True},
+            finished,
+            {"wallSeconds": 40.0},
+            veg_raises=worker.VegetationLeftOut(),
+        )
+        output_keys, _, total, metrics, sharpen = result
+        self.assertEqual(output_keys, [])
+        self.assertEqual(total, 30)
+        self.assertTrue(sharpen["vegetation"])
+        self.assertTrue(sharpen["vegetationLeftOut"])
+        self.assertEqual(len(uploads), 3)
+        # The pass that was refused or killed is not charged.
+        self.assertEqual(metrics["wallSeconds"], 13.0)
+        self.assertNotIn("vegetationWallSeconds", metrics)
+
+    def test_another_failure_of_the_pass_still_fails_the_job(self):
+        with self.assertRaises(RuntimeError):
+            self.run_job(
+                {"v": 1, "vegetation": True},
+                self.finished,
+                veg_raises=RuntimeError("pipeline.py exited with code 1"),
+            )
+
+
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
+class TestVegetationExit(unittest.TestCase):
+    """How `process_vegetation` reads pipeline.py's exit code.
+
+    Mutations that turn it red: the declared exit code dropped from the
+    left-out codes, -9 dropped from them, or any other non-zero code treated
+    as left out (a real failure would then complete the job).
+    """
+
+    def exit_with(self, code):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        job = {"id": "job-1", "layer_options": {}}
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(worker, "run_with_heartbeat", return_value=code),
+        ):
+            return worker.process_vegetation(job, tmp, Path(tmp) / "in.zip")
+
+    def test_the_declared_exit_and_a_memory_kill_leave_the_layer_out(self):
+        from worker_common import VEGETATION_LEFT_OUT_EXIT
+
+        for code in (VEGETATION_LEFT_OUT_EXIT, -9):
+            with self.assertRaises(worker.VegetationLeftOut):
+                self.exit_with(code)
+
+    def test_any_other_failure_fails(self):
+        for code in (1, 2, -11):
+            with self.assertRaises(RuntimeError):
+                self.exit_with(code)
+
+
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
+class TestLeftOutNotice(unittest.TestCase):
+    """The owner is told in the completion notification and the email.
+
+    Mutations that turn it red: the flag not put in the payload (or put there
+    when nothing was left out), or the sentence missing from either body.
+    """
+
+    def test_the_payload_carries_the_flag_only_when_left_out(self):
+        job = {"id": "job-1", "name": "Kanangra"}
+        self.assertEqual(
+            worker.completion_payload(job, None, True),
+            {
+                "jobId": "job-1",
+                "jobName": "Kanangra",
+                "footprint": None,
+                "vegetationLeftOut": True,
+            },
+        )
+        self.assertNotIn(
+            "vegetationLeftOut", worker.completion_payload(job, None, False)
+        )
+
+    def test_the_email_says_it_too(self):
+        from unittest import mock
+
+        from worker_common import VEGETATION_LEFT_OUT
+
+        for left_out in (True, False):
+            with (
+                mock.patch.object(worker, "send_email") as send,
+                mock.patch.object(worker, "FRONTEND_URL", "https://logjam.example"),
+            ):
+                worker.send_completion_email("a@example.com", "job-1", [], left_out)
+            _, _, text, html = send.call_args.args
+            self.assertEqual(VEGETATION_LEFT_OUT in text, left_out)
+            self.assertEqual(VEGETATION_LEFT_OUT in html, left_out)
 
 
 if __name__ == "__main__":
