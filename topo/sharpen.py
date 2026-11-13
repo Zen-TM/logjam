@@ -22,7 +22,7 @@ OUT receives:
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
-DEMs, too big for memory) and exits 2.
+DEMs, too big for memory or disk) and exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -47,6 +47,7 @@ by its type and code locations only (`pipeline.report_failure`,
 import argparse
 import contextlib
 import dataclasses
+import errno
 import functools
 import json
 import logging
@@ -786,15 +787,17 @@ DISK_FULL_BYTES = 256 * 1024**2
 @contextlib.contextmanager
 def too_big_if_disk_full(path: str):
     """A job that fills the task's disk dies in a PDAL or GDAL child with
-    nothing to say why. A failure while `path`'s filesystem is nearly full is
-    the owner's area being too big (tests/test_sharpen.py `TestDiskFull`).
+    nothing to say why. A failure while `path`'s filesystem is nearly full, or
+    an ENOSPC (the space may be given back as the failure unwinds), is the
+    owner's area being too big (tests/test_sharpen.py `TestDiskFull`).
     The failure's message is not logged: it can quote an input file's name."""
     try:
         yield
     except CannotSharpen:
         raise
     except Exception as e:
-        if shutil.disk_usage(path).free < DISK_FULL_BYTES:
+        no_space = isinstance(e, OSError) and e.errno == errno.ENOSPC
+        if no_space or shutil.disk_usage(path).free < DISK_FULL_BYTES:
             raise CannotSharpen(TOO_BIG) from e
         raise
 

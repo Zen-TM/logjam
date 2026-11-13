@@ -245,10 +245,10 @@ The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
 downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
 `master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
 fails (nothing is uploaded from a build that did not finish). Its default disk
-is 60 GiB (sized for an input ZIP, `ecs.tf`), so the run asks for 120: about
-17 GB of input, 13 GB of block files, and a further 13 GB each for the MBTiles
-the packer builds, its spool and the result. Run it once *Deploy topo worker* has pushed an image that has `slope-s3`.
-Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
+(set in `ecs.tf`, sized for an input ZIP) is smaller than that, so the run asks
+for 120: about 17 GB of input, 13 GB of block files, and a further 13 GB each for
+the MBTiles the packer builds, its spool and the result. Run it once *Deploy
+topo worker* has pushed an image that has `slope-s3`. Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
 first one that prints an error.
 
 The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the

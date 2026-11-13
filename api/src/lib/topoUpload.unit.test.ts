@@ -193,9 +193,11 @@ describe("deleteTopoJobObjects", () => {
 
 describe("the topo worker's disk fits the upload caps", () => {
   // At its peak the worker holds the ZIP, its extraction, and the ground files
-  // (uncompressed LAS) of the extracted point clouds. Those measured up to 0.75
-  // of the extracted size for a forested, classified survey; open country or an
-  // unclassified one is larger, and fails as "too big" instead (sharpen.py).
+  // (uncompressed LAS) of the extracted point clouds. On one dense, forested,
+  // classified tile they came to about 0.66 of the extracted size, and the
+  // neighbour strips add a few percent: 0.75 is that with a margin, for such a
+  // survey. Open country or an unclassified one is larger, and fails as "too
+  // big" instead (sharpen.py).
   // On top of that sit the pulled image, the TIN rasters, the tile files and
   // the archives being packed. ecs.tf is read as text: it is the value prod runs.
   const EXTRACTED_AND_GROUND_FACTOR = 1 + 0.75;
