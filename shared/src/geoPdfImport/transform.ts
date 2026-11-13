@@ -211,8 +211,21 @@ function applyHomography(h: number[], p: XY): XY {
   };
 }
 
+/** [lon, lat] at the middle of the control points. Longitudes are taken
+ * relative to the first, so a sheet across 180° does not average to 0. */
+function sheetCentre(vp: GeoPdfViewport): [number, number] {
+  const pts = vp.controlPoints.map((cp) => cp.lonLat);
+  const lon0 = pts[0].lon;
+  const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  return [
+    lon0 + mean(pts.map((p) => wrap(p.lon - lon0))),
+    mean(pts.map((p) => p.lat)),
+  ];
+}
+
 export function buildGeoTransform(vp: GeoPdfViewport): GeoTransform {
-  const resolved = resolveCrs(vp.crs);
+  const resolved = resolveCrs(vp.crs, sheetCentre(vp));
   // Working plane: the PROJCS itself, or Web Mercator for geographic CRSs.
   const planeIsWebMercator = resolved.isGeographic || resolved.isWebMercator;
   const planeDef = planeIsWebMercator ? WEB_MERCATOR : resolved.def;

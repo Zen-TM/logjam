@@ -1,13 +1,13 @@
 // CRS resolution for GeoPDF viewports.
 //
 // Resolution order, first hit wins:
-//   1. EPSG integer → built-in proj-string table below.
+//   1. EPSG integer → the table and UTM rules below.
 //   2. WKT string → proj4's WKT1 parser (GEOGCS + common PROJCS).
 //   3. Neither → UNSUPPORTED_CRS carrying the raw WKT/EPSG for the in-app
 //      error report (never logged — may contain file-derived strings).
 //
 // Datum note: GPTS values are geographic coordinates in the datum underlying
-// GCS. For GDA94/GDA2020 vs WGS84 the difference is ≤ ~1.8 m — below GPS
+// GCS. For GDA94/GDA2020/NZGD2000/NAD83 vs WGS84 the difference is ≤ ~2 m — below GPS
 // accuracy. GPTS is treated as WGS84 everywhere; no datum-shift machinery.
 import proj4 from "proj4";
 
@@ -26,11 +26,8 @@ const GEOGRAPHIC = "+proj=longlat +ellps=GRS80 +no_defs";
 const WEB_MERCATOR =
   "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +no_defs";
 
-// UTM south zones. Same proj-string idiom as mgaProj in geoPdfExtent.ts
-// (which is deliberately private to that module); MGA94/MGA2020/UTM-WGS84
-// all share GRS80-compatible ellipsoids at our accuracy budget.
-const utmSouth = (zone: number) =>
-  `+proj=utm +zone=${zone} +south +ellps=GRS80 +units=m +no_defs`;
+const utm = (zone: number, south: boolean) =>
+  `+proj=utm +zone=${zone}${south ? " +south" : ""} +ellps=GRS80 +units=m +no_defs`;
 
 interface EpsgEntry {
   def: string;
@@ -42,42 +39,65 @@ const EPSG_TABLE: Record<number, EpsgEntry> = {
   4326: { def: "+proj=longlat +datum=WGS84 +no_defs", isGeographic: true },
   4283: { def: GEOGRAPHIC, isGeographic: true }, // GDA94 geographic
   7844: { def: GEOGRAPHIC, isGeographic: true }, // GDA2020 geographic
+  4269: { def: GEOGRAPHIC, isGeographic: true }, // NAD83 geographic
+  4167: { def: GEOGRAPHIC, isGeographic: true }, // NZGD2000 geographic
   3857: { def: WEB_MERCATOR, isGeographic: false, isWebMercator: true },
   900913: { def: WEB_MERCATOR, isGeographic: false, isWebMercator: true },
-  // MGA94 zones 54–56
-  28354: { def: utmSouth(54), isGeographic: false },
-  28355: { def: utmSouth(55), isGeographic: false },
-  28356: { def: utmSouth(56), isGeographic: false },
-  // MGA2020 zones 54–56
-  7854: { def: utmSouth(54), isGeographic: false },
-  7855: { def: utmSouth(55), isGeographic: false },
-  7856: { def: utmSouth(56), isGeographic: false },
-  // UTM south, WGS84
-  32754: { def: utmSouth(54), isGeographic: false },
-  32755: { def: utmSouth(55), isGeographic: false },
-  32756: { def: utmSouth(56), isGeographic: false },
+  // NZTM2000
+  2193: {
+    def: "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +units=m +no_defs",
+    isGeographic: false,
+  },
 };
 
-/** A probe well inside the NSW operating area, for cross-checking two CRS
- * descriptions against each other. */
-const PROBE_LON_LAT: [number, number] = [151, -33.5];
+// UTM families: EPSG codes `first`..`last` are zones `firstZone`.. in order.
+// Datum shifts are ignored (see the header), so every family shares one
+// definition per zone.
+const UTM_FAMILIES: {
+  first: number;
+  last: number;
+  firstZone: number;
+  south: boolean;
+}[] = [
+  { first: 32601, last: 32660, firstZone: 1, south: false }, // WGS 84 north
+  { first: 32701, last: 32760, firstZone: 1, south: true }, // WGS 84 south
+  { first: 28348, last: 28358, firstZone: 48, south: true }, // MGA94
+  { first: 7846, last: 7859, firstZone: 46, south: true }, // MGA2020
+  { first: 26901, last: 26923, firstZone: 1, south: false }, // NAD83 UTM 1N to 23N
+];
+
+function epsgEntry(epsg: number): EpsgEntry | undefined {
+  const fixed = EPSG_TABLE[epsg];
+  if (fixed) return fixed;
+  const family = UTM_FAMILIES.find((f) => epsg >= f.first && epsg <= f.last);
+  if (!family) return undefined;
+  return {
+    def: utm(family.firstZone + epsg - family.first, family.south),
+    isGeographic: false,
+  };
+}
 
 /** Metres of disagreement tolerated between an /EPSG code and a /WKT that
  * claim to describe the same CRS. They should agree exactly; this only allows
  * for floating-point noise. */
 const CRS_AGREEMENT_TOLERANCE_M = 1;
 
-export function resolveCrs(crs: GeoPdfCrs): ResolvedCrs {
+/** `probe` is a [lon, lat] inside the sheet, where its projection is defined
+ * and accurate: a point outside it can be NaN, or agree by accident. */
+export function resolveCrs(
+  crs: GeoPdfCrs,
+  probe: [number, number],
+): ResolvedCrs {
   const epsg = crs.epsg;
   if (epsg !== undefined) {
-    const entry = EPSG_TABLE[epsg];
+    const entry = epsgEntry(epsg);
     if (entry) {
       // If the EPSG code wins outright without consulting the WKT, a producer
       // that writes the wrong code — a zone-54 code on a zone-56 sheet, say —
       // yields an overlay misplaced by ~500 km, and the residual check cannot
       // catch it: the affine is fitted in the wrong plane, so it fits
       // perfectly. When both are present they must agree.
-      assertCrsDescriptionsAgree(entry.def, crs);
+      assertCrsDescriptionsAgree(entry.def, crs, probe);
       return {
         key: `EPSG:${epsg}`,
         def: entry.def,
@@ -93,7 +113,7 @@ export function resolveCrs(crs: GeoPdfCrs): ResolvedCrs {
     // accepts some malformed WKT silently and yields NaN.
     try {
       const converter = proj4("EPSG:4326", crs.wkt);
-      const [x, y] = converter.forward([151, -33.5]);
+      const [x, y] = converter.forward(probe);
       if (Number.isFinite(x) && Number.isFinite(y)) {
         return {
           key: "WKT",
@@ -116,13 +136,17 @@ export function resolveCrs(crs: GeoPdfCrs): ResolvedCrs {
 /** Project one probe point through both descriptions and refuse the pair if
  * they land in different places. A WKT proj4 can't parse is not evidence of
  * disagreement — the EPSG code stands on its own in that case. */
-function assertCrsDescriptionsAgree(epsgDef: string, crs: GeoPdfCrs): void {
+function assertCrsDescriptionsAgree(
+  epsgDef: string,
+  crs: GeoPdfCrs,
+  probe: [number, number],
+): void {
   if (crs.kind === "EPSG_ONLY") return;
   let viaEpsg: number[];
   let viaWkt: number[];
   try {
-    viaEpsg = proj4("EPSG:4326", epsgDef).forward(PROBE_LON_LAT);
-    viaWkt = proj4("EPSG:4326", crs.wkt).forward(PROBE_LON_LAT);
+    viaEpsg = proj4("EPSG:4326", epsgDef).forward(probe);
+    viaWkt = proj4("EPSG:4326", crs.wkt).forward(probe);
   } catch {
     return;
   }
