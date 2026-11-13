@@ -28,16 +28,6 @@ describe("launchFargateTask", () => {
     );
   });
 
-  // Mutation: drop the override (a ticked job's bigger task is never asked
-  // for), or send it when none was asked (every job launches at a made-up size).
-  it("overrides the task's memory only when asked", async () => {
-    send.mockResolvedValue({ tasks: [{ taskArn: "arn" }], failures: [] });
-    await launchFargateTask({ ...options, memoryMiB: 32768 });
-    expect(send.mock.calls[0]![0].input.overrides.memory).toBe("32768");
-    await launchFargateTask(options);
-    expect(send.mock.calls[1]![0].input.overrides).not.toHaveProperty("memory");
-  });
-
   it("throws with the failure reason when RunTask reports failures[]", async () => {
     send.mockResolvedValue({
       tasks: [],

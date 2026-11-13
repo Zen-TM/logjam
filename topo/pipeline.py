@@ -31,6 +31,7 @@ Usage:
 
 import argparse
 import concurrent.futures.process
+import itertools
 import json
 import logging
 import math
@@ -50,7 +51,17 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+)
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -73,10 +84,7 @@ from shapely.geometry import shape, mapping, Polygon, box as shapely_box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
 
-from worker_common import (
-    VEGETATION_LEFT_OUT_EXIT,
-    vegetation_memory_estimate,
-)
+from worker_common import VEGETATION_LEFT_OUT_EXIT
 
 gdal.UseExceptions()
 ogr.UseExceptions()
@@ -1878,41 +1886,91 @@ def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
     ref_ds = None
 
 
-# Rows or columns of a whole-area array that a step with float64 workings
-# takes at a time, so the workings are never the size of the area.
-WHOLE_AREA_BAND = 1024
+# Cells of the area the density and fire steps hold at a time: a strip of
+# whole rows. Every array they make is a strip in size, so the pass's memory
+# follows the area's width and not its extent, and an area of tiles that is
+# not a compact block costs no more memory than its tiles.
+STRIP_CELLS = 4_000_000
 
 
-def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
-    """Sum of values in a k×k window centred on each cell, computed in O(N) via a
-    summed-area table. Edge cells are reflected so the window is always full size.
-    Returns a float32 array with the same shape as `arr`.
-    """
-    if k % 2 != 1:
-        raise ValueError("window size must be odd")
-    half = k // 2
-    h, w = arr.shape
-    # Summed-area table with a leading zero row/col for clean indexing. One
-    # float32 array summed in place, and the window sums taken in float64 a
-    # band of rows at a time: whole, the table's float64 copy and the four
-    # corners' differences were seven arrays the size of the area. The sums
-    # are the same either way (tests/test_scrub_strata.py `TestBoxSum`).
-    sat = np.zeros((h + 2 * half + 1, w + 2 * half + 1), dtype=np.float32)
-    sat[1:, 1:] = np.pad(arr.astype(np.float32, copy=False), half, mode="reflect")
-    np.cumsum(sat, axis=0, out=sat)
-    np.cumsum(sat, axis=1, out=sat)
-    out = np.empty((h, w), dtype=np.float32)
-    for top in range(0, h, WHOLE_AREA_BAND):
-        rows = slice(top, min(top + WHOLE_AREA_BAND, h))
-        below = slice(rows.start + k, rows.stop + k)
-        # Window [i:i+k, j:j+k] over the padded cells is (i, j) in the original.
-        out[rows] = (
-            sat[below, k : k + w].astype(np.float64)
-            - sat[rows, k : k + w]
-            - sat[below, 0:w]
-            + sat[rows, 0:w]
-        )
-    return out
+def strip_rows(width: int) -> int:
+    """Rows in a strip of a raster `width` cells wide: never fewer than give
+    each of 8 threads a band of the bilateral filter."""
+    return max(8 * BILATERAL_BAND_ROWS, STRIP_CELLS // width)
+
+
+class _Rows:
+    """Rows from an iterator of row blocks, handed out however many at a time
+    the reader asks for."""
+
+    def __init__(self, blocks: Iterable[np.ndarray]):
+        self._blocks = iter(blocks)
+        self._held: Optional[np.ndarray] = None
+
+    def read(self, rows: int) -> np.ndarray:
+        parts, have = [], 0
+        while have < rows:
+            block = self._held if self._held is not None else next(self._blocks)
+            self._held = None
+            take = min(rows - have, len(block))
+            parts.append(block[:take])
+            if take < len(block):
+                self._held = block[take:]
+            have += take
+        return parts[0] if len(parts) == 1 else np.vstack(parts)
+
+
+def _window_sums(padded: np.ndarray, k: int) -> np.ndarray:
+    """Sums of the k×k windows of `padded`, which is k - 1 rows and columns
+    larger than the float32 result. Each row's sums come from that row's own
+    running sum, in float64, and the k rows are added in order: a cell's sum
+    is the same whatever rows it is worked with
+    (tests/test_scrub_strata.py `TestWindowSums`). One summed-area table for
+    the whole area, in float32, was wrong by as much as the confidence
+    threshold at the far corner of a four-tile area, and by more the larger
+    the area."""
+    c = np.zeros((padded.shape[0], padded.shape[1] + 1), dtype=np.float64)
+    np.cumsum(padded, axis=1, dtype=np.float64, out=c[:, 1:])
+    along = c[:, k:] - c[:, :-k]
+    rows = padded.shape[0] - k + 1
+    out = along[:rows].copy()
+    for dy in range(1, k):
+        out += along[dy : dy + rows]
+    return out.astype(np.float32)
+
+
+def _positive_median(blocks: Callable[[], Iterable[np.ndarray]]) -> Optional[float]:
+    """np.median of the positive values of float32 blocks, or None when there
+    are none. `blocks()` is read twice and the values are never held together:
+    a positive float's bits sort as the float does, so the middle values are
+    found by counting the values' high halves, then the low halves of those
+    that share the middle's (tests/test_scrub_strata.py `TestPositiveMedian`)."""
+
+    def bits():
+        for block in blocks():
+            block = np.asarray(block, dtype=np.float32)
+            yield block[block > 0].view(np.uint32)
+
+    high = np.zeros(1 << 16, dtype=np.int64)
+    for b in bits():
+        high += np.bincount(b >> 16, minlength=1 << 16)
+    n = int(high.sum())
+    if n == 0:
+        return None
+    before = np.cumsum(high)
+    # The middle value, or the two around the middle of an even count.
+    ranks = sorted({(n - 1) // 2, n // 2})
+    tops = [int(np.searchsorted(before, r, side="right")) for r in ranks]
+    low = {t: np.zeros(1 << 16, dtype=np.int64) for t in tops}
+    for b in bits():
+        for t in low:
+            low[t] += np.bincount(b[b >> 16 == t] & 0xFFFF, minlength=1 << 16)
+    middle = []
+    for r, t in zip(ranks, tops):
+        within = r - (int(before[t - 1]) if t else 0)
+        bottom = int(np.searchsorted(np.cumsum(low[t]), within, side="right"))
+        middle.append((t << 16) | bottom)
+    return float(np.mean(np.array(middle, dtype=np.uint32).view(np.float32)))
 
 
 def _build_svtm_mu_lookup(
@@ -1939,37 +1997,28 @@ def _build_svtm_mu_lookup(
     return mu_lookup
 
 
-def apply_svtm_weighting(
-    density_arr: np.ndarray,
-    dtm_path: str,
-    work_dir: str,
-    weights_enabled: bool = True,
-    formation_weights: Optional[Dict[str, float]] = None,
-) -> np.ndarray:
-    """Multiply NRD per-pixel by the SVTM formation μ.
+def svtm_formation_aligned(
+    dtm_path: str, work_dir: str, weights_enabled: bool = True
+) -> Optional[str]:
+    """The SVTM formation raster warped onto the DTM grid, or None when the
+    density is not to be weighted by it.
 
     The formation raster is warped from S3 (/vsis3/ path) onto the DTM grid
     (1 m, Web Mercator, nearest-neighbour to preserve discrete formation
     indices) — GDAL only fetches the tiles covering the job AOI, so the full
-    NSW-wide raster never loads into memory. μ is then looked up per cell.
+    NSW-wide raster never loads into memory.
 
-    Returns the input array unchanged if SVTM_FORMATION_S3_PATH is unset or
-    empty, or if the /vsis3/ path cannot be opened (e.g. offline dev without
-    LocalStack) — the pipeline always degrades cleanly.
-
-    Output is clamped to [0, 1] so MAX_RATIO normalisation downstream is
-    still meaningful (μ > 1 can push NRD beyond 1).
-
-    When `weights_enabled` is False the formation lookup is skipped and the
-    raw density is returned — useful when the user has turned the per-
-    formation μ table off in advanced settings.
+    None if SVTM_FORMATION_S3_PATH is unset or empty, or if the /vsis3/ path
+    cannot be opened (e.g. offline dev without LocalStack) — the pipeline
+    always degrades cleanly — and when `weights_enabled` is False: the user
+    has turned the per-formation μ table off in advanced settings.
     """
     if not weights_enabled:
         log.info("SVTM weighting disabled by settings — skipping.")
-        return density_arr
+        return None
     if not SVTM_FORMATION_RASTER:
         log.info("SVTM_FORMATION_S3_PATH not set — skipping vegetation weighting.")
-        return density_arr
+        return None
 
     log.info(
         f"Warping SVTM formation raster onto DTM grid (source: {SVTM_FORMATION_RASTER}) …"
@@ -2003,20 +2052,22 @@ def apply_svtm_weighting(
         log.warning(
             f"SVTM formation raster unavailable ({e}) — skipping vegetation weighting."
         )
-        return density_arr
+        return None
 
-    mu_lookup = _build_svtm_mu_lookup(formation_weights)
-    form_ds = gdal.Open(formation_aligned)
-    formation_arr = form_ds.GetRasterBand(1).ReadAsArray().astype(np.uint8, copy=False)
-    form_ds = None
+    return formation_aligned
 
-    # density × μ, clamped to [0, 1], worked in μ's own array.
-    out = mu_lookup[formation_arr]
-    del formation_arr
-    np.multiply(density_arr, out, out=out)
+
+def _svtm_weighted(
+    density: np.ndarray, formation: np.ndarray, mu_lookup: np.ndarray
+) -> np.ndarray:
+    """NRD multiplied per cell by its SVTM formation's μ, clamped to [0, 1] so
+    MAX_RATIO normalisation downstream is still meaningful (μ > 1 can push NRD
+    beyond 1). NaN nodata cells stay NaN."""
+    # density × μ, worked in μ's own array.
+    out = mu_lookup[formation]
+    np.multiply(density, out, out=out)
     np.clip(out, 0.0, 1.0, out=out)
-    # Preserve NaN nodata cells.
-    out[~np.isfinite(density_arr)] = np.nan
+    out[~np.isfinite(density)] = np.nan
     return out
 
 
@@ -2130,44 +2181,6 @@ def _las_summary(laz_path: str) -> dict:
 
 def point_count(laz_path: str) -> int:
     return int(_las_summary(laz_path)["num_points"])
-
-
-def union_area_m2(clouds: List[Tuple[str, dict]]) -> float:
-    """Ground area, in square metres, of the bounding box around point clouds,
-    given as (CRS, PDAL header bounds) pairs. Clouds in one CRS share one box;
-    clouds in different CRSs (an area across two MGA zones) are boxed apart
-    and their areas added, which counts the strip where the zones overlap
-    twice: an overestimate, never an under (tests/test_pipeline_build.py
-    `TestUnionArea`). Bounds are metres, as every ELVIS point cloud is."""
-    boxes: Dict[str, List[float]] = {}
-    for crs, b in clouds:
-        box = boxes.setdefault(crs, [b["minx"], b["miny"], b["maxx"], b["maxy"]])
-        box[:] = [
-            min(box[0], b["minx"]),
-            min(box[1], b["miny"]),
-            max(box[2], b["maxx"]),
-            max(box[3], b["maxy"]),
-        ]
-    return sum((x1 - x0) * (y1 - y0) for x0, y0, x1, y1 in boxes.values())
-
-
-def _cloud_extent(path: str) -> Tuple[str, dict]:
-    summary = _las_summary(path)
-    srs = summary.get("srs") or {}
-    return str(srs.get("horizontal") or srs.get("wkt") or ""), summary["bounds"]
-
-
-def leave_out_if_too_big(paths: List[str]) -> None:
-    """Exit with VEGETATION_LEFT_OUT_EXIT, before any gridding, when the pass
-    would not fit in the memory the container has left. The worker then
-    finishes the job without this layer (tests/test_worker_helpers.py
-    `TestProcessSharpen`). Logs sizes only: no coordinate, name or tile id."""
-    need = vegetation_memory_estimate(union_area_m2([_cloud_extent(p) for p in paths]))
-    have = available_memory()
-    log.info(f"The vegetation pass needs about {need >> 20} MiB; {have >> 20} MiB free")
-    if need > have:
-        log.warning("The area is too large for the vegetation layer: leaving it out")
-        sys.exit(VEGETATION_LEFT_OUT_EXIT)
 
 
 def _measure_tile_density(laz_path: str) -> float:
@@ -2295,70 +2308,115 @@ def _compute_stale_mask(
     return stale_mask, stale_fraction
 
 
-def _box_blur(
-    arr: np.ndarray, width_m: float, cell_m: float, passes: int
-) -> np.ndarray:
-    """Edge-padded cumsum box blur (no scipy, see _dilate_mask's note)."""
+def _blur_down(blocks: Iterable[np.ndarray], w: int) -> Iterator[np.ndarray]:
+    """Box blur of width `w` down the columns of float32 rows that arrive in
+    blocks, edge-padded at the first and last row. Each column's running sum
+    carries from block to block, so a row is the same whatever block it
+    arrives in (tests/test_stale_overlay.py `TestBoxBlurBlocks`)."""
+    lead, trail = w // 2 + 1, w // 2
+    carry = held = last = None
+
+    def push(rows):
+        # c is the running sum down each column and a blurred row is
+        # (c[i + w] - c[i]) / w, so the last w rows of c wait for the next block.
+        nonlocal carry, held
+        c = np.cumsum(
+            rows if carry is None else np.vstack([carry[None], rows]),
+            axis=0,
+            dtype=np.float64,
+        )
+        if carry is not None:
+            c = c[1:]
+        carry = c[-1]
+        if held is not None:
+            c = np.vstack([held, c])
+        n = len(c) - w
+        held = c[max(n, 0) :]
+        return ((c[w:] - c[:n]) / w).astype(np.float32) if n > 0 else None
+
+    for block in blocks:
+        if last is None:
+            block = np.vstack([np.repeat(block[:1], lead, axis=0), block])
+        last = block[-1:]
+        out = push(block)
+        if out is not None:
+            yield out
+    if last is not None and trail:
+        out = push(np.repeat(last, trail, axis=0))
+        if out is not None:
+            yield out
+
+
+def _blur_across(blocks: Iterable[np.ndarray], w: int) -> Iterator[np.ndarray]:
+    """The same box blur along each row."""
+    pad = ((0, 0), (w // 2 + 1, w // 2))
+    for block in blocks:
+        n = block.shape[1]
+        c = np.cumsum(np.pad(block, pad, mode="edge"), axis=1, dtype=np.float64)
+        yield ((c[:, w : w + n] - c[:, :n]) / w).astype(np.float32)
+
+
+def _box_blur_blocks(
+    blocks: Iterable[np.ndarray], width_m: float, cell_m: float, passes: int
+) -> Iterator[np.ndarray]:
+    """Edge-padded cumsum box blur (no scipy, see _dilate_mask's note) of rows
+    that arrive in blocks; the blurred rows leave in blocks too, a few rows
+    behind."""
     w = max(int(round(width_m / cell_m)) | 1, 1)  # odd, so the window is centred
-    out = arr.astype(np.float32)
+    blocks = (np.asarray(b, dtype=np.float32) for b in blocks)
     for _ in range(passes):
-        for axis in (0, 1):
-            pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
-            n = out.shape[axis]
-            # A band of the lines being summed along at a time, written back
-            # in place: each line's sums are its own, and whole they were
-            # eight arrays the size of the area, the pass's peak in memory
-            # (tests/test_stale_overlay.py `TestBoxBlurBands`).
-            for start in range(0, out.shape[1 - axis], WHOLE_AREA_BAND):
-                lines = slice(start, start + WHOLE_AREA_BAND)
-                part = out[:, lines] if axis == 0 else out[lines]
-                c = np.cumsum(
-                    np.pad(part, pad, mode="edge"), axis=axis, dtype=np.float64
-                )
-                hi = c[w : w + n] if axis == 0 else c[:, w : w + n]
-                lo = c[:n] if axis == 0 else c[:, :n]
-                part[...] = (hi - lo) / w
-    return out
+        blocks = _blur_across(_blur_down(blocks, w), w)
+    return blocks
 
 
-def _encode_fire_stale(
-    burnt_mask: np.ndarray, valid_mask: np.ndarray, cell_m: float
-) -> np.ndarray:
-    """float32 fire_stale.tif band: 0 outside burnt ground, 1 + k inside, where
-    k is 1 at the smoothed fire boundary and 0 a band-width (~40 m) in.
+def _fire_stale_blocks(
+    burnt_blocks: Iterable[np.ndarray],
+    valid_blocks: Iterable[np.ndarray],
+    cell_m: float,
+) -> Iterator[np.ndarray]:
+    """float32 fire_stale.tif band, a block of rows at a time: 0 outside burnt
+    ground, 1 + k inside, where k is 1 at the smoothed fire boundary and 0 a
+    band-width (~40 m) in.
 
-    `burnt_mask` is the fire alone (not gated by data), so the boundary is a
+    The burnt mask is the fire alone (not gated by data), so the boundary is a
     real fire boundary: neither the AOI edge nor the edge of the survey data
-    is one. `valid_mask` only clips the result so stripes do not draw off the
-    survey; it is blurred first, so small holes in density do not punch gaps.
+    is one. The valid mask only clips the result so stripes do not draw off
+    the survey; it is blurred first, so small holes in density do not punch
+    gaps.
 
-    Runs once on the whole AOI, not per render tile, so tiles cut from it
+    The blurs run over the whole AOI, not per render tile and not per block
+    (`_blur_down` carries its sums), so tiles cut from it
     share no seam (guard: test_stale_overlay.py::test_tiles_sharing_a_boundary_agree_on_band_values).
     Blurs are edge-padded, so burnt ground reaching the AOI edge gets no band
     there (guard: test_burnt_all_over_gets_stripes_and_no_band); a survey
     edge inside a burn gets none either (guard: test_survey_edge_inside_a_burn_has_no_band).
     """
-    inside = _box_blur(burnt_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
-    # k = clip((1 - d) * 2, 0, 1) and then 1 + k, worked in the blur's own array.
-    k = _box_blur(inside, FIRE_STALE_BAND_BLUR_M, cell_m, 3)
-    np.subtract(1.0, k, out=k)
-    k *= 2.0
-    np.clip(k, 0.0, 1.0, out=k)
-    k += 1.0
-    has_data = _box_blur(valid_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
-    k[~(inside & has_data)] = 0.0
-    return k
+    inside_for_band, inside_blocks = itertools.tee(
+        b >= 0.5 for b in _box_blur_blocks(burnt_blocks, FIRE_STALE_SMOOTH_M, cell_m, 4)
+    )
+    inside = _Rows(inside_blocks)
+    has_data = _Rows(
+        b >= 0.5 for b in _box_blur_blocks(valid_blocks, FIRE_STALE_SMOOTH_M, cell_m, 4)
+    )
+    for k in _box_blur_blocks(inside_for_band, FIRE_STALE_BAND_BLUR_M, cell_m, 3):
+        # k = clip((1 - d) * 2, 0, 1) and then 1 + k, worked in the blur's own array.
+        np.subtract(1.0, k, out=k)
+        k *= 2.0
+        np.clip(k, 0.0, 1.0, out=k)
+        k += 1.0
+        k[~(inside.read(len(k)) & has_data.read(len(k)))] = 0.0
+        yield k
 
 
 def apply_fire_history(
-    density_arr: np.ndarray,
+    density_path: str,
     dtm_path: str,
     work_dir: str,
     capture_year: Optional[int],
-) -> np.ndarray:
+) -> None:
     """Flag vegetation-density cells made stale by fire since LiDAR capture.
 
-    This does NOT modify density_arr. Baseline testing showed the LiDAR
+    This does NOT modify the density. Baseline testing showed the LiDAR
     captures post-fire regrowth directly, so re-weighting density by fire
     recency here would double-count regrowth the point cloud already shows —
     the only outputs are the fire_stale.tif mask for the render's amber
@@ -2366,14 +2424,17 @@ def apply_fire_history(
 
     The fire-history raster (per-cell most-recent-fire year) is warped from
     S3 (/vsis3/ path, or a local path override) onto the DTM grid — same
-    approach as apply_svtm_weighting, so GDAL only fetches the AOI tiles.
+    approach as svtm_formation_aligned, so GDAL only fetches the AOI tiles.
 
-    Writes work_dir/fire_stale.tif (float32, see _encode_fire_stale: 0 outside
-    stale ground, 1 + boundary-band strength inside, aligned to the DTM
-    grid/projection; stale_fraction still counts the unsmoothed cells) and work_dir/fire_stale_summary.json (capture_year,
-    stale_fraction, fire_years_min, fire_years_max) as a side effect.
+    Reads `density_path` (scrub_density.tif, on the DTM grid) for which cells
+    have a density, and writes work_dir/fire_stale.tif (float32, see
+    _fire_stale_blocks: 0 outside stale ground, 1 + boundary-band strength
+    inside, aligned to the DTM grid/projection; stale_fraction still counts
+    the unsmoothed cells) and work_dir/fire_stale_summary.json (capture_year,
+    stale_fraction, fire_years_min, fire_years_max), both a strip of rows at
+    a time.
 
-    Returns density_arr unchanged in all cases, including every no-op path:
+    Writes nothing on every no-op path:
       - FIRE_HISTORY_RASTER is unset/empty (staleness check disabled), or
       - capture_year is None (no ELVIS filename encoded a capture date), or
       - the fire-history raster can't be opened (e.g. offline dev without
@@ -2383,13 +2444,13 @@ def apply_fire_history(
         log.info(
             "FIRE_HISTORY_S3_PATH not set — skipping fire-history staleness check."
         )
-        return density_arr
+        return
     if capture_year is None:
         log.info(
             "No LiDAR capture year parsed from input filenames — "
             "skipping fire-history staleness check."
         )
-        return density_arr
+        return
 
     log.info(
         f"Warping fire-history raster onto DTM grid (source: {FIRE_HISTORY_RASTER}) …"
@@ -2423,31 +2484,46 @@ def apply_fire_history(
         log.warning(
             f"Fire-history raster unavailable ({e}) — skipping fire-history staleness check."
         )
-        return density_arr
+        return
 
     fire_ds = gdal.Open(fire_year_aligned)
-    fire_year_arr = fire_ds.GetRasterBand(1).ReadAsArray().astype(np.uint16, copy=False)
-    fire_ds = None
+    fire_band = fire_ds.GetRasterBand(1)
+    density_ds = gdal.Open(density_path)
+    density_band = density_ds.GetRasterBand(1)
+    nodata = density_band.GetNoDataValue()
+    h, w = fire_ds.RasterYSize, fire_ds.RasterXSize
+    rows = strip_rows(w)
 
-    valid_mask = np.isfinite(density_arr)
-    stale_mask, stale_fraction = _compute_stale_mask(
-        fire_year_arr, capture_year, valid_mask
-    )
+    def strips(read):
+        return (read(top, min(rows, h - top)) for top in range(0, h, rows))
+
+    def fire_years(top, n):
+        return fire_band.ReadAsArray(0, top, w, n).astype(np.uint16, copy=False)
+
+    def valid(top, n):
+        return density_band.ReadAsArray(0, top, w, n) != nodata
+
+    stale_cells = valid_cells = 0
+    fire_years_min = fire_years_max = None
+    for fire_year_arr, valid_mask in zip(strips(fire_years), strips(valid)):
+        stale_mask, _ = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
+        stale_cells += int(stale_mask.sum())
+        valid_cells += int(valid_mask.sum())
+        burned_years = fire_year_arr[fire_year_arr != 0]
+        if burned_years.size:
+            low, high = int(burned_years.min()), int(burned_years.max())
+            fire_years_min = low if fire_years_min is None else min(fire_years_min, low)
+            fire_years_max = (
+                high if fire_years_max is None else max(fire_years_max, high)
+            )
+    stale_fraction = float(stale_cells) / max(valid_cells, 1)
+
     # The boundary comes from the fire alone: gating by data would draw a band
     # along the survey edge.
-    burnt_mask = _compute_stale_mask(
-        fire_year_arr, capture_year, np.ones_like(valid_mask)
-    )[0]
-
-    burned_years_in_aoi = fire_year_arr[fire_year_arr != 0]
-    fire_years_min = (
-        int(burned_years_in_aoi.min()) if burned_years_in_aoi.size else None
+    burnt = (
+        _compute_stale_mask(f, capture_year, np.ones(f.shape, dtype=bool))[0]
+        for f in strips(fire_years)
     )
-    fire_years_max = (
-        int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
-    )
-    # Done with before the blurs below, the step's peak in memory.
-    del fire_year_arr, burned_years_in_aoi, stale_mask
 
     # Write fire_stale.tif — aligned to the DTM grid, smoothed once over the AOI so tiles cut from it share no seam.
     dtm_ds = gdal.Open(dtm_path)
@@ -2464,9 +2540,12 @@ def apply_fire_history(
     out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
     out_ds.SetProjection(dtm_ds.GetProjection())
     band = out_ds.GetRasterBand(1)
-    band.WriteArray(
-        _encode_fire_stale(burnt_mask, valid_mask, abs(dtm_ds.GetGeoTransform()[1]))
-    )
+    top = 0
+    for block in _fire_stale_blocks(
+        burnt, strips(valid), abs(dtm_ds.GetGeoTransform()[1])
+    ):
+        band.WriteArray(block, 0, top)
+        top += len(block)
     out_ds.FlushCache()
     out_ds = None
     dtm_ds = None
@@ -2487,8 +2566,6 @@ def apply_fire_history(
         f"Fire-history: {stale_fraction * 100:.1f}% of AOI burned after LiDAR "
         f"capture ({capture_year}) — veg layer may be stale there."
     )
-
-    return density_arr
 
 
 # Rows the bilateral filter works on at a time: a band's dozen float arrays
@@ -2593,30 +2670,94 @@ def _combine_scrub_strata(
 
 
 def _density_normalized_min_pulses(
-    all_arr: np.ndarray,
+    nominal_all: Optional[float],
     reference_all_returns: float,
     base_min_pulses: float,
 ) -> Tuple[float, float, float]:
     """Pure arithmetic core of the density-normalized confidence-mask threshold.
 
     `nominal_all` is the median of the positive (>0) cells of the all-return
-    count raster — falls back to `reference_all_returns` when there are no
-    positive cells (e.g. a degenerate all-nodata tile) rather than dividing by
-    zero. `scale` is nominal_all/reference_all_returns clamped to [0.5, 2.0]
-    so an unusually sparse/dense capture can't blow the threshold out
-    entirely. `min_pulses_eff` is base_min_pulses * scale.
+    count raster (`_positive_median`), or None when there are no positive
+    cells (e.g. a degenerate all-nodata tile): it then falls back to
+    `reference_all_returns` rather than dividing by zero. `scale` is
+    nominal_all/reference_all_returns clamped to [0.5, 2.0] so an unusually
+    sparse/dense capture can't blow the threshold out entirely.
+    `min_pulses_eff` is base_min_pulses * scale.
 
     Returns (nominal_all, scale, min_pulses_eff). Extracted from
     compute_rasters so the scaling math is unit-testable without GDAL.
     """
-    positive_all = all_arr[all_arr > 0]
-    if positive_all.size > 0:
-        nominal_all = float(np.median(positive_all))
-    else:
+    if nominal_all is None:
         nominal_all = reference_all_returns
     scale = float(np.clip(nominal_all / reference_all_returns, 0.5, 2.0))
     min_pulses_eff = base_min_pulses * scale
     return nominal_all, scale, min_pulses_eff
+
+
+def _scrub_density_strips(
+    counts: Callable[[int, int], Tuple[np.ndarray, np.ndarray, np.ndarray]],
+    h: int,
+    w: int,
+    rows: int,
+    min_pulses_eff: float,
+    workers: int,
+) -> Iterator[Tuple[int, np.ndarray]]:
+    """(first row, scrub density) for each strip of `rows` rows of an h×w
+    grid, NaN where there is no confident density. `counts(first, end)` gives
+    the low, high and below count rows of [first, end).
+
+    Each strip is worked with the rows of its neighbours that its windows
+    reach, so a cell is the same whatever strip it falls in, and only over
+    the columns that have a pulse in or near them, so a strip of mostly empty
+    ground costs little (tests/test_scrub_strata.py `TestDensityStrips`).
+    """
+    k = SCRUB_DENSITY_FILTER_WINDOW_M
+    half = k // 2
+    for top in range(0, h, rows):
+        bottom = min(top + rows, h)
+        first, end = max(top - half, 0), min(bottom + half, h)
+        # Shared, UNSPLIT confidence denominator (total_near) + weighted-strata
+        # NRD combine — see _combine_scrub_strata for why confidence isn't
+        # split per stratum and why raw_nrd stays in [0, 1]. Cells with zero
+        # total contribute 0 (smoothed away by the bilateral filter via their
+        # zero confidence weight).
+        total_near, raw_nrd = _combine_scrub_strata(
+            *counts(first, end), SCRUB_STRATUM_WEIGHT_LOW, SCRUB_STRATUM_WEIGHT_HIGH
+        )
+        density = np.full((bottom - top, w), np.nan, dtype=np.float32)
+        pulsed = np.flatnonzero(total_near.any(axis=0))
+        if pulsed.size:
+            # A window reaches `half` cells, so nothing 2 × half beyond the
+            # last pulse can see one, nor be seen by a cell that does.
+            left = max(int(pulsed[0]) - 2 * half, 0)
+            right = min(int(pulsed[-1]) + 1 + 2 * half, w)
+            total_near, raw_nrd = total_near[:, left:right], raw_nrd[:, left:right]
+            # Bilateral filter, weighted by per-cell total-near-ground pulse count.
+            smoothed = _bilateral_filter_weighted(
+                raw_nrd,
+                total_near,
+                window=k,
+                sigma_spatial=SCRUB_DENSITY_SIGMA_SPATIAL_M,
+                sigma_range=SCRUB_DENSITY_SIGMA_RANGE,
+                workers=workers,
+            )[top - first : bottom - first]
+            # Mask cells whose windowed near-ground pulse sum is below the
+            # effective confidence threshold: exactly the quantity for "are
+            # there enough total pulses nearby?". Rows beyond the grid's
+            # first and last are reflected, as the filter's are.
+            windowed_pulses = _window_sums(
+                np.pad(
+                    total_near,
+                    ((half - (top - first), half - (end - bottom)), (half, half)),
+                    mode="reflect",
+                ),
+                k,
+            )
+            smoothed[~((windowed_pulses >= min_pulses_eff) & np.isfinite(smoothed))] = (
+                np.nan
+            )
+            density[:, left:right] = smoothed
+        yield top, density
 
 
 def compute_rasters(
@@ -2688,57 +2829,24 @@ def compute_rasters(
     ]
     side_by_side([(align_raster_to_reference, *a) for a in aligns], workers)
 
-    log.info(
-        f"Computing weighted-strata NRD + bilateral filter "
-        f"({SCRUB_DENSITY_FILTER_WINDOW_M}×{SCRUB_DENSITY_FILTER_WINDOW_M} m, "
-        f"σ_s={SCRUB_DENSITY_SIGMA_SPATIAL_M} m, σ_r={SCRUB_DENSITY_SIGMA_RANGE}) …"
-    )
     dtm_ds = gdal.Open(dtm_path)
-    scrub_low_ds = gdal.Open(scrub_low_aligned)
-    scrub_high_ds = gdal.Open(scrub_high_aligned)
-    below_ds = gdal.Open(below_aligned)
-    all_ds = gdal.Open(all_aligned)
+    h, w = dtm_ds.RasterYSize, dtm_ds.RasterXSize
+    rows = strip_rows(w)
+    count_ds = [
+        gdal.Open(path)
+        for path in (scrub_low_aligned, scrub_high_aligned, below_aligned, all_aligned)
+    ]
 
     # PDAL writes count rasters with nodata=0; warp then injects -9999 sentinels
     # at non-overlap edges. For NRD purposes "no points" is a count of 0, not
     # nodata — clamp anything non-positive (sentinel or NaN) to zero so it
     # cleanly contributes nothing without poisoning the arithmetic.
-    def _read_count(ds):
-        a = ds.GetRasterBand(1).ReadAsArray().astype(np.float32, copy=False)
+    def _read_count(ds, first, end):
+        a = ds.GetRasterBand(1).ReadAsArray(0, first, w, end - first)
+        a = a.astype(np.float32, copy=False)
         a[~np.isfinite(a)] = 0.0
         a[a < 0] = 0.0
         return a
-
-    # Each whole-area array below is let go of when its last reader is done:
-    # the most held at once is what decides how large an area fits in memory.
-    low_arr = _read_count(scrub_low_ds)
-    high_arr = _read_count(scrub_high_ds)
-    below_arr = _read_count(below_ds)
-
-    # Shared, UNSPLIT confidence denominator (total_near) + weighted-strata
-    # NRD combine — see _combine_scrub_strata for why confidence isn't split
-    # per stratum and why raw_nrd stays in [0, 1]. Cells with zero total
-    # contribute 0 (smoothed away by the bilateral filter via their zero
-    # confidence weight).
-    total_near, raw_nrd = _combine_scrub_strata(
-        low_arr,
-        high_arr,
-        below_arr,
-        SCRUB_STRATUM_WEIGHT_LOW,
-        SCRUB_STRATUM_WEIGHT_HIGH,
-    )
-    del low_arr, high_arr, below_arr
-
-    # Bilateral filter, weighted by per-cell total-near-ground pulse count.
-    nrd_smoothed = _bilateral_filter_weighted(
-        raw_nrd,
-        total_near,
-        window=SCRUB_DENSITY_FILTER_WINDOW_M,
-        sigma_spatial=SCRUB_DENSITY_SIGMA_SPATIAL_M,
-        sigma_range=SCRUB_DENSITY_SIGMA_RANGE,
-        workers=workers,
-    )
-    del raw_nrd
 
     # Density-normalize the confidence-mask threshold: a sparse capture
     # (LID2) has a lower nominal per-cell all-return count than a dense one
@@ -2746,7 +2854,12 @@ def compute_rasters(
     # all-return density compares to a fixed reference, clamped so an extreme
     # capture can't blow the threshold out entirely.
     nominal_all, scale, min_pulses_eff = _density_normalized_min_pulses(
-        _read_count(all_ds),
+        _positive_median(
+            lambda: (
+                _read_count(count_ds[3], top, min(top + rows, h))
+                for top in range(0, h, rows)
+            )
+        ),
         SCRUB_DENSITY_REFERENCE_ALL_RETURNS,
         SCRUB_DENSITY_MIN_PULSES,
     )
@@ -2756,33 +2869,59 @@ def compute_rasters(
         f"(reference={SCRUB_DENSITY_REFERENCE_ALL_RETURNS})"
     )
 
-    # Mask cells whose windowed near-ground pulse sum is below the effective
-    # confidence threshold — a box sum is faster than re-walking the
-    # bilateral neighbourhood and is exactly the right quantity for "are
-    # there enough total pulses nearby?".
-    windowed_pulses = _box_sum_2d(total_near, SCRUB_DENSITY_FILTER_WINDOW_M)
-    del total_near
-    density = nrd_smoothed
-    density[~((windowed_pulses >= min_pulses_eff) & np.isfinite(nrd_smoothed))] = np.nan
-    del nrd_smoothed, windowed_pulses
-
-    # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
-    # (sclerophyll/heath) vegetation of equal LiDAR density. No-op if the
-    # preprocessed formation raster is absent or the user disabled weighting.
+    # SVTM formation μ — distinguishes soft (rainforest) from hard
+    # (sclerophyll/heath) vegetation of equal LiDAR density. Not applied if
+    # the preprocessed formation raster is absent or the user disabled
+    # weighting.
     veg_settings = settings.get("vegetation", {})
-    density = apply_svtm_weighting(
-        density,
-        dtm_path,
-        work_dir,
-        weights_enabled=bool(veg_settings.get("weightsEnabled", True)),
-        formation_weights=veg_settings.get("formationWeights"),
+    formation_path = svtm_formation_aligned(
+        dtm_path, work_dir, bool(veg_settings.get("weightsEnabled", True))
     )
+    formation_ds = gdal.Open(formation_path) if formation_path else None
+    mu_lookup = _build_svtm_mu_lookup(veg_settings.get("formationWeights"))
+
+    log.info(
+        f"Computing weighted-strata NRD + bilateral filter "
+        f"({SCRUB_DENSITY_FILTER_WINDOW_M}×{SCRUB_DENSITY_FILTER_WINDOW_M} m, "
+        f"σ_s={SCRUB_DENSITY_SIGMA_SPATIAL_M} m, σ_r={SCRUB_DENSITY_SIGMA_RANGE}), "
+        f"{rows} rows at a time …"
+    )
+    # Write scrub_density.tif (values 0–1, nodata = -9999), a strip at a time
+    density_path = os.path.join(work_dir, "scrub_density.tif")
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        density_path, w, h, 1, gdal.GDT_Float32, options=["COMPRESS=LZW"]
+    )
+    out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
+    out_ds.SetProjection(dtm_ds.GetProjection())
+    band = out_ds.GetRasterBand(1)
+    band.SetNoDataValue(-9999)
+    for top, density in _scrub_density_strips(
+        lambda first, end: tuple(_read_count(ds, first, end) for ds in count_ds[:3]),
+        h,
+        w,
+        rows,
+        min_pulses_eff,
+        workers,
+    ):
+        if formation_ds is not None:
+            formation = formation_ds.GetRasterBand(1).ReadAsArray(
+                0, top, w, len(density)
+            )
+            density = _svtm_weighted(
+                density, formation.astype(np.uint8, copy=False), mu_lookup
+            )
+        density[~np.isfinite(density)] = -9999
+        band.WriteArray(density, 0, top)
+    out_ds.FlushCache()
+    out_ds = None
+    paths["scrub_density"] = density_path
 
     # Detect (never correct) vegetation-density cells made stale by fire since
     # LiDAR capture. Density is not modified — see apply_fire_history docstring
     # for why a regrowth multiplier would double-count. No-op if fire-history
     # staleness detection is disabled or no capture year could be parsed.
-    density = apply_fire_history(density, dtm_path, work_dir, capture_year)
+    apply_fire_history(density_path, dtm_path, work_dir, capture_year)
 
     # fire_stale.tif is written by apply_fire_history only when fire-staleness
     # detection is enabled (fire raster configured + a parseable capture
@@ -2794,28 +2933,6 @@ def compute_rasters(
     fire_stale_path = os.path.join(work_dir, "fire_stale.tif")
     if os.path.exists(fire_stale_path):
         paths["fire_stale"] = fire_stale_path
-
-    # Write scrub_density.tif (values 0–1, nodata = -9999)
-    density_path = os.path.join(work_dir, "scrub_density.tif")
-    density_out = density
-    density_out[~np.isfinite(density)] = -9999
-    driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(
-        density_path,
-        dtm_ds.RasterXSize,
-        dtm_ds.RasterYSize,
-        1,
-        gdal.GDT_Float32,
-        options=["COMPRESS=LZW"],
-    )
-    out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
-    out_ds.SetProjection(dtm_ds.GetProjection())
-    band = out_ds.GetRasterBand(1)
-    band.WriteArray(density_out)
-    band.SetNoDataValue(-9999)
-    out_ds.FlushCache()
-    out_ds = None
-    paths["scrub_density"] = density_path
     return paths
 
 
@@ -3085,7 +3202,7 @@ def render_vegetation_tile(
     Sparse/dense colours and alpha endpoints come from `settings.vegetation`.
 
     stale_arr, when given, is a fire_stale.tif window on the SAME grid as
-    density_arr, encoded by _encode_fire_stale: v >= 0.5 is ground burnt since
+    density_arr, encoded by _fire_stale_blocks: v >= 0.5 is ground burnt since
     the survey, and v - 1 (0-1) is the boundary band strength. Burnt ground
     gets sparse stripes, plus a band fading inwards from the boundary and a
     thin edge line. Pixels outside those amber marks are exactly the plain
@@ -3775,7 +3892,7 @@ def main():
     try:
         run()
     except MemoryError:
-        # The estimate was too low: the worker finishes the job without the layer.
+        # The worker finishes the job without the layer.
         log.warning("The vegetation pass ran out of memory: leaving the layer out")
         sys.exit(VEGETATION_LEFT_OUT_EXIT)
     except Exception as e:  # noqa: BLE001 - every failure, told without its message
@@ -3938,7 +4055,6 @@ def run():
             "Select surveys per footprint (density vs recency)", key="survey_select"
         ):
             survey_selection = select_surveys_by_layer(contents.las_files)
-        leave_out_if_too_big(survey_selection.gridded_paths)
         capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
         with bench.step("PDAL: LAZ → DTM + vegetation counts", key="pdal"):
             run_pdal_per_tile(

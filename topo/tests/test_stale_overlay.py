@@ -25,7 +25,8 @@ try:
         FIRE_STALE_BAND_ALPHA,
         FIRE_STALE_STRIPE_ALPHA,
         FIRE_STALE_STRIPE_PERIOD,
-        _encode_fire_stale,
+        _box_blur_blocks,
+        _fire_stale_blocks,
         render_vegetation_tile,
     )
 
@@ -41,24 +42,33 @@ if _IMPORT_OK and (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("
 CELL_M = 4.0  # coarse grid keeps the whole-raster blurs cheap in tests
 
 
+def _blocks(arr, rows):
+    return (arr[top : top + rows] for top in range(0, len(arr), rows))
+
+
+def _encode_fire_stale(burnt_mask, valid_mask, cell_m, rows=10**6):
+    """The fire encoding of whole masks, fed to the pass's own code in blocks
+    of `rows` rows."""
+    return np.vstack(
+        list(
+            _fire_stale_blocks(
+                _blocks(burnt_mask, rows), _blocks(valid_mask, rows), cell_m
+            )
+        )
+    )
+
+
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestBoxBlurBands(unittest.TestCase):
-    """The blur sums a band of lines at a time and writes it back in place.
-    Red if a band is written over another's lines (its offset dropped) or
-    the last, short band is left out."""
+class TestBoxBlurBlocks(unittest.TestCase):
+    """The blur takes its rows a block at a time. Red if a block's columns
+    are summed from the block's own first row (the running sum not carried),
+    the rows waiting for the next block are dropped or doubled, the first or
+    last row is not repeated past the edge, or the last rows never leave."""
 
-    def test_a_cell_is_the_same_whatever_band_it_falls_in(self):
-        from unittest import mock
-
-        import pipeline
-
-        rng = np.random.default_rng(5)
-        arr = rng.random((19, 26)) > 0.6
-        w = 5  # 5 m at 1 m cells
-
+    def whole(self, arr, w, passes):
         # The blur as whole-area expressions.
         whole = arr.astype(np.float32)
-        for _ in range(3):
+        for _ in range(passes):
             for axis in (0, 1):
                 pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
                 c = np.cumsum(
@@ -68,12 +78,34 @@ class TestBoxBlurBands(unittest.TestCase):
                 hi = c[w : w + n] if axis == 0 else c[:, w : w + n]
                 lo = c[:n] if axis == 0 else c[:, :n]
                 whole = ((hi - lo) / w).astype(np.float32)
-        self.assertTrue(((whole > 0) & (whole < 1)).any())
-        for band in (1, 4, 26, 1024):
-            with mock.patch.object(pipeline, "WHOLE_AREA_BAND", band):
-                np.testing.assert_array_equal(
-                    pipeline._box_blur(arr, 5.0, 1.0, 3), whole
+        return whole
+
+    def test_a_cell_is_the_same_whatever_block_it_arrives_in(self):
+        rng = np.random.default_rng(5)
+        for shape, w, passes in (((19, 26), 5, 3), ((40, 9), 13, 4), ((3, 7), 9, 2)):
+            arr = rng.random(shape) > 0.6
+            whole = self.whole(arr, w, passes)
+            self.assertTrue(((whole > 0) & (whole < 1)).any())
+            for rows in (1, 4, 26, 1024):
+                got = np.vstack(
+                    list(_box_blur_blocks(_blocks(arr, rows), float(w), 1.0, passes))
                 )
+                np.testing.assert_array_equal(got, whole)
+
+    def test_the_fire_encoding_is_the_same_whatever_block_a_row_arrives_in(self):
+        # Red too if the two masks' rows fall out of step with the band's.
+        rng = np.random.default_rng(6)
+        burnt = np.zeros((90, 120), dtype=bool)
+        burnt[30:, 40:] = True
+        burnt ^= rng.random(burnt.shape) > 0.97
+        valid = rng.random(burnt.shape) > 0.2
+        valid[:12] = False
+        whole = _encode_fire_stale(burnt, valid, CELL_M)
+        self.assertTrue((whole > 1).any() and (whole == 0).any())
+        for rows in (1, 7, 50):
+            np.testing.assert_array_equal(
+                _encode_fire_stale(burnt, valid, CELL_M, rows), whole
+            )
 
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
