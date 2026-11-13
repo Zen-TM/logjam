@@ -44,7 +44,7 @@ output "cognito_region" {
 
 output "topo_cdn_base_url" {
   description = "TOPO_CDN_BASE_URL — the web distribution serves topo tiles under /master/*."
-  value       = "https://logjamnsw.com"
+  value       = "https://logjam.earth"
 }
 
 output "web_cloudfront_distribution_id" {
