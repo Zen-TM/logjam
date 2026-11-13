@@ -414,7 +414,8 @@ export type LonLatBox = {
 
 /**
  * The box around a region's borders. Throws for a region with none (`WORLD`),
- * which has no box. Guard: `regions.test.ts` ("bounds the border").
+ * which has no box. Guard: `regions.test.ts` ("bounds the border, and refuses a
+ * region with none").
  */
 export function regionBounds(region: Region): LonLatBox {
   const points = region.borders.flat();
