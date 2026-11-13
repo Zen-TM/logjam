@@ -514,9 +514,10 @@ describe("planRegionForBasemaps", () => {
 });
 
 // What a save cost before the figures moved onto the archives, measured from
-// that code for four boxes and three basemap choices. A save in New South Wales
-// must cost the same to the byte; outside it, only what the box's own tiles
-// cost. Mutation: drop one NSW clip from `planRegionForBasemaps` (the slope, say)
+// that code for three boxes in New South Wales (inside, the 40 km box and across
+// its border) and three basemap choices: those rows must stay to the byte. The
+// Perth and Victorian Alps rows are new expectations: outside it, only what the
+// box's own tiles cost. Mutation: drop one NSW clip from `planRegionForBasemaps` (the slope, say)
 // and the inside and border rows go red; clip NSW's archives for every box
 // again and the outside rows go red.
 describe("what a save costs, by the archives that cover its box", () => {

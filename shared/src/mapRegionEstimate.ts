@@ -159,7 +159,7 @@ export function checkRegionCaps(
 
 /**
  * A basemap the tile-pyramid downloader can fetch: the id of a raster entry in
- * `BASEMAP_CATALOG` that is `offlineCapable`, which `offlineRaster` checks.
+ * `BASEMAP_CATALOG` that is `offlineCapable`, which `pyramidTileBytes` checks.
  */
 export type OfflineBasemapId = string;
 

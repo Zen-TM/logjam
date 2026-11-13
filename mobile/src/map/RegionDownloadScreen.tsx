@@ -125,8 +125,8 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * against tens for one raster, and the route and measure tools snap to it, so
  * leaving it optional would mean a tool that quietly stops working in the field.
  */
-type SelectableId = "six-topo" | "six-base" | "six-imagery";
-const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
+const DOWNLOADABLE = ["six-topo", "six-base", "six-imagery"] as const;
+type SelectableId = (typeof DOWNLOADABLE)[number];
 
 /**
  * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
