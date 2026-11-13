@@ -655,8 +655,7 @@ describe("a lying Zip64 record is refused, never crashes", () => {
   });
 
   it("refuses a locator that points outside the file", async () => {
-    // Mutation: delete the `recordPos + ZIP64_EOCD_BYTES !== locatorPos` check
-    // (the `recordPos < 0` check beside it is redundant: nothing fails without it).
+    // Mutation: delete the `recordPos + ZIP64_EOCD_BYTES !== locatorPos` check.
     await expect(
       lie((view, _record, locator) =>
         view.setBigUint64(
@@ -669,6 +668,29 @@ describe("a lying Zip64 record is refused, never crashes", () => {
     await expect(
       lie((view, _record, locator) => view.setBigUint64(locator + 8, 0n, true)),
     ).rejects.toThrow(refused("TRUNCATED"));
+  });
+
+  it("refuses a locator whose end record would start before the tail", async () => {
+    // Mutation: delete `recordPos < 0 ||` in locateZipCentralDirectory (a raw
+    // RangeError from the DataView escapes instead of the refusal). A crafted
+    // upload can put the end record 40 bytes into the tail, as if its comment
+    // were over 65535 bytes, so a record 56 bytes before the locator starts
+    // before the tail and `recordPos + 56 === locatorPos` still holds.
+    const total = 10_000_000;
+    const tailStart = total - ZIP_TAIL_BYTES;
+    const eocd = 40;
+    const locator = eocd - 20;
+    const held = new Uint8Array(eocd + 22);
+    const view = new DataView(held.buffer);
+    view.setUint32(locator, 0x07064b50, true);
+    view.setBigUint64(locator + 8, BigInt(tailStart + locator - 56), true);
+    view.setUint32(locator + 16, 1, true);
+    view.setUint32(eocd, 0x06054b50, true);
+    const file = virtualFile(total, [{ at: tailStart, bytes: held }]);
+    await expect(
+      readZipEntries(file.totalFileSize, file.readRange),
+    ).rejects.toThrow(refused("TRUNCATED"));
+    expect(file.reads).toHaveLength(1);
   });
 
   it("refuses a locator that points at something else", async () => {
