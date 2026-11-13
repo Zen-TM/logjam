@@ -98,23 +98,34 @@ def _is_copied(relpath, sources):
     )
 
 
-# Packages that only build or fetch: none belongs in the image (a `-dev` suffix
-# is checked on its own).
+# Packages that only build, add a repository or fetch: none belongs in the image
+# (a `-dev` suffix is checked on its own).
 _BUILD_ONLY_PACKAGES = frozenset(
     {
+        "autoconf",
+        "automake",
         "build-essential",
-        "g++",
-        "gcc",
-        "make",
-        "pkg-config",
-        "software-properties-common",
-        "gpg-agent",
-        "python3-pip",
+        "cmake",
         "curl",
-        "wget",
+        "gpg-agent",
+        "libtool",
+        "make",
+        "ninja-build",
+        "pkg-config",
+        "python3-pip",
+        "software-properties-common",
         "unzip",
+        "wget",
     }
 )
+# gcc, gcc-13, g++-13, cpp, clang-18, gfortran-13, and the `cc` and `c++` names.
+_COMPILER = re.compile(r"(gcc|g\+\+|cpp|cc|c\+\+|clang|gfortran)(-\d+)?")
+
+# Every apt invocation the parser reads, and a loose count of every one that
+# exists, so a form it does not understand fails instead of passing unseen.
+_APT_ANY = re.compile(r"\bapt(?:-get)?\s")
+_APT_UPDATE = re.compile(r"\bapt(?:-get)?(?:\s+-\S+)*\s+update\b")
+_APT_INSTALL = re.compile(r"\bapt(?:-get)?((?:\s+-\S+)*)\s+install\b([^&;|]*)")
 
 
 def _dockerfile_lines():
@@ -138,14 +149,26 @@ def _final_stage():
     return lines[last_from:]
 
 
-def _final_stage_apt_packages():
-    packages = set()
+def _apt_installs():
+    """(instruction, flags and arguments, package names) of every apt install in
+    the last stage, one entry per invocation. Fails on an apt invocation that is
+    neither an install nor an update."""
+    found = []
     for ln in _final_stage():
-        if "apt-get install" not in ln:
-            continue
-        words = ln.split("apt-get install", 1)[1].split("&&", 1)[0].split()
-        packages.update(w for w in words if not w.startswith("-"))
-    return packages
+        installs = _APT_INSTALL.findall(ln)
+        seen = len(installs) + len(_APT_UPDATE.findall(ln))
+        if len(_APT_ANY.findall(ln)) != seen:
+            raise AssertionError(f"an apt invocation this test cannot read: {ln}")
+        for flags, rest in installs:
+            words = rest.split()
+            # `pkg=1.2-3` and `pkg:amd64` name the package `pkg`.
+            names = {re.split(r"[=:]", w)[0] for w in words if not w.startswith("-")}
+            found.append((ln, f"{flags} {rest}", names))
+    return found
+
+
+def _final_stage_apt_packages():
+    return set().union(*(names for _, _, names in _apt_installs()))
 
 
 class TestDockerImageFiles(unittest.TestCase):
@@ -172,15 +195,30 @@ class TestDockerImageFiles(unittest.TestCase):
         cmds = [ln for ln in lines if ln.startswith("CMD")]
         self.assertEqual(cmds[-1], 'CMD ["python3", "/app/worker.py"]')
 
-    # Mutation: add `build-essential` (or `libgdal-dev`) to the last stage's
-    # apt-get install and the image ships a compiler (or GDAL's headers) again.
+    # Mutations, each of which turns it red, as the last stage's apt step:
+    # `apt-get install build-essential` or `libgdal-dev`; `apt-get -y install
+    # build-essential`; a second `&& apt-get install libgdal-dev` in one RUN;
+    # `gcc=4:13.2` or `libgdal-dev:amd64`; `gcc-13` or `cmake`; a flag with an
+    # argument (`apt-get -o X=y install ...`), which the parser cannot read;
+    # dropping `fonts-dejavu-core`, which pipeline.py loads DejaVuSans.ttf and
+    # DejaVuSans-Bold.ttf from, and falls back from silently to a default font.
     def test_the_last_stage_installs_runtime_packages_only(self):
         installed = _final_stage_apt_packages()
         # Floor: a parse that found nothing would pass the check below.
-        for needed in ("python3", "gdal-bin", "python3-gdal", "pdal"):
+        for needed in (
+            "ca-certificates",
+            "fonts-dejavu-core",
+            "gdal-bin",
+            "pdal",
+            "python3",
+            "python3-gdal",
+            "python3-venv",
+        ):
             self.assertIn(needed, installed)
         build_only = sorted(
-            p for p in installed if p.endswith("-dev") or p in _BUILD_ONLY_PACKAGES
+            p
+            for p in installed
+            if p.endswith("-dev") or p in _BUILD_ONLY_PACKAGES or _COMPILER.fullmatch(p)
         )
         self.assertEqual(
             build_only,
@@ -189,15 +227,15 @@ class TestDockerImageFiles(unittest.TestCase):
             "starts; build in an earlier stage and COPY --from the result",
         )
 
-    # Mutation: drop `--no-install-recommends` from one apt-get install, or its
-    # `rm -rf /var/lib/apt/lists/*`, and the layer carries recommended packages
-    # or the package lists.
+    # Mutation: drop `--no-install-recommends` from one apt install, or the
+    # `rm -rf /var/lib/apt/lists/*` from its RUN, and the layer carries
+    # recommended packages or the package lists.
     def test_every_apt_step_is_lean_and_cleans_its_lists(self):
-        steps = [ln for ln in _final_stage() if "apt-get install" in ln]
-        self.assertGreaterEqual(len(steps), 2)
-        for step in steps:
-            self.assertIn("--no-install-recommends", step)
-            self.assertIn("rm -rf /var/lib/apt/lists/*", step)
+        installs = _apt_installs()
+        self.assertGreaterEqual(len(installs), 2)
+        for instruction, args, _ in installs:
+            self.assertIn("--no-install-recommends", args)
+            self.assertIn("rm -rf /var/lib/apt/lists/*", instruction)
 
     def test_walk_actually_reaches_the_lazy_imports(self):
         # Guards the guard: push_send/email_send are imported inside function

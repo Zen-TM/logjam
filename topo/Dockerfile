@@ -65,8 +65,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ------------------------------------------------------------
 #     Pinned to a released tag — `main` HEAD would silently change the
 #     vector-tile renderer on every rebuild, with nothing to bisect.
-#     The last stage copies the one binary the code runs and links it against
-#     libstdc++, libsqlite3 and zlib, which GDAL's own dependencies bring.
+#     The last stage copies the one binary the code runs, which links libstdc++,
+#     libsqlite3 and zlib. It installs none of them itself: GDAL's own
+#     dependencies bring them. The build-time `tippecanoe --version` in the last
+#     stage fails the build if one of them stops coming.
 FROM base AS tippecanoe
 ARG TIPPECANOE_VERSION=2.79.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -88,7 +90,9 @@ RUN strip /usr/local/bin/tippecanoe
 # 3. The image: runtime packages only (GDAL + PDAL, via UbuntuGIS)
 #    No compiler, no -dev header package, no apt-installed pip: the Python
 #    dependencies below are all wheels. Every apt step ends by deleting the
-#    package lists, so no layer keeps them.
+#    package lists, so no layer keeps them. tests/test_docker_image_files.py
+#    holds this: `test_the_last_stage_installs_runtime_packages_only` and
+#    `test_every_apt_step_is_lean_and_cleans_its_lists`.
 # ------------------------------------------------------------
 FROM base
 # apt reaches the PPA over https, so the CA bundle goes in before its source does.
