@@ -15,18 +15,12 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    from pipeline import (  # noqa: E402
-        MODE_DEM_ONLY,
-        MODE_LAZ_ONLY,
-        _safe_extract_zip,
-        extract_elvis_zip,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+from pipeline import (  # noqa: E402
+    MODE_DEM_ONLY,
+    MODE_LAZ_ONLY,
+    _safe_extract_zip,
+    extract_elvis_zip,
+)
 
 
 def _make_zip(path, entries):
@@ -37,7 +31,6 @@ def _make_zip(path, entries):
     return path
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestSafeExtractZip(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -70,7 +63,6 @@ class TestSafeExtractZip(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.out, "sub", "cloud.laz")))
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestExtractElvisZip(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
