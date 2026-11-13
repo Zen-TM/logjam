@@ -106,7 +106,7 @@ function assertZoneNearSheet(
   if (offset > MAX_ZONE_OFFSET_DEG) {
     throw new GeoPdfParseError(
       "UNSUPPORTED_CRS",
-      `EPSG:${epsg} is UTM zone ${zone}, ${Math.round(offset)}° from the sheet`,
+      `EPSG:${epsg} (UTM zone ${zone}) is far from the sheet`,
     );
   }
 }

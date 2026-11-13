@@ -230,6 +230,12 @@ describe("resolveCrs — a zoned code is checked against the sheet", () => {
   it("refuses a code for a zone on the far side of the world", () => {
     // A New South Wales sheet labelled UTM zone 1N.
     expect(() => code(32601, NSW_PROBE)).toThrow(GeoPdfParseError);
+    // The detail names the code and zone, never how far the sheet is: with
+    // the code that figure would locate it. Mutation: putting the offset back
+    // into the detail turns this red.
+    expect(() => code(32601, NSW_PROBE)).toThrow(
+      "EPSG:32601 (UTM zone 1) is far from the sheet",
+    );
     expect(code(32756, NSW_PROBE).key).toBe("EPSG:32756");
   });
 
