@@ -42,6 +42,40 @@ CELL_M = 4.0  # coarse grid keeps the whole-raster blurs cheap in tests
 
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestBoxBlurBands(unittest.TestCase):
+    """The blur sums a band of lines at a time and writes it back in place.
+    Red if a band is written over another's lines (its offset dropped) or
+    the last, short band is left out."""
+
+    def test_a_cell_is_the_same_whatever_band_it_falls_in(self):
+        from unittest import mock
+
+        import pipeline
+
+        rng = np.random.default_rng(5)
+        arr = rng.random((19, 26)) > 0.6
+        w = 5  # 5 m at 1 m cells
+
+        # The blur as whole-area expressions.
+        whole = arr.astype(np.float32)
+        for _ in range(3):
+            for axis in (0, 1):
+                pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
+                c = np.cumsum(
+                    np.pad(whole, pad, mode="edge"), axis=axis, dtype=np.float64
+                )
+                n = whole.shape[axis]
+                hi = c[w : w + n] if axis == 0 else c[:, w : w + n]
+                lo = c[:n] if axis == 0 else c[:, :n]
+                whole = ((hi - lo) / w).astype(np.float32)
+        self.assertTrue(((whole > 0) & (whole < 1)).any())
+        for band in (1, 4, 26, 1024):
+            with mock.patch.object(pipeline, "WHOLE_AREA_BAND", band):
+                np.testing.assert_array_equal(
+                    pipeline._box_blur(arr, 5.0, 1.0, 3), whole
+                )
+
+
 class TestBurntGroundMarking(unittest.TestCase):
     SETTINGS = {
         "vegetation": {
