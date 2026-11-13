@@ -1,10 +1,10 @@
 """Amber marking of ground burnt since the survey, drawn into the vegetation tile
 (pure numpy/PIL, no GDAL).
 
-Covers render_vegetation_tile's stale_arr drawing and _encode_fire_stale, which
-apply_fire_history runs once over the whole AOI before tiles are cut. The
-raster write itself (GDAL warp) is integration-tested in
-test_fire_history_apply.py. Same _native_stub convention as
+Covers render_vegetation_tile's stale_arr drawing and _fire_stale_blocks, which
+apply_fire_history runs once over the whole AOI, a block of rows at a time,
+before tiles are cut (`_encode_fire_stale` here feeds it whole masks). The
+raster write itself (GDAL warp) is not unit-tested. Same _native_stub convention as
 test_render_tiles.py: pipeline.py imports osgeo at module top, so we stub it
 first; numpy/PIL must be real since these tests do real array/image maths.
 """
@@ -17,31 +17,94 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    import numpy as np  # noqa: E402
-    from pipeline import (  # noqa: E402
-        TILE_SIZE,
-        FIRE_STALE_AMBER,
-        FIRE_STALE_BAND_ALPHA,
-        FIRE_STALE_STRIPE_ALPHA,
-        FIRE_STALE_STRIPE_PERIOD,
-        _encode_fire_stale,
-        render_vegetation_tile,
-    )
+import numpy as np  # noqa: E402
+from pipeline import (  # noqa: E402
+    TILE_SIZE,
+    FIRE_STALE_AMBER,
+    FIRE_STALE_BAND_ALPHA,
+    FIRE_STALE_STRIPE_ALPHA,
+    FIRE_STALE_STRIPE_PERIOD,
+    _box_blur_blocks,
+    _fire_stale_blocks,
+    render_vegetation_tile,
+)
 
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
-
-if _IMPORT_OK and (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("PIL")):
-    _IMPORT_OK = False
-    _IMPORT_ERR = "numpy/PIL is stubbed on this host (real array/image maths required)"
+_REAL_ARRAYS = not (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("PIL"))
 
 CELL_M = 4.0  # coarse grid keeps the whole-raster blurs cheap in tests
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+def _blocks(arr, rows):
+    return (arr[top : top + rows] for top in range(0, len(arr), rows))
+
+
+def _encode_fire_stale(burnt_mask, valid_mask, cell_m, rows=10**6):
+    """The fire encoding of whole masks, fed to the pass's own code in blocks
+    of `rows` rows."""
+    return np.vstack(
+        list(
+            _fire_stale_blocks(
+                _blocks(burnt_mask, rows), _blocks(valid_mask, rows), cell_m
+            )
+        )
+    )
+
+
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy/PIL is stubbed on this host (real array/image maths required)"
+)
+class TestBoxBlurBlocks(unittest.TestCase):
+    """The blur takes its rows a block at a time. Red if a block's columns
+    are summed from the block's own first row (the running sum not carried),
+    the rows waiting for the next block are dropped or doubled, the first or
+    last row is not repeated past the edge, or the last rows never leave."""
+
+    def whole(self, arr, w, passes):
+        # The blur as whole-area expressions.
+        whole = arr.astype(np.float32)
+        for _ in range(passes):
+            for axis in (0, 1):
+                pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
+                c = np.cumsum(
+                    np.pad(whole, pad, mode="edge"), axis=axis, dtype=np.float64
+                )
+                n = whole.shape[axis]
+                hi = c[w : w + n] if axis == 0 else c[:, w : w + n]
+                lo = c[:n] if axis == 0 else c[:, :n]
+                whole = ((hi - lo) / w).astype(np.float32)
+        return whole
+
+    def test_a_cell_is_the_same_whatever_block_it_arrives_in(self):
+        rng = np.random.default_rng(5)
+        for shape, w, passes in (((19, 26), 5, 3), ((40, 9), 13, 4), ((3, 7), 9, 2)):
+            arr = rng.random(shape) > 0.6
+            whole = self.whole(arr, w, passes)
+            self.assertTrue(((whole > 0) & (whole < 1)).any())
+            for rows in (1, 4, 26, 1024):
+                got = np.vstack(
+                    list(_box_blur_blocks(_blocks(arr, rows), float(w), 1.0, passes))
+                )
+                np.testing.assert_array_equal(got, whole)
+
+    def test_the_fire_encoding_is_the_same_whatever_block_a_row_arrives_in(self):
+        # Red too if the two masks' rows fall out of step with the band's.
+        rng = np.random.default_rng(6)
+        burnt = np.zeros((90, 120), dtype=bool)
+        burnt[30:, 40:] = True
+        burnt ^= rng.random(burnt.shape) > 0.97
+        valid = rng.random(burnt.shape) > 0.2
+        valid[:12] = False
+        whole = _encode_fire_stale(burnt, valid, CELL_M)
+        self.assertTrue((whole > 1).any() and (whole == 0).any())
+        for rows in (1, 7, 50):
+            np.testing.assert_array_equal(
+                _encode_fire_stale(burnt, valid, CELL_M, rows), whole
+            )
+
+
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy/PIL is stubbed on this host (real array/image maths required)"
+)
 class TestBurntGroundMarking(unittest.TestCase):
     SETTINGS = {
         "vegetation": {
@@ -113,8 +176,9 @@ class TestBurntGroundMarking(unittest.TestCase):
 
     def test_tiles_sharing_a_boundary_agree_on_band_values(self):
         # The encoding must not depend on where a tile cut falls. Mutation:
-        # make _box_blur work in 256 px blocks (or encode per tile) -> a seam at
-        # a multiple of 256 that the shifted raster below does not have.
+        # restart _blur_down's running sum every 256 rows or _blur_across's every
+        # 256 columns (or encode per tile) -> a seam at a multiple of 256 that the
+        # shifted raster below does not have.
         mask = np.zeros((TILE_SIZE, 3 * TILE_SIZE), dtype=bool)
         mask[:, TILE_SIZE - 3 :] = True  # fire edge 3 px left of the first cut
         a = _encode_fire_stale(mask, np.ones_like(mask), CELL_M)
@@ -160,8 +224,9 @@ class TestBurntGroundMarking(unittest.TestCase):
 
     def test_burnt_all_over_gets_stripes_and_no_band(self):
         # An area sharpened wholly inside a fire: the AOI edge is not a fire
-        # edge. Mutation: zero-pad instead of edge-pad in _box_blur (mode="edge"
-        # -> "constant") -> a band and line appear along the raster edge.
+        # edge. Mutation: zero-pad instead of edge-pad in _blur_across
+        # (mode="edge" -> "constant"), or zeros for the rows _blur_down repeats
+        # past the first and last -> a band and line appear along the raster edge.
         ones = np.ones((300, 300), dtype=bool)
         enc = _encode_fire_stale(ones, ones, CELL_M)
         np.testing.assert_array_equal(enc, np.ones_like(enc))

@@ -115,6 +115,23 @@ class TestFootprintCoverage(unittest.TestCase):
         _write_synthetic_dtm(self.dtm)
         compute_data_footprint(self.dtm, self.fp)
 
+    def test_the_footprint_is_the_same_whatever_block_a_row_falls_in(self):
+        # Red if a block's mask is written at another block's rows, or the
+        # last, short block is left out.
+        from unittest import mock
+
+        import pipeline
+
+        blocks = os.path.join(self.tmp, "blocks.geojson")
+        with mock.patch.object(pipeline, "VALID_BLOCK_ROWS", 97):
+            compute_data_footprint(self.dtm, blocks)
+        with open(self.fp) as whole, open(blocks) as by_block:
+            self.assertEqual(json.load(by_block), json.load(whole))
+        self.assertEqual(
+            sorted(os.listdir(self.tmp)),
+            ["blocks.geojson", "dtm.tif", "footprint.geojson"],
+        )
+
     def test_footprint_is_valid_geojson(self):
         with open(self.fp) as f:
             fc = json.load(f)
@@ -185,6 +202,20 @@ class TestRasterHasValidPixels(unittest.TestCase):
         path = os.path.join(self.tmp, "nan.tif")
         _write_raster(path, np.full((10, 10), np.nan), set_nodata=False)
         self.assertFalse(raster_has_valid_pixels(path))
+
+    def test_data_in_the_last_block_of_rows_counts(self):
+        # Red if only the first block of rows is read, or a block is read
+        # from the top again (its row offset dropped).
+        from unittest import mock
+
+        import pipeline
+
+        path = os.path.join(self.tmp, "last.tif")
+        arr = np.full((10, 10), _NODATA)
+        arr[9, 2] = 100.0
+        _write_raster(path, arr)
+        with mock.patch.object(pipeline, "VALID_BLOCK_ROWS", 3):
+            self.assertTrue(raster_has_valid_pixels(path))
 
     def test_missing_file_is_invalid(self):
         self.assertFalse(
