@@ -15,12 +15,12 @@ repeat that: it would need a fetcher and a warp per country (the `fetch` and
 one tile set per zoom range: `planet.pmtiles` (zoom 0 to 12) and a
 `6-x-y.pmtiles` file for each zoom-6 tile with finer data (zoom 13 and up), in
 `download_urls.json` on `download.mapterhorn.com`. The tiles are 512 px
-terrarium in lossless WebP. Its `attribution.json` names each source and
-licence, and lists 1 m sources in New Zealand (`nz`, LINZ) and the United
-States (`us1*`, USGS 3DEP).
+terrarium in lossless WebP. Its `attribution.json`, read on 2026-11-14, names
+each source and licence, and lists 1 m sources in New Zealand (`nz`, LINZ) and
+the United States (`us1*`, USGS 3DEP).
 
-NSW stays on 0031. Mapterhorn's Australian source (`au5a` to `au5i` in
-`attribution.json`) is Geoscience Australia's 5 m LiDAR-derived DEM, which the
+NSW stays on 0031. Mapterhorn's Australian source (`au5a` to `au5i` in the same
+file) is Geoscience Australia's 5 m LiDAR-derived DEM, which the
 maintainer established on 2026-11-14 is a partial composite, not the statewide
 model 0031 builds from.
 
@@ -74,10 +74,12 @@ and Logjam GPS inflates PNG by hand with `fflate`
   archive has the format of one `build_nsw_dem.py` made, so the sampler, the
   API, the phone's decoder and every `raster-dem` source should take it
   unchanged; no client was run against one in this change.
-- **Negative:** PNG is bigger than the WebP: 1.36 to 1.58 times on 12 tiles
-  measured when this was planned, the ratio 0030 measured and accepted. The
-  planet at zoom 1 to 13 would be about 500 GB (an estimate) where Mapterhorn's
-  file is 356 GB, and its one-off transcode is a large job. Logjam hosts and is
+- **Negative:** PNG is bigger than the WebP: 0030 measured 34 KB against 23 KB
+  on rugged ground and 4.7 KB against 2.7 KB on flat ground (it says about a
+  third larger), and accepted it. This change did not measure the ratio again. At that
+  ratio the planet at zoom 1 to 13 would be about 500 GB (an estimate), where
+  Mapterhorn's `planet.pmtiles` is 355.6 GB (its size in `download_urls.json`,
+  read 2026-11-14), and its one-off transcode is a large job. Logjam hosts and is
   responsible for a derived copy of other people's data, under each source's
   licence.
 - **Negative:** a region's heights are not one resolution, and nothing in the
@@ -100,8 +102,8 @@ and Logjam GPS inflates PNG by hand with `fflate`
   states no terms we found, is understood to log each reader's address and
   referrer (not verified here), and a map view would send where a user is
   looking to a third party. Logjam GPS cuts its offline clips from Logjam's own
-  archives for the same reason
-  ([0036](0036-the-phone-cuts-its-own-offline-clips.md)).
+  archives, as [0036](0036-the-phone-cuts-its-own-offline-clips.md) does:
+  requests stay on Logjam's own CDN.
 - **Teach the readers WebP.** No transcode and a third smaller. It needs an
   image dependency in the API, a native decoder or a second hand-written
   codec on the phone, a tile size per source through `resolveDemSamples`, a

@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+from concurrent.futures.process import BrokenProcessPool
 from unittest import mock
 from pathlib import Path
 
@@ -482,8 +483,8 @@ class TestInitFailure(unittest.TestCase):
     """A source that cannot be opened must stop the run with a sentence, not
     hang it. Mutations that turn it red: the check of every source in `heights`
     removed (a mistyped `--source` is then read in the workers); the worker
-    initializer left to raise (the pool respawns its workers for ever: the
-    real-pool test ends in its alarm instead of a failure); `build_block`
+    initializer left to raise (the pool breaks with no reason given, and the
+    real-pool test, which wants the reason, fails); `build_block`
     not raising the failure the initializer kept."""
 
     def args(self, tmp, sources, **extra):
@@ -545,7 +546,7 @@ class TestInitFailure(unittest.TestCase):
                 tempfile.TemporaryDirectory() as tmp,
                 mock.patch.object(region, "open_source", flaky),
                 mock.patch.object(
-                    region, "Pool", multiprocessing.get_context("fork").Pool
+                    region, "POOL_CONTEXT", multiprocessing.get_context("fork")
                 ),
             ):
                 with self.assertRaises(RuntimeError) as caught:
@@ -554,6 +555,76 @@ class TestInitFailure(unittest.TestCase):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, old)
         self.assertIn("worker cannot open it", str(caught.exception))
+
+
+class TestWorkerKilled(unittest.TestCase):
+    """A worker that dies part-way (out of memory) must fail the run, not leave
+    it waiting for a block that never arrives. Mutation that turns it red:
+    `multiprocessing.Pool` with `imap_unordered` in place of
+    `ProcessPoolExecutor` in `heights` (the run waits for ever: the test ends
+    in its alarm)."""
+
+    def test_a_killed_worker_raises_instead_of_hanging(self):
+        def alarm(*_):
+            raise AssertionError("the run hung")
+
+        old = signal.signal(signal.SIGALRM, alarm)
+        signal.alarm(60)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                src = Path(tmp) / "made-up.pmtiles"
+                sx, sy = dem.lonlat_to_tile(0.75, 42.5, 6)
+                sharpen.write_pmtiles(
+                    [(6, sx, sy, webp(ramp(512)))], src, MADE_UP_SOURCE
+                )
+                args = argparse.Namespace(
+                    bbox="0.5,42,1.0,43",
+                    zmax=7,
+                    zmin=5,
+                    credit="c",
+                    name="n",
+                    jobs=2,
+                    source=[str(src)],
+                    out=str(Path(tmp) / "out.pmtiles"),
+                )
+                with (
+                    mock.patch.object(region, "_build_block", lambda job: os._exit(1)),
+                    mock.patch.object(
+                        region, "POOL_CONTEXT", multiprocessing.get_context("fork")
+                    ),
+                ):
+                    with self.assertRaises(BrokenProcessPool):
+                        region.heights(args)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+
+
+class TestCommandLine(unittest.TestCase):
+    """Mutation that turns it red: `--bbox` renamed, or its value split into
+    several arguments. A west edge below zero has to be passed as
+    `--bbox=-112.2,…`: on Python 3.12 (the worker image's) argparse refuses
+    `--bbox -112.2,…` ("expected one argument"), and 3.14 accepts it."""
+
+    def test_a_negative_west_edge_reaches_heights_whole(self):
+        argv = [
+            "build_region_dem.py",
+            "heights",
+            "--bbox=-112.2,40.5,-111.6,41",
+            "--zmax",
+            "15",
+            "--credit",
+            "c",
+            "out.pmtiles",
+        ]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            mock.patch.object(region, "heights") as run,
+        ):
+            region.main()
+        (args,), _ = run.call_args
+        self.assertEqual(args.bbox, "-112.2,40.5,-111.6,41")
+        self.assertEqual(args.zmax, 15)
 
 
 class TestBuild(unittest.TestCase):

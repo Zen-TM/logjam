@@ -10,6 +10,7 @@ pixels line up and nothing is resampled.
 docs/decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md
 
     build_region_dem.py heights --bbox W,S,E,N --zmax 17 --credit "…" OUT.pmtiles
+    build_region_dem.py heights --bbox=-112.2,40.5,-111.6,41 …   # a negative W: write "="
                                 [--zmin 8] [--name NAME] [--jobs N] [--source URL ...]
 
 `--zmax` is the deepest zoom written. It needs Mapterhorn tiles one zoom up
@@ -38,7 +39,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -56,6 +57,7 @@ SOURCE_TILE = 512  # Mapterhorn's tile size, in pixels
 ATTEMPTS = 8  # a range read, waiting 1, 2, 4 ... 60 s between
 MAX_WAIT_S = 60
 MAX_RETRY_AFTER_S = 300
+POOL_CONTEXT = None  # the default start method; a test sets one
 BLOCK_LEVELS = 3  # a block is 2**3 tiles across at the deepest zoom
 
 
@@ -237,8 +239,8 @@ _init_failure: Optional[str] = None  # why this process could not open them
 
 def init_worker(sources: List[str]) -> None:
     """Open this process's readers. It never raises: a pool whose initializer
-    fails respawns its workers for ever and the parent hears nothing, so the
-    failure is kept and `build_block` raises it
+    fails is broken with no reason given, so the failure is kept and
+    `build_block` raises it
     (tests/test_region_dem.py `TestInitFailure`)."""
     global _init_failure
     _readers.clear()
@@ -314,19 +316,38 @@ def heights(args: argparse.Namespace) -> None:
             sys.exit(f"cannot read {source}: {type(e).__name__}: {e}")
     tiles = source_tiles(bbox, zmax - 1)
     blocks = blocks_of(tiles, zmax, zb)
-    jobs = [(zmax, zb, bx, by, tiles) for (bx, by), tiles in sorted(blocks.items())]
-    print(f"{len(jobs)} blocks from {len(sources)} sources", file=sys.stderr)
+    blocks_jobs = [
+        (zmax, zb, bx, by, tiles) for (bx, by), tiles in sorted(blocks.items())
+    ]
+    print(f"{len(blocks_jobs)} blocks from {len(sources)} sources", file=sys.stderr)
 
     level: Dict[Tuple[int, int], np.ndarray] = {}
     count = 0
 
     def rows():
         nonlocal count
-        with Pool(args.jobs, init_worker, (sources,)) as pool:
-            for block_rows, (bx, by, grid) in pool.imap_unordered(build_block, jobs):
-                level[(bx, by)] = grid
-                count += len(block_rows)
-                yield from block_rows
+        # Not multiprocessing.Pool: a worker killed part-way (out of memory)
+        # leaves that waiting for ever; this raises BrokenProcessPool, as
+        # build_slope in build_nsw_dem.py does
+        # (tests/test_region_dem.py `TestInitFailure`).
+        with ProcessPoolExecutor(
+            args.jobs,
+            mp_context=POOL_CONTEXT,
+            initializer=init_worker,
+            initargs=(sources,),
+        ) as pool:
+            futures = [pool.submit(build_block, job) for job in blocks_jobs]
+            try:
+                for done in as_completed(futures):
+                    block_rows, (bx, by, grid) = done.result()
+                    level[(bx, by)] = grid
+                    count += len(block_rows)
+                    yield from block_rows
+            except BaseException:
+                # Cancel what is queued: the `with`'s own shutdown would run
+                # every queued block first.
+                pool.shutdown(cancel_futures=True)
+                raise
         if not count:
             sys.exit(f"Mapterhorn has no tile at zoom {zmax - 1} over {args.bbox}")
         for row in dem.coarse_levels(level, zb, zmin, rounding_for):
@@ -366,7 +387,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     cmd = commands.add_parser("heights", help="Mapterhorn tiles to a Logjam archive")
-    cmd.add_argument("--bbox", required=True, help="W,S,E,N in degrees")
+    cmd.add_argument(
+        "--bbox",
+        required=True,
+        help="W,S,E,N in degrees; write --bbox=… when W is negative",
+    )
     cmd.add_argument("--zmax", type=int, required=True)
     cmd.add_argument("--zmin", type=int, default=8)
     cmd.add_argument("--credit", required=True, help="the archive's attribution")

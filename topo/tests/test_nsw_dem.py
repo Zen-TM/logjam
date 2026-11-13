@@ -60,20 +60,20 @@ def decode(rgb: np.ndarray) -> np.ndarray:
 
 
 class TestCoarseTiles(unittest.TestCase):
-    """The NSW build's z9 and z8 are the bytes they were before `coarse_levels`
+    """The NSW build's z9 and z8 are the pixels they were before `coarse_levels`
     was shared with build_region_dem.py (the digests were taken from the loop
-    it replaced). Mutations that turn it red: a child placed in the wrong
+    it replaced, as it stood on `regions/terrain` before this change). Mutations that turn it red: a child placed in the wrong
     quarter, a zoom skipped, a coarser zoom taken from every other pixel instead
     of the layer's reduce."""
 
     DIGESTS = {
         "heights": (
             4,
-            "3a5b57f0899bb313e895082f0b4cb0348163ae8bb5d470585f247e1db13f34f1",
+            "d928d89ad7c30277273acfd22a16adf1d5a0df82426e9531253a84fda54de0d3",
         ),
         "slope": (
             4,
-            "6bc4a498aa667301b31024d37086299d72c6ba90e41813a26651648d5b9893e5",
+            "3c816e7a84b7142c1ab0df1b3c18949af00b26800c719373e7b3e19c64c1c56e",
         ),
     }
 
@@ -89,14 +89,18 @@ class TestCoarseTiles(unittest.TestCase):
             h, n = hashlib.sha256(), 0
             for z, x, y, png in coarse_tiles(Path(tmp), layer):
                 h.update(f"{z},{x},{y},".encode())
-                h.update(png)
+                # The decoded pixels, not the PNG bytes: those depend on the
+                # interpreter's zlib.
+                h.update(
+                    np.asarray(Image.open(io.BytesIO(png)).convert("RGB")).tobytes()
+                )
                 n += 1
         return n, h.hexdigest()
 
-    def test_heights_are_the_bytes_they_were(self):
+    def test_heights_are_the_pixels_they_were(self):
         self.assertEqual(self.digest(HEIGHTS), self.DIGESTS["heights"])
 
-    def test_slope_is_the_bytes_it_was(self):
+    def test_slope_is_the_pixels_it_was(self):
         self.assertEqual(self.digest(SLOPE), self.DIGESTS["slope"])
 
 

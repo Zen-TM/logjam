@@ -391,6 +391,10 @@ docker run --rm -v "$PWD/out:/out" logjam-topo-worker:latest \
 pmtiles show out/example.pmtiles
 ```
 
+A west edge below zero (the Americas) is written with an equals sign,
+`--bbox=-112.2,40.5,-111.6,41`: the image's Python reads `--bbox -112.2,…` as
+a missing value.
+
 The box above took 6 minutes 38 seconds in the image on a 4-thread machine (3
 jobs) and wrote 77 MB, byte for byte what the same command gave on a laptop. It
 is mostly coarse ground; a box of 1 m ground would be larger (an estimate from
