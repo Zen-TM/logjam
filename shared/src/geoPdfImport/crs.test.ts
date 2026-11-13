@@ -233,7 +233,13 @@ describe("resolveCrs — a zoned code is checked against the sheet", () => {
     // The detail names the code and zone, never how far the sheet is: with
     // the code that figure would locate it. Mutation: putting the offset back
     // into the detail turns this red.
-    expect(() => code(32601, NSW_PROBE)).toThrow(
+    let caught: unknown;
+    try {
+      code(32601, NSW_PROBE);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as GeoPdfParseError).detail).toBe(
       "EPSG:32601 (UTM zone 1) is far from the sheet",
     );
     expect(code(32756, NSW_PROBE).key).toBe("EPSG:32756");
