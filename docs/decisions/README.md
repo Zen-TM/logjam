@@ -83,18 +83,15 @@ An accepted ADR changes in three ways only:
   on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
   "(updated YYYY-MM-DD)".
-- **A narrow exception, or a reason that no longer holds,** is a bullet under
+- **A narrow exception, an addition to a rule, or a reason that no longer
+  holds,** is a bullet under
   Decision, `**Update YYYY-MM-DD: <what changes>.**`, that says what still
   holds the decision up and ends "Everything else above stands". For an
   exception, list the option you rejected under Alternatives. When no reason
-  is left holding the decision up, supersede it.
-
-A Decision step that gains a part (its workflow a stage, its list a member)
-is a stale fact: correct it in place, say what was added, and name the guard
-that holds it. The exception is a part that brings a requirement or refusal
-whose reason no other ADR carries: that changes this decision, so it takes
-the bullet. A change gets a bullet in each ADR whose decision it changes, and
-the in-place mark wherever else it makes a sentence stale.
+  is left holding the decision up, supersede it. An addition is anything a
+  Decision rule gains: a stage in its workflow, a member of its list, a case
+  it now covers. It is a bullet even when another ADR carries the reason; the
+  bullet then links that ADR.
 
 Leave the title, status and index row alone. If the change would alter what
 the decision chooses, or a reader would need both texts to know the rule,
