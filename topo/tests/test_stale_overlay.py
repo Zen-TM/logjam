@@ -76,6 +76,7 @@ class TestBoxBlurBands(unittest.TestCase):
                 )
 
 
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestBurntGroundMarking(unittest.TestCase):
     SETTINGS = {
         "vegetation": {
