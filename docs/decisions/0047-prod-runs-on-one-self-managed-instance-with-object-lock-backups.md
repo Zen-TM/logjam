@@ -302,7 +302,7 @@ fails when it is broken.
   `api/src/__tests__/sweepLeader.test.ts`). The rate limiter's counters, in
   each process's memory, are not.
 - **Negative: the host files are 90 % of what EC2 allows.** They travel in the
-  instance's user data, 14,751 bytes gzipped of EC2's 16,384, and a guard
+  instance's user data, 14,769 bytes gzipped of EC2's 16,384, and a guard
   stops at 15,000 (`brain_user_data_stays_within_the_ec2_limit`). The way out is to
   move them into the brain's Postgres image, which already carries the Compose
   plugin.
@@ -394,8 +394,9 @@ fails when it is broken.
   requests a second (15 held) against 80 with burst. Rejected for `unlimited`, accepting the worst case above.
 - **For the major upgrade: `pg_upgrade --link`, or a dump and restore.** Link
   mode is faster and needs no free space, and the official 18 image's layout
-  (`/var/lib/postgresql/18/docker`) is made for it, but it leaves the old
-  cluster unusable once the new server has run, so it is no rollback; a
+  (`/var/lib/postgresql/18/docker`) is made for it, but a failed
+  upgrade could not be counted on to leave the old cluster intact for the old tag
+  to boot, since both clusters share its files; a
   `pg_dump`/restore keeps the old cluster but takes a long outage on a large
   database, and a restore of the repository's newest backup under the new
   server is impossible. Rejected for copy mode between two directories of the

@@ -399,7 +399,7 @@ else
 fi
 docker rm -f -v $C > /dev/null
 
-# The old cluster is the rollback: the 16 server still starts on it and finds its row, and not the new one.
+# The old cluster is what a failed upgrade leaves for the old tag: the 16 server still starts on it and finds its row, and not the new one.
 check "the 16 server starts on the kept old cluster and finds its row" \
   [ "$(docker run --rm -v $V:/data --entrypoint bash "$UPIMG" -c '
     B=/usr/lib/postgresql/16/bin

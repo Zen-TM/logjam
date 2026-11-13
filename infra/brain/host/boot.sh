@@ -122,7 +122,7 @@ export BRAIN_RESTORE_TARGET=$target
 
 # Data of an older Postgres major than the image is upgraded first (postgres/major-upgrade.sh, in a container
 # of its own), newer is refused, and equal starts no container. A failure leaves the old cluster intact.
-# $gate (lib.sh) keeps the API down from before the upgrade until a full backup of the new major succeeds.
+# The boot that runs the upgrade writes $gate (lib.sh): no API until a full backup of the new major clears it.
 want=
 upgraded=
 if [ "$mode" = existing ]; then
@@ -222,8 +222,8 @@ if [ "$mode" = restore ] || [ "$repo" != backup ]; then pgb --type=full backup; 
 # A restore follows the newest backup, so it must be of this database's timeline and major. A volume
 # put back after a rewind is on an older timeline while the newest backup belongs to the rewound database:
 # without a full backup now, the next disk loss would come back as that other history. After a major upgrade the
-# newest backup is of the old major, which the image cannot restore: that backup is taken before the API starts
-# and its failure fails the boot. An ordinary reboot takes none. A timeline mismatch never stops the boot.
+# newest backup is of the old major, which the image cannot restore: that backup clears $gate (only the upgrading boot
+# writes it), and its failure fails the boot. An ordinary reboot takes none. A timeline mismatch never stops the boot.
 if [ "$mode" = existing ]; then
   db_tl=$(psql_agent -c "select substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8)" || true)
   read -r _ repo_tl repo_major < <(stanza_state) || true

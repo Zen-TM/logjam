@@ -342,8 +342,8 @@ the 3 minutes of "Changing a host file" plus the upgrade and a full backup
 **Afterwards:** `brain 'cat /run/brain/boot-mode'` says `upgraded`;
 `brain 'ls /data'` shows `postgres` and `postgres-<old>`;
 `brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
-lists both majors, a new WAL archive id (`18-2` after `16-1`), and a new full
-backup of the new major; `last_full_time` is now. The stats the planner keeps are
+lists both majors, a new WAL archive id (the new major with the next history
+number), and a new full backup of the new major; `last_full_time` is now. The stats the planner keeps are
 carried over except extended statistics: if a query plan looks wrong, run
 `vacuumdb --all --analyze-in-stages --missing-stats-only` in the container. When
 the new database has run well for a while, delete `/data/postgres-<old>` by hand
@@ -381,8 +381,8 @@ passes and `pg_ctl start` is what fails), so it reports `start_failed`. The full
 backup is the first thing the boot takes, so that only matters if the drill's
 04:30 Sydney run (`brain_drill.tf`) lands in the window: keep the cutover away
 from it. The watchdog lists the WAL archive under `logjam/archive/logjam/` and
-takes the highest archive id (`16-1`, then `18-2`), so it follows the move (it
-compares the history number first: `infra/lambda/brain-watchdog/test_handler.py`).
+takes the highest history number among the archive ids, so it follows the move
+(`infra/lambda/brain-watchdog/test_handler.py`).
 
 ## A release and a rollback
 
@@ -415,7 +415,7 @@ finished, same certificate, every marker row present. Do it in a quiet hour,
 announce it if users could notice, and do not merge anything else to `main`
 while it runs.
 
-The user data is 14,751 bytes gzipped of EC2's 16,384-byte limit, and a guard
+The user data is 14,769 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
 would cross it, move the host files into the brain's Postgres image instead,
 which already carries the Compose plugin: the host would then fetch them from
