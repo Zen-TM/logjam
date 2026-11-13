@@ -61,7 +61,7 @@ describe("the canyon grade as one value", () => {
 // would draw as a row of its own beside the Grade row); let the ACA grade win
 // over a French one; join the ACA segments with no space.
 describe("the ACA grade", () => {
-  const aca = { aca_technical: 3, aca_water: 2, aca_time: 3, aca_risk: 1 };
+  const aca = { aca_technical: 3, aca_water: 2, aca_time: 3, aca_risk: 3 };
 
   it("writes technical and water together, then time, then risk", () => {
     expect(formatCanyonGrade(aca)).toBe("3B III R");
@@ -69,12 +69,14 @@ describe("the ACA grade", () => {
 
   it("reads each rank as its label", () => {
     expect(formatCanyonGrade({ aca_technical: 4, aca_water: 7 })).toBe("4C4");
-    expect(formatCanyonGrade({ aca_water: 4, aca_risk: 3 })).toBe("C1 XX");
+    expect(formatCanyonGrade({ aca_water: 4, aca_risk: 5 })).toBe("C1 XX");
+    expect(formatCanyonGrade({ aca_risk: 1 })).toBe("PG");
+    expect(formatCanyonGrade({ aca_risk: 2 })).toBe("PG13");
   });
 
   it("shows what is set and nothing else", () => {
     expect(formatCanyonGrade({ aca_time: 6 })).toBe("VI");
-    expect(formatCanyonGrade({ aca_risk: 2, quality: 4 })).toBe("X");
+    expect(formatCanyonGrade({ aca_risk: 4, quality: 4 })).toBe("X");
   });
 
   it("shows the French grade alone when both systems are set", () => {
@@ -83,7 +85,7 @@ describe("the ACA grade", () => {
   });
 
   it("skips a value outside its labels", () => {
-    expect(formatCanyonGrade({ aca_water: 8, aca_risk: 0 })).toBeNull();
+    expect(formatCanyonGrade({ aca_water: 8, aca_risk: 6 })).toBeNull();
   });
 
   it("collapses the four inputs into the one Grade row", () => {
@@ -91,7 +93,7 @@ describe("the ACA grade", () => {
       ["aca_technical", "ACA technical", 3, "integer"],
       ["aca_water", "ACA water", 2, "integer"],
       ["aca_time", "ACA time", 3, "integer"],
-      ["aca_risk", "ACA risk", 1, "integer"],
+      ["aca_risk", "ACA risk", 3, "integer"],
       ["quality", "Quality", 4, "float"],
     ];
     expect(canyonGradeRows(acaRows, aca)).toEqual([

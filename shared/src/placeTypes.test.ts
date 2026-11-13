@@ -136,11 +136,30 @@ describe("system field definitions", () => {
     }
   });
 
+  // A stored value is a position in the list, so the order is the data. This is
+  // the guard for the append-only rule on `SystemFieldDef.labels` (ADR 0051).
+  // Mutation: swap two labels of `aca_water`, or insert one before the first
+  // of `aca_risk`: the test above still passes on the length, this one fails.
+  it("pin every labelled field's labels, in order", () => {
+    const labelled = Object.fromEntries(
+      SYSTEM_FIELD_DEFS.filter((def) => def.labels).map((def) => [
+        def.key,
+        def.labels,
+      ]),
+    );
+    expect(labelled).toEqual({
+      aca_technical: ["1", "2", "3", "4"],
+      aca_water: ["A", "B", "C", "C1", "C2", "C3", "C4"],
+      aca_time: ["I", "II", "III", "IV", "V", "VI"],
+      aca_risk: ["PG", "PG13", "R", "X", "XX"],
+    });
+  });
+
   it("read a labelled value by its rank from the field's minimum", () => {
     expect(fieldValueLabel("aca_water", 1)).toBe("A");
     expect(fieldValueLabel("aca_water", 5)).toBe("C2");
     expect(fieldValueLabel("aca_water", 7)).toBe("C4");
-    expect(fieldValueLabel("aca_risk", 3)).toBe("XX");
+    expect(fieldValueLabel("aca_risk", 5)).toBe("XX");
   });
 
   it("read no label for a field without labels or a value outside them", () => {

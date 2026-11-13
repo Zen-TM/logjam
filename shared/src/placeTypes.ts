@@ -360,7 +360,8 @@ export type SystemFieldDef = {
    * `labels[i]`, so "C2" is stored as 5 and filters and sorting keep working on
    * numbers. Append-only: a stored value is a position in this list, so
    * reordering or inserting renumbers every place that holds one. Guard:
-   * `placeTypes.test.ts` ("a label for every value"). Reasoning: ADR 0051.
+   * `placeTypes.test.ts` ("pin every labelled field's labels, in order").
+   * Reasoning: ADR 0051.
    */
   labels?: readonly string[];
 };
@@ -517,10 +518,10 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
     label: "ACA risk",
     type: "integer",
     min: 1,
-    max: 3,
+    max: 5,
     hint: "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.",
     placeTypes: ["canyon"],
-    labels: ["R", "X", "XX"],
+    labels: ["PG", "PG13", "R", "X", "XX"],
   },
 ];
 
