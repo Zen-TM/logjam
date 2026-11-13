@@ -3705,6 +3705,17 @@ function Map({
           // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
             disabled={selectingArea}
+            getView={() => {
+              const bounds = mapRef.current?.getBounds();
+              return bounds
+                ? {
+                    west: bounds.getWest(),
+                    south: bounds.getSouth(),
+                    east: bounds.getEast(),
+                    north: bounds.getNorth(),
+                  }
+                : null;
+            }}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {

@@ -5712,6 +5712,7 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSearchPin={setSearchPin}
+          view={viewportBbox}
           onSelectSaved={(item) => {
             if (item.gaugeId) {
               setShowGauges(true);

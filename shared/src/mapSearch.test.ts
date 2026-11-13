@@ -11,6 +11,17 @@ import {
   searchPinAfter,
 } from "./mapSearch";
 import { toEastingNorthing } from "./geoPdfExtent";
+import type { LonLatBox } from "./regions";
+
+const viewAround = (lat: number, lon: number): LonLatBox => ({
+  west: lon - 0.2,
+  south: lat - 0.2,
+  east: lon + 0.2,
+  north: lat + 0.2,
+});
+const OVER_UTAH = viewAround(40.7, -111.9);
+const OVER_NZ = viewAround(-41.3, 174.8);
+const OVER_SYDNEY = viewAround(-33.8, 151.2);
 
 describe("parseCoordinates", () => {
   it.each([
@@ -32,6 +43,50 @@ describe("parseCoordinates", () => {
       2,
     );
     expect(p!.lon).toBeCloseTo(150.31, 2);
+  });
+
+  // Bug: an unsigned pair was forced south and east whatever was typed, so it
+  // flew to the wrong side of the world anywhere but Australia.
+  // Mutation: force the signs again (`lat = -lat`, lon positive).
+  it.each([
+    ["40.7 111.9", OVER_UTAH, 40.7, -111.9],
+    ["40.7, 111.9", OVER_UTAH, 40.7, -111.9],
+    ["41.3 174.8", OVER_NZ, -41.3, 174.8],
+    ["111.9 40.7", OVER_UTAH, 40.7, -111.9],
+    ["33.71 150.31", OVER_SYDNEY, -33.71, 150.31],
+  ])(
+    "takes the hemispheres of an unsigned %j from the map over it",
+    (text, view, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect([p.lat, p.lon]).toEqual([lat, lon]);
+    },
+  );
+
+  // Mutation: ignore the typed minus and use the centre's hemisphere.
+  it.each([
+    ["-33.7 150.3", OVER_UTAH, -33.7, 150.3],
+    ["-33.7 150.3", OVER_NZ, -33.7, 150.3],
+    ["-33.7, 150.3", null, -33.7, 150.3],
+    ["40.7 -111.9", OVER_SYDNEY, 40.7, -111.9],
+    ["-40.7 -111.9", OVER_SYDNEY, -40.7, -111.9],
+    ["-41.3 174.8", OVER_UTAH, -41.3, 174.8],
+  ])(
+    "keeps the sign typed in %j wherever the map is",
+    (text, view, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect([p.lat, p.lon]).toEqual([lat, lon]);
+    },
+  );
+
+  it("falls back to the home region's hemispheres when the map has no view", () => {
+    expect(parseCoordinates("33.71 150.31", null)).toMatchObject({
+      lat: -33.71,
+      lon: 150.31,
+    });
+    expect(parseCoordinates("33.71 150.31")).toMatchObject({
+      lat: -33.71,
+      lon: 150.31,
+    });
   });
 
   it("labels a decimal pair to five places", () => {
@@ -76,6 +131,8 @@ describe("parseCoordinates", () => {
     "-33.71, 10.31", // neither longitude nor latitude fits
     `33°72'00"S 150°18'36"E`, // 72 minutes
     "1 2 3 4",
+    "40.7 41.9", // two latitudes' worth of degrees: which is which is unknown
+    "100 120", // two longitudes
   ])("does not read %j", (text) => {
     expect(parseCoordinates(text)).toBeNull();
   });
