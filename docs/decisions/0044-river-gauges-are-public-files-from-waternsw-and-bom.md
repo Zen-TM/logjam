@@ -83,9 +83,9 @@ service.**
   `units` (`{ "level": "m", "flow": "ML/d" }`) and `dayOffsetMinutes` (600),
   written by `topo/build_gauges.py`, and a client prints readings in the
   file's units, never converted, and cuts history days and a trip's day at
-  its offset (`gaugeDay` in `shared/src/gauges.ts`). A feed for another
-  country is a file at its own prefix, in its own units and day, which
-  `Region.gauges` points at. A gauge id is the one rule `isValidGaugeId`,
+  its offset (`gaugeDay` in `shared/src/gauges.ts`). A feed in other
+  units or another day needs no change to the readers, which take both
+  from the file they hold. A gauge id is the one rule `isValidGaugeId`,
   letters and digits, so a provider prefix fits. The fields are additive
   and a file without them reads as metres, ML/d and 600, so the format stays
   version 1 and the feed in the field is read unchanged. A file whose units
