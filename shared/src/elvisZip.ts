@@ -303,6 +303,8 @@ function parseDirectoryEntries(
   // Python's zipfile (the worker) reads the directory by its size, not its
   // count, so an entry past the count would reach the worker unseen here.
   // Other trailing bytes (a signature record, padding) are not entries.
+  // Guards: elvisZip.test.ts ("refuses entries past the count", "accepts
+  // trailing bytes that are not an entry").
   if (
     pos + 4 <= directory.length &&
     view.getUint32(pos, true) === CENTRAL_ENTRY_SIGNATURE

@@ -158,6 +158,7 @@ function fixture(name: string): Uint8Array {
 }
 
 describe("parseZipCentralDirectory on Zip64 archives", () => {
+  // Mutation: delete the line that reads the uncompressed size from the Zip64 extra field.
   it("reads an entry of 4 GiB or more from the Zip64 extra field", () => {
     const entries = parse(PYTHON_BIG_ENTRY_ZIP);
     expect(entries.map((e) => e.filename)).toEqual([
@@ -169,6 +170,7 @@ describe("parseZipCentralDirectory on Zip64 archives", () => {
     expect(entries[1].uncompressedSize).toBe(0);
   });
 
+  // Mutation: stop following the Zip64 locator in locateZipCentralDirectory (`locatorPos >= 0 &&` to `false &&`).
   it("reads a directory that starts past 4 GiB", () => {
     const entries = parseZipCentralDirectory(
       PYTHON_ZIP64_TAIL,
@@ -276,6 +278,7 @@ describe("readZipEntries", () => {
     expect(file.reads).toEqual([[0, zip.length]]);
   });
 
+  // Mutation: stop following the Zip64 locator, as above.
   it("reads a Zip64 directory at 5 GiB that is larger than the tail", async () => {
     const directory = directoryOf(buildZip(elvisNames(1200)));
     const at = 5 * 2 ** 30;
@@ -286,6 +289,7 @@ describe("readZipEntries", () => {
     expect(file.reads[1]).toEqual([at, at + directory.length]);
   });
 
+  // Mutation: stop following the Zip64 locator, as above.
   it("reads a real Python Zip64 archive whose directory starts past 4 GiB", async () => {
     const file = virtualFile(PYTHON_ZIP64_TAIL_FILE_SIZE, [
       {
@@ -425,6 +429,7 @@ describe("a central directory that disagrees with itself is refused", () => {
     );
   });
 
+  // Mutation: refuse any trailing byte (`pos < directory.length`) instead of an entry signature.
   it("accepts trailing bytes that are not an entry", () => {
     const zip = three();
     const directory = directoryOf(zip);

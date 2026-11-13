@@ -133,7 +133,7 @@ describe("topo-jobs route (fake auth)", () => {
   }
   const oneLazZip = (name: string) => zipOf([name]);
 
-  // 5 m DEMs, whose central directory is bigger than the 64 KiB tail /start
+  // 5 m DEMs, whose central directory is bigger than the tail /start
   // reads first. /start refuses 5 m DEMs after reading the directory, without
   // launching anything, so the refusal says the directory was read.
   const manyDemZip = (count: number) =>
@@ -145,9 +145,9 @@ describe("topo-jobs route (fake auth)", () => {
       ),
     );
 
-  // Mutation: put back the one 64 KiB tail read and parseZipCentralDirectory
+  // Mutation: put back the one tail read and parseZipCentralDirectory
   // in /start, and the refusal turns into "Logjam couldn't read that ZIP".
-  it("/start reads a central directory larger than the first 64 KiB", async () => {
+  it("/start reads a central directory larger than the tail", async () => {
     const createRes = await request(API_URL)
       .post("/topo-jobs")
       .set(AUTH)

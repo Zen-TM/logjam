@@ -349,9 +349,9 @@ router.post(
       );
     }
 
-    // Re-validate the ZIP's central directory from S3 with ranged GETs: the
-    // last 64 KB, plus the directory itself when that is larger (readZipEntries
-    // bounds it). Catches bypassed clients or corrupted uploads before paying
+    // Re-validate the ZIP's central directory from S3 with ranged GETs: the end
+    // of the file (ZIP_TAIL_BYTES), plus the directory itself when that is
+    // larger (readZipEntries bounds it). Catches bypassed clients or corrupted uploads before paying
     // ECS spin-up cost.
     let verifiedTileCount: number | null = null;
     let lazCount = 0;
