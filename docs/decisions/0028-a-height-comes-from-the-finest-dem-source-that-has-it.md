@@ -27,7 +27,9 @@ Proposal: #359.
 - **One declaration.** `DEM_SOURCES` in `shared/src/demSources.ts` lists every
   source, finest first; the order is the precedence. It is derived: each
   region's sources (`shared/src/regions.ts`), then the worldwide one. No file
-  but those two names a source's URL, zoom or credit (updated 2026-11-07).
+  but those two and the simulated regions' declaration
+  (`shared/src/simRegions.ts`) names a source's URL, zoom or credit (updated
+  2026-11-14). Guard: `shared/src/demSources.test.ts`.
 - **One sampler.** `sampleDem` in the same file decides which source answers.
   The API and Logjam GPS supply only tile I/O (a `DemTileReader`), following
   [0020](0020-share-the-decision-not-the-drawing.md).
@@ -122,6 +124,15 @@ Proposal: #359.
   gives no slope when none does, since the worldwide 30 m tiles are too
   coarse to show a cliff. Guard: `shared/src/demSlope.test.ts`.
   Everything else above stands.
+- **Update 2026-11-14: the simulated regions declare their own height
+  sources.** `shared/src/simRegions.ts` declares made-up height sources for
+  the simulated regions, which join `REGIONS`, and so `DEM_SOURCES`, only
+  where the simulated-regions flag is set (`simRegionsOn` in
+  `shared/src/regions.ts`), never in prod. That file is the third that may
+  name a source's URL, zoom or credit. The one sampler, the precedence and
+  the rule that no client or other file names a source all still hold.
+  Guard: `shared/src/demSources.test.ts`, which checks the sources with the
+  flag on as well as off. Everything else above stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS

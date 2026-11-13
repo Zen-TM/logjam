@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // E2E target. Defaults to the local Vite dev server; override for prod:
-//   E2E_BASE_URL=https://logjamnsw.com npm run e2e
+//   E2E_BASE_URL=https://logjam.earth npm run e2e
 // Local dev requires the full stack up first: `make dev`, then `cd api && npm run dev`.
 // This config auto-starts the *frontend* dev server (fake auth) but NOT api/infra.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";

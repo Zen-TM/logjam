@@ -185,7 +185,7 @@ describe("scrubStructure", () => {
 
   it("scrubs URLs inside string values", () => {
     expect(
-      scrubStructure({ url: "https://api.logjamnsw.com/places/abc" }),
+      scrubStructure({ url: "https://api.logjam.earth/places/abc" }),
     ).toEqual({
       url: "[redacted-url]",
     });
@@ -220,7 +220,7 @@ describe("scrubEvent", () => {
           { type: "Error", value: "Invalid input\n{ name: 'Hidden Place' }" },
         ],
       },
-      request: { url: "https://api.logjamnsw.com/places" },
+      request: { url: "https://api.logjam.earth/places" },
       user: { id: "abc" },
       extra: { latitude: -33.7, harmless: true },
     };
@@ -239,9 +239,9 @@ describe("scrubEvent", () => {
       breadcrumbs: [
         {
           category: "fetch",
-          message: "GET https://api.logjamnsw.com/places/xyz 200",
+          message: "GET https://api.logjam.earth/places/xyz 200",
           data: {
-            url: "https://api.logjamnsw.com/places/xyz",
+            url: "https://api.logjam.earth/places/xyz",
             status_code: 200,
           },
         },
