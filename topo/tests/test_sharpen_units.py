@@ -30,6 +30,9 @@ from sharpen import CannotSharpen  # noqa: E402
 
 _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 
+# A unit's name comes from the upload, so a sentence never quotes it.
+LEAK = "Kanangra Walls Survey"
+
 US_FOOT = 1200 / 3937
 FOOT = 0.3048
 
@@ -135,10 +138,12 @@ class TestUnitNames(unittest.TestCase):
         for name in ("US survey foot", "us-ft", "US Survey Foot", "ftUS"):
             self.assertEqual(sharpen.linear_unit_m(name), US_FOOT, name)
 
-    def test_an_unknown_unit_is_refused_with_its_name(self):
+    def test_an_unknown_unit_is_refused_without_quoting_it(self):
+        # The sentence is logged and stored: text from the upload stays out.
         with self.assertRaises(CannotSharpen) as raised:
-            sharpen.linear_unit_m("furlong")
-        self.assertIn("furlong", str(raised.exception))
+            sharpen.linear_unit_m(LEAK)
+        self.assertNotIn(LEAK, str(raised.exception))
+        self.assertNotIn("Kanangra", str(raised.exception))
 
 
 class TestCloudUnits(unittest.TestCase):
@@ -177,12 +182,13 @@ class TestCloudUnits(unittest.TestCase):
 
     def test_an_unknown_horizontal_unit_is_refused(self):
         srs = {
-            "units": {"horizontal": "furlong", "vertical": ""},
+            "units": {"horizontal": LEAK, "vertical": ""},
             "isgeographic": False,
         }
-        with self.assertRaises(CannotSharpen) as raised:
-            sharpen.cloud_units(srs)
-        self.assertIn("furlong", str(raised.exception))
+        for decide in (sharpen.cloud_units, lambda s: sharpen.metre_filters(s, 32756)):
+            with self.assertRaises(CannotSharpen) as raised:
+                decide(srs)
+            self.assertNotIn("Kanangra", str(raised.exception))
 
     def test_utm_zone_of_a_point(self):
         self.assertEqual(sharpen.utm_epsg(-112.95, 37.28), 32612)
@@ -450,11 +456,11 @@ class TestRealDem(unittest.TestCase):
             "EPSG:3566",
             (1_650_000.0, 3.2808, 0, 4_400_000.0, 0, -3.2808),
             np.ones((8, 8)),
-            band_unit="furlong",
+            band_unit=LEAK,
         )
         with self.assertRaises(CannotSharpen) as raised:
             self.ground([path])
-        self.assertIn("furlong", str(raised.exception))
+        self.assertNotIn("Kanangra", str(raised.exception))
 
     def test_a_dem_in_feet_with_no_band_unit_has_heights_in_feet(self):
         path = self.dem(

@@ -22,7 +22,8 @@ OUT receives:
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
-DEMs, too big for memory or disk) and exits 2.
+DEMs, a measuring unit Logjam can't read, too big for memory or disk) and
+exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -32,9 +33,9 @@ archive and draw no seam.
 
 Ground is the ZIP's ELVIS DEM when it has one finer than 5 m; otherwise the
 survey's own class 2, as a TIN. Either is made metric first when the survey is
-in feet or degrees (`metric_dem`, `metre_filters`). The points are re-classified (SMRF) only
-when no tile has any class 2: on a classified survey that puts ground on
-the canopy.
+in feet or degrees (`metric_dem`, `metre_filters`). The points are
+re-classified (SMRF) only when no tile has any class 2: on a classified survey
+that puts ground on the canopy.
 
 PRIVACY: the footprint, the tile range, a tile index and a survey's name say
 where the user surveyed. No log call names them (tests/test_log_privacy.py).
@@ -109,6 +110,10 @@ SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
     "from ELVIS with its DEM, and make it again."
+)
+UNKNOWN_UNIT = (
+    "This survey's measuring unit isn't one Logjam can read. "
+    "Download it again in metres or feet, and make it again."
 )
 ONLY_5M = (
     "This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. "
@@ -314,14 +319,11 @@ LINEAR_UNITS = {
 
 def linear_unit_m(name: str) -> float:
     """Metres in a unit as PDAL or GDAL names it; a unit not known is refused,
-    never taken as metres."""
+    never taken as metres, and never quoted: its name is the upload's text."""
     try:
         return LINEAR_UNITS[name.strip().lower()]
     except KeyError:
-        raise CannotSharpen(
-            f"This survey measures in “{name}”, which Logjam can't read. "
-            "Download it again in metres or feet, and make it again."
-        ) from None
+        raise CannotSharpen(UNKNOWN_UNIT) from None
 
 
 def cell_metres(px: float, py: float, linear_m: Optional[float], lat: float = 0.0):
@@ -404,7 +406,7 @@ def metric_dem(path: Path, out: Path, epsg: Optional[int] = None) -> Path:
     # GDAL's warp converts a raster's heights by its CRS's vertical unit: the
     # source is warped without its vertical part, so the scale below is the only
     # one, and what it writes has none, so no later warp (`_warp`) scales again
-    # (tests/test_sharpen_units.py `test_a_dem_with_a_vertical_crs_in_feet_is_scaled_once`).
+    # (tests/test_sharpen_units.py `TestRealDem`).
     flat = pipeline.osr.SpatialReference(wkt=ds.GetProjection() or "")
     flat.StripVertical()
     dst = flat.ExportToWkt()
@@ -482,7 +484,8 @@ def cloud_units(srs: Optional[dict]) -> Tuple[Optional[float], float]:
 
     The height unit is the factor of the UNIT in the `vertical` WKT, not
     `units.vertical`: PDAL 2.6.2 reported "metre" there for a file whose
-    vertical CRS is in US survey feet (tests/test_sharpen_units.py `METRES_OVER_FEET`).
+    vertical CRS is in US survey feet (tests/test_sharpen_units.py
+    `METRES_OVER_FEET`).
     A file with no vertical CRS has its Z in the horizontal unit.
 
     Untested: a survey in feet as its agency wrote it, whose header differs in
