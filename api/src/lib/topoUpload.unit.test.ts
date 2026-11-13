@@ -199,7 +199,10 @@ describe("the topo worker's disk fits the upload caps", () => {
   // survey. Open country or an unclassified one is larger, and fails as "too
   // big" instead (sharpen.py).
   // On top of that sit the pulled image, the TIN rasters, the tile files and
-  // the archives being packed. ecs.tf is read as text: it is the value prod runs.
+  // the archives being packed. These factors model the sharpen step's disk; the
+  // vegetation pass after it holds the ZIP, one extraction and its rasters, and
+  // is limited by memory, not disk, at the caps.
+  // ecs.tf is read as text: it is the value prod runs.
   const EXTRACTED_AND_GROUND_FACTOR = 1 + 0.75;
   const OVERHEAD_GIB = 10;
   const GiB = 1024 ** 3;
