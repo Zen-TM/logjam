@@ -11,6 +11,7 @@
 // accuracy. GPTS is treated as WGS84 everywhere; no datum-shift machinery.
 import proj4 from "proj4";
 
+import { formatHeight } from "../units.js";
 import { GeoPdfParseError, type GeoPdfCrs } from "./parseGeoref.js";
 
 export interface ResolvedCrs {
@@ -131,7 +132,7 @@ function assertCrsDescriptionsAgree(epsgDef: string, crs: GeoPdfCrs): void {
   if (offBy > CRS_AGREEMENT_TOLERANCE_M) {
     throw new GeoPdfParseError(
       "UNSUPPORTED_CRS",
-      `EPSG:${crs.epsg} and the embedded WKT disagree by ${Math.round(offBy)} m`,
+      `EPSG:${crs.epsg} and the embedded WKT disagree by ${formatHeight(offBy)}`,
     );
   }
 }

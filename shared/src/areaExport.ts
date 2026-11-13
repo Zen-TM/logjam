@@ -47,7 +47,10 @@ export type AreaBbox = {
  */
 export const AREA_EXPORT_MAX_SIDE_KM = 100;
 
-export const AREA_EXPORT_TOO_LARGE = say`A map can be up to ${AREA_EXPORT_MAX_SIDE_KM} km on a side. Choose a smaller area, or split it into smaller maps.`;
+// The limit is written out: a `say` hole takes a number, not a formatted
+// string, and the API sends this sentence as it is, in km. The test "says the
+// limit it enforces" (`areaExport.test.ts`) holds the 100 to the constant.
+export const AREA_EXPORT_TOO_LARGE = say`A map can be up to 100 km on a side. Choose a smaller area, or split it into smaller maps.`;
 
 /**
  * Names every region with terrain, which `say` cannot take as a hole: a

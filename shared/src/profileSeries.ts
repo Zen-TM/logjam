@@ -270,8 +270,8 @@ export function trackStatRows(
     rows.push({ label: L.moving, value: formatDurationMs(detail.movingMs) });
     rows.push({ label: L.stopped, value: formatDurationMs(detail.stoppedMs) });
   }
-  rows.push({ label: L.ascent, value: `↑ ${Math.round(gainM)} m` });
-  rows.push({ label: L.descent, value: `↓ ${Math.round(lossM)} m` });
+  rows.push({ label: L.ascent, value: `↑ ${formatHeight(gainM)}` });
+  rows.push({ label: L.descent, value: `↓ ${formatHeight(lossM)}` });
   if (timed) {
     // Two speeds, because they answer different questions: the first is "how
     // long did the day take", the second is "how fast do we walk". A trip with

@@ -11,6 +11,7 @@
 // touches latitude/longitude — a place's position never reaches a list row.
 import { formatCanyonGrade } from "./canyonGrade.js";
 import { numericFieldValue } from "./fieldValues.js";
+import { lengthToInput, lengthUnitLabel } from "./units.js";
 
 export type PlaceStatus = "done" | "todo" | "shared";
 
@@ -83,7 +84,9 @@ export function placeSummary(place: PlaceSummaryFields): string {
   const facts = [
     formatCanyonGrade(place.fieldValues),
     hours != null ? `${trimNumber(hours)} h` : null,
-    longest != null ? `${trimNumber(longest)} m max` : null,
+    longest != null
+      ? `${trimNumber(lengthToInput(longest))} ${lengthUnitLabel()} max`
+      : null,
     abseils != null ? `${abseils} abseils` : null,
   ]
     .filter((part): part is string => Boolean(part))

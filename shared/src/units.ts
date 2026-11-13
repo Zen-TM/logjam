@@ -73,11 +73,30 @@ export function formatDistance(metres: number): string {
   return `${formatNumber(metres / 1000, 1)} km`;
 }
 
-/** A height, whole metres or feet. */
+/** A height, or any length read in whole metres or feet (a GPS accuracy). */
 export function formatHeight(metres: number): string {
   return imperial()
     ? `${formatNumber(Math.round(metres / METRES_PER_FOOT), 0)} ft`
     : `${formatNumber(Math.round(metres), 0)} m`;
+}
+
+/** The lowest and highest ground under a line, "412–655 m": one unit after both. */
+export function formatHeightRange(
+  minMetres: number,
+  maxMetres: number,
+): string {
+  const [low, high] = [minMetres, maxMetres].map((metres) =>
+    formatNumber(Math.round(imperial() ? metres / METRES_PER_FOOT : metres), 0),
+  );
+  return `${low}–${high} ${lengthUnitLabel()}`;
+}
+
+/** The two sides of a box in whole km or mi, "18 × 11 km": one unit after both. */
+export function formatBoxSize(widthKm: number, heightKm: number): string {
+  const [width, height] = [widthKm, heightKm].map((km) =>
+    formatNumber(Math.round(imperial() ? km / KM_PER_MILE : km), 0),
+  );
+  return `${width} × ${height} ${imperial() ? "mi" : "km"}`;
 }
 
 /** Speed with one decimal. Null (no timestamps) reads as unknown. */
