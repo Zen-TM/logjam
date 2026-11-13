@@ -248,6 +248,29 @@ describe("resolveCrs — a zoned code is checked against the sheet", () => {
     expect(() => code(7855, [156.1, -33.65])).toThrow(GeoPdfParseError);
   });
 
+  // A sheet far from its zone is refused when nothing but the code places it,
+  // and accepted when a WKT that parses agrees. Mutation: running the zone
+  // check whatever the WKT is turns the "still resolves" case red; never
+  // running it turns the other two red.
+  const FAR: [number, number] = [133, -25]; // 14 degrees from zone 55
+  const MGA55_WKT =
+    'PROJCS["GDA94_MGA_Zone_55",GEOGCS["GCS_GDA_1994",DATUM["D_GDA_1994",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",10000000.0],PARAMETER["Central_Meridian",147.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]';
+
+  it("still resolves a far sheet whose WKT parses and agrees", () => {
+    const r = resolveCrs({ kind: "PROJCS", epsg: 28355, wkt: MGA55_WKT }, FAR);
+    expect(r.key).toBe("EPSG:28355");
+  });
+
+  it("refuses a far sheet with a code only", () => {
+    expect(() => code(28355, FAR)).toThrow(GeoPdfParseError);
+  });
+
+  it("refuses a far sheet with a code and a WKT that does not parse", () => {
+    expect(() =>
+      resolveCrs({ kind: "PROJCS", epsg: 28355, wkt: "PROJCS[broken" }, FAR),
+    ).toThrow(GeoPdfParseError);
+  });
+
   // Mutation: dropping the wrap in the longitude difference refuses these.
   it("accepts either end of a sheet across 180 degrees", () => {
     expect(code(32760, [179.95, -17]).key).toBe("EPSG:32760");

@@ -33,6 +33,8 @@ interface EpsgEntry {
   def: string;
   isGeographic: boolean;
   isWebMercator?: boolean;
+  /** UTM zone number, for the zoned families. */
+  zone?: number;
 }
 
 const EPSG_TABLE: Record<number, EpsgEntry> = {
@@ -69,30 +71,40 @@ const UTM_FAMILIES: {
 /** Longitude, in degrees, a sheet's centre may lie from its zone's central
  * meridian. A zone spans 6° (3° each side), but real sheets sit in the next
  * zone over near an edge, and Norway's and Svalbard's widened zones reach 6°
- * from theirs. A sheet labelled with a code further out is mislabelled. */
+ * from theirs. A sheet labelled with a code further out is mislabelled.
+ * Guard: "allows 9 degrees from the central meridian and no more" in
+ * crs.test.ts. */
 const MAX_ZONE_OFFSET_DEG = 9;
 
-function epsgEntry(
-  epsg: number,
-  probe: [number, number],
-): EpsgEntry | undefined {
+function epsgEntry(epsg: number): EpsgEntry | undefined {
   const fixed = EPSG_TABLE[epsg];
   if (fixed) return fixed;
   if (!Number.isInteger(epsg)) return undefined;
   const family = UTM_FAMILIES.find((f) => epsg >= f.first && epsg <= f.last);
   if (!family) return undefined;
   const zone = family.firstZone + epsg - family.first;
-  // Without a WKT nothing else places the sheet, and the affine fits
-  // perfectly in the wrong plane (see resolveCrs).
-  const wrapped =
-    ((((probe[0] - (6 * zone - 183) + 180) % 360) + 360) % 360) - 180;
-  if (Math.abs(wrapped) > MAX_ZONE_OFFSET_DEG) {
+  return { def: utm(zone, family.south), isGeographic: false, zone };
+}
+
+/** Refuse a zoned code whose zone is far from the sheet. Only for a sheet
+ * with no usable WKT: nothing else places it, and its affine fits perfectly
+ * in the wrong plane. A WKT that parses is compared by
+ * assertCrsDescriptionsAgree instead, which also admits a correctly labelled
+ * sheet far from its zone, such as a map of a whole continent. */
+function assertZoneNearSheet(
+  epsg: number,
+  zone: number,
+  probe: [number, number],
+): void {
+  const offset = Math.abs(
+    ((((probe[0] - (6 * zone - 183) + 180) % 360) + 360) % 360) - 180,
+  );
+  if (offset > MAX_ZONE_OFFSET_DEG) {
     throw new GeoPdfParseError(
       "UNSUPPORTED_CRS",
-      `EPSG:${epsg} is UTM zone ${zone}, ${Math.round(Math.abs(wrapped))}° from the sheet`,
+      `EPSG:${epsg} is UTM zone ${zone}, ${Math.round(offset)}° from the sheet`,
     );
   }
-  return { def: utm(zone, family.south), isGeographic: false };
 }
 
 /** Metres of disagreement tolerated between an /EPSG code and a /WKT that
@@ -100,22 +112,25 @@ function epsgEntry(
  * for floating-point noise. */
 const CRS_AGREEMENT_TOLERANCE_M = 1;
 
-/** `probe` is a [lon, lat] inside the sheet, where its projection is defined
- * and accurate: a point outside it can be NaN, or agree by accident. */
+/** `probe` is a [lon, lat] inside the sheet, where its projection is defined:
+ * proj4 returns NaN or throws for some projections at a point far outside it. */
 export function resolveCrs(
   crs: GeoPdfCrs,
   probe: [number, number],
 ): ResolvedCrs {
   const epsg = crs.epsg;
   if (epsg !== undefined) {
-    const entry = epsgEntry(epsg, probe);
+    const entry = epsgEntry(epsg);
     if (entry) {
       // If the EPSG code wins outright without consulting the WKT, a producer
       // that writes the wrong code — a zone-54 code on a zone-56 sheet, say —
       // yields an overlay misplaced by ~500 km, and the residual check cannot
       // catch it: the affine is fitted in the wrong plane, so it fits
       // perfectly. When both are present they must agree.
-      assertCrsDescriptionsAgree(entry.def, crs, probe);
+      const compared = assertCrsDescriptionsAgree(entry.def, crs, probe);
+      if (!compared && entry.zone !== undefined) {
+        assertZoneNearSheet(epsg, entry.zone, probe);
+      }
       return {
         key: `EPSG:${epsg}`,
         def: entry.def,
@@ -153,22 +168,25 @@ export function resolveCrs(
 
 /** Project one probe point through both descriptions and refuse the pair if
  * they land in different places. A WKT proj4 can't parse is not evidence of
- * disagreement — the EPSG code stands on its own in that case. */
+ * disagreement — the EPSG code stands on its own in that case. Returns
+ * whether the two were compared. */
 function assertCrsDescriptionsAgree(
   epsgDef: string,
   crs: GeoPdfCrs,
   probe: [number, number],
-): void {
-  if (crs.kind === "EPSG_ONLY") return;
+): boolean {
+  if (crs.kind === "EPSG_ONLY") return false;
   let viaEpsg: number[];
   let viaWkt: number[];
   try {
     viaEpsg = proj4("EPSG:4326", epsgDef).forward(probe);
     viaWkt = proj4("EPSG:4326", crs.wkt).forward(probe);
   } catch {
-    return;
+    return false;
   }
-  if (!viaWkt.every(Number.isFinite) || !viaEpsg.every(Number.isFinite)) return;
+  if (!viaWkt.every(Number.isFinite) || !viaEpsg.every(Number.isFinite)) {
+    return false;
+  }
   const offBy = Math.hypot(viaEpsg[0]! - viaWkt[0]!, viaEpsg[1]! - viaWkt[1]!);
   if (offBy > CRS_AGREEMENT_TOLERANCE_M) {
     throw new GeoPdfParseError(
@@ -176,4 +194,5 @@ function assertCrsDescriptionsAgree(
       `EPSG:${crs.epsg} and the embedded WKT disagree by ${Math.round(offBy)} m`,
     );
   }
+  return true;
 }
