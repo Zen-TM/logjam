@@ -540,8 +540,9 @@ export function drawGridLabel(
   drawHaloed(
     ctx,
     [
-      // A margin prints no sign: -10 km reads "1" then "90".
-      [String(Math.abs(Math.floor(km / 100))), small],
+      // A margin prints no sign: -10 km reads "99" then "90", as the same
+      // line does in the southern zone with its 10,000 km false northing.
+      [String(((Math.floor(km / 100) % 100) + 100) % 100), small],
       [
         String(((km % 100) + 100) % 100).padStart(2, "0"),
         `bold ${largeFontSize}px ${MAP_FONT}`,

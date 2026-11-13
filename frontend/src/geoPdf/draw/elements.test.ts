@@ -118,15 +118,20 @@ describe("grid labels", () => {
   }
 
   // A northern zone's northing is negative south of the equator, and a margin
-  // prints no sign. Mutation: revert to the sign-keeping `%` and `Math.floor`,
-  // and -10 000 m draws "-1" then "-10".
-  it("draws a negative value as unsigned digits", () => {
+  // prints no sign: the digits are those of the same line in the southern
+  // zone, with its 10,000 km false northing. Mutation: revert to the
+  // sign-keeping `%` and `Math.floor`, and -10 000 m draws "-1" then "-10";
+  // restore `Math.abs` on the prefix and -10 km reads "1", as +100 km does.
+  it.each([
+    [-10000, ["99", "90"]],
+    [-100000, ["99", "00"]],
+    [-110000, ["98", "90"]],
+  ])("draws %i m as unsigned digits", (metres, digits) => {
     const { ctx, ops } = recorder();
-    drawGridLabel(ctx, -10000, 10000, 5, 9, 10, 16);
-    expect(ops.filter((o) => o.op === "fill").map((o) => o.text)).toEqual([
-      "1",
-      "90",
-    ]);
+    drawGridLabel(ctx, metres, 10000, 5, 9, 10, 16);
+    expect(ops.filter((o) => o.op === "fill").map((o) => o.text)).toEqual(
+      digits,
+    );
   });
 
   it("a label of several pieces strokes all of them before filling any", () => {

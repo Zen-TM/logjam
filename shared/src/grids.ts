@@ -126,7 +126,10 @@ export function gridZoneAt(
 
 /**
  * The zones of the grid at the box's centre that the box touches, west to
- * east. A box over two grids gets the centre's one. The box is unwrapped: one
+ * east. A view draws the grid of the ground at its centre: a box over two
+ * grids gets the centre's one, and UTM when the centre is in no region, even
+ * if the box overlaps one (grids.test.ts, "draws one grid for a box over
+ * two: the centre's"). The box is unwrapped: one
  * across the date line has `east` past 180, and the zones come back in the
  * world copy the box is in, so a clip against their edges lands on the map.
  * A box with no width gets the one zone at its point.
