@@ -50,7 +50,9 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
-`matchLanguage`). No test yet holds that call sites use it; a later change adds one.
+`matchLanguage`). No test yet holds that call sites use it; a later change adds one. No test yet holds that each client's entry file sets
+the global before it imports `@logjam/shared`, or that the API installs the
+resolver from `AsyncLocalStorage`; a later change adds them.
 
 ## Consequences
 
