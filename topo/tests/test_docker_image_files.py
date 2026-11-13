@@ -98,6 +98,56 @@ def _is_copied(relpath, sources):
     )
 
 
+# Packages that only build or fetch: none belongs in the image (a `-dev` suffix
+# is checked on its own).
+_BUILD_ONLY_PACKAGES = frozenset(
+    {
+        "build-essential",
+        "g++",
+        "gcc",
+        "make",
+        "pkg-config",
+        "software-properties-common",
+        "gpg-agent",
+        "python3-pip",
+        "curl",
+        "wget",
+        "unzip",
+    }
+)
+
+
+def _dockerfile_lines():
+    """Instructions with comment lines dropped and `\\` continuations joined."""
+    with open(_DOCKERFILE, encoding="utf-8") as fh:
+        raw = [ln.rstrip("\n") for ln in fh if not ln.lstrip().startswith("#")]
+    joined, current = [], ""
+    for ln in raw:
+        if ln.endswith("\\"):
+            current += ln[:-1] + " "
+        else:
+            joined.append(" ".join((current + ln).split()))
+            current = ""
+    return joined
+
+
+def _final_stage():
+    """The Dockerfile's instructions after its last FROM: the shipped image."""
+    lines = _dockerfile_lines()
+    last_from = max(i for i, ln in enumerate(lines) if ln.startswith("FROM "))
+    return lines[last_from:]
+
+
+def _final_stage_apt_packages():
+    packages = set()
+    for ln in _final_stage():
+        if "apt-get install" not in ln:
+            continue
+        words = ln.split("apt-get install", 1)[1].split("&&", 1)[0].split()
+        packages.update(w for w in words if not w.startswith("-"))
+    return packages
+
+
 class TestDockerImageFiles(unittest.TestCase):
     def test_every_imported_local_module_is_copied(self):
         sources = _copied_sources()
@@ -121,6 +171,33 @@ class TestDockerImageFiles(unittest.TestCase):
         self.assertEqual([ln for ln in lines if ln.startswith("ENTRYPOINT")], [])
         cmds = [ln for ln in lines if ln.startswith("CMD")]
         self.assertEqual(cmds[-1], 'CMD ["python3", "/app/worker.py"]')
+
+    # Mutation: add `build-essential` (or `libgdal-dev`) to the last stage's
+    # apt-get install and the image ships a compiler (or GDAL's headers) again.
+    def test_the_last_stage_installs_runtime_packages_only(self):
+        installed = _final_stage_apt_packages()
+        # Floor: a parse that found nothing would pass the check below.
+        for needed in ("python3", "gdal-bin", "python3-gdal", "pdal"):
+            self.assertIn(needed, installed)
+        build_only = sorted(
+            p for p in installed if p.endswith("-dev") or p in _BUILD_ONLY_PACKAGES
+        )
+        self.assertEqual(
+            build_only,
+            [],
+            "the last stage is the image a Fargate task pulls before the worker "
+            "starts; build in an earlier stage and COPY --from the result",
+        )
+
+    # Mutation: drop `--no-install-recommends` from one apt-get install, or its
+    # `rm -rf /var/lib/apt/lists/*`, and the layer carries recommended packages
+    # or the package lists.
+    def test_every_apt_step_is_lean_and_cleans_its_lists(self):
+        steps = [ln for ln in _final_stage() if "apt-get install" in ln]
+        self.assertGreaterEqual(len(steps), 2)
+        for step in steps:
+            self.assertIn("--no-install-recommends", step)
+            self.assertIn("rm -rf /var/lib/apt/lists/*", step)
 
     def test_walk_actually_reaches_the_lazy_imports(self):
         # Guards the guard: push_send/email_send are imported inside function
