@@ -68,6 +68,7 @@ export function PlaceGauge({
               gauge={chosen}
               attribution={file.attribution}
               generatedAt={file.generatedAt}
+              units={file.units}
               now={now}
             />
           </>
@@ -120,7 +121,7 @@ export function PlaceGauge({
                       subtitle={[
                         formatDistanceM(distanceM),
                         level?.level != null && level.levelAt != null
-                          ? `${formatGaugeLevel(level.level)}, ${gaugeAgo(level.levelAt, now)}`
+                          ? `${formatGaugeLevel(level.level, file.units)}, ${gaugeAgo(level.levelAt, now)}`
                           : GAUGES.copy.noLevel,
                       ].join(" · ")}
                       onOpen={() => {
