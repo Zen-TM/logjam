@@ -184,6 +184,11 @@ I will not pretend this is airtight. It is not.
    it is the way back. Until I delete it, it holds a full copy of the database
    that none of the above watches beyond the events of attaching or snapshotting
    it.
+7. **A deleted photo or file stays for about ten days.** The media bucket keeps
+   old versions so a deletion can be undone: for about ten days after you
+   delete something, its bytes remain in the bucket, readable by me, and are
+   then removed for good. A file sent with "Send a copy" goes sooner, about a
+   day after its bytes are deleted.
 
 That is the real claim, stated plainly:
 
@@ -209,6 +214,9 @@ That is the real claim, stated plainly:
   snapshot's blocks, a backup object or the database's log: the shared privacy
   Deny in `infra/terraform/envs/prod/iam.tf` (`DenyShells` and its neighbours), held by
   `ci_reads_no_secret_or_user_data` and `contributor_is_read_only_and_mfa_gated`.
+- The media bucket (versioned, with old versions removed after about ten days,
+  and no rule that expires current photos): `infra/terraform/envs/prod/s3.tf`,
+  held by `media_is_versioned_and_never_expires_current_objects`.
 - The backup bucket (versioned, write-once for 7 days, no rule that
   expires current objects): `infra/terraform/envs/prod/brain_s3.tf`, held by
   `brain_backups_are_locked_and_never_expire`; and what the host's role may do

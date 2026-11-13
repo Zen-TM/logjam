@@ -740,6 +740,71 @@ run "brain_backups_are_locked_and_never_expire" {
   }
 }
 
+run "media_is_versioned_and_never_expires_current_objects" {
+  command = plan
+  plan_options {
+    target = [module.media]
+  }
+
+  # A Terraform test cannot read a module's rendered rules (its outputs are
+  # unknown in a targeted plan), so these assert on the two locals s3.tf hands
+  # the module, and the first assert holds the hand-over. How
+  # modules/storage renders a rule (an `expiration_days` of null must render no
+  # `expiration { days }`) is held by review.
+
+  # Mutation: `versioning_enabled = false`, an inline `lifecycle_rules = [...]`,
+  # either line commented out, or a local renamed with a suffix, in module
+  # "media" (a delete is final again, or a rule the next asserts do not see).
+  # The lines are matched whole, so `fmt`'s padding of `=` is fine.
+  assert {
+    condition = (
+      local.media_versioned != null &&
+      can(regex("(?m)^[ \\t]*versioning_enabled[ \\t]*=[ \\t]*local\\.media_versioned[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf")))) &&
+      can(regex("(?m)^[ \\t]*lifecycle_rules[ \\t]*=[ \\t]*local\\.media_lifecycle_rules[ \\t]*$", regex("(?s)module \"media\" \\{.*?\n\\}\n", file("s3.tf"))))
+    )
+    error_message = "module \"media\" in s3.tf must set versioning_enabled = local.media_versioned and lifecycle_rules = local.media_lifecycle_rules, each on its own uncommented line: the other asserts in this run read those locals, so an inline value would slip past them. Change the locals, not the module call."
+  }
+
+  # Mutation: `media_versioned = false` (a delete is final again).
+  assert {
+    condition     = local.media_versioned == true
+    error_message = "The media bucket must stay versioned: versioning is the undo window for a deleted photo, and without it a delete is final. Set local.media_versioned back to true in s3.tf."
+  }
+
+  # Mutation: an `expiration_days` on the undo rule (prefix "") or on any new
+  # rule outside file-sends/. That is an expiry of current objects, and it
+  # deletes every user's photos N days after upload. Only the "Send a copy"
+  # prefix may expire current objects.
+  assert {
+    condition = alltrue([
+      for r in local.media_lifecycle_rules :
+      r.prefix == "file-sends/" || try(r.expiration_days, null) == null
+    ])
+    error_message = "No lifecycle rule on the media bucket may expire current objects in days, bar file-sends/: it would delete every user's photos after that many days. Remove the expiration_days; a rule that ends the undo window uses noncurrent_expiration_days (local.media_lifecycle_rules in infra/terraform/envs/prod/s3.tf)."
+  }
+
+  # Mutation: removing the whole-bucket noncurrent rule, or changing its 10
+  # days, leaves versions for ever (a cost) or drops the undo window.
+  assert {
+    condition = anytrue([
+      for r in local.media_lifecycle_rules :
+      r.prefix == "" && try(r.noncurrent_expiration_days, null) == 10
+    ])
+    error_message = "The media bucket needs a whole-bucket (prefix \"\") rule with noncurrent_expiration_days = 10: without it deleted versions pile up and cost for ever, and a different number changes the undo window the runbook (docs/operations/brain.md) and privacy page state. Restore it in local.media_lifecycle_rules."
+  }
+
+  # Mutation: removing the file-sends/ noncurrent rule, or lengthening it. A
+  # sent file would then stay recoverable for the full 10 days past its day-8
+  # expiry, beyond the 7 days privacy.html promises.
+  assert {
+    condition = anytrue([
+      for r in local.media_lifecycle_rules :
+      r.prefix == "file-sends/" && try(r.noncurrent_expiration_days, null) == 1
+    ])
+    error_message = "A sent file's noncurrent version must expire after 1 day (a file-sends/ rule with noncurrent_expiration_days = 1 in local.media_lifecycle_rules): privacy.html promises a sent file is gone after 7 days, and the 10-day rule alone would keep it about 17."
+  }
+}
+
 run "brain_deploy_role_writes_only_release_json" {
   command = plan
   plan_options {
