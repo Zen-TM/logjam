@@ -66,7 +66,7 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--workers N` | CPU count − 1 | How many things run at once: tiles gridded (fewer if memory is short), rasters warped, filter threads, tiles rendered |
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |

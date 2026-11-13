@@ -207,5 +207,62 @@ class TestGroundPerTile(unittest.TestCase):
         self.assertEqual(self.grid(small, 2**34)[1], 8)
 
 
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestHasClass2(unittest.TestCase):
+    """Red if a cloud is read whole when its first part already has ground,
+    if the search stops at a part with none (an unclassified start, ground
+    further in), or if the last, short part is left unread."""
+
+    def probe(self, total, classes_of_part):
+        """has_class2 on a made-up cloud of `total` points; `classes_of_part`
+        maps a part's start to the classes PDAL would find in it. Returns
+        (the answer, the (start, count) of each part read)."""
+        import json
+        from unittest import mock
+
+        import pipeline
+
+        read = []
+
+        def run(command, **_):
+            start = int(next(a for a in command if "las.start" in a).split("=")[1])
+            count = int(next(a for a in command if "las.count" in a).split("=")[1])
+            read.append((start, count))
+            stats = {"statistic": [{"values": classes_of_part.get(start, [1])}]}
+            return mock.Mock(stdout=json.dumps({"stats": stats}))
+
+        with (
+            mock.patch.object(pipeline, "point_count", return_value=total),
+            mock.patch.object(pipeline.subprocess, "run", side_effect=run),
+        ):
+            return pipeline.has_class2("a.laz"), read
+
+    def test_it_stops_at_the_first_part_with_ground(self):
+        import pipeline
+
+        # A Category 1 tile's 57.6 M points, answered from its first part.
+        found, read = self.probe(57_600_000, {0: [1, 2, 5]})
+        self.assertTrue(found)
+        self.assertEqual(read, [(0, pipeline.CLASS_PROBE_POINTS)])
+        self.assertLessEqual(read[0][1], 2_000_000)
+
+    def test_ground_further_in_is_found(self):
+        import pipeline
+
+        part = pipeline.CLASS_PROBE_POINTS
+        found, read = self.probe(2 * part + 7, {2 * part: [2.0]})
+        self.assertTrue(found)
+        self.assertEqual(read, [(0, part), (part, part), (2 * part, 7)])
+
+    def test_a_cloud_with_none_is_read_to_its_end(self):
+        import pipeline
+
+        part = pipeline.CLASS_PROBE_POINTS
+        found, read = self.probe(2 * part + 7, {})
+        self.assertFalse(found)
+        self.assertEqual(len(read), 3)
+        self.assertEqual(self.probe(0, {}), (False, []))
+
+
 if __name__ == "__main__":
     unittest.main()
