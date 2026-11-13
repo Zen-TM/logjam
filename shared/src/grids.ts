@@ -63,11 +63,11 @@ const NZTM_ZONE: GridZone = {
 };
 
 /**
- * UTM zone `index` (0 starts at 180°W) on `side`'s side of the equator. An
+ * UTM zone `index` (0 starts at 180°W), in the southern hemisphere when `south`. An
  * index outside 0 to 59 is a longitude past 180°, as MapLibre reports a view
  * panned over the date line; it names the zone it wraps to and keeps its
  * longitudes unwrapped, so a clip against them still works.
- * ponytail: no Norway or Svalbard exceptions, no polar grid; add when a region needs them.
+ * It has no Norway or Svalbard exceptions and no polar grid, which no region needs.
  */
 function utmZone(index: number, south: boolean): GridZone {
   const zone = (((index % 60) + 60) % 60) + 1;
@@ -182,6 +182,11 @@ export function toGridAt(
   return { ...toGrid(lat, lon, zone), zone };
 }
 
+/**
+ * Latitude and longitude of a point in `zone`. The longitude is in [-180, 180]
+ * whatever world copy the zone was chosen for; a caller working in another
+ * copy shifts it, as `mgaGrid` does.
+ */
 export function fromGrid(
   easting: number,
   northing: number,
@@ -193,8 +198,7 @@ export function fromGrid(
 
 /**
  * Grid north's angle from true north at a point, in degrees; positive means
- * grid north is east of true north. The first-order rule, which is good to a
- * few hundredths of a degree inside a zone.
+ * grid north is east of true north. This is the first-order rule, Δλ·sin(lat).
  */
 export function gridConvergence(
   lat: number,

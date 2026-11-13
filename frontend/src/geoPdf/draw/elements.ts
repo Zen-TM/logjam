@@ -10,7 +10,7 @@ import {
   gridConvergence,
   gridZoneAt,
   overlayAttributionLines,
-  toGridAt,
+  toGrid,
   type GeoPdfConfig,
 } from "@logjam/shared";
 import {
@@ -569,15 +569,16 @@ export function drawGridLines(
   ctx.lineWidth = 2.5;
 
   if (config.elements.gridLines === "enNorthing") {
-    // MGA easting/northing grid
+    // Easting/northing grid
     const interval = config.scale <= 25000 ? 1000 : 10000;
 
-    // Use a single MGA zone based on the map centre to avoid cross-zone issues
+    // One grid zone, the one at the sheet's centre, read at both corners so a
+    // sheet across a zone edge or the equator gets one set of numbers
     const midLon = (east + west) / 2;
     const zone = gridZoneAt(midLon, (north + south) / 2);
 
-    const swEN = toGridAt(south, west);
-    const neEN = toGridAt(north, east);
+    const swEN = toGrid(south, west, zone);
+    const neEN = toGrid(north, east, zone);
 
     const toPixel = (lat: number, lon: number) =>
       latLonToCanvasPx(lat, lon, config.extent, widthPx, heightPx);

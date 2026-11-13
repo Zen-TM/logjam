@@ -14,8 +14,8 @@ import {
 import { NSW_REGION, REGIONS, type Region } from "./regions.js";
 
 /**
- * A made-up region with a box border. `Region.grid` is still "mga2020"
- * alone, so `grid` is cast; the slice that first reads a wider one widens it.
+ * A made-up region with a box border. `Region.grid` is typed "mga2020"
+ * alone, so `grid` is cast.
  */
 const region = (
   grid: GridId,

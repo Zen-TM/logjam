@@ -126,3 +126,44 @@ describe("grid labels", () => {
     }
   });
 });
+
+// A sheet's grid is one grid zone's, the one at its centre, whatever zones its
+// corners fall in: read in two zones, the southwest and northeast corners
+// differ by hundreds of kilometres (or a 10,000 km false northing) and no
+// line falls between them.
+// Mutation: read each corner with `toGridAt` (its own zone) and these draw no lines.
+describe("a sheet across a grid zone edge", () => {
+  const lines = (box: GeoPdfConfig["extent"]) => {
+    const { ctx, ops } = recorder();
+    drawGridLines(
+      ctx,
+      {
+        extent: box,
+        scale: 25000,
+        elements: { gridLines: "enNorthing" },
+      } as GeoPdfConfig,
+      1000,
+      1000,
+      150,
+    );
+    return ops.filter((o) => o.op === "line").length;
+  };
+
+  it.each([
+    [
+      "MGA 55 and 56 at 150 E",
+      { north: -33.6, south: -33.7, east: 150.05, west: 149.95 },
+    ],
+    [
+      "UTM 32 and 33 at 12 E",
+      { north: 46.05, south: 45.95, east: 12.05, west: 11.95 },
+    ],
+    [
+      "the equator, a 10,000 km false northing on one side",
+      { north: 0.05, south: -0.05, east: 12.1, west: 12.0 },
+    ],
+  ])("draws vertical and horizontal lines across %s", (_name, box) => {
+    // About 9 km wide and 11 km tall at 1 km spacing.
+    expect(lines(box)).toBeGreaterThan(15);
+  });
+});
