@@ -11,28 +11,8 @@ import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { NSW_REGION } from "./regions.js";
 
-export const NSW_COVERAGE = {
-  /** A saved clip is filed under this, beside the area it was saved with. */
-  id: "nsw-coverage",
-  /** A PMTiles archive under the CDN's `/master`, beside Land. */
-  archivePath: "master/coverage/nsw-coverage.pmtiles",
-  /** The build script's `SOURCE_LAYER` (test_coverage.py). */
-  sourceLayer: "coverage",
-  /** A `CARRIERS` id. */
-  carrierProperty: "carrier",
-  /** A `COVERAGE_LEVELS` level. */
-  levelProperty: "level",
-  /** The build script's zooms: z12 alone, where the overlay is drawn from
-   *  (`COVERAGE_MIN_ZOOM`); its grid is about 50 m, finer than the hatch's
-   *  spacing (about 190 m at z12). Deeper zooms overzoom. */
-  minzoom: 12,
-  maxzoom: 12,
-  coverage: NSW_REGION.terrain.heights.coverage,
-  credit:
-    "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
-  creditHtml:
-    'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
-} as const;
+/** NSW's archive, declared in the region (regions.ts). */
+export const NSW_COVERAGE = NSW_REGION.terrain.coverage;
 
 /**
  * The networks a user picks from: the three that own one. `NETWORKS` in the

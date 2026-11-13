@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
@@ -16,17 +16,25 @@ import {
 import {
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
+  layerIn,
   NSW_REGION,
   normalizeRegionIds,
   offersRegionChoice,
   REGIONS,
+  regionAt,
   regionBounds,
+  regionInView,
   regionsOf,
+  regionsTouching,
   regionTouchesBox,
+  simRegionsOn,
+  WORLD,
   type Region,
 } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
+const ALL: readonly Region[] = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD, WORLD];
 
 describe("the declaration", () => {
   // Mutation: give a second region NSW's id, and choosing one chooses both.
@@ -43,10 +51,24 @@ describe("the declaration", () => {
   });
 
   // Mutation: set a default basemap the region doesn't list, and Logjam GPS
-  // opens on a map its picker can't show.
+  // opens on a map its picker can't show. A region with none opens on a
+  // worldwide entry, which no region lists.
   it("opens each region on one of its own basemaps", () => {
-    for (const region of REGIONS)
-      expect(region.basemaps).toContain(region.defaultBasemap);
+    const owned = ALL.flatMap((region) => region.basemaps);
+    for (const region of ALL)
+      if (region.basemaps.length > 0)
+        expect(region.basemaps).toContain(region.defaultBasemap);
+      else {
+        expect(ids(BASEMAP_CATALOG)).toContain(region.defaultBasemap);
+        expect(owned).not.toContain(region.defaultBasemap);
+      }
+  });
+
+  // Mutation: an id with a capital or a hyphen, and a map's layer ids
+  // (`${id}${layer}`) stop being plain words that never collide.
+  it("keeps each id to lower-case letters and digits", () => {
+    expect(ALL.length).toBeGreaterThanOrEqual(5);
+    for (const region of ALL) expect(region.id).toMatch(/^[a-z0-9]+$/);
   });
 
   // Mutation: add a DEM source with a coverage box to DEM_SOURCES by hand, or
@@ -65,8 +87,10 @@ describe("the declaration", () => {
   // Mutation: cut the terrain from TERRARIUM, and the hillshade reads an
   // archive no region declares.
   it("cuts each region's terrain from one of its own height sources", () => {
-    for (const region of REGIONS.filter((r) => r.terrain))
-      expect(region.dem).toContain(region.terrain!.heights);
+    const withHeights = ALL.filter((r) => layerIn(r, "heights"));
+    expect(withHeights.length).toBeGreaterThanOrEqual(4);
+    for (const region of withHeights)
+      expect(region.dem).toContain(region.terrain.heights);
   });
 
   // Mutation: "Australia/Sidney", and every date read in it throws.
@@ -79,7 +103,7 @@ describe("the declaration", () => {
 
   // Mutation: a view centre in the sea, and a new map opens on nothing.
   it("opens its map inside its own border", () => {
-    for (const region of REGIONS) {
+    for (const region of [NSW_REGION, ...SIM_REGIONS]) {
       const [lon, lat] = region.view.center;
       expect(
         regionTouchesBox(region, {
@@ -111,6 +135,27 @@ describe("the declaration", () => {
       "six-imagery",
     ]);
     expect(NSW_REGION.defaultBasemap).toBe("six-topo");
+    expect(NSW_REGION.terrain.fire.id).toBe("nsw-fire");
+    expect(NSW_REGION.terrain.fire.archivePath).toBe(
+      "master/fire/nsw-fire-history.pmtiles",
+    );
+    expect(NSW_REGION.terrain.coverage.id).toBe("nsw-coverage");
+    expect(NSW_REGION.terrain.coverage.archivePath).toBe(
+      "master/coverage/nsw-coverage.pmtiles",
+    );
+    expect(NSW_REGION.vector).toEqual({
+      archivePath: "master/basemap/protomaps-nsw.pmtiles",
+      maxzoom: 15,
+    });
+  });
+
+  // Mutation: set the global in the test environment, and every other test
+  // runs with the simulated regions in `REGIONS`.
+  it("declares only NSW unless the simulated-regions flag is set", () => {
+    expect(simRegionsOn()).toBe(false);
+    expect(ids(REGIONS)).toEqual(["nsw"]);
+    expect(WORLD.vector).toBeNull();
+    expect(WORLD.terrain).toEqual({});
   });
 });
 
@@ -332,5 +377,198 @@ describe("toggleRegion and regionOffRefusal", () => {
     expect(regionOffRefusal(["nsw"], "nsw")).toBe(regionChoiceProblem([]));
     expect(regionOffRefusal(["nsw"], "nz")).toBeNull();
     expect(regionOffRefusal(["nsw", "nz"], "nsw")).toBeNull();
+  });
+});
+
+describe("the simulated regions", () => {
+  // Mutation: reuse an id or an archive path across two, and a clip or a map
+  // layer of one answers for another.
+  it("share no id or archive path with each other or with NSW", () => {
+    const declared = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD];
+    const archives = declared.flatMap((r) => [
+      ...Object.values(r.terrain).map((a) => a.id),
+      ...Object.values(r.terrain).map((a) => a.archivePath),
+    ]);
+    // A hillshade shares its archive with the heights, so count the ids.
+    const idsOnly = declared.flatMap((r) =>
+      Object.values(r.terrain).map((a) => a.id),
+    );
+    expect(new Set(idsOnly).size).toBe(idsOnly.length);
+    expect(archives.length).toBeGreaterThan(15);
+    for (const sim of [...SIM_REGIONS, SIM_WORLD])
+      for (const archive of Object.values(sim.terrain))
+        expect(archive.archivePath).toContain(
+          sim === SIM_WORLD ? "simworld" : sim.id,
+        );
+  });
+
+  // Mutation: draw a ring over the sea between the islands.
+  it("give NZ one ring for each island", () => {
+    expect(SIM_NZ.borders).toHaveLength(2);
+    expect(SIM_UTAH.borders).toHaveLength(1);
+  });
+});
+
+describe("simRegionsOn", () => {
+  // Mutation: read the flag when `REGIONS` is used instead of when the module
+  // loads, or ignore it, and the clients' tables built at load disagree.
+  it("puts the simulated regions and their world in the declaration at load", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const on = await import("./regions.js");
+      const sim = await import("./simRegions.js");
+      expect(on.simRegionsOn()).toBe(true);
+      expect(ids(on.REGIONS)).toEqual(["nsw", "simnz", "simutah"]);
+      expect(on.WORLD).toBe(sim.SIM_WORLD);
+      const demSources = await import("./demSources.js");
+      expect(ids(demSources.DEM_SOURCES)).toContain("simnz-heights");
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
+    expect(simRegionsOn()).toBe(false);
+  });
+});
+
+describe("regionAt", () => {
+  const two = [NSW_REGION, ...SIM_REGIONS];
+  const wanaka: [number, number] = [169.1, -44.62];
+  const coromandel: [number, number] = [175.6, -37.0];
+
+  // Mutation: test only `borders[0]`, and a point on the second island
+  // belongs to no region.
+  it("finds a point on each island of a region", () => {
+    expect(regionAt(...wanaka, two)).toBe(SIM_NZ);
+    expect(regionAt(...coromandel, two)).toBe(SIM_NZ);
+  });
+
+  // Mutation: test the region's bounding box, and the strait between the
+  // islands is New Zealand.
+  it("finds nothing in the strait, at sea or in a gap between regions", () => {
+    expect(regionAt(174.5, -41.2, two)).toBeNull();
+    expect(regionAt(156, -33, two)).toBeNull();
+    // Inside the box round NZ's two rings, between them.
+    expect(regionAt(172.0, -40.0, two)).toBeNull();
+  });
+
+  // Mutation: return NSW whatever the point, and Utah is New South Wales.
+  it("tells the hemispheres apart", () => {
+    expect(regionAt(-110.8, 38.27, two)).toBe(SIM_UTAH);
+    expect(regionAt(150.31, -33.7, two)).toBe(NSW_REGION);
+  });
+
+  // Mutation: fall back to WORLD for a point no region holds.
+  it("never returns the world", () => {
+    expect(regionAt(0, 0, [...two, SIM_WORLD])).toBeNull();
+  });
+
+  // Mutation: search from the end, and an overlap reads as the later region.
+  it("takes the first region in order where two overlap", () => {
+    const twin: Region = { ...SIM_NZ, id: "twin" };
+    expect(regionAt(...wanaka, [SIM_NZ, twin])).toBe(SIM_NZ);
+    expect(regionAt(...wanaka, [twin, SIM_NZ])).toBe(twin);
+  });
+});
+
+describe("regionsTouching", () => {
+  const two = [NSW_REGION, ...SIM_REGIONS];
+
+  // Mutation: stop at the first region, and a box across both islands is
+  // saved with the South Island's data alone.
+  it("lists every region a box shares ground with", () => {
+    expect(
+      ids(
+        regionsTouching({ west: 168, south: -45, east: 176, north: -36 }, two),
+      ),
+    ).toEqual(["simnz"]);
+    expect(
+      ids(
+        regionsTouching({ west: -111, south: -40, east: 155, north: 40 }, two),
+      ),
+    ).toEqual(["nsw", "simutah"]);
+  });
+
+  it("is empty for a box over the sea", () => {
+    expect(
+      regionsTouching(
+        { west: 174, south: -41.5, east: 174.5, north: -41 },
+        two,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("regionInView", () => {
+  const two = [NSW_REGION, ...SIM_REGIONS];
+  const around = (lon: number, lat: number, half: number) => ({
+    west: lon - half,
+    south: lat - half,
+    east: lon + half,
+    north: lat + half,
+  });
+  const quiet: Region = { ...SIM_WORLD, vector: null, terrain: {} };
+
+  // Mutation: take the first region touching the view, and a view centred on
+  // the next region's ground draws NSW because it clips NSW's coast.
+  it("takes the region under the view's centre", () => {
+    const next: Region = {
+      ...SIM_NZ,
+      id: "next",
+      borders: [
+        [
+          [154.3, -33],
+          [155, -33],
+          [155, -32],
+          [154.3, -32],
+        ],
+      ],
+    };
+    const view = { west: 153.9, south: -33.2, east: 154.9, north: -32.8 };
+    expect(regionsTouching(view, [NSW_REGION, next])[0]).toBe(NSW_REGION);
+    expect(regionInView(view, [NSW_REGION, next], quiet)).toBe(next);
+  });
+
+  // Mutation: return null when the centre is in no region, and a view that
+  // only grazes one draws none of its layers.
+  it("falls back to the first region touching the view", () => {
+    // Centred in the strait, one island at the edge of the view.
+    const view = { west: 174.0, south: -41.5, east: 176.0, north: -36.9 };
+    expect(regionAt(175, -39.2, two)).toBeNull();
+    expect(regionInView(view, two, quiet)).toBe(SIM_NZ);
+  });
+
+  // Mutation: return WORLD for a world that declares nothing, and prod's
+  // layers read "available" outside NSW.
+  it("falls back to the world only when it declares something", () => {
+    const sea = around(156, -33, 0.5);
+    expect(regionInView(sea, two, quiet)).toBeNull();
+    expect(regionInView(sea, two, SIM_WORLD)).toBe(SIM_WORLD);
+    expect(regionInView(sea)).toBeNull();
+  });
+
+  // Mutation: let the world win over a region that holds the centre.
+  it("prefers a region to the world", () => {
+    expect(regionInView(around(150.31, -33.7, 1), two, SIM_WORLD)).toBe(
+      NSW_REGION,
+    );
+  });
+});
+
+describe("layerIn", () => {
+  // Mutation: return `{}` or the region for an absent layer, and a switch
+  // reads "available" over no data.
+  it("is the region's archive, or null where it has none", () => {
+    expect(layerIn(NSW_REGION, "land")).toBe(NSW_REGION.terrain.land);
+    expect(layerIn(SIM_NZ, "heights")).toBe(SIM_NZ.terrain.heights);
+    expect(layerIn(SIM_NZ, "land")).toBeNull();
+    expect(layerIn(SIM_NZ, "fire")).toBeNull();
+    expect(layerIn(SIM_WORLD, "slope")).toBeNull();
+    expect(layerIn(SIM_WORLD, "hillshade")).not.toBeNull();
+  });
+
+  it("is null for no region", () => {
+    expect(layerIn(null, "heights")).toBeNull();
   });
 });
