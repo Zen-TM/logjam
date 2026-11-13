@@ -13,6 +13,7 @@ import {
   CreateMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
+import { readS3Range } from "../lib/readS3Range";
 import {
   say,
   readZipEntries,
@@ -359,16 +360,9 @@ router.post(
     let verifiedTileCount: number | null = null;
     let lazCount = 0;
     try {
-      const entries = await readZipEntries(objectSize, async (start, end) => {
-        const part = await s3.send(
-          new GetObjectCommand({
-            Bucket: TOPO_BUCKET,
-            Key: job.s3InputKey!,
-            Range: `bytes=${start}-${end - 1}`,
-          }),
-        );
-        return part.Body!.transformToByteArray();
-      });
+      const entries = await readZipEntries(objectSize, (start, end) =>
+        readS3Range(TOPO_BUCKET, job.s3InputKey!, start, end, objectSize),
+      );
       const zipStats = classifyElvisEntries(entries);
       // Zip-bomb guard: reject if the declared uncompressed payload would
       // exhaust the worker's disk before the worker is ever launched.

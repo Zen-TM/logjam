@@ -57,6 +57,11 @@ export class ElvisZipError extends Error {
   }
 }
 
+/** The error for a ZIP that cannot be read as it stands, for a caller whose read came back wrong. */
+export function truncatedZipError(): ElvisZipError {
+  return new ElvisZipError("TRUNCATED", TRUNCATED);
+}
+
 export interface ZipEntry {
   filename: string;
   compressedSize: number;
@@ -93,16 +98,25 @@ export const DERIVATIVE_STEM_TOKENS = [
   "rgb",
 ] as const;
 
-/** How much of a ZIP's end `readZipEntries` reads first. */
-export const ZIP_TAIL_BYTES = 65536;
+/**
+ * How much of a ZIP's end `readZipEntries` reads first: the end record (22)
+ * and its longest comment (65535), the Zip64 locator (20) and a standard Zip64
+ * end record (56), all of which can sit at the very end. A Zip64 end record
+ * with extensible data in front of its locator can start outside this and is
+ * refused as TRUNCATED (elvisZip.test.ts holds a maximal comment at the edge).
+ */
+export const ZIP_TAIL_BYTES = 22 + 65535 + 20 + 56;
 
 /**
  * The most central directory `readZipEntries` will fetch. The directory is
- * attacker-controlled on the API, so its size is bounded before it is read;
- * 16 MiB is about 100,000 ELVIS entries, far past any real download
- * (elvisZip.test.ts holds the refusal).
+ * attacker-controlled on the API and buffered whole on every call, so its size
+ * is bounded before it is read. An ELVIS entry is about 150 bytes (143 to 158
+ * in the two sample ZIPs), so 4 MiB is about 28,000 entries. A 15 GB ZIP of
+ * 2 m DEM tiles (4.9 MB each) or point-cloud tiles (14.3 MB each), with a
+ * metadata file apiece, lists about 6,000 or 2,000 (elvisZip.test.ts holds the
+ * refusal).
  */
-export const MAX_ZIP_DIRECTORY_BYTES = 16 * 1024 * 1024;
+export const MAX_ZIP_DIRECTORY_BYTES = 4 * 1024 * 1024;
 
 const EOCD_SIGNATURE = 0x06054b50;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
@@ -268,6 +282,16 @@ function parseDirectoryEntries(
     pos = entryEnd;
   }
 
+  // Python's zipfile (the worker) reads the directory by its size, not its
+  // count, so an entry past the count would reach the worker unseen here.
+  // Other trailing bytes (a signature record, padding) are not entries.
+  if (
+    pos + 4 <= directory.length &&
+    view.getUint32(pos, true) === CENTRAL_ENTRY_SIGNATURE
+  ) {
+    throw new ElvisZipError("TRUNCATED", TRUNCATED);
+  }
+
   return entries;
 }
 
@@ -319,6 +343,12 @@ export async function readZipEntries(
   if (offset >= tailStart) {
     const start = offset - tailStart;
     return parseDirectoryEntries(tail.subarray(start, start + size), count);
+  }
+  // An empty directory needs no read, and a range with end <= start is not a
+  // range at all (S3 would answer it with the whole object).
+  if (size === 0) {
+    if (count === 0) return [];
+    throw new ElvisZipError("TRUNCATED", TRUNCATED);
   }
   if (size > MAX_ZIP_DIRECTORY_BYTES) {
     throw new ElvisZipError("TOO_MANY_FILES", TOO_MANY_FILES);

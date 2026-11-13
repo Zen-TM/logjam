@@ -186,6 +186,35 @@ describe("topo-jobs route (fake auth)", () => {
     }
   });
 
+  // Mutation: delete the `size === 0` branch in shared's readZipEntries, and
+  // /start asks S3 for `bytes=0--1` (which it ignores) instead of answering.
+  it("/start answers a zero-size directory before the tail without a second read", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "topo-start-empty-directory-test" });
+    expect(createRes.status).toBe(201);
+    const { jobId, uploadUrl } = createRes.body;
+    try {
+      // 70 KB of padding, then an end record of count 0, size 0, offset 0.
+      const eocd = Buffer.alloc(22);
+      eocd.writeUInt32LE(0x06054b50, 0);
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/zip" },
+        body: Buffer.concat([Buffer.alloc(70_000), eocd]),
+      });
+      expect(put.status).toBe(200);
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
+      expect(startRes.status).toBe(400);
+      expect(startRes.body.error).toBe("That ZIP is empty.");
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
+  });
+
   // The worker refuses a job with no mark (OLD_JOB), and only CI's topo-e2e
   // would otherwise notice /start forgetting it. This one does launch the
   // worker (on a ZIP it cannot read), so it runs where the stack has ECS.
