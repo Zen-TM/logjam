@@ -95,7 +95,14 @@
         }
       ],
       "expo-secure-store",
-      "@sentry/react-native",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "logjam-qb",
+          "project": "react-native",
+          "experimental_android": { "enableAndroidGradlePlugin": true }
+        }
+      ],
       "expo-sqlite",
       [
         "expo-location",

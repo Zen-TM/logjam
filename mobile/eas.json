@@ -11,7 +11,8 @@
       "channel": "development",
       "environment": "development",
       "env": {
-        "LOGJAM_SENSOR_LOG": "1"
+        "LOGJAM_SENSOR_LOG": "1",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "preview": {
@@ -24,8 +25,7 @@
         "EXPO_PUBLIC_API_URL": "https://api.logjamnsw.com",
         "EXPO_PUBLIC_WEB_URL": "https://logjamnsw.com",
         "EXPO_PUBLIC_AUTH_MODE": "oidc",
-        "EXPO_PUBLIC_TOPO_CDN_BASE_URL": "https://logjamnsw.com",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_TOPO_CDN_BASE_URL": "https://logjamnsw.com"
       }
     },
     "production": {
