@@ -47,8 +47,8 @@ export function boxOverlayRect(
 /**
  * Two opposite corners in any order → a bbox.
  *
- * NSW-only product, so no antimeridian case: `west <= east` always holds, and a
- * box that wrapped 180° would need a different comparison than min/max.
+ * Corners are unwrapped longitudes, so a box dragged across 180° has an east
+ * edge above 180 and `west <= east` holds. Readers compare with `lonWithin`.
  */
 export function cornersToBbox(a: BoxCorner, b: BoxCorner): RegionBbox {
   return {

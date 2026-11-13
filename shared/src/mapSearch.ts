@@ -5,7 +5,7 @@
 // PRIVACY: nothing here touches the network or a log. Recents hold place
 // names, so each client keeps them on the device only and clears them when the
 // account leaves (frontend useAuth.ts, mobile wipeLocalData.ts).
-import { fromEastingNorthing } from "./geoPdfExtent.js";
+import { fromGrid, mgaZone } from "./grids.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
 /** What the search box says while it works, finds nothing or fails: one set of
@@ -105,7 +105,7 @@ function parseMga(text: string): SearchPoint | null {
   if (!g) return null;
   const zone = Number(g[1]) as 54 | 55 | 56;
   const [easting, northing] = [Number(g[2]), Number(g[3])];
-  const { lat, lon } = fromEastingNorthing(easting, northing, zone);
+  const { lat, lon } = fromGrid(easting, northing, mgaZone(zone));
   if (!within(-lat, LAT_MAG) || !within(lon, LON_MAG)) return null;
   return { lat, lon, label: `MGA ${zone} ${easting} ${northing}` };
 }

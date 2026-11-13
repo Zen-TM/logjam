@@ -13,10 +13,6 @@ import {
   applyPaperChange,
   applyOrientationChange,
   applyCoordModeChange,
-  detectMgaZone,
-  toEastingNorthing,
-  fromEastingNorthing,
-  gridConvergence,
 } from "./geoPdfExtent";
 
 // ── Test Helpers ─────────────────────────────────────────────────────────────
@@ -309,65 +305,6 @@ describe("applyCoordModeChange", () => {
     expect(result.east).toBe(state.east);
     expect(result.west).toBe(state.west);
     expect(result.scale).toBe(state.scale);
-  });
-});
-
-// ── Coordinate Conversion ────────────────────────────────────────────────────
-
-describe("coordinate conversion", () => {
-  it("detects MGA zone 56 for Sydney longitude", () => {
-    expect(detectMgaZone(151.2)).toBe(56);
-  });
-
-  it("detects MGA zone 55 for Melbourne longitude", () => {
-    expect(detectMgaZone(144.9)).toBe(55);
-  });
-
-  it("detects MGA zone 54 for Adelaide longitude", () => {
-    expect(detectMgaZone(138.6)).toBe(54);
-  });
-
-  it("round-trips lat/lon → easting/northing → lat/lon", () => {
-    const lat = -33.685;
-    const lon = 150.315;
-    const { easting, northing, zone } = toEastingNorthing(lat, lon);
-    const back = fromEastingNorthing(easting, northing, zone);
-
-    expect(back.lat).toBeCloseTo(lat, 4);
-    expect(back.lon).toBeCloseTo(lon, 4);
-  });
-
-  it("round-trips for zone 55", () => {
-    const lat = -37.8;
-    const lon = 145.0;
-    const { easting, northing, zone } = toEastingNorthing(lat, lon);
-    expect(zone).toBe(55);
-    const back = fromEastingNorthing(easting, northing, zone);
-    expect(back.lat).toBeCloseTo(lat, 4);
-    expect(back.lon).toBeCloseTo(lon, 4);
-  });
-
-  it("returns reasonable easting/northing values", () => {
-    const { easting, northing } = toEastingNorthing(-33.685, 150.315);
-    // Easting should be around 200k–800k for MGA zones
-    expect(easting).toBeGreaterThan(100000);
-    expect(easting).toBeLessThan(900000);
-    // Northing should be around 6000k–7000k for southern NSW
-    expect(northing).toBeGreaterThan(5000000);
-    expect(northing).toBeLessThan(7000000);
-  });
-});
-
-describe("gridConvergence", () => {
-  it("returns ~0 at the central meridian of zone 56", () => {
-    // Central meridian of zone 56 is 153°E
-    const conv = gridConvergence(-33.0, 153.0);
-    expect(Math.abs(conv)).toBeLessThan(0.01);
-  });
-
-  it("returns non-zero away from central meridian", () => {
-    const conv = gridConvergence(-33.0, 150.0);
-    expect(Math.abs(conv)).toBeGreaterThan(0.1);
   });
 });
 

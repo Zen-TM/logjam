@@ -7,7 +7,9 @@ import {
   displayUnits,
   formatArea,
   formatDistance,
+  formatBoxSize,
   formatHeight,
+  formatHeightRange,
   formatRain,
   formatSpeed,
   formatTemperature,
@@ -220,5 +222,22 @@ describe("formatNumber", () => {
     expect(formatNumber(1203, 0)).toBe("1203");
     expect(formatNumber(1234567.891, 1)).toBe("1234567.9");
     expect(formatNumber(0.5, 2)).toBe("0.50");
+  });
+});
+
+describe("one unit after two figures", () => {
+  // Mutation: in `formatHeightRange` or `formatBoxSize` write the unit after
+  // each figure ("412 m–655 m"), or round the box sides with `Math.floor`.
+  it("writes metric as Logjam did before", () => {
+    expect(formatHeightRange(411.6, 655.2)).toBe("412–655 m");
+    expect(formatBoxSize(17.6, 11.4)).toBe("18 × 11 km");
+  });
+
+  // Mutation: `formatBoxSize` converts with `METRES_PER_MILE` (a km as miles),
+  // or `formatHeightRange` leaves the metres unconverted.
+  it("writes imperial in feet and miles", () => {
+    setDisplayUnits("imperial");
+    expect(formatHeightRange(300, 600)).toBe("984–1969 ft");
+    expect(formatBoxSize(16.09344, 8.04672)).toBe("10 × 5 mi");
   });
 });
