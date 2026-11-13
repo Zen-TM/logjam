@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatCanyonGrade } from "./placeUtils";
 
-// `formatCanyonGrade` takes field values: the three grades are reserved
+// `formatCanyonGrade` takes field values: the grades are reserved
 // keys in `fieldValues`, not columns.
 // It stays canyon-specific on purpose — `v3a4III` is how a canyon's grade is
 // written and no other place type has one, so this is a presenter the generic

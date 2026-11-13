@@ -314,7 +314,7 @@ function PlaceDetailPanel({
 
   /** What this KIND of place records, and what this one answered. Only the
    *  answered ones: a form asks every question, a page reports the answers.
-   *  The three grade inputs read as the one Grade row, first, as on the hero. */
+   *  The grade inputs read as the one Grade row, first, as on the hero. */
   const attributes = useMemo(() => {
     if (!place) return [];
     const answered = defsForType(placeCustomFieldDefs, place.placeTypeId)

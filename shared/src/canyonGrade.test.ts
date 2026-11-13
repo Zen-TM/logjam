@@ -74,6 +74,8 @@ describe("the ACA grade", () => {
     expect(formatCanyonGrade({ aca_risk: 2 })).toBe("PG13");
   });
 
+  // Mutation: drop the `.filter(Boolean)` in `formatAcaGrade`, so an unset
+  // segment leaves its space behind.
   it("shows what is set and nothing else", () => {
     expect(formatCanyonGrade({ aca_time: 6 })).toBe("VI");
     expect(formatCanyonGrade({ aca_risk: 4, quality: 4 })).toBe("X");
@@ -84,6 +86,7 @@ describe("the ACA grade", () => {
     expect(formatCanyonGrade({ ...aca, commitment: 2 })).toBe("II");
   });
 
+  // Mutation: print the number for a value `fieldValueLabel` has no label for.
   it("skips a value outside its labels", () => {
     expect(formatCanyonGrade({ aca_water: 8, aca_risk: 6 })).toBeNull();
   });

@@ -12,7 +12,8 @@
 -- in the migration's first INSERT (aca_water's max 7 to 6); skip the
 -- `field_values` move in the rename; choose the suffix without looking at what the
 -- owner holds (the fixtures' aca_risk meets the aca_risk_2 they hold, and the
--- migration itself fails).
+-- migration itself fails); drop `updated_at` from either UPDATE, so delta sync
+-- never sends the change to a phone that has already synced.
 SELECT to_regclass('upgrade_check_aca.defs') IS NOT NULL AS aca_apply \gset
 \if :aca_apply
 DO $$
@@ -89,6 +90,19 @@ BEGIN
    WHERE d.id IS NULL;
   IF bad > 0 THEN
     RAISE EXCEPTION 'upgrade-check: % fixture definition(s) not renamed as expected', bad;
+  END IF;
+
+  -- Delta sync selects by `updated_at`: each row the rename changed is newer than
+  -- it was, and the one the rename left alone (aca_risk_2) is not touched.
+  SELECT count(*) INTO bad FROM upgrade_check_aca.fixtures f
+    LEFT JOIN (SELECT id, updated_at FROM custom_field_defs
+               UNION ALL SELECT id, updated_at FROM places) now ON now.id = f.id
+   WHERE now.id IS NULL
+      OR CASE WHEN f.id = 'upgrade-fixture-aca-risk-2'
+              THEN now.updated_at <> f.updated_at
+              ELSE now.updated_at <= f.updated_at END;
+  IF bad > 0 THEN
+    RAISE EXCEPTION 'upgrade-check: % renamed fixture row(s) kept their updated_at', bad;
   END IF;
 
   -- The values moved with them, and nothing is left under a system key.

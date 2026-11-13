@@ -52,17 +52,20 @@ BEGIN
       def.label, def.key, candidate, def.owner_id;
 
     -- The VALUES move first: they are keyed by the old key, and once the
-    -- definition moves nothing else knows where they were.
+    -- definition moves nothing else knows where they were. `updated_at` is set by
+    -- hand (Prisma's `@updatedAt` does not fire in SQL): delta sync selects by it,
+    -- so a phone that already synced only receives the change if it moves.
     UPDATE places
        SET field_values = jsonb_set(
              field_values,
              ARRAY[candidate],
              field_values -> def.key
-           ) - def.key
+           ) - def.key,
+           updated_at = CURRENT_TIMESTAMP
      WHERE owner_id = def.owner_id
        AND field_values ? def.key;
 
-    UPDATE custom_field_defs SET key = candidate WHERE id = def.id;
+    UPDATE custom_field_defs SET key = candidate, updated_at = CURRENT_TIMESTAMP WHERE id = def.id;
   END LOOP;
 END $$;
 

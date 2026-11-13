@@ -46,7 +46,11 @@ INSERT INTO places (id, owner_id, place_type_id, name, latitude, longitude, fiel
   ('upgrade-fixture-aca-place', 'upgrade-fixture-aca', 'b0000000-0000-4000-8000-000000000001', 'Fixture canyon', -33.0, 150.0,
    '{"aca_water": "mine", "aca_risk": "mine too", "aca_risk_2": "already here", "quality": 4}', CURRENT_TIMESTAMP);
 CREATE SCHEMA IF NOT EXISTS upgrade_check_aca;
-CREATE TABLE upgrade_check_aca.fixtures AS SELECT 1 AS one;
+-- When the fixtures were last changed, which the rename must move past.
+CREATE TABLE upgrade_check_aca.fixtures AS
+  SELECT id, updated_at FROM custom_field_defs WHERE id LIKE 'upgrade-fixture-aca-%'
+  UNION ALL
+  SELECT id, updated_at FROM places WHERE id = 'upgrade-fixture-aca-place';
 \endif
 CREATE SCHEMA IF NOT EXISTS upgrade_check_aca;
 CREATE TABLE upgrade_check_aca.defs AS

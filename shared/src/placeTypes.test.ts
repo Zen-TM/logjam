@@ -155,6 +155,7 @@ describe("system field definitions", () => {
     });
   });
 
+  // Mutation: index `labels` by the value instead of the value less `min`.
   it("read a labelled value by its rank from the field's minimum", () => {
     expect(fieldValueLabel("aca_water", 1)).toBe("A");
     expect(fieldValueLabel("aca_water", 5)).toBe("C2");
@@ -162,6 +163,8 @@ describe("system field definitions", () => {
     expect(fieldValueLabel("aca_risk", 5)).toBe("XX");
   });
 
+  // Mutation: give a field without labels `String(value)`, or a value outside
+  // the list its number.
   it("read no label for a field without labels or a value outside them", () => {
     expect(fieldValueLabel("commitment", 3)).toBeUndefined();
     expect(fieldValueLabel("my_own_field", 1)).toBeUndefined();
