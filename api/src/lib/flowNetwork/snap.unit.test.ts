@@ -122,6 +122,13 @@ describe("downstreamBearing", () => {
     expect(downstreamBearing(stairs, near)).toBeLessThan(105);
   });
 
+  // Mutation: wrap before rounding, and a creek running 359.7° reads 360,
+  // outside the 0 to 359 a bearing takes.
+  it("reads a bearing just west of north as 0, never 360", () => {
+    const north = [at(0, 0), at(-1, 200)];
+    expect(downstreamBearing(north, nearestOnLine(north, at(0, 100))!)).toBe(0);
+  });
+
   it("has no direction on a line without length", () => {
     const dot = [at(1, 1), at(1, 1)];
     expect(downstreamBearing(dot, nearestOnLine(dot, ORIGIN)!)).toBeNull();

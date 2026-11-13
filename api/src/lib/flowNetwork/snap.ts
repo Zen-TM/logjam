@@ -125,7 +125,8 @@ export function downstreamBearing(
   const [dx, dy] = at(here + spanM);
   if (ux === dx && uy === dy) return null;
   const degrees = (Math.atan2(dx - ux, dy - uy) * 180) / Math.PI;
-  return Math.round((degrees + 360) % 360);
+  // Rounded before the wrap, so 359.7° reads 0, never 360.
+  return Math.round(degrees + 360) % 360;
 }
 
 /**
