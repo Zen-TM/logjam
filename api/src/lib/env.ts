@@ -196,6 +196,22 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(500),
+  // Site-wide caps beside the per-user quotas: bytes stored by every account
+  // together (lib/storageQuota.ts, 500 GiB) and bytes downloaded this month by
+  // every account together (lib/egressQuota.ts, 300 GiB). S3 is about
+  // US$0.025 per GiB-month stored and the internet egress about US$0.114 per
+  // GiB at ap-southeast-2 prices, so the defaults are roughly US$12.50 and
+  // US$34 a month at the cap. 0 = no cap, like SITE_MONTHLY_COMPUTE_CREDITS.
+  SITE_STORAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(500 * 1024 ** 3),
+  SITE_MONTHLY_EGRESS_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(300 * 1024 ** 3),
   // TopoExportJob sweeps: queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
