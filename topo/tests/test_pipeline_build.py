@@ -48,7 +48,7 @@ class TestBuildPipelineFull(unittest.TestCase):
         # Rasters are produced in the LAZ's native CRS; reprojection happens
         # later as a raster warp (reproject_raster_to_web_mercator). Reprojecting
         # points here would rasterize a rotated quad into an axis-aligned grid →
-        # edge wedges that fill_nodata fabricates data into.
+        # edge wedges of no data.
         self.assertEqual(_stages_of_type(self.p, "filters.reprojection"), [])
 
     def test_drops_asprs_noise_and_overlap_before_smrf(self):
@@ -137,37 +137,184 @@ class TestGroundPerTile(unittest.TestCase):
     Red if one ground is chosen for the whole job: a ZIP mixing a classified
     tile with an unclassified one (a water-only tile, a second survey) then
     either runs height above ground on a tile with no ground points, which
-    fails the job, or wipes the survey's classes everywhere."""
+    fails the job, or wipes the survey's classes everywhere. Red too if the
+    tiles are gridded one a CPU whatever their size (eight dense tiles at
+    once run the task out of memory), by the first tile's size instead of
+    the largest's, with an unclassified tile counted as a classified one
+    (SMRF holds more than twice as much), with a small tile counted by its
+    points alone, or one at a time when several fit; or if a failed tile
+    leaves the tiles queued behind it to be gridded before the job fails."""
 
-    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+    def grid(self, points, memory):
+        """run_pdal_per_tile on two made-up tiles with PDAL mocked. Returns
+        (the pipelines run, how many at a time)."""
         import tempfile
+        from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
         import pipeline
 
         run = mock.Mock()
+        pools = []
+
+        def pool(n):
+            pools.append(n)
+            return ThreadPoolExecutor(n)
+
         with (
             tempfile.TemporaryDirectory() as work,
             mock.patch.object(
                 pipeline, "has_class2", side_effect=lambda p: p == "classified.laz"
             ),
+            mock.patch.object(pipeline, "point_count", side_effect=points.get),
+            mock.patch.object(pipeline, "available_memory", return_value=memory),
+            mock.patch.object(pipeline, "ThreadPoolExecutor", side_effect=pool),
+            mock.patch.object(pipeline, "ProcessPoolExecutor", ThreadPoolExecutor),
             mock.patch.object(pipeline, "run_pdal_pipeline", run),
             mock.patch.object(pipeline, "_merge_raster_tiles"),
             mock.patch.object(pipeline.os, "remove"),
         ):
-            pipeline.run_pdal_sequential_full(
-                ["classified.laz", "unclassified.laz"],
-                ["classified.laz", "unclassified.laz"],
+            pipeline.run_pdal_per_tile(
+                list(points),
+                list(points),
                 *(os.path.join(work, f"{n}.tif") for n in "abcde"),
                 work,
+                workers=8,
             )
+        # The first pool asks each tile for its ground; the second grids.
+        return [c.args[0] for c in run.call_args_list], pools[1]
+
+    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+        pipelines, _ = self.grid(
+            {"classified.laz": 1_000_000, "unclassified.laz": 1_000_000}, 2**34
+        )
         smrf = {
             next(
                 s["filename"] for s in p["pipeline"] if s.get("type") == "readers.las"
             ): bool(_stages_of_type(p["pipeline"], "filters.smrf"))
-            for p in (c.args[0] for c in run.call_args_list)
+            for p in pipelines
         }
         self.assertEqual(smrf, {"classified.laz": False, "unclassified.laz": True})
+
+    def test_a_failed_tile_stops_the_tiles_still_queued(self):
+        import tempfile
+        import time
+        from unittest import mock
+
+        import pipeline
+
+        started = []
+
+        def grid(job):
+            started.append(job[0])
+            if job[0] == 0:
+                raise RuntimeError("PDAL failed")
+            time.sleep(0.05)
+
+        classified = mock.patch.object(pipeline, "has_class2", return_value=True)
+
+        tiles = [f"{i}.laz" for i in range(8)]
+        with (
+            tempfile.TemporaryDirectory() as work,
+            classified,
+            mock.patch.object(pipeline, "point_count", return_value=10**12),
+            mock.patch.object(pipeline, "available_memory", return_value=1),
+            mock.patch.object(pipeline, "_grid_tile", side_effect=grid),
+            mock.patch.object(pipeline, "side_by_side") as merge,
+            self.assertRaises(RuntimeError),
+        ):
+            pipeline.run_pdal_per_tile(
+                tiles,
+                tiles,
+                *(os.path.join(work, f"{n}.tif") for n in "abcde"),
+                work,
+                workers=8,
+            )
+        # One at a time (no memory for more): the first fails, and at most
+        # the one the pool had already picked up runs after it, not all eight.
+        self.assertLessEqual(len(started), 2)
+        merge.assert_not_called()
+
+    def test_as_many_tiles_at_a_time_as_the_largest_fits_in_memory_with(self):
+        import pipeline
+
+        per_point = pipeline.GRID_BYTES_PER_POINT
+        self.assertGreater(per_point["smrf"], 2 * per_point["class2"])
+        share = pipeline.GRID_MEMORY_SHARE
+
+        def room_for(jobs, points, ground):
+            return int((jobs + 0.5) * points * per_point[ground] / share)
+
+        # The classified tile is the larger in points, the unclassified one
+        # in memory: room for three of it.
+        tiles = {"classified.laz": 60_000_000, "unclassified.laz": 50_000_000}
+        memory = room_for(3, 50_000_000, "smrf")
+        self.assertGreater(memory, room_for(5, 60_000_000, "class2"))
+        self.assertEqual(self.grid(tiles, memory)[1], 3)
+        # No room for one: still one, as before.
+        self.assertEqual(self.grid(tiles, 1)[1], 1)
+        # Small tiles are counted as the measured tile, not by their points.
+        small = {"classified.laz": 1000, "unclassified.laz": 1000}
+        measured = pipeline.GRID_MEASURED_POINTS
+        self.assertEqual(self.grid(small, room_for(2, measured, "smrf"))[1], 2)
+        self.assertEqual(self.grid(small, 2**36)[1], 8)
+
+
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestHasClass2(unittest.TestCase):
+    """Red if a cloud is read whole when its first part already has ground,
+    if the search stops at a part with none (an unclassified start, ground
+    further in), or if the last, short part is left unread."""
+
+    def probe(self, total, classes_of_part):
+        """has_class2 on a made-up cloud of `total` points; `classes_of_part`
+        maps a part's start to the classes PDAL would find in it. Returns
+        (the answer, the (start, count) of each part read)."""
+        import json
+        from unittest import mock
+
+        import pipeline
+
+        read = []
+
+        def run(command, **_):
+            start = int(next(a for a in command if "las.start" in a).split("=")[1])
+            count = int(next(a for a in command if "las.count" in a).split("=")[1])
+            read.append((start, count))
+            stats = {"statistic": [{"values": classes_of_part.get(start, [1])}]}
+            return mock.Mock(stdout=json.dumps({"stats": stats}))
+
+        with (
+            mock.patch.object(pipeline, "point_count", return_value=total),
+            mock.patch.object(pipeline.subprocess, "run", side_effect=run),
+        ):
+            return pipeline.has_class2("a.laz"), read
+
+    def test_it_stops_at_the_first_part_with_ground(self):
+        import pipeline
+
+        # A Category 1 tile's 57.6 M points, answered from its first part.
+        found, read = self.probe(57_600_000, {0: [1, 2, 5]})
+        self.assertTrue(found)
+        self.assertEqual(read, [(0, pipeline.CLASS_PROBE_POINTS)])
+        self.assertLessEqual(read[0][1], 2_000_000)
+
+    def test_ground_further_in_is_found(self):
+        import pipeline
+
+        part = pipeline.CLASS_PROBE_POINTS
+        found, read = self.probe(2 * part + 7, {2 * part: [2.0]})
+        self.assertTrue(found)
+        self.assertEqual(read, [(0, part), (part, part), (2 * part, 7)])
+
+    def test_a_cloud_with_none_is_read_to_its_end(self):
+        import pipeline
+
+        part = pipeline.CLASS_PROBE_POINTS
+        found, read = self.probe(2 * part + 7, {})
+        self.assertFalse(found)
+        self.assertEqual(len(read), 3)
+        self.assertEqual(self.probe(0, {}), (False, []))
 
 
 if __name__ == "__main__":

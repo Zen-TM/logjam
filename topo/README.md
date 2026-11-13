@@ -66,7 +66,7 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--workers N` | CPU count − 1 | How many things run at once: tiles gridded (fewer if memory is short), rasters warped, filter threads, tiles rendered |
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |
@@ -509,11 +509,6 @@ python3 build_coverage.py publish --bucket logjam-topo-jobs
 
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
-
-**Empty or patchy output tiles**
-This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step
-fills gaps up to 50 m across. For larger holes, increase `max_distance` in
-`fill_nodata()`.
 
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
