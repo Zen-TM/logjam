@@ -3,6 +3,11 @@
   "generatedAt": "2026-10-30T12:00:00Z",
   "coldSweptAt": "2026-10-30T12:00:00Z",
   "attribution": "\u00a9 State of New South Wales through WaterNSW. History via the Bureau of Meteorology, \u00a9 WaterNSW (CC BY).",
+  "units": {
+    "level": "m",
+    "flow": "ML/d"
+  },
+  "dayOffsetMinutes": 600,
   "gauges": [
     {
       "id": "900001",

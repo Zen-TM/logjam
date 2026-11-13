@@ -67,6 +67,11 @@ SWEEP_AFTER = timedelta(hours=23)
 # registry, not a change; every client would lose gauges.
 MIN_COUNT_RATIO = 0.8
 AEST = timezone(timedelta(hours=10))  # the portal's clock, no daylight saving
+# What `latest.json` says about its figures, so a reader prints and cuts days
+# as this feed does (`GaugeFeedFormat` in shared/src/gauges.ts). NSW's feed:
+# the levels above are metres and the flows megalitres a day.
+UNITS = {"level": "m", "flow": "ML/d"}
+DAY_OFFSET_MINUTES = int(AEST.utcoffset(None).total_seconds() // 60)
 
 BOM_URL = "https://www.bom.gov.au/waterdata/services"
 BOM_SERIES = "DMQaQc.Merged.DailyMean.24HR"
@@ -196,6 +201,8 @@ def build_latest(
         "generatedAt": iso(now),
         "coldSweptAt": swept_at,
         "attribution": ATTRIBUTION,
+        "units": UNITS,
+        "dayOffsetMinutes": DAY_OFFSET_MINUTES,
         "gauges": [
             {
                 "id": g["id"],
