@@ -16,8 +16,10 @@ export const GAUGE_FORMAT = 1;
 export const GAUGE_PREFIX = `master/gauges/v${GAUGE_FORMAT}/`;
 export const GAUGE_LATEST_PATH = `${GAUGE_PREFIX}latest.json`;
 
-/** The units a feed's readings are in, as published and never converted. A
- *  value is added here with the formatter that prints it. */
+/** The units a feed's readings may be in, as published and never converted.
+ *  The formatters print whatever unit they are handed, so this allowlist,
+ *  checked in `parseGaugeLatest`, is the only gate. Guard: gauges.test.ts
+ *  ("refuses units off the allowlist"). */
 export const GAUGE_LEVEL_UNITS = ["m", "ft"] as const;
 export const GAUGE_FLOW_UNITS = ["ML/d", "cfs"] as const;
 
@@ -114,7 +116,7 @@ const isDayOffset = (v: unknown): v is number =>
   Number.isInteger(v) && (v as number) >= -720 && (v as number) <= 840;
 
 /** The latest file, or null when it is not this format or is malformed. A
- *  file that states units no formatter knows is refused, not printed in the
+ *  file that states units off that allowlist is refused, not printed in the
  *  wrong ones; one that states none is New South Wales's, as first written. */
 export function parseGaugeLatest(value: unknown): GaugeLatestFile | null {
   if (typeof value !== "object" || value === null) return null;

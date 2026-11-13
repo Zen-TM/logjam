@@ -91,7 +91,7 @@ describe("gauge files", () => {
     expect(parsed.dayOffsetMinutes).toBe(GAUGE_DAY_OFFSET_DEFAULT);
   });
 
-  it("refuses units no formatter knows and an offset no clock has", () => {
+  it("refuses units off the allowlist and an offset no clock has", () => {
     // Mutation: accept any string as a unit, or any number as an offset → red.
     const raw = readFixture("gauges-latest.json") as Record<string, unknown>;
     expect(

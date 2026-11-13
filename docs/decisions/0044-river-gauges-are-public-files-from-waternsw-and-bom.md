@@ -89,7 +89,7 @@ service.**
   letters and digits, so a provider prefix fits. The fields are additive
   and a file without them reads as metres, ML/d and 600, so the format stays
   version 1 and the feed in the field is read unchanged. A file whose units
-  no formatter knows is refused, not printed in the wrong ones. No fetcher
+  are not on the shared allowlist is refused, not printed in the wrong ones. No fetcher
   for a second provider is built; no `provider` field, since the id's prefix
   and `attribution` already say whose reading it is. Guards:
   `shared/src/gauges.test.ts` ("a feed that is not New South Wales's"),
