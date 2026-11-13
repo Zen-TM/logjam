@@ -24,6 +24,34 @@ from urllib.parse import quote
 # children (pdal, a pool worker) still reads as the generic failure.
 TOO_BIG = "This area was too big to process. Try a smaller one."
 
+# The vegetation pass's own process peaks at about 0.22 GiB plus 50 bytes per
+# square metre of ground, because `compute_rasters` holds whole-area arrays
+# (measured: 976 MiB on a 16 km² four-tile area, 407 MiB on one 4 km² tile).
+# These declare 60 bytes and 0.5 GiB: an estimate too low is caught by the
+# pass's own out-of-memory exit, one too high leaves out a layer that would
+# have fitted. The API sizes a ticked job's task from the same two numbers
+# (api/src/lib/vegetationMemory.unit.test.ts reads them from here).
+VEGETATION_BYTES_PER_M2 = 60
+VEGETATION_BASE_BYTES = 512 * 1024**2
+
+# How `pipeline.py` says it can't fit the area (it refuses in advance, or runs
+# out of memory anyway), and the worker then finishes the job without the
+# vegetation layer. Guard: tests/test_worker_helpers.py `TestProcessSharpen`.
+VEGETATION_LEFT_OUT_EXIT = 3
+
+# What the owner reads when the layer was left out, in the completion
+# notification and email. shared/src/notificationLabel.ts words it the same
+# (notificationLabel.test.ts holds them equal).
+VEGETATION_LEFT_OUT = (
+    "The area is too large for the vegetation layer, so it was left out."
+)
+
+
+def vegetation_memory_estimate(area_m2: float) -> int:
+    """Bytes the vegetation pass needs for `area_m2` of ground."""
+    return VEGETATION_BASE_BYTES + int(VEGETATION_BYTES_PER_M2 * max(area_m2, 0))
+
+
 # The brain's Postgres certificate, which the worker image carries (Dockerfile).
 BRAIN_CA_PATH = "/app/brain-ca.pem"
 

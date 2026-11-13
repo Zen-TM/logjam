@@ -28,6 +28,7 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { deleteTopoJob } from "../lib/deleteTopoJob";
 import { launchFargateTask } from "../lib/ecsRunTask";
+import { vegetationTaskMemoryMiB } from "../lib/vegetationMemory";
 import { assertHasCredits } from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { assertGlobalCapacity } from "../lib/fargateCapacity";
@@ -407,6 +408,7 @@ router.post(
     // of one task is harmless.
     await assertGlobalCapacity("topo");
 
+    const sharpen = sharpenMark(lazCount, job.layerOptions);
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
       await assertHasCredits(user, "topo", verifiedEstimate, tx);
@@ -418,7 +420,7 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
-          sharpen: sharpenMark(lazCount, job.layerOptions),
+          sharpen,
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
@@ -442,6 +444,9 @@ router.post(
           taskDefinition: ECS_TASK_DEFINITION,
           containerName: "topo-worker",
           environment: [{ name: "JOB_ID", value: jobId }],
+          // A ticked job's vegetation pass grows with the area. Credits are
+          // vCPU-minutes of wall time: the task's size does not change them.
+          memoryMiB: vegetationTaskMemoryMiB(sharpen, lazCount),
         });
         // Persist the ARN so the reaper / DELETE can StopTask it.
         await prisma.topoJob.update({
