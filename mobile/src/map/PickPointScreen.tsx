@@ -77,7 +77,7 @@ import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
-import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
+import { homeView } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { RoutesLayer } from "./RoutesLayer";
 import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
@@ -129,6 +129,7 @@ export function PickPointScreen({
   const theme = useTheme();
   const styles = useStyles();
   const regionIds = useRegions();
+  const [home] = useState(() => homeView(regionIds));
 
   const insets = useSafeAreaInsets();
   // Read once: `initialViewState` is only honoured on the first render, and
@@ -143,10 +144,10 @@ export function PickPointScreen({
 
   const startCenter: [number, number] = initialPoint
     ? [initialPoint.longitude, initialPoint.latitude]
-    : (lastCamera?.center ?? DEFAULT_CENTER);
+    : (lastCamera?.center ?? home.center);
   const startZoom = initialPoint
     ? TYPED_POINT_ZOOM
-    : (lastCamera?.zoom ?? DEFAULT_ZOOM);
+    : (lastCamera?.zoom ?? home.zoom);
 
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(

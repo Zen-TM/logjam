@@ -35,7 +35,6 @@ const STILL_NAMING = [
   "frontend/src/geoPdf/render.ts",
   "mobile/src/map/MapScreen.tsx",
   "mobile/src/map/RegionDownloadScreen.tsx",
-  "mobile/src/map/mapChrome.ts",
   "mobile/src/map/sourceResolver.ts",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",

@@ -11,60 +11,70 @@
 // api/src/routes/leaderboard.unit.test.ts and api/src/__tests__/leaderboard.test.ts.
 
 import { DateTime } from "luxon";
-import { SYDNEY_TZ } from "./monthlyQuota.js";
+import type { Region } from "./regions.js";
 
 /**
- * A season runs winter to winter: 21 June to 20 June, so a whole canyoning
- * summer sits in one season. Trip dates are UTC-midnight date-only values, so
- * the bounds are too: `start` is 21 June's date, `end` the next 21 June's,
- * half-open. Only "which season is today" reads a clock, in Sydney time.
+ * A season runs winter to winter, so a whole canyoning summer sits in one
+ * season: 21 June to 20 June south of the equator, 21 December to 20 December
+ * north of it. Trip dates are UTC-midnight date-only values, so the bounds are
+ * too: `start` is the opening day's date, `end` the next one's, half-open.
+ * Only "which season is today" reads a clock, in the region's time zone.
  */
-const SEASON_START_MONTH = 6;
 const SEASON_START_DAY = 21;
 
+/** What a season reads of a region: where its winter is, and its calendar day. */
+type SeasonRegion = Pick<Region, "timeZone" | "view">;
+
+const seasonStartMonth = (region: SeasonRegion) =>
+  region.view.center[1] < 0 ? 6 : 12;
+
 export type Season = {
-  /** Inclusive, UTC midnight of 21 June. */
+  /** Inclusive, UTC midnight of the opening day. */
   start: Date;
-  /** Exclusive, UTC midnight of the next 21 June. */
+  /** Exclusive, UTC midnight of the next opening day. */
   end: Date;
   /** "2026–27" */
   label: string;
 };
 
-function seasonStartingIn(year: number): Season {
+function seasonStartingIn(year: number, region: SeasonRegion): Season {
   const endYear = (year + 1) % 100;
+  const month = seasonStartMonth(region) - 1;
   return {
-    start: new Date(Date.UTC(year, SEASON_START_MONTH - 1, SEASON_START_DAY)),
-    end: new Date(Date.UTC(year + 1, SEASON_START_MONTH - 1, SEASON_START_DAY)),
+    start: new Date(Date.UTC(year, month, SEASON_START_DAY)),
+    end: new Date(Date.UTC(year + 1, month, SEASON_START_DAY)),
     label: `${year}–${endYear.toString().padStart(2, "0")}`,
   };
 }
 
-/** Today's date in Sydney, as the UTC-midnight instant a trip dated today has. */
-function sydneyToday(now: Date): Date {
-  const local = DateTime.fromJSDate(now, { zone: SYDNEY_TZ });
+/** Today's date in the region, as the UTC-midnight instant a trip dated today has. */
+function regionToday(now: Date, region: SeasonRegion): Date {
+  const local = DateTime.fromJSDate(now, { zone: region.timeZone });
   return new Date(Date.UTC(local.year, local.month - 1, local.day));
 }
 
-export function currentSeason(now = new Date()): Season {
-  const today = sydneyToday(now);
+export function currentSeason(now: Date, region: SeasonRegion): Season {
+  const today = regionToday(now, region);
   const year = today.getUTCFullYear();
-  return today < seasonStartingIn(year).start
-    ? seasonStartingIn(year - 1)
-    : seasonStartingIn(year);
+  return today < seasonStartingIn(year, region).start
+    ? seasonStartingIn(year - 1, region)
+    : seasonStartingIn(year, region);
 }
 
-export function previousSeason(now = new Date()): Season {
-  return seasonStartingIn(currentSeason(now).start.getUTCFullYear() - 1);
+export function previousSeason(now: Date, region: SeasonRegion): Season {
+  return seasonStartingIn(
+    currentSeason(now, region).start.getUTCFullYear() - 1,
+    region,
+  );
 }
 
 /** Days after a season ends that a top-three finish is celebrated. */
 export const PODIUM_CELEBRATION_DAYS = 7;
 
-/** Whether today (Sydney) is within the week after the previous season ended. */
-export function isPodiumWeek(now = new Date()): boolean {
-  const today = sydneyToday(now).getTime();
-  const end = previousSeason(now).end.getTime();
+/** Whether today (in the region) is within the week after the previous season ended. */
+export function isPodiumWeek(now: Date, region: SeasonRegion): boolean {
+  const today = regionToday(now, region).getTime();
+  const end = previousSeason(now, region).end.getTime();
   return today >= end && today < end + PODIUM_CELEBRATION_DAYS * 86_400_000;
 }
 

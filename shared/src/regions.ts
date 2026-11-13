@@ -86,7 +86,7 @@ export type Region = {
   name: string;
   /** Where a map opens before the user has moved it. */
   view: { center: readonly [lon: number, lat: number]; zoom: number };
-  /** IANA. Gauge days and trip-plan dates still read `SYDNEY_TZ` until a second region. */
+  /** IANA. The leaderboard's season and a trip plan's day read it; gauge days still read `SYDNEY_TZ`. */
   timeZone: string;
   /**
    * The border, simplified, as one ring of [lon, lat] for each island, drawn a
@@ -370,10 +370,32 @@ export const DEFAULT_REGION_IDS: readonly string[] = [NSW_REGION.id];
  * unknown ids dropped, and anything that leaves none (absent, damaged, every
  * id retired) read as the default.
  */
-export function normalizeRegionIds(value: unknown): string[] {
+export function normalizeRegionIds(
+  value: unknown,
+  regions: readonly Region[] = REGIONS,
+): string[] {
   const ids = Array.isArray(value) ? value : [];
-  const known = REGIONS.filter((r) => ids.includes(r.id)).map((r) => r.id);
+  const known = regions.filter((r) => ids.includes(r.id)).map((r) => r.id);
   return known.length > 0 ? known : [...DEFAULT_REGION_IDS];
+}
+
+/**
+ * The account's home: the first of its chosen regions in `REGIONS` order, or
+ * the default region for an account that never chose. What a user's season,
+ * plan day and first-run map view follow; never what a map offers at a place.
+ * Guard: `regions.test.ts` ("accountRegion").
+ */
+export function accountRegion(
+  uiPreferences: unknown,
+  regions: readonly Region[] = REGIONS,
+): Region {
+  const chosen =
+    typeof uiPreferences === "object" && uiPreferences !== null
+      ? (uiPreferences as { regions?: unknown }).regions
+      : undefined;
+  return (
+    regionsOf(normalizeRegionIds(chosen, regions), regions)[0] ?? regions[0]!
+  );
 }
 
 /** The regions behind a choice, in `REGIONS` order. */

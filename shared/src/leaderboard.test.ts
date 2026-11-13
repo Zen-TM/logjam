@@ -9,51 +9,103 @@ import {
   selfStanding,
   type LeaderboardBoard,
 } from "./leaderboard";
+import { NSW_REGION } from "./regions";
+import { SIM_NZ, SIM_UTAH } from "./simRegions";
+
+const NSW = NSW_REGION;
 
 // Sydney is UTC+10 in June (no DST), so 21 June 00:00 Sydney is 20 June 14:00 UTC.
 const OPENING = new Date("2026-06-20T14:00:00.000Z");
 
 describe("currentSeason", () => {
   it("opens on 21 June in Sydney, bounded by trip dates (UTC midnight)", () => {
-    const season = currentSeason(OPENING);
+    const season = currentSeason(OPENING, NSW);
     expect(season.label).toBe("2026–27");
     expect(season.start.toISOString()).toBe("2026-06-21T00:00:00.000Z");
     expect(season.end.toISOString()).toBe("2027-06-21T00:00:00.000Z");
   });
 
   it("is still last season one minute before 21 June in Sydney", () => {
-    expect(currentSeason(new Date("2026-06-20T13:59:00.000Z")).label).toBe(
+    expect(currentSeason(new Date("2026-06-20T13:59:00.000Z"), NSW).label).toBe(
       "2025–26",
     );
   });
 
   it("reads March as the season that opened the June before", () => {
-    expect(currentSeason(new Date("2027-03-01T00:00:00.000Z")).label).toBe(
+    expect(currentSeason(new Date("2027-03-01T00:00:00.000Z"), NSW).label).toBe(
       "2026–27",
     );
   });
 
   it("pads the second year across a century", () => {
-    expect(currentSeason(new Date("2099-08-01T00:00:00.000Z")).label).toBe(
+    expect(currentSeason(new Date("2099-08-01T00:00:00.000Z"), NSW).label).toBe(
       "2099–00",
     );
   });
 });
 
+describe("a season in another region", () => {
+  // Mutation: start every season on 21 June.
+  it("opens on 21 December north of the equator, in its own day", () => {
+    // 21 Dec 00:00 in Denver (UTC-7) is 07:00Z.
+    expect(
+      currentSeason(new Date("2026-12-21T06:59:00.000Z"), SIM_UTAH).label,
+    ).toBe("2025–26");
+    const opened = currentSeason(
+      new Date("2026-12-21T07:00:00.000Z"),
+      SIM_UTAH,
+    );
+    expect(opened.label).toBe("2026–27");
+    expect(opened.start.toISOString()).toBe("2026-12-21T00:00:00.000Z");
+    expect(opened.end.toISOString()).toBe("2027-12-21T00:00:00.000Z");
+    // June, the middle of its canyoning summer, is still the season that opened the December before.
+    expect(
+      currentSeason(new Date("2027-06-21T00:00:00.000Z"), SIM_UTAH).label,
+    ).toBe("2026–27");
+  });
+
+  // Mutation: read Sydney's clock for every region.
+  it("turns over on the day in the region's own time zone", () => {
+    // New Zealand is UTC+12 in June: 21 June 00:00 there is 20 June 12:00Z, two hours before Sydney's.
+    expect(
+      currentSeason(new Date("2026-06-20T11:59:00.000Z"), SIM_NZ).label,
+    ).toBe("2025–26");
+    expect(
+      currentSeason(new Date("2026-06-20T12:00:00.000Z"), SIM_NZ).label,
+    ).toBe("2026–27");
+    expect(currentSeason(new Date("2026-06-20T12:00:00.000Z"), NSW).label).toBe(
+      "2025–26",
+    );
+  });
+
+  // Mutation: keep the podium week on 21 June.
+  it("has its podium week after the December opening", () => {
+    expect(isPodiumWeek(new Date("2026-12-22T00:00:00.000Z"), SIM_UTAH)).toBe(
+      true,
+    );
+    expect(isPodiumWeek(new Date("2026-06-22T00:00:00.000Z"), SIM_UTAH)).toBe(
+      false,
+    );
+    expect(
+      previousSeason(new Date("2026-12-22T00:00:00.000Z"), SIM_UTAH).label,
+    ).toBe("2025–26");
+  });
+});
+
 describe("previousSeason", () => {
   it("ends where the current one starts", () => {
-    const prev = previousSeason(OPENING);
+    const prev = previousSeason(OPENING, NSW);
     expect(prev.label).toBe("2025–26");
-    expect(prev.end).toEqual(currentSeason(OPENING).start);
+    expect(prev.end).toEqual(currentSeason(OPENING, NSW).start);
   });
 });
 
 describe("isPodiumWeek", () => {
   it("is the seven Sydney days from 21 June", () => {
-    expect(isPodiumWeek(OPENING)).toBe(true);
-    expect(isPodiumWeek(new Date("2026-06-27T13:59:00.000Z"))).toBe(true); // 27 Jun
-    expect(isPodiumWeek(new Date("2026-06-27T14:00:00.000Z"))).toBe(false); // 28 Jun
-    expect(isPodiumWeek(new Date("2026-06-20T13:59:00.000Z"))).toBe(false); // 20 Jun
+    expect(isPodiumWeek(OPENING, NSW)).toBe(true);
+    expect(isPodiumWeek(new Date("2026-06-27T13:59:00.000Z"), NSW)).toBe(true); // 27 Jun
+    expect(isPodiumWeek(new Date("2026-06-27T14:00:00.000Z"), NSW)).toBe(false); // 28 Jun
+    expect(isPodiumWeek(new Date("2026-06-20T13:59:00.000Z"), NSW)).toBe(false); // 20 Jun
   });
 });
 

@@ -183,8 +183,7 @@ import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import {
   CHROME_BOTTOM,
   CHROME_GAP,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
+  homeView,
   FAB_ICON,
   FAB_SIZE,
   MINI_FAB_ICON,
@@ -482,11 +481,6 @@ const SINGLE_POINT_ZOOM = 14;
  * moving it — a rounding error next to the screen being lit at all.
  */
 const MAP_MAX_FPS = 60;
-
-const CAMERA_DEFAULTS = {
-  center: DEFAULT_CENTER,
-  zoom: DEFAULT_ZOOM,
-};
 
 /**
  * The scale "where am I" always lands on: opening Logjam GPS, and entering either
@@ -1032,6 +1026,8 @@ export function MapScreen({
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
   const regionIds = useRegions();
+  // Read once: the camera's `initialViewState` is only honoured on the first render.
+  const [home] = useState(() => homeView(regionIds));
   // The pick can outlive its region (unchosen while the map is open).
   const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
@@ -1235,9 +1231,9 @@ export function MapScreen({
   // the camera continuously through its own ref (see scaleBarRef), because
   // re-rendering this screen at gesture rate would re-reconcile every layer.
   const [camera, setCamera] = useState({
-    zoom: DEFAULT_ZOOM,
-    latitude: DEFAULT_CENTER[1],
-    longitude: DEFAULT_CENTER[0],
+    zoom: home.zoom,
+    latitude: home.center[1],
+    longitude: home.center[0],
   });
   // Hand the settled camera to the module store the offline-download screen
   // reads, so it opens on this ground whether it was reached from here or from
@@ -1349,7 +1345,7 @@ export function MapScreen({
     followModeRef.current = followMode;
   });
   /** Live zoom and heading, so a pinch starts from what is actually on screen. */
-  const zoomRef = useRef(DEFAULT_ZOOM);
+  const zoomRef = useRef(home.zoom);
   const headingRef = useRef(0);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   // MLRN's native camera KEEPS the last stop handed to it imperatively, and
@@ -5182,7 +5178,7 @@ export function MapScreen({
         onPress={handleMapOrArrowPress}
         onLongPress={handleMapLongPress}
       >
-        <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
+        <Camera ref={cameraRef} initialViewState={home} />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}

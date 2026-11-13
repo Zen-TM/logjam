@@ -60,7 +60,8 @@ import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
-import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
+import { readRegions } from "../regionsPreference";
+import { homeView } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import { SelectionFrame } from "./SelectionFrame";
@@ -113,6 +114,7 @@ export function PickAreaScreen({
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as PickPointScreen and RegionDownloadScreen.
   const [lastCamera] = useState(() => readLastMapCamera());
+  const [home] = useState(() => homeView(readRegions()));
   // Fixed for the life of the screen: the basemap the user was last looking at,
   // with no way to change it here (see the header for why there is no rail).
   const basemapId: BasemapId = lastCamera?.basemapId ?? readBasemapPreference();
@@ -237,8 +239,8 @@ export function PickAreaScreen({
         },
       }
     : {
-        center: lastCamera?.center ?? DEFAULT_CENTER,
-        zoom: lastCamera?.zoom ?? DEFAULT_ZOOM,
+        center: lastCamera?.center ?? home.center,
+        zoom: lastCamera?.zoom ?? home.zoom,
       };
 
   return (

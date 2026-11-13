@@ -97,7 +97,8 @@ import { BAND_MARKERS } from "./layerOrder";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
-import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
+import { readRegions } from "../regionsPreference";
+import { homeView } from "./mapChrome";
 import { nextRegionName } from "./regionName";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
@@ -228,8 +229,9 @@ export function RegionDownloadScreen({
   const [lastCamera] = useState(() => readLastMapCamera());
   const startBasemapId: BasemapId =
     initialBasemapId ?? lastCamera?.basemapId ?? "six-topo";
-  const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;
-  const startZoom = initialZoom ?? lastCamera?.zoom ?? DEFAULT_ZOOM;
+  const [home] = useState(() => homeView(readRegions()));
+  const startCenter = initialCenter ?? lastCamera?.center ?? home.center;
+  const startZoom = initialZoom ?? lastCamera?.zoom ?? home.zoom;
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(
     basemapAssets.localBaseUrl,
