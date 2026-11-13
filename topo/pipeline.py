@@ -174,6 +174,21 @@ def available_memory(
     return max(0, free)
 
 
+def _call(job: tuple):
+    function, *arguments = job
+    return function(*arguments)
+
+
+def side_by_side(jobs: List[tuple], workers: int) -> None:
+    """Run (function, *arguments) jobs that each write their own file, each
+    in a process of its own. Not threads: what GDAL's warps allocate then
+    stays in this process, under the whole-area arrays that come later
+    (1.1 GiB held before the first of them on a four-tile area, against
+    0.24 GiB this way)."""
+    with ProcessPoolExecutor(min(workers, len(jobs))) as pool:
+        list(pool.map(_call, jobs))
+
+
 def jobs_in_memory(cpus: int, job_bytes: int, memory_bytes: int, share: float) -> int:
     """Jobs at a time: one a CPU, and as many of the largest as fit in `share`
     of the memory, but always one (tests/test_sharpen.py `TestTinWorkers`,
@@ -1573,17 +1588,15 @@ def run_pdal_per_tile(
         ("all-return-count", veg_tiles, "all", out_all_count, 0, "bilinear"),
     ]
 
-    def merge(job):
-        name, tiles, key, out, nodata, resample = job
+    for name, tiles, *_ in merges:
         log.info(f"Merging {len(tiles)} {name} tiles …")
-        _merge_raster_tiles(
-            [grids[t][key] for t in tiles], out, nodata=nodata, resample=resample
-        )
-
-    # GDAL lets go of the interpreter while it warps, so the five mosaics are
-    # made side by side.
-    with ThreadPoolExecutor(min(workers, len(merges))) as pool:
-        list(pool.map(merge, merges))
+    side_by_side(
+        [
+            (_merge_raster_tiles, [grids[t][key] for t in tiles], out, nodata, resample)
+            for _, tiles, key, out, nodata, resample in merges
+        ],
+        workers,
+    )
 
     for tile in grids.values():
         for p in tile.values():
@@ -2586,8 +2599,7 @@ def compute_rasters(
         (below_count_path, dtm_path, below_aligned),
         (all_count_path, dtm_path, all_aligned),
     ]
-    with ThreadPoolExecutor(min(workers, len(aligns))) as pool:
-        list(pool.map(lambda a: align_raster_to_reference(*a), aligns))
+    side_by_side([(align_raster_to_reference, *a) for a in aligns], workers)
 
     log.info(
         f"Computing weighted-strata NRD + bilateral filter "
@@ -2661,6 +2673,11 @@ def compute_rasters(
     windowed_pulses = _box_sum_2d(total_near, SCRUB_DENSITY_FILTER_WINDOW_M)
     valid = (windowed_pulses >= min_pulses_eff) & np.isfinite(nrd_smoothed)
     density = np.where(valid, nrd_smoothed, np.nan).astype(np.float32)
+    # Nine whole-area arrays that only the density came from. Held to the end
+    # of this function they sit under the fire step, the pass's peak in
+    # memory: 2.0 GiB on a four-tile area, against 1.5 GiB without them.
+    del low_arr, high_arr, below_arr, all_arr, total_near, raw_nrd
+    del nrd_smoothed, windowed_pulses, valid
 
     # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
     # (sclerophyll/heath) vegetation of equal LiDAR density. No-op if the
@@ -3851,8 +3868,9 @@ def run():
             warps = [(dtm_raw, dtm_grid, -9999, "cubic")] + [
                 (native[name], mercator[name], 0, "bilinear") for name in native
             ]
-            with ThreadPoolExecutor(min(args.workers, len(warps))) as pool:
-                list(pool.map(lambda w: reproject_raster_to_web_mercator(*w), warps))
+            side_by_side(
+                [(reproject_raster_to_web_mercator, *w) for w in warps], args.workers
+            )
 
         with bench.step("Compute scrub density (vegetation)", key="derivatives"):
             raster_paths = compute_rasters(

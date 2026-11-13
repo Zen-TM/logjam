@@ -169,6 +169,7 @@ class TestGroundPerTile(unittest.TestCase):
             mock.patch.object(pipeline, "point_count", side_effect=points.get),
             mock.patch.object(pipeline, "available_memory", return_value=memory),
             mock.patch.object(pipeline, "ThreadPoolExecutor", side_effect=pool),
+            mock.patch.object(pipeline, "ProcessPoolExecutor", ThreadPoolExecutor),
             mock.patch.object(pipeline, "run_pdal_pipeline", run),
             mock.patch.object(pipeline, "_merge_raster_tiles"),
             mock.patch.object(pipeline.os, "remove"),
@@ -219,7 +220,7 @@ class TestGroundPerTile(unittest.TestCase):
             mock.patch.object(pipeline, "point_count", return_value=10**12),
             mock.patch.object(pipeline, "available_memory", return_value=1),
             mock.patch.object(pipeline, "_grid_tile", side_effect=grid),
-            mock.patch.object(pipeline, "_merge_raster_tiles") as merge,
+            mock.patch.object(pipeline, "side_by_side") as merge,
             self.assertRaises(RuntimeError),
         ):
             pipeline.run_pdal_per_tile(
