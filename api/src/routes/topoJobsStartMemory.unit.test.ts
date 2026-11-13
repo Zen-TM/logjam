@@ -56,7 +56,7 @@ vi.mock("../lib/runtimeEstimates", () => ({
 const zip = vi.hoisted(() => ({ lazCount: 0 }));
 vi.mock("@logjam/shared", async (original) => ({
   ...(await original<typeof import("@logjam/shared")>()),
-  parseZipCentralDirectory: () => [],
+  readZipEntries: async () => [],
   classifyElvisEntries: () => ({
     uncompressedBytes: 1,
     tileCount: zip.lazCount,

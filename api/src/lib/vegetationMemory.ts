@@ -24,11 +24,11 @@ const TASK_MEMORY_GIB = [WORKER_SPECS.topo.memoryGiB, 32, 60] as const;
  * size (an unticked job, or an area that fits it). A ZIP
  * whose estimate fits no size gets the largest: the pass then declines it and
  * the job finishes without the layer. The tiles' areas are summed, which
- * equals the worker's bounding box (`union_area_m2`) for a compact block of
- * tiles, as Logjam Web's one-rectangle ELVIS order gives, and counts
- * overlapping surveys twice. A set that is not compact (diagonal, L-shaped)
- * has a bigger box than its sum, so it can be under-sized: the pass then
- * declines the layer and the owner is told.
+ * equals the worker's bounding box (`union_area_m2`) only for a compact block
+ * of tiles, and counts overlapping surveys twice. A set that is not compact
+ * (diagonal, L-shaped: tiles picked along a creek) has a bigger box than its
+ * sum, so it can be under-sized: the pass then declines the layer and the
+ * owner is told.
  */
 export function vegetationTaskMemoryMiB(
   mark: { vegetation: boolean },
