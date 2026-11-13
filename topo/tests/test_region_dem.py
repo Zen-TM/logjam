@@ -9,8 +9,10 @@ convention).
 import argparse
 import http.client
 import io
+import multiprocessing
 import os
 import pickle
+import signal
 import sys
 import tempfile
 import unittest
@@ -474,6 +476,84 @@ class TestBlock(unittest.TestCase):
         region._readers[:] = [FakeSource({}), FakeSource({(16, 1, 1): b"x"})]
         self.assertEqual(region.source_tile(16, 1, 1), b"x")
         self.assertIsNone(region.source_tile(16, 2, 2))
+
+
+class TestInitFailure(unittest.TestCase):
+    """A source that cannot be opened must stop the run with a sentence, not
+    hang it. Mutations that turn it red: the check of every source in `heights`
+    removed (a mistyped `--source` is then read in the workers); the worker
+    initializer left to raise (the pool respawns its workers for ever: the
+    real-pool test ends in its alarm instead of a failure); `build_block`
+    not raising the failure the initializer kept."""
+
+    def args(self, tmp, sources, **extra):
+        values = dict(
+            bbox="0.5,42,1.0,43",
+            zmax=7,
+            zmin=5,
+            credit="c",
+            name="n",
+            jobs=1,
+            source=sources,
+            out=str(Path(tmp) / "out.pmtiles"),
+        )
+        values.update(extra)
+        return argparse.Namespace(**values)
+
+    def test_a_missing_source_stops_the_run_with_its_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gone = str(Path(tmp) / "typo.pmtiles")
+            with self.assertRaises(SystemExit) as caught:
+                region.heights(self.args(tmp, [gone]))
+        self.assertIn(gone, str(caught.exception))
+
+    def test_an_empty_source_stops_the_run_with_its_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = Path(tmp) / "empty.pmtiles"
+            empty.write_bytes(b"")
+            with self.assertRaises(SystemExit) as caught:
+                region.heights(self.args(tmp, [str(empty)]))
+        self.assertIn(str(empty), str(caught.exception))
+
+    def test_an_initializer_that_fails_does_not_raise_and_the_block_says_why(self):
+        self.addCleanup(region._readers.clear)
+        self.addCleanup(setattr, region, "_init_failure", None)
+        with mock.patch.object(region, "open_source", side_effect=OSError("no file")):
+            region.init_worker(["x"])
+        with self.assertRaises(RuntimeError) as caught:
+            region.build_block((17, 14, 2, 3, [(8, 8)]))
+        self.assertIn("no file", str(caught.exception))
+
+    def test_a_pool_whose_workers_cannot_open_a_source_ends_with_the_reason(self):
+        # The parent can open the source and the workers cannot: the second
+        # call, in each (forked) worker, fails.
+        calls = []
+
+        def flaky(source):
+            calls.append(source)
+            if len(calls) > 1:
+                raise OSError("worker cannot open it")
+            return mock.Mock()
+
+        def alarm(*_):
+            raise AssertionError("the run hung")
+
+        old = signal.signal(signal.SIGALRM, alarm)
+        signal.alarm(60)
+        try:
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                mock.patch.object(region, "open_source", flaky),
+                mock.patch.object(
+                    region, "Pool", multiprocessing.get_context("fork").Pool
+                ),
+            ):
+                with self.assertRaises(RuntimeError) as caught:
+                    region.heights(self.args(tmp, ["made-up"]))
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+        self.assertIn("worker cannot open it", str(caught.exception))
 
 
 class TestBuild(unittest.TestCase):

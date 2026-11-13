@@ -370,37 +370,44 @@ so each becomes four 256 px PNG tiles one zoom deeper; the heights are not
 resampled. Why this and not a pipeline per country, and why not reading
 Mapterhorn from the apps:
 [ADR 0052](../docs/decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md).
-NSW does not use it: Mapterhorn's Australian source is a partial 5 m composite.
+NSW does not use it.
 
-It needs NumPy, Pillow and the `pmtiles` Python package (`requirements.txt`),
-and GDAL's Python bindings only because it shares `build_nsw_dem.py`'s code;
-it is copied into the worker image, though it has only been run on a host. It
-reads Mapterhorn by byte range, fetching only the tiles over the box, and
-writes the archive on the machine it runs on.
+Run it in the worker image (`make build-workers` builds it), which has NumPy,
+Pillow, the `pmtiles` Python package and the GDAL bindings it shares with
+`build_nsw_dem.py`. It reads Mapterhorn by byte range, fetching only the tiles
+over the box, and writes the archive and a temporary MBTiles beside it, so
+mount an output directory with room for both. The `pmtiles show` check below
+needs the [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary, on the
+host.
 
 ```bash
 # W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, where its files
 # for New Zealand and Utah stop.
-python3 build_region_dem.py heights --bbox 169.20,-44.10,169.30,-44.01 \
-  --zmax 17 --zmin 8 --jobs 4 \
-  --credit "Elevation data: …" --name "Example heights" example.pmtiles
+mkdir -p out
+docker run --rm -v "$PWD/out:/out" logjam-topo-worker:latest \
+  python3 /app/build_region_dem.py heights --bbox 169.20,-44.20,169.32,-44.11 \
+  --zmax 17 --zmin 8 --jobs 3 \
+  --credit "Elevation data: …" --name "Example heights" /out/example.pmtiles
+pmtiles show out/example.pmtiles
 ```
 
-A 9.6 by 10 km box at zoom 17 took 7 minutes on four cores and wrote 77 MB.
+The box above took 6 minutes 38 seconds in the image on a 4-thread machine (3
+jobs) and wrote 77 MB, byte for byte what the same command gave on a laptop. It
+is mostly coarse ground; a box of 1 m ground would be larger (an estimate from
+the tile sizes, not measured).
 `--source` replaces the files it would read (a URL or a path to a PMTiles file,
 as often as needed, tried in order); without it they are the ones in
-Mapterhorn's `download_urls.json` that hold the zoom over the box. Check the
-result with `pmtiles show example.pmtiles`: `bounds` is the box's tiles, and
-`attribution` is the credit given.
+Mapterhorn's `download_urls.json` that hold the zoom over the box. In
+`pmtiles show`, `bounds` is the box's tiles and `attribution` is the credit
+given.
 
-**The credit is yours to write.** Mapterhorn's `attribution.json` names each
-source and its licence; the credit lists those the box draws on. Mapterhorn
-keeps no mark of where a fine survey ends: a tile over ground with no survey is
-made from a coarser source and has the same zoom (over Makarora, most likely
-30 m Copernicus data at zoom 16, inferred from the tiles' size and smoothness). Say in the credit that the
-finest heights exist only where the survey covers, and name the coarser source the rest of the box
-draws on, which may be a 10 m or a 5 m one. A pixel Mapterhorn marks as no
-height is written as no-data; sea is 0 m.
+**The credit is yours to write.** Name the sources you can show the box draws
+on, from Mapterhorn's `attribution.json` and its coverage, with each licence.
+Mapterhorn keeps no mark of where a fine survey ends: a tile over ground with no
+survey is made from a coarser source and has the same zoom. Say in the credit
+that the finest heights exist only where the survey covers, and do not claim
+the finest resolution for the whole box. A pixel Mapterhorn marks as no height
+is written as no-data.
 
 Do not run it from CI: Mapterhorn states no terms we found for ranged reads of
 its download host, and the build is the only thing that should make them.

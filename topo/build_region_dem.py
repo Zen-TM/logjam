@@ -232,10 +232,21 @@ def mapterhorn_files(bbox, z: int) -> List[str]:
 
 
 _readers: list = []  # this process's readers, in the order they are tried
+_init_failure: Optional[str] = None  # why this process could not open them
 
 
 def init_worker(sources: List[str]) -> None:
-    _readers[:] = [open_source(s) for s in sources]
+    """Open this process's readers. It never raises: a pool whose initializer
+    fails respawns its workers for ever and the parent hears nothing, so the
+    failure is kept and `build_block` raises it
+    (tests/test_region_dem.py `TestInitFailure`)."""
+    global _init_failure
+    _readers.clear()
+    _init_failure = None
+    try:
+        _readers.extend(open_source(s) for s in sources)
+    except Exception as e:
+        _init_failure = f"{type(e).__name__}: {e}"
 
 
 def source_tile(z: int, x: int, y: int) -> Optional[bytes]:
@@ -253,6 +264,8 @@ def build_block(job: Tuple[int, int, int, int, list]):
     RuntimeError: an exception that cannot be unpickled in the parent leaves
     the run waiting for ever."""
     try:
+        if _init_failure:
+            raise RuntimeError(f"cannot open the sources: {_init_failure}")
         return _build_block(job)
     except Exception as e:
         raise RuntimeError(
@@ -291,6 +304,14 @@ def heights(args: argparse.Namespace) -> None:
     sources = args.source or mapterhorn_files(bbox, zmax - 1)
     if not sources:
         sys.exit(f"Mapterhorn has no file with zoom {zmax - 1} over {args.bbox}")
+    for source in sources:
+        # Once, here, before any worker starts: a source that cannot be opened
+        # (a mistyped path, an empty file, no boto3) stops the run with a
+        # sentence, whatever kind of source it is.
+        try:
+            open_source(source).header()
+        except Exception as e:
+            sys.exit(f"cannot read {source}: {type(e).__name__}: {e}")
     tiles = source_tiles(bbox, zmax - 1)
     blocks = blocks_of(tiles, zmax, zb)
     jobs = [(zmax, zb, bx, by, tiles) for (bx, by), tiles in sorted(blocks.items())]
