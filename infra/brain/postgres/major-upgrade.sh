@@ -6,11 +6,11 @@
 #
 #   /data/postgres       the cluster, the only path the server mounts
 #   /data/postgres.new   the upgraded copy, until the swap
-#   /data/postgres-<N>   the old cluster, kept for good: it is the rollback
+#   /data/postgres-<N>   the old cluster, kept until a human deletes it
 #
 # Nothing is deleted except a /data/postgres.new this script left unfinished.
-# pg_upgrade runs in copy mode, never --link: a linked old cluster would stop
-# being a rollback the moment the new one ran. Stdout is one line, `upgraded <old> -> <new>`,
+# pg_upgrade runs in copy mode, never --link: a failed upgrade must leave the old cluster
+# intact for the old tag to boot, and a linked one is not once the new server has run. Stdout is one line, `upgraded <old> -> <new>`,
 # or nothing when the cluster is already at this major; everything else is stderr.
 # BRAIN_UPGRADE_MARGIN: free bytes wanted beyond the old cluster's size (default 1 GiB).
 # Guard: tests/test.sh ("major upgrade"), tests/e2e.sh scenario 14.
