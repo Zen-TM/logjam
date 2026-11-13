@@ -527,6 +527,9 @@ area the layer covers.
 It needs GDAL with its Python bindings, NumPy, Shapely (the worker image has
 all three) and the `whitebox_tools` binary from
 [WhiteboxTools](https://www.whiteboxgeo.com/download-whiteboxtools/) on PATH.
+Unlike the worker's own scripts it is a host run, not a Docker one: the worker
+image has GDAL, NumPy and Shapely but not `whitebox_tools`, and does not copy
+this script.
 
 The basins are a polygon file (GeoPackage, GeoJSON or shapefile, any CRS) with
 one feature per basin; `--name-field` names the attribute that holds each

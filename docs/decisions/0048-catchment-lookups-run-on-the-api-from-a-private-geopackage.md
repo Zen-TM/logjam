@@ -35,11 +35,16 @@ and the API has Postgres without PostGIS.
 - **The API reads the GeoPackage itself with `node:sqlite`.** On the first
   lookup it copies the file to local disk and opens it read-only; every five
   minutes at most it compares the object's ETag and swaps in a rebuild. No
-  deploy publishes a new layer. The API's Node is at least 22.13, where
-  `node:sqlite` is unflagged: CI's api jobs run 22, `api/Dockerfile` 26.
+  deploy publishes a new layer. Guard: `api/src/services/flowNetwork.unit.test.ts`
+  (the copy, the ETag recheck and swap, a rebuild during a download). The
+  tables and columns it reads are declared once in the writer; guard:
+  `topo/tests/test_flow_network_schema.py`. The API's Node is at least
+  22.13, where `node:sqlite` is unflagged: no test holds that floor; CI's api
+  jobs (Node 22) and `api/Dockerfile` (Node 26) are the check.
 - **The credit** of [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md)
-  comes with every answer (`NSW_REGION.terrain.heights.credit`) and on the map sources that draw
-  it.
+  comes with every answer (`NSW_REGION.terrain.heights.credit`) and on the
+  map sources that draw it. Guards: `api/src/services/flowNetwork.unit.test.ts`,
+  `frontend/src/components/map/flowNetworkLayers.test.ts`.
 
 ## Consequences
 
