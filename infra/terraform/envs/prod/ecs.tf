@@ -228,6 +228,17 @@ resource "aws_ecs_task_definition" "topo_worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
+
+  # Sized for a survey at the upload caps (api/src/lib/topoUpload.ts): the
+  # ZIP, its extraction, the ground files of a forested, classified survey and
+  # a fixed overhead, as topoUpload.unit.test.ts spells out and holds. That
+  # models the sharpen step's disk; the vegetation pass after it is limited by
+  # memory, not disk, at the caps. Open
+  # country or an unclassified survey can need more, and then fails with the
+  # "too big" sentence. Fargate's default of 20 GiB is overrun by a full ZIP.
+  ephemeral_storage {
+    size_in_gib = 60
+  }
 }
 
 # One-shot task that runs `prisma migrate deploy` against the brain as the
