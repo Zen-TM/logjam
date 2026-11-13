@@ -4,7 +4,7 @@
 // Its own module (rather than sitting in snapLines.ts) purely so it is
 // testable: snapLines pulls in expo-file-system and `../config`, neither of
 // which a unit test should have to stand up.
-import { SNAP_TILE_ZOOM } from "@logjam/shared";
+import { lonWithin, SNAP_TILE_ZOOM } from "@logjam/shared";
 
 import type { MapArtifact } from "./sourceResolver";
 
@@ -36,7 +36,7 @@ export function regionCovering(
       const [west, south, east, north] = bbox;
       return [from, to].every(
         ([lon, lat]) =>
-          lon >= west && lon <= east && lat >= south && lat <= north,
+          lonWithin(lon, west, east) && lat >= south && lat <= north,
       );
     }) ?? null
   );

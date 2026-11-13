@@ -19,6 +19,7 @@ import {
 } from "./customFieldFilter.js";
 import { numericFieldValue } from "./fieldValues.js";
 import type { RegionBbox } from "./mapRegionEstimate.js";
+import { lonWithin } from "./placeGeo.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** [start, end] inclusive ISO-date bounds (yyyy-mm-dd); either bound nullable. */
@@ -53,8 +54,8 @@ export type PlaceFilters = {
    * Keep only places whose position falls inside this box (inclusive on all
    * four edges). Drawn by the user on a map; null when no area is set.
    *
-   * NSW-only product, so no antimeridian case: `west <= east` always holds and
-   * a box that wrapped 180° would need a different comparison.
+   * The box may run past the date line, wrapped or unwrapped: `lonWithin`
+   * reads it.
    */
   area: RegionBbox | null;
   /**
@@ -227,8 +228,7 @@ export function isPlaceInArea(
   return (
     place.latitude >= area.south &&
     place.latitude <= area.north &&
-    place.longitude >= area.west &&
-    place.longitude <= area.east
+    lonWithin(place.longitude, area.west, area.east)
   );
 }
 
