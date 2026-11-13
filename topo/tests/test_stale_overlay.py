@@ -17,27 +17,19 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    import numpy as np  # noqa: E402
-    from pipeline import (  # noqa: E402
-        TILE_SIZE,
-        FIRE_STALE_AMBER,
-        FIRE_STALE_BAND_ALPHA,
-        FIRE_STALE_STRIPE_ALPHA,
-        FIRE_STALE_STRIPE_PERIOD,
-        _box_blur_blocks,
-        _fire_stale_blocks,
-        render_vegetation_tile,
-    )
+import numpy as np  # noqa: E402
+from pipeline import (  # noqa: E402
+    TILE_SIZE,
+    FIRE_STALE_AMBER,
+    FIRE_STALE_BAND_ALPHA,
+    FIRE_STALE_STRIPE_ALPHA,
+    FIRE_STALE_STRIPE_PERIOD,
+    _box_blur_blocks,
+    _fire_stale_blocks,
+    render_vegetation_tile,
+)
 
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
-
-if _IMPORT_OK and (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("PIL")):
-    _IMPORT_OK = False
-    _IMPORT_ERR = "numpy/PIL is stubbed on this host (real array/image maths required)"
+_REAL_ARRAYS = not (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("PIL"))
 
 CELL_M = 4.0  # coarse grid keeps the whole-raster blurs cheap in tests
 
@@ -58,7 +50,9 @@ def _encode_fire_stale(burnt_mask, valid_mask, cell_m, rows=10**6):
     )
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy/PIL is stubbed on this host (real array/image maths required)"
+)
 class TestBoxBlurBlocks(unittest.TestCase):
     """The blur takes its rows a block at a time. Red if a block's columns
     are summed from the block's own first row (the running sum not carried),
@@ -108,7 +102,9 @@ class TestBoxBlurBlocks(unittest.TestCase):
             )
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy/PIL is stubbed on this host (real array/image maths required)"
+)
 class TestBurntGroundMarking(unittest.TestCase):
     SETTINGS = {
         "vegetation": {

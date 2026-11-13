@@ -22,19 +22,13 @@ os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("JOB_ID", "job-123")
 
-try:
-    import worker  # noqa: E402
-    from worker import (  # noqa: E402
-        compose_database_url,
-        safe_error_message,
-        send_failure_email,
-    )
-    from email_send import wants_email  # noqa: E402
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+import worker  # noqa: E402
+from worker import (  # noqa: E402
+    compose_database_url,
+    safe_error_message,
+    send_failure_email,
+)
+from email_send import wants_email  # noqa: E402
 
 
 class _FakeCursor:
@@ -62,9 +56,6 @@ class _FakeConn:
         return _FakeCursor(self._row)
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestSafeErrorMessage(unittest.TestCase):
     # The owner reads this in both clients (shared/DESIGN.md §11): no tool's
     # name, no id. Which step failed is in CloudWatch.
@@ -97,9 +88,6 @@ class TestSafeErrorMessage(unittest.TestCase):
         self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestWantsEmail(unittest.TestCase):
     def test_missing_user_returns_false(self):
         self.assertFalse(wants_email(_FakeConn(None), "u1", "topoEmail"))
@@ -134,9 +122,6 @@ class TestWantsEmail(unittest.TestCase):
         self.assertTrue(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestSendFailureEmail(unittest.TestCase):
     """A reaped/failed topo job must mail its owner. Captures the send_email call
     instead of sending."""
@@ -172,9 +157,6 @@ class TestSendFailureEmail(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestComposeDatabaseUrl(unittest.TestCase):
     def setUp(self):
         self._saved = {
@@ -307,9 +289,6 @@ class TestComposeDatabaseUrl(unittest.TestCase):
         self.assertNotIn("secret-value", msg)
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestProcessSharpen(unittest.TestCase):
     """A job the API marked to sharpen runs sharpen.py, and its mark becomes
     the result.
@@ -515,9 +494,6 @@ class TestProcessSharpen(unittest.TestCase):
             )
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestVegetationExit(unittest.TestCase):
     """How `process_vegetation` reads pipeline.py's exit code.
 
@@ -551,9 +527,6 @@ class TestVegetationExit(unittest.TestCase):
                 self.exit_with(code)
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestLeftOutNotice(unittest.TestCase):
     """The owner is told in the completion notification and the email.
 

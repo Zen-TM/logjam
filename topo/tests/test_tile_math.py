@@ -12,31 +12,22 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402  (installs native stubs before import)
 
-try:
-    from pipeline import (  # noqa: E402
-        TILE_SIZE,
-        ZOOM_MIN,
-        ZOOM_MAX,
-        footprint_tile_coords,
-        ground_metres_per_pixel,
-        lon_lat_to_tile,
-        lonlat_to_world_px,
-        tile_bbox_mercator,
-        tile_to_bbox,
-        tiles_for_bbox,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+from pipeline import (  # noqa: E402
+    TILE_SIZE,
+    ZOOM_MIN,
+    ZOOM_MAX,
+    footprint_tile_coords,
+    ground_metres_per_pixel,
+    lon_lat_to_tile,
+    lonlat_to_world_px,
+    tile_bbox_mercator,
+    tile_to_bbox,
+    tiles_for_bbox,
+)
 
 _REAL_SHAPELY = not _native_stub.is_stubbed("shapely")
 
 
-@unittest.skipUnless(
-    _IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
 class TestTileMath(unittest.TestCase):
     def test_lon_lat_to_tile_origin(self):
         # lon=-180, lat≈85.05 (top-left of the web-mercator world) → tile (0,0).
@@ -119,7 +110,7 @@ def _square(lon0, lat0, side=0.02):
     return box(lon0, lat0, lon0 + side, lat0 + side)
 
 
-@unittest.skipUnless(_IMPORT_OK and _REAL_SHAPELY, "needs real shapely (host stubs it)")
+@unittest.skipUnless(_REAL_SHAPELY, "needs real shapely (host stubs it)")
 class TestFootprintTileCoords(unittest.TestCase):
     """Processing-side prune: render only tiles intersecting the footprint, per
     connected component, never the union bbox that spans the gap between a
