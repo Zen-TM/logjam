@@ -24,7 +24,13 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
 from build_nsw_dem import (  # noqa: E402
     BLOCK_ZOOM,
+    block_zoom,
     build_slope,
+    centre_box,
+    contour_lines,
+    contours_archive,
+    smoothing_factor,
+    tile_range,
     EARTH_CIRCUMFERENCE_M,
     HEIGHTS,
     SLOPE,
@@ -37,7 +43,7 @@ from build_nsw_dem import (  # noqa: E402
     HEIGHT_KEY,
     SLOPE_KEY,
     decode_terrarium,
-    extracted_month,
+    derived_credit,
     slope_s3,
     encode_terrarium,
     halve,
@@ -256,8 +262,9 @@ class TestSlopeBlock(unittest.TestCase):
         build_nsw_dem._heights = Heights()
         try:
             with tempfile.TemporaryDirectory() as work:
-                self.assertIn("7/9", build_nsw_dem.slope_block((7, 9, work)))
-                self.assertIsNone(build_nsw_dem.slope_block((7, 9, work)))  # resumed
+                job = (7, 9, work, 15, 8)
+                self.assertIn("7/9", build_nsw_dem.slope_block(job))
+                self.assertIsNone(build_nsw_dem.slope_block(job))  # resumed
                 db = sqlite3.connect(os.path.join(work, "7-9.sqlite"))
                 rows = dict(
                     ((z, x, y), data)
@@ -303,10 +310,11 @@ from pathlib import Path
 
 class Reader:
     def metadata(self):
-        return {{"attribution": nd.credit(nd.HEIGHTS, "October 2026")}}
+        return {{"name": "NSW 5 m DEM", "attribution": nd.credit(nd.HEIGHTS, "October 2026")}}
     def header(self):
         return dict(min_lon_e7=1409000000, max_lon_e7=1537000000,
-                    min_lat_e7=-376000000, max_lat_e7=-280000000)
+                    min_lat_e7=-376000000, max_lat_e7=-280000000,
+                    min_zoom=8, max_zoom=15)
     def get(self, z, x, y):
         return b"1"
 
@@ -336,37 +344,141 @@ nd.build_slope(Path("unused"), Path(sys.argv[1]) / "out.pmtiles", Path(sys.argv[
             self.assertLess(time.time() - started, 30)
 
 
-class TestExtractedMonth(unittest.TestCase):
-    # Mutation: capture `(\w+)` and the space in "October 2026" stops the match,
-    # so a good credit exits; drop the `sys.exit` and a credit with no month
-    # raises AttributeError, not SystemExit.
-    def test_the_month_is_read_back_from_the_credit(self):
+class TestDerivedCredit(unittest.TestCase):
+    # Mutation: any change to the wording or the order of `derived_credit`'s two
+    # forms: NSW's published slope credit stops being `credit(SLOPE, month)`.
+    def test_nsw_credit_becomes_the_slope_credit_it_always_was(self):
         self.assertEqual(
-            extracted_month(credit(HEIGHTS, "October 2026")), "October 2026"
+            derived_credit("Slope", credit(HEIGHTS, "October 2026")),
+            credit(SLOPE, "October 2026"),
         )
-        with self.assertRaises(SystemExit):
-            extracted_month("no month here")
+
+    # Mutation: as above, for the contour archive's description, which `contours`
+    # used to spell out by hand.
+    def test_nsw_contours_credit_is_what_contours_always_wrote(self):
+        self.assertEqual(
+            derived_credit("Contours", credit(HEIGHTS, "October 2026")),
+            "Contours derived from the NSW 5 m Digital Elevation Model, © State of"
+            " New South Wales (Spatial Services), extracted October 2026."
+            " CC BY 3.0 AU.",
+        )
+
+    # Mutation: drop the `else` branch's colon text and a foreign credit is lost
+    # (the slope archive would carry no licence line at all).
+    def test_another_archives_credit_is_kept_whole(self):
+        self.assertEqual(
+            derived_credit("Contours", "LINZ, CC BY 4.0"),
+            "Contours derived from: LINZ, CC BY 4.0",
+        )
 
 
-class TestBuildSlopeMonth(unittest.TestCase):
-    # Mutation: `extracted = "October 2026"` in `build_slope` (a month typed by
-    # hand) and the slope archive's credit disagrees with the heights it was
-    # built from.
-    def test_pack_gets_the_month_the_heights_say(self):
+class TestBlockZoom(unittest.TestCase):
+    # Mutation: `zmax - BLOCK_DEPTH` becomes a constant 10 and a z17 archive
+    # makes a 4 GB block; or the `max(.., zmin)` goes and a z14 archive that
+    # starts at z12 writes z9 tiles it never had a source for.
+    def test_nsw_is_z10_and_a_block_stays_32_tiles_across(self):
+        self.assertEqual(block_zoom(15, 8), BLOCK_ZOOM)
+        self.assertEqual(block_zoom(17, 8), 12)
+        self.assertEqual(block_zoom(15, 13), 13)
+
+
+class TestSlopeFromAnyArchive(unittest.TestCase):
+    # Mutation: `block_slope` or `slope_block` leaves `pixel_size_m` at its
+    # default z15: a z17 archive's pixels are a quarter the size, so every
+    # slope reads a quarter of its real angle.
+    def test_a_z17_block_uses_z17_pixels(self):
+        flat_rise = np.tile(np.arange(TILE, dtype=np.float32), (TILE, 1))
+        got = block_slope(lambda x, y: flat_rise, 5, 6, 1, 17)
+        want = horn_slope(
+            np.pad(flat_rise, 1, mode="edge"), pixel_size_m(6 * TILE, TILE, 17)
+        )
+        np.testing.assert_array_equal(got[1:-1, 1:-1], want[1:-1, 1:-1])
+        self.assertGreater(
+            float(got[100, 100]),
+            float(
+                horn_slope(
+                    np.pad(flat_rise, 1, mode="edge"), pixel_size_m(6 * TILE, TILE, 15)
+                )[100, 100]
+            ),
+        )
+
+    # Mutation: `slope_block` ignores `zmax` and reads and writes z15: the z17
+    # tile is missing and the block's tile is z10, not z12.
+    def test_a_z17_block_is_written_at_z17_down_to_its_z12_tile(self):
+        import sqlite3
+        import tempfile
+
+        import build_nsw_dem
+
+        rise = np.tile(np.arange(TILE, dtype=np.float32) * 3.0, (TILE, 1))
+        png = png_bytes(encode_terrarium(rise, np.ones_like(rise, bool)))
+
+        class Heights:
+            def get(self, z, x, y):
+                return png if (z, x, y) == (17, 3 * 32, 4 * 32) else None
+
+        build_nsw_dem._heights = Heights()
+        try:
+            with tempfile.TemporaryDirectory() as work:
+                build_nsw_dem.slope_block((3, 4, work, 17, 8))
+                db = sqlite3.connect(os.path.join(work, "3-4.sqlite"))
+                zooms = {z for (z,) in db.execute("select z from tiles")}
+                db.close()
+        finally:
+            build_nsw_dem._heights = None
+        self.assertEqual(zooms, set(range(12, 18)))
+
+
+class TestSlopeOfAZ17Archive(unittest.TestCase):
+    # Mutation: `pack` or `build_slope` falls back to z15 and z8 anywhere (the
+    # metadata, the bounds row, the block zoom, the coarse zooms): the slope of
+    # a 1 m archive loses its z17 tiles or claims zooms it does not have.
+    def test_heights_to_slope_keep_the_archives_own_zooms(self):
+        import tempfile
+
+        from pmtiles.reader import MmapSource, Reader, all_tiles
+
+        import build_nsw_dem as nd
+
+        rise = np.tile(np.arange(TILE, dtype=np.float32) * 0.5, (TILE, 1))
+        grid = np.full((32 * TILE, 32 * TILE), np.nan, np.float32)
+        grid[: 2 * TILE, : 2 * TILE] = np.tile(rise, (2, 2))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "h").mkdir()
+            # Block (3, 4) at z12, so its tiles at z17 start at (96, 128).
+            nd.save_block(grid, 3, 4, tmp / "h", HEIGHTS, 17, 12)
+            heights = tmp / "heights.pmtiles"
+            nd.pack(tmp / "h", heights, "Test credit", HEIGHTS, 17, 10)
+            slope = tmp / "slope.pmtiles"
+            build_slope(heights, slope, tmp / "w", 1)
+            for archive in (heights, slope):
+                with open(archive, "rb") as f:
+                    source = MmapSource(f)
+                    header = Reader(source).header()
+                    zooms = {z for (z, _, _), _ in all_tiles(source)}
+                self.assertEqual((header["min_zoom"], header["max_zoom"]), (10, 17))
+                self.assertEqual(zooms, set(range(10, 18)))
+            with open(slope, "rb") as f:
+                meta = Reader(MmapSource(f)).metadata()
+        self.assertEqual(meta["attribution"], "Slope derived from: Test credit")
+        self.assertEqual(meta["maxzoom"], "17")
+
+
+class TestBuildSlopeCredit(unittest.TestCase):
+    # Mutation: a hard-coded name or credit in `build_slope` (the old month
+    # typed by hand, or "NSW 5 m DEM slope"): another archive's slope then
+    # carries NSW's credit, or an NSW rebuild carries last month's.
+    def _packed(self, metadata, header):
         import tempfile
         from unittest import mock
 
         class Reader:
             def metadata(self):
-                return {"attribution": credit(HEIGHTS, "March 2031")}
+                return metadata
 
             def header(self):
-                return dict(
-                    min_lon_e7=1509000000,
-                    max_lon_e7=1510000000,
-                    min_lat_e7=-337000000,
-                    max_lat_e7=-336000000,
-                )
+                return header
 
             def get(self, z, x, y):
                 return None
@@ -377,7 +489,262 @@ class TestBuildSlopeMonth(unittest.TestCase):
             mock.patch("build_nsw_dem.pack") as pack,
         ):
             build_slope(Path("unused"), Path(tmp) / "o", Path(tmp) / "w", 1)
-        self.assertEqual(pack.call_args.args[2], "March 2031")
+        return pack.call_args
+
+    def test_nsw_gets_the_month_the_heights_say(self):
+        call = self._packed(
+            {"name": "NSW 5 m DEM", "attribution": credit(HEIGHTS, "March 2031")},
+            dict(
+                min_lon_e7=1509000000,
+                max_lon_e7=1510000000,
+                min_lat_e7=-337000000,
+                max_lat_e7=-336000000,
+                min_zoom=8,
+                max_zoom=15,
+            ),
+        )
+        self.assertEqual(call.args[2], credit(SLOPE, "March 2031"))
+        self.assertEqual(call.args[3].name, SLOPE.name)
+        self.assertEqual(call.args[4:], (15, 8))
+
+    def test_another_archive_gets_its_own_name_zooms_and_credit(self):
+        call = self._packed(
+            {"name": "Zion 1 m DEM", "attribution": "USGS 3DEP, public domain"},
+            dict(
+                min_lon_e7=-1130000000,
+                max_lon_e7=-1129000000,
+                min_lat_e7=372400000,
+                max_lat_e7=373300000,
+                min_zoom=10,
+                max_zoom=17,
+            ),
+        )
+        self.assertEqual(call.args[2], "Slope derived from: USGS 3DEP, public domain")
+        self.assertEqual(call.args[3].name, "Zion 1 m DEM slope")
+        self.assertEqual(call.args[4:], (17, 10))
+
+
+class TestNswSlopeUnchanged(unittest.TestCase):
+    # The slope archive of a heights archive built the NSW way (the Katoomba
+    # fixture's tiles through `save_block` and `pack`) is what it was before
+    # `build_slope` read its zooms and credit from the archive: the same tiles
+    # to the whole degree, the same name and credit. The hash was taken with
+    # build_nsw_dem.py before that change. Mutation: change `halve_max`, the
+    # slope rounding, a zoom, or the credit's wording for NSW, and it is red.
+    HASH = "8ef0ef71f2a81aa48fc68a2c2db5e785f34e91f4328c74342861bc28aab3d07d"
+
+    def test_the_katoomba_slope_archive_is_unchanged(self):
+        import hashlib
+        import tempfile
+
+        from pmtiles.reader import MmapSource, Reader, all_tiles
+
+        import build_nsw_dem as nd
+
+        fixture = (
+            Path(__file__).resolve().parents[2]
+            / "shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles"
+        )
+        with open(fixture, "rb") as f:
+            reader = Reader(MmapSource(f))
+            h = reader.header()
+            x0, y0 = lonlat_to_tile(h["min_lon_e7"] / 1e7, h["max_lat_e7"] / 1e7, 15)
+            x1, y1 = lonlat_to_tile(h["max_lon_e7"] / 1e7, h["min_lat_e7"] / 1e7, 15)
+            bx, by = x0 >> 5, y0 >> 5
+            grid = np.full((32 * TILE, 32 * TILE), np.nan, np.float32)
+            found = 0
+            for x in range(x0, x1 + 1):
+                for y in range(y0, y1 + 1):
+                    tile = nd.height_tile(reader, 15, x, y)
+                    if tile is not None:
+                        row, col = (y - by * 32) * TILE, (x - bx * 32) * TILE
+                        grid[row : row + TILE, col : col + TILE] = tile
+                        found += 1
+        self.assertEqual(found, 3)  # the fixture's own tiles: a floor
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "h").mkdir()
+            nd.save_block(grid, bx, by, tmp / "h", HEIGHTS)
+            heights = tmp / "heights.pmtiles"
+            nd.pack(tmp / "h", heights, credit(HEIGHTS, "October 2026"), HEIGHTS)
+            slope = tmp / "slope.pmtiles"
+            build_slope(heights, slope, tmp / "w", 1)
+            with open(slope, "rb") as f:
+                source = MmapSource(f)
+                meta = Reader(source).metadata()
+                digest, count = hashlib.sha256(), 0
+                for (z, x, y), data in sorted(all_tiles(source)):
+                    values = decode_terrarium(
+                        np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))
+                    )
+                    digest.update(f"{z}/{x}/{y}".encode())
+                    digest.update(
+                        np.nan_to_num(values, nan=-1).astype(np.int16).tobytes()
+                    )
+                    count += 1
+        self.assertEqual(meta["name"], "NSW 5 m DEM slope")
+        self.assertEqual(meta["attribution"], credit(SLOPE, "October 2026"))
+        self.assertEqual(count, 11)
+        self.assertEqual(digest.hexdigest(), self.HASH)
+
+
+class TestContourSmoothing(unittest.TestCase):
+    # Mutation: a factor that is not a power of two (`round(CELL / px)`), and a
+    # smoothing cell straddles a tile edge: two blocks' grids no longer line up,
+    # and a line steps at every block edge.
+    def test_the_factor_is_a_power_of_two_dividing_a_tile(self):
+        for ground_px in (0.2, 0.86, 1.19, 2.0, 4.0, 9.0, 25.0, 500.0):
+            n = smoothing_factor(ground_px)
+            self.assertEqual(TILE % n, 0, ground_px)
+            self.assertEqual(n & (n - 1), 0, ground_px)
+
+    # Mutation: the target changes from CONTOUR_CELL_M, or the rounding becomes
+    # floor: a z17 pixel at -44 degrees (0.86 m) gets 8 and a 7 m cell, or 1.
+    def test_the_cell_is_the_one_nearest_ten_metres(self):
+        self.assertEqual(smoothing_factor(0.86), 16)  # 13.8 m; 8 is 6.9 m
+        self.assertEqual(smoothing_factor(4.0), 2)  # 8 m; 4 is 16 m
+        self.assertEqual(smoothing_factor(10.0), 1)
+        self.assertEqual(smoothing_factor(30.0), 1)  # never finer than the data
+
+
+class TestCentreBox(unittest.TestCase):
+    # Mutation: return the tiles' corners instead of their centres, and the
+    # box's far edge (or its near one, on the float) reads as the next tile.
+    def test_tile_range_reads_the_tiles_back(self):
+        for z, (x0, y0, x1, y1) in (
+            (15, (30048, 19630, 30082, 19664)),
+            (17, (0, 0, 33, 33)),
+            (12, (3000, 2000, 3000, 2000)),
+        ):
+            self.assertEqual(
+                tile_range(centre_box(x0, y0, x1, y1, z), z), (x0, y0, x1, y1)
+            )
+
+
+class TestContourLines(unittest.TestCase):
+    def commands(self, **kwargs):
+        calls = []
+        contour_lines(
+            Path("r.tif"),
+            Path("raw.gpkg"),
+            Path("lines.gpkg"),
+            lambda *command: calls.append(command),
+            **kwargs,
+        )
+        return calls
+
+    # Mutation: a default that differs from CONTOUR_INTERVAL_M, or a clip added
+    # when none is asked for: NSW's contours (and every sharpened area's) change.
+    def test_the_defaults_are_the_statewide_commands(self):
+        calls = self.commands()
+        self.assertEqual(calls[0][:6], ("gdal_contour", "-q", "-a", "elev", "-i", "10"))
+        self.assertEqual(len(calls), 3)
+        for call in calls[1:]:
+            self.assertNotIn("-clipdst", call)
+
+    # Mutation: clip only the first ogr2ogr (the `major` layer): the `minor`
+    # lines of a block run over its neighbour's and are drawn twice.
+    def test_the_interval_and_clip_reach_every_command(self):
+        calls = self.commands(interval=20, clip=(1.0, 2.0, 3.0, 4.0))
+        self.assertIn("20", calls[0])
+        for call in calls[1:]:
+            at = call.index("-clipdst")
+            self.assertEqual(call[at + 1 : at + 5], ("1.0", "2.0", "3.0", "4.0"))
+
+
+class TestContoursArchive(unittest.TestCase):
+    """The block loop, with the GDAL and pmtiles steps replaced by recorders."""
+
+    def run_archive(self, work, existing=()):
+        from unittest import mock
+
+        zmax = 17
+        # One z12 block at (1000, 2000), reported by the archive's header.
+        west, north = lonlat(1000, 2000, 12)
+        east, south = lonlat(1001, 2001, 12)
+        mosaics, clips, packed, commands = [], [], [], []
+
+        class Reader:
+            def metadata(self):
+                return {"name": "Zion 1 m DEM", "attribution": "USGS 3DEP"}
+
+            def header(self):
+                return dict(
+                    min_lon_e7=int((west + 1e-6) * 1e7),
+                    max_lon_e7=int((east - 1e-6) * 1e7),
+                    min_lat_e7=int((south + 1e-6) * 1e7),
+                    max_lat_e7=int((north - 1e-6) * 1e7),
+                    min_zoom=10,
+                    max_zoom=zmax,
+                )
+
+            def get(self, z, x, y):
+                return b"x" if z == 12 else None
+
+        def lines(raster, raw, part, interval, clip):
+            clips.append((interval, clip))
+            part.write_bytes(b"")
+
+        for name in existing:
+            (work / name).write_bytes(b"")
+        with (
+            mock.patch("build_nsw_dem.open_heights", lambda path: Reader()),
+            mock.patch("build_nsw_dem.need_pmtiles"),
+            mock.patch(
+                "build_nsw_dem.write_mosaic",
+                lambda reader, bbox, *rest: mosaics.append((bbox, rest[-1])),
+            ),
+            mock.patch("build_nsw_dem.run", lambda *c: commands.append(c)),
+            mock.patch("build_nsw_dem.contour_lines", lines),
+            mock.patch("build_nsw_dem.pack_contours", lambda *a: packed.append(a)),
+        ):
+            contours_archive(Path("h"), work, work / "o.pmtiles", 20)
+        return mosaics, clips, packed, commands
+
+    # Mutation: no margin (`bx * tiles - 1` becomes `bx * tiles`): lines stop
+    # short at every block edge. Or a margin of two tiles: the mosaic grows 6 %
+    # for nothing.
+    def test_the_mosaic_is_the_block_and_one_tile_around(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            mosaics, *_ = self.run_archive(Path(tmp))
+        ((bbox, zoom),) = mosaics
+        self.assertEqual(zoom, 17)
+        self.assertEqual(
+            tile_range(bbox, 17), (1000 * 32 - 1, 2000 * 32 - 1, 1001 * 32, 2001 * 32)
+        )
+
+    # Mutation: clip to the mosaic (margin included) and the lines of two
+    # blocks overlap; clip to a box a degree out and the same.
+    def test_lines_are_clipped_to_the_blocks_own_tile(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _, clips, packed, _ = self.run_archive(Path(tmp))
+        ((interval, clip),) = clips
+        west, north = lonlat(1000, 2000, 12)
+        east, south = lonlat(1001, 2001, 12)
+        self.assertEqual((interval, clip), (20, (west, south, east, north)))
+        # The credit of the heights the contours came from.
+        self.assertEqual(packed[0][2], "Contours derived from: USGS 3DEP")
+
+    # Mutation: ignore a block file already in `work`: a killed run redoes
+    # every block, hours at statewide size.
+    def test_a_finished_block_is_kept(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            mosaics, clips, _, _ = self.run_archive(
+                Path(tmp), existing=("1000-2000.lines.gpkg",)
+            )
+        self.assertEqual((mosaics, clips), ([], []))
+
+
+def lonlat(x, y, z):
+    from build_nsw_dem import tile_lonlat
+
+    return tile_lonlat(x, y, z)
 
 
 class TestSlopeS3(unittest.TestCase):
