@@ -11,9 +11,9 @@
 // PRIVACY: a click is a precise wilderness position. Nothing here logs one, or
 // a segment, or a basin's name: only whether the layer could be read.
 import { createWriteStream, existsSync } from "node:fs";
-import { rename, unlink } from "node:fs/promises";
+import { readdir, rename, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
@@ -140,9 +140,10 @@ async function download(): Promise<FlowNetworkLayer> {
   // downloading another. Only a whole file ever has this name: it is
   // written under another and renamed when complete.
   const path = layerPath(object.ETag);
+  void sweepStaleCopies(path);
   if (existsSync(path)) {
     body.destroy();
-    return openFlowNetwork(path, object.ETag);
+    return openOrDiscard(path, object.ETag);
   }
   const part = `${path}.${randomUUID()}.part`;
   try {
@@ -152,10 +153,58 @@ async function download(): Promise<FlowNetworkLayer> {
       if (!existsSync(path)) throw err;
       await unlink(part);
     });
-    return openFlowNetwork(path, object.ETag);
+    return openOrDiscard(path, object.ETag);
   } catch (err) {
     await unlink(part).catch(() => {});
     throw err;
+  }
+}
+
+/**
+ * Opens a copy on disk, and deletes one that will not open: kept, a corrupt
+ * copy would be reopened, and fail, every RETRY_MS until the process ended.
+ */
+async function openOrDiscard(
+  path: string,
+  etag: string | undefined,
+): Promise<FlowNetworkLayer> {
+  try {
+    return openFlowNetwork(path, etag);
+  } catch (err) {
+    await unlink(path).catch(() => {});
+    throw err;
+  }
+}
+
+const COPY_NAME = /^logjam-flow-network-.+\.gpkg(\..+\.part)?$/;
+
+/**
+ * Deletes copies of other versions, and downloads that were cut off, once
+ * they are older than RECHECK_MS: a rebuilt layer retires the version it
+ * replaces, but a version no process served, or a `.part` left by a killed
+ * process, would otherwise stay in the temp directory for good (in dev; a
+ * prod container's /tmp goes with it). Never the copy in use or the one
+ * being written.
+ */
+async function sweepStaleCopies(current: string) {
+  const dir = tmpdir();
+  const keep = new Set([current, layer?.path]);
+  const cutoff = Date.now() - RECHECK_MS;
+  try {
+    for (const name of await readdir(dir)) {
+      const path = join(dir, name);
+      if (!COPY_NAME.test(name) || keep.has(path)) continue;
+      // This version's own download, however long it is taking.
+      if (name.startsWith(`${basename(current)}.`)) continue;
+      const { mtimeMs } = await stat(path).catch(() => ({ mtimeMs: Infinity }));
+      // Open elsewhere (Windows refuses), or gone already: left alone.
+      if (mtimeMs < cutoff) await unlink(path).catch(() => {});
+    }
+  } catch (err) {
+    logger.warn(
+      { flowNetwork: "sweep-failed", err: safeErrorForLog(err) },
+      "flow_network_sweep_failed",
+    );
   }
 }
 

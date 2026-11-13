@@ -1,4 +1,11 @@
-import { createReadStream, readdirSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  readdirSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { Readable } from "node:stream";
 import { join } from "node:path";
@@ -265,6 +272,62 @@ describe("loading the layer from S3", () => {
     expect(read).toBe(false);
     expect(body.destroyed).toBe(true);
     expect(ours()).toEqual(before);
+  });
+
+  // Mutation: open the copy on disk unguarded, and a corrupt one is opened,
+  // and fails, every five minutes until the process ends.
+  it("deletes a copy on disk that will not open, and downloads afresh", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const others = new Set(layerFiles());
+    const ours = () => layerFiles().filter((name) => !others.has(name));
+    send.mockImplementation(async () => fixtureObject('"corrupt"'));
+    await lookupFlowNetwork(ON_GOVETTS, false);
+    const [copy] = ours();
+    forgetFlowNetwork({ keepFile: true });
+    writeFileSync(join(tmpdir(), copy!), "not a GeoPackage");
+
+    send.mockImplementation(async () => ({
+      Body: Readable.from([]),
+      ETag: '"corrupt"',
+    }));
+    await expect(lookupFlowNetwork(ON_GOVETTS, false)).rejects.toMatchObject({
+      statusCode: 503,
+    });
+    expect(ours()).toEqual([]);
+
+    vi.setSystemTime(Date.now() + 5 * 60_000);
+    send.mockImplementation(async () => fixtureObject('"corrupt"'));
+    expect((await lookupFlowNetwork(ON_GOVETTS, false)).status).toBe("found");
+  });
+
+  // Mutation: drop sweepStaleCopies, and every version no process served
+  // and every cut-off download stays in the temp directory for good.
+  it("sweeps other versions and cut-off downloads once they are stale", async () => {
+    const stale = [
+      `logjam-flow-network-test-${randomUUID()}.gpkg`,
+      `logjam-flow-network-test-${randomUUID()}.gpkg.${randomUUID()}.part`,
+    ];
+    const fresh = `logjam-flow-network-test-${randomUUID()}.gpkg`;
+    const unrelated = `logjam-flow-network-notes-${randomUUID()}.txt`;
+    const old = (Date.now() - 6 * 60_000) / 1000;
+    for (const name of [...stale, fresh, unrelated]) {
+      writeFileSync(join(tmpdir(), name), "x");
+      if (name !== fresh) utimesSync(join(tmpdir(), name), old, old);
+    }
+    send.mockImplementation(async () => fixtureObject('"swept"'));
+    expect((await lookupFlowNetwork(ON_GOVETTS, false)).status).toBe("found");
+    await vi.waitFor(() => {
+      for (const name of stale)
+        expect(existsSync(join(tmpdir(), name))).toBe(false);
+    });
+    expect(existsSync(join(tmpdir(), fresh))).toBe(true);
+    expect(existsSync(join(tmpdir(), unrelated))).toBe(true);
+    // The copy in use stays.
+    expect((await lookupFlowNetwork(ON_GOVETTS, false)).status).toBe("found");
+    for (const name of [fresh, unrelated])
+      await import("node:fs/promises").then((fs) =>
+        fs.unlink(join(tmpdir(), name)),
+      );
   });
 
   it("keeps the layer when the rebuild check finds the same file", async () => {
