@@ -34,6 +34,7 @@ from sharpen import (  # noqa: E402
     extraction_month,
     mosaic_bounds,
     pyramid,
+    read_parts,
     sharpen_block,
     tin_workers,
     z15_mosaic,
@@ -239,7 +240,17 @@ class TestGround(unittest.TestCase):
     where they overlap), an empty DEM taken over the point clouds (or setting
     zmax), and an empty class 2 gridded anyway. `dem_cell` reporting a cell
     for a DEM with no valid pixel (its emptiness check deleted) turns
-    `test_an_empty_dem_has_no_cell` red."""
+    `test_an_empty_dem_has_no_cell` red. A file's last, short part dropped,
+    or two parts sharing a point, turns `test_parts_read_every_point_once`
+    red."""
+
+    def test_parts_read_every_point_once(self):
+        part = sharpen_module.PART_POINTS
+        self.assertEqual(read_parts(0), [])
+        self.assertEqual(read_parts(part), [(0, part)])
+        self.assertEqual(
+            read_parts(2 * part + 7), [(0, part), (part, part), (2 * part, 7)]
+        )
 
     def test_an_empty_dem_has_no_cell(self):
         from unittest import mock
@@ -306,18 +317,23 @@ class TestGroundSteps(unittest.TestCase):
     DEM upsampled nearest (2 x 2 blocks in the hillshade), whether dem_ground
     stops asking or merge_dem_tiles stops forwarding; require_ground's call
     removed, so a ground grid with no height goes on to claim the whole area;
-    and TIN results collected without a progress write (the reaper fails a
-    long dense job while it works)."""
+    TIN results collected without a progress write (the reaper fails a
+    long dense job while it works); a tile read whole by one process; a
+    window cut without `--stream`, a TIN job handed its neighbours' files
+    instead of its window, or the TIN pool sized by those files (an area of
+    dense tiles then runs one job at a time, or out of memory); and the
+    ZIP's point clouds left on disk beside the windows."""
 
-    def laz_ground(self, points):
-        """laz_ground on two tiles with PDAL mocked: `points(name)` is the
-        point count of a file it writes. Returns (PDAL commands, result)."""
+    def laz_ground(self, points, tin_workers=None):
+        """laz_ground on two tiles of 6 M points with PDAL mocked:
+        `points(name)` is the point count of a ground or window file it
+        writes. Returns (PDAL commands, result, TIN jobs, files left)."""
         from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
         import sharpen
 
-        calls = []
+        calls, tins = [], []
 
         def fake_run(*command):
             calls.append(command)
@@ -325,39 +341,80 @@ class TestGroundSteps(unittest.TestCase):
 
         def summary(path):
             bounds = {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000}
-            return {"bounds": bounds, "num_points": points(Path(path).name)}
+            name = Path(path).name
+            made = name.startswith(("ground-", "window-"))
+            return {
+                "bounds": bounds,
+                "num_points": points(name) if made else 6_000_000,
+            }
+
+        def tin(job):
+            tins.append(job)
+            return job[4]
 
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(sharpen, "run", side_effect=fake_run),
             mock.patch.object(sharpen, "las_summary", side_effect=summary),
-            mock.patch.object(
-                sharpen.pipeline,
-                "select_surveys_by_layer",
-                return_value=mock.Mock(terrain_tiles=["a.laz", "b.laz"]),
-            ),
+            mock.patch.object(sharpen.pipeline, "select_surveys_by_layer") as select,
             mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
-            mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
+            mock.patch.object(sharpen, "_tin_tile", side_effect=tin),
             mock.patch.object(sharpen, "available_memory", return_value=2**34),
+            mock.patch.object(
+                sharpen, "tin_workers", tin_workers or sharpen.tin_workers
+            ),
             mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
             mock.patch.object(sharpen.pipeline, "_write_progress"),
         ):
-            result = sharpen.laz_ground([Path("a.laz")], "g.tif", Path(tmp), 2)
-        return [" ".join(c) for c in calls], result
+            clouds = [Path(tmp) / "a.laz", Path(tmp) / "b.laz"]
+            for cloud in clouds:
+                cloud.touch()
+            select.return_value = mock.Mock(terrain_tiles=[str(c) for c in clouds])
+            result = sharpen.laz_ground(clouds, "g.tif", Path(tmp), 2)
+            left = sorted(f.name for f in Path(tmp).iterdir())
+        return [" ".join(c) for c in calls], result, tins, left
 
     def test_class_2_while_any_tile_has_it(self):
         # Tile b has no class 2, but a does: b is left to the fill, never SMRF.
-        calls, result = self.laz_ground(
-            lambda name: 500_000 if name == "ground-0.las" else 0
+        calls, result, _, _ = self.laz_ground(
+            lambda name: 500_000 if name.startswith("ground-0-") else 0
         )
         self.assertEqual(result, (16, "class-2"))
-        self.assertEqual(len(calls), 2)
-        for command in calls:
+        reads = [c for c in calls if " translate " in c]
+        # Each tile's 6 M points in two parts, side by side.
+        part = sharpen_module.PART_POINTS
+        self.assertEqual(len(reads), 4)
+        for command in reads:
             self.assertIn("--filters.range.limits=Classification[2:2]", command)
             self.assertNotIn("smrf", command.lower())
+        for start, count in ((0, part), (part, 6_000_000 - part)):
+            ranged = f"--readers.las.start={start} --readers.las.count={count}"
+            self.assertEqual(sum(ranged in c for c in reads), 2)
+
+    def test_a_tin_job_holds_only_its_window(self):
+        from unittest import mock
+
+        sized = mock.Mock(return_value=2)
+        # Each tile has 6 M ground points and a 7 M window: its own and the
+        # strip of its neighbour's.
+        calls, _, tins, left = self.laz_ground(
+            lambda name: 7_000_000 if name.startswith("window-") else 3_000_000,
+            tin_workers=sized,
+        )
+        cuts = [c for c in calls if " pipeline " in c]
+        self.assertEqual(len(cuts), 2)
+        for command in cuts:
+            self.assertIn("pdal pipeline --stream", command)
+        self.assertEqual(
+            sorted(Path(job[2]).name for job in tins),
+            ["window-0.las", "window-1.las"],
+        )
+        self.assertEqual(sized.call_args.args[:2], (2, 7_000_000))
+        self.assertNotIn("a.laz", left)
+        self.assertNotIn("b.laz", left)
 
     def test_smrf_only_when_no_tile_has_class_2(self):
-        calls, result = self.laz_ground(
+        calls, result, _, _ = self.laz_ground(
             lambda name: 500_000 if name.startswith("ground-smrf") else 0
         )
         self.assertEqual(result, (16, "smrf"))
@@ -371,7 +428,7 @@ class TestGroundSteps(unittest.TestCase):
             self.assertIn("Classification[:]=0", command)
         # Its ground is then taken as class 2 is.
         self.assertEqual(
-            sum("Classification[2:2]" in c and "smrf-" in c for c in calls), 2
+            sum("Classification[2:2]" in c and "smrf-" in c for c in calls), 4
         )
 
     def test_smrf_finding_no_ground_is_refused(self):
@@ -449,23 +506,22 @@ class TestGroundSteps(unittest.TestCase):
             "bounds": {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000},
             "num_points": 500_000,
         }
-        tiles = ["a.laz", "b.laz", "c.laz"]
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(sharpen, "run", return_value=""),
             mock.patch.object(sharpen, "las_summary", return_value=summary),
-            mock.patch.object(
-                sharpen.pipeline,
-                "select_surveys_by_layer",
-                return_value=mock.Mock(terrain_tiles=tiles),
-            ),
+            mock.patch.object(sharpen.pipeline, "select_surveys_by_layer") as select,
             mock.patch.object(sharpen, "ProcessPoolExecutor", ThreadPoolExecutor),
             mock.patch.object(sharpen, "_tin_tile", side_effect=lambda job: job[4]),
             mock.patch.object(sharpen, "available_memory", return_value=2**34),
             mock.patch.object(sharpen.pipeline, "merge_dem_tiles"),
             mock.patch.object(sharpen.pipeline, "_write_progress") as progress,
         ):
-            sharpen.laz_ground([Path(t) for t in tiles], "g.tif", Path(tmp), 2)
+            tiles = [Path(tmp) / name for name in ("a.laz", "b.laz", "c.laz")]
+            for tile in tiles:
+                tile.touch()
+            select.return_value = mock.Mock(terrain_tiles=[str(t) for t in tiles])
+            sharpen.laz_ground(tiles, "g.tif", Path(tmp), 2)
         tin = [c.args for c in progress.call_args_list if c.args[2] == "tin"]
         self.assertEqual(tin, [(1, 3, "tin"), (2, 3, "tin"), (3, 3, "tin")])
 
