@@ -1,4 +1,4 @@
-// User-facing text goes through `t`, `plural` or `say`, which look the English
+// User-facing text goes through `t`, `plural`, `rich` or `say`, which look the English
 // up in the catalogue of the language in force. The reasoning, and why there
 // is no library, is docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
 // Guard: shared/src/i18n.test.ts.
@@ -8,8 +8,8 @@ import { enUS } from "./i18nCatalogues/en-US.js";
 export const SOURCE_LANGUAGE = "en-AU";
 /** Computed, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧. Dev only. */
 export const PSEUDO_LANGUAGE = "en-XA";
-export type Language = "en-AU" | "en-US" | "en-XA";
-export const LANGUAGES: readonly Language[] = ["en-AU", "en-US", "en-XA"];
+export const LANGUAGES = ["en-AU", "en-US", "en-XA"] as const;
+export type Language = (typeof LANGUAGES)[number];
 
 type PluralCategory = "zero" | "one" | "two" | "few" | "many" | "other";
 
@@ -211,26 +211,36 @@ export function plural(
           ? found
           : english;
   }
-  return text.replace(/#|\{(\d+)\}/g, (whole, i) =>
-    whole === "#"
-      ? String(count)
-      : Number(i) < holes.length
-        ? String(holes[i])
-        : whole,
-  );
+  // `#` first: a hole that holds a `#` must stay as written.
+  return fillHoles(text.replace(/#/g, String(count)), holes);
 }
 
 export type RichPart = string | { tag: string; text: string };
 
-/** "Read the <a>terms</a>." → ["Read the ", { tag: "a", text: "terms" }, "."]. Tags do not nest. */
-export function richParts(text: string): RichPart[] {
+/**
+ * A sentence with an element in it, as parts:
+ * rich`Read the <a>${name}</a>.` is ["Read the ", { tag: "a", text: name }, "."].
+ * The tags are found in the message after the catalogue lookup and before the
+ * holes go in, so a hole holding `<` or `<b>x</b>` is only ever text. A tag
+ * holds text and holes, never another tag; a nested or unclosed tag stays in
+ * the text as written (the scanner slice's guard refuses such a message).
+ */
+export function rich(
+  strings: TemplateStringsArray,
+  ...holes: (string | number)[]
+): RichPart[] {
+  const message = localise(keyOf(strings));
   const parts: RichPart[] = [];
+  const text = (from: number, to: number) => {
+    const filled = fillHoles(message.slice(from, to), holes);
+    if (filled) parts.push(filled);
+  };
   let from = 0;
-  for (const m of text.matchAll(/<([a-z][a-z0-9]*)>([^<]*)<\/\1>/g)) {
-    if (m.index > from) parts.push(text.slice(from, m.index));
-    parts.push({ tag: m[1], text: m[2] });
+  for (const m of message.matchAll(/<([a-z][a-z0-9]*)>([^<]*)<\/\1>/g)) {
+    text(from, m.index);
+    parts.push({ tag: m[1], text: fillHoles(m[2], holes) });
     from = m.index + m[0].length;
   }
-  if (from < text.length) parts.push(text.slice(from));
+  text(from, message.length);
   return parts;
 }

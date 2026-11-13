@@ -9,6 +9,7 @@ vi.mock("./i18nCatalogues/en-US.js", () => ({
     "{0} {1} {2}": "{1} {0}, {2}",
     "Couldn't find {0}.": "Can't find {0}.",
     "Abseil down {0}": "Rappel down {0}",
+    "Read <a>{0}</a> now": "Now <a>{0}</a>, read {0}",
     "# places in {0}": { one: "# spot in {0}", few: "# spots (few) in {0}" },
   },
 }));
@@ -142,6 +143,12 @@ describe("plural", () => {
     expect(f(2)).toBe("2 canyons in NSW");
   });
 
+  // Mutation: fill holes before `#`, so a hole holding "#" becomes the count.
+  it("does not read a # in a hole as the count", async () => {
+    const { plural } = await load();
+    expect(plural(3, "# in {0}", "# in {0}", "#7")).toBe("3 in #7");
+  });
+
   // Mutation: key the entry by the `one` form, or ignore the language's categories.
   it("reads a catalogue entry by category, falling back to other, then to English", async () => {
     vi.stubGlobal("Intl", {
@@ -207,11 +214,11 @@ describe("pseudo-language", () => {
     expect(say`Hello`).toBe("⟦Hélló~~⟧");
   });
 
-  // Mutation: change the tag pattern in `pseudo` and `richParts` so they disagree.
-  it("round-trips through richParts", async () => {
-    const { t, richParts } = await load();
+  // Mutation: change the tag pattern in `pseudo` and `rich` so they disagree.
+  it("keeps its tags, so `rich` still splits it", async () => {
+    const { rich } = await load();
     use("en-XA");
-    const parts = richParts(t`Read the <a>terms</a>, please.`);
+    const parts = rich`Read the <a>terms</a>, please.`;
     expect(parts).toHaveLength(3);
     expect(parts[1]).toEqual({ tag: "a", text: "térmš" });
     expect(parts[0]).toMatch(/^⟦/);
@@ -219,21 +226,53 @@ describe("pseudo-language", () => {
   });
 });
 
-describe("richParts", () => {
-  // Mutation: return the text whole, or lose the text after the last tag.
-  it("splits a sentence round its tags", async () => {
-    const { richParts } = await load();
-    expect(richParts("Read the <a>terms</a>.")).toEqual([
+describe("rich", () => {
+  // Mutation: return the message whole, or lose the text after the last tag.
+  it("splits a sentence round its tags and fills the holes in each part", async () => {
+    const { rich } = await load();
+    expect(rich`Read the <a>terms</a>.`).toEqual([
       "Read the ",
       { tag: "a", text: "terms" },
       ".",
     ]);
-    expect(richParts("<b>One</b><i>two</i>")).toEqual([
+    expect(rich`<b>One</b><i>two</i>`).toEqual([
       { tag: "b", text: "One" },
       { tag: "i", text: "two" },
     ]);
-    expect(richParts("No tags, 2 < 3")).toEqual(["No tags, 2 < 3"]);
-    expect(richParts("")).toEqual([]);
+    expect(rich`${"Ann"} read <a>${"the terms"} (${2})</a>`).toEqual([
+      "Ann read ",
+      { tag: "a", text: "the terms (2)" },
+    ]);
+    expect(rich`No tags, 2 < 3`).toEqual(["No tags, 2 < 3"]);
+    expect(rich``).toEqual([]);
+  });
+
+  // Mutation: split the message after the holes are filled (the old `richParts(t`…`)`).
+  it("never reads a hole as markup", async () => {
+    const { rich } = await load();
+    expect(rich`<a>${"a<b"}</a>`).toEqual([{ tag: "a", text: "a<b" }]);
+    expect(rich`Read ${"<b>x</b>"} now`).toEqual(["Read <b>x</b> now"]);
+  });
+
+  // Mutation: reorder through the catalogue only for `t`, not `rich`.
+  it("reads the catalogue, so a translation can move the tag", async () => {
+    const { rich } = await load();
+    use("en-US");
+    expect(rich`Read <a>${"x"}</a> now`).toEqual([
+      "Now ",
+      { tag: "a", text: "x" },
+      ", read x",
+    ]);
+  });
+
+  it("leaves nested and unclosed tags in the text", async () => {
+    const { rich } = await load();
+    expect(rich`<a>one <b>two</b></a>`).toEqual([
+      "<a>one ",
+      { tag: "b", text: "two" },
+      "</a>",
+    ]);
+    expect(rich`<a>open`).toEqual(["<a>open"]);
   });
 });
 

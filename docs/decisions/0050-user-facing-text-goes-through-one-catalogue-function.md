@@ -23,7 +23,7 @@ translations. The Australian wording ("abseil", "metre") is what differs.
 
 ## Decision
 
-User-facing text is written through `t`, `plural` or `say`
+User-facing text is written through `t`, `plural`, `rich` or `say`
 (`shared/src/i18n.ts`), and nothing else decides what language it is in.
 
 - **The English text is the key.** `` t`Showing ${shown} of ${total}` `` looks
@@ -33,7 +33,9 @@ User-facing text is written through `t`, `plural` or `say`
   the lookup, so no catalogue can change the marks `withoutQuoted` depends on.
   A plural is `plural(n, one, other, …holes)`, keyed by `other`; a catalogue
   entry for it is an object of CLDR categories. A sentence with an element in
-  it is one message, `<a>terms</a>`, split by `richParts`.
+  it is one message, ``rich`Read the <a>${name}</a>.` ``, which returns the parts of
+  the sentence. The tags are found in the message before its holes are filled,
+  so a hole is only ever text.
 - **The source language is `en-AU`.** A catalogue holds differences only
   (`shared/src/i18nCatalogues/en-US.ts`). `en-XA`, the pseudo-language, is
   computed (`pseudo`): accented letters, padding and ⟦ ⟧, with holes, tags and
@@ -57,8 +59,8 @@ of the extraction work do.
   id is invented or kept in step. Holes are typed by the template. Nothing
   loads at build time: `shared` and the API still build with plain `tsc`.
 - **Negative:** one English text cannot have two translations until a key gains
-  a context. Rewording an English message orphans its `en-US` entry, and the
-  catalogue test fails until the same change fixes it. A language change
+  a context. Rewording an English message orphans its `en-US` entry. No test
+  catches that yet; the scanner slice of the extraction work adds it. A language change
   reloads Logjam Web and Logjam GPS. There are no translator tools: a
   translation platform would need a script that exports the catalogue.
 - **Neutral:** `en-US` is empty until the extraction moves the copy. With one
@@ -73,8 +75,9 @@ of the extraction work do.
   per-request language (each still needs `AsyncLocalStorage`), and moving 4,000
   strings. i18next and FormatJS keys are ids and its holes are untyped
   strings; Lingui keeps the English as the key but needs a Babel or SWC macro in
-  every build, and `shared` and the API build with plain `tsc`. All three need
-  an `Intl.PluralRules` polyfill on Hermes. What they add, translator tooling
+  every build, and `shared` and the API build with plain `tsc`. Hermes's `Intl`
+  support is incomplete (`shared/src/dateNames.ts` already writes month names
+  by hand for that reason), so each may need a polyfill for plurals. What they add, translator tooling
   and ICU select, is not needed for US English and a pseudo-language.
 - **Ids as keys** (`plans.title.rename`). Survives rewording, but every
   call site changes shape and a second list of names has to stay in step with

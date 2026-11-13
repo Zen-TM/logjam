@@ -134,7 +134,7 @@ export {
   language,
   matchLanguage,
   plural,
-  richParts,
+  rich,
   setLanguageResolver,
   t,
 } from "./i18n.js";
