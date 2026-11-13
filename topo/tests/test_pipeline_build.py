@@ -140,7 +140,10 @@ class TestGroundPerTile(unittest.TestCase):
     fails the job, or wipes the survey's classes everywhere. Red too if the
     tiles are gridded one a CPU whatever their size (eight dense tiles at
     once run the task out of memory), by the first tile's size instead of
-    the largest's, or one at a time when several fit."""
+    the largest's, with an unclassified tile counted as a classified one
+    (SMRF holds more than twice as much), with a small tile counted by its
+    points alone, or one at a time when several fit; or if a failed tile
+    leaves the tiles queued behind it to be gridded before the job fails."""
 
     def grid(self, points, memory):
         """run_pdal_per_tile on two made-up tiles with PDAL mocked. Returns
@@ -177,7 +180,8 @@ class TestGroundPerTile(unittest.TestCase):
                 work,
                 workers=8,
             )
-        return [c.args[0] for c in run.call_args_list], pools[0]
+        # The first pool asks each tile for its ground; the second grids.
+        return [c.args[0] for c in run.call_args_list], pools[1]
 
     def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
         pipelines, _ = self.grid(
@@ -191,20 +195,68 @@ class TestGroundPerTile(unittest.TestCase):
         }
         self.assertEqual(smrf, {"classified.laz": False, "unclassified.laz": True})
 
+    def test_a_failed_tile_stops_the_tiles_still_queued(self):
+        import tempfile
+        import time
+        from unittest import mock
+
+        import pipeline
+
+        started = []
+
+        def grid(job):
+            started.append(job[0])
+            if job[0] == 0:
+                raise RuntimeError("PDAL failed")
+            time.sleep(0.05)
+
+        classified = mock.patch.object(pipeline, "has_class2", return_value=True)
+
+        tiles = [f"{i}.laz" for i in range(8)]
+        with (
+            tempfile.TemporaryDirectory() as work,
+            classified,
+            mock.patch.object(pipeline, "point_count", return_value=10**12),
+            mock.patch.object(pipeline, "available_memory", return_value=1),
+            mock.patch.object(pipeline, "_grid_tile", side_effect=grid),
+            mock.patch.object(pipeline, "_merge_raster_tiles") as merge,
+            self.assertRaises(RuntimeError),
+        ):
+            pipeline.run_pdal_per_tile(
+                tiles,
+                tiles,
+                *(os.path.join(work, f"{n}.tif") for n in "abcde"),
+                work,
+                workers=8,
+            )
+        # One at a time (no memory for more): the first fails, and at most
+        # the one the pool had already picked up runs after it, not all eight.
+        self.assertLessEqual(len(started), 2)
+        merge.assert_not_called()
+
     def test_as_many_tiles_at_a_time_as_the_largest_fits_in_memory_with(self):
         import pipeline
 
         per_point = pipeline.GRID_BYTES_PER_POINT
-        self.assertGreater(per_point, 0)
-        tiles = {"classified.laz": 1_000_000, "unclassified.laz": 50_000_000}
-        # Room for three of the largest in the share of memory the tiles get.
-        memory = int(3.5 * 50_000_000 * per_point / pipeline.GRID_MEMORY_SHARE)
+        self.assertGreater(per_point["smrf"], 2 * per_point["class2"])
+        share = pipeline.GRID_MEMORY_SHARE
+
+        def room_for(jobs, points, ground):
+            return int((jobs + 0.5) * points * per_point[ground] / share)
+
+        # The classified tile is the larger in points, the unclassified one
+        # in memory: room for three of it.
+        tiles = {"classified.laz": 60_000_000, "unclassified.laz": 50_000_000}
+        memory = room_for(3, 50_000_000, "smrf")
+        self.assertGreater(memory, room_for(5, 60_000_000, "class2"))
         self.assertEqual(self.grid(tiles, memory)[1], 3)
         # No room for one: still one, as before.
         self.assertEqual(self.grid(tiles, 1)[1], 1)
-        # Small tiles: one a CPU.
+        # Small tiles are counted as the measured tile, not by their points.
         small = {"classified.laz": 1000, "unclassified.laz": 1000}
-        self.assertEqual(self.grid(small, 2**34)[1], 8)
+        measured = pipeline.GRID_MEASURED_POINTS
+        self.assertEqual(self.grid(small, room_for(2, measured, "smrf"))[1], 2)
+        self.assertEqual(self.grid(small, 2**36)[1], 8)
 
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")

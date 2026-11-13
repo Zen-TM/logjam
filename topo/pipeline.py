@@ -1455,21 +1455,26 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
     log.info("PDAL pipeline complete.")
 
 
-# Peak memory of one tile's PDAL pipeline per point it reads: PDAL holds the
-# whole cloud, its height above ground, the index hag_nn searches and five
-# rasters. Measured: 466 MiB for a Category 2 tile's 2.58 M points, ~190
-# bytes a point. A 57.6 M point Category 1 tile passed 4.6 GB on a box that
-# was swapping, so its peak is not known: the small tile's figure, which
-# carries the rasters' fixed share, is the cautious one for it.
-GRID_BYTES_PER_POINT = 190
+# Peak memory of one tile's PDAL pipeline per point it reads, by its ground:
+# PDAL holds the whole cloud, its height above ground, the index hag_nn
+# searches and five rasters, and SMRF its own grids over the tile as well.
+# Measured on one Category 2 tile of 2.58 M points: 466 MiB on its class 2
+# (~190 bytes a point), 1,122 MiB through SMRF (~455). A 57.6 M point
+# Category 1 tile passed 4.6 GB on a box that was swapping, so its peak is
+# not known: the small tile's figure, which carries the rasters' fixed share,
+# is the cautious one for it.
+GRID_BYTES_PER_POINT = {"class2": 190, "smrf": 460}
+# The rasters and SMRF's grids are sized by the tile's extent, not its points:
+# a tile with fewer points than the measured one is counted as that one.
+GRID_MEASURED_POINTS = 2_600_000
 # Of the memory the container may still use, the share the tiles' PDAL
 # pipelines may take.
 GRID_MEMORY_SHARE = 0.7
 
 
-def _grid_tile(job: Tuple[int, str, Dict[str, str], str, float]) -> None:
+def _grid_tile(job: Tuple[int, str, str, Dict[str, str], str, float]) -> None:
     """One point cloud to its five rasters, on its own class 2 or SMRF's."""
-    i, laz, tile, work_dir, resolution = job
+    i, laz, ground, tile, work_dir, resolution = job
     pipeline = build_pipeline_full(
         [laz],
         tile["dtm"],
@@ -1478,7 +1483,7 @@ def _grid_tile(job: Tuple[int, str, Dict[str, str], str, float]) -> None:
         tile["below"],
         tile["all"],
         resolution,
-        ground="class2" if has_class2(laz) else "smrf",
+        ground=ground,
     )
     run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
 
@@ -1524,25 +1529,41 @@ def run_pdal_per_tile(
         }
         for i, laz in enumerate(union)
     }
-    largest = max((point_count(laz) for laz in union), default=0)
-    n = jobs_in_memory(
-        workers,
-        GRID_BYTES_PER_POINT * largest,
-        available_memory(),
-        GRID_MEMORY_SHARE,
+    # Each tile's ground is found first: it sets what the tile's pipeline
+    # holds in memory. The search streams, so every tile is asked at once.
+    with ThreadPoolExecutor(workers) as pool:
+        grounds = [
+            "class2" if found else "smrf" for found in pool.map(has_class2, union)
+        ]
+    largest = max(
+        (
+            GRID_BYTES_PER_POINT[ground] * max(point_count(laz), GRID_MEASURED_POINTS)
+            for laz, ground in zip(union, grounds)
+        ),
+        default=0,
     )
+    n = jobs_in_memory(workers, largest, available_memory(), GRID_MEMORY_SHARE)
     log.info(f"PDAL: {len(union)} tile(s), {n} at a time")
-    jobs = [(i, laz, grids[laz], work_dir, resolution) for i, laz in enumerate(union)]
+    jobs = [
+        (i, laz, grounds[i], grids[laz], work_dir, resolution)
+        for i, laz in enumerate(union)
+    ]
     # Heartbeat: PDAL is the other long phase. A report as each tile ends
     # keeps last_progress_at fresh through the whole PDAL pass, so the
     # stall-reaper doesn't false-kill a big job before render starts.
     _write_progress(0, len(union), "pdal")
     with ThreadPoolExecutor(n) as pool:
-        for k, done in enumerate(
-            as_completed([pool.submit(_grid_tile, job) for job in jobs]), 1
-        ):
-            done.result()
-            _write_progress(k, len(union), "pdal")
+        futures = [pool.submit(_grid_tile, job) for job in jobs]
+        try:
+            for k, done in enumerate(as_completed(futures), 1):
+                done.result()
+                _write_progress(k, len(union), "pdal")
+        except BaseException:
+            # A tile failed: the tiles still queued are not gridded first.
+            # Left to the `with`, they all would be, with no progress
+            # written meanwhile (`TestGroundPerTile`).
+            pool.shutdown(cancel_futures=True)
+            raise
 
     merges = [
         ("DTM", terrain_tiles, "dtm", out_dtm, -9999, "cubic"),
@@ -2224,16 +2245,10 @@ def _encode_fire_stale(
     there (guard: test_burnt_all_over_gets_stripes_and_no_band); a survey
     edge inside a burn gets none either (guard: test_survey_edge_inside_a_burn_has_no_band).
     """
-    # The data mask is blurred beside the fire's: numpy lets go of the
-    # interpreter inside each sum.
-    with ThreadPoolExecutor(1) as pool:
-        blurred_data = pool.submit(
-            _box_blur, valid_mask, FIRE_STALE_SMOOTH_M, cell_m, 4
-        )
-        inside = _box_blur(burnt_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
-        d = _box_blur(inside, FIRE_STALE_BAND_BLUR_M, cell_m, 3)
-        k = np.clip((1.0 - d) * 2.0, 0.0, 1.0)
-        has_data = blurred_data.result() >= 0.5
+    inside = _box_blur(burnt_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
+    d = _box_blur(inside, FIRE_STALE_BAND_BLUR_M, cell_m, 3)
+    k = np.clip((1.0 - d) * 2.0, 0.0, 1.0)
+    has_data = _box_blur(valid_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
     return np.where(inside & has_data, 1.0 + k, 0.0).astype(np.float32)
 
 
@@ -3802,8 +3817,9 @@ def run():
         }
         mercator = {name: os.path.join(work_dir, f"{name}_raw.tif") for name in native}
         dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
-        # The grid every later raster is aligned to. Only its grid is read,
-        # never a height: the DTM's holes are left unfilled.
+        # The grid every later raster is aligned to: compute_rasters and
+        # get_raster_bbox_wgs84 read its size, transform and projection.
+        # Its holes are left unfilled.
         dtm_grid = os.path.join(work_dir, "dtm_grid.tif")
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
