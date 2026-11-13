@@ -102,39 +102,14 @@ describe("topo-jobs route (fake auth)", () => {
     expect(goneRes.status).toBe(404);
   });
 
-  // A stored ZIP of one empty point-cloud file: all /start reads of it is the
+  // A stored ZIP of empty files with these names: all /start reads of it is the
   // central directory.
-  function oneLazZip(name: string): Buffer {
-    const nameBytes = Buffer.from(name);
-    const local = Buffer.alloc(30 + nameBytes.length);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(nameBytes.length, 26);
-    nameBytes.copy(local, 30);
-    const central = Buffer.alloc(46 + nameBytes.length);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(nameBytes.length, 28);
-    nameBytes.copy(central, 46);
-    const eocd = Buffer.alloc(22);
-    eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(1, 8);
-    eocd.writeUInt16LE(1, 10);
-    eocd.writeUInt32LE(central.length, 12);
-    eocd.writeUInt32LE(local.length, 16);
-    return Buffer.concat([local, central, eocd]);
-  }
-
-  // A stored ZIP of 5 m DEMs, whose central directory is bigger than the 64 KiB
-  // tail /start reads first. /start refuses 5 m DEMs after reading the
-  // directory, without launching anything, so the refusal says the directory
-  // was read.
-  function manyDemZip(count: number): Buffer {
+  function zipOf(names: string[]): Buffer {
     const locals: Buffer[] = [];
     const centrals: Buffer[] = [];
     let offset = 0;
-    for (let i = 0; i < count; i++) {
-      const nameBytes = Buffer.from(
-        `Madeup201801/DEM/5 Metre/Madeup201801-DEM_2400004_56_${String(i).padStart(4, "0")}_0001_5m.tif`,
-      );
+    for (const name of names) {
+      const nameBytes = Buffer.from(name);
       const local = Buffer.alloc(30 + nameBytes.length);
       local.writeUInt32LE(0x04034b50, 0);
       local.writeUInt16LE(nameBytes.length, 26);
@@ -148,15 +123,27 @@ describe("topo-jobs route (fake auth)", () => {
       centrals.push(central);
       offset += local.length;
     }
-    const directory = Buffer.concat(centrals);
     const eocd = Buffer.alloc(22);
     eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(count, 8);
-    eocd.writeUInt16LE(count, 10);
-    eocd.writeUInt32LE(directory.length, 12);
+    eocd.writeUInt16LE(names.length, 8);
+    eocd.writeUInt16LE(names.length, 10);
+    eocd.writeUInt32LE(Buffer.concat(centrals).length, 12);
     eocd.writeUInt32LE(offset, 16);
-    return Buffer.concat([...locals, directory, eocd]);
+    return Buffer.concat([...locals, ...centrals, eocd]);
   }
+  const oneLazZip = (name: string) => zipOf([name]);
+
+  // 5 m DEMs, whose central directory is bigger than the 64 KiB tail /start
+  // reads first. /start refuses 5 m DEMs after reading the directory, without
+  // launching anything, so the refusal says the directory was read.
+  const manyDemZip = (count: number) =>
+    zipOf(
+      Array.from(
+        { length: count },
+        (_, i) =>
+          `Madeup201801/DEM/5 Metre/Madeup201801-DEM_2400004_56_${String(i).padStart(4, "0")}_0001_5m.tif`,
+      ),
+    );
 
   // Mutation: put back the one 64 KiB tail read and parseZipCentralDirectory
   // in /start, and the refusal turns into "Logjam couldn't read that ZIP".

@@ -127,7 +127,6 @@ const EOCD_BYTES = 22;
 const ZIP64_LOCATOR_BYTES = 20;
 const ZIP64_EOCD_BYTES = 56;
 const CENTRAL_ENTRY_BYTES = 46;
-const SATURATED_16 = 0xffff;
 const SATURATED_32 = 0xffffffff;
 
 /** Where a ZIP's central directory is, in absolute file offsets. */
@@ -146,7 +145,7 @@ function readUint64(view: DataView, pos: number): number {
 
 /**
  * Finds the central directory from the trailing bytes of a ZIP: the classic
- * end record, or the Zip64 one when the classic fields are saturated
+ * end record, or the Zip64 one when a locator for it is present
  * (APPNOTE 4.3.14 to 4.3.16). Does not need the directory itself.
  *
  * `tailBytes` is the last N bytes of the file and `totalFileSize` its size.
@@ -183,20 +182,28 @@ export function locateZipCentralDirectory(
   let offset = view.getUint32(eocdPos + 16, true);
 
   const tailStart = totalFileSize - tailBytes.length;
-  const saturated =
-    count === SATURATED_16 || size === SATURATED_32 || offset === SATURATED_32;
   const locatorPos = eocdPos - ZIP64_LOCATOR_BYTES;
+  // A locator in the 20 bytes before the end record is followed whatever the
+  // classic fields hold, as Python's zipfile (the worker) does: a reader that
+  // used the classic values here could check one directory while the worker
+  // extracts another (elvisZip.test.ts holds it).
   if (
-    saturated &&
     locatorPos >= 0 &&
     view.getUint32(locatorPos, true) === ZIP64_LOCATOR_SIGNATURE
   ) {
+    // Multi-disk archives are refused, as zipfile refuses them.
+    if (
+      view.getUint32(locatorPos + 4, true) !== 0 ||
+      view.getUint32(locatorPos + 16, true) > 1
+    ) {
+      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    }
     // The Zip64 end record sits just before its locator; one that starts
     // before the tail we were given is refused rather than guessed at.
     const recordPos = readUint64(view, locatorPos + 8) - tailStart;
     if (
       recordPos < 0 ||
-      recordPos + ZIP64_EOCD_BYTES > tailBytes.length ||
+      recordPos + ZIP64_EOCD_BYTES > locatorPos ||
       view.getUint32(recordPos, true) !== ZIP64_EOCD_SIGNATURE
     ) {
       throw new ElvisZipError("TRUNCATED", TRUNCATED);

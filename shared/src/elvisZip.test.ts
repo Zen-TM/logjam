@@ -489,6 +489,39 @@ describe("a lying Zip64 record is refused, never crashes", () => {
     expect(run()).toHaveLength(4);
   });
 
+  it("follows the Zip64 record even when the classic record holds real values", () => {
+    // The worker's Python zipfile does, so a ZIP whose classic record shows one
+    // harmless entry and whose Zip64 record shows another directory must be
+    // read as the second. Mutation: follow the locator only when a classic
+    // field is 0xFFFF or 0xFFFFFFFF.
+    const harmless = directoryOf(buildZip([{ name: "harmless.laz" }]));
+    const hidden = directoryOf(
+      buildZip(elvisNames(3).map((f) => ({ ...f, size: 5 }))),
+    );
+    const records = zip64Tail(hidden, 3, harmless.length);
+    const zip = new Uint8Array(harmless.length + records.length);
+    zip.set(harmless);
+    zip.set(records, harmless.length);
+    const eocd = new DataView(zip.buffer, zip.length - 22);
+    eocd.setUint16(8, 1, true);
+    eocd.setUint16(10, 1, true);
+    eocd.setUint32(12, harmless.length, true);
+    eocd.setUint32(16, 0, true);
+    expect(parse(zip).map((e) => e.filename)).toEqual(
+      elvisNames(3).map((f) => f.name),
+    );
+  });
+
+  it("refuses a multi-disk Zip64 locator", () => {
+    // Mutation: delete the disk checks (zipfile raises BadZipFile for them).
+    expect(
+      lie((view, _record, locator) => view.setUint32(locator + 4, 1, true)),
+    ).toThrow(refused("TRUNCATED"));
+    expect(
+      lie((view, _record, locator) => view.setUint32(locator + 16, 2, true)),
+    ).toThrow(refused("TRUNCATED"));
+  });
+
   it("refuses a locator that points outside the file", () => {
     // Mutation: use the locator's offset without checking it is in the tail.
     expect(
