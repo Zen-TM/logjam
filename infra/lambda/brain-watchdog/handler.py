@@ -115,9 +115,8 @@ def _listing(s3, bucket, prefix):
 
 
 def _archive_id_order(prefix):
-    # "<major>-<history>", as "16-1" or "18-2": the newest is the highest history, which only
-    # ever grows, not the highest major (a stanza taken back from 18 to 16 is "16-3") and
-    # not the lexicographic last ("9-1" after "10-1").
+    # "<major>-<history>", as "16-1" or "18-2": the newest is the highest history number, which
+    # only ever grows, not the highest major and not the lexicographic last ("9-1" after "10-1").
     try:
         major, history = (
             int(n) for n in prefix.rstrip("/").rsplit("/", 1)[1].split("-")

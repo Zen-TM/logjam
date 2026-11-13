@@ -22,7 +22,7 @@ OUT receives:
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
-DEMs, too big for memory) and exits 2.
+DEMs, too big for memory or disk) and exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -47,17 +47,19 @@ by its type and code locations only (`pipeline.report_failure`,
 import argparse
 import contextlib
 import dataclasses
+import errno
 import functools
 import json
 import logging
 import math
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import zipfile
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -83,13 +85,23 @@ TIN_BUFFER_M = 30
 # A triangle longer than this spans a void (water, a gap in the survey), not
 # ground: the cells under it take the statewide value instead.
 TIN_MAX_EDGE_M = 50
+# One `pdal translate` reads this many of a tile's points. LAZ decodes on one
+# core, but from any chunk, so a tile's parts are read side by side: a
+# 57.6 M point Category 1 tile took 49 s whole and 12 s a quarter.
+PART_POINTS = 5_000_000
 # Pixels of context around a block: Horn needs one, the contour smoothing a
 # few more at the contour grid.
 MARGIN_PX = 16
 NODATA = dem.NODATA
 
-# The statewide archives' encodings (ADR 0030, ADR 0039), under their own names.
-HEIGHTS = dataclasses.replace(dem.HEIGHTS, name="Sharpened heights", derived="")
+# The statewide archives' encodings (ADR 0030, ADR 0039), under their own
+# names, but for the heights' PNG level: 6, as the slope
+# (tests/test_sharpen.py `TestPyramid`). Level 9 was most of the time a block
+# took, and level 6 makes the archive 12 % larger: ADR 0039's update of
+# 2026-11-13 has the measurements.
+HEIGHTS = dataclasses.replace(
+    dem.HEIGHTS, name="Sharpened heights", derived="", png_level=dem.SLOPE.png_level
+)
 SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 
 EMPTY_GROUND = (
@@ -295,22 +307,45 @@ def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
 # a point. Holding back 10% of the class 2 of one steep survey, a 2 m TIN beat
 # it on every slope band (RMSE 0.40 m v 0.43 m; 1.34 m v 1.42 m at 40°+), and
 # a 1 m TIN added only ~2%.
-def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
-    """One tile's TIN of class 2 from its own and its neighbours' ground."""
-    name, bounds, neighbours, cell, out, work = job
+def _strips(job: Tuple[List[str], dict, str]) -> int:
+    """A tile's neighbours' ground within TIN_BUFFER_M of it, into one file;
+    returns its point count, 0 and no file for a tile with no neighbour.
+
+    Cut on its own, streamed, so a TIN job holds its own tile and the strips:
+    a TIN pipeline that read the neighbours itself would hold each whole,
+    and an area of dense tiles would have memory for one job at a time.
+    `--stream` fails the cut rather than hold a file, should a stage that
+    cannot stream be added: `tin_workers` counts on a job never holding a
+    neighbour (tests/test_sharpen.py `TestGroundSteps`)."""
+    files, bounds, out = job
+    if not files:
+        return 0
     b = TIN_BUFFER_M
-    ox = math.floor(bounds["minx"] / cell) * cell
-    oy = math.floor(bounds["miny"] / cell) * cell
-    width = math.ceil((bounds["maxx"] - ox) / cell)
-    height = math.ceil((bounds["maxy"] - oy) / cell)
-    stages: list = [{"type": "readers.las", "filename": n} for n in neighbours]
+    stages: list = [{"type": "readers.las", "filename": f} for f in files]
     stages += [
-        {"type": "filters.merge"},
         {
             "type": "filters.crop",
             "bounds": f"([{bounds['minx'] - b},{bounds['maxx'] + b}],"
             f"[{bounds['miny'] - b},{bounds['maxy'] + b}])",
         },
+        {"type": "writers.las", "filename": out},
+    ]
+    spec = Path(out).with_suffix(".json")
+    spec.write_text(json.dumps({"pipeline": stages}))
+    run("pdal", "pipeline", "--stream", str(spec))
+    return int(las_summary(out)["num_points"])
+
+
+def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
+    """One tile's TIN of class 2 from its own ground and its strips."""
+    name, bounds, files, cell, out, work = job
+    ox = math.floor(bounds["minx"] / cell) * cell
+    oy = math.floor(bounds["miny"] / cell) * cell
+    width = math.ceil((bounds["maxx"] - ox) / cell)
+    height = math.ceil((bounds["maxy"] - oy) / cell)
+    stages: list = [{"type": "readers.las", "filename": f} for f in files]
+    stages += [
+        {"type": "filters.merge"},
         {"type": "filters.delaunay"},
         {
             "type": "filters.faceraster",
@@ -333,9 +368,8 @@ def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
 
 
 # Peak memory of one TIN job per ground point it reads: PDAL holds every point
-# of every file it reads (its own tile's ground and its neighbours') and the
-# mesh over them. Measured: 992 MiB for a Category 1 tile's 5.0 M
-# ground points read alone, ~210 bytes a point.
+# of its tile and its strips, and the mesh over them. Measured: 992 MiB for a
+# Category 1 tile's 5.0 M ground points read alone, ~210 bytes a point.
 TIN_BYTES_PER_POINT = 210
 # Of the memory the container may still use, the share TIN jobs may take.
 TIN_MEMORY_SHARE = 0.7
@@ -359,9 +393,10 @@ def available_memory(
     """Bytes the job can still take, never below zero: the host's
     MemAvailable or, when the container has a cgroup v2 memory limit and it
     is lower, that limit less what the cgroup holds that it can't give back
-    (memory.current less memory.stat's inactive_file, the page cache the
-    kernel reclaims first: the extracted ZIP and the ground files are written
-    before this is asked). Tests: tests/test_sharpen.py `TestTinWorkers`."""
+    (memory.current less memory.stat's page cache: the extracted ZIP and the
+    ground files are written before this is asked. Both of its lists, as
+    MemAvailable counts them: a ground file read by each neighbour's strips
+    cut is on the active one). Tests: tests/test_sharpen.py `TestTinWorkers`."""
     found = dict(line.split(":", 1) for line in meminfo.read_text().splitlines())
     free = int(found["MemAvailable"].split()[0]) * 1024
     with contextlib.suppress(OSError, ValueError, KeyError):
@@ -369,26 +404,53 @@ def available_memory(
         stat = dict(
             line.split() for line in (cgroup / "memory.stat").read_text().splitlines()
         )
-        held = int((cgroup / "memory.current").read_text()) - int(stat["inactive_file"])
+        cache = int(stat["inactive_file"]) + int(stat["active_file"])
+        held = int((cgroup / "memory.current").read_text()) - cache
         free = min(free, limit - held)
     return max(0, free)
 
 
-def class2_tiles(paths: List[str], work: Path, name: str) -> list:
-    """(ground file, bounds, ground points) of each tile with any class 2."""
-    tiles = []
-    for i, path in enumerate(paths):
-        b = las_summary(path)["bounds"]
-        ground = str(work / f"ground-{name}{i}.las")
-        run(
-            *["pdal", "translate", path, ground, "range"],
-            "--filters.range.limits=Classification[2:2]",
-        )
-        count = int(las_summary(ground)["num_points"])
-        if count:
-            tiles.append((ground, b, count))
-        pipeline._write_progress(i + 1, len(paths), "ground")
-    return tiles
+def read_parts(points: int) -> List[Tuple[int, int]]:
+    """(start, count) of each part a file's points are read in: every point
+    once (tests/test_sharpen.py `TestGround`)."""
+    return [(s, min(PART_POINTS, points - s)) for s in range(0, points, PART_POINTS)]
+
+
+def _class2_part(job: Tuple[int, str, str, int, int]) -> Tuple[int, str, int]:
+    """One part of a tile's class 2 into its own file: (tile, file, points)."""
+    i, path, ground, start, count = job
+    run(
+        *["pdal", "translate", path, ground, "range"],
+        "--filters.range.limits=Classification[2:2]",
+        f"--readers.las.start={start}",
+        f"--readers.las.count={count}",
+    )
+    return i, ground, int(las_summary(ground)["num_points"])
+
+
+def class2_tiles(paths: List[str], work: Path, name: str, workers: int) -> list:
+    """(ground files, bounds, ground points) of each tile with any class 2.
+    A file with no class 2 in it is left out: nothing reads an empty one."""
+    summaries = [las_summary(path) for path in paths]
+    jobs = [
+        (i, path, str(work / f"ground-{name}{i}-{k}.las"), start, count)
+        for i, (path, summary) in enumerate(zip(paths, summaries))
+        for k, (start, count) in enumerate(read_parts(int(summary["num_points"])))
+    ]
+    grounds: List[List[str]] = [[] for _ in paths]
+    counts = [0] * len(paths)
+    # Threads: each only waits on its own PDAL process.
+    with ThreadPoolExecutor(workers) as pool:
+        for n, (i, ground, count) in enumerate(pool.map(_class2_part, jobs), 1):
+            if count:
+                grounds[i].append(ground)
+                counts[i] += count
+            pipeline._write_progress(n, len(jobs), "ground")
+    return [
+        (grounds[i], summary["bounds"], counts[i])
+        for i, summary in enumerate(summaries)
+        if counts[i]
+    ]
 
 
 def smrf_classify(paths: List[str], work: Path) -> List[str]:
@@ -418,11 +480,11 @@ def laz_ground(
     terrain = pipeline.select_surveys_by_layer([str(f) for f in las_files])
     paths = terrain.terrain_tiles
     kind = "class-2"
-    tiles = class2_tiles(paths, work, "")
+    tiles = class2_tiles(paths, work, "", workers)
     if not tiles:
         kind = "smrf"
         log.info("No class 2 in the point clouds: ground found by SMRF")
-        tiles = class2_tiles(smrf_classify(paths, work), work, "smrf-")
+        tiles = class2_tiles(smrf_classify(paths, work), work, "smrf-", workers)
     total = sum(count for *_, count in tiles)
     area = sum((b["maxx"] - b["minx"]) * (b["maxy"] - b["miny"]) for _, b, _ in tiles)
     cell = class2_cell(total, area)
@@ -435,13 +497,33 @@ def laz_ground(
             or c["maxy"] < a["miny"] - TIN_BUFFER_M
         )
 
-    jobs, window = [], 0
-    for i, (_, b, _) in enumerate(tiles):
-        around = [(g, c) for g, nb, c in tiles if near(b, nb)]
-        window = max(window, sum(c for _, c in around))
-        out_i = str(work / f"tin-{i}.tif")
-        jobs.append((str(i), b, [g for g, _ in around], float(cell), out_i, str(work)))
-    n = tin_workers(workers, window, available_memory())
+    # Nothing reads the point clouds again: deleted, they leave more room
+    # than the strips take (tests/test_sharpen.py `TestGroundSteps`).
+    for f in las_files:
+        Path(f).unlink()
+    cuts = [
+        (
+            [
+                f
+                for j, (g, nb, _) in enumerate(tiles)
+                if j != i and near(b, nb)
+                for f in g
+            ],
+            b,
+            str(work / f"strips-{i}.las"),
+        )
+        for i, (_, b, _) in enumerate(tiles)
+    ]
+    jobs, largest = [], 0
+    with ThreadPoolExecutor(workers) as pool:
+        for i, points in enumerate(pool.map(_strips, cuts)):
+            own, b, count = tiles[i]
+            files = own + ([cuts[i][2]] if points else [])
+            largest = max(largest, count + points)
+            out_i = str(work / f"tin-{i}.tif")
+            jobs.append((str(i), b, files, float(cell), out_i, str(work)))
+            pipeline._write_progress(i + 1, len(cuts), "strips")
+    n = tin_workers(workers, largest, available_memory())
     log.info(
         f"{len(tiles)} of {len(paths)} tile(s) with ground, "
         f"{total / area:.2f} pts/m² → {cell} m cell, {n} TIN job(s) at a time"
@@ -778,11 +860,36 @@ def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
     }
 
 
+# Free space under which a failed job is read as a full disk.
+DISK_FULL_BYTES = 256 * 1024**2
+
+
+@contextlib.contextmanager
+def too_big_if_disk_full(path: str):
+    """A job that fills the task's disk dies in a PDAL or GDAL child with
+    nothing to say why. A failure while `path`'s filesystem is nearly full, or
+    an ENOSPC (the space may be given back as the failure unwinds), is the
+    owner's area being too big (tests/test_sharpen.py `TestDiskFull`).
+    The failure's message is not logged: it can quote an input file's name."""
+    try:
+        yield
+    except CannotSharpen:
+        raise
+    except Exception as e:
+        no_space = isinstance(e, OSError) and e.errno == errno.ENOSPC
+        if no_space or shutil.disk_usage(path).free < DISK_FULL_BYTES:
+            raise CannotSharpen(TOO_BIG) from e
+        raise
+
+
 def sharpen(args) -> dict:
     bench = pipeline.Benchmark()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="sharpen_") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix="sharpen_") as tmp,
+        too_big_if_disk_full(tmp),  # exits first, while tmp still exists
+    ):
         work = Path(tmp)
         with bench.step("Extract", key="extract"):
             contents = pipeline.extract_elvis_zip(args.zip, str(work / "zip"))
