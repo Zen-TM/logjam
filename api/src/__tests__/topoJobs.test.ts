@@ -145,8 +145,9 @@ describe("topo-jobs route (fake auth)", () => {
       ),
     );
 
-  // Mutation: put back the one tail read and parseZipCentralDirectory
-  // in /start, and the refusal turns into "Logjam couldn't read that ZIP".
+  // Mutation: make /start read only the one tail range, as it did before it
+  // used readZipEntries, and the refusal turns into "Logjam couldn't read that
+  // ZIP".
   it("/start reads a central directory larger than the tail", async () => {
     const createRes = await request(API_URL)
       .post("/topo-jobs")
