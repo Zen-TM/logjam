@@ -22,6 +22,7 @@ import {
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
   systemRowIds,
+  fieldValueLabel,
   assertSystemIdsAreUuidV4,
 } from "./placeTypes.js";
 import { isUuidV4 } from "./sync.js";
@@ -114,6 +115,41 @@ describe("system field definitions", () => {
     const quality = SYSTEM_FIELD_DEFS.filter((def) => def.key === "quality");
     expect(quality).toHaveLength(1);
     expect(quality[0].placeTypes.sort()).toEqual(["campsite", "canyon"]);
+  });
+
+  // Mutation: delete one label from `aca_water`, or add one to `aca_risk`: a
+  // stored rank would read as nothing, or a label could never be stored.
+  it("give a labelled field a label for every value", () => {
+    const labelled = SYSTEM_FIELD_DEFS.filter((def) => def.labels);
+    // A floor: the four ACA fields are the labelled ones today.
+    expect(labelled.length).toBeGreaterThanOrEqual(4);
+    for (const def of labelled) {
+      expect(def.type, `${def.key} is labelled but not a whole number`).toBe(
+        "integer",
+      );
+      expect(def.min, `${def.key} needs a lower bound`).not.toBeNull();
+      expect(def.max, `${def.key} needs an upper bound`).not.toBeNull();
+      expect(
+        def.labels!.length,
+        `${def.key}: a label for every value (ADR 0051)`,
+      ).toBe(def.max! - def.min! + 1);
+    }
+  });
+
+  it("read a labelled value by its rank from the field's minimum", () => {
+    expect(fieldValueLabel("aca_water", 1)).toBe("A");
+    expect(fieldValueLabel("aca_water", 5)).toBe("C2");
+    expect(fieldValueLabel("aca_water", 7)).toBe("C4");
+    expect(fieldValueLabel("aca_risk", 3)).toBe("XX");
+  });
+
+  it("read no label for a field without labels or a value outside them", () => {
+    expect(fieldValueLabel("commitment", 3)).toBeUndefined();
+    expect(fieldValueLabel("my_own_field", 1)).toBeUndefined();
+    expect(fieldValueLabel("aca_water", 0)).toBeUndefined();
+    expect(fieldValueLabel("aca_water", 8)).toBeUndefined();
+    expect(fieldValueLabel("aca_water", 1.5)).toBeUndefined();
+    expect(fieldValueLabel("aca_water", "A")).toBeUndefined();
   });
 
   it("have unique keys", () => {

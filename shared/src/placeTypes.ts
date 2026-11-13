@@ -355,11 +355,19 @@ export type SystemFieldDef = {
    * where the label does not already carry it: "Hours" says hours.
    */
   unit?: string;
+  /**
+   * The words a stored whole number reads as: the value `min + i` is
+   * `labels[i]`, so "C2" is stored as 5 and filters and sorting keep working on
+   * numbers. Append-only: a stored value is a position in this list, so
+   * reordering or inserting renumbers every place that holds one. Guard:
+   * `placeTypes.test.ts` ("a label for every value"). Reasoning: ADR 0051.
+   */
+  labels?: readonly string[];
 };
 
 /**
- * The system field definitions: seven grade/quality fields for Canyon, and
- * three campsite fields.
+ * The system field definitions: seven grade/quality fields for Canyon, the four
+ * ACA grade fields (scoped to Canyon too), and three campsite fields.
  *
  * Bounds match numeric constraints for place field values. Note `hours`,
  * `num_abseils` and `longest_abseil` are min-only (`isTripLogCustomFieldDef`).
@@ -470,12 +478,72 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
     max: null,
     placeTypes: ["campsite"],
   },
+  {
+    id: "a0000000-0000-4000-8000-000000000011",
+    key: "aca_technical",
+    label: "ACA technical",
+    type: "integer",
+    min: 1,
+    max: 4,
+    hint: "Technical difficulty of the descent, on the American Canyoneering Association rating system.",
+    placeTypes: ["canyon"],
+    labels: ["1", "2", "3", "4"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000012",
+    key: "aca_water",
+    label: "ACA water",
+    type: "integer",
+    min: 1,
+    max: 7,
+    hint: "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.",
+    placeTypes: ["canyon"],
+    labels: ["A", "B", "C", "C1", "C2", "C3", "C4"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000013",
+    key: "aca_time",
+    label: "ACA time",
+    type: "integer",
+    min: 1,
+    max: 6,
+    hint: "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.",
+    placeTypes: ["canyon"],
+    labels: ["I", "II", "III", "IV", "V", "VI"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000014",
+    key: "aca_risk",
+    label: "ACA risk",
+    type: "integer",
+    min: 1,
+    max: 3,
+    hint: "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.",
+    placeTypes: ["canyon"],
+    labels: ["R", "X", "XX"],
+  },
 ];
 
 /** The system definition for a key, or undefined for a user's own field. The
  *  one lookup for the bounds, the hint and the unit a built-in carries. */
 export function systemFieldDef(key: string): SystemFieldDef | undefined {
   return SYSTEM_FIELD_DEFS.find((def) => def.key === key);
+}
+
+/**
+ * How a stored whole number reads where a built-in field gives its values
+ * words ("C2" for 5), or undefined for a field that has none and for a value
+ * outside the list: the caller prints the number it holds.
+ */
+export function fieldValueLabel(
+  key: string,
+  value: unknown,
+): string | undefined {
+  const def = systemFieldDef(key);
+  if (!def?.labels || def.min === null) return undefined;
+  return typeof value === "number" && Number.isInteger(value)
+    ? def.labels[value - def.min]
+    : undefined;
 }
 
 /**

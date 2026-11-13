@@ -39,3 +39,18 @@ INSERT INTO users (id, subject, username, email, monthly_compute_credits, monthl
 CREATE SCHEMA IF NOT EXISTS upgrade_check;
 CREATE TABLE upgrade_check.users AS SELECT id FROM users;
 \endif
+
+-- 20261114010000_aca_grade_fields: four system field definitions join Canyon
+-- beside the ones the base has, and the base's own rows and every account's
+-- own definitions stay as they were. Off once the base has it.
+SELECT NOT EXISTS (
+  SELECT 1 FROM _prisma_migrations
+   WHERE migration_name = '20261114010000_aca_grade_fields'
+) AS aca_apply \gset
+\if :aca_apply
+CREATE SCHEMA IF NOT EXISTS upgrade_check_aca;
+CREATE TABLE upgrade_check_aca.defs AS
+  SELECT id, owner_id, key, label, type, min, max, position FROM custom_field_defs;
+CREATE TABLE upgrade_check_aca.scopes AS
+  SELECT def_id, place_type_id FROM custom_field_def_place_types;
+\endif
