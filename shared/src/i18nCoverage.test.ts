@@ -82,8 +82,8 @@ describe("@logjam/shared i18n coverage", () => {
 });
 
 // Spellings the Australian source writes and US English does not: a message
-// holding one has an entry in `i18nCatalogues/en-US.ts`. Empty until a message
-// moves into the catalogue that has one.
+// holding one has an entry in `i18nCatalogues/en-US.ts`. No message in source
+// holds one yet, so the list is empty.
 const AUSTRALIAN_WORDS: readonly string[] = [];
 
 describe("the en-US catalogue", () => {
