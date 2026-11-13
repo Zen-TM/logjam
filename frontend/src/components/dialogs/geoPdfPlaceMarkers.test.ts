@@ -87,6 +87,8 @@ describe("buildPlaceMarkers", () => {
     ).toEqual([]);
   });
 
+  // Mutation: put the plain `c.longitude >= extent.west && c.longitude <= extent.east`
+  // back in `inExtent`.
   it("keeps places on both sides of 180 when the extent follows the map past it", () => {
     // Made-up positions; the extent's east edge is above 180, as MapLibre
     // reports a view panned past the line.

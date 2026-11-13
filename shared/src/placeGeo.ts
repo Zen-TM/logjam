@@ -43,7 +43,6 @@ export function withinBbox(
  */
 export function lonWithin(lon: number, west: number, east: number): boolean {
   if (west > east) return lon >= west || lon <= east;
-  if (east - west >= 360) return true;
   // The copy of `lon` nearest above `west`, whatever world copy the box is in.
   return lon + 360 * Math.ceil((west - lon) / 360) <= east;
 }

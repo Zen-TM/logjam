@@ -327,6 +327,9 @@ describe("passesFilters — area across 180°", () => {
   const far = place({ latitude: -17, longitude: 170 });
   const bands = { south: -18, north: -16 };
 
+  // Mutation: delete the `if (west > east)` line of `lonWithin` (the wrapped
+  // case), or make its last line a plain `lon >= west && lon <= east` (the
+  // unwrapped case), or put that plain comparison back in `isPlaceInArea`.
   it.each([
     ["unwrapped, east above 180", { west: 178, east: 182 }],
     ["wrapped, west above east", { west: 178, east: -178 }],
@@ -337,6 +340,8 @@ describe("passesFilters — area across 180°", () => {
     expect(passesFilters(far, f, true)).toBe(false);
   });
 
+  // Mutation: put the plain `place.longitude >= area.west && place.longitude <= area.east`
+  // back in `isPlaceInArea`.
   it("keeps the places of a box wholly in another world copy", () => {
     const f = filters({ area: { ...bands, west: 538, east: 542 } });
     expect(passesFilters(east, f, true)).toBe(true);

@@ -134,6 +134,7 @@ describe("a saved region that runs past 180°", () => {
     );
   });
 
+  // Mutation: the same direct comparison in `holds`; the -179.5 way reads uncovered.
   it("holds a way on either side of the line", () => {
     expect(
       routeCoveredByOfflineMaps(

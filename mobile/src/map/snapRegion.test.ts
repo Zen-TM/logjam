@@ -59,6 +59,7 @@ describe("regionCovering", () => {
     expect(regionCovering([], INSIDE_A, INSIDE_B)).toBeNull();
   });
 
+  // Mutation: put the plain `lon >= west && lon <= east` back in `regionCovering`.
   it("covers both ends of a segment across 180 when the region's box runs past it", () => {
     // A saved area drawn over a view panned past the line has an east edge
     // above 180; the route's own longitudes are always inside [-180, 180].
