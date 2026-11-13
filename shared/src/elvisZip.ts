@@ -134,7 +134,7 @@ const CENTRAL_ENTRY_BYTES = 46;
 const SATURATED_32 = 0xffffffff;
 
 /** Where a ZIP's central directory is, in absolute file offsets. */
-export interface ZipDirectoryLocation {
+interface ZipDirectoryLocation {
   offset: number;
   size: number;
   count: number;
@@ -156,7 +156,7 @@ function readUint64(view: DataView, pos: number): number {
  * Throws ElvisZipError if the data is not a ZIP or a record points outside the
  * file.
  */
-export function locateZipCentralDirectory(
+function locateZipCentralDirectory(
   tailBytes: Uint8Array,
   totalFileSize: number,
 ): ZipDirectoryLocation {
