@@ -1446,6 +1446,7 @@ function sharpenedJob(jobId: string) {
       credit: "Elevation: made up for Logjam's seed data.",
       keys,
       vegetation: false,
+      vegetationLeftOut: false,
     },
     objects,
     bytes: BigInt(
