@@ -82,12 +82,16 @@ An accepted ADR changes in three ways only:
   change touches. Guard: `shared/src/adrReferences.test.ts`, which also fails
   on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
-  "(updated YYYY-MM-DD)".
+  "(updated YYYY-MM-DD)". A sentence that describes how the decision is
+  carried out is such a fact: a Decision step whose workflow gained a stage
+  is corrected this way.
 - **A narrow exception, or a reason that no longer holds,** is a bullet under
   Decision, `**Update YYYY-MM-DD: <what changes>.**`, that says what still
   holds the decision up and ends "Everything else above stands". For an
   exception, list the option you rejected under Alternatives. When no reason
-  is left holding the decision up, supersede it.
+  is left holding the decision up, supersede it. One change gets one bullet,
+  in the ADR whose decision it changes; every other sentence it makes stale,
+  in that ADR or another, is a stale fact.
 
 Leave the title, status and index row alone. If the change would alter what
 the decision chooses, or a reader would need both texts to know the rule,
