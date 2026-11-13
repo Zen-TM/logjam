@@ -126,3 +126,16 @@ export * from "./tripPlans.js";
 export * from "./tripPlanAnswerDraft.js";
 export * from "./tripPlanEdits.js";
 export * from "./tripPlanTripLog.js";
+export {
+  LANGUAGES,
+  PSEUDO_LANGUAGE,
+  SOURCE_LANGUAGE,
+  intlLocale,
+  language,
+  matchLanguage,
+  plural,
+  richParts,
+  setLanguageResolver,
+  t,
+} from "./i18n.js";
+export type { Catalogue, Language, RichPart } from "./i18n.js";
