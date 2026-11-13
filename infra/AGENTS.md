@@ -117,9 +117,10 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   `--target-timeline=current` (Postgres's default follows the newest timeline
   in the archive, which after a rewind is another history), and `boot.sh`
   takes a full backup, before the API starts, when an existing database finds
-  the newest backup on another timeline. Drop either and a second rewind, or a
-  volume made current again, comes back as the wrong history with no error.
-  Guards: `postgres/tests/test.sh`, scenario 13b of `brain/tests/e2e.sh`.
+  the newest backup on another timeline or of another Postgres major. Drop
+  either and a second rewind, or a volume made current again, comes back as the
+  wrong history with no error. Guards: `postgres/tests/test.sh`, scenarios 13b
+  and 14 of `brain/tests/e2e.sh`.
 - **The brain's instance exists only while `brain_pg_image_tag` is set** (its
   default is empty; prod's value is in `brain.auto.tfvars`): with it empty, no
   instance, data volume, Elastic IP or alarm is planned

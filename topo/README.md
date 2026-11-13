@@ -66,7 +66,7 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--workers N` | CPU count − 1 | How many things run at once: tiles gridded (fewer if memory is short), rasters warped, filter threads, tiles rendered |
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |
@@ -75,6 +75,20 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
 
 A ZIP with no point clouds writes nothing.
+
+### Memory
+
+The density and fire steps work a strip of rows at a time (`STRIP_CELLS` and
+`FIRE_BLOCK_CELLS` in `pipeline.py`), so their arrays follow the width of the
+area and not its extent: tiles that do not form a rectangle cost them no more
+memory than a block of them. What else the pass holds (GDAL's block cache,
+which GDAL caps at a share of the machine's memory) is not sized by the
+strips. If the pass still runs out of memory it exits with a declared code
+(`worker_common.py`). `worker.py` reads that code, or a kill (-9), as "leave
+the layer out": the job still completes with its height, slope and contour
+archives, records `vegetationLeftOut` in its `sharpen` result, and its
+completion notification and email say the area was too large. Any other
+failure of the pass fails the job.
 
 ---
 
@@ -245,11 +259,12 @@ The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
 downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
 `master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
 fails (nothing is uploaded from a build that did not finish). Its default disk
-is 20 GiB, so the run asks for 120: about 17 GB of input, 13 GB of block files,
-and a further 13 GB each for the MBTiles the packer builds, its spool and the
-result. Run it once *Deploy topo worker* has pushed an image that has `slope-s3`.
-Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
-first one that prints an error.
+(set in `ecs.tf`, sized for an input ZIP) is smaller than that, so the run asks
+for 120: about 17 GB of input, 13 GB of block files, and a further 13 GB each for
+the MBTiles the packer builds, its spool and the result. Run it once *Deploy
+topo worker* has pushed an image that has `slope-s3`. Run the blocks below in
+order, from `topo/` of a fresh clone, and stop at the first one that prints an
+error.
 
 The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the
 API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
@@ -509,11 +524,10 @@ python3 build_coverage.py publish --bucket logjam-topo-jobs
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
 
-**Empty or patchy output tiles**
-This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step
-fills gaps up to 50 m across. For larger holes, increase `max_distance` in
-`fill_nodata()`.
-
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
 limit in `docker-compose.yml`.
+
+**`pipeline.py` exits with its left-out code (`worker_common.py`)**
+The pass ran out of memory, so the vegetation layer was left out
+([Memory](#memory)). Give the container more memory, or use a narrower area.

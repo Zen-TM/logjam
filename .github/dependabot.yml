@@ -43,7 +43,9 @@ updates:
 
   # The image prod's database runs and local dev builds. A new minor must reach
   # ci.yml's Postgres services in the same change: rollback-compat-mirrors-ci.py
-  # fails until they match.
+  # fails until they match. A new major is more than its FROM line (the pgaudit
+  # package, the old major's binaries for pg_upgrade): the same script fails a
+  # bump of the line alone, and docs/operations/brain.md says what it needs.
   - package-ecosystem: "docker"
     directory: "/infra/brain/postgres"
     schedule:

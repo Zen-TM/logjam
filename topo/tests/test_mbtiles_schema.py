@@ -9,22 +9,15 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    from pipeline import (  # noqa: E402
-        ZOOM_MAX,
-        ZOOM_MIN,
-        create_mbtiles,
-        finalise_bounds,
-        insert_tile,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+from pipeline import (  # noqa: E402
+    ZOOM_MAX,
+    ZOOM_MIN,
+    create_mbtiles,
+    finalise_bounds,
+    insert_tile,
+)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestMbtilesSchema(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".mbtiles", delete=False)

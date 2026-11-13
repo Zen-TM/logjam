@@ -21,12 +21,12 @@ model User {
   // Monthly worker allowance in credits (= vCPU-minutes; see
   // shared/src/computeCredits.ts). Replaced monthly_tile_quota, which only
   // constrained one of the three workers and did not measure cost.
-  monthlyComputeCredits   Int                 @default(1200) @map("monthly_compute_credits")
+  monthlyComputeCredits   Int                 @default(800) @map("monthly_compute_credits")
   // Monthly S3 download allowance. usedBytes is written by the egress sweeper
   // from S3 access logs, and periodStart is what makes the reset lazy: the
   // sweeper zeroes usedBytes when it sees periodStart belongs to a past month,
   // so no scheduled job is needed to roll everyone over at midnight on the 1st.
-  monthlyEgressQuotaBytes BigInt              @default(53687091200) @map("monthly_egress_quota_bytes")
+  monthlyEgressQuotaBytes BigInt              @default(10737418240) @map("monthly_egress_quota_bytes")
   monthlyEgressUsedBytes  BigInt              @default(0) @map("monthly_egress_used_bytes")
   egressPeriodStart       DateTime            @default(now()) @map("egress_period_start")
   consentedAt             DateTime?           @map("consented_at")

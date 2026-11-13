@@ -27,10 +27,16 @@ because Dependabot updates the compose file and cannot read a workflow's
 release infra/brain/postgres/Dockerfile builds `FROM`, so CI tests the server
 prod runs.
 
+A new Postgres major is more than that FROM line (the pgaudit package, the old
+major's binaries for pg_upgrade, the host's upgrade step), so a Dependabot
+bump of it alone fails here, saying so.
+
 Mutations that turn that red: drop the tag from any service image in any
 workflow or from docker-compose.yml's; make one workflow's `postgres:` differ
 from the Dockerfile's FROM line; change the MiniStack digest in one workflow or
-in e2e.sh; drop the digest from docker-compose.yml's MiniStack.
+in e2e.sh; drop the digest from docker-compose.yml's MiniStack; change the
+Dockerfile's FROM to another major (postgres:19.0-trixie) and the workflows
+with it.
 
 Usage: rollback-compat-mirrors-ci.py   (from anywhere in the repo; needs PyYAML)
 """
@@ -100,6 +106,18 @@ def check_images(failures):
     if not postgres:
         failures.append(
             f"no `FROM postgres:` line in {POSTGRES_DOCKERFILE.relative_to(ROOT)}"
+        )
+
+    major = re.match(r"postgres:(\d+)\.", postgres or "")
+    if (
+        major
+        and f"postgresql-{major.group(1)}-pgaudit"
+        not in POSTGRES_DOCKERFILE.read_text()
+    ):
+        failures.append(
+            f"{POSTGRES_DOCKERFILE.relative_to(ROOT)} builds FROM {postgres} but installs no "
+            f"postgresql-{major.group(1)}-pgaudit: a new Postgres major is more than the FROM line "
+            'and its copies, see docs/operations/brain.md ("Upgrading Postgres to a new major")'
         )
 
     seen = 0
