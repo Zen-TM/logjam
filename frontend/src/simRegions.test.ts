@@ -5,6 +5,8 @@ import { simRegionsFor } from "./simRegions";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.resetModules();
+  delete (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS;
 });
 
 describe("simRegionsFor", () => {
@@ -30,6 +32,22 @@ describe("simRegionsFor", () => {
       );
     },
   );
+});
+
+describe("the module", () => {
+  // Mutation: hard-code "fake" as the second argument of the call at the foot
+  // of simRegions.ts (a real-auth build would then take the simulated regions).
+  it("refuses a real-auth build that sets the flag, and leaves the switch off", async () => {
+    vi.stubEnv("VITE_SIM_REGIONS", "1");
+    vi.stubEnv("VITE_AUTH_MODE", "oidc");
+    vi.resetModules();
+    await expect(import("./simRegions")).rejects.toThrow(
+      /only allowed with fake auth/,
+    );
+    expect(
+      (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS,
+    ).toBeUndefined();
+  });
 });
 
 // Mutation that turns this red: add VITE_SIM_REGIONS to the build step of

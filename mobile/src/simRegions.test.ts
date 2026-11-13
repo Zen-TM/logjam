@@ -69,6 +69,20 @@ describe("the entry and the builds", () => {
     expect(REGIONS.map((r) => r.id)).toEqual(["nsw", "simnz", "simutah"]);
   }, 30_000);
 
+  // Mutation: hard-code a loopback URL as the second argument of the call at
+  // the foot of simRegions.ts (a build for the prod API would then take the
+  // simulated regions).
+  it("refuses a build for the prod API that sets the flag, and leaves the switch off", async () => {
+    vi.stubEnv("EXPO_PUBLIC_SIM_REGIONS", "1");
+    vi.stubEnv("EXPO_PUBLIC_API_URL", "https://api.logjam.earth");
+    await expect(import("./simRegions")).rejects.toThrow(
+      /only allowed against a local API/,
+    );
+    expect(
+      (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS,
+    ).toBeUndefined();
+  });
+
   // Mutation: add EXPO_PUBLIC_SIM_REGIONS to a profile's env in eas.json.
   it("no EAS profile sets it", () => {
     const eas = JSON.parse(
