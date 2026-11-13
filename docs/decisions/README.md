@@ -90,8 +90,10 @@ An accepted ADR changes in three ways only:
   exception, list the option you rejected under Alternatives. When no reason
   is left holding the decision up, supersede it. An addition is anything a
   Decision rule gains: a stage in its workflow, a member of its list, a case
-  it now covers. It is a bullet even when another ADR carries the reason; the
-  bullet then links that ADR.
+  it now covers. It leaves the rule's own text in force, which is why it is a
+  bullet and not a new ADR. It is a bullet even when another ADR carries the
+  reason; the bullet then links that ADR. An addition already marked in place
+  stays as it is.
 
 Leave the title, status and index row alone. If the change would alter what
 the decision chooses, or a reader would need both texts to know the rule,
