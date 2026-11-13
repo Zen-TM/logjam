@@ -277,8 +277,8 @@ of the data, not an image bump. The upgrade is
 `infra/brain/postgres/major-upgrade.sh`, which `host/boot.sh` runs when
 `/data/postgres/PG_VERSION` is older than the pinned image's major. The only
 change to the host is the usual one: `brain_pg_image_tag` in `brain.auto.tfvars`.
-The last one, 16 to 18, is the example below; CI runs the path
-(`infra/brain/tests/e2e.sh` scenarios 14 to 14c, and the image's own tests).
+CI runs the path with 16 as the old major (`infra/brain/tests/e2e.sh` scenarios 14
+to 14c, and the image's own tests).
 
 **What the change that adopts the new major holds** (Dependabot's bump of the
 `FROM` line alone fails `infra/scripts/rollback-compat-mirrors-ci.py`, which
@@ -363,17 +363,13 @@ would otherwise lose it. The `boot_failed` alarm fires; once the cause is gone,
 `systemctl restart brain-boot` (or a reboot) finishes the stanza and the backup,
 removes the marker and starts the API.
 
-**Going back is not supported.** Once an upgrade has succeeded, going back to the
-old major is not, and neither is a rewind to a time before an upgrade
-("Rewinding" below): neither is built or tested, and the app is not released, so
-the cost was not worth it. A restore of an old-major backup under the new image
-stops with `holds a PostgreSQL <old> database and this image runs PostgreSQL
-<new>`; the Postgres service is `restart: unless-stopped`, so Docker keeps
-restarting it and the message repeats while `boot.sh` fails the boot
-(`boot_failed`, API down). So does a boot that finds data *newer* than the pinned
-image, which is what pinning the old tag after a successful upgrade does: its
-message says `pin the image of <data's major> again`, and that is the fix, the
-new tag. A *failed* upgrade is different: it leaves the old cluster intact, as
+**Refusals.** A boot that finds data *newer* than the pinned image fails with
+`pin the image of <data's major> again`: the fix is the tag of the data's major.
+A server start on another major's directory, such as a restored old-major
+backup, stops with `holds a PostgreSQL <old> database and this image runs
+PostgreSQL <new>`; the Postgres service is `restart: unless-stopped`, so Docker
+keeps restarting it and the message repeats while `boot.sh` fails the boot
+(`boot_failed`, API down). A failed upgrade leaves the old cluster intact, as
 above.
 
 **The drill and the watchdog after an upgrade.** The daily drill restores the
@@ -419,7 +415,7 @@ finished, same certificate, every marker row present. Do it in a quiet hour,
 announce it if users could notice, and do not merge anything else to `main`
 while it runs.
 
-The user data is 14,766 bytes gzipped of EC2's 16,384-byte limit, and a guard
+The user data is 14,751 bytes gzipped of EC2's 16,384-byte limit, and a guard
 (`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
 would cross it, move the host files into the brain's Postgres image instead,
 which already carries the Compose plugin: the host would then fetch them from
@@ -514,10 +510,9 @@ On the host (run on a scratch copy):
   `brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
   lists each backup with its start and stop times and the archive's WAL range.
   The target must be after the oldest backup's stop and not after the newest
-  WAL. Fulls are nightly at 03:00 Sydney time and eight are kept. A target
-  before the last major upgrade is not supported ("Upgrading Postgres to a new
-  major", "Going back is not supported"), though `info` lists the old major's
-  backups until they expire.
+  WAL. Fulls are nightly at 03:00 Sydney time and eight are kept. The image
+  restores backups of its own major only, and `info` lists the old major's
+  backups until they expire: pick a target after the last major upgrade.
 - When it happened: the Postgres log group (`/logjam/brain/postgres`) has pgaudit
   lines in UTC for every write and DDL statement, with no values; a `DELETE` or a
   migration's statements show the time. The API log (`/logjam/brain/api`) shows

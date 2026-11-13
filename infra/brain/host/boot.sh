@@ -123,13 +123,14 @@ export BRAIN_RESTORE_TARGET=$target
 # Data of an older Postgres major than the image is upgraded first (postgres/major-upgrade.sh, in a container
 # of its own), newer is refused, and equal starts no container. A failure leaves the old cluster intact.
 # $gate (lib.sh) keeps the API down from before the upgrade until a full backup of the new major succeeds.
-docker image inspect "$BRAIN_PG_IMAGE" > /dev/null 2>&1 || docker pull -q "$BRAIN_PG_IMAGE" > /dev/null
-want=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$BRAIN_PG_IMAGE" | sed -n 's/^PG_MAJOR=//p')
+want=
 upgraded=
 if [ "$mode" = existing ]; then
+  docker image inspect "$BRAIN_PG_IMAGE" > /dev/null 2>&1 || docker pull -q "$BRAIN_PG_IMAGE" > /dev/null
+  want=$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$BRAIN_PG_IMAGE" | sed -n 's/^PG_MAJOR=//p')
   have=$(cat /data/postgres/PG_VERSION)
   aside=$(cat /data/postgres.new/PG_VERSION 2> /dev/null || echo 99)
-  [ "$have" -le "$want" ] || die "/data/postgres is PostgreSQL $have and the image runs '$want': pin the image of $have again (docs/operations/brain.md, going back)"
+  [ "$have" -le "$want" ] || die "/data/postgres is PostgreSQL $have and the image runs '$want': pin the image of $have again"
   if [ "$have" -lt "$want" ] || [ "$aside" -lt "$have" ]; then
     echo upgrading > "$mode_file"
     touch "$gate"
@@ -228,7 +229,6 @@ if [ "$mode" = existing ]; then
   read -r _ repo_tl repo_major < <(stanza_state) || true
   if [[ $repo_major =~ ^[0-9]+$ ]] && [ "$repo_major" != "$want" ]; then
     log "the newest backup is of PostgreSQL $repo_major, not $want: taking a full backup"
-    touch "$gate"
     pgb --type=full backup
     rm -f "$gate"
   elif [[ $db_tl =~ ^[0-9A-F]{8}$ && $repo_tl =~ ^[0-9A-F]{8}$ ]]; then
