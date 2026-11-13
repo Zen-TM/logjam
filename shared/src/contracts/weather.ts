@@ -117,7 +117,8 @@ export const WEATHER_NONE = "–";
 const RAIN_SHOWN_MM = 0.05;
 
 // A figure that would be written as zero in the display units ("0.00 in",
-// "0 mph") is the dash instead, whichever unit that is.
+// "0 mph") is the dash instead, whichever unit that is. Test: `units.test.ts`,
+// "weather facts in imperial".
 const figureOrNone = (text: string): string =>
   /[1-9]/.test(text) ? text : WEATHER_NONE;
 
