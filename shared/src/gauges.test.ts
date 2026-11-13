@@ -28,7 +28,9 @@ import {
   gaugeSeries,
   GAUGE_LATEST_PATH,
   GAUGE_PREFIX,
-  aestDay,
+  gaugeDay,
+  GAUGE_DAY_OFFSET_DEFAULT,
+  GAUGE_UNITS_DEFAULT,
   distinctGaugeIds,
   gaugeReadingOnDay,
   levelOnDate,
@@ -48,6 +50,8 @@ const readFixture = (name: string): unknown =>
   );
 const latest = parseGaugeLatest(readFixture("gauges-latest.json"))!;
 const history = parseGaugeHistory(readFixture("gauge-history.json"))!;
+
+const AEST = GAUGE_DAY_OFFSET_DEFAULT;
 
 describe("gauge files", () => {
   it("reads what the builder writes", () => {
@@ -72,8 +76,38 @@ describe("gauge files", () => {
     expect(parseGaugeHistory({ ...h, flow: [1] })).toBeNull();
   });
 
-  it("builds URLs only for station numbers", () => {
+  it("states its units and its day, and reads a file that omits them as NSW's", () => {
+    // Mutation: drop either field from the builder (topo/tests/test_gauges.py)
+    // or from the parser's defaults → red.
+    expect(latest.units).toEqual({ level: "m", flow: "ML/d" });
+    expect(latest.dayOffsetMinutes).toBe(600);
+    const { units, dayOffsetMinutes, ...old } = readFixture(
+      "gauges-latest.json",
+    ) as Record<string, unknown>;
+    expect(units).toBeDefined();
+    expect(dayOffsetMinutes).toBeDefined();
+    const parsed = parseGaugeLatest(old)!;
+    expect(parsed.units).toEqual(GAUGE_UNITS_DEFAULT);
+    expect(parsed.dayOffsetMinutes).toBe(GAUGE_DAY_OFFSET_DEFAULT);
+  });
+
+  it("refuses units off the allowlist and an offset no clock has", () => {
+    // Mutation: accept any string as a unit, or any number as an offset → red.
+    const raw = readFixture("gauges-latest.json") as Record<string, unknown>;
+    expect(
+      parseGaugeLatest({ ...raw, units: { level: "cm", flow: "ML/d" } }),
+    ).toBeNull();
+    expect(parseGaugeLatest({ ...raw, units: { level: "m" } })).toBeNull();
+    expect(parseGaugeLatest({ ...raw, dayOffsetMinutes: 2000 })).toBeNull();
+    expect(parseGaugeLatest({ ...raw, dayOffsetMinutes: 600.5 })).toBeNull();
+  });
+
+  it("builds URLs only for gauge ids", () => {
     // Mutation: build the URL without the id check → red.
+    expect(gaugeHistoryUrl("https://cdn", "usgs09380000")).toBe(
+      `https://cdn/${GAUGE_PREFIX}history/usgs09380000.json`,
+    );
+    expect(gaugeHistoryUrl("https://cdn", "a".repeat(21))).toBeNull();
     expect(gaugeHistoryUrl("https://cdn", "900001")).toBe(
       `https://cdn/${GAUGE_PREFIX}history/900001.json`,
     );
@@ -113,14 +147,25 @@ describe("a gauge on a trip's date", () => {
     expect(tripGaugeDay("soon")).toBeNull();
   });
 
-  it("puts a moment in its AEST day", () => {
-    // Mutation: use the UTC day → red.
-    expect(aestDay(sec("2026-10-28T13:59:59Z") * 1000)).toBe("2026-10-28");
-    expect(aestDay(sec("2026-10-28T14:00:00Z") * 1000)).toBe("2026-10-29");
+  it("puts a moment in its feed's day", () => {
+    // Mutation: use the UTC day, or ignore the offset → red.
+    expect(gaugeDay(sec("2026-10-28T13:59:59Z") * 1000, AEST)).toBe(
+      "2026-10-28",
+    );
+    expect(gaugeDay(sec("2026-10-28T14:00:00Z") * 1000, AEST)).toBe(
+      "2026-10-29",
+    );
+    // UTC-7: the day turns at 07:00 UTC.
+    expect(gaugeDay(sec("2026-10-28T06:59:59Z") * 1000, -420)).toBe(
+      "2026-10-27",
+    );
+    expect(gaugeDay(sec("2026-10-28T07:00:00Z") * 1000, -420)).toBe(
+      "2026-10-28",
+    );
   });
 
   it("reads history first", () => {
-    expect(gaugeReadingOnDay(gauge, history, "2026-10-01", now)).toEqual({
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-01", now, AEST)).toEqual({
       level: 0.91,
       flow: 120.5,
     });
@@ -128,11 +173,11 @@ describe("a gauge on a trip's date", () => {
 
   it("falls back to the latest file's mean for a recent day not in history", () => {
     // Mutation: count the 14:30Z reading in the 28th → red.
-    expect(gaugeReadingOnDay(gauge, history, "2026-10-28", now)).toEqual({
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-28", now, AEST)).toEqual({
       level: 1.0,
       flow: 10,
     });
-    expect(gaugeReadingOnDay(gauge, history, "2026-10-29", now)).toEqual({
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-29", now, AEST)).toEqual({
       level: 3.0,
       flow: 20,
     });
@@ -140,10 +185,16 @@ describe("a gauge on a trip's date", () => {
 
   it("shows nothing for a day before history, without a value, or in the future", () => {
     // Mutation: fall back to the latest file for an old day → red.
-    expect(gaugeReadingOnDay(gauge, history, "2020-01-01", now)).toBeNull();
-    expect(gaugeReadingOnDay(gauge, history, "2026-10-02", now)).toBeNull();
-    expect(gaugeReadingOnDay(gauge, history, "2026-10-31", now)).toBeNull();
-    expect(gaugeReadingOnDay(gauge, null, "2026-10-20", now)).toBeNull();
+    expect(
+      gaugeReadingOnDay(gauge, history, "2020-01-01", now, AEST),
+    ).toBeNull();
+    expect(
+      gaugeReadingOnDay(gauge, history, "2026-10-02", now, AEST),
+    ).toBeNull();
+    expect(
+      gaugeReadingOnDay(gauge, history, "2026-10-31", now, AEST),
+    ).toBeNull();
+    expect(gaugeReadingOnDay(gauge, null, "2026-10-20", now, AEST)).toBeNull();
   });
 
   it("keeps a few distinct gauges", () => {
@@ -160,6 +211,7 @@ describe("a gauge on a trip's date", () => {
         ["2026-10-01T00:00:00.000Z"],
         "trip",
         now,
+        latest,
       ),
     ).toEqual([
       "Made Up River at One: 0.91 m and 121 ML/d on this trip, 0.95 m and 130 ML/d now.",
@@ -171,6 +223,7 @@ describe("a gauge on a trip's date", () => {
         ["2026-10-01"],
         "lastTrip",
         now,
+        latest,
       ),
     ).toEqual([
       "Made Up River at One: 0.91 m on your last trip here, 0.95 m now.",
@@ -181,7 +234,7 @@ describe("a gauge on a trip's date", () => {
     // Mutation: fall back to an older trip, or count a planned trip → red.
     const g = { ...latest.gauges[0]!, hasFlow: false };
     const line = (dates: string[]) =>
-      tripGaugeLines([{ gauge: g, history }], dates, "lastTrip", now);
+      tripGaugeLines([{ gauge: g, history }], dates, "lastTrip", now, latest);
     expect(line(["2026-10-01", "2026-12-25", "2026-09-01"])[0]).toContain(
       "0.91 m on your last trip here",
     );
@@ -197,13 +250,14 @@ describe("a gauge on a trip's date", () => {
       ...latest.gauges[1]!,
       readings: [[Math.floor(now / 1000) - 60, null, 5]],
     };
-    expect(gaugeReadingOnDay(g, null, "2026-10-30", now)).toBeNull();
+    expect(gaugeReadingOnDay(g, null, "2026-10-30", now, AEST)).toBeNull();
     expect(
       tripGaugeLines(
         [{ gauge: g, history: null }],
         ["2026-10-30"],
         "trip",
         now,
+        latest,
       ),
     ).toEqual([]);
   });
@@ -222,13 +276,20 @@ describe("a gauge on a trip's date", () => {
         ["2020-01-01"],
         "trip",
         now,
+        latest,
       ),
     ).toEqual([]);
     expect(
-      tripGaugeLines([{ gauge: g, history }], ["2026-10-02"], "trip", now),
+      tripGaugeLines(
+        [{ gauge: g, history }],
+        ["2026-10-02"],
+        "trip",
+        now,
+        latest,
+      ),
     ).toEqual([`${gaugeDisplayName(g.name)} ${GAUGES.copy.noneForDate}`]);
     expect(
-      tripGaugeLines([{ gauge: g, history }], [], "lastTrip", now),
+      tripGaugeLines([{ gauge: g, history }], [], "lastTrip", now, latest),
     ).toEqual([]);
   });
 
@@ -240,6 +301,7 @@ describe("a gauge on a trip's date", () => {
         ["2026-10-01"],
         "trip",
         now,
+        latest,
       )[0],
     ).toMatch(/on this trip, no recent reading now\.$/);
   });
@@ -377,9 +439,9 @@ describe("the gauge panel's words", () => {
   });
 
   it("formats and ages", () => {
-    expect(formatGaugeLevel(1.234)).toBe("1.23 m");
-    expect(formatGaugeFlow(4.26)).toBe("4.3 ML/d");
-    expect(formatGaugeFlow(1234.6)).toBe("1235 ML/d");
+    expect(formatGaugeLevel(1.234, GAUGE_UNITS_DEFAULT)).toBe("1.23 m");
+    expect(formatGaugeFlow(4.26, GAUGE_UNITS_DEFAULT)).toBe("4.3 ML/d");
+    expect(formatGaugeFlow(1234.6, GAUGE_UNITS_DEFAULT)).toBe("1235 ML/d");
     expect(gaugeAgo(now - 45 * 60_000, now)).toBe("45 min ago");
     expect(gaugeAgo(now - 3 * 3_600_000, now)).toBe("3 h ago");
     expect(gaugeAgo(now - 2 * 86_400_000, now)).toBe("2 days ago");
@@ -399,6 +461,7 @@ describe("the gauge panel's words", () => {
         ["2026-10-01", "2026-10-02"],
         "lastTrip",
         Date.parse("2026-10-30T12:00:00Z"),
+        latest,
       ),
       MAP_OVERLAYS.copy,
       GAUGES.title,
@@ -453,22 +516,29 @@ describe("gaugeStats", () => {
 
   // Mutation: span either stat, or drop the pair from STAT_PAIRS.
   it("sets level beside flow, each on half the line", () => {
-    expect(gaugeStats(gauge, latest, 2000)).toEqual([
+    expect(gaugeStats(gauge, latest, 2000, GAUGE_UNITS_DEFAULT)).toEqual([
       { label: "Level", value: "0.90 m", span: false },
       { label: "Flow", value: "120 ML/d", span: false },
     ]);
   });
 
   it("gives a level with no flow beside it the whole line", () => {
-    expect(gaugeStats({ ...gauge, hasFlow: false }, latest, 2000)).toEqual([
-      { label: "Level", value: "0.90 m", span: true },
-    ]);
+    expect(
+      gaugeStats(
+        { ...gauge, hasFlow: false },
+        latest,
+        2000,
+        GAUGE_UNITS_DEFAULT,
+      ),
+    ).toEqual([{ label: "Level", value: "0.90 m", span: true }]);
   });
 
   // Mutation: match the pair on the labels with their ages in them.
   it("keeps the pair when each value says its own age", () => {
     const stale = { ...latest, levelAt: 0, flowAt: 2 * 3_600_000 };
-    expect(gaugeStats(gauge, stale, 3 * 3_600_000)).toEqual([
+    expect(
+      gaugeStats(gauge, stale, 3 * 3_600_000, GAUGE_UNITS_DEFAULT),
+    ).toEqual([
       { label: "Level, 3 h ago", value: "0.90 m", span: false },
       { label: "Flow, 1 h ago", value: "120 ML/d", span: false },
     ]);
@@ -518,5 +588,60 @@ describe("gaugeWeekCharts", () => {
         [2, null, 120],
       ]),
     ).toEqual(["flow"]);
+  });
+});
+
+// A made-up feed in cfs and feet, whose day turns at 07:00 UTC: everything
+// that prints or cuts a day reads the file's own say, never NSW's.
+describe("a feed that is not New South Wales's", () => {
+  const feed = parseGaugeLatest({
+    version: 1,
+    generatedAt: "2026-10-30T12:00:00Z",
+    coldSweptAt: "2026-10-30T12:00:00Z",
+    attribution: "Made up",
+    units: { level: "ft", flow: "cfs" },
+    dayOffsetMinutes: -420,
+    gauges: [
+      {
+        id: "madeup09380000",
+        name: "MADE UP R @ FOUR",
+        lat: 36.9,
+        lon: -111.5,
+        hot: true,
+        hasFlow: true,
+        // 2026-10-29 05:00 UTC is still the 28th at UTC-7.
+        readings: [[Date.parse("2026-10-29T05:00:00Z") / 1000, 4.5, 1200]],
+      },
+    ],
+  })!;
+  const gauge = feed.gauges[0]!;
+
+  it("prints the file's units, unconverted", () => {
+    // Mutation: print "m" or "ML/d" whatever the file says → red.
+    const reading = { level: 4.5, levelAt: 1000, flow: 1200, flowAt: 1000 };
+    expect(gaugeStats(gauge, reading, 2000, feed.units)).toEqual([
+      { label: "Level", value: "4.50 ft", span: false },
+      { label: "Flow", value: "1200 cfs", span: false },
+    ]);
+  });
+
+  it("cuts a day at the file's offset", () => {
+    // Mutation: cut at AEST whatever the file says → red.
+    const now = Date.parse("2026-10-30T12:00:00Z");
+    const on = (day: string) =>
+      gaugeReadingOnDay(gauge, null, day, now, feed.dayOffsetMinutes);
+    expect(on("2026-10-28")).toEqual({ level: 4.5, flow: 1200 });
+    expect(on("2026-10-29")).toBeNull();
+    expect(
+      tripGaugeLines(
+        [{ gauge, history: null }],
+        ["2026-10-28"],
+        "trip",
+        now,
+        feed,
+      ),
+    ).toEqual([
+      "Made Up River at Four: 4.50 ft and 1200 cfs on this trip, 4.50 ft and 1200 cfs now.",
+    ]);
   });
 });

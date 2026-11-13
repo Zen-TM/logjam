@@ -34,7 +34,7 @@ export function TripGaugeReading({
     const gauge = file.gauges.find((g) => g.id === id);
     return gauge ? [{ gauge, history: histories[id] ?? null }] : [];
   });
-  const lines = tripGaugeLines(inputs, dates, when, now);
+  const lines = tripGaugeLines(inputs, dates, when, now, file);
   if (lines.length === 0) return null;
   return (
     <View style={styles.stack}>
