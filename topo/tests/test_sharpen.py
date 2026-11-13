@@ -124,7 +124,21 @@ class TestPyramid(unittest.TestCase):
     """Mutations that turn it red: the slope pyramid by the mean (a cliff
     fades out of its band zoomed out, ADR 0039), and heights rounded to the
     same step at every zoom (terraces in the hillshade at z17, ADR 0030's
-    update of 2026-10-23)."""
+    update of 2026-10-23); and `png_level` dropped from sharpen.py's
+    `HEIGHTS`, so a job goes back to spending most of its time on PNG level
+    9, or the statewide `dem.HEIGHTS` moved off 9, so a rebuild changes the
+    published height archive's bytes (ADR 0039)."""
+
+    def test_heights_are_encoded_at_the_slopes_png_level(self):
+        rng = np.random.default_rng(0)
+        tile = (500 + rng.random((dem.TILE, dem.TILE)) * 40).astype(np.float32)
+        # One z14 block at z15: four tiles, each this one.
+        _, _, _, png = next(pyramid(np.tile(tile, (2, 2)), 15, 0, 0, HEIGHTS))
+        rgb = dem.encode_terrarium(tile, ~np.isnan(tile), dem.ROUNDING_M)
+        self.assertEqual(png, dem.png_bytes(rgb, dem.SLOPE.png_level))
+        # The premise: on this tile the two levels' bytes differ.
+        self.assertNotEqual(png, dem.png_bytes(rgb, 9))
+        self.assertEqual(dem.HEIGHTS.png_level, 9)
 
     def test_heights_round_finer_with_each_zoom(self):
         import io
@@ -318,16 +332,21 @@ class TestGroundSteps(unittest.TestCase):
     stops asking or merge_dem_tiles stops forwarding; require_ground's call
     removed, so a ground grid with no height goes on to claim the whole area;
     TIN results collected without a progress write (the reaper fails a
-    long dense job while it works); a tile read whole by one process; a
-    window cut without `--stream`, a TIN job handed its neighbours' files
-    instead of its window, or the TIN pool sized by those files (an area of
-    dense tiles then runs one job at a time, or out of memory); and the
-    ZIP's point clouds left on disk beside the windows."""
+    long dense job while it works); a tile read whole by one process; the
+    strips cut without `--stream`, from a part of the neighbour's ground
+    only, from the tile's own ground as well (its points meshed twice), or
+    from a tile that is not beside it; a TIN job handed its neighbours'
+    files instead of its strips, or without its own ground; the TIN pool
+    sized without the strips, or by the neighbours' whole files (an area of
+    dense tiles then runs out of memory, or one job at a time); and the
+    ZIP's point clouds left on disk beside the strips."""
 
-    def laz_ground(self, points, tin_workers=None):
-        """laz_ground on two tiles of 6 M points with PDAL mocked:
-        `points(name)` is the point count of a ground or window file it
-        writes. Returns (PDAL commands, result, TIN jobs, files left)."""
+    def laz_ground(self, points, tin_workers=None, apart=False):
+        """laz_ground on two tiles of 6 M points, side by side or 8 km
+        `apart`, with PDAL mocked: `points(name)` is the point count of a
+        ground or strips file it writes. Returns (PDAL commands, result, TIN
+        jobs, files left, the files each strips cut reads)."""
+        import json
         from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
@@ -340,9 +359,10 @@ class TestGroundSteps(unittest.TestCase):
             return ""
 
         def summary(path):
-            bounds = {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000}
             name = Path(path).name
-            made = name.startswith(("ground-", "window-"))
+            west = 10_000 if apart and name == "b.laz" else 2000 * (name == "b.laz")
+            bounds = {"minx": west, "maxx": west + 2000, "miny": 0, "maxy": 2000}
+            made = name.startswith(("ground-", "strips-"))
             return {
                 "bounds": bounds,
                 "num_points": points(name) if made else 6_000_000,
@@ -372,11 +392,19 @@ class TestGroundSteps(unittest.TestCase):
             select.return_value = mock.Mock(terrain_tiles=[str(c) for c in clouds])
             result = sharpen.laz_ground(clouds, "g.tif", Path(tmp), 2)
             left = sorted(f.name for f in Path(tmp).iterdir())
-        return [" ".join(c) for c in calls], result, tins, left
+            cuts = {
+                spec.stem: [
+                    Path(stage["filename"]).name
+                    for stage in json.loads(spec.read_text())["pipeline"]
+                    if stage["type"] == "readers.las"
+                ]
+                for spec in Path(tmp).glob("strips-*.json")
+            }
+        return [" ".join(c) for c in calls], result, tins, left, cuts
 
     def test_class_2_while_any_tile_has_it(self):
         # Tile b has no class 2, but a does: b is left to the fill, never SMRF.
-        calls, result, _, _ = self.laz_ground(
+        calls, result, *_ = self.laz_ground(
             lambda name: 500_000 if name.startswith("ground-0-") else 0
         )
         self.assertEqual(result, (16, "class-2"))
@@ -391,30 +419,49 @@ class TestGroundSteps(unittest.TestCase):
             ranged = f"--readers.las.start={start} --readers.las.count={count}"
             self.assertEqual(sum(ranged in c for c in reads), 2)
 
-    def test_a_tin_job_holds_only_its_window(self):
+    def test_a_tin_job_reads_its_tile_and_its_neighbours_strips(self):
         from unittest import mock
 
         sized = mock.Mock(return_value=2)
-        # Each tile has 6 M ground points and a 7 M window: its own and the
-        # strip of its neighbour's.
-        calls, _, tins, left = self.laz_ground(
-            lambda name: 7_000_000 if name.startswith("window-") else 3_000_000,
+        # Each tile has 6 M ground points, 400 k of its neighbour's beside it.
+        calls, _, tins, left, cuts = self.laz_ground(
+            lambda name: 400_000 if name.startswith("strips-") else 3_000_000,
             tin_workers=sized,
         )
-        cuts = [c for c in calls if " pipeline " in c]
-        self.assertEqual(len(cuts), 2)
-        for command in cuts:
+        for command in (c for c in calls if " pipeline " in c):
             self.assertIn("pdal pipeline --stream", command)
         self.assertEqual(
-            sorted(Path(job[2]).name for job in tins),
-            ["window-0.las", "window-1.las"],
+            cuts,
+            {
+                "strips-0": ["ground-1-0.las", "ground-1-1.las"],
+                "strips-1": ["ground-0-0.las", "ground-0-1.las"],
+            },
         )
-        self.assertEqual(sized.call_args.args[:2], (2, 7_000_000))
+        self.assertEqual(
+            sorted([Path(f).name for f in job[2]] for job in tins),
+            [
+                ["ground-0-0.las", "ground-0-1.las", "strips-0.las"],
+                ["ground-1-0.las", "ground-1-1.las", "strips-1.las"],
+            ],
+        )
+        self.assertEqual(sized.call_args.args[:2], (2, 6_400_000))
         self.assertNotIn("a.laz", left)
         self.assertNotIn("b.laz", left)
 
+    def test_a_tile_with_no_neighbour_has_no_strips(self):
+        calls, _, tins, _, cuts = self.laz_ground(lambda name: 3_000_000, apart=True)
+        self.assertEqual(cuts, {})
+        self.assertEqual([c for c in calls if " pipeline " in c], [])
+        self.assertEqual(
+            sorted([Path(f).name for f in job[2]] for job in tins),
+            [
+                ["ground-0-0.las", "ground-0-1.las"],
+                ["ground-1-0.las", "ground-1-1.las"],
+            ],
+        )
+
     def test_smrf_only_when_no_tile_has_class_2(self):
-        calls, result, _, _ = self.laz_ground(
+        calls, result, *_ = self.laz_ground(
             lambda name: 500_000 if name.startswith("ground-smrf") else 0
         )
         self.assertEqual(result, (16, "smrf"))
@@ -584,7 +631,8 @@ class TestTinWorkers(unittest.TestCase):
     dense TIN jobs at once run a 16 GB task out of memory; a job that fits in
     memory alone refused because it misses the pool's share; one that
     doesn't fit run anyway (an out-of-memory kill after the work); and free
-    memory read with the page cache counted as held, or below zero."""
+    memory read with the page cache, or the half of it read more than once,
+    counted as held, or below zero."""
 
     def test_bounded_by_memory_as_well_as_cpus(self):
         gib = 2**30
@@ -622,13 +670,15 @@ class TestTinWorkers(unittest.TestCase):
             self.assertEqual(free, 10_000_000 * 1024)  # no cgroup files: the host's
             self.write(cgroup, {"memory.max": "max\n"})
             self.assertEqual(sharpen_module.available_memory(meminfo, cgroup), free)
-            # A 4 GiB limit, 3 GiB charged of which 2 GiB is page cache.
+            # A 4 GiB limit, 3 GiB charged of which 2 GiB is page cache, half
+            # of it read more than once.
             self.write(
                 cgroup,
                 {
                     "memory.max": f"{4 * 2**30}\n",
                     "memory.current": f"{3 * 2**30}\n",
-                    "memory.stat": f"anon 1\ninactive_file {2 * 2**30}\n",
+                    "memory.stat": f"anon 1\ninactive_file {2**30}\n"
+                    f"active_file {2**30}\n",
                 },
             )
             self.assertEqual(
