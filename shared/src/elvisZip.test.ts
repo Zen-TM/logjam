@@ -342,8 +342,9 @@ describe("readZipEntries", () => {
   // An end record of count 0, size 0, offset 0 on a file longer than the tail:
   // the "range" would be [0, 0), which S3 answers with the whole object.
   for (const count of [0, 1]) {
-    it(`never asks for an empty range when the directory is empty (count ${count})`, async () => {
-      // Mutation: delete the `size === 0` branch in readZipEntries.
+    it(`refuses an empty directory far before the tail without a second read (count ${count})`, async () => {
+      // Mutation: delete the `offset + size !== endStart` check in
+      // locateZipCentralDirectory (readRange(0, 0) is then called).
       const total = ZIP_TAIL_BYTES + 1000;
       const eocd = new Uint8Array(22);
       const view = new DataView(eocd.buffer);
@@ -351,10 +352,10 @@ describe("readZipEntries", () => {
       view.setUint16(8, count, true);
       view.setUint16(10, count, true);
       const file = virtualFile(total, [{ at: total - 22, bytes: eocd }]);
-      const result = readZipEntries(total, file.readRange);
-      if (count === 0) expect(await result).toEqual([]);
-      else await expect(result).rejects.toMatchObject({ code: "TRUNCATED" });
-      expect(file.reads.length).toBeGreaterThan(0);
+      await expect(readZipEntries(total, file.readRange)).rejects.toMatchObject(
+        { code: "TRUNCATED" },
+      );
+      expect(file.reads).toHaveLength(1);
       for (const [start, end] of file.reads) expect(end).toBeGreaterThan(start);
     });
   }
@@ -461,6 +462,72 @@ describe("a central directory that disagrees with itself is refused", () => {
     expect(() => parse(zip)).toThrow(
       expect.objectContaining({ code: "TRUNCATED" }),
     );
+  });
+});
+
+describe("the directory must end where the end record begins", () => {
+  // Python's zipfile, which the worker uses, reads the directory from just
+  // before the end record whatever offset is stored (it treats the difference
+  // as prepended data). This reader uses the stored offset, so where the two
+  // differ it refuses rather than list a different directory than the worker.
+  const refused = expect.objectContaining({ code: "TRUNCATED" });
+  const decoyName = "Madeup201801/a_decoy_2400004_56_0001_0001.laz";
+  const realName = "Madeup201801/a_real__2400004_56_0001_0001.laz";
+
+  it("refuses a ZIP with bytes in front whose stored offset lands on a decoy directory", () => {
+    // Mutation: delete the `offset + size !== endStart` check in
+    // locateZipCentralDirectory. Python lists realName for this file.
+    const real = buildZip([{ name: realName }]);
+    const offset = new DataView(real.buffer).getUint32(
+      real.length - 22 + 16,
+      true,
+    );
+    const decoy = directoryOf(buildZip([{ name: decoyName }]));
+    expect(decoy.length).toBe(directoryOf(real).length);
+    const zip = new Uint8Array(offset + decoy.length + real.length);
+    zip.set(decoy, offset);
+    zip.set(real, offset + decoy.length);
+    // Read at the stored offset, the decoy is a valid one-entry directory.
+    expect(directoryOf(zip).length).toBe(decoy.length);
+    expect(() => parse(zip)).toThrow(refused);
+  });
+
+  it("refuses a gap between the directory and the end record", () => {
+    // Mutation: as above.
+    const zip = buildZip([{ name: realName }]);
+    const gapped = new Uint8Array(zip.length + 10);
+    gapped.set(zip.subarray(0, zip.length - 22));
+    gapped.set(zip.subarray(zip.length - 22), zip.length - 22 + 10);
+    expect(() => parse(gapped)).toThrow(refused);
+  });
+
+  it("refuses a Zip64 directory that does not end at the Zip64 end record", () => {
+    // Mutation: as above. A decoy directory at the stored offset, the real one
+    // after it, which is where Python reads.
+    const decoy = directoryOf(buildZip([{ name: decoyName }]));
+    const real = directoryOf(buildZip([{ name: realName }]));
+    const at = 5 * 2 ** 30;
+    const both = new Uint8Array(decoy.length + real.length);
+    both.set(decoy);
+    both.set(real, decoy.length);
+    const tail = zip64Tail(both, 1, at);
+    new DataView(tail.buffer).setBigUint64(
+      both.length + 40,
+      BigInt(real.length),
+      true,
+    );
+    expect(() => parseZipCentralDirectory(tail, at + tail.length)).toThrow(
+      refused,
+    );
+  });
+
+  it("still reads a directory that ends where the end record begins", () => {
+    const decoy = directoryOf(buildZip([{ name: decoyName }]));
+    const tail = zip64Tail(decoy, 1, 5 * 2 ** 30);
+    expect(
+      parseZipCentralDirectory(tail, 5 * 2 ** 30 + tail.length)[0].filename,
+    ).toBe(decoyName);
+    expect(parse(buildZip([{ name: realName }]))[0].filename).toBe(realName);
   });
 });
 

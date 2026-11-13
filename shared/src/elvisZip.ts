@@ -182,6 +182,9 @@ export function locateZipCentralDirectory(
   let offset = view.getUint32(eocdPos + 16, true);
 
   const tailStart = totalFileSize - tailBytes.length;
+  // Where the records that end the directory begin: Python's zipfile reads the
+  // directory from just before here, so it must end here (elvisZip.test.ts).
+  let endStart = tailStart + eocdPos;
   const locatorPos = eocdPos - ZIP64_LOCATOR_BYTES;
   // A locator in the 20 bytes before the end record is followed whatever the
   // classic fields hold, as Python's zipfile (the worker) does: a reader that
@@ -208,12 +211,13 @@ export function locateZipCentralDirectory(
     ) {
       throw new ElvisZipError("TRUNCATED", TRUNCATED);
     }
+    endStart = tailStart + recordPos;
     count = readUint64(view, recordPos + 32);
     size = readUint64(view, recordPos + 40);
     offset = readUint64(view, recordPos + 48);
   }
 
-  if (offset + size > totalFileSize) {
+  if (offset + size !== endStart) {
     throw new ElvisZipError("TRUNCATED", TRUNCATED);
   }
   return { offset, size, count };
@@ -351,12 +355,8 @@ export async function readZipEntries(
     const start = offset - tailStart;
     return parseDirectoryEntries(tail.subarray(start, start + size), count);
   }
-  // An empty directory needs no read, and a range with end <= start is not a
-  // range at all (S3 would answer it with the whole object).
-  if (size === 0) {
-    if (count === 0) return [];
-    throw new ElvisZipError("TRUNCATED", TRUNCATED);
-  }
+  // The directory ends inside the tail, so one that starts before it has size
+  // above 0: this is never a range with end <= start.
   if (size > MAX_ZIP_DIRECTORY_BYTES) {
     throw new ElvisZipError("TOO_MANY_FILES", TOO_MANY_FILES);
   }
