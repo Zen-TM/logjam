@@ -98,14 +98,21 @@ export const DERIVATIVE_STEM_TOKENS = [
   "rgb",
 ] as const;
 
+const EOCD_BYTES = 22;
+/** The longest comment an end record can carry (a 16-bit length). */
+const MAX_ZIP_COMMENT_BYTES = 0xffff;
+const ZIP64_LOCATOR_BYTES = 20;
+const ZIP64_EOCD_BYTES = 56;
+
 /**
  * How much of a ZIP's end `readZipEntries` reads first: the end record (22)
  * and its longest comment (65535), the Zip64 locator (20) and a standard Zip64
  * end record (56), all of which can sit at the very end. A Zip64 end record
- * with extensible data in front of its locator can start outside this and is
- * refused as TRUNCATED (elvisZip.test.ts holds a maximal comment at the edge).
+ * must sit directly before its locator, so one with extensible data is refused
+ * (elvisZip.test.ts holds a maximal comment at the edge).
  */
-export const ZIP_TAIL_BYTES = 22 + 65535 + 20 + 56;
+export const ZIP_TAIL_BYTES =
+  EOCD_BYTES + MAX_ZIP_COMMENT_BYTES + ZIP64_LOCATOR_BYTES + ZIP64_EOCD_BYTES;
 
 /**
  * The most central directory `readZipEntries` will fetch. The directory is
@@ -123,9 +130,6 @@ const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const CENTRAL_ENTRY_SIGNATURE = 0x02014b50;
 const ZIP64_EXTRA_ID = 0x0001;
-const EOCD_BYTES = 22;
-const ZIP64_LOCATOR_BYTES = 20;
-const ZIP64_EOCD_BYTES = 56;
 const CENTRAL_ENTRY_BYTES = 46;
 const SATURATED_32 = 0xffffffff;
 
@@ -201,12 +205,15 @@ export function locateZipCentralDirectory(
     ) {
       throw new ElvisZipError("TRUNCATED", TRUNCATED);
     }
-    // The Zip64 end record sits just before its locator; one that starts
-    // before the tail we were given is refused rather than guessed at.
+    // The Zip64 end record must sit directly before its locator. Some Pythons
+    // read it at that fixed spot and others at the locator's stored offset, so
+    // a ZIP where the two differ (or with extensible data in between) is
+    // refused rather than read as one of them (elvisZip.test.ts). One that
+    // starts before the tail we were given is refused too.
     const recordPos = readUint64(view, locatorPos + 8) - tailStart;
     if (
       recordPos < 0 ||
-      recordPos + ZIP64_EOCD_BYTES > locatorPos ||
+      recordPos + ZIP64_EOCD_BYTES !== locatorPos ||
       view.getUint32(recordPos, true) !== ZIP64_EOCD_SIGNATURE
     ) {
       throw new ElvisZipError("TRUNCATED", TRUNCATED);

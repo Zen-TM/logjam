@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
-import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import { RASTER_TEMPLATE_DEFAULTS, ZIP_TAIL_BYTES } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 import prisma from "../services/prisma";
 
@@ -156,7 +156,9 @@ describe("topo-jobs route (fake auth)", () => {
     const { jobId, uploadUrl } = createRes.body;
     try {
       const zip = manyDemZip(1200);
-      expect(zip.readUInt32LE(zip.length - 22 + 12)).toBeGreaterThan(65536);
+      expect(zip.readUInt32LE(zip.length - 22 + 12)).toBeGreaterThan(
+        ZIP_TAIL_BYTES,
+      );
       const put = await fetch(uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/zip" },

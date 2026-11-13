@@ -124,9 +124,9 @@ describe("parseZipCentralDirectory", () => {
 //   import io, zipfile
 //   info = lambda n: zipfile.ZipInfo(n, (2025, 1, 1, 0, 0, 0))
 //
-// PYTHON_BIG_ENTRY_ZIP: a small archive whose first entry's sizes were set to
-// 6 GiB and 3 GiB in memory before close() wrote the directory. Its local
-// headers still say 0, so it is not an archive Python could have extracted:
+// PYTHON_BIG_ENTRY_ZIP (__fixtures__/zip64-python-big-entry.zip): a small
+// archive whose first entry's sizes were set to 6 GiB and 3 GiB in memory
+// before close() wrote the directory. Its local headers still say 0, so it is not an archive Python could have extracted:
 // only its central directory (with the Zip64 extra field) is real.
 //
 //   buf = io.BytesIO()
@@ -136,8 +136,9 @@ describe("parseZipCentralDirectory", () => {
 //       z.filelist[0].file_size = 6 * 2**30
 //       z.filelist[0].compress_size = 3 * 2**30
 //
-// PYTHON_ZIP64_TAIL: the last 638 bytes (from the central directory) of a real
-// 4,718,593,168-byte archive, written with
+// PYTHON_ZIP64_TAIL (__fixtures__/zip64-python-tail.bin): the last 638 bytes
+// (from the central directory) of a real 4,718,593,168-byte archive, written
+// with
 //
 //   d = "Madeup201801/Point Clouds/Madeup201801-LID2-C3-AHD_2400004_56_0001_000"
 //   with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
@@ -146,16 +147,14 @@ describe("parseZipCentralDirectory", () => {
 //       for i in (2, 3, 4):
 //           with z.open(info(d + f"{i}.laz"), "w", force_zip64=True) as f:
 //               f.write(b"x" * 10)
-const PYTHON_BIG_ENTRY_ZIP = fromBase64(
-  "UEsDBBQAAAAAAAAAIVoAAAAAAAAAAAAAAAAnAAAATWFkZXVwMjAxODAxL2FfMjQwMDAwNF81Nl8wMDAxXzAwMDEubGF6UEsDBBQAAAAAAAAAIVoAAAAAAAAAAAAAAAAnAAAATWFkZXVwMjAxODAxL2FfMjQwMDAwNF81Nl8wMDAxXzAwMDIubGF6UEsBAi0DLQAAAAAAAAAhWgAAAAD//////////ycAFAAAAAAAAAAAAIABAAAAAE1hZGV1cDIwMTgwMS9hXzI0MDAwMDRfNTZfMDAwMV8wMDAxLmxhegEAEAAAAACAAQAAAAAAAMAAAAAAUEsBAhQDFAAAAAAAAAAhWgAAAAAAAAAAAAAAACcAAAAAAAAAAAAAAIABRQAAAE1hZGV1cDIwMTgwMS9hXzI0MDAwMDRfNTZfMDAwMV8wMDAyLmxhelBLBQYAAAAAAgACAL4AAACKAAAAAAA=",
-);
-const PYTHON_ZIP64_TAIL = fromBase64(
-  "UEsBAi0DLQAAAAAAAAAhWr5SE/D//////////0sAFAAAAAAAAAAAAIABAAAAAE1hZGV1cDIwMTgwMS9Qb2ludCBDbG91ZHMvTWFkZXVwMjAxODAxLUxJRDItQzMtQUhEXzI0MDAwMDRfNTZfMDAwMV8wMDAxLmxhegEAEAAAAEAZAQAAAAAAQBkBAAAAUEsBAi0DLQAAAAAAAAAhWndH344KAAAACgAAAEsADAAAAAAAAAAAAIAB/////01hZGV1cDIwMTgwMS9Qb2ludCBDbG91ZHMvTWFkZXVwMjAxODAxLUxJRDItQzMtQUhEXzI0MDAwMDRfNTZfMDAwMV8wMDAyLmxhegEACAB9AEAZAQAAAFBLAQItAy0AAAAAAAAAIVp3R9+OCgAAAAoAAABLAAwAAAAAAAAAAACAAf////9NYWRldXAyMDE4MDEvUG9pbnQgQ2xvdWRzL01hZGV1cDIwMTgwMS1MSUQyLUMzLUFIRF8yNDAwMDA0XzU2XzAwMDFfMDAwMy5sYXoBAAgABAFAGQEAAABQSwECLQMtAAAAAAAAACFad0ffjgoAAAAKAAAASwAMAAAAAAAAAAAAgAH/////TWFkZXVwMjAxODAxL1BvaW50IENsb3Vkcy9NYWRldXAyMDE4MDEtTElEMi1DMy1BSERfMjQwMDAwNF81Nl8wMDAxXzAwMDQubGF6AQAIAIsBQBkBAAAAUEsGBiwAAAAAAAAALQAtAAAAAAAAAAAABAAAAAAAAAAEAAAAAAAAABwCAAAAAAAAEgJAGQEAAABQSwYHAAAAAC4EQBkBAAAAAQAAAFBLBQYAAAAABAAEABwCAAD/////AAA=",
-);
+const PYTHON_BIG_ENTRY_ZIP = fixture("zip64-python-big-entry.zip");
+const PYTHON_ZIP64_TAIL = fixture("zip64-python-tail.bin");
 const PYTHON_ZIP64_TAIL_FILE_SIZE = 4718593168;
 
-function fromBase64(text: string): Uint8Array {
-  return Uint8Array.from(Buffer.from(text, "base64"));
+function fixture(name: string): Uint8Array {
+  return new Uint8Array(
+    readFileSync(join(import.meta.dirname, "__fixtures__", name)),
+  );
 }
 
 describe("parseZipCentralDirectory on Zip64 archives", () => {
@@ -519,6 +518,50 @@ describe("the directory must end where the end record begins", () => {
     expect(() => parseZipCentralDirectory(tail, at + tail.length)).toThrow(
       refused,
     );
+  });
+
+  it("refuses a Zip64 end record that is not directly before its locator", () => {
+    // Layout D | A | D' | B | locator | EOCD: the locator points at A, which
+    // ends directory D exactly, and B sits at the fixed spot before the
+    // locator and ends D'. Upstream CPython 3.12.0 to 3.12.11 read B, 3.12.12
+    // and 3.14 read A (the locator's offset), so this refuses rather than pick
+    // one, whichever Python the worker is built with. Mutation:
+    // in locateZipCentralDirectory put `recordPos + ZIP64_EOCD_BYTES > locatorPos`
+    // back for the `!==` check.
+    const benign = directoryOf(buildZip([{ name: decoyName }]));
+    const evil = directoryOf(buildZip([{ name: realName }]));
+    const record = (count: number, size: number, offset: number, rest = 44) => {
+      const bytes = new Uint8Array(56);
+      const view = new DataView(bytes.buffer);
+      view.setUint32(0, 0x06064b50, true);
+      view.setBigUint64(4, BigInt(rest), true);
+      view.setUint16(12, 45, true);
+      view.setUint16(14, 45, true);
+      view.setBigUint64(24, BigInt(count), true);
+      view.setBigUint64(32, BigInt(count), true);
+      view.setBigUint64(40, BigInt(size), true);
+      view.setBigUint64(48, BigInt(offset), true);
+      return bytes;
+    };
+    const aPos = benign.length;
+    const evilPos = aPos + 56;
+    const bPos = evilPos + evil.length;
+    const zip = new Uint8Array(bPos + 56 + 20 + 22);
+    zip.set(benign);
+    zip.set(record(1, benign.length, 0, 44 + 56 + evil.length), aPos);
+    zip.set(evil, evilPos);
+    zip.set(record(1, evil.length, evilPos), bPos);
+    const locator = new DataView(zip.buffer, bPos + 56);
+    locator.setUint32(0, 0x07064b50, true);
+    locator.setBigUint64(8, BigInt(aPos), true);
+    locator.setUint32(16, 1, true);
+    const eocd = new DataView(zip.buffer, bPos + 56 + 20);
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(8, 1, true);
+    eocd.setUint16(10, 1, true);
+    eocd.setUint32(12, evil.length, true);
+    eocd.setUint32(16, evilPos, true);
+    expect(() => parse(zip)).toThrow(refused);
   });
 
   it("still reads a directory that ends where the end record begins", () => {
