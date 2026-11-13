@@ -33,6 +33,7 @@ _ENTRYPOINTS = (
     "build_fire_history.py",
     "build_coverage.py",
     "build_nsw_dem.py",
+    "build_region_dem.py",
 )
 
 

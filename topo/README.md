@@ -25,6 +25,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
+| **Mapterhorn** elevation tiles (a new region's heights, `build_region_dem.py`) | heights | each source's own, in Mapterhorn's `attribution.json` | the sources the box draws on, written into the build's `--credit` |
 
 > **SVTM licence — unconfirmed.** NSW open data on the SEED portal
 > (<https://datasets.seed.nsw.gov.au/>) is typically CC BY 4.0, but the exact
@@ -357,6 +358,49 @@ it should print `206`:
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
 ```
+
+---
+
+## Building a region's heights from Mapterhorn
+
+`build_region_dem.py` cuts a box out of [Mapterhorn](https://mapterhorn.com)'s
+elevation tiles and writes it as a height archive in the form of the NSW one:
+terrarium PNG, 256 px, in one PMTiles file. Mapterhorn's tiles are 512 px WebP,
+so each becomes four 256 px PNG tiles one zoom deeper; the heights are not
+resampled. Why this and not a pipeline per country, and why not reading
+Mapterhorn from the apps:
+[ADR 0052](../docs/decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md).
+NSW does not use it: Mapterhorn's Australian source is a partial 5 m composite.
+
+It needs NumPy, Pillow and the `pmtiles` Python package (`requirements.txt`),
+and GDAL's Python bindings only because it shares `build_nsw_dem.py`'s code;
+it runs in the worker image. It reads Mapterhorn by byte range, so a 10 by
+10 km box fetches 50 to 100 MB, and writes the archive on the machine it runs on.
+
+```bash
+# W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, its finest.
+python3 build_region_dem.py heights --bbox 169.20,-44.10,169.30,-44.01 \
+  --zmax 17 --zmin 8 --jobs 4 \
+  --credit "Elevation data: …" --name "Example heights" example.pmtiles
+```
+
+A 9.6 by 10 km box at zoom 17 took 7 minutes on four cores and wrote 77 MB.
+`--source` replaces the files it would read (a URL or a path to a PMTiles file,
+as often as needed, tried in order); without it they are the ones in
+Mapterhorn's `download_urls.json` that hold the zoom over the box. Check the
+result with `pmtiles show example.pmtiles`: `bounds` is the box's tiles, and
+`attribution` is the credit given.
+
+**The credit is yours to write.** Mapterhorn's `attribution.json` names each
+source and its licence; the credit lists those the box draws on. Mapterhorn
+keeps no mark of where a fine survey ends: a tile over ground with no survey is
+made from the next coarser source and has the same zoom (30 m Copernicus data
+at zoom 16, in places). Say in the credit that the finest heights exist only
+where the survey covers. A pixel Mapterhorn marks as no height is written as
+no-data; sea is 0 m.
+
+Do not run it from CI: Mapterhorn states no terms for ranged reads of its
+download host, and the build is the only thing that should make them.
 
 ---
 

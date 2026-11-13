@@ -153,3 +153,4 @@ supersede instead.
 | [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
 | [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
 | [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) | Database connections verify the brain's certificate and never fall back to plain | 2026-11-11 | Accepted |
+| [0052](0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md) | A new region's heights are a Mapterhorn extract, transcoded to ADR 0030 tiles and hosted by Logjam | 2026-11-14 | Accepted |
