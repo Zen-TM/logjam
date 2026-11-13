@@ -15,6 +15,7 @@ import {
   gaugeWeekCharts,
   latestGaugeReading,
   type Gauge,
+  type GaugeUnits,
   type ProfileSeries,
   type SectionKeysOn,
 } from "@logjam/shared";
@@ -49,6 +50,7 @@ type Props = {
   gauge: Gauge;
   attribution: string;
   generatedAt: string;
+  units: GaugeUnits;
   now: number;
 };
 
@@ -57,9 +59,11 @@ export const GAUGE_SECTIONS: Record<
   SectionKeysOn<typeof GAUGES, "gps">,
   (props: Props & { styles: ReturnType<typeof useStyles> }) => ReactNode
 > = {
-  reading: ({ gauge, now }) => {
+  reading: ({ gauge, units, now }) => {
     const latest = latestGaugeReading(gauge, now);
-    return latest ? <StatGrid stats={gaugeStats(gauge, latest, now)} /> : null;
+    return latest ? (
+      <StatGrid stats={gaugeStats(gauge, latest, now, units)} />
+    ) : null;
   },
   age: ({ gauge, generatedAt, now, styles }) => {
     const latest = latestGaugeReading(gauge, now);
@@ -68,7 +72,7 @@ export const GAUGE_SECTIONS: Record<
     const text = [line, note].filter(Boolean).join(" · ");
     return text ? <Text style={styles.note}>{text}</Text> : null;
   },
-  graph: ({ gauge, now, styles }) => {
+  graph: ({ gauge, units, now, styles }) => {
     const week = gaugeWeekCharts(gauge, latestGaugeReading(gauge, now));
     return week.length > 0 ? (
       <>
@@ -79,8 +83,10 @@ export const GAUGE_SECTIONS: Record<
             <ProfileChart
               key={charted}
               series={shifted.series}
-              formatValue={
-                charted === "level" ? formatGaugeLevel : formatGaugeFlow
+              formatValue={(v) =>
+                charted === "level"
+                  ? formatGaugeLevel(v, units)
+                  : formatGaugeFlow(v, units)
               }
               formatX={(x) => DAY_FORMAT.format(x + shifted.start)}
               hint={`${GAUGES.copy[charted]}. Press or drag for readings.`}

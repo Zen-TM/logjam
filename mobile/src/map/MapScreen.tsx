@@ -75,6 +75,7 @@ import {
   initialBearingDegrees,
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
+  GAUGE_UNITS_DEFAULT,
   MAP_OVERLAYS,
   MAP_OVERLAY_DEFAULTS,
   messageFromError,
@@ -6059,6 +6060,7 @@ export function MapScreen({
         gauge={openGauge ?? null}
         attribution={gaugeFile?.attribution ?? ""}
         generatedAt={gaugeFile?.generatedAt ?? ""}
+        units={gaugeFile?.units ?? GAUGE_UNITS_DEFAULT}
         now={gaugeNow}
         onClose={() => setGaugeId(null)}
       />

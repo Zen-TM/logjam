@@ -79,6 +79,22 @@ service.**
   client instead would be tens of megabytes to hide which one was opened, a
   poor trade on a phone. Opening a gauge's panel is not tied to a place:
   anyone can open any gauge.
+- **Update 2026-11-14: `latest.json` states its units and its day.** It carries
+  `units` (`{ "level": "m", "flow": "ML/d" }`) and `dayOffsetMinutes` (600),
+  written by `topo/build_gauges.py`, and a client prints readings in the
+  file's units, never converted, and cuts history days and a trip's day at
+  its offset (`gaugeDay` in `shared/src/gauges.ts`). A feed for another
+  country is a file at its own prefix, in its own units and day, which
+  `Region.gauges` points at. A gauge id is the one rule `isValidGaugeId`,
+  letters and digits, so a provider prefix fits. The fields are additive
+  and a file without them reads as metres, ML/d and 600, so the format stays
+  version 1 and the feed in the field is read unchanged. A file whose units
+  no formatter knows is refused, not printed in the wrong ones. No fetcher
+  for a second provider is built; no `provider` field, since the id's prefix
+  and `attribution` already say whose reading it is. Guards:
+  `shared/src/gauges.test.ts` ("a feed that is not New South Wales's"),
+  `topo/tests/test_gauges.py` ("the feed states the units and day it is cut
+  in"). Everything else above stands.
 
 ## Consequences
 
@@ -108,5 +124,8 @@ service.**
 - **History from WaterNSW.** Its Hourly and Instantaneous data reach back 168
   hours only; BoM serves the daily series since the 1970s under CC BY with no
   key.
+- **A `provider` field and a unit conversion in the clients (for the update
+  above).** Nothing would read the field, and a converted number is not the
+  one the provider published.
 - **The nearest gauge chosen automatically.** It gives a confident answer
   about the wrong river; a person picks, from a list.
