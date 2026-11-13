@@ -70,6 +70,8 @@ Needed before the first release tag.
      `mobile-release-branches` ruleset lets deploy keys push
      `release/mobile-v*`, so this must stay the repository's only deploy key
      with write access. Delete the local files once both are set.
+8. **Account deletion URL:** in the Play Console Data safety form, enter
+   `https://logjamnsw.com/delete-account.html` (`frontend/public/delete-account.html`).
 
 Submissions go to the internal track as a **draft**
 (`submit.production.android` in `mobile/eas.json`): a draft is accepted even
