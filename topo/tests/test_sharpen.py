@@ -795,5 +795,59 @@ class TestContourArchive(unittest.TestCase):
             self.assertEqual(os.listdir(tmp), [])
 
 
+class TestDiskFull(unittest.TestCase):
+    """A failure on a full disk reads as "too big".
+
+    Mutation that turns it red: remove the too_big_if_disk_full line from
+    sharpen(), invert its free-space comparison (`<` to `>=`), or remove its
+    errno check."""
+
+    def _sharpen_failing(self, free, failure=None):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        usage = SimpleNamespace(free=free)
+        with tempfile.TemporaryDirectory() as out:
+            args = SimpleNamespace(out=out, zip="x.zip", workers=1)
+            with (
+                mock.patch.object(
+                    sharpen_module.pipeline,
+                    "extract_elvis_zip",
+                    side_effect=failure
+                    or RuntimeError("pdal wrote nothing to secret.laz"),
+                ),
+                mock.patch.object(
+                    sharpen_module.shutil, "disk_usage", return_value=usage
+                ),
+            ):
+                sharpen_module.sharpen(args)
+
+    def test_a_full_disk_is_too_big(self):
+        with self.assertRaises(sharpen_module.CannotSharpen) as raised:
+            self._sharpen_failing(free=0)
+        self.assertEqual(str(raised.exception), sharpen_module.TOO_BIG)
+
+    def test_enospc_is_too_big_whatever_the_free_space_reads(self):
+        # The space can be given back as the failure unwinds.
+        with self.assertRaises(sharpen_module.CannotSharpen) as raised:
+            self._sharpen_failing(
+                free=10**12,
+                failure=OSError(sharpen_module.errno.ENOSPC, "No space left"),
+            )
+        self.assertEqual(str(raised.exception), sharpen_module.TOO_BIG)
+
+    def test_another_oserror_with_room_left_is_untouched(self):
+        with self.assertRaises(OSError) as raised:
+            self._sharpen_failing(
+                free=10**12,
+                failure=OSError(sharpen_module.errno.EACCES, "Permission denied"),
+            )
+        self.assertEqual(raised.exception.errno, sharpen_module.errno.EACCES)
+
+    def test_a_failure_with_room_left_is_untouched(self):
+        with self.assertRaises(RuntimeError):
+            self._sharpen_failing(free=sharpen_module.DISK_FULL_BYTES)
+
+
 if __name__ == "__main__":
     unittest.main()
