@@ -12,19 +12,13 @@ import {
   MAX_WIDTH_PX,
   MIN_WIDTH_PX,
   REVEAL_BANDS,
-  SNAP_LINE_LAYER,
-  SNAP_SOURCE,
   UPSTREAM_LINE_LAYERS,
   UPSTREAM_SOURCE,
-  clearSnap,
   clearUpstream,
-  paintFlowNetwork,
   paintReveal,
   revealOpacity,
   revealUpstream,
-  showSnap,
   showUpstream,
-  snapData,
   upstreamCasingLayer,
   upstreamLineLayer,
   upstreamLineWidth,
@@ -32,6 +26,7 @@ import {
   upstreamReveal,
   upstreamSize,
 } from "./flowNetworkLayers";
+import { FLOW_NETWORK_FLOOR, TOPO_CEILING } from "./layerOrder";
 
 /** As much of MapLibre's style bookkeeping as these functions touch. */
 function fakeMap(existingLayers: string[] = []) {
@@ -282,59 +277,18 @@ describe("the creeks upstream on the map", () => {
     clearUpstream(map);
   });
 
-  it("draws under the place pins, so a pin on a creek stays pressable", () => {
-    const map = fakeMap(["place-highlight"]);
+  // Mutation: anchor on the place pins (or on nothing), and the creeks draw
+  // over the user's own tracks and routes; rename the lowest layer without
+  // `FLOW_NETWORK_FLOOR`, and a topo layer turned on later lands over them.
+  it("draws over the topo band and under every track, route and pin", () => {
+    const map = fakeMap([TOPO_CEILING]);
     showUpstream(map, upstream);
-    for (const layer of map.layers.slice(1))
-      expect(layer.before).toBe("place-highlight");
-  });
-});
-
-describe("the line to the creek point a catchment was measured at", () => {
-  const from = { longitude: 150.3001, latitude: -33.6001 };
-  const creek = { longitude: 150.3, latitude: -33.6 };
-
-  // Mutation: draw the line from the creek point to itself, and a snap to the
-  // wrong creek looks the same as a snap to the right one.
-  it("joins the press to the creek point", () => {
-    expect(snapData(from, creek).features.map((f) => f.geometry)).toEqual([
-      {
-        type: "LineString",
-        coordinates: [
-          [150.3001, -33.6001],
-          [150.3, -33.6],
-        ],
-      },
-    ]);
-  });
-
-  it("is dashed, credited, and gone with the panel", () => {
-    const map = fakeMap();
-    showSnap(map, from, creek, "#abc");
-    expect(map.sources.get(SNAP_SOURCE)?.attribution).toBe(
-      NSW_REGION.terrain.heights.creditHtml,
-    );
-    expect(map.getLayer(SNAP_LINE_LAYER)).toMatchObject({
-      paint: { "line-dasharray": [2, 2] },
-    });
-    clearSnap(map);
-    expect(map.sources.size).toBe(0);
-    expect(map.layers).toEqual([]);
-  });
-
-  it("follows the scheme's accent; the water does not", () => {
-    const map = fakeMap();
-    showSnap(map, from, creek, "#abc");
-    showUpstream(map, upstream);
-    const water = map.getLayer(upstreamLineLayer(0))!.paint["line-color"];
-    paintFlowNetwork(map, "#123456");
-    expect(map.getLayer(SNAP_LINE_LAYER)!.paint).toMatchObject({
-      "line-color": "#123456",
-    });
-    expect(map.getLayer(upstreamLineLayer(0))!.paint["line-color"]).toEqual(
-      water,
-    );
-    // Nothing drawn: nothing to repaint, and no error.
-    paintFlowNetwork(fakeMap(), "#123456");
+    const added = map.layers.slice(1);
+    for (const layer of added) expect(layer.before).toBe(TOPO_CEILING);
+    // Each goes in just under the ceiling, so the first added is the lowest.
+    expect(added[0].id).toBe(FLOW_NETWORK_FLOOR[0]);
+    // With no outline, the farthest band's casing is the lowest.
+    expect(added[2].id).toBe(FLOW_NETWORK_FLOOR[1]);
+    expect(upstreamCasingLayer(REVEAL_BANDS - 1)).toBe(FLOW_NETWORK_FLOOR[1]);
   });
 });

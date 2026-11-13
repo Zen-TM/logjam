@@ -1,7 +1,6 @@
 // What Logjam Web draws on the map from the flow network lookup
-// (shared/src/flowNetwork.ts): the dashed line from a press to the creek point
-// a "What is here?" was measured at, and the creeks upstream of it once the
-// user asks for them, over a wash of the land that drains to it.
+// (shared/src/flowNetwork.ts): the creeks upstream of a point once the user
+// asks for them, over a wash of the land that drains to it.
 //
 // Each source is added when its figure is shown and removed when it goes,
 // rather than left empty from load: MapLibre lists a source's credit whenever
@@ -17,17 +16,25 @@ import {
   MAP_INK,
   NSW_REGION,
   catchmentOutline,
+  routeLengthM,
   type FlowNetworkSegmentFeature,
   type FlowNetworkUpstream,
-  type MapPointCoord,
 } from "@logjam/shared";
+import { TOPO_CEILING } from "./layerOrder";
 
 export const UPSTREAM_SOURCE = "flow-upstream";
 export const CATCHMENT_SOURCE = "flow-catchment";
 export const CATCHMENT_FILL_LAYER = "flow-catchment-fill";
 export const CATCHMENT_EDGE_LAYER = "flow-catchment-edge";
-export const SNAP_SOURCE = "flow-snap";
-export const SNAP_LINE_LAYER = "flow-snap-line";
+
+/**
+ * How solid each part is once drawn in; the draw-in fades up to these.
+ * Named here so they can be tuned by eye.
+ */
+export const LINE_OPACITY = 1;
+export const CASING_OPACITY = 1;
+export const FILL_OPACITY = 0.14;
+export const EDGE_OPACITY = 0.5;
 
 /**
  * The creeks are drawn in this many bands by how far upstream of the press
@@ -45,9 +52,6 @@ export const upstreamCasingLayer = (band: number) =>
 export const upstreamLineLayer = (band: number) => `flow-upstream-line-${band}`;
 /** Every layer a pointer over a creek can hit. */
 export const UPSTREAM_LINE_LAYERS = bands.map(upstreamLineLayer);
-
-/** Drawn under the place pins, so a pin on a creek stays pressable. */
-const UNDER_LAYER = "place-highlight";
 
 type OverlayMap = Pick<
   MapLibreMap,
@@ -109,7 +113,9 @@ export function upstreamReveal(
     const first = feature.geometry.coordinates[0];
     if (first) byStart.set(key(first), index);
   });
-  const length = features.map((feature) => lineLengthM(feature));
+  const length = features.map((feature) =>
+    routeLengthM(feature.geometry.coordinates),
+  );
   const feeding: number[][] = features.map(() => []);
   const outlets: number[] = [];
   features.forEach((feature, index) => {
@@ -140,18 +146,6 @@ export function upstreamReveal(
   return distance.map((each) =>
     Number.isNaN(each) ? 1 : farthest === 0 ? 0 : each / farthest,
   );
-}
-
-function lineLengthM(feature: FlowNetworkSegmentFeature): number {
-  const coordinates = feature.geometry.coordinates;
-  let metres = 0;
-  for (let k = 1; k < coordinates.length; k++) {
-    const [ax, ay] = coordinates[k - 1];
-    const [bx, by] = coordinates[k];
-    const kx = 111_320 * Math.cos((((ay + by) / 2) * Math.PI) / 180);
-    metres += Math.hypot((bx - ax) * kx, (by - ay) * 110_574);
-  }
-  return metres;
 }
 
 /** The API's lines, each carrying how it is drawn and when it appears. */
@@ -198,29 +192,6 @@ export function revealOpacity(band: number, progress: number): number {
   return Math.min(1, Math.max(0, (progress - start) / fade));
 }
 
-/** The dashed line from where the user pressed to the creek point measured. */
-export function snapData(
-  from: MapPointCoord,
-  to: MapPointCoord,
-): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [from.longitude, from.latitude],
-            [to.longitude, to.latitude],
-          ],
-        },
-        properties: {},
-      },
-    ],
-  };
-}
-
 function geojson(data: GeoJSON.GeoJSON): GeoJSONSourceSpecification {
   return {
     type: "geojson",
@@ -257,9 +228,6 @@ function zoomed(width: ExpressionSpecification): ExpressionSpecification {
   ];
 }
 
-const FILL_OPACITY = 0.08;
-const EDGE_OPACITY = 0.5;
-
 /**
  * Draws the creeks upstream, hidden, ready for `revealUpstream`. Colour runs
  * from `waterSmall` to `waterLarge` by each creek's size; a light casing under
@@ -275,7 +243,9 @@ export function showUpstream(
   clickedKm2?: number,
 ) {
   clearUpstream(map);
-  const before = map.getLayer(UNDER_LAYER) ? UNDER_LAYER : undefined;
+  // Over the contours, under the user's own tracks, routes and pins
+  // (`FLOW_NETWORK_FLOOR`).
+  const before = map.getLayer(TOPO_CEILING) ? TOPO_CEILING : undefined;
   const outline = catchmentOutline(
     upstream.lines.features.map((feature) => feature.geometry.coordinates),
     { reachCells: upstream.trimmedBelowOrder != null ? 3.5 : 2 },
@@ -372,11 +342,15 @@ export function paintReveal(map: OverlayMap, progress: number) {
   for (const band of bands) {
     const opacity = revealOpacity(band, progress);
     if (map.getLayer(upstreamLineLayer(band))) {
-      map.setPaintProperty(upstreamLineLayer(band), "line-opacity", opacity);
+      map.setPaintProperty(
+        upstreamLineLayer(band),
+        "line-opacity",
+        LINE_OPACITY * opacity,
+      );
       map.setPaintProperty(
         upstreamCasingLayer(band),
         "line-opacity",
-        0.85 * opacity,
+        CASING_OPACITY * opacity,
       );
     }
   }
@@ -423,42 +397,4 @@ export function revealUpstream(
     cancelAnimationFrame(frame);
     if (map.getLayer(upstreamLineLayer(0))) paintReveal(map, 1);
   };
-}
-
-export function clearSnap(map: OverlayMap) {
-  remove(map, SNAP_SOURCE, [SNAP_LINE_LAYER]);
-}
-
-/**
- * The dashed line from the press to the creek point a catchment was measured
- * at: a click rarely lands on a creek, and a snap to the wrong one should be
- * plain to see. The creek point itself is a marker (`CreekPointMarker`).
- */
-export function showSnap(
-  map: OverlayMap,
-  from: MapPointCoord,
-  to: MapPointCoord,
-  accent: string,
-) {
-  clearSnap(map);
-  map.addSource(SNAP_SOURCE, geojson(snapData(from, to)));
-  map.addLayer({
-    id: SNAP_LINE_LAYER,
-    type: "line",
-    source: SNAP_SOURCE,
-    paint: {
-      "line-color": accent,
-      "line-width": 2,
-      "line-dasharray": [2, 2],
-    },
-  });
-}
-
-/**
- * A scheme change repaints whatever of these follows the scheme: only the
- * dashed line, which joins the scheme's own dot. The water is `MAP_INK`.
- */
-export function paintFlowNetwork(map: OverlayMap, accent: string) {
-  if (map.getLayer(SNAP_LINE_LAYER))
-    map.setPaintProperty(SNAP_LINE_LAYER, "line-color", accent);
 }
