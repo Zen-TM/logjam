@@ -55,7 +55,9 @@ Limits:
   `api.logjamnsw.com`, which no longer answers, and that API's environment
   names the old domain for its map files and email links. The Rollback
   workflow refuses a frontend release whose page was built for another API
-  address than `PROD_API_URL`.
+  address than `PROD_API_URL`, the repository variable declared in
+  `infra/terraform/envs/github/variables.tf`; by hand, step 1 below is the
+  same check.
 - **Worker shas:** a worker image exists only for commits that changed `topo/`.
   The sha to roll back to is the tag the task definition carried before.
 - **The next deploy undoes a rollback.** The next green push to `main`
@@ -197,6 +199,9 @@ aws s3 cp "s3://$BUCKET/releases/$SHA/files.txt" /tmp/files.txt
 # in one order; a locale sort reports files missing that are there.
 aws s3api list-objects-v2 --bucket "$BUCKET" --output json | jq -r '.Contents[].Key' | LC_ALL=C sort > /tmp/present.txt
 LC_ALL=C sort /tmp/files.txt | LC_ALL=C comm -23 - /tmp/present.txt   # must print nothing
+# Its page must have been built for the API address in use, or it will load
+# and then fail every call. Must print a line:
+aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" - | grep -oF "connect-src 'self' https://api.logjam.earth "
 
 # 2. Put its index.html back. REPLACE drops the source's headers, so restate them.
 aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "s3://$BUCKET/index.html" \

@@ -97,6 +97,30 @@ describe("CSP worker-src", () => {
   });
 });
 
+// The deployed bundle calls PROD_API_URL (deploy-frontend.yml bakes it in as
+// VITE_API_URL), and CSP_PROD is written by hand, so the two could part: the
+// page would then block its own API calls in production only. The Rollback
+// workflow also reads a release's API address off this directive.
+//
+// Mutation that turns it red: change the API origin in CSP_PROD's connect-src
+// or PROD_API_URL in infra/terraform/envs/github/variables.tf, but not both.
+describe("CSP connect-src and the deployed API address", () => {
+  it("lists PROD_API_URL straight after 'self'", () => {
+    const declared = fs
+      .readFileSync(
+        new URL(
+          "../../infra/terraform/envs/github/variables.tf",
+          import.meta.url,
+        ),
+        "utf8",
+      )
+      .match(/PROD_API_URL\s*=\s*"([^"]+)"/)?.[1];
+    expect(declared, "PROD_API_URL not found in variables.tf").toBeTruthy();
+    // The exact text rollback.yml greps a release's page for.
+    expect(CSP_PROD).toContain(`connect-src 'self' ${declared} `);
+  });
+});
+
 // The origins the code names against CSP_PROD. A host the code fetches from
 // but CSP_PROD lacks is blocked in a production build and nowhere else: the
 // dev server sets no CSP. So every https host in non-test source in this

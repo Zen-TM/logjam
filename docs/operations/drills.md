@@ -62,7 +62,9 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       `logjam-fire-history` and `logjam-coverage` carry the
       chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
-      with no ECR image (or no `releases/<sha>/`) fails before any swap.
+      with no ECR image (or no `releases/<sha>/`) fails before any swap; a
+      frontend sha from before the move to `logjam.earth` fails as built for
+      another API address.
 - [ ] **Refused while a deploy is busy:** a rollback dispatched while a
       deploy of the same target is queued or running fails its preflight job
       and changes nothing. A deploy that starts while a rollback runs waits
