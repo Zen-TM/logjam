@@ -321,7 +321,7 @@ async function failReapedTopoJob(
   return claim;
 }
 
-// A browser PUT of even the 25 GB cap finishes well inside a day; an
+// A browser PUT of even the 15 GB cap finishes well inside a day; an
 // `uploading` row older than this was abandoned (tab closed, network lost).
 const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
 
