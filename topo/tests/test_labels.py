@@ -9,26 +9,19 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    from PIL import Image, ImageDraw, ImageFont  # noqa: E402
-    from pipeline import (  # noqa: E402
-        LABEL_MIN_GAP_PX,
-        TILE_SIZE,
-        _point_at_distance,
-        declutter_labels,
-        label_font_size,
-        line_label_anchors,
-        lonlat_to_world_px,
-        tile_label_box,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+from PIL import Image, ImageDraw, ImageFont  # noqa: E402
+from pipeline import (  # noqa: E402
+    LABEL_MIN_GAP_PX,
+    TILE_SIZE,
+    _point_at_distance,
+    declutter_labels,
+    label_font_size,
+    line_label_anchors,
+    lonlat_to_world_px,
+    tile_label_box,
+)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestPointAtDistance(unittest.TestCase):
     def test_endpoints(self):
         pts = [(0.0, 0.0), (10.0, 0.0)]
@@ -48,7 +41,6 @@ class TestPointAtDistance(unittest.TestCase):
         self.assertEqual(_point_at_distance(pts, seg, 5.0), (5.0, 0.0))
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestLineLabelAnchors(unittest.TestCase):
     def test_too_few_points(self):
         self.assertEqual(line_label_anchors([(150.0, -33.0)], 16, 100), [])
@@ -82,7 +74,6 @@ class TestLineLabelAnchors(unittest.TestCase):
         self.assertEqual(line_label_anchors(coords, 16, 100), [])
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestLabelFontSize(unittest.TestCase):
     def test_known_endpoints(self):
         # Baked tiles bump the 9→12px web ramp by EXPORT_LABEL_BASE_SCALE (3×).
@@ -108,7 +99,6 @@ class TestLabelFontSize(unittest.TestCase):
         self.assertGreaterEqual(label_font_size(14, 0.01), 1)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestTileLabelBox(unittest.TestCase):
     def setUp(self):
         self.img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE))
@@ -139,7 +129,6 @@ class TestTileLabelBox(unittest.TestCase):
         self.assertIsNone(tile_label_box(self.draw, (wx, wy), 3, 3, "X", self.font))
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestDeclutterLabels(unittest.TestCase):
     def test_overlapping_lower_priority_dropped(self):
         # Two boxes whose grown rects overlap; the first (higher priority) wins.
