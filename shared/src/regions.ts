@@ -336,8 +336,10 @@ export const REGIONS: readonly Region[] = simRegionsOn()
 
 /**
  * What answers outside every region: no border, so never in `REGIONS` and
- * never returned by `regionAt`. It declares nothing in prod; switching the
- * worldwide tier on is setting `vector` and `terrain` here and releasing.
+ * never returned by `regionAt`. It declares nothing in prod. The map's layers
+ * read this entry; the height sampler does not yet, because `DEM_SOURCES` is
+ * built from `REGIONS` alone. Switching the worldwide tier on means setting
+ * `vector` and `terrain` here and also adding its heights to `DEM_SOURCES`.
  */
 const EMPTY_WORLD: Region = {
   id: "world",

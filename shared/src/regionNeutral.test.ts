@@ -1,8 +1,9 @@
 // Nothing outside the region declaration names NSW's region, fire or coverage
 // constants, so a second region cannot be silently answered with NSW's data.
-// A file that still does is listed below with the work that clears it; each
-// slice that makes a file region-neutral deletes its line, and a line whose
-// file no longer names one fails here, so the list only shrinks.
+// A file that still does is listed below. The test keeps the list exact: a
+// file that names one without a line fails, and so does a line for a file that
+// no longer does, so a new entry is an added line a reviewer sees. Each change
+// that makes a file region-neutral deletes its line.
 //
 // Mutation that turns it red: add `NSW_REGION.view` to any new source file, or
 // leave a file in the list after it stopped naming a constant.

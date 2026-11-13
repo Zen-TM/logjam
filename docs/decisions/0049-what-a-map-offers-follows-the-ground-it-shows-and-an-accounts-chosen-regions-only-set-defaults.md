@@ -46,7 +46,8 @@ what is offered at a location.**
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
-  which only shrinks. No test yet fails on code that gates an offer by the
+  and on a listed file that no longer does; a new entry is an added line a
+  reviewer sees. No test yet fails on code that gates an offer by the
   chosen regions: `offeredBasemaps(regionIds)` still does, until the gallery
   reads the view.
 
