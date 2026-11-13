@@ -93,7 +93,9 @@ An accepted ADR changes in three ways only:
   it now covers. It leaves the rule's own text in force, which is why it is a
   bullet and not a new ADR. It is a bullet even when another ADR carries the
   reason; the bullet then links that ADR. An addition already marked in place
-  stays as it is.
+  stays as it is. Whatever the bullet is for, each earlier line it makes
+  false also takes the stale-fact mark, so a reader who lands there first is
+  not misled.
 
 Leave the title, status and index row alone. If the change would alter what
 the decision chooses, or a reader would need both texts to know the rule,
