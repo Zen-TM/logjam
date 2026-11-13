@@ -57,6 +57,8 @@ describe("vegetationTaskMemoryMiB", () => {
     }
   });
 
+  // Mutation: keep nothing back for the worker (RESERVE_BYTES = 0), and a ZIP
+  // the pass would decline in 16 GiB is launched in it.
   it("asks for the next size once the estimate passes the last", () => {
     // 4 km² a tile: 60 bytes a m² is 240 MB a tile, plus 0.5 GiB and 1 GiB
     // kept back; 16 GiB holds 64 tiles and 32 GiB holds 136.
@@ -66,6 +68,8 @@ describe("vegetationTaskMemoryMiB", () => {
     expect(vegetationTaskMemoryMiB(ticked, 137)).toBe(61440);
   });
 
+  // Mutation: fall back to the smallest size when none fits, and the largest
+  // areas get no larger task.
   it("asks for the most when nothing fits, so the pass declines it", () => {
     expect(vegetationTaskMemoryMiB(ticked, 10_000)).toBe(61440);
   });

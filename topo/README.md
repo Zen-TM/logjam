@@ -78,23 +78,20 @@ A ZIP with no point clouds writes nothing.
 
 ### Memory
 
-The pass holds whole-area arrays, so its memory grows with the ground it covers:
-about 0.22 GiB plus 50 bytes per square metre, measured at 976 MiB on a 16 km²
-area and 407 MiB on one 4 km² tile. `worker_common.py` declares 60 bytes and
-0.5 GiB, which sit above both. Before gridding, the pass boxes its point
-clouds (one box per coordinate system, their areas added), and if that estimate
-is more than the memory the container has left it exits with code 3
-(`VEGETATION_LEFT_OUT_EXIT`) within seconds, writing no layer. A `MemoryError`
-exits the same way, and `worker.py` reads that code, or a kill (-9), as "leave
-the layer out": the job still completes with its height, slope and contour
-archives, records `vegetationLeftOut` in its `sharpen` result, and its
-completion notification and email say the area was too large. Any other failure
-of the pass fails the job.
+The pass holds whole-area arrays, so its memory grows with the ground it covers.
+Before gridding it estimates that from the area its point clouds span, and if
+the estimate is more than the memory the container has left it exits with a
+declared code within seconds and writes no layer. A `MemoryError` exits the
+same way. `worker.py` reads that code, or a kill (-9), as "leave the layer
+out": the job still completes with its height, slope and contour archives,
+records `vegetationLeftOut` in its `sharpen` result, and its completion
+notification and email say the area was too large. Any other failure of the
+pass fails the job. The estimate's numbers, with their measurements, and the
+exit code are in `worker_common.py`.
 
-The API launches a ticked job with more memory when the ZIP needs it
-(`api/src/lib/vegetationMemory.ts`): the task definition's 16 GiB, else 32 GiB,
-else 60 GiB, from the ZIP's point-cloud count at 4 km² a tile. Credits are
-vCPU-minutes of wall time and do not change with the size.
+The API launches a ticked job with a larger task when the ZIP's point-cloud count
+needs it, sized from the same numbers (`api/src/lib/vegetationMemory.ts` has the
+sizes). Credits are vCPU-minutes of wall time and do not change with the size.
 
 ---
 
@@ -534,7 +531,7 @@ Install PDAL: `sudo apt-get install pdal`
 Reduce the number of LAZ files processed at once, or increase the Docker memory
 limit in `docker-compose.yml`.
 
-**`pipeline.py` exits with code 3**
+**`pipeline.py` exits with its left-out code (`worker_common.py`)**
 The area is too large for the memory the container has, so the vegetation layer
 was left out ([Memory](#memory)). Give the container more memory, or use a
 smaller area.

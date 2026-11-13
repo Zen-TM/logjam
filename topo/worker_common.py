@@ -37,7 +37,9 @@ VEGETATION_BASE_BYTES = 512 * 1024**2
 
 # How `pipeline.py` says it can't fit the area (it refuses in advance, or runs
 # out of memory anyway), and the worker then finishes the job without the
-# vegetation layer. Guard: tests/test_worker_helpers.py `TestProcessSharpen`.
+# vegetation layer. Guards: tests/test_worker_helpers.py `TestVegetationExit`
+# (the worker reads it) and tests/test_pipeline_build.py `TestLeaveOutIfTooBig`
+# (the pass exits with it).
 VEGETATION_LEFT_OUT_EXIT = 3
 
 # What the owner reads when the layer was left out, in the completion

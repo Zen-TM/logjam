@@ -109,6 +109,8 @@ describe("POST /topo-jobs/:id/start sizes the task", () => {
     expect((await started(3, TICKED)).memoryMiB).toBeUndefined();
   });
 
+  // Mutation: drop `lazCount > 0` from `sharpenMark` and size from
+  // `(lazCount || 100)` tiles, and a ZIP with no point clouds gets a larger task.
   it("launches a ZIP with no point clouds as the definition says", async () => {
     expect((await started(0, TICKED)).memoryMiB).toBeUndefined();
   });
