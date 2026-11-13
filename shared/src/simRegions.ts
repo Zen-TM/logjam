@@ -4,9 +4,9 @@
 // includes them only where `simRegionsOn()` (regions.ts) says so; a unit test
 // passes `SIM_REGIONS` as `regions` instead.
 //
-// Every box, id, path, zoom and credit here is a placeholder: the terrain
-// branch's data build (`regions/terrain`, slice T9a, simulated-region archives)
-// sets the real values, and the archive paths follow `master/<kind>/<id>-…`.
+// Every box, id, path, zoom and credit here is a placeholder until the
+// simulated-region archives are built, which sets the real values; the archive
+// paths follow `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
 import type { Region, RegionTerrain, Ring } from "./regions.js";
 

@@ -297,12 +297,14 @@ describe("regionTouchesBox", () => {
   });
 
   // Mutation: take min for east, and the geocoder's view box is empty.
-  it("bounds the border", () => {
+  it("bounds the border, and refuses a region with none", () => {
     const { west, south, east, north } = regionBounds(NSW_REGION);
     expect(west).toBeLessThan(141);
     expect(east).toBeGreaterThan(153.6);
     expect(south).toBeLessThan(-37.5);
     expect(north).toBeGreaterThan(-28.2);
+    // Mutation: drop the empty check, and the geocoder's box is +/-Infinity.
+    expect(() => regionBounds(WORLD)).toThrow(/no border/);
   });
 });
 

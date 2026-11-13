@@ -82,7 +82,7 @@ describe("files that name NSW's region constants", () => {
     );
     expect(
       unlisted,
-      "Read the region in view (regionInView, layerIn) instead of NSW's constants",
+      "Read the region in view (regionInView, layerIn) instead of NSW's constants: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
     ).toEqual([]);
   });
 

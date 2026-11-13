@@ -76,8 +76,10 @@ export type RegionTerrain = {
 
 export type Region = {
   /**
-   * Stored in `uiPreferences.regions`: never change one (regions.test.ts).
-   * Lower-case letters and digits only: a map's layer ids are `${id}${layer}`.
+   * Stored in `uiPreferences.regions`: never change one. Lower-case letters
+   * and digits only: a map's layer ids are `${id}${layer}`. Guards:
+   * `regions.test.ts` ("keeps NSW's stored ids and paths", "keeps each id to
+   * lower-case letters and digits").
    */
   id: string;
   /** What user copy calls it: "That area is outside NSW". */
@@ -197,8 +199,8 @@ export const NSW_REGION = {
   // The vector basemap is the region's own extract of OpenStreetMap.
   basemaps: ["protomaps", "six-topo", "six-base", "six-imagery"],
   defaultBasemap: "six-topo",
-  // The catalogue entry "protomaps" still names this file until the vector
-  // basemap reads the region (geoPdfBaseLayers.ts).
+  // The catalogue entry "protomaps" (geoPdfBaseLayers.ts) reads this path and
+  // zoom from here.
   vector: { archivePath: "master/basemap/protomaps-nsw.pmtiles", maxzoom: 15 },
   dem: [NSW_HEIGHTS],
   terrain: {
@@ -316,8 +318,10 @@ export const NSW_REGION = {
 
 /**
  * Whether the simulated regions (simRegions.ts) are declared. A module-load
- * read: `DEM_SOURCES` and the clients' entry tables are computed at load, so
- * each runtime sets the flag before anything imports shared.
+ * read: `DEM_SOURCES` and the clients' entry tables are computed at load, so a
+ * runtime that wants them sets the flag before shared loads. Guard:
+ * `regions.test.ts` ("puts the simulated regions and their world in the
+ * declaration at load").
  */
 export function simRegionsOn(): boolean {
   return (
@@ -404,9 +408,14 @@ export type LonLatBox = {
   north: number;
 };
 
-/** The box around a region's borders; the region must have some (not `WORLD`). */
+/**
+ * The box around a region's borders. Throws for a region with none (`WORLD`),
+ * which has no box. Guard: `regions.test.ts` ("bounds the border").
+ */
 export function regionBounds(region: Region): LonLatBox {
   const points = region.borders.flat();
+  if (points.length === 0)
+    throw new Error(`Region ${region.id} has no border to bound`);
   const lons = points.map(([lon]) => lon);
   const lats = points.map(([, lat]) => lat);
   return {

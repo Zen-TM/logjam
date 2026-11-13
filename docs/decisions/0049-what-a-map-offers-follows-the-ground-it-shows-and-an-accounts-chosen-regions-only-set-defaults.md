@@ -8,11 +8,12 @@
 
 `shared/src/regions.ts` declares NSW as a region and was written for a second:
 its header said "Choosing regions controls what Logjam offers (the basemaps a
-gallery lists, the canyon-list import, the layer switches)". That is what
-#847 and #850 built: `offeredBasemaps(regionIds)` in
+gallery lists, the canyon-list import, the layer switches)". #847 declared NSW
+as a region; #849 built the choice: `offeredBasemaps(regionIds)` in
 `shared/src/geoPdfBaseLayers.ts` lists the basemaps of the regions an account
 chose (`uiPreferences.regions`), and the region step and Settings section
-offer the choice once there is more than one region.
+offer the choice once there is more than one region. #850 added the
+canyon-list offers for each chosen region.
 
 Gating by the choice breaks for a traveller. Someone who chose NSW and pans to
 New Zealand sees no New Zealand basemap and no New Zealand terrain layers,
@@ -39,6 +40,9 @@ what is offered at a location.**
   `regionsTouching(box)`, not one.
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.
+- **The declaration's shape.** A region's border is a list of rings; the
+  worldwide entry `WORLD` sits outside `REGIONS`; and a map draws one region
+  at a time.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
@@ -65,7 +69,7 @@ what is offered at a location.**
 
 ## Alternatives considered
 
-- **Offers gated by the chosen regions** (#847, #850). The obvious reading of
+- **Offers gated by the chosen regions** (#849, #850). The obvious reading of
   "choosing regions" and what the code did. Rejected: the traveller case
   above, and an account must change a setting to see data Logjam already
   holds for the place on screen. It keeps one place to look for what an account
