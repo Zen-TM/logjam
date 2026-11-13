@@ -251,7 +251,7 @@ step says why.
 
    ```sh
    aws s3 cp s3://logjam-brain-signals-620853681701/release.json - | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
-   curl -s https://api.logjamnsw.com/meta | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+   curl -s https://api.logjam.earth/meta | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
    ```
 
    The two lines must be the same commit (the second answers once the API is

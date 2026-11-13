@@ -34,8 +34,8 @@
 # A prod-pointed field APK is the same script with the EXPO_PUBLIC_* values
 # overridden in the shell, which Expo prefers to `.env`:
 #   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=oidc \
-#   EXPO_PUBLIC_API_URL=https://api.logjamnsw.com \
-#   EXPO_PUBLIC_WEB_URL=https://logjamnsw.com \
+#   EXPO_PUBLIC_API_URL=https://api.logjam.earth \
+#   EXPO_PUBLIC_WEB_URL=https://logjam.earth \
 #   EXPO_PUBLIC_OIDC_ISSUER=... EXPO_PUBLIC_OIDC_CLIENT_ID=... \
 #   ./scripts/build-local-apk.sh
 # The issuer and client id can come from `.env` instead.

@@ -125,7 +125,7 @@ const NOT_FETCHED: Record<string, string> = {
   "protomaps.com": "credit link",
   "open-meteo.com": "credit link; the forecast itself is api.open-meteo.com",
   "ozultimate.com": "a link out to a track note page",
-  "logjamnsw.com": "Logjam's own address in a User-Agent the API sends",
+  "logjam.earth": "Logjam's own address in a User-Agent the API sends",
   "example.test": "an example host in a doc comment or fixture",
   "example.com": "an example host in a doc comment or fixture",
 };

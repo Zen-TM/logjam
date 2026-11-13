@@ -62,7 +62,7 @@ Limits:
 
 ## Finding the sha to roll back to
 
-- **API:** the live sha is `curl -s https://api.logjamnsw.com/meta | jq -r .sha`
+- **API:** the live sha is `curl -s https://api.logjam.earth/meta | jq -r .sha`
   (`null` for a release built before `/meta` reported one). The previous
   release is the one named in the last green **Deploy API** run's log (its
   guard job's "What is live?" step), or the commit before the bad one on `main`
@@ -99,9 +99,9 @@ cancelled run is grey, not red.
 
 `deploy-api.yml` and `deploy-frontend.yml` run a smoke test after deploying:
 
-- API: `https://api.logjamnsw.com/health` answers and `/meta` reports the
+- API: `https://api.logjam.earth/health` answers and `/meta` reports the
   deployed sha (for up to 5 minutes).
-- Frontend: `https://logjamnsw.com/` serves the deployed release's
+- Frontend: `https://logjam.earth/` serves the deployed release's
   `index.html`, and the entry script it names loads.
 
 If the smoke test fails, the deploy calls the Rollback workflow for the
@@ -171,8 +171,8 @@ aws s3 cp /tmp/release.json "s3://$SIGNALS/release.json" --content-type applicat
 # 4. Wait for the brain: its release agent acts within 30 seconds, then pulls
 #    the image if the host does not have it (a minute or two). Check, over and
 #    over, until /meta names $SHA.
-curl -s https://api.logjamnsw.com/health
-curl -s https://api.logjamnsw.com/meta | jq -r .sha   # $SHA
+curl -s https://api.logjam.earth/health
+curl -s https://api.logjam.earth/meta | jq -r .sha   # $SHA
 ```
 
 If `/meta` still shows another sha after five minutes, read the brain's
@@ -203,7 +203,7 @@ ID=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
 aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$ID"
 
 # 4. Check: the two must be identical.
-diff <(curl -s https://logjamnsw.com/) <(curl -s "https://logjamnsw.com/releases/$SHA/index.html")
+diff <(curl -s https://logjam.earth/) <(curl -s "https://logjam.earth/releases/$SHA/index.html")
 ```
 
 ### Worker
