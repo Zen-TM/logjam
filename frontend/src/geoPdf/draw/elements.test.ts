@@ -117,6 +117,18 @@ describe("grid labels", () => {
     });
   }
 
+  // A northern zone's northing is negative south of the equator, and a margin
+  // prints no sign. Mutation: revert to the sign-keeping `%` and `Math.floor`,
+  // and -10 000 m draws "-1" then "-10".
+  it("draws a negative value as unsigned digits", () => {
+    const { ctx, ops } = recorder();
+    drawGridLabel(ctx, -10000, 10000, 5, 9, 10, 16);
+    expect(ops.filter((o) => o.op === "fill").map((o) => o.text)).toEqual([
+      "1",
+      "90",
+    ]);
+  });
+
   it("a label of several pieces strokes all of them before filling any", () => {
     for (const value of [312_000, 477_000]) {
       const { ctx, ops } = recorder();
@@ -172,8 +184,8 @@ describe("a sheet across a grid zone edge", () => {
 // A sheet near Sydney is 3 degrees west of MGA zone 56's meridian, so grid
 // north is east of true: as before. In Utah (UTM 13) the same offset west of
 // the meridian reads west, and south of the equator the sign flips back.
-// Mutation: take the zone from the wrong hemisphere or grid, or drop its
-// meridian, and a figure moves.
+// Mutation: take the zone from the wrong grid (always NSW's) and the Utah and
+// UTM 33 figures move.
 describe("the compass's grid north", () => {
   const gn = (extent: GeoPdfConfig["extent"]) => {
     const { ctx, ops } = recorder();

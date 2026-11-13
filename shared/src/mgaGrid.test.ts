@@ -49,25 +49,33 @@ describe("mgaGrid", () => {
   });
 
   // The overlay draws the grid of the ground at the view's centre, which is
-  // UTM outside NSW. Mutation: build only NSW's MGA zones and a view centred
-  // outside it has no lines.
+  // UTM outside NSW. A northern view tells UTM from MGA: MGA's zone 54 there
+  // is south of the equator on another meridian. Mutation: always build NSW's
+  // MGA zones and no line sits on a whole kilometre of UTM 12.
   it("draws UTM lines for a view centred outside NSW", () => {
-    // Around Melbourne (UTM 55 south).
-    const melbourne = {
-      west: 144.9,
-      south: -37.84,
-      east: 144.96,
-      north: -37.8,
-    };
-    const g = mgaGrid(melbourne, 14);
+    // Around Bryce Canyon, Utah (UTM 12 north).
+    const utah = { west: -112.2, south: 37.58, east: -112.14, north: 37.62 };
+    const g = mgaGrid(utah, 14);
     expect(g.features.length).toBeGreaterThan(8);
     for (const f of g.features) {
       const [lon, lat] = f.geometry.coordinates[0];
       const { easting, northing, zone } = toGridAt(lat, lon);
-      expect(zone.name).toBe("UTM 55");
+      expect(zone.name).toBe("UTM 12");
       const offStep = (m: number) => Math.abs(m / 1e3 - Math.round(m / 1e3));
       expect(Math.min(offStep(easting), offStep(northing))).toBeLessThan(1e-3);
     }
+  });
+
+  // Mutation: drop the copy shift in `mgaGrid`'s `at` and lines come back in
+  // [-180, 180], outside the view and its clip.
+  it("draws a UTM view in another world copy where the view is", () => {
+    const utah = { west: -112.2, south: 37.58, east: -112.14, north: 37.62 };
+    const copy = { ...utah, west: utah.west - 720, east: utah.east - 720 };
+    const g = mgaGrid(copy, 14);
+    expect(g.features.length).toBe(mgaGrid(utah, 14).features.length);
+    for (const f of g.features)
+      for (const [lon] of f.geometry.coordinates)
+        expect(lon).toBeLessThan(copy.east + 0.05);
   });
 
   // Mutation: filter the zones against the unshifted view and a view in
@@ -94,6 +102,23 @@ describe("mgaGrid", () => {
     expect(mgaGridLabel(6284000, 1000)).toBe("84");
     expect(mgaGridLabel(6284300, 100)).toBe("843");
     expect(mgaGridLabel(250000, 10000)).toBe("50");
+  });
+
+  // A northern zone's northing is negative south of the equator, and a margin
+  // prints no sign. Mutation: revert to the sign-keeping `%`, and -30 000 m
+  // reads "-30".
+  it("labels a negative northing with unsigned margin digits", () => {
+    expect(mgaGridLabel(-30000, 10000)).toBe("70");
+    expect(mgaGridLabel(-1000, 1000)).toBe("99");
+    expect(mgaGridLabel(-300, 100)).toBe("997");
+    expect(mgaGridLabel(-30000, 1000)).toBe("70");
+  });
+
+  // Mutation: the same `%` revert, and a line south of the equator has "-1".
+  it("labels every line of a view across the equator without a sign", () => {
+    const g = mgaGrid({ west: 12, south: -0.05, east: 12.05, north: 0.05 }, 14);
+    expect(g.features.length).toBeGreaterThan(8);
+    for (const f of g.features) expect(f.properties.text).toMatch(/^\d\d$/);
   });
 
   // Mutation: drop `text` from a line and the symbol layer drawing labels

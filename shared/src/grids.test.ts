@@ -83,6 +83,7 @@ describe("NSW's MGA zones", () => {
     expect(zone.centralMeridian).toBe(159);
   });
 
+  // Mutation: swap lat and lon in `fromGrid`'s return.
   it("round-trips lat/lon through easting and northing", () => {
     for (const [lat, lon, name] of [
       [-33.685, 150.315, "MGA 56"],
@@ -96,6 +97,7 @@ describe("NSW's MGA zones", () => {
     }
   });
 
+  // Mutation: drop `+south` from the MGA proj string.
   it("gives easting and northing in MGA's ranges", () => {
     const { easting, northing } = toGridAt(-33.685, 150.315);
     expect(easting).toBeGreaterThan(100000);
@@ -123,7 +125,9 @@ describe("NZTM2000", () => {
     expect(back.lon).toBeCloseTo(lon, 7);
   });
 
-  it("is one zone for the whole country, across 180°", () => {
+  // Mutation: delete the `nztm2000` branch in `gridZonesFor`, and a box over
+  // NZ lists several UTM zones.
+  it("is one zone for the whole country", () => {
     expect(gridZoneAt(176.9, -39.5, MADE_UP).name).toBe("NZTM");
     expect(gridZoneAt(168.4, -46.4, MADE_UP).name).toBe("NZTM");
     expect(
@@ -142,6 +146,7 @@ describe("UTM", () => {
   // values leave out the 500,000 m false easting). It uses Clarke 1866, so
   // the zone's ellipsoid is swapped; this checks `toGrid`'s transverse
   // Mercator and false easting against a published value.
+  // Mutation: pass `[lat, lon]` to proj4 in `toGrid`.
   it("matches USGS's published zone 18 example", () => {
     const [lat, lon] = [40.5, -73.5];
     const zone = {
@@ -156,7 +161,7 @@ describe("UTM", () => {
   // Values from PROJ (pyproj 3.7) for EPSG:32612 and EPSG:32760: a cross-check
   // of the zone number, hemisphere and WGS84 ellipsoid, which the USGS example
   // above does not reach.
-  // Mutation: drop `+south` or pick the zone by `lon / 6` and these move.
+  // Mutation: drop `+south` or truncate `lon / 6` for the zone and these move.
   it.each([
     [37.2, -112, "UTM 12", 32612, 411256.293, 4117527.646],
     [37.5, -111.5, "UTM 12", 32612, 455804.816, 4150458.736],
@@ -183,6 +188,7 @@ describe("UTM", () => {
     });
   });
 
+  // Mutation: wrap the box's edges before computing the zone range.
   it("covers a box panned past 180° with unwrapped zone edges", () => {
     const zones = gridZonesFor({ west: 179, south: 9, east: 181, north: 11 });
     expect(zones.map((z) => [z.name, z.west, z.east])).toEqual([
@@ -195,12 +201,16 @@ describe("UTM", () => {
     expect(got.northing).toBeCloseTo(1106077.13, 2);
   });
 
+  // Mutation: `box.south < 0` in place of the centre's latitude.
   it("takes the hemisphere from the box's centre", () => {
     const box = { west: 12.5, east: 13.5, south: -1, north: 3 };
     expect(gridZonesFor(box)[0]!.epsg).toBe(32633);
     expect(gridZonesFor({ ...box, south: -5 })[0]!.epsg).toBe(32733);
   });
 
+  // Mutation: drop the `- 1` in the `Math.ceil` for the last zone, and the
+  // box ending on 12 °E lists zone 33 too. The no-width box is also pinned in
+  // the MGA test below, which names its own mutation.
   it("gives one zone to a box that ends on a zone edge or has no width", () => {
     expect(
       gridZonesFor({ west: 6, east: 12, south: 45, north: 46 }).map(
@@ -271,6 +281,7 @@ describe("a longitude in another world copy", () => {
     ]);
   });
 
+  // Mutation: look the MGA zone up by the raw longitude.
   it("takes the same grid and coordinates as the wrapped copy", () => {
     const here = toGridAt(-33.7, 150.3);
     const there = toGridAt(-33.7, 150.3 - 360);
@@ -281,7 +292,8 @@ describe("a longitude in another world copy", () => {
 });
 
 describe("gridZonesFor", () => {
-  // Mutation: filter with `<` alone, and a box with no width lists no MGA zone.
+  // Mutation: delete the `box.west === box.east` early return, and the filter's
+  // strict `<` lists no MGA zone for a box with no width.
   it("gives a box with no width the one MGA zone at its point", () => {
     const at = (lon: number) =>
       gridZonesFor({ west: lon, east: lon, south: -33.7, north: -33.7 }).map(
@@ -321,6 +333,7 @@ describe("gridZonesFor", () => {
 });
 
 describe("gridConvergence", () => {
+  // Mutation: use `lon` in place of `lon - zone.centralMeridian`.
   it("is ~0 on a zone's central meridian", () => {
     expect(Math.abs(gridConvergence(-33, 153, mgaZone(56)))).toBeLessThan(0.01);
     expect(gridConvergence(45, -111, gridZoneAt(-111, 45))).toBeCloseTo(0, 6);
@@ -346,18 +359,19 @@ describe("gridConvergence", () => {
     expect(gridConvergence(45, -113, gridZoneAt(-113, 45))).toBeLessThan(0);
   });
 
-  // Mutation: no wrap, and zone 1 at 179.9°E reads about -350°.
+  // UTM 1's meridian is -177; 179.9 is 3.1 degrees west of it. Mutation: drop
+  // the wrap in `gridConvergence` and the offset reads 356.9 degrees.
   it("measures across 180°", () => {
-    const zone = gridZonesFor({
-      west: 179,
-      south: 9,
-      east: 181,
-      north: 11,
-    })[1]!;
-    expect(Math.abs(gridConvergence(10, 179.9, zone))).toBeLessThan(2);
+    const zone = gridZoneAt(-179.9, 10);
+    expect(zone.centralMeridian).toBe(-177);
+    expect(gridConvergence(10, 179.9, zone)).toBeCloseTo(
+      -3.1 * Math.sin((10 * Math.PI) / 180),
+      6,
+    );
   });
 });
 
+// Mutation: add a second region to `REGIONS`.
 it("is NSW's alone in prod", () => {
   expect(REGIONS).toEqual([NSW_REGION]);
 });

@@ -540,9 +540,10 @@ export function drawGridLabel(
   drawHaloed(
     ctx,
     [
-      [String(Math.floor(km / 100)), small],
+      // A margin prints no sign: -10 km reads "1" then "90".
+      [String(Math.abs(Math.floor(km / 100))), small],
       [
-        String(km % 100).padStart(2, "0"),
+        String(((km % 100) + 100) % 100).padStart(2, "0"),
         `bold ${largeFontSize}px ${MAP_FONT}`,
       ],
       ...(interval < 10000 ? [["000", small] as const] : []),

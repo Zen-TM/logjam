@@ -48,11 +48,16 @@ export type MgaGrid = { type: "FeatureCollection"; features: Line[] };
 const SEGMENTS = 8;
 
 /** The digits a map margin prints: km modulo 100, or hundreds of metres modulo
- *  1000 at the 100 m step ("84" for 6 284 000, "843" for 6 284 300). */
+ *  1000 at the 100 m step ("84" for 6 284 000, "843" for 6 284 300). A margin
+ *  prints no sign, so a northing south of the equator in a northern zone
+ *  ("-30" km) reads "70". */
 export function mgaGridLabel(metres: number, step: number): string {
   return step >= 1000
-    ? String(Math.round(metres / 1000) % 100).padStart(2, "0")
-    : String(Math.round(metres / 100) % 1000).padStart(3, "0");
+    ? String(((Math.round(metres / 1000) % 100) + 100) % 100).padStart(2, "0")
+    : String(((Math.round(metres / 100) % 1000) + 1000) % 1000).padStart(
+        3,
+        "0",
+      );
 }
 
 type Pt = [number, number];

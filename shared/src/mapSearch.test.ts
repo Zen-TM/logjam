@@ -54,6 +54,16 @@ describe("parseCoordinates", () => {
     expect(back.northing).toBeCloseTo(6264000, 0);
   });
 
+  // Every input above is zone 56. Mutation: read every reference in zone 56.
+  it("reads a zone 55 reference in zone 55", () => {
+    const p = parseCoordinates("55 700000 6264000")!;
+    expect(p.label).toBe("MGA 55 700000 6264000");
+    const back = toGridAt(p.lat, p.lon);
+    expect(back.zone.name).toBe("MGA 55");
+    expect(back.easting).toBeCloseTo(700000, 0);
+    expect(back.northing).toBeCloseTo(6264000, 0);
+  });
+
   // Mutation: decimals back outside the capture groups (metres truncated).
   it("keeps the metres' decimals", () => {
     const p = parseCoordinates("56 245000.6 6264000.4")!;
