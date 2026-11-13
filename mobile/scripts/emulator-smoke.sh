@@ -19,7 +19,7 @@ set -euo pipefail
 APK=$(realpath "${1:?apk}")
 OUT=$(realpath -m "${2:?screenshot dir}")
 LOGS=$(realpath -m "${3:?log dir}")
-PKG=com.logjamnsw.mobile.dev
+PKG=earth.logjam.gps.dev
 cd "$(dirname "$0")/.."
 mkdir -p "$OUT" "$LOGS"
 # Whatever the outcome, so a failure arrives with the device's own account of it.

@@ -4,12 +4,12 @@
 # the app lands on the entry chooser. It never reaches the provider: the chooser sits
 # in front of the sign-in button, so this flow needs no credentials and no network
 # beyond Metro. It does need a CLEAN app state — `adb shell pm clear
-# com.logjamnsw.mobile` first, or the stored entry choice skips the chooser.
+# earth.logjam.gps` first, or the stored entry choice skips the chooser.
 #
 # What it proves: a guest gets into the app, can create a place that lands in
 # local SQLite, and sees account-backed features disabled with the reason rather
 # than hidden or crashing. Run: maestro test e2e/guest.yaml
-appId: com.logjamnsw.mobile
+appId: earth.logjam.gps
 ---
 - openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 

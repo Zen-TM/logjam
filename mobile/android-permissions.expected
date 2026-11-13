@@ -5,7 +5,7 @@
 # SYSTEM_ALERT_WINDOW is here because the debug build's own manifest adds it (the
 # dev menu overlay) and wins over the removal; a release build drops it, which
 # src/androidPermissions.test.ts checks in the config.
-permission: com.logjamnsw.mobile.dev.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+permission: earth.logjam.gps.dev.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
 uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
 uses-permission: name='android.permission.ACCESS_LOCAL_NETWORK'
@@ -36,7 +36,7 @@ uses-permission: name='com.htc.launcher.permission.UPDATE_SHORTCUT'
 uses-permission: name='com.huawei.android.launcher.permission.CHANGE_BADGE'
 uses-permission: name='com.huawei.android.launcher.permission.READ_SETTINGS'
 uses-permission: name='com.huawei.android.launcher.permission.WRITE_SETTINGS'
-uses-permission: name='com.logjamnsw.mobile.dev.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+uses-permission: name='earth.logjam.gps.dev.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
 uses-permission: name='com.majeur.launcher.permission.UPDATE_BADGE'
 uses-permission: name='com.oppo.launcher.permission.READ_SETTINGS'
 uses-permission: name='com.oppo.launcher.permission.WRITE_SETTINGS'

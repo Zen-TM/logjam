@@ -36,7 +36,7 @@ Needed before the first release tag.
 2. **`EXPO_TOKEN`**, the Environment's one secret, set by hand (Settings →
    Environments → `mobile-release`): a robot-user access token from expo.dev
    for the `logjamnsw` account, with access to the `logjam-mobile` project.
-3. **Play Console app** for `com.logjamnsw.mobile`. Google accepts the first
+3. **Play Console app** for `earth.logjam.gps`. Google accepts the first
    bundle of a new app only by hand upload, so the first release tag's
    automatic submission fails. Download that build's `.aab` from its EAS build
    page and upload it to the internal testing track yourself. Later releases
@@ -51,7 +51,10 @@ Needed before the first release tag.
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
    (`mobile/eas.json`). `mobile/scripts/check-eas-env.sh` refuses a store build
-   or an update when either OIDC variable is missing.
+   or an update when either OIDC variable is missing. The
+   `GOOGLE_SERVICES_JSON` file comes from a Firebase Android app registered
+   for `earth.logjam.gps`: the Gradle plugin fails a build whose file has no
+   client for the application id.
 6. **Production access.** The Play developer account is a personal one, so
    Google allows production releases only after a closed test with at least
    12 testers opted in for 14 continuous days, followed by an application in
@@ -125,7 +128,7 @@ needs: [`mobile/e2e/README.md`](../../mobile/e2e/README.md).
 |---|---|---|
 | `browse.yaml` | `fake` | the signed-in shell: tabs, place list from the API, place detail, inbox, account |
 | `map.yaml` | `fake` | map tab, layers picker, the vector basemap and its attribution, locate-me |
-| `guest.yaml` | `oidc`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
+| `guest.yaml` | `oidc`, after `adb shell pm clear earth.logjam.gps` | the entry chooser, a guest's local place, account features shown disabled |
 | `signin.yaml` | `oidc`, with the test Cognito user | real password sign-in on the landing screen to the shell |
 
 A flow that fails is not retried until it passes: find out why. A flow broken

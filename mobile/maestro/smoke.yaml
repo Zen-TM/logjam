@@ -8,7 +8,7 @@
 # emulator renders on a software GPU.
 # PLACE_NAME comes from the script (-e), so a rerun on a reused database cannot
 # pass on a previous run's row.
-appId: com.logjamnsw.mobile.dev
+appId: earth.logjam.gps.dev
 ---
 - openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 # On a fresh install the crash-report question covers the screen, and the tabs
