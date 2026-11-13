@@ -264,13 +264,16 @@ python3 build_nsw_dem.py contours-archive dem/zion-1m.pmtiles dem/zion-contours-
 
 `contours-archive` makes the same vector tiles `contours` does (one `contours`
 layer, `elev` in metres, a major line every 50 m, z11 to z14), from the archive's
-deepest tiles: each block plus a tile around it is averaged to the nearest
-power-of-two number of pixels to 10 m of ground (a z17 pixel at 37° is 0.95 m,
-so 16 of them, 15 m), contoured, and clipped to the block, so lines meet exactly
-at a block's edge. It needs the `pmtiles` binary, and resumes like `slope`: a
-finished block's lines are kept in the work directory. `--interval` changes the
-spacing, not the 50 m major lines the clients style. A region shown in feet gets
-metric lines too; the label is the clients' to convert.
+deepest tiles. Each block plus a tile around it is averaged to a cell, contoured,
+and clipped to the block, so the lines of two blocks line up at the edge. The
+cell is a power-of-two number of pixels, the one that brings it nearest 10 m of
+ground, worked out once from the archive's centre latitude so every block uses
+the same grid: a z17 pixel at 37° is 0.95 m, so 8 of them (a 7.6 m cell); at 44°
+it is 0.86 m, so 16 (13.8 m). It needs the `pmtiles` binary, and resumes like
+`slope`: a finished block's lines are kept in the work directory. `--interval`
+is a whole number of metres and changes the spacing, not the 50 m major lines the
+clients style. A region shown in feet gets metric lines too; the label is the
+clients' to convert.
 
 #### Building it in AWS
 

@@ -87,6 +87,15 @@ level 9.
   height archive keeps level 9: it is built once, and its published bytes do
   not change. Guard:
   `topo/tests/test_sharpen.py` `TestPyramid`. Everything else above stands.
+- **Update 2026-11-14: `slope` builds from any height archive.** The rule
+  covers a region's own heights as it covers NSW's. `build_slope` takes the
+  deepest and coarsest zoom from the archive's header (a 1 m archive runs to
+  z17), a block is 32 × 32 tiles of the deepest zoom, and the layer name and
+  credit come from the archive's metadata. Horn, the 1° rounding, the max
+  pyramid and PNG level 6 are unchanged. NSW's archive is unchanged:
+  `topo/tests/test_nsw_dem.py` `TestNswSlopeUnchanged` builds a heights archive
+  the NSW way from the Katoomba fixture and holds its slope archive, z15 to z8,
+  to a hash taken before the change. Everything else above stands.
 
 Guard: `topo/tests/test_nsw_dem.py` holds the terrarium encoding with
 `(0, 0, 0)` for no data, the 1° rounding, PNG level 6, the credit, and Horn
@@ -101,8 +110,9 @@ Horn weights of 1-1-1, a missing centre-pixel check, the neighbour ring read
 from the wrong tile, and a row's latitude taken from the wrong origin.
 `shared/src/demSlope.test.ts` and `test_nsw_dem.py` assert the same bumpy window to
 the same figure. Only the z15 tile of `TestSlopeBlock` holds the top of the
-zoom range; nothing holds the bottom (8), that a tile with no value is left out, or a
-client drawing the archive.
+zoom range; `TestNswSlopeUnchanged` holds the bottom (8) (updated 2026-11-14).
+Nothing holds that a tile with no value is left out, or a client drawing the
+archive.
 
 ## Consequences
 

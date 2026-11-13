@@ -363,8 +363,8 @@ class TestDerivedCredit(unittest.TestCase):
             " CC BY 3.0 AU.",
         )
 
-    # Mutation: drop the `else` branch's colon text and a foreign credit is lost
-    # (the slope archive would carry no licence line at all).
+    # Mutation: drop the colon from the second form and the foreign credit
+    # reads as a sentence it is not.
     def test_another_archives_credit_is_kept_whole(self):
         self.assertEqual(
             derived_credit("Contours", "LINZ, CC BY 4.0"),
@@ -598,18 +598,21 @@ class TestContourSmoothing(unittest.TestCase):
             self.assertEqual(TILE % n, 0, ground_px)
             self.assertEqual(n & (n - 1), 0, ground_px)
 
-    # Mutation: the target changes from CONTOUR_CELL_M, or the rounding becomes
-    # floor: a z17 pixel at -44 degrees (0.86 m) gets 8 and a 7 m cell, or 1.
+    # Mutation: `round` becomes `math.floor` and 0.86 m (a z17 pixel at 44
+    # degrees) gets 8 pixels, a 6.9 m cell, not the 13.8 m of 16 pixels that is
+    # the nearer to 10 m in the log; or the target is not CONTOUR_CELL_M.
     def test_the_cell_is_the_one_nearest_ten_metres(self):
         self.assertEqual(smoothing_factor(0.86), 16)  # 13.8 m; 8 is 6.9 m
+        self.assertEqual(smoothing_factor(0.95), 8)  # 7.6 m: a z17 pixel at 37 degrees
         self.assertEqual(smoothing_factor(4.0), 2)  # 8 m; 4 is 16 m
         self.assertEqual(smoothing_factor(10.0), 1)
         self.assertEqual(smoothing_factor(30.0), 1)  # never finer than the data
 
 
 class TestCentreBox(unittest.TestCase):
-    # Mutation: return the tiles' corners instead of their centres, and the
-    # box's far edge (or its near one, on the float) reads as the next tile.
+    # Mutation: return the tiles' corners instead of their centres (the first
+    # tile's corner lies on the line between two tiles, and the far corner is the
+    # next tile's).
     def test_tile_range_reads_the_tiles_back(self):
         for z, (x0, y0, x1, y1) in (
             (15, (30048, 19630, 30082, 19664)),
@@ -633,8 +636,8 @@ class TestContourLines(unittest.TestCase):
         )
         return calls
 
-    # Mutation: a default that differs from CONTOUR_INTERVAL_M, or a clip added
-    # when none is asked for: NSW's contours (and every sharpened area's) change.
+    # Mutation: `interval: int = 5` or a clip added when none is asked for:
+    # NSW's contours (and every sharpened area's) change.
     def test_the_defaults_are_the_statewide_commands(self):
         calls = self.commands()
         self.assertEqual(calls[0][:6], ("gdal_contour", "-q", "-a", "elev", "-i", "10"))
@@ -642,8 +645,8 @@ class TestContourLines(unittest.TestCase):
         for call in calls[1:]:
             self.assertNotIn("-clipdst", call)
 
-    # Mutation: clip only the first ogr2ogr (the `major` layer): the `minor`
-    # lines of a block run over its neighbour's and are drawn twice.
+    # Mutation: drop `*cut` from the `ogr2ogr` command: the lines of a block run
+    # over its neighbour's and are drawn twice.
     def test_the_interval_and_clip_reach_every_command(self):
         calls = self.commands(interval=20, clip=(1.0, 2.0, 3.0, 4.0))
         self.assertIn("20", calls[0])
@@ -655,13 +658,15 @@ class TestContourLines(unittest.TestCase):
 class TestContoursArchive(unittest.TestCase):
     """The block loop, with the GDAL and pmtiles steps replaced by recorders."""
 
-    def run_archive(self, work, existing=()):
+    def run_archive(self, work, existing=(), blocks=((1000, 2000),)):
         from unittest import mock
 
         zmax = 17
-        # One z12 block at (1000, 2000), reported by the archive's header.
-        west, north = lonlat(1000, 2000, 12)
-        east, south = lonlat(1001, 2001, 12)
+        # z12 blocks, reported by the archive's header as their hull.
+        west, north = lonlat(min(b[0] for b in blocks), min(b[1] for b in blocks), 12)
+        east, south = lonlat(
+            max(b[0] for b in blocks) + 1, max(b[1] for b in blocks) + 1, 12
+        )
         mosaics, clips, packed, commands = [], [], [], []
 
         class Reader:
@@ -702,8 +707,8 @@ class TestContoursArchive(unittest.TestCase):
         return mosaics, clips, packed, commands
 
     # Mutation: no margin (`bx * tiles - 1` becomes `bx * tiles`): lines stop
-    # short at every block edge. Or a margin of two tiles: the mosaic grows 6 %
-    # for nothing.
+    # short at every block edge. Or a margin of two tiles: the range is not the
+    # block's plus one.
     def test_the_mosaic_is_the_block_and_one_tile_around(self):
         import tempfile
 
@@ -715,8 +720,8 @@ class TestContoursArchive(unittest.TestCase):
             tile_range(bbox, 17), (1000 * 32 - 1, 2000 * 32 - 1, 1001 * 32, 2001 * 32)
         )
 
-    # Mutation: clip to the mosaic (margin included) and the lines of two
-    # blocks overlap; clip to a box a degree out and the same.
+    # Mutation: clip to the mosaic (margin included) instead of the block's own
+    # tile, and the clip box no longer equals the block's.
     def test_lines_are_clipped_to_the_blocks_own_tile(self):
         import tempfile
 
@@ -729,8 +734,8 @@ class TestContoursArchive(unittest.TestCase):
         # The credit of the heights the contours came from.
         self.assertEqual(packed[0][2], "Contours derived from: USGS 3DEP")
 
-    # Mutation: ignore a block file already in `work`: a killed run redoes
-    # every block, hours at statewide size.
+    # Mutation: ignore a block file already in `work` (drop the `continue`): a
+    # killed run redoes every block.
     def test_a_finished_block_is_kept(self):
         import tempfile
 
@@ -739,6 +744,41 @@ class TestContoursArchive(unittest.TestCase):
                 Path(tmp), existing=("1000-2000.lines.gpkg",)
             )
         self.assertEqual((mosaics, clips), ([], []))
+
+    # Mutation: `archive_smoothing(header, zmax)` becomes the factor at each
+    # block's own top row: blocks 1516 and 1517 at z12 lie either side of 42.23
+    # degrees, where a z17 pixel's cell changes from 16 pixels to 8, so the two
+    # would average on grids that do not line up.
+    def test_neighbouring_blocks_share_one_smoothing_cell(self):
+        import tempfile
+
+        tops = [
+            smoothing_factor(float(pixel_size_m(by * 32 * TILE, 1, 17)[0]))
+            for by in (1516, 1517)
+        ]
+        self.assertEqual(tops, [16, 8])  # the premise: per-block would differ
+        with tempfile.TemporaryDirectory() as tmp:
+            *_, commands = self.run_archive(
+                Path(tmp), blocks=((1000, 1516), (1000, 1517))
+            )
+        cells = [c[c.index("-tr") + 1] for c in commands]
+        self.assertEqual(len(cells), 2)  # a floor: both blocks were built
+        self.assertEqual(cells[0], cells[1])
+
+
+class TestPositiveInt(unittest.TestCase):
+    # Mutation: `type=float` again, or a check of `< 0`: `--interval 0.5` makes
+    # `cast(elev as integer) % 50` pick 50.5 m as a major line, and 0 asks
+    # gdal_contour for no spacing.
+    def test_only_a_whole_positive_number_of_metres(self):
+        import argparse
+
+        from build_nsw_dem import positive_int
+
+        self.assertEqual(positive_int("10"), 10)
+        for bad in ("0", "-5", "0.5", "ten", "", "\u00b2"):
+            with self.assertRaises(argparse.ArgumentTypeError, msg=bad):
+                positive_int(bad)
 
 
 def lonlat(x, y, z):

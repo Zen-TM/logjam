@@ -70,13 +70,13 @@ TILE = 256
 ZMAX = 15  # a z15 pixel is ~4 m here: the first zoom finer than the 5 m data
 ZMIN = 8
 # A block is 2**BLOCK_DEPTH tiles of the deepest zoom along each edge, so its
-# grid is 8,192 px square whatever that zoom is.
+# grid is at most 8,192 px square whatever that zoom is.
 BLOCK_DEPTH = 5
 
 
 def block_zoom(zmax: int, zmin: int = ZMIN) -> int:
     """The zoom whose tile is one block: z10 for NSW's z15, z12 for a 1 m
-    archive's z17. Never above the archive's own coarsest zoom."""
+    archive's z17. Never coarser than the archive's own coarsest zoom."""
     return max(zmax - BLOCK_DEPTH, zmin)
 
 
@@ -812,14 +812,15 @@ def contour_lines(
     raw: Path,
     lines: Path,
     run=run,
-    interval: float = CONTOUR_INTERVAL_M,
+    interval: int = CONTOUR_INTERVAL_M,
     clip: Optional[Tuple[float, float, float, float]] = None,
 ) -> None:
-    """`interval` lines of a height raster into a GeoPackage in lon/lat, as two
-    layers: `major` (every CONTOUR_MAJOR_M) and `minor`, cut to the lon/lat box
-    `clip` (west, south, east, north) when given. The statewide archive, any
-    other region's and a sharpened area's (sharpen.py) are all cut by this, so
-    they share a schema."""
+    """Lines of a height raster every `interval` metres into a GeoPackage in
+    lon/lat, as two layers: `major` (every CONTOUR_MAJOR_M) and `minor`, cut to
+    the lon/lat box `clip` (west, south, east, north) when given. A whole number
+    of metres, so every line sits on a whole metre and the `cast(elev as
+    integer)` below is exact. The statewide archive, any other region's and a
+    sharpened area's (sharpen.py) are all cut by this, so they share a schema."""
     cut = ["-clipdst", *map(str, clip)] if clip else []
     run(
         *["gdal_contour", "-q", "-a", "elev", "-i", str(interval)],
@@ -842,8 +843,8 @@ def need_pmtiles(command: str) -> None:
 
 def pack_contours(work: Path, out: Path, description: str) -> None:
     """Every `*.lines.gpkg` in `work` as vector tiles in one PMTiles archive."""
-    # Every sheet's two layers as one, without copying them: an OGR virtual
-    # dataset that reads the per-sheet files in place.
+    # Every file's two layers as one, without copying them: an OGR virtual
+    # dataset that reads the files in place.
     sheets = sorted(work.glob("*.lines.gpkg"))
     union = work / "contours.vrt"
     union.write_text(
@@ -927,9 +928,20 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
 
 
 def smoothing_factor(ground_px_m: float) -> int:
-    """How many deepest-zoom pixels (a power of two, so a cell never straddles a
-    tile edge) average to the cell nearest CONTOUR_CELL_M of ground."""
+    """How many deepest-zoom pixels along an edge average to one contouring cell:
+    the power of two that brings the cell nearest CONTOUR_CELL_M of ground, and
+    never finer than the data. A power of two divides a tile's 256 px, so a cell
+    never straddles a tile edge (test_nsw_dem.py `TestContourSmoothing`)."""
     return min(256, 2 ** max(0, round(math.log2(CONTOUR_CELL_M / ground_px_m))))
+
+
+def archive_smoothing(header: dict, zmax: int) -> int:
+    """`smoothing_factor` at the latitude of the archive's centre: one factor for
+    every block, so neighbouring blocks average on one grid wherever the factor
+    would change with latitude (test_nsw_dem.py `TestContoursArchive`)."""
+    lat = (header["min_lat_e7"] + header["max_lat_e7"]) / 2e7
+    row = (1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * 2**zmax * TILE
+    return smoothing_factor(float(pixel_size_m(int(row), 1, zmax)[0]))
 
 
 def centre_box(
@@ -943,17 +955,17 @@ def centre_box(
 
 
 def contours_archive(
-    heights: Path, work: Path, out: Path, interval: float = CONTOUR_INTERVAL_M
+    heights: Path, work: Path, out: Path, interval: int = CONTOUR_INTERVAL_M
 ) -> None:
     """Contours of a height archive, as vector tiles in one PMTiles archive: the
     schema `contours` makes, so both clients draw it unchanged. See `contours`
     for the layer and the major lines.
 
     A block is the same square of tiles as in `build_slope`. Its deepest tiles
-    are mosaicked with one extra tile around, averaged to ~CONTOUR_CELL_M on a
-    grid every block shares, contoured, and clipped to the block: lines from
-    two blocks meet exactly at their edge, with no gap or doubled line. A block
-    file already in `work` is kept, as in `build_slope`.
+    are mosaicked with one extra tile around, averaged on a grid every block
+    shares (`archive_smoothing`), contoured, and clipped to the block, so the
+    lines of two blocks line up at their edge with none doubled. A block file
+    already in `work` is kept, as in `build_slope`.
     """
     need_pmtiles("contours-archive")
     work.mkdir(parents=True, exist_ok=True)
@@ -980,6 +992,7 @@ def contours_archive(
         if reader.get(bzoom, bx, by) is not None
     ]
     print(f"{len(todo)} blocks", flush=True)
+    cell = str(archive_smoothing(header, zmax) * 2 * HALF_WORLD_M / (2**zmax * TILE))
     for n, (bx, by) in enumerate(todo, 1):
         lines = work / f"{bx}-{by}.lines.gpkg"
         if lines.exists():
@@ -1003,11 +1016,9 @@ def contours_archive(
             metadata["attribution"],
             zmax,
         )
-        factor = smoothing_factor(float(pixel_size_m((by * tiles) * TILE, 1, zmax)[0]))
         west, _, _, north = tile_bounds_3857(zmax, mx0, my0)
         _, _, east, _ = tile_bounds_3857(zmax, mx1, my1)
         _, south, _, _ = tile_bounds_3857(zmax, mx0, my1)
-        cell = str(factor * (east - west) / ((mx1 - mx0 + 1) * TILE))
         run(
             *["gdalwarp", "-q", "-overwrite", "-tr", cell, cell, "-r", "average"],
             *["-te", *map(str, (west, south, east, north))],
@@ -1026,6 +1037,15 @@ def contours_archive(
         out,
         derived_credit("Contours", metadata["attribution"]),
     )
+
+
+def positive_int(text: str) -> int:
+    """An `--interval`: a whole number of metres, so `contour_lines` can pick
+    the major lines by `cast(elev as integer)` (test_nsw_dem.py
+    `TestContoursArchive`)."""
+    if not (text.isascii() and text.isdigit()) or int(text) < 1:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number of metres")
+    return int(text)
 
 
 def main() -> None:
@@ -1057,9 +1077,9 @@ def main() -> None:
     p.add_argument("out", type=Path)
     p.add_argument(
         "--interval",
-        type=float,
+        type=positive_int,
         default=CONTOUR_INTERVAL_M,
-        help="metres between lines (default %(default)s); major lines stay every 50 m",
+        help="whole metres between lines (default %(default)s); major lines stay every 50 m",
     )
     p = sub.add_parser("slope")
     p.add_argument("heights", type=Path, help="a height archive, e.g. nsw-5m.pmtiles")
