@@ -374,11 +374,13 @@ NSW does not use it: Mapterhorn's Australian source is a partial 5 m composite.
 
 It needs NumPy, Pillow and the `pmtiles` Python package (`requirements.txt`),
 and GDAL's Python bindings only because it shares `build_nsw_dem.py`'s code;
-it runs in the worker image. It reads Mapterhorn by byte range, so a 10 by
-10 km box fetches 50 to 100 MB, and writes the archive on the machine it runs on.
+it is copied into the worker image, though it has only been run on a host. It
+reads Mapterhorn by byte range, fetching only the tiles over the box, and
+writes the archive on the machine it runs on.
 
 ```bash
-# W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, its finest.
+# W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, where its files
+# for New Zealand and Utah stop.
 python3 build_region_dem.py heights --bbox 169.20,-44.10,169.30,-44.01 \
   --zmax 17 --zmin 8 --jobs 4 \
   --credit "Elevation data: …" --name "Example heights" example.pmtiles
@@ -394,14 +396,14 @@ result with `pmtiles show example.pmtiles`: `bounds` is the box's tiles, and
 **The credit is yours to write.** Mapterhorn's `attribution.json` names each
 source and its licence; the credit lists those the box draws on. Mapterhorn
 keeps no mark of where a fine survey ends: a tile over ground with no survey is
-made from the next coarser source and has the same zoom (30 m Copernicus data
-at zoom 16, over Makarora). Say in the credit that the finest heights exist
-only where the survey covers, and name the coarser source the rest of the box
+made from a coarser source and has the same zoom (over Makarora, most likely
+30 m Copernicus data at zoom 16, inferred from the tiles' size and smoothness). Say in the credit that the
+finest heights exist only where the survey covers, and name the coarser source the rest of the box
 draws on, which may be a 10 m or a 5 m one. A pixel Mapterhorn marks as no
 height is written as no-data; sea is 0 m.
 
-Do not run it from CI: Mapterhorn states no terms for ranged reads of its
-download host, and the build is the only thing that should make them.
+Do not run it from CI: Mapterhorn states no terms we found for ranged reads of
+its download host, and the build is the only thing that should make them.
 
 ---
 

@@ -63,7 +63,8 @@ class TestCoarseTiles(unittest.TestCase):
     """The NSW build's z9 and z8 are the bytes they were before `coarse_levels`
     was shared with build_region_dem.py (the digests were taken from the loop
     it replaced). Mutations that turn it red: a child placed in the wrong
-    quarter, a zoom skipped, the reduce swapped (mean for max or the reverse)."""
+    quarter, a zoom skipped, a coarser zoom taken from every other pixel instead
+    of the layer's reduce."""
 
     DIGESTS = {
         "heights": (

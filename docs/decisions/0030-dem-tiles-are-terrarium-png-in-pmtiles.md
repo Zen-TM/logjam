@@ -59,7 +59,8 @@ The publisher states the data is good to ±0.9 m on open ground.
   the step each zoom deeper, as a sharpened area's archive does, for the reason
   given there: its zoom 16 and 17 pixels are as fine as a sharpened area's
   ([0052](0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md)).
-  The NSW statewide archive keeps its quarter metre. Everything else above
+  The NSW statewide archive keeps its quarter metre. Guard:
+  `topo/tests/test_region_dem.py` `TestRounding`. Everything else above
   stands.
 
 Guard: `topo/tests/test_nsw_dem.py` decodes what the builder encodes with the

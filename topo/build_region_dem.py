@@ -25,8 +25,7 @@ as often as needed, tried in order) replaces that.
 
 Where Mapterhorn has no tile, the archive has none. A pixel it marks as no
 height (a transparent pixel, or the terrarium value for -32768 m) is written as
-ADR 0030's no-data. Sea is a height Mapterhorn writes as exactly 0 m, and
-stays one.
+ADR 0030's no-data. Sea in the tiles read was exactly 0 m, and stays a height.
 """
 
 import argparse
@@ -50,7 +49,8 @@ import build_nsw_dem as dem
 import sharpen
 
 DOWNLOAD_URLS = "https://download.mapterhorn.com/download_urls.json"
-# Not the project's name: this goes to somebody else's server.
+# Not the project's name: this goes to somebody else's server. Guard:
+# tests/test_region_dem.py `TestMapterhornIsOnlyTheBuildsToRead`.
 USER_AGENT = "pmtiles-python-client"
 SOURCE_TILE = 512  # Mapterhorn's tile size, in pixels
 ATTEMPTS = 8  # a range read, waiting 1, 2, 4 ... 60 s between
@@ -129,6 +129,13 @@ def block_tiles(grid: np.ndarray, zmax: int, zb: int, bx: int, by: int):
 # ── Reading Mapterhorn ───────────────────────────────────────────────────────
 
 
+class FetchError(OSError):
+    """A range read that failed for good. A plain message and nothing else, so
+    it survives the pickling that carries a worker's exception to the parent:
+    `urllib.error.HTTPError` does not, and the pool then waits for ever
+    (tests/test_region_dem.py `TestFetchRange.test_every_failure_survives_pickling`)."""
+
+
 class NotRangeable(Exception):
     """The server answered a range request with something else (a whole file,
     or an error that asking again will not change)."""
@@ -176,7 +183,9 @@ def fetch_range(
         except (OSError, http.client.HTTPException) as e:
             error = e
         if attempt == ATTEMPTS - 1:
-            raise error
+            if isinstance(error, urllib.error.HTTPError):
+                raise FetchError(f"{url}: HTTP {error.code}") from error
+            raise FetchError(f"{url}: {type(error).__name__}: {error}") from error
         sleep(wait)
     raise AssertionError("unreachable")
 
@@ -238,7 +247,20 @@ def source_tile(z: int, x: int, y: int) -> Optional[bytes]:
 
 
 def build_block(job: Tuple[int, int, int, int, list]):
-    """One block: its tiles as (z, x, y, png) rows, and its grid at zoom zb."""
+    """One block: its tiles as (z, x, y, png) rows, and its grid at zoom zb.
+
+    Runs in a pool worker, so whatever it raises is rebuilt as a plain
+    RuntimeError: an exception that cannot be unpickled in the parent leaves
+    the run waiting for ever."""
+    try:
+        return _build_block(job)
+    except Exception as e:
+        raise RuntimeError(
+            f"block {job[2]}, {job[3]}: {type(e).__name__}: {e}"
+        ) from None
+
+
+def _build_block(job: Tuple[int, int, int, int, list]):
     zmax, zb, bx, by, tiles = job
     span = 2 ** (zmax - zb)
     side = span * dem.TILE

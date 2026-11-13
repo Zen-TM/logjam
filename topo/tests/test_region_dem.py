@@ -10,6 +10,7 @@ import argparse
 import http.client
 import io
 import os
+import pickle
 import sys
 import tempfile
 import unittest
@@ -115,8 +116,7 @@ class TestQuarters(unittest.TestCase):
 
 class TestRounding(unittest.TestCase):
     """Mutation that turns it red: one step at every zoom (terraces in the
-    hillshade on 1 m pixels, ADR 0030's update of 2026-10-23); or a quarter
-    metre at z17 because a tile's source was 1/32 m."""
+    hillshade on 1 m pixels, ADR 0030's update of 2026-10-23)."""
 
     def test_a_quarter_metre_to_z15_then_halved_each_zoom_deeper(self):
         steps = {z: region.rounding_for(z).rounding for z in (8, 13, 15, 16, 17)}
@@ -183,12 +183,14 @@ class TestTiles(unittest.TestCase):
 
 class TestCoarse(unittest.TestCase):
     """Mutations that turn it red: a sibling that is missing counted as 0 m
-    (a tile at the box's edge drops to sea level); the parent taken as one
-    child instead of the mean."""
+    (a tile at the box's edge drops to sea level); the parent taken from every
+    other pixel of its children instead of their mean."""
 
     def test_a_parent_is_the_mean_of_its_children_and_no_height_where_none(self):
+        striped = np.full((256, 256), 100.0, np.float32)
+        striped[:, 1::2] = 200.0  # its mean over each 2 x 2 is 150
         level = {
-            (0, 0): np.full((256, 256), 100.0, np.float32),
+            (0, 0): striped,
             (1, 0): np.full((256, 256), 200.0, np.float32),
         }
         (z, x, y, png), *rest = list(
@@ -196,7 +198,7 @@ class TestCoarse(unittest.TestCase):
         )
         self.assertEqual((z, x, y, rest), (0, 0, 0, []))
         got = png_heights(png)
-        self.assertTrue((got[:128, :128] == 100).all())
+        self.assertTrue((got[:128, :128] == 150).all())
         self.assertTrue((got[:128, 128:] == 200).all())
         self.assertTrue(np.isnan(got[128:]).all())
 
@@ -284,7 +286,9 @@ class TestFetchRange(unittest.TestCase):
     errors (a short read with a Content-Length kills the worker); a 429 waited
     out for a fixed second instead of Retry-After; a 404 retried; a 200 (a
     whole file) accepted; a short body returned; the retries never giving up;
-    the cache holding more than a few dozen bodies."""
+    the cache raised above 128 ranges; a final failure raised as the
+    `urllib.error.HTTPError` itself, or as any exception that cannot be
+    pickled, so a pool worker's failure hangs the run."""
 
     def fetch(self, *replies, length=4):
         opener, calls = scripted(*replies)
@@ -347,9 +351,45 @@ class TestFetchRange(unittest.TestCase):
 
     def test_it_gives_up_after_its_attempts(self):
         opener, calls = scripted(*[http_error(500)] * region.ATTEMPTS)
-        with self.assertRaises(urllib.error.HTTPError):
+        with self.assertRaises(region.FetchError):
             region.fetch_range("https://x/f", 0, 4, opener=opener, sleep=lambda s: None)
         self.assertEqual(len(calls), region.ATTEMPTS)
+
+    def test_every_failure_survives_pickling(self):
+        # A pool worker's exception is pickled to the parent. An
+        # urllib.error.HTTPError cannot be unpickled there, which hangs the
+        # pool: every way a read ends must come out as something that can.
+        def failure(*replies):
+            opener, _ = scripted(*replies)
+            with self.assertRaises(Exception) as caught:
+                region.fetch_range(
+                    "https://x/f", 0, 4, opener=opener, sleep=lambda s: None
+                )
+            return caught.exception
+
+        failures = [
+            failure(*[http_error(500)] * region.ATTEMPTS),
+            failure(*[http_error(429, "1")] * region.ATTEMPTS),
+            failure(
+                *[FakeResponse(http.client.IncompleteRead(b"a", 3))] * region.ATTEMPTS
+            ),
+            failure(*[FakeResponse(b"ab")] * region.ATTEMPTS),
+            failure(*[ConnectionResetError()] * region.ATTEMPTS),
+            failure(http_error(404)),
+            failure(FakeResponse(b"x", status=200)),
+        ]
+        for exc in failures:
+            again = pickle.loads(pickle.dumps(exc))
+            self.assertEqual((type(again), str(again)), (type(exc), str(exc)))
+
+    def test_a_block_that_fails_raises_what_can_be_pickled(self):
+        region._readers[:] = [BrokenSource()]
+        self.addCleanup(region._readers.clear)
+        with self.assertRaises(RuntimeError) as caught:
+            region.build_block((17, 14, 2, 3, [(8, 8)]))
+        again = pickle.loads(pickle.dumps(caught.exception))
+        self.assertIn("block 2, 3", str(again))
+        self.assertIn("HTTPError", str(again))
 
     def test_the_reader_keeps_few_bodies(self):
         # The reader's cache is the lru_cache on get_bytes: small, because it
@@ -357,7 +397,14 @@ class TestFetchRange(unittest.TestCase):
         with mock.patch.object(region, "fetch_range", lambda *a: b"x") as _:
             reader = region.http_reader("https://x/f")
         cache = reader.get_bytes
-        self.assertLessEqual(cache.cache_parameters()["maxsize"], 256)
+        self.assertLessEqual(cache.cache_parameters()["maxsize"], 128)
+
+
+class BrokenSource:
+    """A source whose read fails for good, as a worker sees it."""
+
+    def get(self, z, x, y):
+        raise urllib.error.HTTPError("https://x/f", 500, "m", {}, None)
 
 
 class FakeSource:
@@ -372,8 +419,8 @@ class FakeSource:
 
 class TestBlock(unittest.TestCase):
     """Mutations that turn it red: a quarter in the wrong place in the block;
-    a coarser zoom taken as the mean of the encoded pixels instead of the
-    heights; the zoom above a block not the mean of its children."""
+    a block's zooms taken from every other pixel instead of the mean, in its
+    tiles (`block_tiles`) or in the grid handed back for the coarser zooms."""
 
     def setUp(self):
         self.addCleanup(region._readers.clear)
@@ -410,6 +457,12 @@ class TestBlock(unittest.TestCase):
         )
         self.assertEqual(grid.shape, (256, 256))
         self.assertEqual((bx, by), (2, 2))
+        # The grid handed back for the coarser zooms is the z14 tile's heights.
+        z14 = png_heights(by_tile[(14, 2, 2)])
+        self.assertEqual(grid.shape, z14.shape)
+        np.testing.assert_array_equal(np.isnan(grid), np.isnan(z14))
+        valid = ~np.isnan(grid)
+        np.testing.assert_array_equal(z14[valid], np.round(grid[valid] * 4) / 4)
 
     def test_a_block_with_nothing_has_no_tiles(self):
         region._readers[:] = [FakeSource({})]
