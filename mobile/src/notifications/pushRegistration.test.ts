@@ -31,7 +31,7 @@ vi.mock("expo-secure-store", () => ({
 vi.mock("expo-constants", () => ({
   default: {
     expoConfig: {
-      android: { package: "com.logjamnsw.mobile" },
+      android: { package: "earth.logjam.gps" },
       extra: { eas: { projectId: "p" } },
     },
   },
