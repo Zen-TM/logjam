@@ -115,3 +115,52 @@ describe("routeCoveredByOfflineMaps", () => {
     expect(routeCoveredByOfflineMaps([], [west])).toBe(false);
   });
 });
+
+describe("a saved region that runs past 180°", () => {
+  // Made-up ground either side of the line.
+  const across = region([178, -18, 182, -16]);
+
+  // Mutation: compare the point's longitude with the region's edges directly
+  // (`region[0] <= lon && region[2] >= lon`). The -179.5 point reads uncovered.
+  it("holds a place's box on either side of the line", () => {
+    expect(coveredByOfflineMaps([179.4, -17.1, 179.6, -16.9], [across])).toBe(
+      true,
+    );
+    expect(coveredByOfflineMaps([-179.6, -17.1, -179.4, -16.9], [across])).toBe(
+      true,
+    );
+    expect(coveredByOfflineMaps([176.9, -17.1, 177.1, -16.9], [across])).toBe(
+      false,
+    );
+  });
+
+  it("holds a way on either side of the line", () => {
+    expect(
+      routeCoveredByOfflineMaps(
+        [
+          [179.5, -17],
+          [179.9, -17],
+        ],
+        [across],
+      ),
+    ).toBe(true);
+    expect(
+      routeCoveredByOfflineMaps(
+        [
+          [-179.5, -17],
+          [-179.9, -17],
+        ],
+        [across],
+      ),
+    ).toBe(true);
+    expect(
+      routeCoveredByOfflineMaps(
+        [
+          [179.5, -17],
+          [177, -17],
+        ],
+        [across],
+      ),
+    ).toBe(false);
+  });
+});
