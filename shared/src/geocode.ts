@@ -92,7 +92,7 @@ export async function geocode(
     signal,
     headers: {
       Accept: "application/json",
-      "User-Agent": "Logjam/0.1.0 (https://logjamnsw.com)",
+      "User-Agent": "Logjam/0.1.0 (https://logjam.earth)",
     },
   });
   if (!res.ok) throw new Error(`Geocoder returned ${res.status}`);

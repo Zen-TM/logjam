@@ -25,7 +25,7 @@ const RESERVED_HOST =
 const ALLOWED_HOSTS: Record<string, string> = {
   "ropewiki.com": "the published source of the seeded canyon rows",
   "ozultimate.com": "the published source of the seeded canyon rows",
-  "logjamnsw.com": "this project's own domain",
+  "logjam.earth": "this project's own domain",
 };
 
 // The ACMA's numbers for use in fiction (acma.gov.au, "Telephone numbers for

@@ -22,7 +22,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       under test. A release deployed before `/meta` reported a sha, or before
       the frontend kept `releases/<sha>/`, cannot be a rollback target: its
       smoke test would fail on a healthy release.
-- [ ] Note the live sha of each: API `curl -s https://api.logjamnsw.com/meta | jq -r .sha`;
+- [ ] Note the live sha of each: API `curl -s https://api.logjam.earth/meta | jq -r .sha`;
       frontend `release-sha` on `index.html`; worker image tag on
       `logjam-topo-worker`. Note the release before each.
 - [ ] Any Terraform the change needs has been applied.
@@ -62,7 +62,9 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       `logjam-fire-history` and `logjam-coverage` carry the
       chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
-      with no ECR image (or no `releases/<sha>/`) fails before any swap.
+      with no ECR image (or no `releases/<sha>/`) fails before any swap; a
+      frontend sha from before the move to `logjam.earth` fails as built for
+      another API address.
 - [ ] **Refused while a deploy is busy:** a rollback dispatched while a
       deploy of the same target is queued or running fails its preflight job
       and changes nothing. A deploy that starts while a rollback runs waits

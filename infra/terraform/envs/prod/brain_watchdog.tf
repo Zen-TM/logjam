@@ -101,7 +101,7 @@ resource "aws_lambda_function" "brain_watchdog" {
       BACKUP_BUCKET  = aws_s3_bucket.brain_backups.bucket
       WAL_PREFIX     = local.brain_wal_prefix
       # Through CloudFront, as a user's request goes.
-      READY_URL = "https://api.logjamnsw.com/ready"
+      READY_URL = "https://api.logjam.earth/ready"
     }
   }
 

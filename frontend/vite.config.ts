@@ -21,7 +21,7 @@ export const CSP_PROD = [
   "img-src 'self' data: blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com https://tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://protomaps.github.io https://maps.six.nsw.gov.au https://elevation.fsdf.org.au https://s3.amazonaws.com",
   "font-src 'self' data:",
   "media-src 'self' blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com",
-  "connect-src 'self' https://api.logjamnsw.com https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com https://tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://protomaps.github.io https://maps.six.nsw.gov.au https://elevation.fsdf.org.au https://nominatim.openstreetmap.org https://api.open-meteo.com https://s3.amazonaws.com",
+  "connect-src 'self' https://api.logjam.earth https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com https://tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://protomaps.github.io https://maps.six.nsw.gov.au https://elevation.fsdf.org.au https://nominatim.openstreetmap.org https://api.open-meteo.com https://s3.amazonaws.com",
   "worker-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -153,7 +153,7 @@ export default defineConfig(({ mode, command }) => {
   // playwright.config.ts stops the server starting, which turns the job red.
   if (command === "serve" && process.env.CI && !devMaster)
     throw new Error("CI must set DEV_MASTER_URL: unset, /master reads prod");
-  const master = new URL(devMaster || "https://logjamnsw.com");
+  const master = new URL(devMaster || "https://logjam.earth");
   const masterPrefix = master.pathname.replace(/\/$/, "");
   return {
     // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken

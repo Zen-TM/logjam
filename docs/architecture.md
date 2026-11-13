@@ -12,8 +12,8 @@ keeps in `us-east-1`. Terraform in
 it except the VPC and its subnets, which predate it and which it only
 references. This page gives no ids: where you need one, it gives the
 `terraform output` that prints it ([list](#looking-up-ids)). Only the public
-product URLs appear literally: `logjamnsw.com` (Logjam Web) and
-`api.logjamnsw.com` (the API).
+product URLs appear literally: `logjam.earth` (Logjam Web) and
+`api.logjam.earth` (the API).
 
 ## The pieces
 
@@ -26,8 +26,8 @@ flowchart LR
   cognito["Cognito<br/>user pool"]
 
   subgraph edge["CloudFront + WAF"]
-    cfweb["web distribution<br/>logjamnsw.com"]
-    cfapi["api distribution<br/>api.logjamnsw.com"]
+    cfweb["web distribution<br/>logjam.earth"]
+    cfapi["api distribution<br/>api.logjam.earth"]
   end
 
   subgraph vpc[VPC]
@@ -81,11 +81,11 @@ UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
 
 **Edge.** Two CloudFront distributions, each behind a WAF web ACL:
 
-- *web* serves `logjamnsw.com` (and `www.`). The default behaviour serves the
+- *web* serves `logjam.earth` (and `www.`). The default behaviour serves the
   SPA from the frontend bucket; `/master/*` serves the shared basemap tiles
   from the topo-jobs bucket. That is why the apps' topo CDN base URL
   (`terraform output topo_cdn_base_url`) is the site itself.
-- *api* serves `api.logjamnsw.com` and forwards everything, uncached, to the
+- *api* serves `api.logjam.earth` and forwards everything, uncached, to the
   brain.
 
 The API accepts only traffic that came through the *api* distribution. Two
