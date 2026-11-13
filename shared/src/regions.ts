@@ -319,7 +319,9 @@ export const NSW_REGION = {
 /**
  * Whether the simulated regions (simRegions.ts) are declared. A module-load
  * read: `DEM_SOURCES` and the clients' entry tables are computed at load, so a
- * runtime that wants them sets the flag before shared loads. Guard:
+ * runtime that wants them sets the flag before shared loads (Logjam Web in
+ * `frontend/src/simRegions.ts`, Logjam GPS in `mobile/src/simRegions.ts`, the
+ * API in `api/src/loadEnv.ts`, each refusing it outside a dev stack). Guard:
  * `regions.test.ts` ("puts the simulated regions and their world in the
  * declaration at load").
  */
