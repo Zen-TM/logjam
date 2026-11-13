@@ -8,17 +8,21 @@ import {
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  CARRIERS,
   fireLegendRows,
-  NSW_COVERAGE,
   MAP_TERRAIN,
   NSW_REGION,
-  NSW_FIRE,
   OVERLAY_LEGENDS,
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
 import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
+
+const {
+  land: NSW_LAND,
+  fire: NSW_FIRE,
+  coverage: NSW_COVERAGE,
+} = NSW_REGION.terrain;
+const CARRIERS = NSW_COVERAGE.carriers;
 
 // jsdom has no ResizeObserver, which the Coverage legend's ChipRail uses.
 vi.stubGlobal(
@@ -257,7 +261,7 @@ describe("the Land tenure row on Logjam Web", () => {
     const legend = screen.getByRole("dialog", { name: copy.land }).textContent;
     expect(legend).toContain(copy.landLegend);
     expect(legend).toContain("Private land");
-    expect(legend).toContain(copy.landCaveat);
+    expect(legend).toContain(NSW_LAND.caveat);
     expect(legend).toContain(NSW_REGION.terrain.land.credit);
   });
 });
@@ -297,7 +301,7 @@ describe("the Fire history row on Logjam Web", () => {
     const legend = screen.getByRole("dialog", { name: copy.fire }).textContent;
     expect(legend).toContain(copy.fireLegend);
     for (const { label } of fireLegendRows()) expect(legend).toContain(label);
-    expect(legend).toContain(copy.fireCaveat);
+    expect(legend).toContain(NSW_FIRE.caveat);
     expect(legend).toContain(NSW_FIRE.credit);
   });
 
@@ -412,7 +416,7 @@ describe("the Coverage row on Logjam Web", () => {
     expect(legend.textContent).toContain(copy.coverageLegend);
     for (const { label } of OVERLAY_LEGENDS.coverage.rows)
       expect(legend.textContent).toContain(label);
-    expect(legend.textContent).toContain(copy.coverageCaveat);
+    expect(legend.textContent).toContain(NSW_COVERAGE.caveat);
     expect(legend.textContent).toContain(NSW_COVERAGE.credit);
   });
 

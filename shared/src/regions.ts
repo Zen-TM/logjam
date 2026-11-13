@@ -49,18 +49,40 @@ export type HeightsArchive = DemSource & {
 };
 export type LandArchive = TerrainArchive & {
   sourceLayer: string;
+  /** The tile attribute that holds a feature's class: one of `classes`' `source`. */
   classProperty: string;
+  /**
+   * The source's classes, in the order a legend lists them, each with what a
+   * person reads and its colour. A class not listed is left undrawn.
+   */
+  classes: readonly [
+    { source: string; name: string; colour: string },
+    ...{ source: string; name: string; colour: string }[],
+  ];
+  /** What the source gets wrong, said beside the legend it qualifies. */
+  caveat: string;
 };
 export type FireArchive = TerrainArchive & {
   sourceLayer: string;
   yearProperty: string;
   monthProperty: string;
   typeProperty: string;
+  /** The source's fire-type codes, as "What is here?" names them. */
+  types: Readonly<Record<number, string>>;
+  /** What the source gets wrong, said beside the legend it qualifies. */
+  caveat: string;
 };
 export type CoverageArchive = TerrainArchive & {
   sourceLayer: string;
   carrierProperty: string;
   levelProperty: string;
+  /** The networks a user picks from; `id` is the `carrierProperty` value. */
+  carriers: readonly [
+    { id: string; name: string },
+    ...{ id: string; name: string }[],
+  ];
+  /** What the source gets wrong, said beside the legend it qualifies. */
+  caveat: string;
 };
 
 /** The Terrain group's archives. A member a region lacks is absent: `layerIn` is null. */
@@ -238,7 +260,7 @@ export const NSW_REGION = {
       ...derived("Contours"),
     },
     // Who holds the land, from the NSW Land Tenure layer, built by
-    // `topo/build_land_tenure.py` (nswLand.ts draws it).
+    // `topo/build_land_tenure.py` (land.ts draws it).
     land: {
       id: "nsw-land",
       archivePath: "master/land/nsw-tenure.pmtiles",
@@ -249,6 +271,39 @@ export const NSW_REGION = {
       /** The build script's zooms (test_land_tenure.py): z13 is about a metre, and deeper ones overzoom. */
       minzoom: 8,
       maxzoom: 13,
+      /**
+       * `TENURE_CLASSES` in the build script lists the same `source` values,
+       * and the build stops on any other, because `landColor` leaves a class
+       * it doesn't know undrawn (test_land_tenure.py).
+       *
+       * The source calls "Aboriginal Area" "Indigenous Owned", but all it
+       * holds there are NPWS reserves of that type; Land Council freehold can
+       * be under Private.
+       */
+      classes: [
+        { source: "Private", name: "Private land", colour: "#8e6bbf" },
+        { source: "National Park", name: "National park", colour: "#2f9c95" },
+        { source: "State Forest", name: "State forest", colour: "#7f8f3a" },
+        {
+          source: "Crownland-Leasehold",
+          name: "Crown leasehold",
+          colour: "#d9a441",
+        },
+        { source: "Crownland-Other", name: "Crown land", colour: "#e6d34f" },
+        {
+          source: "Indigenous Owned",
+          name: "Aboriginal Area",
+          colour: "#3b78c4",
+        },
+        {
+          source: "Unresolved Tenure",
+          name: "Tenure unresolved",
+          colour: "#8a8a8a",
+        },
+      ],
+      // The source's two known gaps.
+      caveat:
+        "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
@@ -256,7 +311,7 @@ export const NSW_REGION = {
         'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
     },
     // How long since the ground last burnt, from NPWS Fire History, built by
-    // `topo/build_fire_history.py` (nswFire.ts draws it). The archive holds
+    // `topo/build_fire_history.py` (fireHistory.ts draws it). The archive holds
     // the fire's year and month, never how long ago that was: each client
     // works that out from today, so the map doesn't age between builds.
     fire: {
@@ -269,12 +324,17 @@ export const NSW_REGION = {
        *  date while it has none: the vegetation layer's rule. */
       yearProperty: "year",
       monthProperty: "month",
-      /** The source's `FireType` code, absent where it had none: `FIRE_TYPES`. */
+      /** The source's `FireType` code, absent where it had none: `types`. */
       typeProperty: "type",
       /** The build script's zooms: fires are mapped to tens of metres, and z12 is
        *  finer than that. Deeper zooms overzoom. */
       minzoom: 8,
       maxzoom: 12,
+      // A code not listed reads as a plain "Fire" (fireHistory.ts).
+      types: { 1: "Wildfire", 2: "Prescribed burn" },
+      // The source's gap.
+      caveat:
+        "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
@@ -283,13 +343,13 @@ export const NSW_REGION = {
     },
     // Where the user's carrier predicts a phone won't work, from the ACCC
     // Mobile Infrastructure Report data, built by `topo/build_coverage.py`
-    // (nswCoverage.ts draws it). One archive holds every carrier.
+    // (coverage.ts draws it). One archive holds every carrier.
     coverage: {
       id: "nsw-coverage",
       archivePath: "master/coverage/nsw-coverage.pmtiles",
       /** The build script's `SOURCE_LAYER` (test_coverage.py). */
       sourceLayer: "coverage",
-      /** A `CARRIERS` id. */
+      /** A `carriers` id. */
       carrierProperty: "carrier",
       /** A `COVERAGE_LEVELS` level. */
       levelProperty: "level",
@@ -298,6 +358,19 @@ export const NSW_REGION = {
        *  spacing (about 190 m at z12). Deeper zooms overzoom. */
       minzoom: 12,
       maxzoom: 12,
+      /**
+       * The three networks that own one. `NETWORKS` in the build script has the
+       * same ids (test_coverage.py). A reseller uses one of these; Telstra's
+       * resellers get less than Telstra's own map, which the caveat says.
+       */
+      carriers: [
+        { id: "telstra", name: "Telstra" },
+        { id: "optus", name: "Optus" },
+        { id: "tpg", name: "TPG" },
+      ],
+      // The source's limits.
+      caveat:
+        "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
       coverage: NSW_HEIGHTS.coverage,
       credit:
         "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",

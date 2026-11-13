@@ -404,6 +404,28 @@ describe("the simulated regions", () => {
         );
   });
 
+  // Mutation: duplicate a `source` or `name` in a simulated region's land
+  // classes, or a carrier `id` in its coverage: `landColor` builds a `match`
+  // with a repeated label, which MapLibre rejects, and a picker lists one
+  // carrier twice.
+  it("list each land class and each carrier once", () => {
+    const declared = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD];
+    const unique = (values: string[]) => new Set(values).size === values.length;
+    const withLand = declared.filter((r) => r.terrain.land);
+    const withCoverage = declared.filter((r) => r.terrain.coverage);
+    expect(withLand.length).toBeGreaterThanOrEqual(3);
+    expect(withCoverage.length).toBeGreaterThanOrEqual(2);
+    for (const r of withLand) {
+      const classes = r.terrain.land!.classes;
+      expect(unique(classes.map((c) => c.source)), r.id).toBe(true);
+      expect(unique(classes.map((c) => c.name)), r.id).toBe(true);
+    }
+    for (const r of withCoverage)
+      expect(unique(r.terrain.coverage!.carriers.map((c) => c.id)), r.id).toBe(
+        true,
+      );
+  });
+
   // Mutation: draw a ring over the sea between the islands.
   it("give NZ one ring for each island", () => {
     expect(SIM_NZ.borders).toHaveLength(2);
@@ -564,8 +586,10 @@ describe("layerIn", () => {
   it("is the region's archive, or null where it has none", () => {
     expect(layerIn(NSW_REGION, "land")).toBe(NSW_REGION.terrain.land);
     expect(layerIn(SIM_NZ, "heights")).toBe(SIM_NZ.terrain.heights);
-    expect(layerIn(SIM_NZ, "land")).toBeNull();
-    expect(layerIn(SIM_NZ, "fire")).toBeNull();
+    expect(layerIn(SIM_NZ, "land")).toBe(SIM_NZ.terrain.land);
+    expect(layerIn(SIM_UTAH, "coverage")).toBeNull();
+    expect(layerIn(SIM_WORLD, "land")).toBeNull();
+    expect(layerIn(SIM_WORLD, "fire")).toBeNull();
     expect(layerIn(SIM_WORLD, "slope")).toBeNull();
     expect(layerIn(SIM_WORLD, "hillshade")).not.toBeNull();
   });

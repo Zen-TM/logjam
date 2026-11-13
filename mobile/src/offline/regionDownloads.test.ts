@@ -109,14 +109,8 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const {
-  fetchExtractRequest,
-  LAND_EDGE_MINZOOM,
-  NSW_COVERAGE,
-  NSW_FIRE,
-  NSW_REGION,
-  planExtract,
-} = await import("@logjam/shared");
+const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_REGION, planExtract } =
+  await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
@@ -400,13 +394,13 @@ describe("runRegionClip", () => {
   it("cuts a fire clip from the archive's own first zoom", async () => {
     expect((await run({ fire: true })).status).toBe("ready");
     for (const { url } of cdn.calls)
-      expect(url).toBe(`${CDN}/${NSW_FIRE.archivePath}`);
+      expect(url).toBe(`${CDN}/${NSW_REGION.terrain.fire.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "fire-region",
-        logicalKey: NSW_FIRE.id,
+        logicalKey: NSW_REGION.terrain.fire.id,
         sourceType: "vector",
-        minzoom: NSW_FIRE.minzoom,
+        minzoom: NSW_REGION.terrain.fire.minzoom,
       }),
     );
   });
@@ -416,13 +410,13 @@ describe("runRegionClip", () => {
   it("cuts a coverage clip from the whole coverage archive", async () => {
     expect((await run({ coverage: true })).status).toBe("ready");
     for (const { url } of cdn.calls)
-      expect(url).toBe(`${CDN}/${NSW_COVERAGE.archivePath}`);
+      expect(url).toBe(`${CDN}/${NSW_REGION.terrain.coverage.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "coverage-region",
-        logicalKey: NSW_COVERAGE.id,
+        logicalKey: NSW_REGION.terrain.coverage.id,
         sourceType: "vector",
-        minzoom: NSW_COVERAGE.minzoom,
+        minzoom: NSW_REGION.terrain.coverage.minzoom,
       }),
     );
   });
