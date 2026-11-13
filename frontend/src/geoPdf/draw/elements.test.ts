@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GeoPdfConfig } from "@logjam/shared";
 import type { Ctx } from "./common";
-import { drawGridLabel, drawGridLines } from "./elements";
+import { drawCompass, drawGridLabel, drawGridLines } from "./elements";
 
 type Op = {
   op: "line" | "stroke" | "fill";
@@ -117,6 +117,23 @@ describe("grid labels", () => {
     });
   }
 
+  // A northern zone's northing is negative south of the equator, and a margin
+  // prints no sign: the digits are those of the same line in the southern
+  // zone, with its 10,000 km false northing. Mutation: revert to the
+  // sign-keeping `%` and `Math.floor`, and -10 000 m draws "-1" then "-10";
+  // restore `Math.abs` on the prefix and -10 km reads "1", as +100 km does.
+  it.each([
+    [-10000, ["99", "90"]],
+    [-100000, ["99", "00"]],
+    [-110000, ["98", "90"]],
+  ])("draws %i m as unsigned digits", (metres, digits) => {
+    const { ctx, ops } = recorder();
+    drawGridLabel(ctx, metres, 10000, 5, 9, 10, 16);
+    expect(ops.filter((o) => o.op === "fill").map((o) => o.text)).toEqual(
+      digits,
+    );
+  });
+
   it("a label of several pieces strokes all of them before filling any", () => {
     for (const value of [312_000, 477_000]) {
       const { ctx, ops } = recorder();
@@ -124,5 +141,86 @@ describe("grid labels", () => {
       expect(ops).toHaveLength(6);
       expectHaloed(ops);
     }
+  });
+});
+
+// A sheet's grid is one grid zone's, the one at its centre, whatever zones its
+// corners fall in: read in two zones, the southwest and northeast corners
+// differ by hundreds of kilometres (or a 10,000 km false northing) and no
+// line falls between them.
+// Mutation: read each corner with `toGridAt` (its own zone) and these draw no lines.
+describe("a sheet across a grid zone edge", () => {
+  const lines = (box: GeoPdfConfig["extent"]) => {
+    const { ctx, ops } = recorder();
+    drawGridLines(
+      ctx,
+      {
+        extent: box,
+        scale: 25000,
+        elements: { gridLines: "enNorthing" },
+      } as GeoPdfConfig,
+      1000,
+      1000,
+      150,
+    );
+    return ops.filter((o) => o.op === "line").length;
+  };
+
+  it.each([
+    [
+      "MGA 55 and 56 at 150 E",
+      { north: -33.6, south: -33.7, east: 150.05, west: 149.95 },
+    ],
+    [
+      "UTM 32 and 33 at 12 E",
+      { north: 46.05, south: 45.95, east: 12.05, west: 11.95 },
+    ],
+    [
+      "the equator, a 10,000 km false northing on one side",
+      { north: 0.05, south: -0.05, east: 12.1, west: 12.0 },
+    ],
+  ])("draws vertical and horizontal lines across %s", (_name, box) => {
+    // About 9 km wide and 11 km tall at 1 km spacing.
+    expect(lines(box)).toBeGreaterThan(15);
+  });
+});
+
+// The compass prints the sheet's grid convergence from the zone at its centre.
+// A sheet near Sydney is 3 degrees west of MGA zone 56's meridian, so grid
+// north is east of true: as before. In Utah (UTM 13) the same offset west of
+// the meridian reads west, and south of the equator the sign flips back.
+// Mutation: take the zone from the wrong grid (always NSW's) and the Utah and
+// UTM 33 figures move.
+describe("the compass's grid north", () => {
+  const gn = (extent: GeoPdfConfig["extent"]) => {
+    const { ctx, ops } = recorder();
+    // The compass draws curves and shapes the recorder has no use for.
+    const canvas = new Proxy(ctx as unknown as Record<string, unknown>, {
+      get: (target, key) => (key in target ? target[key as string] : () => {}),
+    }) as unknown as Ctx;
+    drawCompass(canvas, { extent } as GeoPdfConfig, 0, 10, 150);
+    const fills = ops.filter((o) => o.op === "fill").map((o) => o.text);
+    // The readout's last row is "GN" and its figure.
+    return fills[fills.length - 1];
+  };
+
+  it.each([
+    [
+      "near Sydney",
+      { north: -33.6, south: -33.7, east: 150.1, west: 150.0 },
+      "1.6° E",
+    ],
+    [
+      "in Utah",
+      { north: 37.55, south: 37.45, east: -107.95, west: -108.05 },
+      "1.8° W",
+    ],
+    [
+      "south of the equator in UTM 33",
+      { north: -10.0, south: -10.1, east: 12.05, west: 11.95 },
+      "0.5° E",
+    ],
+  ])("prints the figure for a sheet %s", (_name, extent, text) => {
+    expect(gn(extent)).toBe(text);
   });
 });
