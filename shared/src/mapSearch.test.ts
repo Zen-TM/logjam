@@ -19,6 +19,11 @@ const viewAround = (lat: number, lon: number): LonLatBox => ({
   east: lon + 0.2,
   north: lat + 0.2,
 });
+const shifted = (v: LonLatBox, turn: number): LonLatBox => ({
+  ...v,
+  west: v.west + turn,
+  east: v.east + turn,
+});
 const OVER_UTAH = viewAround(40.7, -111.9);
 const OVER_NZ = viewAround(-41.3, 174.8);
 const OVER_SYDNEY = viewAround(-33.8, 151.2);
@@ -108,6 +113,28 @@ describe("parseCoordinates", () => {
     });
   });
 
+  // MapLibre's bounds run past ±180 after a pan around the world: the copy of
+  // the world a view sits in must not decide east or west. Mutation: drop the
+  // `wrapView` call in `parseLatLon`.
+  it.each([
+    [
+      "Sydney, 360 west",
+      shifted(OVER_SYDNEY, -360),
+      "33.7 150.3",
+      -33.7,
+      150.3,
+    ],
+    ["Sydney, 720 east", shifted(OVER_SYDNEY, 720), "33.7 150.3", -33.7, 150.3],
+    ["Utah, 360 east", shifted(OVER_UTAH, 360), "40.7 111.9", 40.7, -111.9],
+    ["Utah, 720 west", shifted(OVER_UTAH, -720), "40.7 111.9", 40.7, -111.9],
+  ])(
+    "reads an unsigned pair the same in another copy of the world: %s",
+    (_n, view, text, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect([p.lat, p.lon]).toEqual([lat, lon]);
+    },
+  );
+
   // A comma is a separator here, never a thousands mark: "1,050" is 1 and 50,
   // as "33,150" must stay a pair. Mutation: drop the comma from the separator
   // test in `parseLatLon`, and this and every comma-separated read goes red.
@@ -158,6 +185,10 @@ describe("parseCoordinates", () => {
     `33°72'00"S 150°18'36"E`, // 72 minutes
     "1 2 3 4",
     "100 120", // neither can be a latitude
+    // A lone angle with spaces is not a pair whose first number was cut in two.
+    // Mutation: delete the `(?!\d)` after the degrees in `PART`.
+    `33 42' 36"`,
+    "33° 42'",
   ])("does not read %j", (text) => {
     expect(parseCoordinates(text)).toBeNull();
   });

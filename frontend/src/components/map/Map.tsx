@@ -101,6 +101,7 @@ import {
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
+  type LonLatBox,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -129,6 +130,16 @@ maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
 //     archive's response code, e.g. "Bad response code: 404".
 // A per-tile "Tile not found." (sparse coverage inside a healthy archive) is
 // NOT terminal and is intentionally excluded.
+/** MapLibre's bounds as the shared box. Longitudes are raw: past ±180 after a pan round the world. */
+function boxOf(bounds: maplibregl.LngLatBounds): LonLatBox {
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
+}
+
 function isTerminalTopoSourceError(error: unknown): boolean {
   const status = (error as { status?: unknown } | null | undefined)?.status;
   if (typeof status === "number") {
@@ -1834,13 +1845,7 @@ function Map({
       // or pitched map reports MORE ground than is on screen. "Filter to the
       // current view" is a coarse convenience, and reporting slightly more than
       // is visible errs towards keeping places rather than hiding them.
-      const bounds = map.getBounds();
-      onMapBoundsChangeRef.current?.({
-        west: bounds.getWest(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        north: bounds.getNorth(),
-      });
+      onMapBoundsChangeRef.current?.(boxOf(map.getBounds()));
     };
 
     fireViewChange(); // report initial centre immediately on load
@@ -2261,16 +2266,7 @@ function Map({
       map.setLayoutProperty(id, "visibility", vis);
     if (!showMgaGrid) return;
     const draw = () => {
-      const b = map.getBounds();
-      const grid = mgaGrid(
-        {
-          west: b.getWest(),
-          south: b.getSouth(),
-          east: b.getEast(),
-          north: b.getNorth(),
-        },
-        map.getZoom(),
-      );
+      const grid = mgaGrid(boxOf(map.getBounds()), map.getZoom());
       (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
     };
     draw();
@@ -3720,14 +3716,7 @@ function Map({
             disabled={selectingArea}
             getView={() => {
               const bounds = mapRef.current?.getBounds();
-              return bounds
-                ? {
-                    west: bounds.getWest(),
-                    south: bounds.getSouth(),
-                    east: bounds.getEast(),
-                    north: bounds.getNorth(),
-                  }
-                : null;
+              return bounds ? boxOf(bounds) : null;
             }}
             places={places}
             sharedPlaces={sharedPlaces}

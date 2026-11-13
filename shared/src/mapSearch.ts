@@ -6,7 +6,7 @@
 // names, so each client keeps them on the device only and clears them when the
 // account leaves (frontend useAuth.ts, mobile wipeLocalData.ts).
 import { fromEastingNorthing } from "./geoPdfExtent.js";
-import { REGIONS, type LonLatBox } from "./regions.js";
+import { REGIONS, wrapView, type LonLatBox } from "./regions.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
 /** What the search box says while it works, finds nothing or fails: one set of
@@ -38,7 +38,7 @@ const within = (v: number, [lo, hi]: readonly [number, number]) =>
 // optional minutes and seconds. A trailing letter must touch its number
 // ("33.71S"); a spaced one ("33.71 E") belongs to the next part. D M S need their marks (° ' ") so that
 // "33 42 36" is never guessed at.
-const PART = String.raw`([NSEW])?\s*(-?\d+(?:\.\d+)?)°?(?:\s*(\d+(?:\.\d+)?)\s*['′’])?(?:\s*(\d+(?:\.\d+)?)\s*(?:"|″|”|''))?([NSEW])?`;
+const PART = String.raw`([NSEW])?\s*(-?\d+(?:\.\d+)?)(?!\d)°?(?:\s*(\d+(?:\.\d+)?)\s*['′’])?(?:\s*(\d+(?:\.\d+)?)\s*(?:"|″|”|''))?([NSEW])?`;
 const PAIR = new RegExp(String.raw`^${PART}\s*[,;]?\s*${PART}$`, "i");
 
 interface Part {
@@ -105,8 +105,9 @@ function parseLatLon(
     if (am <= 90 && bm <= 180) [latPart, lonPart] = [a, b];
     else if (bm <= 90 && am <= 180) [latPart, lonPart] = [b, a];
     else return null;
-    const [centreLon, centreLat] = view
-      ? [(view.west + view.east) / 2, (view.south + view.north) / 2]
+    const wrapped = view && wrapView(view);
+    const [centreLon, centreLat] = wrapped
+      ? [(wrapped.west + wrapped.east) / 2, (wrapped.south + wrapped.north) / 2]
       : REGIONS[0].view.center;
     const typed = (p: Part) => p.value < 0 || Object.is(p.value, -0);
     const explicit = typed(a) || typed(b);

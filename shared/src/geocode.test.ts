@@ -137,6 +137,23 @@ describe("geocode", () => {
 });
 
 describe("geocodeBias", () => {
+  // MapLibre's bounds run past ±180 after a pan around the world. Mutation:
+  // drop the `wrapView` call in `geocodeBias`.
+  it.each([-360, 360, 720])(
+    "finds the region, or none, in the copy of the world %i degrees over",
+    (turn) => {
+      const over = (view: LonLatBox) => ({
+        ...view,
+        west: view.west + turn,
+        east: view.east + turn,
+      });
+      expect(geocodeBias(over(around(NSW_REGION.view.center)))).toEqual(
+        regionBounds(NSW_REGION),
+      );
+      expect(geocodeBias(over(OPEN_OCEAN))).toBeNull();
+    },
+  );
+
   // Mutation: return the view itself, or any box when no region holds it.
   it("is the bounds of the region in view and nothing outside every region", () => {
     expect(geocodeBias(around(NSW_REGION.view.center))).toEqual(
