@@ -62,7 +62,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "ap-southeast-2"
       }, {
       name  = "CORS_ORIGIN"
-      value = "https://logjamnsw.com,https://www.logjamnsw.com"
+      value = "https://logjam.earth,https://www.logjam.earth,https://logjamnsw.com,https://www.logjamnsw.com"
       }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
@@ -227,6 +227,17 @@ resource "aws_ecs_task_definition" "topo_worker" {
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
+  }
+
+  # Sized for a survey at the upload caps (api/src/lib/topoUpload.ts): the
+  # ZIP, its extraction, the ground files of a forested, classified survey and
+  # a fixed overhead, as topoUpload.unit.test.ts spells out and holds. That
+  # models the sharpen step's disk; the vegetation pass after it is limited by
+  # memory, not disk, at the caps. Open
+  # country or an unclassified survey can need more, and then fails with the
+  # "too big" sentence. Fargate's default of 20 GiB is overrun by a full ZIP.
+  ephemeral_storage {
+    size_in_gib = 60
   }
 }
 

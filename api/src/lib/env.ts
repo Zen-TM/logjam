@@ -167,13 +167,13 @@ const baseSchema = z.object({
   // The month's compute credits (vCPU-minutes) all accounts share, checked
   // before a launch beside the per-user allowance (lib/computeCredits.ts). A
   // credit is about US$0.001 of Fargate at ap-southeast-2 on-demand prices
-  // (about US$0.062 per vCPU-hour with the workers' 2 GiB per vCPU), so 15000
-  // credits, 250 vCPU-hours, is about US$15 a month. 0 = no site-wide cap.
+  // (about US$0.062 per vCPU-hour with the workers' 2 GiB per vCPU), so 32000
+  // credits, about 533 vCPU-hours, is about US$33 a month. 0 = no site-wide cap.
   SITE_MONTHLY_COMPUTE_CREDITS: z.coerce
     .number()
     .int()
     .nonnegative()
-    .default(15000),
+    .default(32000),
   // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
   // existing interval rather than owning a timer — it is incremental and does
   // nothing when no new log objects have been delivered.
@@ -196,6 +196,22 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(500),
+  // Site-wide caps beside the per-user quotas: bytes stored by every account
+  // together (lib/storageQuota.ts, 500 GiB) and bytes downloaded this month by
+  // every account together (lib/egressQuota.ts, 300 GiB). S3 is about
+  // US$0.025 per GiB-month stored and the internet egress about US$0.114 per
+  // GiB at ap-southeast-2 prices, so the defaults are roughly US$12.50 and
+  // US$34 a month at the cap. 0 = no cap, like SITE_MONTHLY_COMPUTE_CREDITS.
+  SITE_STORAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(500 * 1024 ** 3),
+  SITE_MONTHLY_EGRESS_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(300 * 1024 ** 3),
   // TopoExportJob sweeps: queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.

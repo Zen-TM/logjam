@@ -14,8 +14,8 @@
 #   2. Cleartext is blocked in a release variant, so Logjam GPS cannot reach a
 #      local http API at all. LOGJAM_LOCAL_API=1 turns on the loopback-only
 #      exemption (plugins/withLocalApiCleartext.js).
-#   3. The Sentry sourcemap upload fails the build when no org/project is
-#      configured, which is every local build.
+#   3. The Sentry upload fails the build when there is no SENTRY_AUTH_TOKEN,
+#      which is every local build; this script switches it off.
 #   4. `:app:packageRelease` is flaky above one worker on constrained hosts.
 #
 # 1, 2 and 3 all present as something OTHER than a build problem — a bare

@@ -8,7 +8,8 @@
 # Refuses to run unless CANARY_TARGET_IS_THROWAWAY=yes: the run overwrites the
 # text in every row of the database it is pointed at.
 #
-# Needs DB_HOST DB_NAME DB_USER DB_PASSWORD (DB_PORT optional), psql and pg_dump.
+# Needs DB_HOST DB_NAME DB_USER DB_PASSWORD (DB_PORT optional), psql and a pg_dump
+# at least as new as the server (the major in infra/brain/postgres/Dockerfile).
 # CI: the `migration-upgrade` job, after the upgrade.
 #
 # Mutation that turns it red: delete any statement from snapshot-scrub.sql (a
