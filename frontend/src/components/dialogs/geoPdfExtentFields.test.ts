@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toEastingNorthing, type ExtentState } from "@logjam/shared";
+import { toGridAt, type ExtentState } from "@logjam/shared";
 import {
   extentFieldText,
   parseExtentField,
@@ -41,7 +41,7 @@ describe("parseExtentField", () => {
 
   it("round-trips the displayed northing back to the same latitude (E/N mode)", () => {
     const en = { ...baseState, coordMode: "enNorthing" as const };
-    const displayedN = toEastingNorthing(en.north, en.west).northing;
+    const displayedN = toGridAt(en.north, en.west).northing;
     const lat = parseExtentField("n", displayedN.toFixed(1), en);
     expect(lat).not.toBeNull();
     expect(lat!).toBeCloseTo(en.north, 5);
@@ -49,7 +49,7 @@ describe("parseExtentField", () => {
 
   it("round-trips the displayed easting back to the same longitude (E/N mode)", () => {
     const en = { ...baseState, coordMode: "enNorthing" as const };
-    const displayedE = toEastingNorthing(en.north, en.east).easting;
+    const displayedE = toGridAt(en.north, en.east).easting;
     const lon = parseExtentField("e", displayedE.toFixed(1), en);
     expect(lon).not.toBeNull();
     expect(lon!).toBeCloseTo(en.east, 5);
@@ -57,7 +57,7 @@ describe("parseExtentField", () => {
 
   it("moving the northing up moves the latitude north (E/N mode)", () => {
     const en = { ...baseState, coordMode: "enNorthing" as const };
-    const displayedN = toEastingNorthing(en.north, en.west).northing;
+    const displayedN = toGridAt(en.north, en.west).northing;
     const lat = parseExtentField("n", String(displayedN + 1000), en);
     expect(lat!).toBeGreaterThan(en.north);
     expect(lat! - en.north).toBeCloseTo(1000 / 110540, 3); // ≈ metres per degree lat
@@ -97,13 +97,13 @@ describe("extentFieldErrors", () => {
 
   it("flags an inverted extent typed as MGA northings (E/N mode)", () => {
     const en = { ...baseState, coordMode: "enNorthing" as const };
-    const southNorthing = toEastingNorthing(en.south, en.east).northing;
+    const southNorthing = toGridAt(en.south, en.east).northing;
     const errors = extentFieldErrors(
       {
         n: String(southNorthing - 5000), // north edge below the south edge
         s: String(southNorthing),
-        e: String(toEastingNorthing(en.north, en.east).easting),
-        w: String(toEastingNorthing(en.south, en.west).easting),
+        e: String(toGridAt(en.north, en.east).easting),
+        w: String(toGridAt(en.south, en.west).easting),
       },
       en,
     );

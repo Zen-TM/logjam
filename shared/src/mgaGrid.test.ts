@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toEastingNorthing, toZoneEastingNorthing } from "./geoPdfExtent.js";
+import { mgaZone, toGrid, toGridAt } from "./grids.js";
 import {
   clipToLongitudes,
   mgaGrid,
@@ -29,7 +29,7 @@ describe("mgaGrid", () => {
     expect(g.features.length).toBeGreaterThan(8);
     const first = g.features[0].geometry.coordinates;
     expect(first.length).toBeGreaterThan(2);
-    const e = toEastingNorthing(first[0][1], first[0][0]).easting;
+    const e = toGridAt(first[0][1], first[0][0]).easting;
     expect(Math.abs(e / 1000 - Math.round(e / 1000))).toBeLessThan(1e-6);
   });
 
@@ -63,7 +63,7 @@ describe("mgaGrid", () => {
 
   // Mutation: build only the centre's zone and the far side of the edge has
   // no lines of its own zone; drop the clip and the west zone's lines run
-  // past the edge; move an edge or drop a zone in MGA_ZONES.
+  // past the edge; move an edge or drop a zone in grids.ts MGA_ZONES.
   it.each([
     [144, 54, 55],
     [150, 55, 56],
@@ -81,7 +81,7 @@ describe("mgaGrid", () => {
       );
       sides.add(zone);
       const [lon, lat] = c[Math.floor(c.length / 2)];
-      const { easting, northing } = toZoneEastingNorthing(lat, lon, zone);
+      const { easting, northing } = toGrid(lat, lon, mgaZone(zone));
       const offStep = (m: number) => Math.abs(m / 1e4 - Math.round(m / 1e4));
       expect(Math.min(offStep(easting), offStep(northing))).toBeLessThan(1e-3);
     }

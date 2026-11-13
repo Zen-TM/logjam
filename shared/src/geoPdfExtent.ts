@@ -1,5 +1,3 @@
-import proj4 from "proj4";
-
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type CoordMode = "latlon" | "enNorthing";
@@ -283,62 +281,4 @@ export function applyCoordModeChange(
   newCoordMode: CoordMode,
 ): ExtentState {
   return { ...state, coordMode: newCoordMode };
-}
-
-// ── Coordinate Conversion (GDA2020 / MGA) ───────────────────────────────────
-
-const WGS84 = "EPSG:4326";
-
-function mgaProj(zone: 54 | 55 | 56): string {
-  // GDA2020 / MGA zone projection string
-  return `+proj=utm +zone=${zone} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
-}
-
-/** Each MGA zone's longitude span; the outer two run on past NSW. */
-export const MGA_ZONES = [
-  { zone: 54, west: -Infinity, east: 144 },
-  { zone: 55, west: 144, east: 150 },
-  { zone: 56, west: 150, east: Infinity },
-] as const;
-
-export function detectMgaZone(lon: number): 54 | 55 | 56 {
-  return (MGA_ZONES.find((z) => lon < z.east) ?? MGA_ZONES[2]).zone;
-}
-
-/** Easting and northing in a chosen zone, not the one `lon` falls in. */
-export function toZoneEastingNorthing(
-  lat: number,
-  lon: number,
-  zone: 54 | 55 | 56,
-): { easting: number; northing: number } {
-  const [easting, northing] = proj4(WGS84, mgaProj(zone), [lon, lat]);
-  return { easting, northing };
-}
-
-export function toEastingNorthing(
-  lat: number,
-  lon: number,
-): { easting: number; northing: number; zone: 54 | 55 | 56 } {
-  const zone = detectMgaZone(lon);
-  return { ...toZoneEastingNorthing(lat, lon, zone), zone };
-}
-
-export function fromEastingNorthing(
-  easting: number,
-  northing: number,
-  zone: 54 | 55 | 56,
-): { lat: number; lon: number } {
-  const [lon, lat] = proj4(mgaProj(zone), WGS84, [easting, northing]);
-  return { lat, lon };
-}
-
-/**
- * Calculate grid north convergence angle in degrees at a given point.
- * Positive means grid north is east of true north.
- */
-export function gridConvergence(lat: number, lon: number): number {
-  const zone = detectMgaZone(lon);
-  const centralMeridian = (zone - 1) * 6 - 177;
-  // Simplified convergence: γ ≈ (lon - centralMeridian) * sin(lat)
-  return (lon - centralMeridian) * Math.sin(lat * DEG_TO_RAD);
 }

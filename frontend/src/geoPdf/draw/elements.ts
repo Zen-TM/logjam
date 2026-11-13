@@ -4,13 +4,13 @@
 // same constants, so a browser GeoPDF looks like a server one.
 import { model as magneticModel } from "geomagnetism";
 import {
-  detectMgaZone,
   extractionCreditLine,
-  fromEastingNorthing,
+  fromGrid,
   BASEMAP_CATALOG,
   gridConvergence,
+  gridZoneAt,
   overlayAttributionLines,
-  toEastingNorthing,
+  toGridAt,
   type GeoPdfConfig,
 } from "@logjam/shared";
 import {
@@ -220,7 +220,7 @@ export function drawCompass(
   const magDecl = magInfo.decl as number; // degrees, positive = east
 
   // Grid convergence
-  const gridConv = gridConvergence(midLat, midLon);
+  const gridConv = gridConvergence(midLat, midLon, gridZoneAt(midLon, midLat));
 
   // ── Layout ───────────────────────────────────────────────────────────────
   // Standard declination diagram: three arms from one origin at their TRUE
@@ -574,10 +574,10 @@ export function drawGridLines(
 
     // Use a single MGA zone based on the map centre to avoid cross-zone issues
     const midLon = (east + west) / 2;
-    const zone = detectMgaZone(midLon);
+    const zone = gridZoneAt(midLon, (north + south) / 2);
 
-    const swEN = toEastingNorthing(south, west);
-    const neEN = toEastingNorthing(north, east);
+    const swEN = toGridAt(south, west);
+    const neEN = toGridAt(north, east);
 
     const toPixel = (lat: number, lon: number) =>
       latLonToCanvasPx(lat, lon, config.extent, widthPx, heightPx);
@@ -586,8 +586,8 @@ export function drawGridLines(
     const startE = Math.ceil(swEN.easting / interval) * interval;
     const endE = Math.floor(neEN.easting / interval) * interval;
     for (let e = startE; e <= endE; e += interval) {
-      const topLL = fromEastingNorthing(e, neEN.northing, zone);
-      const botLL = fromEastingNorthing(e, swEN.northing, zone);
+      const topLL = fromGrid(e, neEN.northing, zone);
+      const botLL = fromGrid(e, swEN.northing, zone);
       const topPx = toPixel(topLL.lat, topLL.lon);
       const botPx = toPixel(botLL.lat, botLL.lon);
       ctx.beginPath();
@@ -609,8 +609,8 @@ export function drawGridLines(
     const startN = Math.ceil(swEN.northing / interval) * interval;
     const endN = Math.floor(neEN.northing / interval) * interval;
     for (let n = startN; n <= endN; n += interval) {
-      const leftLL = fromEastingNorthing(swEN.easting, n, zone);
-      const rightLL = fromEastingNorthing(neEN.easting, n, zone);
+      const leftLL = fromGrid(swEN.easting, n, zone);
+      const rightLL = fromGrid(neEN.easting, n, zone);
       const leftPx = toPixel(leftLL.lat, leftLL.lon);
       const rightPx = toPixel(rightLL.lat, rightLL.lon);
       ctx.beginPath();

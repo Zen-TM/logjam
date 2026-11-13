@@ -26,8 +26,8 @@ const GEOGRAPHIC = "+proj=longlat +ellps=GRS80 +no_defs";
 const WEB_MERCATOR =
   "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +no_defs";
 
-// UTM south zones. Same proj-string idiom as mgaProj in geoPdfExtent.ts
-// (which is deliberately private to that module); MGA94/MGA2020/UTM-WGS84
+// UTM south zones. Same proj-string idiom as the MGA zones in
+// grids.ts; MGA94/MGA2020/UTM-WGS84
 // all share GRS80-compatible ellipsoids at our accuracy budget.
 const utmSouth = (zone: number) =>
   `+proj=utm +zone=${zone} +south +ellps=GRS80 +units=m +no_defs`;

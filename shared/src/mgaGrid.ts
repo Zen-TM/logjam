@@ -3,11 +3,7 @@
 // meridian, since the two grids sit at different angles there. Both clients
 // draw it from this one function (ADR 0020); the printed grid in the GeoPDF
 // follows the same two-digit label convention. Guard: mgaGrid.test.ts.
-import {
-  fromEastingNorthing,
-  MGA_ZONES,
-  toZoneEastingNorthing,
-} from "./geoPdfExtent.js";
+import { fromGrid, gridZonesFor, toGrid, type GridZone } from "./grids.js";
 
 export interface GridBbox {
   west: number;
@@ -90,7 +86,7 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
   const out: MgaGrid = { type: "FeatureCollection", features: [] };
   const step = mgaGridStep(zoom);
   if (step === null) return out;
-  for (const z of MGA_ZONES) {
+  for (const z of gridZonesFor(bbox)) {
     const west = Math.max(bbox.west, z.west);
     const east = Math.min(bbox.east, z.east);
     if (west < east) zoneGrid(out, { ...bbox, west, east }, z, step);
@@ -100,18 +96,14 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
 
 /** One zone's lines over `bbox`, cut at the zone's edges but not at the
  *  view's, so lines still reach past a turned or panning view. */
-function zoneGrid(
-  out: MgaGrid,
-  bbox: GridBbox,
-  { zone, west, east }: (typeof MGA_ZONES)[number],
-  step: number,
-) {
+function zoneGrid(out: MgaGrid, bbox: GridBbox, zone: GridZone, step: number) {
+  const { west, east } = zone;
   const corners = [
     [bbox.south, bbox.west],
     [bbox.south, bbox.east],
     [bbox.north, bbox.west],
     [bbox.north, bbox.east],
-  ].map(([lat, lon]) => toZoneEastingNorthing(lat, lon, zone));
+  ].map(([lat, lon]) => toGrid(lat, lon, zone));
   const eMin = Math.min(...corners.map((c) => c.easting));
   const eMax = Math.max(...corners.map((c) => c.easting));
   const nMin = Math.min(...corners.map((c) => c.northing));
@@ -119,7 +111,7 @@ function zoneGrid(
   if (![eMin, eMax, nMin, nMax].every(Number.isFinite)) return;
 
   const at = (e: number, n: number): Pt => {
-    const { lat, lon } = fromEastingNorthing(e, n, zone);
+    const { lat, lon } = fromGrid(e, n, zone);
     return [lon, lat];
   };
   const run = (from: number, to: number) =>

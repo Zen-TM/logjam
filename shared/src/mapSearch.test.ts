@@ -10,7 +10,7 @@ import {
   SEARCH_STATUS,
   searchPinAfter,
 } from "./mapSearch";
-import { toEastingNorthing } from "./geoPdfExtent";
+import { toGridAt } from "./grids";
 
 describe("parseCoordinates", () => {
   it.each([
@@ -48,8 +48,8 @@ describe("parseCoordinates", () => {
   ])("reads MGA %s", (text) => {
     const p = parseCoordinates(text)!;
     expect(p.label).toBe("MGA 56 245000 6264000");
-    const back = toEastingNorthing(p.lat, p.lon);
-    expect(back.zone).toBe(56);
+    const back = toGridAt(p.lat, p.lon);
+    expect(back.zone.name).toBe("MGA 56");
     expect(back.easting).toBeCloseTo(245000, 0);
     expect(back.northing).toBeCloseTo(6264000, 0);
   });
@@ -57,7 +57,7 @@ describe("parseCoordinates", () => {
   // Mutation: decimals back outside the capture groups (metres truncated).
   it("keeps the metres' decimals", () => {
     const p = parseCoordinates("56 245000.6 6264000.4")!;
-    const back = toEastingNorthing(p.lat, p.lon);
+    const back = toGridAt(p.lat, p.lon);
     expect(back.easting).toBeCloseTo(245000.6, 1);
     expect(back.northing).toBeCloseTo(6264000.4, 1);
   });

@@ -11,11 +11,7 @@
 //     range, North > South, East > West — sign-correct comparisons only, no
 //     hemisphere assumptions).
 
-import {
-  toEastingNorthing,
-  fromEastingNorthing,
-  type ExtentState,
-} from "@logjam/shared";
+import { toGridAt, fromGrid, type ExtentState } from "@logjam/shared";
 
 export type ExtentFieldKey = "n" | "s" | "e" | "w";
 export type ExtentFieldValues = Record<ExtentFieldKey, string>;
@@ -54,20 +50,20 @@ export function parseExtentField(
 
   switch (field) {
     case "n": {
-      const base = toEastingNorthing(state.north, state.west);
-      return fromEastingNorthing(base.easting, v, base.zone).lat;
+      const base = toGridAt(state.north, state.west);
+      return fromGrid(base.easting, v, base.zone).lat;
     }
     case "s": {
-      const base = toEastingNorthing(state.south, state.east);
-      return fromEastingNorthing(base.easting, v, base.zone).lat;
+      const base = toGridAt(state.south, state.east);
+      return fromGrid(base.easting, v, base.zone).lat;
     }
     case "e": {
-      const base = toEastingNorthing(state.north, state.east);
-      return fromEastingNorthing(v, base.northing, base.zone).lon;
+      const base = toGridAt(state.north, state.east);
+      return fromGrid(v, base.northing, base.zone).lon;
     }
     case "w": {
-      const base = toEastingNorthing(state.south, state.west);
-      return fromEastingNorthing(v, base.northing, base.zone).lon;
+      const base = toGridAt(state.south, state.west);
+      return fromGrid(v, base.northing, base.zone).lon;
     }
   }
 }
@@ -86,7 +82,7 @@ export function extentFieldText(field: ExtentFieldKey, state: Edges): string {
   }[field];
   const latitude = field === "n" || field === "s";
   if (state.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
-  const en = toEastingNorthing(lat, lon);
+  const en = toGridAt(lat, lon);
   return (latitude ? en.northing : en.easting).toFixed(1);
 }
 
