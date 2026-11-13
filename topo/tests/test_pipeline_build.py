@@ -10,8 +10,6 @@ import _native_stub  # noqa: F401,E402
 
 try:
     from pipeline import (  # noqa: E402
-        leave_out_if_too_big,
-        union_area_m2,
         PDAL_SCAN_ANGLE_MAX,
         SCRUB_BAND_MAX_M,
         SCRUB_STRATUM_LOW_MAX_M,
@@ -320,89 +318,10 @@ class TestHasClass2(unittest.TestCase):
 
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestUnionArea(unittest.TestCase):
-    """Mutations that turn it red: a box per cloud instead of one around them
-    (overlapping clouds counted twice), one box across CRSs (two zones' eastings
-    boxed together), and an area summed over the clouds' own sizes (a gap
-    between two clouds left out of it)."""
-
-    @staticmethod
-    def b(x0, y0, x1, y1):
-        return {"minx": x0, "miny": y0, "maxx": x1, "maxy": y1}
-
-    def test_one_box_around_clouds_of_one_crs(self):
-        clouds = [
-            ("z56", self.b(0, 0, 2000, 2000)),
-            ("z56", self.b(1000, 1000, 3000, 3000)),
-        ]
-        self.assertEqual(union_area_m2(clouds), 3000 * 3000)
-
-    def test_a_gap_between_clouds_is_inside_the_box(self):
-        clouds = [
-            ("z56", self.b(0, 0, 2000, 2000)),
-            ("z56", self.b(4000, 0, 6000, 2000)),
-        ]
-        self.assertEqual(union_area_m2(clouds), 6000 * 2000)
-
-    def test_each_crs_is_boxed_apart_and_added(self):
-        clouds = [
-            ("z55", self.b(0, 0, 2000, 2000)),
-            ("z56", self.b(900000, 0, 902000, 2000)),
-        ]
-        self.assertEqual(union_area_m2(clouds), 2 * 2000 * 2000)
-
-    def test_no_clouds_is_no_area(self):
-        self.assertEqual(union_area_m2([]), 0)
-
-
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestLeaveOutIfTooBig(unittest.TestCase):
-    """Mutations that turn it red: the memory test inverted or dropped (an area
-    that does not fit runs on to an out-of-memory kill), the exit code
-    replaced by another, or the estimate not including the declared base."""
-
-    def run_with(self, free, area_m2):
-        from unittest import mock
-
-        cloud = ("z56", {"minx": 0, "miny": 0, "maxx": area_m2, "maxy": 1})
-        with (
-            mock.patch("pipeline._cloud_extent", return_value=cloud),
-            mock.patch("pipeline.available_memory", return_value=free),
-        ):
-            leave_out_if_too_big(["a.laz"])
-
-    def test_an_area_that_does_not_fit_exits_with_the_declared_code(self):
-        from worker_common import VEGETATION_LEFT_OUT_EXIT, vegetation_memory_estimate
-
-        need = vegetation_memory_estimate(16_000_000)
-        with self.assertRaises(SystemExit) as caught:
-            self.run_with(need - 1, 16_000_000)
-        self.assertEqual(caught.exception.code, VEGETATION_LEFT_OUT_EXIT)
-        self.run_with(need, 16_000_000)  # exactly enough: runs on
-
-    def test_the_estimate_is_the_base_plus_a_rate_per_square_metre(self):
-        from worker_common import (
-            VEGETATION_BASE_BYTES,
-            VEGETATION_BYTES_PER_M2,
-            vegetation_memory_estimate,
-        )
-
-        self.assertEqual(vegetation_memory_estimate(0), VEGETATION_BASE_BYTES)
-        self.assertEqual(
-            vegetation_memory_estimate(1_000_000),
-            VEGETATION_BASE_BYTES + 1_000_000 * VEGETATION_BYTES_PER_M2,
-        )
-
-    def test_the_estimate_covers_what_was_measured(self):
-        # 976 MiB on a 16 km2 area, 407 MiB on a 4 km2 tile (worker_common.py).
-        from worker_common import vegetation_memory_estimate
-
-        self.assertGreaterEqual(vegetation_memory_estimate(16_000_000), 976 * 2**20)
-        self.assertGreaterEqual(vegetation_memory_estimate(4_000_000), 407 * 2**20)
-
+class TestOutOfMemoryExit(unittest.TestCase):
     # Mutation: drop `except MemoryError` from `main`, and a pass that runs out
     # of memory fails the job instead of leaving the layer out.
-    def test_running_out_of_memory_exits_with_the_same_code(self):
+    def test_running_out_of_memory_exits_with_the_left_out_code(self):
         from unittest import mock
 
         from pipeline import main

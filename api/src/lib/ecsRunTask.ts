@@ -10,12 +10,6 @@ export interface LaunchFargateTaskOptions {
   taskDefinition: string;
   containerName: string;
   environment: { name: string; value: string }[];
-  /**
-   * Task-level memory in MiB, overriding the task definition's. Fargate takes
-   * only its valid sizes for the task's vCPU (8 vCPU: 16 to 60 GiB in 4 GiB
-   * steps). Omitted, the task runs at the definition's size.
-   */
-  memoryMiB?: number;
 }
 
 /**
@@ -43,9 +37,6 @@ export async function launchFargateTask(
         },
       },
       overrides: {
-        ...(options.memoryMiB !== undefined && {
-          memory: String(options.memoryMiB),
-        }),
         containerOverrides: [
           {
             name: options.containerName,
