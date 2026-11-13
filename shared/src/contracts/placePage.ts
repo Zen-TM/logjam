@@ -5,7 +5,12 @@
 // first sit on the page as buttons, every other one is behind the ⋯. A page
 // draws no verb of its own, so Delete and Remove are never a section.
 import { fieldValue } from "../fieldValues.js";
-import { SOURCES_FIELD_KEY, systemFieldDef } from "../placeTypes.js";
+import {
+  SOURCES_FIELD_KEY,
+  SYSTEM_PLACE_TYPE_IDS,
+  systemFieldDef,
+} from "../placeTypes.js";
+import { FLOW_NETWORK_GAP } from "./mapPoint.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { AttributeRow } from "../logbook.js";
 import {
@@ -47,6 +52,11 @@ export const PLACE_PAGE = {
     // section only when one is set. The owner with none gets a quiet way to
     // choose; Logjam never picks for them.
     { key: "gauge", shareeSees: true },
+    // "Show catchment": the creeks upstream of a canyon's pin, drawn on the
+    // map as "What is here?" draws them. Under the gauge, its neighbour in
+    // reading how much water comes down. Canyons only
+    // (`placeOffersCatchment`), and the API is asked only on the press.
+    { key: "catchment", on: "web", gap: FLOW_NETWORK_GAP },
     { key: "linkedPlaces", ownerOnly: true },
     { key: "trips" },
     { key: "sharedWith", ownerOnly: true },
@@ -55,6 +65,7 @@ export const PLACE_PAGE = {
     // A section's title is the copy under its own key, where it is constant.
     position: PLACE_FORM.copy.position,
     gauge: "River gauge",
+    showCatchment: "Show catchment",
     doesntFit: "Doesn't fit this type",
     notes: PLACE_FORM.copy.notes,
     sources: PLACE_FORM.copy.sources,
@@ -134,6 +145,16 @@ export function placeSectionTitle(
   return view.owned && view.filled && view.shared && section?.shareeSees
     ? `${title} · ${PLACE_PAGE.copy.sharedMarker}`
     : title;
+}
+
+/**
+ * Whether a place's page offers "Show catchment": the built-in Canyon type,
+ * by its pinned id, so a friend's copied canyon offers it too.
+ */
+export function placeOffersCatchment(
+  placeTypeId: string | null | undefined,
+): boolean {
+  return placeTypeId === SYSTEM_PLACE_TYPE_IDS.canyon;
 }
 
 /** Decimals a position is written to: about a metre, on both clients. */

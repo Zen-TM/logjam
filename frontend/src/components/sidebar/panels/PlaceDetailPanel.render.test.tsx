@@ -8,7 +8,13 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ADD_WAY, PLACE_PAGE, type MediaItem } from "@logjam/shared";
+import {
+  ADD_WAY,
+  PLACE_PAGE,
+  SYSTEM_PLACE_TYPE_IDS,
+  contractSectionsFor,
+  type MediaItem,
+} from "@logjam/shared";
 import type { TPlace, TRoute } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
@@ -123,6 +129,7 @@ function renderPanel(
       onOpenRoute={noop}
       onRoutesChanged={noop}
       onDrawRoute={noop}
+      onShowCatchment={noop}
       {...props}
     />,
   );
@@ -514,6 +521,44 @@ describe("the place panel's notes", () => {
     });
     await waitFor(() =>
       expect(container.querySelector("strong")?.textContent).toBe("a"),
+    );
+  });
+});
+
+describe("Show catchment on a canyon's page", () => {
+  const button = () =>
+    screen.queryByRole("button", { name: PLACE_PAGE.copy.showCatchment });
+
+  // Mutation: send anything but the pin's own position, and the creeks drawn
+  // are upstream of somewhere else.
+  it("draws the creeks upstream of the pin, from the pin", () => {
+    const onShowCatchment = vi.fn();
+    renderPanel({ onShowCatchment });
+    fireEvent.click(button()!);
+    expect(onShowCatchment).toHaveBeenCalledWith({
+      latitude: -33.71234,
+      longitude: 150.31188,
+    });
+  });
+
+  // Mutation: offer it on every place type, and a campsite gets a button for
+  // the creeks above it.
+  it("is offered on canyons only", () => {
+    renderPanel({
+      place: {
+        ...place,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+      } as TPlace,
+    });
+    expect(button()).toBeNull();
+  });
+
+  // The button sits right under the river gauge: both are about the water.
+  it("comes straight after the river gauge section", () => {
+    const keys = contractSectionsFor(PLACE_PAGE, "web", true);
+    expect(keys.indexOf("catchment")).toBe(keys.indexOf("gauge") + 1);
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).not.toContain(
+      "catchment",
     );
   });
 });

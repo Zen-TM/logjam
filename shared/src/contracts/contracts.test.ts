@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
-import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { SYSTEM_FIELD_DEFS, SYSTEM_PLACE_TYPE_IDS } from "../placeTypes.js";
 import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
@@ -485,17 +485,20 @@ describe("a place's page", () => {
       "route",
       "weather",
       "gauge",
+      "catchment",
       "linkedPlaces",
       "trips",
       "sharedWith",
     ];
     const ownerOnly = ["doesntFit", "linkedPlaces", "sharedWith"];
-    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(order);
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(
+      order.filter((key) => key !== "catchment"),
+    );
     expect(contractSectionsFor(PLACE_PAGE, "web", true)).toEqual(
       order.filter((key) => key !== "navigate"),
     );
     expect(contractSectionsFor(PLACE_PAGE, "gps", false)).toEqual(
-      order.filter((key) => !ownerOnly.includes(key)),
+      order.filter((key) => !ownerOnly.includes(key) && key !== "catchment"),
     );
   });
 
@@ -1813,5 +1816,28 @@ describe("delete done-toasts", () => {
     expect(placeDeleteDone(3)).toBe("3 places deleted.");
     expect(tripDeleteDone(1)).toBe("Trip deleted.");
     expect(tripDeleteDone(3)).toBe("3 trips deleted.");
+  });
+});
+
+describe("Show catchment on a place's page", () => {
+  // Mutation: test the type by name, or offer it on every type, and a
+  // campsite or a renamed copy of Canyon gets it wrong.
+  it("is offered on the built-in Canyon type, by its pinned id", () => {
+    expect(contracts.placeOffersCatchment(SYSTEM_PLACE_TYPE_IDS.canyon)).toBe(
+      true,
+    );
+    expect(contracts.placeOffersCatchment(SYSTEM_PLACE_TYPE_IDS.campsite)).toBe(
+      false,
+    );
+    expect(contracts.placeOffersCatchment(null)).toBe(false);
+  });
+
+  it("says why nothing is drawn when the pin is off a creek or unmapped", () => {
+    expect(contracts.MAP_POINT.copy.upstreamNoCreek).toBe(
+      "No creek within 50 m to show the catchment of.",
+    );
+    expect(contracts.MAP_POINT.copy.upstreamNotCovered).toBe(
+      "Catchments aren't mapped here yet.",
+    );
   });
 });

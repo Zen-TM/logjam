@@ -22,12 +22,12 @@ import {
   initialBearingDegrees,
 } from "../trackStats.js";
 import type { IconIdea } from "../icons.js";
-import type { FlowNetworkLookup } from "../flowNetwork.js";
+import { FLOW_NETWORK_SNAP_M, type FlowNetworkLookup } from "../flowNetwork.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 import { WEATHER } from "./weather.js";
 
-const FLOW_NETWORK_GAP =
+export const FLOW_NETWORK_GAP =
   "Logjam GPS's sheet does not ask the API's flow network yet: a gap, not a choice.";
 
 export const MAP_POINT = {
@@ -100,6 +100,10 @@ export const MAP_POINT = {
     catchment: "Catchment",
     upstreamFinding: "Finding the creeks upstream…",
     upstreamFailed: "Couldn't show the creeks upstream.",
+    // Asked from a place's page, where no lookup has run first: the pin may
+    // be off the creek, or in a basin not built yet.
+    upstreamNoCreek: `No creek within ${FLOW_NETWORK_SNAP_M} m to show the catchment of.`,
+    upstreamNotCovered: "Catchments aren't mapped here yet.",
     upstreamClear: "Clear the creeks upstream",
     upstreamFit: "Fit the map to the creeks upstream",
   },

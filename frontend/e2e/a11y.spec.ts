@@ -1597,6 +1597,75 @@ test.describe("desktop", () => {
     await expect(notice).toHaveCount(0);
   });
 
+  test("Show catchment: a canyon's page draws the creeks upstream of its pin", async ({
+    page,
+  }) => {
+    // Answered here, as above: the seeded canyon is outside the committed
+    // Govetts Creek layer. A creek on the pin, then none, on the second press.
+    let pressed = 0;
+    await page.route("**/flow-network/lookup", async (route) => {
+      const { longitude, latitude } = route.request().postDataJSON();
+      pressed += 1;
+      if (pressed > 1) {
+        await route.fulfill({
+          json: { status: "no-creek", attribution: "NSW 5 m DEM" },
+        });
+        return;
+      }
+      const creek: [number, number] = [longitude, latitude];
+      await route.fulfill({
+        json: {
+          status: "found",
+          snapped: { longitude, latitude },
+          distanceM: 3,
+          catchmentKm2: 12.4,
+          streamOrder: 4,
+          attribution: "NSW 5 m DEM",
+          upstream: {
+            lines: {
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: [[creek[0] - 0.01, creek[1] + 0.01], creek],
+                  },
+                  properties: { catchmentKm2: 12.4, streamOrder: 4 },
+                },
+              ],
+            },
+            bbox: [creek[0] - 0.01, creek[1], creek[0], creek[1] + 0.01],
+          },
+        },
+      });
+    });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await aside
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
+      .click();
+    const show = aside.getByRole("button", { name: "Show catchment" });
+    await expect(show).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await show.click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Creeks upstream · 12 km²" }),
+    ).toBeVisible();
+
+    // Off a creek: a sentence saying so, and nothing drawn.
+    await page
+      .getByRole("button", { name: "Clear the creeks upstream" })
+      .click();
+    await show.click();
+    await expect(
+      page.getByText("No creek within 50 m to show the catchment of."),
+    ).toBeVisible();
+    await expect(page.getByText(/^Creeks upstream ·/)).toHaveCount(0);
+  });
+
   test("What is here?: no Catchment row where no creek is found", async ({
     page,
   }) => {

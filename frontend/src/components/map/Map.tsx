@@ -660,6 +660,8 @@ function Map({
   onFlyToPlaceConsumed,
   flyToBounds,
   onFlyToBoundsConsumed,
+  showUpstreamAt,
+  onShowUpstreamAtConsumed,
   panelOpen,
   sheetOpen = false,
   placeHighlight,
@@ -817,6 +819,10 @@ function Map({
    */
   flyToBounds?: [number, number, number, number] | null;
   onFlyToBoundsConsumed?: () => void;
+  /** Draw the creeks upstream of a point, asked for off the map (a canyon's
+   *  page): as "What is here?"'s verb does, then consumed. */
+  showUpstreamAt?: { point: MapPointCoord } | null;
+  onShowUpstreamAtConsumed?: () => void;
   /** A page is open over the map's left edge; the chrome moves clear of it. */
   panelOpen: boolean;
   /** A sheet is open beside that page (the Places filters). */
@@ -978,7 +984,17 @@ function Map({
         .then((lookup) => {
           if (request !== upstreamRequest.current || mapRef.current !== map)
             return;
-          if (lookup.status !== "found" || !lookup.upstream) {
+          // Only a page's press gets here without a creek: "What is here?"
+          // offers the verb once its lookup has found one.
+          if (lookup.status === "no-creek") {
+            failed(MAP_POINT.copy.upstreamNoCreek);
+            return;
+          }
+          if (lookup.status === "not-covered") {
+            failed(MAP_POINT.copy.upstreamNotCovered);
+            return;
+          }
+          if (!lookup.upstream) {
             failed(MAP_POINT.copy.upstreamFailed);
             return;
           }
@@ -3366,6 +3382,17 @@ function Map({
     });
     onFlyToBoundsConsumedRef.current?.();
   }, [flyToBounds, mapLoaded]);
+
+  // The creeks upstream of a point asked for off the map: a canyon's page.
+  const onShowUpstreamAtConsumedRef = useRef(onShowUpstreamAtConsumed);
+  useEffect(() => {
+    onShowUpstreamAtConsumedRef.current = onShowUpstreamAtConsumed;
+  }, [onShowUpstreamAtConsumed]);
+  useEffect(() => {
+    if (!showUpstreamAt || !mapLoaded) return;
+    showUpstreamFrom(showUpstreamAt.point);
+    onShowUpstreamAtConsumedRef.current?.();
+  }, [showUpstreamAt, mapLoaded, showUpstreamFrom]);
 
   const onFlyToPlaceConsumedRef = useRef(onFlyToPlaceConsumed);
   useEffect(() => {
