@@ -95,6 +95,8 @@ describe("parseCoordinates", () => {
     },
   );
 
+  // Mutation: fall back to a centre of [0, 0] (everything north) instead of
+  // the first region's centre.
   it("falls back to the home region's hemispheres when the map has no view", () => {
     expect(parseCoordinates("33.71 150.31", null)).toMatchObject({
       lat: -33.71,
@@ -104,6 +106,13 @@ describe("parseCoordinates", () => {
       lat: -33.71,
       lon: 150.31,
     });
+  });
+
+  // A comma is a separator here, never a thousands mark: "1,050" is 1 and 50,
+  // as "33,150" must stay a pair. Mutation: drop the comma from the separator
+  // test in `parseLatLon`, and this and every comma-separated read goes red.
+  it("reads a comma between two numbers as the pair's separator", () => {
+    expect(parseCoordinates("1,050", null)).toMatchObject({ lat: -1, lon: 50 });
   });
 
   it("labels a decimal pair to five places", () => {

@@ -4622,7 +4622,8 @@ export function MapScreen({
    * definition of "where is this thing", not a second one for search.
    *
    * PRIVACY: names and coordinates stay in this array. Nothing here is sent
-   * anywhere; the geocoder only ever sees the typed string.
+   * anywhere; the geocoder sees the typed string and, over a covered region,
+   * that region's outline, never a saved item.
    */
   const savedSearchItems: SavedSearchItem[] = useMemo(
     () => [

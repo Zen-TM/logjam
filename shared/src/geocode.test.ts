@@ -147,6 +147,8 @@ describe("geocodeBias", () => {
     expect(geocodeBias(undefined)).toBeNull();
   });
 
+  // Mutation: pick the region by a corner of the view (`regionAt(view.west,
+  // view.south, regions)`) instead of by `regionInView`'s centre.
   it("follows the region under the view's centre, not the view's size", () => {
     const [lon, lat] = SIM_NZ.view.center;
     expect(geocodeBias(around([lon, lat], 5), SIM_REGIONS)).toEqual(

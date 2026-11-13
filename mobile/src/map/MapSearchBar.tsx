@@ -24,8 +24,9 @@
 // kind's glyph and hue so the two are never confused for each other.
 //
 // PRIVACY: only the typed string leaves Logjam GPS, to our API when the phone
-// has no registry, to Nominatim when asked (shared/src/geocode.test.ts), and
-// nowhere when it has. No saved place's name or coordinates is sent — the saved matches are the
+// has no registry, and to Nominatim when asked, which also gets the outline of
+// the covered region the map shows and nothing extra when it shows none
+// (shared/src/geocode.test.ts); with a registry, nowhere. No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be. The only thing persisted is the short list of
 // recent picks (`recentSearches.ts`), on this phone, cleared on sign-out.
 import { useEffect, useMemo, useRef, useState } from "react";
