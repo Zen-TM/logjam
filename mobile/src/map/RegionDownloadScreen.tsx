@@ -44,6 +44,7 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
+  DOWNLOADABLE_BASEMAP_IDS,
   NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
@@ -125,7 +126,7 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * against tens for one raster, and the route and measure tools snap to it, so
  * leaving it optional would mean a tool that quietly stops working in the field.
  */
-const DOWNLOADABLE = ["six-topo", "six-base", "six-imagery"] as const;
+const DOWNLOADABLE = DOWNLOADABLE_BASEMAP_IDS;
 type SelectableId = (typeof DOWNLOADABLE)[number];
 
 /**

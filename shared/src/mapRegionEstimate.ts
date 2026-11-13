@@ -185,6 +185,18 @@ const TERRARIUM_TILE_BYTES: TileBytes = {
   13: { meanBytes: 34_495, p90Bytes: 38_109 },
 };
 
+/**
+ * The basemaps a save offers as a tile pyramid: every `offlineCapable` raster
+ * entry of `BASEMAP_CATALOG`, listed so a client can type its chips by them.
+ * Guard: `mapRegionEstimate.test.ts` ("lists every offline-capable raster
+ * basemap, and only those").
+ */
+export const DOWNLOADABLE_BASEMAP_IDS = [
+  "six-topo",
+  "six-base",
+  "six-imagery",
+] as const;
+
 /** Anything the tile-pyramid downloader can fetch: basemaps plus the DEM. */
 export type DownloadableTileSourceId = string;
 

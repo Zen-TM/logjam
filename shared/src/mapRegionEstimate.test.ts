@@ -5,6 +5,7 @@ import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { landClip } from "./nswLand.js";
 import {
   DEM_SOURCE_ID,
+  DOWNLOADABLE_BASEMAP_IDS,
   MAX_REGION_AREA_KM2,
   MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
@@ -25,7 +26,7 @@ import {
   type RegionBbox,
   type SaveClipKind,
 } from "./mapRegionEstimate.js";
-import { NSW_REGION, type Region } from "./regions.js";
+import { NSW_REGION, REGIONS, WORLD, type Region } from "./regions.js";
 import { SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
@@ -225,6 +226,16 @@ describe("estimateRegionSize", () => {
     expect(() => estimateRegionSize(plan, "six-nope")).toThrow();
   });
 
+  // Mutation: misspell an id in `DOWNLOADABLE_BASEMAP_IDS`, or
+  // drop an id from it, and the list no longer matches the catalogue.
+  it("lists every offline-capable raster basemap, and only those", () => {
+    const downloadable = BASEMAP_CATALOG.filter(
+      (e) => e.offlineCapable && e.kind === "raster",
+    ).map((e) => e.id);
+    expect(downloadable.length).toBeGreaterThanOrEqual(3);
+    expect([...DOWNLOADABLE_BASEMAP_IDS].sort()).toEqual(downloadable.sort());
+  });
+
   // Mutation: drop the offline-capable raster check in `pyramidTileBytes` and
   // the refusal is a TypeError on missing figures, not the named error.
   it("refuses a basemap that is not a downloadable raster", () => {
@@ -361,7 +372,14 @@ describe("planRegionForBasemaps", () => {
   // area inside it throws, whichever archive it is.
   it("holds figures for every zoom a save clips", () => {
     let archives = 0;
-    for (const region of [NSW_REGION, ...SIM_REGIONS, SIM_WORLD]) {
+    // Every region declared in this runtime and every simulated one, once each.
+    for (const region of new Set([
+      ...REGIONS,
+      NSW_REGION,
+      ...SIM_REGIONS,
+      SIM_WORLD,
+      WORLD,
+    ])) {
       const { heights, slope, contours, land, fire, coverage } = region.terrain;
       const zooms = [
         heights && [
@@ -423,6 +441,8 @@ describe("planRegionForBasemaps", () => {
     expect(job.clips.filter((c) => c.kind === "heights")).toHaveLength(1);
   });
 
+  // Mutation: price every region's clips whatever the box, and a box in
+  // Utah is also priced for NSW's archives.
   it("saves the clips of the one region in a box that touches only it, with every region on", () => {
     const only = (box: RegionBbox) =>
       planRegionForBasemaps(box, [], 15, maxZoomFor, [
