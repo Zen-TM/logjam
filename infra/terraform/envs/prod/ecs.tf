@@ -62,7 +62,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "ap-southeast-2"
       }, {
       name  = "CORS_ORIGIN"
-      value = "https://logjamnsw.com,https://www.logjamnsw.com"
+      value = "https://logjam.earth,https://www.logjam.earth,https://logjamnsw.com,https://www.logjamnsw.com"
       }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"

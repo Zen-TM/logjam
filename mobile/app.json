@@ -20,7 +20,7 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.logjamnsw.mobile",
+      "bundleIdentifier": "earth.logjam.gps",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -28,7 +28,7 @@
       }
     },
     "android": {
-      "package": "com.logjamnsw.mobile",
+      "package": "earth.logjam.gps",
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
