@@ -1,7 +1,9 @@
 // The Coverage overlay as MapScreen mounts it: one hatched fill, with the
-// hatch image registered beside it (shared nswCoverage.ts holds the levels).
+// hatch image registered beside it (shared coverage.ts holds the levels).
 import {
   type CarrierId,
+  type CoverageArchive,
+  carriersOf,
   COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
@@ -34,17 +36,18 @@ export const COVERAGE_IMAGES = Object.fromEntries(
 );
 
 export function coverageLayerFilter(
+  coverage: CoverageArchive,
   carrier: CarrierId,
 ): FillLayerSpecification["filter"] {
-  return coverageFilter(carrier) as FillLayerSpecification["filter"];
+  return coverageFilter(coverage, carrier) as FillLayerSpecification["filter"];
 }
 
-export function coverageLayerPaint(): FillPaint {
+export function coverageLayerPaint(coverage: CoverageArchive): FillPaint {
   return {
     "fill-pattern": COVERAGE_HATCH_IMAGE,
     "fill-opacity": zoomFadeIn(
       COVERAGE_MIN_ZOOM,
-      coverageOpacity(),
+      coverageOpacity(coverage),
     ) as FillPaint["fill-opacity"],
   };
 }
@@ -80,12 +83,13 @@ export async function coverageAtTap(
   at: readonly [number, number],
   layers: readonly string[],
   carrier: CarrierId | null,
+  coverage: CoverageArchive,
 ): Promise<string | null> {
   if (!map || !carrier || layers.length === 0) return null;
   const features = await map.queryRenderedFeatures(point, {
     layers: [...layers],
   });
-  return coverageNameOf(features, carrier, at);
+  return coverageNameOf(coverage, features, carrier, at);
 }
 
 /**
@@ -100,7 +104,7 @@ export function pickCoverageCarrier(
   switchDisabled: boolean,
   on: { choose: (id: CarrierId) => void; turnOn: () => void },
 ): void {
-  const next = normalizeCarrier(value);
+  const next = normalizeCarrier(value, carriersOf());
   if (!next) return;
   if (
     !switchDisabled &&

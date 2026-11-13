@@ -2,6 +2,7 @@ import {
   FIRE_MIN_ZOOM,
   fireColor,
   fireEdgeOpacity,
+  NSW_REGION,
   fireFillOpacity,
   zoomFadeIn,
 } from "@logjam/shared";
@@ -9,20 +10,21 @@ import { describe, expect, it } from "vitest";
 import { fireLayerIds, fireLayerPaints, fireMinZoom } from "./fireLayers";
 
 const NOW = new Date(2026, 10, 7);
+const FIRE = NSW_REGION.terrain.fire;
 
 describe("fireLayerPaints", () => {
   // Mutation: build the fill from `fireEdgeOpacity`, or take `new Date()`
   // here instead of `now`, and the paint no longer equals shared's.
   it("paints with exactly shared's expressions", () => {
-    const { fill, edge } = fireLayerPaints(NOW);
+    const { fill, edge } = fireLayerPaints(FIRE, NOW);
     expect(fill).toEqual({
-      "fill-color": fireColor(NOW),
-      "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(NOW)),
+      "fill-color": fireColor(FIRE, NOW),
+      "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(FIRE, NOW)),
     });
     expect(edge).toEqual({
-      "line-color": fireColor(NOW),
+      "line-color": fireColor(FIRE, NOW),
       "line-width": 1,
-      "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(NOW)),
+      "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(FIRE, NOW)),
     });
   });
 });

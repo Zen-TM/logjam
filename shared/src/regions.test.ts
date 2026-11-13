@@ -564,8 +564,10 @@ describe("layerIn", () => {
   it("is the region's archive, or null where it has none", () => {
     expect(layerIn(NSW_REGION, "land")).toBe(NSW_REGION.terrain.land);
     expect(layerIn(SIM_NZ, "heights")).toBe(SIM_NZ.terrain.heights);
-    expect(layerIn(SIM_NZ, "land")).toBeNull();
-    expect(layerIn(SIM_NZ, "fire")).toBeNull();
+    expect(layerIn(SIM_NZ, "land")).toBe(SIM_NZ.terrain.land);
+    expect(layerIn(SIM_UTAH, "coverage")).toBeNull();
+    expect(layerIn(SIM_WORLD, "land")).toBeNull();
+    expect(layerIn(SIM_WORLD, "fire")).toBeNull();
     expect(layerIn(SIM_WORLD, "slope")).toBeNull();
     expect(layerIn(SIM_WORLD, "hillshade")).not.toBeNull();
   });

@@ -7,12 +7,15 @@ import {
   fireLegendRows,
   fireNameOf,
   fireTintAt,
-  NSW_FIRE,
-} from "./nswFire.js";
-import { LAND_CLASSES } from "./nswLand.js";
+} from "./fireHistory.js";
+import { NSW_REGION } from "./regions.js";
+import { SIM_NZ } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 type Props = Record<string, unknown>;
+
+const NSW_FIRE = NSW_REGION.terrain.fire;
+const LAND_CLASSES = NSW_REGION.terrain.land.classes;
 
 /** The few expression operators the ramp uses, as MapLibre evaluates them. */
 function evaluate(expr: unknown, props: Props): unknown {
@@ -64,7 +67,7 @@ describe("the fire tint", () => {
   // Mutation: count from the fire's year alone (or from January), and a fire
   // in December reads a year older than it is.
   it("counts the years since the fire's month, as of today", () => {
-    const fill = fireFillOpacity(NOV_2026);
+    const fill = fireFillOpacity(NSW_FIRE, NOV_2026);
     // December 2019 to November 2026 is 83 months, 6.92 years.
     expect(evaluate(fill, fire(2019, 12).properties)).toBeCloseTo(
       fireTintAt(83 / 12).fill,
@@ -75,8 +78,8 @@ describe("the fire tint", () => {
 
   // Mutation: let the last stop keep some opacity, and every old fire tints.
   it("is darkest within the year and gone by ten years", () => {
-    const fill = fireFillOpacity(NOV_2026);
-    const edge = fireEdgeOpacity(NOV_2026);
+    const fill = fireFillOpacity(NSW_FIRE, NOV_2026);
+    const edge = fireEdgeOpacity(NSW_FIRE, NOV_2026);
     const at = (year: number, month: number) => ({
       fill: evaluate(fill, fire(year, month).properties) as number,
       edge: evaluate(edge, fire(year, month).properties) as number,
@@ -92,9 +95,9 @@ describe("the fire tint", () => {
   // swatches no longer match the map.
   it("draws what fireTintAt says, in every property", () => {
     for (const [expression, key] of [
-      [fireColor(NOV_2026), "colour"],
-      [fireFillOpacity(NOV_2026), "fill"],
-      [fireEdgeOpacity(NOV_2026), "edge"],
+      [fireColor(NSW_FIRE, NOV_2026), "colour"],
+      [fireFillOpacity(NSW_FIRE, NOV_2026), "fill"],
+      [fireEdgeOpacity(NSW_FIRE, NOV_2026), "edge"],
     ] as const) {
       expect(expression.slice(3)).toEqual(
         FIRE_RAMP.flatMap((stop) => [stop.years, stop[key]]),
@@ -152,14 +155,18 @@ describe("the fire tint", () => {
 
 describe("fireNameOf", () => {
   it("names the fire and its month", () => {
-    expect(fireNameOf([fire(2019, 12, 1)])).toBe("Wildfire, Dec 2019");
-    expect(fireNameOf([fire(2023, 5, 2)])).toBe("Prescribed burn, May 2023");
+    expect(fireNameOf(NSW_FIRE, [fire(2019, 12, 1)])).toBe(
+      "Wildfire, Dec 2019",
+    );
+    expect(fireNameOf(NSW_FIRE, [fire(2023, 5, 2)])).toBe(
+      "Prescribed burn, May 2023",
+    );
   });
 
   // Mutation: take the first feature, and a tap where two tiles' margins
   // overlap can name the older fire.
   it("names the newest fire a tap found", () => {
-    expect(fireNameOf([fire(2013, 10, 1), fire(2019, 12, 2)])).toBe(
+    expect(fireNameOf(NSW_FIRE, [fire(2013, 10, 1), fire(2019, 12, 2)])).toBe(
       "Prescribed burn, Dec 2019",
     );
   });
@@ -167,12 +174,31 @@ describe("fireNameOf", () => {
   // Mutation: return null for a type no list has, and a new code hides the
   // date of every fire it marks.
   it("still dates a fire whose type it doesn't know", () => {
-    expect(fireNameOf([fire(2020, 1, 7)])).toBe("Fire, Jan 2020");
-    expect(fireNameOf([fire(2020, 1)])).toBe("Fire, Jan 2020");
+    expect(fireNameOf(NSW_FIRE, [fire(2020, 1, 7)])).toBe("Fire, Jan 2020");
+    expect(fireNameOf(NSW_FIRE, [fire(2020, 1)])).toBe("Fire, Jan 2020");
   });
 
   it("is null with nothing there", () => {
-    expect(fireNameOf([])).toBeNull();
-    expect(fireNameOf([{ properties: null }, fire(2020, 13, 1)])).toBeNull();
+    expect(fireNameOf(NSW_FIRE, [])).toBeNull();
+    expect(
+      fireNameOf(NSW_FIRE, [{ properties: null }, fire(2020, 13, 1)]),
+    ).toBeNull();
+  });
+});
+
+describe("a region's own fire types", () => {
+  const nz = SIM_NZ.terrain.fire!;
+
+  // Mutation: read NSW's types in `fireNameOf`, and a second region names its
+  // fires with NSW's words, or not at all.
+  it("names a fire by the archive it is given", () => {
+    const type = (code: number) => [
+      {
+        properties: { burntYear: 2024, burntMonth: 2, burntType: code },
+      },
+    ];
+    expect(fireNameOf(nz, type(3))).toBe("Simulated clearing burn, Feb 2024");
+    expect(fireNameOf(nz, type(2))).toBe("Fire, Feb 2024");
+    expect(fireNameOf(NSW_FIRE, type(3))).toBeNull();
   });
 });

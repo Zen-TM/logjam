@@ -1,9 +1,9 @@
 import {
   FIRE_MIN_ZOOM,
+  type FireArchive,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
-  NSW_FIRE,
   zoomFadeIn,
 } from "@logjam/shared";
 import type { ExpressionSpecification, LayerSpecification } from "maplibre-gl";
@@ -13,10 +13,11 @@ import { FIRE_EDGE_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
 type Expr = ExpressionSpecification;
 
 /**
- * The Fire history layers over the source `source`, tint first and its edge
+ * The Fire history layers of `fire` over the source `source`, tint first and its edge
  * over it, as of `now`: the ramp's months are counted from it.
  */
 export function fireLayerSpecs(
+  fire: FireArchive,
   source: string,
   now: Date,
 ): [
@@ -25,7 +26,7 @@ export function fireLayerSpecs(
 ] {
   const common = {
     source,
-    "source-layer": NSW_FIRE.sourceLayer,
+    "source-layer": fire.sourceLayer,
     minzoom: FIRE_MIN_ZOOM,
   };
   return [
@@ -34,8 +35,11 @@ export function fireLayerSpecs(
       id: FIRE_FILL_LAYER,
       type: "fill",
       paint: {
-        "fill-color": fireColor(now) as Expr,
-        "fill-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireFillOpacity(now)) as Expr,
+        "fill-color": fireColor(fire, now) as Expr,
+        "fill-opacity": zoomFadeIn(
+          FIRE_MIN_ZOOM,
+          fireFillOpacity(fire, now),
+        ) as Expr,
       },
     },
     {
@@ -43,9 +47,12 @@ export function fireLayerSpecs(
       id: FIRE_EDGE_LAYER,
       type: "line",
       paint: {
-        "line-color": fireColor(now) as Expr,
+        "line-color": fireColor(fire, now) as Expr,
         "line-width": 1,
-        "line-opacity": zoomFadeIn(FIRE_MIN_ZOOM, fireEdgeOpacity(now)) as Expr,
+        "line-opacity": zoomFadeIn(
+          FIRE_MIN_ZOOM,
+          fireEdgeOpacity(fire, now),
+        ) as Expr,
       },
     },
   ];
