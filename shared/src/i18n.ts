@@ -1,8 +1,9 @@
 // User-facing text goes through `t`, `plural`, `rich` or `say`, which look the
 // English up in the catalogue of the language in force. The reasoning, and why
 // there is no library, is docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
-// shared/src/i18n.test.ts holds how these functions behave; nothing yet holds
-// that text is routed through them (the ADR says so).
+// shared/src/i18n.test.ts holds how these functions behave;
+// shared/src/i18nCoverage.test.ts (and one per package) holds that text outside
+// them does not grow.
 import { enUS } from "./i18nCatalogues/en-US.js";
 
 /** The language the code is written in: a message with no entry reads as itself. */
@@ -219,6 +220,9 @@ export function plural(
 
 export type RichPart = string | { tag: string; text: string };
 
+/** An element in a `rich` message: `<a>text and {0}</a>`. `rich` and the scanner (i18nSource.ts) read tags with this one pattern. */
+export const RICH_TAG = /<([a-z][a-z0-9]*)>([^<]*)<\/\1>/g;
+
 /**
  * A sentence with an element in it, as parts:
  * rich`Read the <a>${name}</a>.` is ["Read the ", { tag: "a", text: name }, "."].
@@ -238,7 +242,7 @@ export function rich(
     if (filled) parts.push(filled);
   };
   let from = 0;
-  for (const m of message.matchAll(/<([a-z][a-z0-9]*)>([^<]*)<\/\1>/g)) {
+  for (const m of message.matchAll(RICH_TAG)) {
     text(from, m.index);
     parts.push({ tag: m[1], text: fillHoles(m[2], holes) });
     from = m.index + m[0].length;

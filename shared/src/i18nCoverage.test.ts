@@ -1,0 +1,139 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import { beforeAll, describe, expect, it } from "vitest";
+import { enUS } from "./i18nCatalogues/en-US.js";
+import {
+  bareCopyIn,
+  ceilingFailures,
+  EXEMPT_FILES,
+  I18N_ADR,
+  messagesIn,
+  missingEntries,
+  orphanKeys,
+  scanSources,
+} from "./i18nSource.js";
+
+// User-facing text goes through `t`, `plural`, `rich` or `say`
+// (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
+// Text written the old way is counted per directory and may only fall: new
+// copy in @logjam/shared goes through the catalogue, and a directory that moves its
+// text lowers its number in the same change. The scanner is `i18nSource.ts` in
+// @logjam/shared; what it must and must not flag is held in its own test.
+//
+// Mutation that turns it red: add `const x = "Open the file";` to any file in
+// shared/src, or move the text of a directory into `t` without lowering its ceiling.
+
+const SRC = dirname(fileURLToPath(import.meta.url));
+
+/** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
+const CEILINGS: Record<string, number> = {
+  ".": 645,
+  contracts: 994,
+  geoPdfImport: 2,
+};
+
+function sources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory())
+      return /^__(?:tests|fixtures)__$/.test(entry.name) ? [] : sources(path);
+    return /\.tsx?$/.test(entry.name) && !/\.(test|d)\./.test(entry.name)
+      ? [path]
+      : [];
+  });
+}
+
+// Parsing every source file takes seconds under load, so it runs once, in a
+// beforeAll with a long timeout, as `copyRules.test.ts` does.
+let scan: ReturnType<typeof scanSources>;
+let fileCount = 0;
+beforeAll(() => {
+  const files = sources(SRC).map((path) => ({
+    path: relative(SRC, path),
+    source: readFileSync(path, "utf8"),
+  }));
+  fileCount = files.length;
+  scan = scanSources(ts, "shared", files);
+}, 30_000);
+
+describe("@logjam/shared i18n coverage", () => {
+  it("reads the source at all — a silent zero would pass forever", () => {
+    expect(fileCount).toBeGreaterThan(130);
+    // About 46 messages today, all `say`.
+    expect(scan.messages.length).toBeGreaterThan(40);
+  });
+
+  it("holds every message to the hygiene rules", () => {
+    expect(
+      scan.messages
+        .filter((message) => message.problems.length)
+        .map(
+          ({ file, line, key, problems }) =>
+            `${file}:${line} "${key}": ${problems.join("; ")} (${I18N_ADR})`,
+        ),
+    ).toEqual([]);
+  });
+
+  it("writes no new text outside the catalogue, and every ceiling is the count", () => {
+    expect(ceilingFailures(scan.counts, CEILINGS)).toEqual([]);
+  });
+});
+
+// Spellings the Australian source writes and US English does not: a message
+// holding one has an entry in `i18nCatalogues/en-US.ts`. Empty until a message
+// moves into the catalogue that has one.
+const AUSTRALIAN_WORDS: readonly string[] = [];
+
+describe("the en-US catalogue", () => {
+  const REPO = join(SRC, "../..");
+  // Every message in the four packages (about 200 distinct today): the catalogue is shared, so a key
+  // belongs to a message in any of them.
+  const keys = new Set<string>();
+  beforeAll(() => {
+    for (const pkg of ["shared", "frontend", "mobile", "api"]) {
+      const root = join(REPO, pkg, "src");
+      for (const path of sources(root))
+        for (const message of messagesIn(ts, path, readFileSync(path, "utf8")))
+          keys.add(message.key);
+    }
+  }, 30_000);
+
+  it("reads the messages of every package — a silent zero would pass forever", () => {
+    expect(keys.size).toBeGreaterThan(150);
+  });
+
+  // Mutation: add `"Abseil down {0}": "Rappel down {0}"` to `enUS`, or reword
+  // a message that has an entry without moving the entry.
+  it("has no entry whose message is gone", () => {
+    expect(
+      orphanKeys(enUS, keys).map(
+        (key) =>
+          `"${key}" matches no message in source. A reworded message leaves its entry behind: move or delete it (${I18N_ADR}).`,
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: put a word in `AUSTRALIAN_WORDS` that a message in source holds,
+  // such as "abseil", without an entry for that message.
+  it("has an entry for every message that holds an Australian spelling", () => {
+    expect(missingEntries(enUS, keys, AUSTRALIAN_WORDS)).toEqual([]);
+  });
+});
+
+describe("the files the scan leaves out", () => {
+  // Mutation: rename `ozUltimate.ts`, or reword every string in `kit.ts` so
+  // the scan finds none there.
+  it("each still exists and still has something to leave out", () => {
+    const stale = Object.keys(EXEMPT_FILES).filter((path) => {
+      try {
+        const file = join(SRC, "../..", path);
+        return bareCopyIn(ts, file, readFileSync(file, "utf8")).length === 0;
+      } catch {
+        return true;
+      }
+    });
+    expect(stale).toEqual([]);
+  });
+});

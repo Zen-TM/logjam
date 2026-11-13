@@ -53,7 +53,10 @@ platform: privacy constrains every feature. Each package has its own
   `shared/src/copyRules.test.ts`.
 - User-facing text is written through `t`, `plural`, `rich` or `say`
   (`shared/src/i18n.ts`), so a language can replace it. Existing literals are not
-  converted yet, and a change does not convert them piecemeal. No guard test yet.
+  converted yet, and a change does not convert them piecemeal. Guard: each
+  package's count of bare literals per directory may only fall
+  (`shared/src/i18nCoverage.test.ts`, `frontend/src/i18nCoverage.test.ts`,
+  `mobile/src/i18nCoverage.test.ts`, `api/src/i18nCoverage.unit.test.ts`).
   [0050](docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
   or `.github/pull_request_template.md` and use its headings and labels: `gh`

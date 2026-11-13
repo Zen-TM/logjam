@@ -50,9 +50,15 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
-`matchLanguage`). No test yet holds that call sites use it; a later change adds one. No test yet holds that each client's entry file sets
-the global before it imports `@logjam/shared`, or that the API installs the
-resolver from `AsyncLocalStorage`; a later change adds them.
+`matchLanguage`). `i18nCoverage.test.ts` in each package holds that the text
+written outside these functions does not grow: a ceiling of bare literals per
+directory that may only fall, found by `shared/src/i18nSource.ts`; the same
+tests hold each message to its hygiene rules (no leading or trailing space, no
+literal `{0}`, a `#` in a plural, only tags `rich` can consume). No test yet
+holds that every call site uses it, since existing literals are not converted,
+or that each client's entry file sets the global before it imports
+`@logjam/shared`, or that the API installs the resolver from
+`AsyncLocalStorage`; a later change adds them. (updated 2026-11-14)
 
 ## Consequences
 
@@ -60,8 +66,8 @@ resolver from `AsyncLocalStorage`; a later change adds them.
   id is invented or kept in step. Holes are typed by the template. Nothing
   loads at build time: `shared` and the API still build with plain `tsc`.
 - **Negative:** one English text cannot have two translations until a key gains
-  a context. Rewording an English message orphans its `en-US` entry. No test
-  catches that yet; a later change adds one. A language change
+  a context. Rewording an English message orphans its `en-US` entry;
+  `shared/src/i18nCoverage.test.ts` fails on it. (updated 2026-11-14) A language change
   reloads Logjam Web and Logjam GPS. There are no translator tools: a
   translation platform would need a script that exports the catalogue.
 - **Neutral:** `en-US` is empty until existing literals are moved into the catalogue. With one
