@@ -78,6 +78,23 @@ describe("parseCoordinates", () => {
     },
   );
 
+  // Mutation: put back magnitude windows (a latitude of at most 65), which
+  // read "70 25" as 25, 70 and read "-70 25" as 25 N 70 W.
+  it.each([
+    ["70 25", OVER_SYDNEY, -70, 25],
+    ["69.6 18.9", OVER_UTAH, 69.6, -18.9],
+    ["-70 25", OVER_UTAH, -70, 25],
+    ["-33.71, 10.31", OVER_SYDNEY, -33.71, 10.31],
+    ["40.7 41.9", OVER_UTAH, 40.7, -41.9],
+    ["150.3 -33.7", OVER_UTAH, -33.7, 150.3],
+  ])(
+    "reads a bare pair %j latitude first, swapped only when the first cannot be one",
+    (text, view, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect([p.lat, p.lon]).toEqual([lat, lon]);
+    },
+  );
+
   it("falls back to the home region's hemispheres when the map has no view", () => {
     expect(parseCoordinates("33.71 150.31", null)).toMatchObject({
       lat: -33.71,
@@ -125,14 +142,13 @@ describe("parseCoordinates", () => {
     "57 245000 6264000",
     "56 245000 5000000", // lands outside Australia
     "-33.71", // one number
+    "2024", // one number is not a pair that splits in two
     "33.71S 150.31S", // two latitudes
     "33.71S 150.31", // letter on one part only
     "200 300",
-    "-33.71, 10.31", // neither longitude nor latitude fits
     `33°72'00"S 150°18'36"E`, // 72 minutes
     "1 2 3 4",
-    "40.7 41.9", // two latitudes' worth of degrees: which is which is unknown
-    "100 120", // two longitudes
+    "100 120", // neither can be a latitude
   ])("does not read %j", (text) => {
     expect(parseCoordinates(text)).toBeNull();
   });

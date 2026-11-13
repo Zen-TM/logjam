@@ -153,10 +153,12 @@ describe("MapSearchBox", () => {
   });
 
   // Mutation: parse a typed coordinate without the view, which reads every
-  // unsigned pair as south and east.
-  it("reads an unsigned coordinate in the hemispheres of the map under it", () => {
-    const view = { west: -112, south: 40.5, east: -111.8, north: 40.9 };
+  // unsigned pair as south and east, or against the view the box had when it
+  // took focus rather than the one the map has now.
+  it("reads an unsigned coordinate in the hemispheres of the map as it is now", () => {
+    let view: LonLatBox = { west: 151, south: -34, east: 151.4, north: -33.6 };
     const input = renderBox({ getView: () => view });
+    view = { west: -112, south: 40.5, east: -111.8, north: 40.9 };
     type(input, "40.7 111.9");
     expect(screen.getAllByRole("option")[0].textContent).toContain(
       "40.70000, -111.90000",

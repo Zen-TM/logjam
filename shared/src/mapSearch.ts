@@ -67,12 +67,6 @@ function part(g: (string | undefined)[], at: number): Part | null {
 const fmt = (lat: number, lon: number) =>
   `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 
-// A bare "40.7 111.9" has no letter to say which number is the latitude, and
-// these magnitudes tell them apart: a latitude is at most 65, a longitude at
-// least 66. A pair outside them (both small, or both large) is left to letters.
-const PAIR_LAT_MAG = [0, 65] as const;
-const PAIR_LON_MAG = [66, 180] as const;
-
 /**
  * A typed latitude and longitude. With letters (33.71S) they decide. With a
  * minus sign on either number the signs are as typed. A pair with neither
@@ -98,15 +92,19 @@ function parseLatLon(
     [lat, lon] = a.axis === "lat" ? [a.value, b.value] : [b.value, a.value];
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   } else {
-    // No letters: the magnitudes say which is which.
+    // No letters: latitude first, as written everywhere, and swapped only when
+    // the first number cannot be a latitude (over 90) and the second can. A
+    // longitude-first pair whose longitude is under 90 ("-74 40.7") therefore
+    // reads latitude first; letters settle it.
+    // The two numbers must be written apart: one number ("-33.71", "2024") is
+    // not a pair that happens to split in two.
+    if (!/[\s,;]/.test(text)) return null;
     const [am, bm] = [Math.abs(a.value), Math.abs(b.value)];
     let latPart: Part;
     let lonPart: Part;
-    if (within(am, PAIR_LAT_MAG) && within(bm, PAIR_LON_MAG)) {
-      [latPart, lonPart] = [a, b];
-    } else if (within(bm, PAIR_LAT_MAG) && within(am, PAIR_LON_MAG)) {
-      [latPart, lonPart] = [b, a];
-    } else return null;
+    if (am <= 90 && bm <= 180) [latPart, lonPart] = [a, b];
+    else if (bm <= 90 && am <= 180) [latPart, lonPart] = [b, a];
+    else return null;
     const [centreLon, centreLat] = view
       ? [(view.west + view.east) / 2, (view.south + view.north) / 2]
       : REGIONS[0].view.center;

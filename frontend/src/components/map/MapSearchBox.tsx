@@ -86,9 +86,6 @@ export default function MapSearchBox({
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  // Where the map looked when the box took focus: the map sits behind the box,
-  // so a typed coordinate reads against this until the box is entered again.
-  const [view, setView] = useState<LonLatBox | null>(null);
   const { file: gaugeFile } = useGauges(focused);
   // The highlighted option by id, not position, so it stays on the same row
   // when an answer adds or removes rows around it.
@@ -212,7 +209,7 @@ export default function MapSearchBox({
           : [];
       })
       .slice(0, GAUGE_RESULTS);
-    const point = parseCoordinates(trimmed, view);
+    const point = parseCoordinates(trimmed, getView?.() ?? null);
     const ours: Option[] = [
       ...(point
         ? [{ kind: "coordinate" as const, id: "coordinate", point }]
@@ -246,7 +243,7 @@ export default function MapSearchBox({
     answer,
     locationQuery,
     locations,
-    view,
+    getView,
   ]);
 
   const open = focused && (trimmed !== "" || options.length > 0);
@@ -334,10 +331,7 @@ export default function MapSearchBox({
           }
           placeholder={MAP_SEARCH_PLACEHOLDER}
           value={query}
-          onFocus={() => {
-            setView(getView?.() ?? null);
-            setFocused(true);
-          }}
+          onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(event) => {
             setQuery(event.target.value);
