@@ -9,6 +9,7 @@
 // mobile/src/sentry/scrubEvent.test.ts).
 
 import { haversineMeters } from "./placeGeo.js";
+import { formatDistance, formatSpeed } from "./units.js";
 import { GPS_CLIMB_SOURCE, type DemSamples } from "./demSources.js";
 import {
   ELEVATION_PROFILE_MAX_SAMPLES,
@@ -901,11 +902,9 @@ export function compassPointFor(bearingDeg: number): string {
   return points[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
 }
 
-/** Human distance: metres under 1 km, else km with one decimal. */
+/** Human distance in the display units: `formatDistance` in `units.ts`. */
 export function formatDistanceM(distanceM: number): string {
-  if (!Number.isFinite(distanceM)) return "—";
-  if (distanceM < 1000) return `${Math.round(distanceM)} m`;
-  return `${(distanceM / 1000).toFixed(1)} km`;
+  return formatDistance(distanceM);
 }
 
 /** "3.4 km/h" as ["3.4", " km/h"]: a figure and its unit, for a display that
@@ -915,11 +914,9 @@ export function splitUnit(text: string): [string, string] {
   return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
 }
 
-/** Human speed: km/h with one decimal. Null (no timestamps) reads as unknown. */
+/** Human speed in the display units: `formatSpeed` in `units.ts`. */
 export function formatSpeedMps(speedMps: number | null): string {
-  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0)
-    return "—";
-  return `${(speedMps * 3.6).toFixed(1)} km/h`;
+  return formatSpeed(speedMps);
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   type WeatherForecast,
   type WeatherHour,
 } from "../weather.js";
+import { formatRain, formatWind } from "../units.js";
 import type { ScreenContract } from "./types.js";
 
 export const WEATHER = {
@@ -115,18 +116,22 @@ export const WEATHER_NONE = "–";
 /** The least rain a figure is drawn for: below it "0.0 mm" would be noise. */
 const RAIN_SHOWN_MM = 0.05;
 
+// A figure that would be written as zero in the display units ("0.00 in",
+// "0 mph") is the dash instead, whichever unit that is. Test: `units.test.ts`,
+// "weather facts in imperial".
+const figureOrNone = (text: string): string =>
+  /[1-9]/.test(text) ? text : WEATHER_NONE;
+
 const rainText = (mm: number): string =>
-  mm >= RAIN_SHOWN_MM ? formatRainMm(mm) : WEATHER_NONE;
+  mm >= RAIN_SHOWN_MM ? figureOrNone(formatRainMm(mm)) : WEATHER_NONE;
 const chanceText = (percent: number): string =>
   percent > 0 ? `${percent}%` : WEATHER_NONE;
-// A figure and its unit are joined by a no-break space, so a narrow card or
-// a large font never strands the unit on a line of its own.
-const UNIT = "\u00a0";
 const windText = (kmh: number): string =>
-  Math.round(kmh) > 0 ? `${Math.round(kmh)}${UNIT}km/h` : WEATHER_NONE;
+  Math.round(kmh) > 0 ? figureOrNone(formatWind(kmh)) : WEATHER_NONE;
 
+/** Rain in the display units: `formatRain` in `units.ts`. */
 export function formatRainMm(mm: number): string {
-  return `${mm > 0 && mm < 1 ? mm.toFixed(1) : Math.round(mm)}${UNIT}mm`;
+  return formatRain(mm);
 }
 
 export type WeatherDayFacts = {

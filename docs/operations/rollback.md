@@ -50,6 +50,14 @@ Limits:
   and the one before it. Releases deployed before
   this mechanism existed have no `releases/<sha>/` copy and cannot be rolled
   back to.
+- **API and frontend, releases from before the move to `logjam.earth`**
+  (November 2026) cannot be rolled back to: that frontend calls
+  `api.logjamnsw.com`, which no longer answers, and that API's environment
+  names the old domain for its map files and email links. The Rollback
+  workflow refuses a frontend release whose page was built for another API
+  address than `PROD_API_URL`, the repository variable declared in
+  `infra/terraform/envs/github/variables.tf`; by hand, step 1 below is the
+  same check.
 - **Worker shas:** a worker image exists only for commits that changed `topo/`.
   The sha to roll back to is the tag the task definition carried before.
 - **The next deploy undoes a rollback.** The next green push to `main`
@@ -62,7 +70,7 @@ Limits:
 
 ## Finding the sha to roll back to
 
-- **API:** the live sha is `curl -s https://api.logjamnsw.com/meta | jq -r .sha`
+- **API:** the live sha is `curl -s https://api.logjam.earth/meta | jq -r .sha`
   (`null` for a release built before `/meta` reported one). The previous
   release is the one named in the last green **Deploy API** run's log (its
   guard job's "What is live?" step), or the commit before the bad one on `main`
@@ -99,9 +107,9 @@ cancelled run is grey, not red.
 
 `deploy-api.yml` and `deploy-frontend.yml` run a smoke test after deploying:
 
-- API: `https://api.logjamnsw.com/health` answers and `/meta` reports the
+- API: `https://api.logjam.earth/health` answers and `/meta` reports the
   deployed sha (for up to 5 minutes).
-- Frontend: `https://logjamnsw.com/` serves the deployed release's
+- Frontend: `https://logjam.earth/` serves the deployed release's
   `index.html`, and the entry script it names loads.
 
 If the smoke test fails, the deploy calls the Rollback workflow for the
@@ -171,8 +179,8 @@ aws s3 cp /tmp/release.json "s3://$SIGNALS/release.json" --content-type applicat
 # 4. Wait for the brain: its release agent acts within 30 seconds, then pulls
 #    the image if the host does not have it (a minute or two). Check, over and
 #    over, until /meta names $SHA.
-curl -s https://api.logjamnsw.com/health
-curl -s https://api.logjamnsw.com/meta | jq -r .sha   # $SHA
+curl -s https://api.logjam.earth/health
+curl -s https://api.logjam.earth/meta | jq -r .sha   # $SHA
 ```
 
 If `/meta` still shows another sha after five minutes, read the brain's
@@ -191,6 +199,9 @@ aws s3 cp "s3://$BUCKET/releases/$SHA/files.txt" /tmp/files.txt
 # in one order; a locale sort reports files missing that are there.
 aws s3api list-objects-v2 --bucket "$BUCKET" --output json | jq -r '.Contents[].Key' | LC_ALL=C sort > /tmp/present.txt
 LC_ALL=C sort /tmp/files.txt | LC_ALL=C comm -23 - /tmp/present.txt   # must print nothing
+# Its page must have been built for the API address in use, or it will load
+# and then fail every call. Must print a line:
+aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" - | grep -oF "connect-src 'self' https://api.logjam.earth "
 
 # 2. Put its index.html back. REPLACE drops the source's headers, so restate them.
 aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "s3://$BUCKET/index.html" \
@@ -203,7 +214,7 @@ ID=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
 aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$ID"
 
 # 4. Check: the two must be identical.
-diff <(curl -s https://logjamnsw.com/) <(curl -s "https://logjamnsw.com/releases/$SHA/index.html")
+diff <(curl -s https://logjam.earth/) <(curl -s "https://logjam.earth/releases/$SHA/index.html")
 ```
 
 ### Worker
