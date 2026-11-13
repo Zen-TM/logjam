@@ -319,7 +319,8 @@ LINEAR_UNITS = {
 
 def linear_unit_m(name: str) -> float:
     """Metres in a unit as PDAL or GDAL names it; a unit not known is refused,
-    never taken as metres, and never quoted: its name is the upload's text."""
+    never taken as metres, and never quoted: its name is the upload's text,
+    which the log must not carry (tests/test_sharpen_units.py `TestUnitNames`)."""
     try:
         return LINEAR_UNITS[name.strip().lower()]
     except KeyError:
@@ -346,7 +347,8 @@ def _band_unit_m(ds, horizontal_m: Optional[float]) -> float:
     """Metres in a DEM's heights: the band's unit, else the CRS's vertical
     one when it has one, else the grid's own (a DEM in metres, or in degrees,
     has heights in metres). A band unit not known on a grid in metres is read
-    as metres (an ELVIS DEM names none); on any other grid it is refused."""
+    as metres (an ELVIS DEM names none); on any other grid it is refused
+    (tests/test_sharpen_units.py `TestRealDem`, the two unknown-band-unit tests)."""
     flat = horizontal_m or 1.0
     name = ds.GetRasterBand(1).GetUnitType()
     if name:
@@ -407,16 +409,21 @@ def metric_dem(path: Path, out: Path, epsg: Optional[int] = None) -> Path:
     # source is warped without its vertical part, so the scale below is the only
     # one, and what it writes has none, so no later warp (`_warp`) scales again
     # (tests/test_sharpen_units.py `TestRealDem`).
-    flat = pipeline.osr.SpatialReference(wkt=ds.GetProjection() or "")
-    flat.StripVertical()
-    dst = flat.ExportToWkt()
+    # A DEM with no CRS keeps its grid: both are None, and only its heights are
+    # scaled.
+    flat = None
+    if ds.GetProjection():
+        ref = pipeline.osr.SpatialReference(wkt=ds.GetProjection())
+        ref.StripVertical()
+        flat = ref.ExportToWkt()
+    dst = flat
     if unit != 1.0:
         dst = f"EPSG:{epsg or utm_epsg(*_dem_lonlat(ds))}"
     source_nodata = ds.GetRasterBand(1).GetNoDataValue()
     warped = gdal.Warp(
         str(out),
         ds,
-        srcSRS=flat.ExportToWkt() or None,
+        srcSRS=flat,
         dstSRS=dst,
         resampleAlg="bilinear",
         outputType=gdal.GDT_Float32,
