@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 import { describe, it, expect } from "vitest";
 import {
-  parseZipCentralDirectory,
   readZipEntries,
   MAX_ZIP_DIRECTORY_BYTES,
   ZIP_TAIL_BYTES,
@@ -76,43 +75,43 @@ function buildZip(files: TestFile[]): Uint8Array {
   return zip;
 }
 
+/** The entries of a whole ZIP held in memory, read as the API reads one. */
 function parse(zip: Uint8Array) {
-  return parseZipCentralDirectory(zip, zip.length);
+  const file = virtualFile(zip.length, [{ at: 0, bytes: zip }]);
+  return readZipEntries(file.totalFileSize, file.readRange);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("parseZipCentralDirectory", () => {
-  it("parses entries from a valid zip", () => {
+describe("readZipEntries on a whole small ZIP", () => {
+  it("parses entries from a valid zip", async () => {
     const zip = buildZip([
       { name: "folder/file.laz", size: 1000 },
       { name: "folder/file.tif", size: 500 },
     ]);
-    const entries = parse(zip);
+    const entries = await parse(zip);
     expect(entries).toHaveLength(2);
     expect(entries[0].filename).toBe("folder/file.laz");
     expect(entries[0].uncompressedSize).toBe(1000);
     expect(entries[1].filename).toBe("folder/file.tif");
   });
 
-  it("throws NOT_A_ZIP on random bytes", () => {
+  it("throws NOT_A_ZIP on random bytes", async () => {
     const junk = new Uint8Array(100);
     junk.fill(0xab);
-    expect(() => parse(junk)).toThrow(ElvisZipError);
-    expect(() => parse(junk)).toThrowError(
+    await expect(parse(junk)).rejects.toThrow(ElvisZipError);
+    await expect(parse(junk)).rejects.toThrowError(
       expect.objectContaining({ code: "NOT_A_ZIP" }),
     );
   });
 
-  it("throws NOT_A_ZIP on too-small buffer", () => {
-    expect(() => parseZipCentralDirectory(new Uint8Array(10), 10)).toThrow(
-      ElvisZipError,
-    );
+  it("throws NOT_A_ZIP on too-small buffer", async () => {
+    await expect(parse(new Uint8Array(10))).rejects.toThrow(ElvisZipError);
   });
 
-  it("handles empty zip (no entries)", () => {
+  it("handles empty zip (no entries)", async () => {
     const zip = buildZip([]);
-    const entries = parse(zip);
+    const entries = await parse(zip);
     expect(entries).toHaveLength(0);
   });
 });
@@ -151,16 +150,23 @@ const PYTHON_BIG_ENTRY_ZIP = fixture("zip64-python-big-entry.zip");
 const PYTHON_ZIP64_TAIL = fixture("zip64-python-tail.bin");
 const PYTHON_ZIP64_TAIL_FILE_SIZE = 4718593168;
 
+/** The 4.7 GB archive of PYTHON_ZIP64_TAIL, holding only that tail. */
+function pythonZip64File(tail = PYTHON_ZIP64_TAIL) {
+  return virtualFile(PYTHON_ZIP64_TAIL_FILE_SIZE, [
+    { at: PYTHON_ZIP64_TAIL_FILE_SIZE - tail.length, bytes: tail },
+  ]);
+}
+
 function fixture(name: string): Uint8Array {
   return new Uint8Array(
     readFileSync(join(import.meta.dirname, "__fixtures__", name)),
   );
 }
 
-describe("parseZipCentralDirectory on Zip64 archives", () => {
+describe("readZipEntries on Zip64 archives", () => {
   // Mutation: delete the line that reads the uncompressed size from the Zip64 extra field.
-  it("reads an entry of 4 GiB or more from the Zip64 extra field", () => {
-    const entries = parse(PYTHON_BIG_ENTRY_ZIP);
+  it("reads an entry of 4 GiB or more from the Zip64 extra field", async () => {
+    const entries = await parse(PYTHON_BIG_ENTRY_ZIP);
     expect(entries.map((e) => e.filename)).toEqual([
       "Madeup201801/a_2400004_56_0001_0001.laz",
       "Madeup201801/a_2400004_56_0001_0002.laz",
@@ -171,11 +177,16 @@ describe("parseZipCentralDirectory on Zip64 archives", () => {
   });
 
   // Mutation: stop following the Zip64 locator in locateZipCentralDirectory (`locatorPos >= 0 &&` to `false &&`).
-  it("reads a directory that starts past 4 GiB", () => {
-    const entries = parseZipCentralDirectory(
-      PYTHON_ZIP64_TAIL,
-      PYTHON_ZIP64_TAIL_FILE_SIZE,
-    );
+  it("reads a directory that starts past 4 GiB", async () => {
+    const file = pythonZip64File();
+    const entries = await readZipEntries(file.totalFileSize, file.readRange);
+    // Only the tail, and no read of the directory's own offset.
+    expect(file.reads).toEqual([
+      [
+        PYTHON_ZIP64_TAIL_FILE_SIZE - ZIP_TAIL_BYTES,
+        PYTHON_ZIP64_TAIL_FILE_SIZE,
+      ],
+    ]);
     expect(entries).toHaveLength(4);
     expect(entries[0].uncompressedSize).toBe(4_718_592_000);
     expect(entries[0].compressedSize).toBe(4_718_592_000);
@@ -291,12 +302,7 @@ describe("readZipEntries", () => {
 
   // Mutation: stop following the Zip64 locator, as above.
   it("reads a real Python Zip64 archive whose directory starts past 4 GiB", async () => {
-    const file = virtualFile(PYTHON_ZIP64_TAIL_FILE_SIZE, [
-      {
-        at: PYTHON_ZIP64_TAIL_FILE_SIZE - PYTHON_ZIP64_TAIL.length,
-        bytes: PYTHON_ZIP64_TAIL,
-      },
-    ]);
+    const file = pythonZip64File();
     const entries = await readZipEntries(file.totalFileSize, file.readRange);
     expect(entries).toHaveLength(4);
     expect(classifyElvisEntries(entries).uncompressedBytes).toBe(
@@ -419,18 +425,18 @@ describe("a central directory that disagrees with itself is refused", () => {
   const three = () => buildZip(elvisNames(3));
   const entryLength = 46 + elvisNames(1)[0].name.length;
 
-  it("refuses entries past the count, which the worker would extract", () => {
+  it("refuses entries past the count, which the worker would extract", async () => {
     // Mutation: delete the check for an entry signature after the last counted
     // entry in parseDirectoryEntries.
     const zip = three();
     new DataView(zip.buffer).setUint16(zip.length - 22 + 10, 1, true);
-    expect(() => parse(zip)).toThrow(
+    await expect(parse(zip)).rejects.toThrow(
       expect.objectContaining({ code: "TRUNCATED" }),
     );
   });
 
   // Mutation: refuse any trailing byte (`pos < directory.length`) instead of an entry signature.
-  it("accepts trailing bytes that are not an entry", () => {
+  it("accepts trailing bytes that are not an entry", async () => {
     const zip = three();
     const directory = directoryOf(zip);
     const padding = new Uint8Array(40);
@@ -443,27 +449,27 @@ describe("a central directory that disagrees with itself is refused", () => {
       directory.length + padding.length,
       true,
     );
-    expect(parse(padded)).toHaveLength(3);
+    expect(await parse(padded)).toHaveLength(3);
   });
 
-  it("refuses a bad entry signature in the middle", () => {
+  it("refuses a bad entry signature in the middle", async () => {
     // Mutation: `break` out of the entry loop instead of throwing.
     const zip = three();
     const directory = directoryOf(zip);
     const at = directory.byteOffset - zip.byteOffset + entryLength;
     new DataView(zip.buffer).setUint32(at, 0, true);
-    expect(() => parse(zip)).toThrow(
+    await expect(parse(zip)).rejects.toThrow(
       expect.objectContaining({ code: "TRUNCATED" }),
     );
   });
 
-  it("refuses an entry whose lengths run past the directory", () => {
+  it("refuses an entry whose lengths run past the directory", async () => {
     // Mutation: delete the `entryEnd > directory.length` check.
     const zip = three();
     const directory = directoryOf(zip);
     const at = directory.byteOffset - zip.byteOffset + 2 * entryLength;
     new DataView(zip.buffer).setUint16(at + 28, 0xffff, true);
-    expect(() => parse(zip)).toThrow(
+    await expect(parse(zip)).rejects.toThrow(
       expect.objectContaining({ code: "TRUNCATED" }),
     );
   });
@@ -478,7 +484,7 @@ describe("the directory must end where the end record begins", () => {
   const decoyName = "Madeup201801/a_decoy_2400004_56_0001_0001.laz";
   const realName = "Madeup201801/a_real__2400004_56_0001_0001.laz";
 
-  it("refuses a ZIP with bytes in front whose stored offset lands on a decoy directory", () => {
+  it("refuses a ZIP with bytes in front whose stored offset lands on a decoy directory", async () => {
     // Mutation: delete the `offset + size !== endStart` check in
     // locateZipCentralDirectory. Python lists realName for this file.
     const real = buildZip([{ name: realName }]);
@@ -493,19 +499,19 @@ describe("the directory must end where the end record begins", () => {
     zip.set(real, offset + decoy.length);
     // Read at the stored offset, the decoy is a valid one-entry directory.
     expect(directoryOf(zip).length).toBe(decoy.length);
-    expect(() => parse(zip)).toThrow(refused);
+    await expect(parse(zip)).rejects.toThrow(refused);
   });
 
-  it("refuses a gap between the directory and the end record", () => {
+  it("refuses a gap between the directory and the end record", async () => {
     // Mutation: as above.
     const zip = buildZip([{ name: realName }]);
     const gapped = new Uint8Array(zip.length + 10);
     gapped.set(zip.subarray(0, zip.length - 22));
     gapped.set(zip.subarray(zip.length - 22), zip.length - 22 + 10);
-    expect(() => parse(gapped)).toThrow(refused);
+    await expect(parse(gapped)).rejects.toThrow(refused);
   });
 
-  it("refuses a Zip64 directory that does not end at the Zip64 end record", () => {
+  it("refuses a Zip64 directory that does not end at the Zip64 end record", async () => {
     // Mutation: as above. A decoy directory at the stored offset, the real one
     // after it, which is where Python reads.
     const decoy = directoryOf(buildZip([{ name: decoyName }]));
@@ -520,12 +526,14 @@ describe("the directory must end where the end record begins", () => {
       BigInt(real.length),
       true,
     );
-    expect(() => parseZipCentralDirectory(tail, at + tail.length)).toThrow(
-      refused,
-    );
+    const file = virtualFile(at + tail.length, [{ at, bytes: tail }]);
+    await expect(
+      readZipEntries(file.totalFileSize, file.readRange),
+    ).rejects.toThrow(refused);
+    expect(file.reads).toHaveLength(1);
   });
 
-  it("refuses a Zip64 end record that is not directly before its locator", () => {
+  it("refuses a Zip64 end record that is not directly before its locator", async () => {
     // Layout D | A | D' | B | locator | EOCD: the locator points at A, which
     // ends directory D exactly, and B sits at the fixed spot before the
     // locator and ends D'. Upstream CPython 3.12.0 to 3.12.11 read B, 3.12.12
@@ -566,16 +574,21 @@ describe("the directory must end where the end record begins", () => {
     eocd.setUint16(10, 1, true);
     eocd.setUint32(12, evil.length, true);
     eocd.setUint32(16, evilPos, true);
-    expect(() => parse(zip)).toThrow(refused);
+    await expect(parse(zip)).rejects.toThrow(refused);
   });
 
-  it("still reads a directory that ends where the end record begins", () => {
+  it("still reads a directory that ends where the end record begins", async () => {
     const decoy = directoryOf(buildZip([{ name: decoyName }]));
-    const tail = zip64Tail(decoy, 1, 5 * 2 ** 30);
+    const at = 5 * 2 ** 30;
+    const tail = zip64Tail(decoy, 1, at);
+    const file = virtualFile(at + tail.length, [{ at, bytes: tail }]);
     expect(
-      parseZipCentralDirectory(tail, 5 * 2 ** 30 + tail.length)[0].filename,
+      (await readZipEntries(file.totalFileSize, file.readRange))[0].filename,
     ).toBe(decoyName);
-    expect(parse(buildZip([{ name: realName }]))[0].filename).toBe(realName);
+    expect(file.reads).toHaveLength(1);
+    expect((await parse(buildZip([{ name: realName }])))[0].filename).toBe(
+      realName,
+    );
   });
 });
 
@@ -590,21 +603,25 @@ describe("a lying Zip64 record is refused, never crashes", () => {
       tail.length - 22 - 20 - 56,
       tail.length - 22 - 20,
     );
-    return () => parseZipCentralDirectory(tail, PYTHON_ZIP64_TAIL_FILE_SIZE);
+    const file = pythonZip64File(tail);
+    // The tail holds the whole directory, so a second read is a wrong one.
+    return readZipEntries(file.totalFileSize, file.readRange).finally(() =>
+      expect(file.reads).toHaveLength(1),
+    );
   }
   const refused = (code: string) => expect.objectContaining({ code });
 
-  it("takes the count from the Zip64 record when the classic count is saturated", () => {
+  it("takes the count from the Zip64 record when the classic count is saturated", async () => {
     // Mutation: read the count from the classic record only.
     const run = lie((view) => {
       const eocd = PYTHON_ZIP64_TAIL.length - 22;
       view.setUint16(eocd + 10, 0xffff, true);
       view.setUint16(eocd + 8, 0xffff, true);
     });
-    expect(run()).toHaveLength(4);
+    expect(await run).toHaveLength(4);
   });
 
-  it("follows the Zip64 record even when the classic record holds real values", () => {
+  it("follows the Zip64 record even when the classic record holds real values", async () => {
     // The worker's Python zipfile does, so a ZIP whose classic record shows one
     // harmless entry and whose Zip64 record shows another directory must be
     // read as the second. Mutation: follow the locator only when a classic
@@ -622,24 +639,24 @@ describe("a lying Zip64 record is refused, never crashes", () => {
     eocd.setUint16(10, 1, true);
     eocd.setUint32(12, harmless.length, true);
     eocd.setUint32(16, 0, true);
-    expect(parse(zip).map((e) => e.filename)).toEqual(
+    expect((await parse(zip)).map((e) => e.filename)).toEqual(
       elvisNames(3).map((f) => f.name),
     );
   });
 
-  it("refuses a multi-disk Zip64 locator", () => {
+  it("refuses a multi-disk Zip64 locator", async () => {
     // Mutation: delete the disk checks (zipfile raises BadZipFile for them).
-    expect(
+    await expect(
       lie((view, _record, locator) => view.setUint32(locator + 4, 1, true)),
-    ).toThrow(refused("TRUNCATED"));
-    expect(
+    ).rejects.toThrow(refused("TRUNCATED"));
+    await expect(
       lie((view, _record, locator) => view.setUint32(locator + 16, 2, true)),
-    ).toThrow(refused("TRUNCATED"));
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a locator that points outside the file", () => {
-    // Mutation: use the locator's offset without checking it is in the tail.
-    expect(
+  it("refuses a locator that points outside the file", async () => {
+    // Mutation: delete the `recordPos + ZIP64_EOCD_BYTES !== locatorPos` check.
+    await expect(
       lie((view, _record, locator) =>
         view.setBigUint64(
           locator + 8,
@@ -647,21 +664,44 @@ describe("a lying Zip64 record is refused, never crashes", () => {
           true,
         ),
       ),
-    ).toThrow(refused("TRUNCATED"));
-    expect(
+    ).rejects.toThrow(refused("TRUNCATED"));
+    await expect(
       lie((view, _record, locator) => view.setBigUint64(locator + 8, 0n, true)),
-    ).toThrow(refused("TRUNCATED"));
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a locator that points at something else", () => {
+  it("refuses a locator whose end record would start before the tail", async () => {
+    // Mutation: delete `recordPos < 0 ||` in locateZipCentralDirectory (a raw
+    // RangeError from the DataView escapes instead of the refusal). A crafted
+    // upload can put the end record 40 bytes into the tail, as if its comment
+    // were over 65535 bytes, so a record 56 bytes before the locator starts
+    // before the tail and `recordPos + 56 === locatorPos` still holds.
+    const total = 10_000_000;
+    const tailStart = total - ZIP_TAIL_BYTES;
+    const eocd = 40;
+    const locator = eocd - 20;
+    const held = new Uint8Array(eocd + 22);
+    const view = new DataView(held.buffer);
+    view.setUint32(locator, 0x07064b50, true);
+    view.setBigUint64(locator + 8, BigInt(tailStart + locator - 56), true);
+    view.setUint32(locator + 16, 1, true);
+    view.setUint32(eocd, 0x06054b50, true);
+    const file = virtualFile(total, [{ at: tailStart, bytes: held }]);
+    await expect(
+      readZipEntries(file.totalFileSize, file.readRange),
+    ).rejects.toThrow(refused("TRUNCATED"));
+    expect(file.reads).toHaveLength(1);
+  });
+
+  it("refuses a locator that points at something else", async () => {
     // Mutation: skip the Zip64 end record's signature check.
-    expect(lie((view, record) => view.setUint32(record, 0, true))).toThrow(
-      refused("TRUNCATED"),
-    );
+    await expect(
+      lie((view, record) => view.setUint32(record, 0, true)),
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a directory that ends past the file", () => {
-    expect(
+  it("refuses a directory that ends past the file", async () => {
+    await expect(
       lie((view, record) =>
         view.setBigUint64(
           record + 48,
@@ -669,63 +709,63 @@ describe("a lying Zip64 record is refused, never crashes", () => {
           true,
         ),
       ),
-    ).toThrow(refused("TRUNCATED"));
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a size or offset past 2^53", () => {
-    expect(
+  it("refuses a size or offset past 2^53", async () => {
+    await expect(
       lie((view, record) => view.setBigUint64(record + 48, 2n ** 60n, true)),
-    ).toThrow(refused("TRUNCATED"));
-    expect(
+    ).rejects.toThrow(refused("TRUNCATED"));
+    await expect(
       lie((view, record) => view.setBigUint64(record + 40, 2n ** 53n, true)),
-    ).toThrow(refused("TRUNCATED"));
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses an entry size that is not a safe integer", () => {
+  it("refuses an entry size that is not a safe integer", async () => {
     // Mutation: delete the high-word check in readUint64 (the 2^60 would come
     // back as a rounded number).
     const zip = PYTHON_BIG_ENTRY_ZIP.slice();
     const view = new DataView(zip.buffer);
     const cd = view.getUint32(zip.length - 22 + 16, true);
     view.setBigUint64(cd + 46 + 39 + 4, 2n ** 60n, true);
-    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+    await expect(parse(zip)).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a count above the entries the directory has", () => {
+  it("refuses a count above the entries the directory has", async () => {
     // Mutation: break out of the entry loop instead of throwing.
-    expect(
+    await expect(
       lie((view, record) => view.setBigUint64(record + 32, 5n, true)),
-    ).toThrow(refused("TRUNCATED"));
-    expect(
+    ).rejects.toThrow(refused("TRUNCATED"));
+    await expect(
       lie((view, record) => view.setBigUint64(record + 32, 2n ** 40n, true)),
-    ).toThrow(refused("TRUNCATED"));
+    ).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses an entry whose 4 GiB size has no Zip64 extra field", () => {
+  it("refuses an entry whose 4 GiB size has no Zip64 extra field", async () => {
     // Mutation: keep 0xFFFFFFFF as the size when the extra field is missing.
     const zip = buildZip([{ name: "a/b_2400004_56_0001_0001.laz" }]);
     const entry = zip.length - 22 - (46 + 28);
     new DataView(zip.buffer).setUint32(entry + 24, 0xffffffff, true);
-    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+    await expect(parse(zip)).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses a Zip64 extra field cut short", () => {
+  it("refuses a Zip64 extra field cut short", async () => {
     // Mutation: read the 8 bytes without checking the field's length.
     const zip = PYTHON_BIG_ENTRY_ZIP.slice();
     const view = new DataView(zip.buffer);
     const cd = view.getUint32(zip.length - 22 + 16, true);
     // First entry: the extra field header's length, 16 down to 4 bytes.
     view.setUint16(cd + 46 + 39 + 2, 4, true);
-    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+    await expect(parse(zip)).rejects.toThrow(refused("TRUNCATED"));
   });
 
-  it("refuses an extra field longer than the entry", () => {
+  it("refuses an extra field longer than the entry", async () => {
     // Mutation: delete the `x > extraEnd` check.
     const zip = PYTHON_BIG_ENTRY_ZIP.slice();
     const view = new DataView(zip.buffer);
     const cd = view.getUint32(zip.length - 22 + 16, true);
     view.setUint16(cd + 46 + 39 + 2, 0xffff, true);
-    expect(() => parse(zip)).toThrow(refused("TRUNCATED"));
+    await expect(parse(zip)).rejects.toThrow(refused("TRUNCATED"));
   });
 });
 
@@ -749,7 +789,7 @@ describe("isUnsafeZipEntryName", () => {
 });
 
 describe("classifyElvisEntries", () => {
-  it("DEM + LAZ: the 2 m DEM is the ground, and the point clouds counted", () => {
+  it("DEM + LAZ: the 2 m DEM is the ground, and the point clouds counted", async () => {
     const zip = buildZip([
       {
         name: "NSW Government - Spatial Services/DEM/2 Metre/Katoomba201804-LID2-AHD_2566284_56_0002_0002_2m.tif",
@@ -784,7 +824,7 @@ describe("classifyElvisEntries", () => {
         size: 11_000,
       },
     ]);
-    const entries = parse(zip);
+    const entries = await parse(zip);
     const stats = classifyElvisEntries(entries);
 
     expect(stats.mode).toBe("LAZ_ONLY");
@@ -798,38 +838,39 @@ describe("classifyElvisEntries", () => {
     expect(stats.uncompressedBytes).toBeGreaterThan(0);
   });
 
-  it("Mode A: DEM only", () => {
+  it("Mode A: DEM only", async () => {
     const zip = buildZip([
       { name: "Survey2023-AHD_1234567_56_0001_0001_1m.tif", size: 1000 },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.mode).toBe("DEM_ONLY");
     expect(stats.lazCount).toBe(0);
     expect(stats.demCount).toBe(1);
   });
 
-  it("Mode C: LAZ only", () => {
+  it("Mode C: LAZ only", async () => {
     const zip = buildZip([
       { name: "Survey2023-C3-AHD_1234567_56_0001_0001.laz", size: 1000 },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.mode).toBe("LAZ_ONLY");
     expect(stats.lazCount).toBe(1);
     expect(stats.demCount).toBe(0);
   });
 
-  it("throws NO_USABLE_FILES when only HTML metadata", () => {
+  it("throws NO_USABLE_FILES when only HTML metadata", async () => {
     const zip = buildZip([
       { name: "folder/file.html" },
       { name: "folder/readme.txt" },
     ]);
-    expect(() => classifyElvisEntries(parse(zip))).toThrow(ElvisZipError);
-    expect(() => classifyElvisEntries(parse(zip))).toThrowError(
+    const entries = await parse(zip);
+    expect(() => classifyElvisEntries(entries)).toThrow(ElvisZipError);
+    expect(() => classifyElvisEntries(entries)).toThrowError(
       expect.objectContaining({ code: "NO_USABLE_FILES" }),
     );
   });
 
-  it("throws NO_USABLE_FILES when all tifs are derivatives, mentions count in message", () => {
+  it("throws NO_USABLE_FILES when all tifs are derivatives, mentions count in message", async () => {
     const zip = buildZip([
       { name: "area_hillshade.tif" },
       { name: "area_slope.tif" },
@@ -837,7 +878,7 @@ describe("classifyElvisEntries", () => {
     ]);
     let err: ElvisZipError | undefined;
     try {
-      classifyElvisEntries(parse(zip));
+      classifyElvisEntries(await parse(zip));
     } catch (e) {
       err = e as ElvisZipError;
     }
@@ -845,109 +886,111 @@ describe("classifyElvisEntries", () => {
     expect(err?.message).toContain("3 derivative rasters");
   });
 
-  it("throws EMPTY_ZIP on zip with no entries", () => {
+  it("throws EMPTY_ZIP on zip with no entries", async () => {
     const zip = buildZip([]);
-    expect(() => classifyElvisEntries(parse(zip))).toThrow(ElvisZipError);
-    expect(() => classifyElvisEntries(parse(zip))).toThrowError(
+    const entries = await parse(zip);
+    expect(() => classifyElvisEntries(entries)).toThrow(ElvisZipError);
+    expect(() => classifyElvisEntries(entries)).toThrowError(
       expect.objectContaining({ code: "EMPTY_ZIP" }),
     );
   });
 
-  it("filters derivative tifs but counts valid tifs", () => {
+  it("filters derivative tifs but counts valid tifs", async () => {
     const zip = buildZip([
       { name: "Survey-AHD_1234567_56_0001_0001_2m.tif", size: 1000 },
       { name: "Survey_hillshade.tif" },
       { name: "Survey_colour.tif" },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.demCount).toBe(1);
     expect(stats.derivativeTifCount).toBe(2);
     expect(stats.mode).toBe("DEM_ONLY");
   });
 
-  it("parses DEM resolution from path directory component", () => {
+  it("parses DEM resolution from path directory component", async () => {
     const zip = buildZip([
       {
         name: "Spatial Services/DEM/1 Metre/SurveyX-AHD_1234_56_0001_0001.tif",
         size: 500,
       },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.demResolutionMeters).toBe(1);
   });
 
-  it("returns null demResolutionMeters when mixed resolutions", () => {
+  it("returns null demResolutionMeters when mixed resolutions", async () => {
     const zip = buildZip([
       { name: "SurveyA-AHD_1111_56_0001_0001_1m.tif", size: 500 },
       { name: "SurveyA-AHD_1112_56_0001_0002_2m.tif", size: 500 },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.demResolutionMeters).toBeNull();
   });
 
-  it("throws UNSAFE_PATH on a parent-directory traversal entry (zip-slip)", () => {
+  it("throws UNSAFE_PATH on a parent-directory traversal entry (zip-slip)", async () => {
     const zip = buildZip([
       { name: "Survey-AHD_1234567_56_0001_0001_2m.tif", size: 1000 },
       { name: "../../../app/evil.py", size: 10 },
     ]);
     let err: ElvisZipError | undefined;
     try {
-      classifyElvisEntries(parse(zip));
+      classifyElvisEntries(await parse(zip));
     } catch (e) {
       err = e as ElvisZipError;
     }
     expect(err?.code).toBe("UNSAFE_PATH");
   });
 
-  it("throws UNSAFE_PATH on an absolute path entry", () => {
+  it("throws UNSAFE_PATH on an absolute path entry", async () => {
     const zip = buildZip([
       { name: "Survey-AHD_1234567_56_0001_0001_2m.tif", size: 1000 },
       { name: "/etc/cron.d/evil", size: 10 },
     ]);
-    expect(() => classifyElvisEntries(parse(zip))).toThrowError(
+    const entries = await parse(zip);
+    expect(() => classifyElvisEntries(entries)).toThrowError(
       expect.objectContaining({ code: "UNSAFE_PATH" }),
     );
   });
 
-  it("collects unique tile IDs across LAZ and DEM", () => {
+  it("collects unique tile IDs across LAZ and DEM", async () => {
     const zip = buildZip([
       { name: "Survey-C3-AHD_1111_56_0001_0001.laz", size: 100 },
       { name: "Survey-C3-AHD_1112_56_0001_0002.laz", size: 100 },
       { name: "Survey-AHD_1111_56_0001_0001_2m.tif", size: 100 }, // same tile as first LAZ
       { name: "Survey-AHD_1113_56_0001_0003_2m.tif", size: 100 }, // new tile
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     // tile IDs: 1111_56_0001_0001 (from LAZ + DEM, deduplicated), 1112_56_0001_0002, 1113_56_0001_0003
     expect(stats.tileCount).toBe(3);
   });
 
-  it("flags overlapping surveys: two LAZ surveys over one footprint", () => {
+  it("flags overlapping surveys: two LAZ surveys over one footprint", async () => {
     const zip = buildZip([
       { name: "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
       { name: "Mudgee201612-LID2-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.lazCount).toBe(2);
     expect(stats.tileCount).toBe(1); // one footprint
     expect(stats.overlappingSurveys).toBe(true);
   });
 
-  it("no overlap flag when each LAZ covers a distinct footprint", () => {
+  it("no overlap flag when each LAZ covers a distinct footprint", async () => {
     const zip = buildZip([
       { name: "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
       { name: "Mudgee201408-LID1-C3-AHD_7766368_55_0002_0002.laz", size: 100 },
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.tileCount).toBe(2);
     expect(stats.overlappingSurveys).toBe(false);
   });
 
-  it("does not flag overlap in DEM-only mode (survey selection is LAZ-only)", () => {
+  it("does not flag overlap in DEM-only mode (survey selection is LAZ-only)", async () => {
     const zip = buildZip([
       { name: "SurveyA-AHD_1111_56_0001_0001_2m.tif", size: 100 },
       { name: "SurveyB-AHD_1111_56_0001_0001_2m.tif", size: 100 }, // same footprint, 2 DEMs
     ]);
-    const stats = classifyElvisEntries(parse(zip));
+    const stats = classifyElvisEntries(await parse(zip));
     expect(stats.mode).toBe("DEM_ONLY");
     expect(stats.overlappingSurveys).toBe(false);
   });
@@ -962,29 +1005,29 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     name: "Madeup2023-C3-AHD_1234567_56_0001_0001.laz",
     size: 1000,
   };
-  const label = (files: { name: string; size: number }[]) =>
-    classifyElvisEntries(parse(buildZip(files))).modeLabel;
+  const label = async (files: { name: string; size: number }[]) =>
+    classifyElvisEntries(await parse(buildZip(files))).modeLabel;
 
   // Mutation: label a ZIP with a fine DEM "from the point clouds", while
   // topo/sharpen.py's dem_plan takes the DEM as ground.
-  it("says where the ground comes from, as sharpen.py chooses it", () => {
-    expect(label([dem(2), laz])).toBe("Ground from the DEM");
-    expect(label([dem(1)])).toBe("Ground from the DEM");
-    expect(label([laz])).toBe("Ground from the point clouds");
-    expect(label([dem(5), laz])).toBe("Ground from the point clouds");
+  it("says where the ground comes from, as sharpen.py chooses it", async () => {
+    expect(await label([dem(2), laz])).toBe("Ground from the DEM");
+    expect(await label([dem(1)])).toBe("Ground from the DEM");
+    expect(await label([laz])).toBe("Ground from the point clouds");
+    expect(await label([dem(5), laz])).toBe("Ground from the point clouds");
   });
 
   // Mutation: let a ZIP of 5 m DEMs through, and the job is refused by the
   // worker only after the upload and a charged launch.
-  it("refuses a ZIP of 5 m DEMs only, before it is uploaded", () => {
-    const only5m = parse(buildZip([dem(5), dem(5)]));
+  it("refuses a ZIP of 5 m DEMs only, before it is uploaded", async () => {
+    const only5m = await parse(buildZip([dem(5), dem(5)]));
     expect(() => classifyElvisEntries(only5m)).toThrow(ElvisZipError);
   });
 
   // Mutation: change the coarsest DEM cell sharpen.py grounds on (its
   // `zoom_for_cell`), and the form labels or refuses a ZIP the worker would
   // treat otherwise.
-  it("grounds on the DEMs sharpen.py does", () => {
+  it("grounds on the DEMs sharpen.py does", async () => {
     const python = readFileSync(
       join(import.meta.dirname, "../../topo/sharpen.py"),
       "utf8",
@@ -992,15 +1035,14 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     const coarsest = Number(
       /if cell_m <= ([\d.]+):\n\s+return 16/.exec(python)![1],
     );
-    expect(label([dem(coarsest)])).toBe("Ground from the DEM");
-    expect(() =>
-      classifyElvisEntries(parse(buildZip([dem(coarsest + 0.5)]))),
-    ).toThrow(ElvisZipError);
+    expect(await label([dem(coarsest)])).toBe("Ground from the DEM");
+    const entries = await parse(buildZip([dem(coarsest + 0.5)]));
+    expect(() => classifyElvisEntries(entries)).toThrow(ElvisZipError);
   });
 
   // Mutation: reword one copy, and the form and the worker refuse the same
   // ZIP in two different sentences.
-  it("refuses it in the worker's own words", () => {
+  it("refuses it in the worker's own words", async () => {
     const python = readFileSync(
       join(import.meta.dirname, "../../topo/sharpen.py"),
       "utf8",
@@ -1010,7 +1052,7 @@ describe("classifyElvisEntries for a job that sharpens", () => {
       .map((m) => m[1])
       .join("");
     try {
-      classifyElvisEntries(parse(buildZip([dem(5)])));
+      classifyElvisEntries(await parse(buildZip([dem(5)])));
     } catch (error) {
       expect((error as ElvisZipError).sentence).toBe(sentence);
       return;

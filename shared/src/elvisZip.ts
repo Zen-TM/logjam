@@ -316,24 +316,6 @@ function parseDirectoryEntries(
 }
 
 /**
- * Parses the ZIP central directory when it lies wholly inside `tailBytes`,
- * the last N bytes of the file. A directory that starts earlier throws
- * TRUNCATED; `readZipEntries` is the form that fetches it.
- */
-export function parseZipCentralDirectory(
-  tailBytes: Uint8Array,
-  totalFileSize: number,
-): ZipEntry[] {
-  const { offset, size, count } = locateZipCentralDirectory(
-    tailBytes,
-    totalFileSize,
-  );
-  const start = offset - (totalFileSize - tailBytes.length);
-  if (start < 0) throw new ElvisZipError("TRUNCATED", TRUNCATED);
-  return parseDirectoryEntries(tailBytes.subarray(start, start + size), count);
-}
-
-/**
  * The entries of a ZIP of `totalFileSize` bytes, reading it through
  * `readRange(start, end)` (end exclusive; an S3 ranged GET or `File.slice`).
  * Reads the last `ZIP_TAIL_BYTES` first and, if the central directory starts
