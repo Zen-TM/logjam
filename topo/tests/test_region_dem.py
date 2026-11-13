@@ -215,7 +215,7 @@ class TestMapterhornIsOnlyTheBuildsToRead(unittest.TestCase):
     never runs from CI": review does. Mutations that turn it red: a
     `https://tiles.mapterhorn.com/...` URL in any file under shared/src,
     frontend/src, mobile/src or api/src; `USER_AGENT` set to a string naming
-    the project, or carrying an address."""
+    the project, or carrying an address, or any other change to its text."""
 
     SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
     DIRS = ("shared/src", "frontend/src", "mobile/src", "api/src")
@@ -241,10 +241,10 @@ class TestMapterhornIsOnlyTheBuildsToRead(unittest.TestCase):
         )
 
     def test_the_user_agent_names_no_project_or_person(self):
-        agent = region.USER_AGENT.lower()
-        self.assertTrue(agent)
-        for word in ("logjam", "zen", "@", "http", "mailto"):
-            self.assertNotIn(word, agent)
+        # Pinned: a change to the client name is a decision to make here.
+        self.assertEqual(region.USER_AGENT, "pmtiles-python-client")
+        for word in ("logjam", "@", "http", "mailto"):
+            self.assertNotIn(word, region.USER_AGENT.lower())
 
 
 class FakeResponse:
