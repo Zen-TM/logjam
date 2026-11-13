@@ -52,13 +52,11 @@ somewhere a workflow can read: that is what changes from 0009.
    started last on the PR's head, skipped runs aside, finished and passed:
    one still running refuses. It re-runs the plan's refusals on
    the release branch as it is then, cherry-picks the squash commit,
-   publishes it to `preview`, uploads its sourcemaps to Sentry (updated
-   2026-11-13; a failure leaves the update on `preview`), promotes that group
-   to `production` (rule 3 of 0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
+   publishes it to `preview`, promotes that group to `production` (rule 3 of
+   0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
    update with the same key, for the owner alone. Guard: the gate tests in
    `mobile/src/otaHotfix.test.ts`, which also check both workflows call
-   `ota-hotfix.js gate` first; `mobile/src/sentryUpload.test.ts` holds the
-   upload's place between the publish and the promotion.
+   `ota-hotfix.js gate` first.
 4. **Only admins and the deploy key in `mobile-ota` may push
    `release/mobile-v*`.** Guard: the `releases_stay_the_maintainers` run in
    `guards.tftest.hcl`.
@@ -75,6 +73,14 @@ somewhere a workflow can read: that is what changes from 0009.
   `mobile/src/otaHotfix.test.ts`, the `main_admits_only_green_squashed_prs`
   run in `guards.tftest.hcl`, and `infra/scripts/check-required-checks.py`
   (the check reports on every pull request). Everything else above stands.
+- **Update 2026-11-13: rule 3 uploads the update's sourcemaps to Sentry after
+  publishing to `preview` and before promoting to `production`.** A crash in
+  an OTA update is unreadable without its map; the reason, and what is
+  uploaded, are in [0004](0004-mobile-sentry-and-scrubber.md). A failed upload
+  stops the run with the update still on `preview`, so none reaches
+  `production` without its maps. Guard: `mobile/src/sentryUpload.test.ts`,
+  which holds the upload's place between the two steps. Everything else above
+  stands.
 
 ## Consequences
 
