@@ -82,8 +82,18 @@ describe("the Fire history layers", () => {
     expect(fill).toMatchObject({
       id: fireFillLayer(SIM_NZ),
       "source-layer": SIM_NZ.terrain.fire!.sourceLayer,
+      paint: {
+        "fill-color": fireColor(SIM_NZ.terrain.fire!, NOV_2026),
+        "fill-opacity": zoomFadeIn(
+          FIRE_MIN_ZOOM,
+          fireFillOpacity(SIM_NZ.terrain.fire!, NOV_2026),
+        ),
+      },
     });
     expect(fill.id).not.toBe(fireFillLayer(NSW_REGION));
+    expect(fill.paint?.["fill-color"]).not.toEqual(
+      fireColor(NSW_FIRE, NOV_2026),
+    );
     expect(
       fireLayerSpecs({ ...SIM_NZ, terrain: {} }, "s", NOV_2026),
     ).toBeNull();

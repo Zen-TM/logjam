@@ -13,8 +13,8 @@
 // credential. Nothing here logs either (`terrainRouter.test.ts`, "logs
 // nothing").
 import {
+  areasInRegion,
   layerIn,
-  regionAt,
   REGIONS,
   type Region,
   SHARPENED_ARCHIVE_URL,
@@ -43,23 +43,6 @@ const ARCHIVE_LAYER: Record<RoutedTerrainKey, TerrainArchiveLayer> = {
 /** Whether a sharpened area replaces a layer's surface: the others are read as they are. */
 export const isRouted = (key: TerrainLayerKey): key is RoutedTerrainKey =>
   key in ARCHIVE_LAYER;
-
-/**
- * The areas of `areas` that `region` holds: the ones whose survey is centred
- * inside its border. An area is routed only inside the region that holds it.
- * Guard:
- * `terrainRouter.test.ts` ("routes an area only inside the region that holds
- * it").
- */
-export function areasIn(
-  region: Region | null,
-  areas: readonly SharpenedOverlay[],
-): SharpenedOverlay[] {
-  if (!region) return [];
-  return areas.filter(({ coverage: [west, south, east, north] }) =>
-    regionAt((west + east) / 2, (south + north) / 2, [region]),
-  );
-}
 
 let routedAreas: readonly SharpenedOverlay[] = [];
 let routedRegions: readonly Region[] = [];
@@ -159,7 +142,7 @@ export async function terrainTile(
   const archive = layerIn(region, key);
   if (!archive) throw new AbsentTerrainTile();
   const answer = terrainTileArchive(
-    areasIn(region, routedAreas),
+    areasInRegion(region, routedAreas),
     layer,
     z,
     x,

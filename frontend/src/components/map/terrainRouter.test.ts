@@ -27,7 +27,6 @@ vi.mock("pmtiles", () => ({
 }));
 
 import {
-  areasIn,
   areasKey,
   isAbsentTerrainTile,
   setRoutedAreas,
@@ -48,12 +47,6 @@ const area: SharpenedOverlay = {
   heightsUrl: "https://bucket.test/h?sig",
   slopeUrl: "https://bucket.test/s?sig",
   contoursUrl: "https://bucket.test/c?sig",
-};
-// A made-up area centred in the simulated New Zealand's south island.
-const nzArea: SharpenedOverlay = {
-  ...area,
-  id: "nz1",
-  coverage: [169.05, -44.65, 169.07, -44.63],
 };
 const statewide = (path: string) => `${window.location.origin}/${path}`;
 const SLOPE = statewide("master/dem/nsw-5m-slope.pmtiles");
@@ -242,17 +235,31 @@ describe("the router's regions", () => {
     expect(await read("slope", 14, 15050, 9827, SIM_NZ)).toBe(`${own}@14`);
   });
 
-  // Mutation: hand `terrainTileArchive` every area (drop the `areasIn` filter
-  // in `terrainTile`), and a tile of the simulated region that lies in an NSW
-  // area's range is read from that NSW area.
+  // Mutation: hand `terrainTileArchive` every area (drop the `areasInRegion`
+  // filter in `terrainTile`), and a tile of the simulated region that lies in
+  // an NSW area's range is read from that NSW area.
   it("routes an area only inside the region that holds it", async () => {
-    expect(areasIn(NSW_REGION, [area, nzArea])).toEqual([area]);
-    expect(areasIn(SIM_NZ, [area, nzArea])).toEqual([nzArea]);
-    expect(areasIn(null, [area])).toEqual([]);
     setRoutedAreas([area], [NSW_REGION, SIM_NZ]);
     const own = statewide(SIM_NZ.terrain.slope!.archivePath);
     held.set(own, new Set([15]));
     held.set(area.slopeUrl, new Set([15]));
     expect(await read("slope", 15, 30100, 19654, SIM_NZ)).toBe(`${own}@15`);
+  });
+
+  // Mutation: have `areasInRegion` test the survey box's centre in place of its
+  // overlap with the border (rebuild shared first), and an area centred in the
+  // sea off NSW's coast, whose box reaches inland, stops being routed.
+  it("routes an area centred outside the border whose box touches it", async () => {
+    const coastal: SharpenedOverlay = {
+      ...area,
+      id: "c1",
+      tiles15: [30410, 19654, 30413, 19657],
+      coverage: [154.0, -33.9, 155.0, -33.5],
+    };
+    route([coastal]);
+    held.set(coastal.slopeUrl, new Set([15]));
+    expect(await read("slope", 15, 30410, 19654)).toBe(
+      `${coastal.slopeUrl}@15`,
+    );
   });
 });

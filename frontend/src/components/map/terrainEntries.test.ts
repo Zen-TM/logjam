@@ -124,11 +124,23 @@ describe("terrainEntries", () => {
       expect(entries[key]).toEqual(terrainEntries(NSW_REGION, [])[key]);
   });
 
-  // Mutation: pass every area on to `routed` (drop the `areasIn` filter), and
-  // an area in NSW turns another region's terrain into routed sources whose
+  // Mutation: pass every area on to `routed` (drop the `areasInRegion`
+  // filter), and an area in NSW turns another region's terrain into routed sources whose
   // zooms reach past its archives.
   it("ignores an area another region holds", () => {
     expect(terrainEntries(SIM_NZ, [area])).toEqual(terrainEntries(SIM_NZ, []));
+  });
+
+  // Mutation: have `areasInRegion` test the survey box's centre in place of
+  // its overlap with the border (rebuild shared first), and an area centred in
+  // the sea off NSW's coast stops being routed.
+  it("routes an area centred outside the border whose box touches it", () => {
+    const coastal = {
+      ...area,
+      id: "c1",
+      coverage: [154.0, -33.9, 155.0, -33.5] as const,
+    };
+    expect(terrainEntries(NSW_REGION, [coastal]).slope?.tiles).toBeDefined();
   });
 });
 

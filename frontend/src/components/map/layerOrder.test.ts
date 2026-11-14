@@ -257,8 +257,8 @@ describe("terrainKeyOf", () => {
     expect(terrainKeyOf("contours")).toBe(null);
   });
 
-  // Mutation: add a layer key that ends in another's ("hill" beside
-  // "hillshade" reads the shade as the hill), and an id reads back as the
+  // Mutation: add a layer key that another key ends in ("shade", which
+  // "hillshade" ends with), and a region's hillshade id reads back as the
   // wrong layer.
   it("holds for keys none of which ends another", () => {
     for (const a of TERRAIN_LAYER_KEYS)

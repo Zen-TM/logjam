@@ -1,4 +1,5 @@
 import {
+  areasInRegion,
   layerIn,
   type Region,
   type SharpenedOverlay,
@@ -7,7 +8,6 @@ import {
 
 import { terrainEntryId } from "./layerOrder";
 import {
-  areasIn,
   isRouted,
   routedAttribution,
   terrainTileTemplate,
@@ -50,7 +50,7 @@ export function terrainEntries(
   areas: readonly SharpenedOverlay[],
 ): Partial<Record<TerrainLayerKey, TerrainEntry>> {
   if (!region) return {};
-  const held = areasIn(region, areas);
+  const held = areasInRegion(region, areas);
   const deepest = Math.max(...held.map((a) => a.zmax));
 
   const entry = (
