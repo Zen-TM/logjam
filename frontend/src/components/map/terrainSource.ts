@@ -58,7 +58,7 @@ export async function terrainSourceFor(
     areas.length
       ? {
           type: "raster-dem",
-          tiles: [terrainTileTemplate("hillshade", areas)],
+          tiles: [terrainTileTemplate(NSW_REGION, "hillshade", areas)],
           // An absent tile (past an area's zmax, or past z15 outside every
           // area) is overzoomed from its parent by MapLibre, as in 2D.
           minzoom: NSW_REGION.terrain.hillshade.minzoom,
