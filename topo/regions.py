@@ -14,7 +14,14 @@ from pathlib import Path
 
 REGIONS_FILE = Path(__file__).with_name("regions.json")
 
-_LOCAL_DB_HOSTS = {"localhost", "127.0.0.1", "host.docker.internal", "postgres"}
+# The database hosts and environment variables api/src/lib/runtime.ts reads,
+# bar NODE_ENV (tests/test_regions.py `TestRuntimeParity` holds them equal).
+LOCAL_DB_HOSTS = {"localhost", "127.0.0.1", "host.docker.internal", "postgres"}
+RUNTIME_SIGNALS = (
+    "AWS_EXECUTION_ENV",
+    "ECS_CONTAINER_METADATA_URI_V4",
+    "AWS_LAMBDA_FUNCTION_NAME",
+)
 
 
 def prod_runtime(env) -> bool:
@@ -25,10 +32,8 @@ def prod_runtime(env) -> bool:
     """
     return (
         env.get("LOGJAM_RUNTIME") == "prod"
-        or bool(env.get("AWS_EXECUTION_ENV"))
-        or bool(env.get("ECS_CONTAINER_METADATA_URI_V4"))
-        or bool(env.get("AWS_LAMBDA_FUNCTION_NAME"))
-        or env.get("DB_HOST", "") not in _LOCAL_DB_HOSTS | {""}
+        or any(env.get(name) for name in RUNTIME_SIGNALS)
+        or env.get("DB_HOST", "") not in LOCAL_DB_HOSTS | {""}
     )
 
 

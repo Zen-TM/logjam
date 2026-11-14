@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
-import { topoRegionsFile } from "./topoRegions.js";
+import { inlineNumberLists, topoRegionsFile } from "./topoRegions.js";
 
 const FILE = new URL("../../topo/regions.json", import.meta.url);
 type Entry = {
@@ -67,5 +67,36 @@ describe("topo/regions.json", () => {
       delete flag.LOGJAM_SIM_REGIONS;
       vi.resetModules();
     }
+  });
+});
+
+describe("inlineNumberLists", () => {
+  // Mutation: match string values too (drop the `"(?:[^"\\]|\\.)*"|` branch),
+  // and a credit holding `[ 2020 ]` is respaced.
+  it("leaves a string that looks like a list alone", () => {
+    const json = JSON.stringify(
+      { credit: 'Survey [ 2020,  2021 ] \\" [ 1 ]' },
+      null,
+      1,
+    );
+    expect(inlineNumberLists(json)).toBe(json);
+  });
+
+  // Mutation: return the text unchanged.
+  it("puts an array of numbers on one line, and no other array", () => {
+    const json = JSON.stringify(
+      {
+        a: [
+          [1, 2],
+          [3, 4],
+        ],
+        b: [-1.5, 2],
+      },
+      null,
+      1,
+    );
+    expect(inlineNumberLists(json)).toBe(
+      '{\n "a": [\n  [1, 2],\n  [3, 4]\n ],\n "b": [-1.5, 2]\n}',
+    );
   });
 });

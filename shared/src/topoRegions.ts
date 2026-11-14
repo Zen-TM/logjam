@@ -41,6 +41,20 @@ function archive(a: TopoArchive): TopoArchive {
 }
 
 /**
+ * Puts each array of numbers (a coordinate, a ring's points, a box) on one
+ * line in JSON text that was written with indentation, and leaves every string
+ * as it is. Guard: `topoRegions.test.ts` ("leaves a string that looks like a
+ * list alone").
+ */
+export function inlineNumberLists(json: string): string {
+  return json.replace(/"(?:[^"\\]|\\.)*"|\[[-\d.,\s]+\]/g, (match) =>
+    match.startsWith('"')
+      ? match
+      : `[${match.slice(1, -1).trim().replace(/\s+/g, " ")}]`,
+  );
+}
+
+/**
  * The file's text: NSW, then the simulated regions marked `"sim": true`,
  * which topo/regions.py ignores unless the dev switch is on. It lists the
  * regions `REGIONS` holds with the switch on (topoRegions.test.ts, "lists the
@@ -65,10 +79,8 @@ export function topoRegionsFile(): string {
     grid: region.grid,
   });
   const regions = REGIONS_WITH_SIMULATED.map(entry);
-  // A coordinate, and a list of numbers, stay on one line: a ring is long.
-  const text = JSON.stringify({ note: NOTE, regions }, null, 1).replace(
-    /\[[-\d.,\s]+\]/g,
-    (list) => `[${list.slice(1, -1).trim().replace(/\s+/g, " ")}]`,
+  const text = inlineNumberLists(
+    JSON.stringify({ note: NOTE, regions }, null, 1),
   );
   return `${text}\n`;
 }

@@ -481,9 +481,9 @@ export function simRegionsOn(): boolean {
 }
 
 /**
- * NSW and the simulated regions, whatever the switch says: what
- * topo/regions.json lists (topoRegions.ts). A client reads `REGIONS`, never
- * this, or a prod build would offer regions with no data.
+ * NSW and the simulated regions, whatever the switch says: the list
+ * topo/regions.json is written from (topoRegions.ts). `REGIONS` is this list
+ * with the switch on.
  */
 export const REGIONS_WITH_SIMULATED: readonly Region[] = [
   NSW_REGION,

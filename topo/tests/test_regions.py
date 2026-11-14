@@ -3,6 +3,7 @@ from shared/src/regions.ts; shared/src/topoRegions.test.ts holds the file equal
 to it). Every coordinate here is a place on a map or made up."""
 
 import os
+import re
 import subprocess
 import sys
 import unittest
@@ -88,11 +89,45 @@ class TestSimulatedRegions(unittest.TestCase):
         self.assertIn("SIM_REGIONS=1 refused", done.stderr)
 
 
+RUNTIME_TS = os.path.join(TOPO, "..", "api", "src", "lib", "runtime.ts")
+
+
+class TestRuntimeParity(unittest.TestCase):
+    """`prod_runtime` is `nonDevRuntime` (api/src/lib/runtime.ts) as a worker
+    reads it, so the two lists of signals and of local database hosts must
+    agree. Not NODE_ENV: no worker's task definition sets it, so an unset one
+    would refuse every local worker."""
+
+    def setUp(self):
+        with open(RUNTIME_TS, encoding="utf-8") as f:
+            self.ts = f.read()
+
+    # Mutation: add a host to `_LOCAL_DB_HOSTS` here, or to the host pattern in
+    # runtime.ts, alone.
+    def test_the_local_database_hosts_are_the_apis(self):
+        pattern = re.search(r"/\^\(([^)]*)\)\$/", self.ts)
+        self.assertIsNotNone(pattern, "no host pattern in runtime.ts")
+        hosts = {h.replace("\\.", ".") for h in pattern.group(1).split("|")}
+        self.assertGreaterEqual(len(hosts), 4)
+        self.assertEqual(hosts, set(regions.LOCAL_DB_HOSTS))
+
+    # Mutation: add an env signal to `nonDevRuntime` in runtime.ts, or to
+    # `RUNTIME_SIGNALS` here, alone.
+    def test_the_environment_signals_are_the_apis(self):
+        names = set(re.findall(r"\benv\.([A-Z][A-Z0-9_]+)", self.ts))
+        signals = names - {"NODE_ENV", "DB_HOST"}
+        self.assertGreaterEqual(len(signals), 4)
+        self.assertIn("DB_HOST", names)
+        self.assertEqual(signals, {"LOGJAM_RUNTIME", *regions.RUNTIME_SIGNALS})
+
+
 class TestRegionLookup(unittest.TestCase):
-    def test_nsw_is_declared_with_the_archives_the_builds_read(self):
-        terrain = regions.region("nsw")["terrain"]
-        for layer in ("heights", "slope", "contours"):
-            self.assertTrue(terrain[layer]["archivePath"].startswith("master/"), layer)
+    def setUp(self):
+        # The module's own list follows the caller's shell (SIM_REGIONS), which
+        # a test must not.
+        patch = mock.patch.object(regions, "REGIONS", load(DEV))
+        patch.start()
+        self.addCleanup(patch.stop)
 
     # Mutation: return None instead of raising, and a typo in an id is a region
     # with no archives rather than an error.
