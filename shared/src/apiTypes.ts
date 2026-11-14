@@ -12,6 +12,7 @@ import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 import type { SlopeBand } from "./topoSettings.js";
+import type { Units } from "./units.js";
 
 export type TPlace = {
   id: string;
@@ -90,6 +91,7 @@ export type TUser = {
     leaderboardOptIn?: boolean;
     slopeBands?: SlopeBand[];
     regions?: string[];
+    units?: Units;
   } | null;
 };
 

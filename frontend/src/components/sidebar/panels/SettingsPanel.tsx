@@ -1,5 +1,6 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import {
+  choosesUnits,
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
   COPY_MEDIA_SETTING,
@@ -8,6 +9,7 @@ import {
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   offersRegionChoice,
+  offersUnitsChoice,
   ownAttributeCountLabel,
   ownTypeCountLabel,
   REGION_CHOICE,
@@ -15,11 +17,14 @@ import {
   REGIONS,
   SETTINGS,
   toggleRegion,
+  UNITS_CHOICE,
+  unitsOf,
   type Region,
   type SectionKeysOn,
   type NotificationPreferenceGroup,
   type NotificationPreferences,
   type ScopedCustomFieldDef,
+  type Units,
 } from "@logjam/shared";
 
 import {
@@ -31,6 +36,7 @@ import {
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import {
+  ChipRail,
   Hero,
   IconTile,
   Row,
@@ -115,6 +121,9 @@ function SettingsPanel({
   const [copyMediaSaving, setCopyMediaSaving] = useState(false);
   const [chosenRegions, setChosenRegions] = useState<string[] | null>(null);
   const [regionsSaving, setRegionsSaving] = useState(false);
+  // The choice being saved, shown until the save settles; the row otherwise
+  // reads the account (`unitsOf`), so it follows a change of home region.
+  const [pendingUnits, setPendingUnits] = useState<Units | null>(null);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -217,6 +226,20 @@ function SettingsPanel({
     }
   }
 
+  async function handleChooseUnits(next: Units) {
+    if (!currentUser || pendingUnits !== null) return;
+    if (!choosesUnits(currentUser.uiPreferences?.units, next)) return;
+    setPendingUnits(next);
+    try {
+      onCurrentUserChange(await updateUserPreferences({ units: next }));
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, UNITS_CHOICE.saveFailed));
+    } finally {
+      setPendingUnits(null);
+    }
+  }
+
   if (page === "placeTypes") {
     return (
       <PlaceTypeSection
@@ -267,6 +290,33 @@ function SettingsPanel({
       <>
         <SectionHeader title={copy.display} />
         <ThemeChooser />
+        {offersUnitsChoice(regions) ? (
+          <>
+            <SectionHeader title={UNITS_CHOICE.title} />
+            {!currentUser ? (
+              <LoadingState />
+            ) : (
+              <ChipRail
+                label={UNITS_CHOICE.title}
+                options={UNITS_CHOICE.options.map((option) => ({
+                  ...option,
+                  // One at a time: the save in flight is the choice shown.
+                  disabled: pendingUnits !== null,
+                }))}
+                value={
+                  pendingUnits ?? unitsOf(currentUser.uiPreferences, regions)
+                }
+                onChange={handleChooseUnits}
+                hint={
+                  pendingUnits !== null
+                    ? UNITS_CHOICE.saving
+                    : UNITS_CHOICE.hint
+                }
+                wrap
+              />
+            )}
+          </>
+        ) : null}
       </>
     ),
     regions: () =>

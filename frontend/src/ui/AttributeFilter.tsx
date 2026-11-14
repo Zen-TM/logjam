@@ -5,6 +5,7 @@ import {
   formatRange,
   formatThreshold,
   isFullRange,
+  stopLabel,
   THRESHOLD_OPERATOR_LABELS,
   THRESHOLD_OPERATORS,
   type CustomFieldFilter,
@@ -53,6 +54,7 @@ export function AttributeFilter({
           label={def.label}
           stops={stops}
           value={range}
+          word={(stop) => stopLabel(def.key, stop)}
           onChange={(next) =>
             onChange(next && { kind: "numberRange", range: next })
           }

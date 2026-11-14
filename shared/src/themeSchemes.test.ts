@@ -110,6 +110,19 @@ describe("normalizeUserUiPreferences", () => {
     ).toBe(false);
   });
 
+  // Mutation: default `units` to "metric" (so an account that never chose has
+  // no home region's units), or keep a value that is neither.
+  it("leaves units absent until the user chose, and keeps only a real choice", () => {
+    expect(normalizeUserUiPreferences(null)).not.toHaveProperty("units");
+    expect(normalizeUserUiPreferences({})).not.toHaveProperty("units");
+    expect(
+      normalizeUserUiPreferences({ units: "furlongs" }),
+    ).not.toHaveProperty("units");
+    expect(normalizeUserUiPreferences({ units: "imperial" }).units).toBe(
+      "imperial",
+    );
+  });
+
   it("clamps an invalid themeSchemeId to the default", () => {
     const result = normalizeUserUiPreferences({ themeSchemeId: "granite" });
     expect(result.themeSchemeId).toBe(DEFAULT_THEME_SCHEME_ID);

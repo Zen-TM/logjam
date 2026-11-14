@@ -37,6 +37,7 @@ import { forgetSlopeBandsEdit } from "../map/slopeBandsPreference";
 import { clearRecentSearches } from "../map/recentSearches";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { forgetRegions } from "../regionsPreference";
+import { forgetUnits } from "../unitsPreference";
 import { stopPlansForWipe } from "../plans/plansCache";
 import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
 import { stopGaugesForWipe } from "../gauges/gaugeStorage";
@@ -119,6 +120,10 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // The chosen regions are the departing account's: the next one is offered
   // the default until its own arrive.
   forgetRegions();
+
+  // And the units they chose: the next account reads its own region's until
+  // its choice arrives.
+  forgetUnits();
 
   // Recent map searches are place names in the device prefs store, which the
   // wipe otherwise leaves alone.

@@ -32,6 +32,7 @@ import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import {
   accountRegion,
   canyonOffersFor,
+  gradeSystemOfView,
   TRIPS_LIST,
   type LoadState,
   type NotificationPlanTarget,
@@ -102,6 +103,7 @@ function SidebarPanel({
   // LiDAR
   onQuotaChanged,
   onWaysChanged,
+  mapCenter,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
@@ -200,6 +202,8 @@ function SidebarPanel({
   onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
   onWaysChanged: () => void;
+  /** Where the map is looking, or null before it has moved. */
+  mapCenter: { lat: number; lng: number } | null;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
@@ -373,6 +377,10 @@ function SidebarPanel({
 
   const accountFailed =
     !currentUser && currentUserError !== null && waitsOnAccount(activePanel);
+  const placesGradeSystem = gradeSystemOfView(
+    mapCenter ? [mapCenter.lng, mapCenter.lat] : null,
+    currentUser?.uiPreferences,
+  );
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
@@ -416,6 +424,7 @@ function SidebarPanel({
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
             canyonRegions={canyonOffersFor(currentUser?.uiPreferences)}
+            gradeSystem={placesGradeSystem}
           />
         )}
         {!accountFailed && activePanel === "friends" && (
