@@ -1,3 +1,4 @@
+import { setDisplayUnits } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -237,5 +238,17 @@ describe("detailLabel", () => {
     expect(detailLabel(16, -33.5)).toBe("Fine, 2 m");
     expect(detailLabel(12, -33.5)).toBe("Overview, 32 m");
     expect(detailLabel(18, -33.5)).toBe("Finest, 0.5 m");
+  });
+
+  // Mutation: `detailLabel` writes `${rounded} m` again, or `formatGroundStep`
+  // ignores the display units.
+  it("names it in feet once the display units are imperial", () => {
+    setDisplayUnits("imperial");
+    try {
+      expect(detailLabel(16, -33.5)).toBe("Fine, 6.5 ft");
+      expect(detailLabel(12, -33.5)).toBe("Overview, 105 ft");
+    } finally {
+      setDisplayUnits("metric");
+    }
   });
 });

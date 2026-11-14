@@ -10,6 +10,9 @@
 import {
   invalidPlaceFields,
   isTransientSyncError,
+  lengthToInput,
+  lengthUnitLabel,
+  trimNumber,
   SYSTEM_FIELD_DEFS,
 } from "@logjam/shared";
 
@@ -310,7 +313,8 @@ export function opChanges(op: ParkedOp): OpChange[] {
 function fieldValueText(field: string, value: unknown): string {
   if (typeof value === "number") {
     if (field === "hours") return `${value} ${value === 1 ? "hour" : "hours"}`;
-    if (field === "longestAbseil") return `${value} m`;
+    if (field === "longestAbseil")
+      return `${trimNumber(lengthToInput(value))} ${lengthUnitLabel()}`;
     if (field === "quality") return `${value}/5`;
   }
   return previewValue(field, value);

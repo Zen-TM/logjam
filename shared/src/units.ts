@@ -92,6 +92,16 @@ export function formatHeightRange(
   return `${low}–${high} ${lengthUnitLabel()}`;
 }
 
+/**
+ * The ground one map pixel covers, "0.5 m" or "32 ft": whole from 10 up, else
+ * one decimal with a trailing ".0" dropped. The rounding is of the figure shown.
+ */
+export function formatGroundStep(metres: number): string {
+  const value = imperial() ? metres / METRES_PER_FOOT : metres;
+  const rounded = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${formatNumber(rounded, Number.isInteger(rounded) ? 0 : 1)} ${lengthUnitLabel()}`;
+}
+
 /** The two sides of a box in whole km or mi, "18 × 11 km": one unit after both. */
 export function formatBoxSize(widthKm: number, heightKm: number): string {
   const [width, height] = [widthKm, heightKm].map((km) =>
