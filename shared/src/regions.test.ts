@@ -27,6 +27,7 @@ import {
   regionAt,
   regionBounds,
   regionInView,
+  regionInWrappedView,
   regionsOf,
   regionsTouching,
   regionTouchesBox,
@@ -689,6 +690,23 @@ describe("layerIn", () => {
 
   it("is null for no region", () => {
     expect(layerIn(null, "heights")).toBeNull();
+  });
+});
+
+describe("regionInWrappedView", () => {
+  // Mutation: pass the view to `regionInView` without `wrapView`, and a map
+  // panned a turn round the world is over no region.
+  it("reads a view panned past the antimeridian by whole turns", () => {
+    const at = (lon: number): LonLatBox => ({
+      west: lon - 0.1,
+      south: -33.8,
+      east: lon + 0.1,
+      north: -33.6,
+    });
+    expect(regionInWrappedView(at(150.3))).toBe(NSW_REGION);
+    expect(regionInWrappedView(at(150.3 + 360))).toBe(NSW_REGION);
+    expect(regionInWrappedView(at(150.3 - 360))).toBe(NSW_REGION);
+    expect(regionInView(at(150.3 + 360))).toBeNull();
   });
 });
 

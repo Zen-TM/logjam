@@ -2,7 +2,7 @@ import type { TopoLayerName } from "./topoSettings.js";
 import {
   NSW_REGION,
   REGIONS,
-  regionInView,
+  regionInWrappedView,
   regionsOf,
   regionsTouching,
   wrapView,
@@ -333,7 +333,7 @@ export function basemapHere(
   const offered = offeredBasemaps(view, regions).map((entry) => entry.id);
   return offered.includes(picked)
     ? picked
-    : (regionInView(wrapView(view), regions)?.defaultBasemap ?? offered[0]!);
+    : (regionInWrappedView(view, regions)?.defaultBasemap ?? offered[0]!);
 }
 
 /**
