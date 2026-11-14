@@ -2,15 +2,16 @@
 // its rows come in. Free of React Native, so both have a test
 // (placeSearch.test.ts).
 //
-// The place registry on this phone answers whenever it is here, even online:
-// it is instant and nothing typed leaves the phone (ADR 0034). A signed-in
-// phone without it asks our API, which runs the same `searchPlaces`; a guest
-// has no API (ADR 0007), so it gets only its own places and the explicit
-// Nominatim row.
+// The place registry on this phone, of the region the map shows, answers
+// whenever it is here, even online: it is instant and nothing typed leaves the
+// phone (ADR 0034). A signed-in phone without it asks our API, which runs the
+// same `searchPlaces` over that region's registry; a guest has no API (ADR
+// 0007), so it gets only its own places and the explicit Nominatim row. Over
+// ground no registry covers there is no registry source at all.
 //
 // PRIVACY: the typed text goes in a POST body, never a URL, and never into a
-// log line. Guards: placeSearch.test.ts ("sends the query in the body, never
-// the URL"), src/sentry/scrubEvent.test.ts ("the typed search query").
+// log line. Guards: placeSearch.test.ts ("sends the query and the region in the
+// body, never the URL"), src/sentry/scrubEvent.test.ts ("the typed search query").
 import {
   messageFromError,
   PLACE_SEARCH_API_PATH,
@@ -31,10 +32,12 @@ export const MAX_PLACE_RESULTS = 8;
 export type PlaceSearchSource = "device" | "api" | "none";
 
 export function placeSearchSource(
+  regionId: string | null,
   hasRegistry: boolean,
   accountState: AccountState,
   online: boolean,
 ): PlaceSearchSource {
+  if (regionId === null) return "none";
   if (hasRegistry) return "device";
   return capabilityStatus("placeSearch", accountState, online).status ===
     "available"
@@ -44,9 +47,14 @@ export function placeSearchSource(
 
 export async function searchPlacesOnline(
   q: string,
+  regionId: string,
   signal: AbortSignal,
 ): Promise<PlaceResult[]> {
-  const body: PlaceSearchRequest = { q, limit: MAX_PLACE_RESULTS };
+  const body: PlaceSearchRequest = {
+    q,
+    limit: MAX_PLACE_RESULTS,
+    region: regionId,
+  };
   const response = await apiFetch<PlaceSearchResponse>(PLACE_SEARCH_API_PATH, {
     method: "POST",
     body,
@@ -55,9 +63,10 @@ export async function searchPlacesOnline(
   return response.results;
 }
 
-/** The API's answer, tagged with the query it answers. */
+/** The API's answer, tagged with the query and the region it answers. */
 export type PlaceAnswer = {
   query: string;
+  region: string;
   results: PlaceResult[];
   error: string | null;
 };
@@ -68,15 +77,16 @@ export type PlaceAnswer = {
  */
 export function askPlacesOnline(
   query: string,
+  regionId: string,
   settle: (answer: PlaceAnswer) => void,
 ): () => void {
   const controller = new AbortController();
   const timer = setTimeout(() => {
-    searchPlacesOnline(query, controller.signal)
+    searchPlacesOnline(query, regionId, controller.signal)
       .then((results) => {
         // An abort after the response arrived does not reject.
         if (!controller.signal.aborted) {
-          settle({ query, results, error: null });
+          settle({ query, region: regionId, results, error: null });
         }
       })
       .catch((err: unknown) => {
@@ -85,6 +95,7 @@ export function askPlacesOnline(
         console.error(err);
         settle({
           query,
+          region: regionId,
           results: [],
           error: messageFromError(err, SEARCH_STATUS.searchFailed),
         });
@@ -97,12 +108,15 @@ export function askPlacesOnline(
 }
 
 /** What the box shows for the API's answer: it still fits while the query only
- *  grows ("Kat" while typing "Kato"); otherwise the next answer is awaited. */
+ *  grows ("Kat" while typing "Kato") over the same region; otherwise the next
+ *  answer is awaited. */
 export function placesFromAnswer(
   answer: PlaceAnswer | null,
   query: string,
+  regionId: string,
 ): readonly PlaceResult[] | PlacesPending {
-  if (!answer || !query.startsWith(answer.query)) return "loading";
+  if (!answer || answer.region !== regionId || !query.startsWith(answer.query))
+    return "loading";
   return answer.error === null ? answer.results : { error: answer.error };
 }
 

@@ -1,6 +1,7 @@
-// The place registry: every named OpenStreetMap feature in NSW, built monthly
-// by topo/build_place_registry.py and published at PLACE_REGISTRY_PREFIX on
-// the topo CDN. Why it exists and why the file is public: ADR 0034.
+// The place registry: every named OpenStreetMap feature in a region, built
+// monthly by topo/build_place_registry.py and published under the prefix the
+// region declares as `placeSearch` (NSW's is PLACE_REGISTRY_PREFIX) on the
+// topo CDN. Why it exists and why the file is public: ADR 0034.
 //
 // searchPlaces is the one ranking. The API answers Logjam Web and a phone
 // without the file with it, and Logjam GPS runs it on its own copy, so a
@@ -13,11 +14,19 @@
  *  an older client keeps reading builds in the format it knows. */
 export const PLACE_REGISTRY_FORMAT = 1;
 
-/** Path under the topo CDN base URL (TOPO_CDN_BASE_URL). */
+/** NSW's path under the topo CDN base URL (TOPO_CDN_BASE_URL). Another
+ *  region declares its own prefix as `placeSearch`. */
 export const PLACE_REGISTRY_PREFIX = `master/places/v${PLACE_REGISTRY_FORMAT}/`;
 
-/** The pointer to the current build: small, short-cached, read first. */
-export const PLACE_REGISTRY_POINTER_PATH = `${PLACE_REGISTRY_PREFIX}latest.json`;
+/** The pointer to a region's current build: small, short-cached, read first. */
+export function placeRegistryPointerPath(prefix: string): string {
+  return `${prefix}latest.json`;
+}
+
+/** NSW's pointer. */
+export const PLACE_REGISTRY_POINTER_PATH = placeRegistryPointerPath(
+  PLACE_REGISTRY_PREFIX,
+);
 
 /** Shown wherever registry results are, as the ODbL asks. */
 export const PLACE_REGISTRY_ATTRIBUTION = "© OpenStreetMap contributors";
@@ -90,6 +99,10 @@ export const PLACE_SEARCH_MAX_RESULTS = 20;
 export interface PlaceSearchRequest {
   q: string;
   limit?: number;
+  /** The id of the region whose registry answers: the region the map shows.
+   *  Absent, the default region's answers, as for a build that predates
+   *  regions. */
+  region?: string;
 }
 
 export interface PlaceSearchResponse {
@@ -114,12 +127,13 @@ export function isPlaceRegistryPointer(
   );
 }
 
-/** The data file's URL for a pointer, under the topo CDN base URL. */
+/** The data file's URL for a region's pointer, under the topo CDN base URL. */
 export function placeRegistryUrl(
   baseUrl: string,
+  prefix: string,
   pointer: PlaceRegistryPointer,
 ): string {
-  return `${baseUrl}/${PLACE_REGISTRY_PREFIX}${pointer.path}`;
+  return `${baseUrl}/${prefix}${pointer.path}`;
 }
 
 // Words for the kinds whose OSM value reads wrong to a walker ("residential"

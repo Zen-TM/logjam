@@ -83,7 +83,7 @@ feature in NSW, never a geocoding service.**
   registry leaves out. No guard.
 - **Logjam GPS holds the whole file,** fetched with the first region download
   and refreshed on Wi-Fi by default, and a download replaces the stored file
-  only once it parses. Guards: `mobile/src/offline/placeRegistry.test.ts`,
+  only once it parses (one file for each region it keeps, updated 2026-11-14). Guards: `mobile/src/offline/placeRegistry.test.ts`,
   and `mobile/src/map/placeSearch.test.ts` for the phone's copy answering
   first and a guest making no API call, and `mobile/src/shellTriggers.test.ts`
   for the refresh being registered for a guest as for a signed-in user
@@ -96,7 +96,7 @@ feature in NSW, never a geocoding service.**
   OpenStreetMap holds.
 - **Negative:** every phone downloads about 4.4 MB a month, and the API holds
   about 35 MB more in memory once loaded, with a peak near 175 MB while it
-  loads. Results are up to a month stale. The ODbL binds
+  loads (for each region that declares a registry, updated 2026-11-14). Results are up to a month stale. The ODbL binds
   us: the "© OpenStreetMap contributors" credit wherever results show, and the
   public copy must stay. A format bump must keep a build of the old format
   publishing for as long as a supported build reads it

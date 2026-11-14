@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  DEFAULT_REGION_IDS,
   indexPlaceRegistry,
+  NSW_REGION,
   searchPlaces,
+  type LonLatBox,
   type PlaceRegistryFile,
+  type Region,
 } from "@logjam/shared";
 import { gzipSync, strFromU8, strToU8 } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +19,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const DIR = "file:///docs/place-registry/";
 const CDN = "https://cdn.test";
 const POINTER_URL = `${CDN}/master/places/v1/latest.json`;
+const NSW = DEFAULT_REGION_IDS[0];
+
+// A second region with a registry of its own, and the map over each.
+const OTHER = vi.hoisted(() => ({
+  id: "other",
+  placeSearch: "master/places/other/v1/",
+  // A square a long way from NSW.
+  borders: [
+    [
+      [10, 10],
+      [11, 10],
+      [11, 11],
+      [10, 11],
+    ],
+  ],
+}));
+vi.mock("@logjam/shared", async (original) => {
+  const real = await original<typeof import("@logjam/shared")>();
+  const other = { ...real.NSW_REGION, ...OTHER } as unknown as Region;
+  // And one that declares no registry, as a simulated region does today.
+  const bare = { ...real.NSW_REGION, id: "bare", placeSearch: null } as Region;
+  return { ...real, REGIONS: [...real.REGIONS, other, bare] };
+});
+const [OTHER_LON, OTHER_LAT] = [10.5, 10.5];
+const around = (lon: number, lat: number): LonLatBox => ({
+  west: lon - 0.05,
+  south: lat - 0.05,
+  east: lon + 0.05,
+  north: lat + 0.05,
+});
+const OVER_NSW = around(...NSW_REGION.view.center);
+const OVER_OTHER = around(OTHER_LON, OTHER_LAT);
+const OTHER_POINTER_URL = `${CDN}/${OTHER.placeSearch}latest.json`;
+/** The regions the user chose, as `regionsPreference` keeps them. */
+const chosen = { ids: [NSW] };
 
 const files = new Map<string, Uint8Array | string>();
 /** What lands on the phone for a URL: the pointer as JSON, a data file as
@@ -23,7 +62,10 @@ const served = new Map<string, unknown>();
 const prefs = new Map<string, string>();
 /** Every file read whole into memory, as "text" or "bytes", and its URI. */
 const reads: string[] = [];
-const artifacts = { kinds: [] as string[] };
+const artifacts = {
+  kinds: [] as string[],
+  bbox: null as [number, number, number, number] | null,
+};
 const network = { expensive: false, connected: true };
 const disk = { free: 1e12 };
 /** A filesystem call to fail once, by name. */
@@ -38,11 +80,11 @@ vi.mock("../api/presignedTransfer", () => ({
 }));
 vi.mock("expo-file-system/legacy", () => ({
   makeDirectoryAsync: async () => {},
+  // A folder goes with what is in it, named with or without its slash.
   deleteAsync: async (uri: string) => {
+    const folder = uri.endsWith("/") ? uri : `${uri}/`;
     for (const key of [...files.keys()]) {
-      if (key === uri || (uri.endsWith("/") && key.startsWith(uri))) {
-        files.delete(key);
-      }
+      if (key === uri || key.startsWith(folder)) files.delete(key);
     }
   },
   getFreeDiskStorageAsync: async () => disk.free,
@@ -74,9 +116,11 @@ vi.mock("expo-file-system/legacy", () => ({
   },
   readDirectoryAsync: async (dir: string) => {
     if (failing.delete("readdir")) throw new Error("readdir failed");
-    return [...files.keys()]
+    // The names directly in `dir`: a folder's files are listed as the folder.
+    const names = [...files.keys()]
       .filter((key) => key.startsWith(dir))
-      .map((key) => key.slice(dir.length));
+      .map((key) => key.slice(dir.length).split("/")[0]);
+    return [...new Set(names)];
   },
 }));
 vi.mock("expo-file-system", () => ({
@@ -139,8 +183,10 @@ vi.mock("./offlineOnlyMode", () => ({ isOfflineOnly: () => offlineOnly.on }));
 vi.mock("../config", () => ({ config: { topoCdnBaseUrl: CDN } }));
 vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
 vi.mock("./registryDb", () => ({
-  listArtifacts: async () => artifacts.kinds.map((kind) => ({ kind })),
+  listArtifacts: async () =>
+    artifacts.kinds.map((kind) => ({ kind, bbox: artifacts.bbox })),
 }));
+vi.mock("../regionsPreference", () => ({ readRegions: () => chosen.ids }));
 
 const fetchMock = vi.fn(async (url: string) => {
   const body = served.get(url);
@@ -184,6 +230,18 @@ function publish(
   served.set(`${CDN}/master/places/v1/${built.pointer.path}`, data);
 }
 
+/** The same for the other region, under its own prefix. */
+function publishOther(built: ReturnType<typeof build>) {
+  served.set(OTHER_POINTER_URL, built.pointer);
+  served.set(`${CDN}/${OTHER.placeSearch}${built.pointer.path}`, built.plain);
+}
+
+/** Put the other region's build on the phone, in its own folder. */
+function holdOtherOnPhone(built: ReturnType<typeof build>) {
+  files.set(`${DIR}other/pointer.json`, JSON.stringify(built.pointer));
+  files.set(`${DIR}other/${built.pointer.path}`, built.plain);
+}
+
 /** Put a build on the phone, as an earlier session left it. */
 function holdOnPhone(
   built: ReturnType<typeof build>,
@@ -209,6 +267,8 @@ beforeEach(() => {
   prefs.clear();
   reads.length = 0;
   artifacts.kinds = [];
+  artifacts.bbox = null;
+  chosen.ids = [NSW];
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
@@ -232,8 +292,8 @@ describe("the first download", () => {
     const built = build("2026-10-15");
     publish(built);
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(fetchMock.mock.calls).toEqual([
       [POINTER_URL, { signal: expect.any(AbortSignal) }],
     ]);
@@ -248,8 +308,8 @@ describe("the first download", () => {
     idleOptions.length = 0;
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(idleOptions).toEqual([{ timeout: expect.any(Number) }]);
   });
 
@@ -258,8 +318,8 @@ describe("the first download", () => {
     network.expensive = true;
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(true);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(true, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
   });
 });
 
@@ -270,7 +330,7 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -284,7 +344,7 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -305,8 +365,8 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     prefs.set("placeRegistryWanted", "off");
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -326,8 +386,8 @@ describe("the saved file", () => {
   it("is read as the plain JSON the platform saved", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
-    await registry.fetchPlaceRegistry({ allowMetered: true });
-    await registry.loadPlaceIndex();
+    await registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await registry.loadPlaceIndex(NSW);
     expect(reads).toEqual([
       `text ${DIR}download.tmp`,
       `text ${DIR}places-2026-10-15.json`,
@@ -339,10 +399,12 @@ describe("the saved file", () => {
     const built = build("2026-10-15", ["Wollangambe"]);
     publish(built, built.gzipped);
     const registry = await load();
-    expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
+    expect(await registry.fetchPlaceRegistry(NSW, { allowMetered: true })).toBe(
       "updated",
     );
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 });
 
@@ -351,7 +413,7 @@ describe("the refresh", () => {
   it("fetches nothing for a phone that never asked for the file", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -362,11 +424,11 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(fetchMock).not.toHaveBeenCalled();
 
     network.expensive = false;
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
     expect(files.has(`${DIR}places-2026-10-15.json`)).toBe(true);
     expect(files.has(`${DIR}places-2026-09-15.json`)).toBe(false);
   });
@@ -378,7 +440,7 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
   });
 
   // Mutation: drop the `isOfflineOnly()` check.
@@ -387,7 +449,7 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     offlineOnly.on = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("offline-only");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("offline-only");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -397,7 +459,7 @@ describe("the refresh", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(current);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("current");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("current");
     expect(download).not.toHaveBeenCalled();
   });
 });
@@ -415,11 +477,11 @@ describe("a bad download never replaces a good file", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"), data);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     expect([...files.keys()].sort()).toEqual(
       [`${DIR}places-2026-09-15.json`, `${DIR}pointer.json`].sort(),
     );
-    const index = await registry.loadPlaceIndex();
+    const index = await registry.loadPlaceIndex(NSW);
     expect(index?.names).toEqual(["Mount Solitary", "Narrow Neck"]);
   });
 
@@ -429,7 +491,7 @@ describe("a bad download never replaces a good file", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"), half(build("2026-10-15").gzipped));
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     expect(reads).not.toContain(`bytes ${DIR}download.tmp`);
   });
 
@@ -444,8 +506,8 @@ describe("a bad download never replaces a good file", () => {
       bytes: 1,
     });
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
-    expect(registry.hasPlaceRegistry()).toBe(true);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
+    expect(registry.hasPlaceRegistry(NSW)).toBe(true);
   });
 });
 
@@ -457,9 +519,9 @@ describe("a failed swap", () => {
     publish(build("2026-10-15"));
     failing.add("move");
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     const next = await load();
-    expect((await next.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect((await next.loadPlaceIndex(NSW))?.names).toEqual(["Narrow Neck"]);
   });
 });
 
@@ -471,8 +533,10 @@ describe("the sweep after a swap", () => {
     publish(build("2026-10-15", ["Wollangambe"]));
     failing.add("readdir");
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 });
 
@@ -487,7 +551,7 @@ describe("free space", () => {
     disk.free = needs(built);
     const registry = await load();
     await expect(
-      registry.fetchPlaceRegistry({ allowMetered: true }),
+      registry.fetchPlaceRegistry(NSW, { allowMetered: true }),
     ).rejects.toThrow(/^Needs about/);
     expect(download).not.toHaveBeenCalled();
   });
@@ -499,9 +563,9 @@ describe("free space", () => {
     disk.free = needs(built);
     const registry = await load();
     const asked = registry
-      .fetchPlaceRegistry({ allowMetered: true })
+      .fetchPlaceRegistry(NSW, { allowMetered: true })
       .catch((err: unknown) => err);
-    const refresh = registry.refreshPlaceRegistry();
+    const refresh = registry.refreshPlaceRegistry(NSW);
     expect(await refresh).toBe("skipped");
     expect(await asked).toBeInstanceOf(Error);
   });
@@ -513,7 +577,7 @@ describe("free space", () => {
     publish(built);
     disk.free = needs(built);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(download).not.toHaveBeenCalled();
   });
 });
@@ -525,8 +589,8 @@ describe("one fetch at a time", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    const refresh = registry.refreshPlaceRegistry();
-    const asked = registry.fetchPlaceRegistry({ allowMetered: true });
+    const refresh = registry.refreshPlaceRegistry(NSW);
+    const asked = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
     expect(await refresh).toBe("skipped");
     expect(await asked).toBe("updated");
   });
@@ -538,13 +602,13 @@ describe("a load that fails", () => {
     holdOnPhone(build("2026-09-15", ["Narrow Neck"]));
     failing.add("read");
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(true);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(true);
     // Mutation: publish nothing when the file is kept (the search box would
     // show "Loading place names…" for good), or never clear it.
-    expect(registry.placeRegistryStatus().loadFailed).toBe(true);
-    const retried = registry.loadPlaceIndex();
-    expect(registry.placeRegistryStatus().loadFailed).toBe(false);
+    expect(registry.placeRegistryStatus(NSW).loadFailed).toBe(true);
+    const retried = registry.loadPlaceIndex(NSW);
+    expect(registry.placeRegistryStatus(NSW).loadFailed).toBe(false);
     expect((await retried)?.names).toEqual(["Narrow Neck"]);
   });
 
@@ -556,10 +620,12 @@ describe("a load that fails", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(built);
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Narrow Neck",
+    ]);
   });
 
   // Mutation: keep a file that does not match its pointer.
@@ -567,8 +633,8 @@ describe("a load that fails", () => {
     const built = build("2026-09-15");
     holdOnPhone(built, half(built.plain));
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
     expect(files.has(`${DIR}pointer.json`)).toBe(false);
   });
 
@@ -579,20 +645,22 @@ describe("a load that fails", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(unindexable);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
     // Mutation: drop the data file's delete in `buildIndex`.
     expect(files.has(`${DIR}${unindexable.pointer.path}`)).toBe(false);
     download.mockClear();
-    expect(await registry.refreshPlaceRegistry()).toBe("unreadable");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("unreadable");
     expect(download).not.toHaveBeenCalled();
     // Rebuilt from the same extract: same version, a new content hash.
     const fixed = build("2026-10-15", ["Narrow Neck"]);
     fixed.pointer.path = "places-2026-10-15-fixed.json";
     publish(fixed);
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Narrow Neck",
+    ]);
   });
 });
 
@@ -610,13 +678,13 @@ describe("the index in memory", () => {
       }),
     );
     const registry = await load();
-    const old = registry.loadPlaceIndex();
-    await registry.refreshPlaceRegistry();
-    const fresh = registry.loadPlaceIndex();
+    const old = registry.loadPlaceIndex(NSW);
+    await registry.refreshPlaceRegistry(NSW);
+    const fresh = registry.loadPlaceIndex(NSW);
     release();
     expect(await old).toBeNull();
     expect((await fresh)?.names).toEqual(["Wollangambe"]);
-    expect(registry.placeIndex()?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex(NSW)?.names).toEqual(["Wollangambe"]);
   });
 
   it("is dropped by a refresh, and the next search builds the new one", async () => {
@@ -624,11 +692,13 @@ describe("the index in memory", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15", ["Wollangambe"]));
     const registry = await load();
-    expect(registry.placeIndex()).toBeNull();
-    await registry.loadPlaceIndex();
-    await registry.refreshPlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex(NSW)).toBeNull();
+    await registry.loadPlaceIndex(NSW);
+    await registry.refreshPlaceRegistry(NSW);
+    expect(registry.placeIndex(NSW)).toBeNull();
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 
   // Mutation: build it with `indexPlaceRegistry`, in one block.
@@ -637,7 +707,7 @@ describe("the index in memory", () => {
     holdOnPhone(build("2026-10-15", names));
     const registry = await load();
     const timer = vi.spyOn(globalThis, "setTimeout");
-    const index = await registry.loadPlaceIndex();
+    const index = await registry.loadPlaceIndex(NSW);
     expect(index?.names).toHaveLength(60_000);
     expect(
       timer.mock.calls.filter(([, ms]) => ms === 0).length,
@@ -650,8 +720,8 @@ describe("the index in memory", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));
     const registry = await load();
-    await registry.refreshPlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
+    await registry.refreshPlaceRegistry(NSW);
+    expect(registry.placeIndex(NSW)).toBeNull();
   });
 });
 
@@ -676,14 +746,193 @@ describe("one ranking, on the phone and on the API", () => {
         strToU8(JSON.stringify(fixture)),
       );
       const registry = await load();
-      expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
-        "updated",
-      );
-      const index = await registry.loadPlaceIndex();
+      expect(
+        await registry.fetchPlaceRegistry(NSW, { allowMetered: true }),
+      ).toBe("updated");
+      const index = await registry.loadPlaceIndex(NSW);
       if (!index) throw new Error("the fixture did not load");
       const expected = searchPlaces(indexPlaceRegistry(fixture), query, 8);
       expect(expected.length).toBeGreaterThan(0);
       expect(searchPlaces(index, query, 8)).toEqual(expected);
     },
   );
+});
+
+describe("one copy for each region", () => {
+  // Mutation: save every region's copy in PLACE_REGISTRY_DIR itself, and the
+  // other region's files land beside NSW's, and its sweep deletes them; drop
+  // the folder test from the sweep in `installBuild`, and NSW's sweep deletes
+  // the other region's folder.
+  it("keeps each region's copy apart", async () => {
+    publish(build("2026-10-15", ["Wollangambe"]));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    chosen.ids = [NSW, OTHER.id];
+    prefs.set("placeRegistryWanted", "on");
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(OTHER.id)).toBe("updated");
+    expect([...files.keys()].sort()).toEqual([
+      `${DIR}other/places-2026-10-15.json`,
+      `${DIR}other/pointer.json`,
+      `${DIR}places-2026-10-15.json`,
+      `${DIR}pointer.json`,
+    ]);
+
+    // A new NSW build sweeps NSW's folder, and only that.
+    publish(build("2026-11-15", ["Wollangambe"]));
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(files.has(`${DIR}places-2026-11-15.json`)).toBe(true);
+    expect(files.has(`${DIR}places-2026-10-15.json`)).toBe(false);
+    expect(files.has(`${DIR}other/pointer.json`)).toBe(true);
+    expect(files.has(`${DIR}other/places-2026-10-15.json`)).toBe(true);
+
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+    expect((await registry.loadPlaceIndex(OTHER.id))?.names).toEqual([
+      "Makarora",
+    ]);
+    expect(registry.placeIndex(OTHER.id)?.names).toEqual(["Makarora"]);
+  });
+
+  // Mutation: read `PLACE_REGISTRY_PREFIX`'s pointer for every region, and the
+  // other region's copy is NSW's file.
+  it("fetches each region's pointer and file from the prefix it declares", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-16", ["Makarora"]));
+    const registry = await load();
+    await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      OTHER_POINTER_URL,
+    ]);
+    expect(download.mock.calls.map(([url]) => url)).toEqual([
+      `${CDN}/${OTHER.placeSearch}places-2026-10-16.json`,
+    ]);
+  });
+
+  // Mutation: build `registered` without the `placeSearch` test, or answer
+  // an id it does not know with NSW's copy.
+  it("has no copy for a region that is unknown or declares no registry", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    for (const id of ["nowhere", "bare", null]) {
+      expect(registry.hasPlaceRegistry(id)).toBe(false);
+      expect(registry.placeRegistryStatus(id)).toEqual({
+        stored: null,
+        loadFailed: false,
+      });
+      expect(await registry.loadPlaceIndex(id)).toBeNull();
+    }
+    expect(await registry.fetchPlaceRegistry("bare", {})).toBe("failed");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mutation: key the unreadable build by one preference for every region,
+  // and a build that would not index in one region stops another region's
+  // build of the same name from being fetched.
+  it("remembers an unreadable build for its own region only", async () => {
+    publishOther(build("2026-10-15", ["Makarora"], 2));
+    publish(build("2026-10-15", ["Wollangambe"]));
+    const registry = await load();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("updated");
+    expect(await registry.loadPlaceIndex(OTHER.id)).toBeNull();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("unreadable");
+    expect(await registry.fetchPlaceRegistry(NSW, { allowMetered: true })).toBe(
+      "updated",
+    );
+  });
+});
+
+describe("the regions a phone fetches for", () => {
+  const SEA = around(156, -33);
+
+  // Mutation: drop `regionsTouching(box, REGIONS)` from `placeRegistryWithRegion`,
+  // and a save in another region brings only NSW's names.
+  it("includes each region the first saved box touches", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, OVER_OTHER);
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    // And the one the user chose, which the box does not touch.
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // Mutation: drop `regionsOf(readRegions(), REGIONS)` from
+  // `placeRegistryWithRegion`, and a save over the sea brings nothing.
+  it("includes each region the user chose, whatever the box touches", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    chosen.ids = [OTHER.id];
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, SEA);
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // Mutation: drop the `hasPlaceRegistry` skip, and a second save downloads
+  // the files again.
+  it("fetches nothing for a region it already holds", async () => {
+    const held = build("2026-10-15");
+    holdOnPhone(held);
+    publish(held);
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the saved-map part of `regionsToKeep`, and a phone that
+  // saved a map over the other region never refreshes its names.
+  it("keeps current a region a saved map touches", async () => {
+    artifacts.kinds = ["basemap-region"];
+    artifacts.bbox = [10.4, 10.4, 10.6, 10.6];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // Mutation: drop the chosen part of `regionsToKeep`.
+  it("keeps current a region the user chose", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // Mutation: drop the held part of `regionsToKeep`, and a copy the user no
+  // longer chose or saved a map over goes stale while it still answers.
+  it("keeps current a copy it holds", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW];
+    holdOtherOnPhone(build("2026-09-15", ["Old"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.placeRegistryStatus(OTHER.id).stored?.version).toBe(
+        "2026-10-15",
+      ),
+    );
+  });
 });

@@ -1,11 +1,12 @@
-// The place registry, held in memory for location search as you type
-// (ADR 0034). The file is public on the topo CDN; the API reads it there like
-// the DEM (services/elevation.ts), so local dev reads MiniStack's copy.
+// The place registries, held in memory for location search as you type
+// (ADR 0034): one index for each region that declares `placeSearch`. The files
+// are public on the topo CDN; the API reads them there like the DEM
+// (services/elevation.ts), so local dev reads MiniStack's copy.
 //
 // Loaded in the background after boot and re-read every few minutes: until a
-// build has loaded, `placeIndex()` is null and the search answers 503. A new
-// build replaces the old one only once it has parsed and indexed, so a failed
-// refresh keeps the index already held.
+// region's build has loaded, `placeIndex(region)` is null and its search
+// answers 503. A new build replaces the old one only once it has parsed and
+// indexed, so a failed refresh keeps the index already held.
 //
 // PRIVACY: nothing here sees a query. The URLs are our own public files.
 import { promisify } from "node:util";
@@ -13,10 +14,12 @@ import { gunzip } from "node:zlib";
 import {
   indexPlaceRegistry,
   isPlaceRegistryPointer,
-  PLACE_REGISTRY_POINTER_PATH,
+  placeRegistryPointerPath,
   placeRegistryUrl,
+  REGIONS,
   type PlaceIndex,
   type PlaceRegistryFile,
+  type Region,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { logger, safeErrorForLog } from "../lib/logger";
@@ -31,11 +34,27 @@ const POINTER_TIMEOUT_MS = 8_000;
 // next version, never a request.
 const FILE_TIMEOUT_MS = 60_000;
 
-let held: { index: PlaceIndex; version: string; path: string } | null = null;
+/** A region with a registry: `placeSearch` is its CDN prefix. */
+type Registered = Pick<Region, "id"> & { placeSearch: string };
 
-/** The registry searches read, or null while none has loaded. */
-export function placeIndex(): { index: PlaceIndex; version: string } | null {
-  return held;
+/** The regions whose registry this process holds. */
+function registered(regions: readonly Region[]): Registered[] {
+  return regions.filter(
+    (r): r is Region & Registered => r.placeSearch !== null,
+  );
+}
+
+/** By region id. */
+const held = new Map<
+  string,
+  { index: PlaceIndex; version: string; path: string }
+>();
+
+/** A region's registry, or null while none has loaded. */
+export function placeIndex(
+  regionId: string,
+): { index: PlaceIndex; version: string } | null {
+  return held.get(regionId) ?? null;
 }
 
 /**
@@ -58,19 +77,39 @@ async function readRegistryFile(
   return JSON.parse(json.toString("utf8")) as PlaceRegistryFile;
 }
 
-/** Read the pointer, and load the build it names if it is not the one held. */
-export async function refreshPlaceRegistry(): Promise<void> {
+/**
+ * Read each region's pointer, and load the build it names if it is not the
+ * one held, one region at a time so at most one parsed file is alive beside
+ * the indexes in use.
+ *
+ * MEMORY: each region's registry stays resident. Measured on a made-up file
+ * with NSW's row count (321,000 rows, 16 MB of JSON; node 24, 2026-11-14):
+ * loading it took the process's resident size 164 to 171 MB above where it
+ * began at the peak, and 110 to 125 MB above it once the parse was
+ * collected (32 MB of live heap and 14 MB of typed arrays). Each region declaring a registry
+ * adds about that much; a country needs an on-disk index or a larger instance
+ * (docs/operations/brain.md, "When it outgrows the box").
+ */
+export async function refreshPlaceRegistry(
+  regions: readonly Region[] = REGIONS,
+): Promise<void> {
   const base = getEnv().TOPO_CDN_BASE_URL?.replace(/\/$/, "");
   if (!base) return;
+  for (const region of registered(regions)) await refreshRegion(base, region);
+}
+
+async function refreshRegion(base: string, region: Registered): Promise<void> {
+  const loaded = held.get(region.id);
   try {
     const pointerResponse = await fetch(
-      `${base}/${PLACE_REGISTRY_POINTER_PATH}`,
+      `${base}/${placeRegistryPointerPath(region.placeSearch)}`,
       { signal: AbortSignal.timeout(POINTER_TIMEOUT_MS) },
     );
     // Not published yet: look again at the next refresh.
     if (pointerResponse.status === 404 || pointerResponse.status === 403) {
       await pointerResponse.body?.cancel();
-      if (!held) logger.info("place_registry_not_published");
+      if (!loaded)
+        logger.info({ region: region.id }, "place_registry_not_published");
       return;
     }
     if (!pointerResponse.ok) {
@@ -83,24 +122,33 @@ export async function refreshPlaceRegistry(): Promise<void> {
     }
     // The path, not the version: a rebuild of the same extract keeps its
     // version and gets a new content hash in its name.
-    if (held?.path === pointer.path) return;
+    if (loaded?.path === pointer.path) return;
 
-    const fileResponse = await fetch(placeRegistryUrl(base, pointer), {
-      signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
-    });
+    const fileResponse = await fetch(
+      placeRegistryUrl(base, region.placeSearch, pointer),
+      { signal: AbortSignal.timeout(FILE_TIMEOUT_MS) },
+    );
     if (!fileResponse.ok) {
       await fileResponse.body?.cancel();
       throw new Error(`file request failed with ${fileResponse.status}`);
     }
     const index = indexPlaceRegistry(await readRegistryFile(fileResponse));
-    held = { index, version: pointer.version, path: pointer.path };
+    held.set(region.id, {
+      index,
+      version: pointer.version,
+      path: pointer.path,
+    });
     logger.info(
-      { version: pointer.version, rows: index.names.length },
+      { region: region.id, version: pointer.version, rows: index.names.length },
       "place_registry_loaded",
     );
   } catch (err) {
     logger.warn(
-      { err: safeErrorForLog(err), loaded: held?.version ?? null },
+      {
+        region: region.id,
+        err: safeErrorForLog(err),
+        loaded: loaded?.version ?? null,
+      },
       "place_registry_refresh_failed",
     );
   }
@@ -108,17 +156,20 @@ export async function refreshPlaceRegistry(): Promise<void> {
 
 /**
  * Load now, in the background, then again every REFRESH_MS (every
- * FIRST_LOAD_RETRY_MS until one has loaded). The next refresh is scheduled
- * only when the last has finished, so two loads never overlap and at most
- * one parsed file is alive beside the index in use. Returns a stop.
+ * FIRST_LOAD_RETRY_MS until every region has loaded). The next refresh is
+ * scheduled only when the last has finished, so two loads never overlap and
+ * at most one parsed file is alive beside the indexes in use. Returns a stop.
  */
-export function startPlaceRegistry(): () => void {
+export function startPlaceRegistry(
+  regions: readonly Region[] = REGIONS,
+): () => void {
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
   const run = () =>
-    void refreshPlaceRegistry().then(() => {
+    void refreshPlaceRegistry(regions).then(() => {
       if (stopped) return;
-      timer = setTimeout(run, held ? REFRESH_MS : FIRST_LOAD_RETRY_MS);
+      const allLoaded = registered(regions).every((r) => held.has(r.id));
+      timer = setTimeout(run, allLoaded ? REFRESH_MS : FIRST_LOAD_RETRY_MS);
       timer.unref();
     });
   run();
@@ -128,7 +179,7 @@ export function startPlaceRegistry(): () => void {
   };
 }
 
-/** Test seam: the index is process-wide. */
+/** Test seam: the indexes are process-wide. */
 export function clearPlaceRegistry(): void {
-  held = null;
+  held.clear();
 }

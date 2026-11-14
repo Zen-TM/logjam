@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
-import { PLACE_SEARCH_API_PATH } from "@logjam/shared";
+import { DEFAULT_REGION_IDS, PLACE_SEARCH_API_PATH } from "@logjam/shared";
 
 import { ALICE_SUB, API_URL, as } from "./_actors";
 
@@ -25,6 +25,23 @@ describe("POST /places/search", () => {
       "Katoomba Falls Road",
       "Katoomba Falls Inn",
     ]);
+  });
+
+  // Mutation: answer a region the lookup does not know with the default
+  // region's registry, and the refusal goes red. The seed publishes only
+  // NSW's registry; a second region's is the unit test's.
+  it("answers for a region it names, and refuses one with no registry", async () => {
+    const named = await request(API_URL)
+      .post(PLACE_SEARCH_API_PATH)
+      .set(as(ALICE_SUB))
+      .send({ q: "katoomba falls", region: DEFAULT_REGION_IDS[0] });
+    expect(named.status).toBe(200);
+    expect(named.body.results[0].name).toBe("Katoomba Falls");
+    const unknown = await request(API_URL)
+      .post(PLACE_SEARCH_API_PATH)
+      .set(as(ALICE_SUB))
+      .send({ q: "katoomba falls", region: "nowhere" });
+    expect(unknown.status).toBe(400);
   });
 
   it("answers nothing for a query too short to rank", async () => {

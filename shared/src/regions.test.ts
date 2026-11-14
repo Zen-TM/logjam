@@ -18,6 +18,7 @@ import {
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
+  placeRegistryIn,
   NSW_REGION,
   normalizeRegionIds,
   offersRegionChoice,
@@ -599,6 +600,46 @@ describe("regionInView", () => {
     expect(regionInView(around(150.31, -33.7, 1), two, SIM_WORLD)).toBe(
       NSW_REGION,
     );
+  });
+});
+
+describe("placeRegistryIn", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const two = [NSW_REGION, nz, SIM_UTAH];
+  const over = (lon: number, lat: number) => ({
+    west: lon - 0.05,
+    south: lat - 0.05,
+    east: lon + 0.05,
+    north: lat + 0.05,
+  });
+
+  // Mutation: return `regionInView(view)` as it is, without the `placeSearch`
+  // test, and a map over Utah (no registry) reads as having one.
+  it("is the region in view when it has a registry, and null when it has none", () => {
+    expect(placeRegistryIn(over(150.31, -33.7), two)).toBe(NSW_REGION);
+    expect(placeRegistryIn(over(...nz.view.center), two)).toBe(nz);
+    expect(placeRegistryIn(over(...SIM_UTAH.view.center), two)).toBeNull();
+  });
+
+  // Mutation: fall back to the first region with a registry for a view in
+  // none, and a map over the open sea is searched as NSW.
+  it("is null outside every region, whatever the world declares", () => {
+    expect(placeRegistryIn(over(156, -33), two, SIM_WORLD)).toBeNull();
+    expect(placeRegistryIn(over(156, -33))).toBeNull();
+  });
+
+  // Mutation: read an unknown view as the default region, and a map not yet
+  // settled asks the registry for a place it is not showing.
+  it("is null for a view that is not known yet", () => {
+    expect(placeRegistryIn(null, two)).toBeNull();
+    expect(placeRegistryIn(undefined, two)).toBeNull();
+  });
+
+  // Mutation: drop the `wrapView` call, and a map panned once round the world
+  // matches no region.
+  it("reads a map panned round the world", () => {
+    const [lon, lat] = nz.view.center;
+    expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
   });
 });
 

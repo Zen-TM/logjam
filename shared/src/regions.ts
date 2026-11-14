@@ -736,6 +736,22 @@ export function regionInView(
   );
 }
 
+/**
+ * The region the map shows, when it has a place registry (ADR 0034), or null:
+ * no registry answers here, and a client offers only the geocoder row. An
+ * unknown view reads as none. Guard: `regions.test.ts` ("placeRegistryIn").
+ */
+export function placeRegistryIn(
+  view: LonLatBox | null | undefined,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): (Region & { placeSearch: string }) | null {
+  const region = view ? regionInView(wrapView(view), regions, world) : null;
+  return region?.placeSearch
+    ? (region as Region & { placeSearch: string })
+    : null;
+}
+
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */
 export function layerIn<K extends keyof RegionTerrain>(
   region: Region | null,

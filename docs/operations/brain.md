@@ -668,6 +668,16 @@ scale itself.
   lowest seen idle was 324 MiB (2026-11-11, with the timers as they are now; the
   whole host used 0.066 of two vCPUs) and 164 MiB under a release swap with a
   1.7 GB database (2026-11-10).
+- **Place registries sit in the API's memory** (one index for each region that
+  declares `placeSearch`; prod declares one). Measured 2026-11-14 on a made-up
+  file with NSW's row count (321,000 rows, 16 MB of JSON; node 24, not NSW's own
+  file): loading one took the API process 164 to 171 MB of resident memory above
+  where it began at the peak, and 110 to 125 MB above it once the parse was
+  collected. Each further region declaring a registry adds about that much, and
+  the loads run one after another so only one parse is alive at a time. A
+  country needs an on-disk index or a larger instance: this holds for regions
+  the size of NSW's registry, not for a country's. The same note sits beside
+  `refreshPlaceRegistry` in `api/src/services/placeRegistry.ts`.
 
 **What the limit is.** The API is one Node process, which uses one core. On both
 sizes tested 80 requests a second passed (p95 269 ms on the micro, 313 ms on the
