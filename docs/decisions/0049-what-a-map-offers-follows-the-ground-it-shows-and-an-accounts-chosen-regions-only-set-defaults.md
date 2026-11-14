@@ -50,8 +50,7 @@ what is offered at a location.**
   reviewer sees. (updated 2026-11-14) The basemap gallery reads the view:
   `offeredBasemaps` and `basemapHere` take a box, so a call that passes the
   chosen region ids does not compile (the typecheck covers the tests), and
-  `regions.test.ts` ("offeredBasemaps") holds what each view lists. No test
-  yet fails on a Terrain layer's switch that gates by the chosen regions.
+  `regions.test.ts` ("offeredBasemaps") holds what each view lists.
 
 ## Consequences
 

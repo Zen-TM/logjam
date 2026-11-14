@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { pointBox } from "@logjam/shared";
 
 vi.mock("../prefsDb", () => ({
   readPref: vi.fn(() => storedValue),
@@ -12,6 +13,7 @@ let storedValue: string | null = null;
 
 const {
   readBasemapPreference,
+  readEffectiveBasemap,
   readCoverageCarrier,
   readGaugesLayer,
   readMgaGridLayer,
@@ -28,7 +30,7 @@ describe("readBasemapPreference", () => {
 
   // Mutation: read the pick against the chosen regions' basemaps, and a pick
   // a map would show over NSW is lost for an account that chose another region.
-  it("keeps a pick whatever regions the account chose", () => {
+  it("returns a listed pick as stored, whatever regions the account chose", () => {
     chosenRegions = [];
     storedValue = "six-imagery";
     expect(readBasemapPreference()).toBe("six-imagery");
@@ -45,6 +47,20 @@ describe("readBasemapPreference", () => {
     // reach the resolver, which throws on an unknown basemap id.
     storedValue = "osm";
     expect(readBasemapPreference()).toBe(DEFAULT_BASEMAP);
+  });
+});
+
+describe("readEffectiveBasemap", () => {
+  const inNsw = pointBox(150.3, -33.7);
+  // The Tasman Sea: outside every region, so SIX Maps is not offered.
+  const atSea = pointBox(160, -40);
+
+  // Mutation: return the stored pick unchanged, and a screen opened outside
+  // NSW draws a blank SIX sheet for an NSW pick.
+  it("draws the stored pick where the view offers it, else what stands in", () => {
+    storedValue = "six-imagery";
+    expect(readEffectiveBasemap(inNsw)).toBe("six-imagery");
+    expect(readEffectiveBasemap(atSea)).toBe("osm-topo");
   });
 });
 

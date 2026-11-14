@@ -52,12 +52,12 @@ export const effectiveBasemap = (
 export const settledView = (
   bounds: readonly number[] | null,
   start: LonLatBox,
-): LonLatBox =>
-  bounds
-    ? {
-        west: bounds[0]!,
-        south: bounds[1]!,
-        east: bounds[2]!,
-        north: bounds[3]!,
-      }
-    : start;
+): LonLatBox => (bounds ? boundsView(bounds) : start);
+
+/** A `[west, south, east, north]` as the shared box. */
+export const boundsView = (bounds: readonly number[]): LonLatBox => ({
+  west: bounds[0]!,
+  south: bounds[1]!,
+  east: bounds[2]!,
+  north: bounds[3]!,
+});
