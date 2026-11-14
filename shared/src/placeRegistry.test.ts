@@ -9,9 +9,12 @@ import {
   isPlaceRegistryPointer,
   normalizeSearchText,
   PLACE_REGISTRY_ATTRIBUTION,
+  PLACE_REGISTRY_POINTER_PATH,
+  PLACE_REGISTRY_PREFIX,
   PLACE_SEARCH_MAX_RESULTS,
   placeKindLabel,
   placeKindRank,
+  placeRegistryPointerPath,
   placeRegistryUrl,
   placeResultDetail,
   type PlaceRegistryFile,
@@ -211,8 +214,22 @@ describe("isPlaceRegistryPointer", () => {
     // Mutation: rename a field in the builder's pointer() → red.
     expect(isPlaceRegistryPointer(pointer)).toBe(true);
     if (!isPlaceRegistryPointer(pointer)) return;
-    expect(placeRegistryUrl("https://cdn.example", pointer)).toBe(
-      `https://cdn.example/master/places/v1/${pointer.path}`,
+    expect(
+      placeRegistryUrl("https://cdn.example", PLACE_REGISTRY_PREFIX, pointer),
+    ).toBe(`https://cdn.example/master/places/v1/${pointer.path}`);
+  });
+
+  // Mutation: build either path from `PLACE_REGISTRY_PREFIX` and not from the
+  // prefix passed in, and another region's registry is read from NSW's folder.
+  it("reads the pointer and the file of the prefix a region declares", () => {
+    const prefix = "master/places/elsewhere/v1/";
+    expect(placeRegistryPointerPath(prefix)).toBe(`${prefix}latest.json`);
+    expect(placeRegistryPointerPath(PLACE_REGISTRY_PREFIX)).toBe(
+      PLACE_REGISTRY_POINTER_PATH,
+    );
+    if (!isPlaceRegistryPointer(pointer)) throw new Error("not a pointer");
+    expect(placeRegistryUrl("https://cdn.example", prefix, pointer)).toBe(
+      `https://cdn.example/${prefix}${pointer.path}`,
     );
   });
 

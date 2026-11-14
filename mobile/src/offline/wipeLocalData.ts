@@ -47,6 +47,7 @@ import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
+import { lapsePlaceRegistries } from "./placeRegistry";
 import { OFFLINE_TABLES } from "./wipedStores";
 
 /**
@@ -164,6 +165,18 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   } catch (err) {
     console.error(err);
     failed.push("offline maps and tracks");
+  }
+
+  // The place registries of the regions the departing account chose or saved a
+  // map over: with the chosen regions forgotten and the saved maps gone above,
+  // only the default region's copy is left, as it was for an account that never
+  // chose (placeRegistry.ts, WHICH COPIES). After the registry rows, because
+  // "saved a map over" is read from them.
+  try {
+    await lapsePlaceRegistries();
+  } catch (err) {
+    console.error(err);
+    failed.push("place names");
   }
 
   // Files last: the registry rows that point at them are already gone, so a

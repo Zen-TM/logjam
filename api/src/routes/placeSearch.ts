@@ -1,4 +1,5 @@
-// Location search as you type, from the place registry (ADR 0034).
+// Location search as you type, from the place registry of the region the
+// client's map shows (ADR 0034).
 //
 // Auth but no user row: nothing here is stored, and a lookup
 // per keystroke would cost a query for nothing. The registry is public, so
@@ -11,7 +12,10 @@
 // error detail here carries it. Guard: placeSearch.unit.test.ts.
 import { Router, Response } from "express";
 import {
+  DEFAULT_REGION_IDS,
   PLACE_SEARCH_MAX_RESULTS,
+  REGIONS,
+  regionWithRegistry,
   say,
   searchPlaces,
   type PlaceSearchResponse,
@@ -23,6 +27,9 @@ import { placeIndex } from "../services/placeRegistry";
 
 /** Longer than any place name; a longer query is cut, not refused. */
 const MAX_QUERY_LENGTH = 100;
+
+/** A client that predates regions names none: it meant the one region there was. */
+const UNNAMED_REGION = DEFAULT_REGION_IDS[0];
 
 const router = Router();
 
@@ -40,7 +47,14 @@ router.post(
     const asked: unknown = req.body?.limit;
     const limit = typeof asked === "number" ? asked : PLACE_SEARCH_MAX_RESULTS;
 
-    const registry = placeIndex();
+    // Only a broken client names a region with no registry.
+    const region = regionWithRegistry(
+      req.body?.region ?? UNNAMED_REGION,
+      REGIONS,
+    );
+    if (!region) throw malformed("region has no place registry");
+
+    const registry = placeIndex(region.id);
     if (!registry) {
       throw new AppError(
         503,

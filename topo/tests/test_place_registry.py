@@ -91,7 +91,7 @@ class TestFixture(unittest.TestCase):
         self.assertEqual(int(fmt.group(1)), reg.FORMAT)
         self.assertIn("`master/places/v${PLACE_REGISTRY_FORMAT}/`", ts)
         self.assertEqual(reg.S3_PREFIX, f"master/places/v{reg.FORMAT}/")
-        self.assertIn("${PLACE_REGISTRY_PREFIX}latest.json", ts)
+        self.assertIn("`${prefix}latest.json`", ts)
 
 
 class TestKindOf(unittest.TestCase):
