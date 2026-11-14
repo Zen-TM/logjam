@@ -1,0 +1,95 @@
+{
+  "note": "Boxes are [west, south, east, north] in degrees. Each region's archives are written under out/master/ at the paths below; shared/src/simRegionsBuild.test.ts holds them equal to the archive paths shared/src/simRegions.ts declares.",
+  "regions": {
+    "simnz": {
+      "boxes": [
+        [169.2, -44.1, 169.3, -44.01],
+        [175.58, -37.14, 175.68, -37.06]
+      ],
+      "heights": {
+        "path": "master/dem/simnz-heights.pmtiles",
+        "name": "Simulated New Zealand heights",
+        "zmax": 17,
+        "zmin": 8,
+        "credit": "Elevation: simulated data for New Zealand, not a real survey. Heights are New Zealand LiDAR 1 m DEM, © Toitū Te Whenua Land Information New Zealand (CC BY 4.0), where that survey covers, and COPERNICUS GLO-30 (30 m; © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved) elsewhere in the box. Cut from Mapterhorn.",
+        "fixtureZooms": [16, 17]
+      },
+      "slope": {
+        "path": "master/dem/simnz-slope.pmtiles",
+        "fixtureZooms": [16, 17]
+      },
+      "contours": {
+        "path": "master/contours/simnz-10m.pmtiles",
+        "fixtureZooms": [13, 14]
+      },
+      "vector": {
+        "path": "master/basemap/protomaps-simnz.pmtiles",
+        "maxzoom": 15,
+        "margin": 0.02,
+        "fixtureZooms": [14, 15]
+      },
+      "places": true,
+      "fixture": {
+        "bbox": [169.2545, -44.0555, 169.2555, -44.0545]
+      }
+    },
+    "simutah": {
+      "boxes": [
+        [-113.0, 37.24, -112.89, 37.33]
+      ],
+      "heights": {
+        "path": "master/dem/simutah-heights.pmtiles",
+        "name": "Simulated Utah heights",
+        "zmax": 15,
+        "zmin": 8,
+        "credit": "Elevation: simulated data for Utah, not a real survey. Heights are the U.S. Geological Survey 3D Elevation Program 1 m DEMs (public domain, U.S. Government work) where that survey covers, and COPERNICUS GLO-30 (30 m; © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved) elsewhere in the box. Cut from Mapterhorn.",
+        "fixtureZooms": [14, 15]
+      },
+      "slope": {
+        "path": "master/dem/simutah-slope.pmtiles",
+        "fixtureZooms": [14, 15]
+      },
+      "contours": {
+        "path": "master/contours/simutah-10m.pmtiles",
+        "fixtureZooms": [13, 14]
+      },
+      "vector": {
+        "path": "master/basemap/protomaps-simutah.pmtiles",
+        "maxzoom": 15,
+        "margin": 0.02,
+        "fixtureZooms": [14, 15]
+      },
+      "places": true,
+      "lidar": {
+        "url": "https://rockyweb.usgs.gov/vdelivery/Datasets/Staged/Elevation/LPC/Projects/UT_Zion_2015/UT_ZionNP_QL2_2016/LAZ/USGS_LPC_UT_Zion_2015_12SUG225265.laz",
+        "path": "lidar/simutah/USGS_LPC_UT_Zion_2015_12SUG225265.laz"
+      },
+      "fixture": {
+        "bbox": [-112.9575, 37.2825, -112.9565, 37.2835]
+      }
+    },
+    "world": {
+      "boxes": [
+        [168.8, -44.6, 169.8, -43.6],
+        [-113.5, 36.8, -112.5, 37.8]
+      ],
+      "heights": {
+        "path": "master/dem/simworld-heights.pmtiles",
+        "name": "Simulated worldwide heights",
+        "zmax": 13,
+        "zmin": 8,
+        "credit": "Elevation: simulated data for the world, not a real survey. Heights are Mapterhorn's worldwide tiles, which are COPERNICUS GLO-30 (30 m; © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved) merged with finer surveys where they exist, here New Zealand LiDAR (© Toitū Te Whenua Land Information New Zealand, CC BY 4.0) and the U.S. Geological Survey 3D Elevation Program (public domain).",
+        "fixtureZooms": [12, 13]
+      },
+      "vector": {
+        "path": "master/basemap/protomaps-simworld.pmtiles",
+        "maxzoom": 15,
+        "margin": 0,
+        "fixtureZooms": [14, 15]
+      },
+      "fixture": {
+        "bbox": [169.2545, -44.0555, 169.2555, -44.0545]
+      }
+    }
+  }
+}

@@ -449,6 +449,9 @@ is written as no-data.
 Do not run it from CI: Mapterhorn states no terms we found for ranged reads of
 its download host, and the build is the only thing that should make them.
 
+[`scripts/sim-regions/`](../scripts/sim-regions/README.md) runs it, and the
+slope and contour builds after it, for the simulated regions.
+
 ---
 
 ## Sharpening an area
