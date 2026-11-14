@@ -73,9 +73,9 @@ describe("the declaration", () => {
     expect(demCredits([])).toEqual([]);
   });
 
-  // Mutation: read `NSW_REGION.terrain.heights.credit` in demCredits in place
-  // of the region the area lies in, and an area in another region is credited
-  // to NSW's heights; drop the `coverage` test and an area with none throws.
+  // Mutation: pair every area with `regions[0]` in demCredits in place of the
+  // region `areasInRegion` finds, and an area outside every region is credited
+  // to the first one; drop the `coverage` test and an area with none throws.
   it("credits an area with the heights of the region it lies in", () => {
     const area = (coverage: DemSource["coverage"]) => ({
       ...sharpenedDemSource({

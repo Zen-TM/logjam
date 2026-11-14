@@ -127,8 +127,11 @@ const ARCHIVE_OF = {
 /**
  * Whether the region the sheet is in has no archive for a layer, so ticking it
  * could draw nothing. `terrain` is null while the area is not set, which
- * judges nothing, and a job's own layer is never missing. The renderer leaves
- * the same layers out (`overlaysDrawn`).
+ * judges nothing, and a job's own layer is never missing. The planner reads
+ * nothing for a layer this calls missing: `overlaysDrawn` gates hillshade and
+ * contours, and slope and land are gated where `statewideReads` plans them.
+ * Guard: geoPdfOverlays.test.ts ("offers a layer only where the planner reads
+ * its archive").
  */
 export function layerMissingHere(
   terrain: SheetTerrain | null,

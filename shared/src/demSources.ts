@@ -22,7 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
-import { layerIn, REGIONS, regionInView, type Region } from "./regions.js";
+import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -171,9 +171,13 @@ export function demCredits(
   const lines = sources
     .filter((source) => sourceIds.includes(source.id))
     .flatMap((source) => {
-      if (!source.areaId || !source.coverage) return [source.credit];
-      const [west, south, east, north] = source.coverage;
-      const region = regionInView({ west, south, east, north }, regions);
+      const { areaId, coverage } = source;
+      if (!areaId || !coverage) return [source.credit];
+      // The first region the area's box shares ground with: the same test a
+      // map and a save use to say which areas belong to a region.
+      const region =
+        regions.find((r) => areasInRegion(r, [{ coverage }]).length > 0) ??
+        null;
       return [source.credit, layerIn(region, "heights")?.credit ?? null];
     })
     .filter((line): line is string => line !== null);

@@ -176,7 +176,7 @@ describe("a sheet in another region", () => {
     expect(paths(read({ overlays: ["land"] }))).toEqual([nz.land!.archivePath]);
   });
 
-  // Mutation: add `?? regions[0]` after `regionInView` in sheetTerrain, and a
+  // Mutation: add `?? regions[0]` after `regionInWrappedView` in sheetTerrain, and a
   // print outside every region prefetches NSW's tiles.
   it("reads nothing where no region holds the sheet", () => {
     const outside = input(

@@ -4,7 +4,7 @@
 import {
   layerIn,
   REGIONS,
-  regionInView,
+  regionInWrappedView,
   WORLD,
   type LandArchive,
   type LonLatBox,
@@ -27,15 +27,22 @@ export type SheetTerrain = {
 };
 
 /**
- * What the region `regionInView` picks for the sheet's box has to draw. A sheet
- * over two regions takes all its Terrain from that one, as a map does.
+ * What the region `regionInWrappedView` picks for the sheet's box has to draw:
+ * the one at its centre, whichever world copy the box was picked in.
+ * ponytail: a sheet over two regions prints all its contours, hillshade, slope
+ * and land from that one, so a sheet straddling a border draws the far side
+ * from the wrong archives or none. Upgrade: plan the reads of each region in
+ * `regionsTouching(box)` and draw each over its own part of the sheet.
+ * Guard: sheetTerrain.test.ts ("takes all its Terrain from the one region at
+ * its centre, though another touches the sheet"). ADR 0049 records it as the
+ * exception to its rule for a printed box.
  */
 export function sheetTerrain(
   extent: LonLatBox,
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): SheetTerrain {
-  const region = regionInView(extent, regions, world);
+  const region = regionInWrappedView(extent, regions, world);
   return {
     heights: layerIn(region, "hillshade"),
     slope: layerIn(region, "slope"),

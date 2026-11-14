@@ -2,6 +2,8 @@
 import {
   layerIn,
   NSW_REGION,
+  REGIONS,
+  regionBounds,
   SIM_NZ,
   SIM_REGIONS,
   SIM_UTAH,
@@ -21,7 +23,7 @@ const ALL = [NSW_REGION, ...SIM_REGIONS];
 
 describe("sheetTerrain", () => {
   // Mutation: take `regions[0]` in sheetTerrain in place of the region
-  // `regionInView` picks, and a sheet in another region reads NSW's archives.
+  // `regionInWrappedView` picks, and a sheet in another region reads NSW's archives.
   it("is the archives of the region the sheet is in", () => {
     const nsw = sheetTerrain(KATOOMBA, ALL);
     expect(nsw.heights).toBe(NSW_REGION.terrain.hillshade);
@@ -39,7 +41,46 @@ describe("sheetTerrain", () => {
     expect(nz.credit).not.toBe(nsw.credit);
   });
 
-  // Mutation: add `?? regions[0]` after `regionInView` in sheetTerrain, and a
+  // Mutation: call `regionInView` in place of `regionInWrappedView` in
+  // sheetTerrain, and a sheet picked in another world copy (longitude shifted
+  // by a whole turn) finds no region, so the dialog disables every layer.
+  it("finds the region of a sheet picked in another world copy", () => {
+    const turn = (box: typeof KATOOMBA, by: number) => ({
+      ...box,
+      west: box.west + by,
+      east: box.east + by,
+    });
+    for (const by of [360, -360, 720]) {
+      const sheet = sheetTerrain(turn(KATOOMBA, by), ALL);
+      expect(sheet.heights, `${by}`).toBe(NSW_REGION.terrain.hillshade);
+      expect(sheet.credit, `${by}`).toBe(NSW_REGION.terrain.heights.credit);
+    }
+  });
+
+  // Mutation: take `regionsTouching(extent, regions)[0]` in sheetTerrain in
+  // place of `regionInWrappedView`, and a sheet whose centre is in one region
+  // but that touches an earlier one reads that earlier region's archives.
+  it("takes all its Terrain from the one region at its centre, though another touches the sheet", () => {
+    const square = (west: number, east: number) =>
+      [
+        [west, -1],
+        [east, -1],
+        [east, 1],
+        [west, 1],
+      ] as const;
+    const west: Region = { ...SIM_NZ, borders: [square(0, 10)] };
+    const east: Region = { ...SIM_UTAH, borders: [square(10, 20)] };
+    // Centre 11: inside `east`; the box also reaches into `west`, listed first.
+    const straddling = { north: 0.5, south: -0.5, west: 8, east: 14 };
+    const sheet = sheetTerrain(straddling, [west, east]);
+    expect(sheet.heights).toBe(SIM_UTAH.terrain.hillshade);
+    expect(sheet.slope).toBe(SIM_UTAH.terrain.slope);
+    expect(sheet.contours).toBe(SIM_UTAH.terrain.contours);
+    expect(sheet.land).toBe(SIM_UTAH.terrain.land);
+    expect(sheet.credit).toBe(SIM_UTAH.terrain.heights!.credit);
+  });
+
+  // Mutation: add `?? regions[0]` after `regionInWrappedView` in sheetTerrain, and a
   // print over the ocean asks for NSW's archives.
   it("has nothing where no region holds the sheet and the world declares nothing", () => {
     const none = sheetTerrain(OCEAN, ALL);
@@ -52,7 +93,7 @@ describe("sheetTerrain", () => {
     });
   });
 
-  // Mutation: drop the `world` argument from the `regionInView` call in
+  // Mutation: drop the `world` argument from the `regionInWrappedView` call in
   // sheetTerrain, and a sheet in no region never reads the world's archives,
   // which a planet-wide build declares.
   it("falls to the world's archives where it declares some", () => {
@@ -76,17 +117,32 @@ describe("sheetTerrain", () => {
 });
 
 describe("a region that draws derived layers", () => {
-  // Mutation: delete `heights` from a simulated region that declares slope.
-  // A print credits the heights its derived layers are cut from, so a region
-  // with one declares the other (terrainCreditLines draws no line for null).
+  // Mutation: delete `heights` from a simulated region that declares slope, or
+  // start a region's heights credit with something other than "Elevation".
+  // A print credits the heights its derived layers are cut from, worded by
+  // replacing that leading word (`terrainCredit`), so every region declares
+  // them, with a credit that starts with it.
   it("declares the heights whose credit a print carries", () => {
+    const every = [...new Set([...REGIONS, ...ALL])];
     let checked = 0;
-    for (const region of [...ALL, SIM_WORLD]) {
+    for (const region of [...every, SIM_WORLD]) {
       const derived = (["slope", "hillshade", "contours"] as const).filter(
         (key) => layerIn(region, key) !== null,
       );
       if (derived.length === 0) continue;
-      expect(layerIn(region, "heights"), region.id).not.toBeNull();
+      const heights = layerIn(region, "heights");
+      expect(heights, region.id).not.toBeNull();
+      expect(heights!.credit, region.id).toMatch(/^Elevation/);
+      // The sheet inside the region carries exactly that credit.
+      const box =
+        region.borders.length > 0
+          ? regionBounds(region)
+          : { west: 0, south: 0, east: 1, north: 1 };
+      const sheet =
+        region.borders.length > 0
+          ? sheetTerrain(box, [region])
+          : sheetTerrain(box, [], region);
+      expect(sheet.credit, region.id).toBe(heights!.credit);
       checked++;
     }
     expect(checked).toBeGreaterThanOrEqual(4);

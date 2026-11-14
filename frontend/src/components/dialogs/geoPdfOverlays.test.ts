@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import {
+  extentFromCentreAndSize,
+  getMapDimensions,
+  RASTER_TEMPLATE_DEFAULTS,
+  TERRAIN_LAYER_DEFAULTS,
+} from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import { sheetTerrain } from "../../geoPdf/sheetTerrain";
+import { statewideReads } from "../../geoPdf/plan";
+import { sheetTerrain, type SheetTerrain } from "../../geoPdf/sheetTerrain";
+import type { GeoPdfRenderInput } from "../../geoPdf/types";
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
@@ -161,5 +168,73 @@ describe("layerMissingHere", () => {
     };
     expect(layerMissingHere(bare, "vegetation")).toBe(false);
     expect(layerMissingHere(bare, "my-places")).toBe(false);
+  });
+});
+
+describe("the dialog and the planner", () => {
+  // The base each layer is drawn over: imagery takes the contours and no
+  // hillshade, and every other sheet the reverse.
+  const LAYERS = [
+    { key: "hillshade", member: "heights", baseLayer: "six-base" },
+    { key: "slope", member: "slope", baseLayer: "six-base" },
+    { key: "contours", member: "contours", baseLayer: "six-imagery" },
+    { key: "land", member: "land", baseLayer: "six-base" },
+  ] as const;
+
+  const planned = (
+    layer: (typeof LAYERS)[number],
+    terrain: SheetTerrain,
+  ): boolean => {
+    const base = { paperSize: "A5", orientation: "portrait", scale: 25000 };
+    const map = getMapDimensions({
+      ...base,
+      north: 0,
+      south: 0,
+      east: 0,
+      west: 0,
+      coordMode: "latlon",
+    } as Parameters<typeof getMapDimensions>[0]);
+    const input = {
+      config: {
+        ...base,
+        extent: extentFromCentreAndSize(
+          -30,
+          150,
+          base.scale * (map.w / 1000),
+          base.scale * (map.h / 1000),
+        ),
+        elements: { compass: false, scaleText: false, scaleBar: false },
+        baseLayer: layer.baseLayer,
+        overlays: [layer.key],
+      },
+      slopeBands: RASTER_TEMPLATE_DEFAULTS.slope.bands,
+      areas: [],
+      vegetationUrls: [],
+      origin: "https://app.example",
+    } as GeoPdfRenderInput;
+    return statewideReads(input, terrain).length > 0;
+  };
+
+  // Mutation: in statewideReads give slope `?? NSW_REGION.terrain.slope`, or
+  // land a default archive, where the region has none; drop `terrain.heights
+  // !== null` from overlaysDrawn and give hillshade `?? NSW_REGION.terrain
+  // .hillshade` in statewideReads (each alone is caught by the other gate); or
+  // map `slope` to `land` in ARCHIVE_OF in geoPdfOverlays.ts. In each the
+  // planner reads an archive the dialog calls missing, or the reverse.
+  it("offers a layer only where the planner reads its archive", () => {
+    const full = sheetTerrain(area);
+    let compared = 0;
+    for (const layer of LAYERS) {
+      for (const terrain of [full, { ...full, [layer.member]: null }]) {
+        expect(
+          planned(layer, terrain),
+          `${layer.key} without ${terrain[layer.member] === null ? layer.member : "nothing"}`,
+        ).toBe(!layerMissingHere(terrain, layer.key));
+        compared++;
+      }
+    }
+    expect(compared).toBe(8);
+    // Each layer is read from the full terrain, or this proves nothing.
+    for (const layer of LAYERS) expect(planned(layer, full)).toBe(true);
   });
 });

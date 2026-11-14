@@ -37,12 +37,26 @@ what is offered at a location.**
   null. A layer switch reads `layerIn(regionInView(view), key) === null` as
   "not available here". `regionAt` answers for a point.
 - **A box that is saved, printed or exported** uses every region in
-  `regionsTouching(box)`, not one.
+  `regionsTouching(box)`, not one, except a printed sheet's Terrain layers,
+  which come from the one region at the sheet's centre (updated 2026-11-15;
+  see the Update below).
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.
 - **The declaration's shape.** A region's border is a list of rings; the
   worldwide entry `WORLD` sits outside `REGIONS`; and a map draws one region
   at a time.
+- **Update 2026-11-15: a printed sheet's Terrain comes from one region.** A
+  GeoPDF takes its hillshade, slope, contours and Land from the one region
+  `regionInWrappedView` picks for the sheet's box (`sheetTerrain` in
+  `frontend/src/geoPdf/sheetTerrain.ts`), the way a map does, not from every
+  region in `regionsTouching(box)`. A sheet straddling two regions prints the
+  far side from the wrong archives, or none. It is held to one region
+  because the renderer plans each strip's tiles, credits and Land legend
+  from a single archive per layer, and no planned region is adjacent to
+  another. A saved or exported box still uses every region touching it. Guard:
+  `frontend/src/geoPdf/sheetTerrain.test.ts` ("takes all its Terrain from
+  the one region at its centre, though another touches the sheet"). Everything
+  else above stands.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
@@ -80,3 +94,8 @@ what is offered at a location.**
   ceiling. Rejected for now: it multiplies sources and layer ids in both
   clients for a case no planned region has. Revisit when two regions are
   adjacent.
+- **Every region touching the printed sheet** (the rule above, without its
+  exception). A sheet over two regions would print both sides from their own
+  archives. Rejected for now: the planner, the renderer's strips and the
+  credit and legend blocks each assume one archive per layer, and no planned
+  region is adjacent to another. Revisit when two regions are adjacent.
