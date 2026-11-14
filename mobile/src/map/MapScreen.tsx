@@ -76,6 +76,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
   MAP_OVERLAY_DEFAULTS,
   messageFromError,
   pickNextTrackColor,
@@ -268,6 +269,7 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
+import { hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -1214,11 +1216,6 @@ export function MapScreen({
     setShowMgaGridState(on);
     setMgaGridLayer(on);
   }, []);
-  const {
-    file: gaugeFile,
-    settled: gaugesSettled,
-    now: gaugesNow,
-  } = useGauges(showGauges);
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
@@ -1596,6 +1593,14 @@ export function MapScreen({
     () => regionShown(viewportBbox, camera),
     [viewportBbox, camera],
   );
+  // The Gauges row reads OFF where the region has no feed, and draws nothing.
+  const gaugesHere = hasGauges(terrainRegion);
+  const gaugesShown = showGauges && gaugesHere;
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(gaugesShown);
   const landArchive = layerIn(terrainRegion, "land");
   const fireArchive = layerIn(terrainRegion, "fire");
   const coverageArchive = layerIn(terrainRegion, "coverage");
@@ -2488,7 +2493,7 @@ export function MapScreen({
     },
     [addToolPoint, collectingPoints],
   );
-  const openGauge = showGauges
+  const openGauge = gaugesShown
     ? gaugeFile?.gauges.find((g) => g.id === gaugeId)
     : undefined;
 
@@ -4859,11 +4864,13 @@ export function MapScreen({
       hue: MAP_INK.gauge,
       title: MAP_OVERLAYS.copy.gauges,
       // Live state only: a layer on with nothing to draw says so.
-      note:
-        showGauges && gaugesSettled && !gaugeFile
+      note: !gaugesHere
+        ? MAP_TERRAIN.copy.notHere
+        : gaugesShown && gaugesSettled && !gaugeFile
           ? GAUGES.copy.failed
           : undefined,
-      value: showGauges,
+      value: gaugesShown,
+      inert: !gaugesHere,
       onChange: setShowGauges,
     },
     {
@@ -5576,7 +5583,7 @@ export function MapScreen({
           <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
-        {showGauges && gaugeFile ? (
+        {gaugesShown && gaugeFile ? (
           <GaugesLayer
             file={gaugeFile}
             now={gaugesNow}
@@ -6283,6 +6290,7 @@ export function MapScreen({
         open={layersOpen}
         onOpened={probeBasemaps}
         connectivity={connectivity}
+        region={terrainRegion}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
         downBasemaps={downBasemaps}

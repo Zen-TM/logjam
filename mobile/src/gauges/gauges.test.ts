@@ -55,11 +55,17 @@ describe("the map's gauge layer", () => {
     );
     expect(screen).toContain("Date.now() - pinPressedAt.current < 250");
   });
-  it("mounts only while the layer is on", () => {
-    expect(screen).toContain("{showGauges && gaugeFile ? (");
+  // Mutation: mount on `showGauges` alone, and the layer draws over a region
+  // that has no feed, though its row reads OFF.
+  it("mounts only while the layer is on and the region has a feed", () => {
+    expect(screen).toContain("const gaugesShown = showGauges && gaugesHere;");
+    expect(screen).toContain("{gaugesShown && gaugeFile ? (");
   });
-  it("is fetched only while on", () => {
+  // Mutation: pass `showGauges` to `useGauges`, and the feed is fetched over a
+  // region that has none.
+  it("is fetched only while on, and only over a region with a feed", () => {
     expect(read("./useGauges.ts")).toContain("if (!enabled) return;");
+    expect(screen).toContain("} = useGauges(gaugesShown);");
   });
 });
 

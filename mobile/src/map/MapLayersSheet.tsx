@@ -36,6 +36,7 @@
 import {
   Fragment,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ComponentProps,
@@ -56,7 +57,9 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
+  overlayLegends,
   type CarrierId,
+  type Region,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type OverlayLegend,
@@ -94,7 +97,11 @@ import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { pickCoverageCarrier } from "./coverageLayers";
-import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
+import {
+  coverageCarrierHere,
+  terrainSwitch,
+  type TerrainSwitchState,
+} from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
@@ -179,6 +186,7 @@ export function MapLayersSheet({
   visible,
   onClose,
   connectivity,
+  region,
   basemapId,
   onBasemapChange,
   downBasemaps,
@@ -198,6 +206,9 @@ export function MapLayersSheet({
   visible: boolean;
   onClose: () => void;
   connectivity: Connectivity;
+  /** The region the map shows (`regionShown`): its archives decide which
+   *  Terrain layers are here, and its legends and carriers are the ones listed. */
+  region: Region | null;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
   /** Basemaps whose tile server did not answer (`useDownBasemaps`). */
@@ -234,6 +245,8 @@ export function MapLayersSheet({
     setLegend(null);
   }
   const online = connectivity === "online";
+  const legends = useMemo(() => overlayLegends(region), [region]);
+  const carrierHere = coverageCarrierHere(region, coverageCarrier);
 
   // Exhaustive by type: a tab the contract names and this sheet does not
   // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
@@ -250,6 +263,7 @@ export function MapLayersSheet({
       <TerrainTab
         layers={terrainLayers}
         onChange={onTerrainLayerChange}
+        region={region}
         basemapId={basemapId}
         online={online}
         artifacts={artifacts}
@@ -272,13 +286,15 @@ export function MapLayersSheet({
                 basemapId,
                 online,
                 artifacts,
+                region,
               ),
             ]),
           ) as Record<OverlayTerrainKey, TerrainSwitchState>
         }
+        legends={legends}
         onOverlayChange={onTerrainLayerChange}
         onOpenOverlayLegend={setLegend}
-        choices={{ coverage: coverageCarrier }}
+        choices={{ coverage: carrierHere }}
       />
     ),
     offline: () => (
@@ -305,23 +321,24 @@ export function MapLayersSheet({
       // The slope bands editor is taller than any tab, so it takes the tab's
       // place instead.
       overlay={
-        legend && isOverlayTerrainKey(legend) ? (
+        legend && isOverlayTerrainKey(legend) && legends[legend] ? (
           <OverlayLegendSheet
-            legend={OVERLAY_LEGENDS[legend]}
+            legend={legends[legend]}
             {...(legend === "coverage"
               ? {
                   choice: {
-                    value: coverageCarrier,
+                    value: carrierHere,
                     onChange: (value: string) =>
                       pickCoverageCarrier(
                         value,
-                        coverageCarrier,
+                        carrierHere,
                         terrainSwitch(
                           "coverage",
                           terrainLayers.coverage,
                           basemapId,
                           online,
                           artifacts,
+                          region,
                         ).disabled,
                         {
                           choose: onCoverageCarrierChange,
@@ -449,6 +466,7 @@ function BasemapTab({
 function TerrainTab({
   layers,
   onChange,
+  region,
   basemapId,
   online,
   artifacts,
@@ -458,6 +476,7 @@ function TerrainTab({
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
+  region: Region | null;
   basemapId: BasemapId;
   online: boolean;
   /** What is saved on this phone: offline, a layer needs a clip of itself. */
@@ -477,6 +496,7 @@ function TerrainTab({
           basemapId,
           online,
           artifacts,
+          region,
         );
         return [
           key,
@@ -696,6 +716,7 @@ function LayersTab({
   layers,
   onImportFile,
   overlays,
+  legends,
   onOverlayChange,
   onOpenOverlayLegend,
   choices,
@@ -703,6 +724,8 @@ function LayersTab({
   layers: LayerToggleEntry[];
   onImportFile: () => void;
   overlays: Record<OverlayTerrainKey, TerrainSwitchState>;
+  /** The region in view's legends: a key is absent where it has no such layer. */
+  legends: ReturnType<typeof overlayLegends>;
   onOverlayChange: (key: OverlayTerrainKey, on: boolean) => void;
   onOpenOverlayLegend: (key: OverlayTerrainKey) => void;
   /** Each overlay's `choice` value, which its row names: null until one is
@@ -713,10 +736,13 @@ function LayersTab({
   const styles = useStyles();
 
   const overlayRow = (key: OverlayTerrainKey) => {
-    const legend = OVERLAY_LEGENDS[key];
+    const here = legends[key];
+    // A layer this region lacks keeps its row, named and tinted as NSW's
+    // legend has it, with no help button: there is no legend to open.
+    const legend = here ?? OVERLAY_LEGENDS[key];
     const state = overlays[key];
     const openLegend = () => onOpenOverlayLegend(key);
-    if (legend.choice && overlayAwaitsChoice(legend, choices[key]))
+    if (here?.choice && overlayAwaitsChoice(here, choices[key]))
       return (
         <Row
           icon="layers"
@@ -727,7 +753,7 @@ function LayersTab({
             <Button
               compact
               variant="outlineAccent"
-              label={legend.choice.choose}
+              label={here.choice.choose}
               onPress={openLegend}
             />
           }
@@ -744,7 +770,7 @@ function LayersTab({
         disabled={state.disabled}
         checked={state.checked}
         onChange={(on) => onOverlayChange(key, on)}
-        help={{ label: legend.about, onPress: openLegend }}
+        help={here ? { label: legend.about, onPress: openLegend } : undefined}
       />
     );
   };
