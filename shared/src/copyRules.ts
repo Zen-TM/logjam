@@ -215,7 +215,7 @@ export function serverSentenceParses(source: string): number[] {
 }
 
 /** JSX attributes and object properties whose string is words a user reads. */
-const COPY_PROPS = new Set([
+export const COPY_PROPS = new Set([
   "label",
   "title",
   "subtitle",
@@ -238,12 +238,46 @@ const COPY_PROPS = new Set([
 /** Calls whose first argument is the words of a toast (Logjam Web's `toast`,
  *  Logjam GPS's `notify`, `emitToast` and `toast`); `Alert.alert` also reads
  *  its second, the message under the title. */
-const COPY_CALLS = /^(?:notify|emitToast|toast(?:\.\w+)?|Alert\.alert)$/;
+export const COPY_CALLS = /^(?:notify|emitToast|toast(?:\.\w+)?|Alert\.alert)$/;
+
+/** The tags that write a message (shared/src/i18n.ts, `say` in userSentence.ts). */
+export const MESSAGE_TAGS = new Set(["t", "say", "rich"]);
+
+/**
+ * The names this file calls `plural` by when it is the message function: the
+ * ones imported from the shared package or from i18n.ts. A file's own helper
+ * of that name (`plural(n, "place")`) is no message.
+ */
+export function pluralNames(
+  tsModule: unknown,
+  sf: TypeScript.SourceFile,
+): Set<string> {
+  const ts = tsModule as typeof TypeScript;
+  const names = new Set<string>();
+  for (const statement of sf.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !/^@logjam\/shared$|(?:^|\/)i18n(?:\.js)?$/.test(
+        statement.moduleSpecifier.text,
+      )
+    )
+      continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings))
+      for (const element of bindings.elements)
+        if ((element.propertyName ?? element.name).text === "plural")
+          names.add(element.name.text);
+  }
+  return names;
+}
 
 /**
  * The strings in a source file that a user reads: JSX text, a JSX attribute
- * named in `COPY_PROPS`, an object property named in it, and the sentence
- * passed to a toast or alert (`COPY_CALLS`). A template's
+ * named in `COPY_PROPS`, an object property named in it, the sentence
+ * passed to a toast or alert (`COPY_CALLS`), and every message wherever it
+ * stands (the text of a `t`, `say` or `rich` template, the two forms of a
+ * `plural`), since a message is a user-facing string by being one. A template's
  * `${}` holes' own strings are read, their code is not. Not every user-facing string is one of these (a
  * `throw new Error("…")` reaches the user through a screen that may reword it),
  * which is why the net is words, not files: a miss is a gap in the net, never a
@@ -265,6 +299,7 @@ export function userFacingStrings(
     fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const found: { line: number; text: string }[] = [];
+  const plurals = pluralNames(ts, sf);
   // Every string literal and template part anywhere under the value: a `??`
   // fallback, a ternary branch, a `+` and a `${}` hole's own strings are all
   // read by the user, so none may hide from the net. A call's arguments are
@@ -274,6 +309,9 @@ export function userFacingStrings(
     const parts: string[] = [];
     const collect = (n: TypeScript.Node): void => {
       if (ts.isCallExpression(n)) return;
+      // A message is read where it stands (`visit`), so it is read once.
+      if (ts.isTaggedTemplateExpression(n) && MESSAGE_TAGS.has(n.tag.getText()))
+        return;
       if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
         parts.push(n.text);
       else if (
@@ -304,9 +342,17 @@ export function userFacingStrings(
       COPY_PROPS.has(node.name.getText().replace(/["']/g, ""))
     )
       texts = stringsOf(node.initializer);
+    else if (
+      ts.isTaggedTemplateExpression(node) &&
+      MESSAGE_TAGS.has(node.tag.getText())
+    )
+      texts = stringsOf(node.template);
     else if (ts.isCallExpression(node)) {
       const callee = node.expression.getText();
-      if (COPY_CALLS.test(callee))
+      // plural(count, one, other, …holes): the two forms are the words.
+      if (plurals.has(callee))
+        texts = node.arguments.slice(1, 3).flatMap(stringsOf);
+      else if (COPY_CALLS.test(callee))
         texts = node.arguments
           .slice(0, callee === "Alert.alert" ? 2 : 1)
           .flatMap(stringsOf);

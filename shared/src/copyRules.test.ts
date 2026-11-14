@@ -11,7 +11,7 @@ import {
   SIGNUP_CAP_MESSAGE,
 } from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
-import { copySay, copyViolations } from "./copyRules.js";
+import { copySay, copyViolations, userFacingStrings } from "./copyRules.js";
 import { NSW_REGION } from "./regions.js";
 
 // Every string a screen contract declares keeps the copy rules of
@@ -355,5 +355,32 @@ describe("static pages and permission prompts", () => {
       copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("userFacingStrings reads messages", () => {
+  const read = (source: string) =>
+    userFacingStrings(ts, "x.tsx", source).map(({ text }) => text);
+
+  // Mutation: drop the tagged-template branch of `userFacingStrings`.
+  it("reads the text of t, say and rich wherever they stand, once", () => {
+    expect(
+      read(
+        "const a = <p>{t`Open the app`}</p>; const b = { label: say`Sign in to the app` }; const c = rich`Use the <a>app</a>`;",
+      ),
+    ).toEqual(["Open the app", "Sign in to the app", "Use the <a>app</a>"]);
+  });
+
+  // Mutation: drop the `plurals.has(callee)` branch of `userFacingStrings`,
+  // which is how `plural`'s words escaped the copy rules.
+  it("reads both forms of an imported plural, and not a local helper's", () => {
+    expect(
+      read(
+        `import { plural } from "@logjam/shared";\nplural(n, "# tile", "# tiles", "x");`,
+      ),
+    ).toEqual(["# tile", "# tiles"]);
+    expect(
+      read('function plural() {}\nplural(n, "# tile", "# tiles");'),
+    ).toEqual([]);
   });
 });

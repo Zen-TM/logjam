@@ -10,7 +10,7 @@ import {
   readCachedGauges,
   stopGaugesForWipe,
 } from "./gaugeStorage";
-import { gaugeFixture } from "./gaugeFixture";
+import { gaugeFixture } from "./__fixtures__/gaugeFixture";
 
 const fs = vi.hoisted(() => ({ files: new Map<string, string>(), dirs: 0 }));
 vi.mock("expo-file-system/legacy", () => ({
