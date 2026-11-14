@@ -17,6 +17,8 @@
 // of the complement cannot overlap by construction. Guard:
 // mobile/src/map/offlineMask.test.ts.
 
+import type { Region } from "@logjam/shared";
+
 import {
   drawsTerrain,
   type MapArtifact,
@@ -146,6 +148,7 @@ export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
 export function offlineMaskBoxes(
   basemap: readonly ResolvedTileSource[],
   artifacts: readonly MapArtifact[],
+  regions?: readonly Region[],
 ): MaskBbox[] | null {
   if (!basemap.some((r) => r.status === "ok" && r.origin === "local")) {
     return null;
@@ -154,6 +157,8 @@ export function offlineMaskBoxes(
     ...basemap.flatMap((r) =>
       r.status === "ok" && r.bounds ? [r.bounds] : [],
     ),
-    ...artifacts.flatMap((a) => (drawsTerrain(a) && a.bbox ? [a.bbox] : [])),
+    ...artifacts.flatMap((a) =>
+      drawsTerrain(a, regions) && a.bbox ? [a.bbox] : [],
+    ),
   ];
 }

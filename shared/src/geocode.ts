@@ -13,11 +13,10 @@
 
 import {
   regionBounds,
-  regionInView,
+  regionInWrappedView,
   REGIONS,
   WORLD,
   type LonLatBox,
-  wrapView,
   type Region,
 } from "./regions.js";
 
@@ -40,7 +39,7 @@ export function geocodeBias(
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): LonLatBox | null {
-  const region = view ? regionInView(wrapView(view), regions, world) : null;
+  const region = view ? regionInWrappedView(view, regions, world) : null;
   return region && region.borders.length > 0 ? regionBounds(region) : null;
 }
 
