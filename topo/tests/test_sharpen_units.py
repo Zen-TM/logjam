@@ -246,6 +246,77 @@ class TestCloudUnits(unittest.TestCase):
         self.assertIn("--filters.reprojection.out_srs=EPSG:32612", options)
 
 
+@unittest.skipIf(not _REAL_GDAL, "needs GDAL")
+class TestLonLat(unittest.TestCase):
+    """`lonlat_of` on the canned `srs` blobs, with the real bounds of the window
+    they were taken from (one place, in each unit) and the WKT of its CRS.
+    Mutations that turn each test red: the bounds' centre taken with x and y
+    swapped (all three); a projected tile's centre returned unconverted (the
+    two in feet or metres); the degrees branch returning (lat, lon) (degrees).
+    Not observable here: `wkt` used where `compoundwkt` is present (PDAL's
+    `wkt` is the horizontal part of the same CRS, which transforms alike), and
+    the degrees centre run through a transform (EPSG:4326 to itself is the
+    identity)."""
+
+    LON, LAT = -112.6038, 37.5995
+
+    def wkt(self, crs):
+        from osgeo import osr
+
+        ref = osr.SpatialReference()
+        ref.SetFromUserInput(crs)
+        return ref.ExportToWkt()
+
+    def check(self, srs, bounds):
+        lon, lat = sharpen.lonlat_of({"bounds": bounds, "srs": srs})
+        self.assertAlmostEqual(lon, self.LON, delta=0.001)
+        self.assertAlmostEqual(lat, self.LAT, delta=0.001)
+
+    def test_feet_over_a_compound_crs(self):
+        srs = {
+            **US_FEET_COMPOUND,
+            "wkt": self.wkt("EPSG:3566"),
+            "compoundwkt": self.wkt("EPSG:3566+6360"),
+        }
+        self.check(
+            srs,
+            {
+                "minx": 1319913.18,
+                "maxx": 1320914.82,
+                "miny": 6295790.14,
+                "maxy": 6296787.65,
+            },
+        )
+
+    def test_metres_over_feet(self):
+        srs = {
+            **METRES_OVER_FEET,
+            "wkt": self.wkt("EPSG:32612"),
+            "compoundwkt": self.wkt("EPSG:32612+6360"),
+        }
+        self.check(
+            srs,
+            {
+                "minx": 358268.46,
+                "maxx": 358574.91,
+                "miny": 4162435.17,
+                "maxy": 4162740.37,
+            },
+        )
+
+    def test_degrees_are_their_own_centre(self):
+        srs = {**DEGREES, "wkt": self.wkt("EPSG:4326")}
+        self.check(
+            srs,
+            {
+                "minx": -112.6055277,
+                "maxx": -112.6021141,
+                "miny": 37.598133,
+                "maxy": 37.6008376,
+            },
+        )
+
+
 class TestSurveyZone(unittest.TestCase):
     """Mutations that turn each test red: `the_zone_is_the_surveys`: the zone
     taken from the first tile alone, or per tile (a survey across a zone edge
@@ -319,8 +390,10 @@ class TestRealDem(unittest.TestCase):
     feet; `a_dem_with_a_vertical_crs_in_feet`: scaled by hand and by the warp
     (`srcSRS` or `StripVertical` removed); `a_degree_dem_becomes_metres`: left
     in degrees; `an_unknown_band_unit_on_a_metric_dem`: refused;
-    `an_unknown_band_unit_on_a_dem_in_feet`: taken as metres, or its name put
-    into the `CannotSharpen` sentence; `no_band_unit_has_heights_in_feet`: a
+    `an_unknown_band_unit_on_a_dem_in_feet` and `..._in_degrees`: taken as
+    metres (on degrees: `_band_unit_m` testing `flat == 1.0`, which reads None
+    as 1.0, where it must test `horizontal_m`), or its name put into the
+    `CannotSharpen` sentence; `no_band_unit_has_heights_in_feet`: a
     missing band unit read as metres on a grid in feet;
     `the_dems_of_a_survey_share_one_zone`: the zone left out of `dem_ground`'s
     call to `metric_dem`, or taken per DEM."""
@@ -497,6 +570,18 @@ class TestRealDem(unittest.TestCase):
             "odd.tif",
             "EPSG:3566",
             (1_650_000.0, 3.2808, 0, 4_400_000.0, 0, -3.2808),
+            np.ones((8, 8)),
+            band_unit=LEAK,
+        )
+        with self.assertRaises(CannotSharpen) as raised:
+            self.ground([path])
+        self.assertNotIn("Kanangra", str(raised.exception))
+
+    def test_an_unknown_band_unit_on_a_dem_in_degrees_is_refused(self):
+        path = self.dem(
+            "odd-deg.tif",
+            "EPSG:4326",
+            (-112.9, 1e-5, 0, 37.3, 0, -1e-5),
             np.ones((8, 8)),
             band_unit=LEAK,
         )

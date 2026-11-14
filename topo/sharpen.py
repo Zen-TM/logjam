@@ -355,7 +355,7 @@ def _band_unit_m(ds, horizontal_m: Optional[float]) -> float:
         try:
             return linear_unit_m(name)
         except CannotSharpen:
-            if flat == 1.0:
+            if horizontal_m == 1.0:
                 return 1.0
             raise
     srs = pipeline.osr.SpatialReference(wkt=ds.GetProjection() or "")
