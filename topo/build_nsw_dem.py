@@ -952,8 +952,8 @@ def contours(src: Path, work: Path, out: Path, extracted: str) -> None:
 
 def smoothing_factor(ground_px_m: float) -> int:
     """How many deepest-zoom pixels along an edge average to one contouring cell:
-    the power of two that brings the cell nearest CONTOUR_CELL_M of ground, and
-    never finer than the data. A power of two divides a tile's 256 px, so a cell
+    the power of two whose cell is nearest CONTOUR_CELL_M of ground as a ratio
+    (the rounding is in the logarithm), and never finer than the data. A power of two divides a tile's 256 px, so a cell
     never straddles a tile edge (test_nsw_dem.py `TestContourSmoothing`)."""
     return min(256, 2 ** max(0, round(math.log2(CONTOUR_CELL_M / ground_px_m))))
 

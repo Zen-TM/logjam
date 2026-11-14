@@ -400,8 +400,7 @@ class TestDerivedCredit(unittest.TestCase):
             credit(SLOPE, "October 2026"),
         )
 
-    # Mutation: as above, for the contour archive's description, which `contours`
-    # used to spell out by hand.
+    # Mutation: as above, for the contour archive's description.
     def test_nsw_contours_credit_is_what_contours_always_wrote(self):
         self.assertEqual(
             derived_credit("Contours", credit(HEIGHTS, "October 2026")),
@@ -528,8 +527,8 @@ class TestSlopeOfAZ17Archive(unittest.TestCase):
 
 
 class TestBuildSlopeCredit(unittest.TestCase):
-    # Mutation: a hard-coded name or credit in `build_slope` (the old month
-    # typed by hand, or "NSW 5 m DEM slope"): another archive's slope then
+    # Mutation: a hard-coded name or credit in `build_slope` (a month typed
+    # into the credit, or "NSW 5 m DEM slope"): another archive's slope then
     # carries NSW's credit, or an NSW rebuild carries last month's.
     def _packed(self, metadata, header):
         import tempfile
@@ -587,13 +586,10 @@ class TestBuildSlopeCredit(unittest.TestCase):
 
 
 class TestNswSlopeUnchanged(unittest.TestCase):
-    # The slope archive of a heights archive built the NSW way (the Katoomba
-    # fixture's tiles through `save_block` and `pack`) is what it was before
-    # `build_slope` read its zooms and credit from the archive: the same tiles
-    # to the whole degree, the same name and credit. It checks the tile count,
-    # the name and the credit, and a hash of the tiles' decoded values, taken
-    # with build_nsw_dem.py before that change (not of the archive's bytes).
-    # Mutation: change `halve_max`, the slope rounding, a zoom, or the credit's
+    # Pins NSW's slope build for the Katoomba fixture's tiles (through
+    # `save_block` and `pack`, as `tile` and `pack` make a heights archive): the
+    # decoded values of the slope tiles (not the archive's bytes), the tile
+    # count, the name and the credit. Mutation: change `halve_max`, the slope rounding, a zoom, or the credit's
     # wording for NSW, and it is red.
     HASH = "8ef0ef71f2a81aa48fc68a2c2db5e785f34e91f4328c74342861bc28aab3d07d"
 
@@ -828,6 +824,66 @@ class TestContoursArchive(unittest.TestCase):
         cells = [c[c.index("-tr") + 1] for c in commands]
         self.assertEqual(len(cells), 2)  # a floor: both blocks were built
         self.assertEqual(cells[0], cells[1])
+
+
+class TestPackContours(unittest.TestCase):
+    # Mutation: `pack_contours` ignores the description it is given (a fixed
+    # string in the `DESCRIPTION=` option), or the zoom configuration is not
+    # CONTOUR_ZOOMS': the archive carries the wrong credit or zooms.
+    def test_the_description_and_zooms_reach_ogr2ogr(self):
+        import json as _json
+        import tempfile
+        from unittest import mock
+
+        import build_nsw_dem
+
+        commands = []
+
+        def record(*command):
+            commands.append(command)
+            if command[0] == "ogr2ogr":  # the MBTiles `pack_contours` then removes
+                Path(command[4]).write_bytes(b"")
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("build_nsw_dem.run", record),
+        ):
+            work = Path(tmp)
+            (work / "1-2.lines.gpkg").write_bytes(b"")
+            build_nsw_dem.pack_contours(work, work / "o.pmtiles", "A credit")
+        ogr = next(c for c in commands if c[0] == "ogr2ogr")
+        self.assertIn("DESCRIPTION=A credit", ogr)
+        self.assertIn("MINZOOM=11", ogr)
+        self.assertIn("MAXZOOM=14", ogr)
+        conf = _json.loads(next(a for a in ogr if a.startswith("CONF="))[5:])
+        self.assertEqual(conf["major"]["minzoom"], 11)
+        self.assertEqual(conf["minor"], {**conf["minor"], "minzoom": 14, "maxzoom": 14})
+        self.assertEqual(commands[-1][:2], ("pmtiles", "convert"))
+
+    # Mutation: `contours()` hands `pack_contours` another description (the
+    # slope credit, or the month dropped): NSW's contour archive carries it.
+    def test_nsw_contours_hands_over_its_description(self):
+        import tempfile
+        from unittest import mock
+
+        import build_nsw_dem
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("build_nsw_dem.need_pmtiles"),
+            mock.patch("build_nsw_dem.pack_contours") as pack,
+        ):
+            tmp = Path(tmp)
+            (tmp / "src").mkdir()  # no sheets: only the hand-over is under test
+            build_nsw_dem.contours(
+                tmp / "src", tmp / "w", tmp / "o.pmtiles", "October 2026"
+            )
+        self.assertEqual(
+            pack.call_args.args[2],
+            "Contours derived from the NSW 5 m Digital Elevation Model, © State of"
+            " New South Wales (Spatial Services), extracted October 2026."
+            " CC BY 3.0 AU.",
+        )
 
 
 class TestPositiveInt(unittest.TestCase):

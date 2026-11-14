@@ -110,8 +110,8 @@ for the mean, a mean inside `halve_max`, a rounding other than 1°,
 Horn weights of 1-1-1, a missing centre-pixel check, the neighbour ring read
 from the wrong tile, and a row's latitude taken from the wrong origin.
 `shared/src/demSlope.test.ts` and `test_nsw_dem.py` assert the same bumpy window to
-the same figure. Only the z15 tile of `TestSlopeBlock` holds the top of the
-zoom range; `TestNswSlopeUnchanged` holds the bottom (8) (updated 2026-11-14).
+the same figure. The z15 tile of `TestSlopeBlock`, `TestNswSlopeUnchanged`
+(z15 to z8) and the z17 tests hold the zoom range (updated 2026-11-14).
 Nothing holds that a tile with no value is left out, or a client drawing the
 archive.
 
