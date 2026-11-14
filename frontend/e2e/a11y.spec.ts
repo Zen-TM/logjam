@@ -1485,7 +1485,8 @@ test.describe("desktop", () => {
     const canvas = page.locator("canvas.maplibregl-canvas");
     const box = (await canvas.boundingBox())!;
     const panel = page.getByRole("dialog", { name: "This point" });
-    // Empty map, away from the seeded pins at the left and from the panel.
+    // Empty map: east of the seeded pins, which cluster round the first-run
+    // view's centre, and clear of the panel at the centre.
     const press = () =>
       page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.2);
     await canvas.focus();
