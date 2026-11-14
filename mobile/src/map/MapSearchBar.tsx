@@ -24,8 +24,9 @@
 // kind's glyph and hue so the two are never confused for each other.
 //
 // PRIVACY: only the typed string leaves Logjam GPS, to our API when the phone
-// has no registry, to Nominatim when asked (shared/src/geocode.test.ts), and
-// nowhere when it has. No saved place's name or coordinates is sent — the saved matches are the
+// has no registry, and to Nominatim when asked, which also gets the outline of
+// the covered region the map shows and nothing extra when it shows none
+// (shared/src/geocode.test.ts); with a registry, nowhere. No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be. The only thing persisted is the short list of
 // recent picks (`recentSearches.ts`), on this phone, cleared on sign-out.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -60,6 +61,7 @@ import {
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
+  type LonLatBox,
   MAP_SEARCH_PLACEHOLDER,
 } from "@logjam/shared";
 
@@ -131,6 +133,7 @@ export function MapSearchBar({
   onSelectPlace,
   onSelectSaved,
   onSearchPin,
+  view,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
@@ -147,6 +150,10 @@ export function MapSearchBar({
   onSelectSaved: (item: SavedSearchItem) => void;
   /** The temporary pin for the searched location, or none (searchPinAfter). */
   onSearchPin: (pin: SearchPin | null) => void;
+  /** What the map shows, null before it first settles. It picks the
+   *  geocoder's bias and reads a typed coordinate's hemispheres, and is never
+   *  sent as it is (geocodeBias). */
+  view: LonLatBox | null;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -156,6 +163,8 @@ export function MapSearchBar({
   // The query the user asked the geocoder about. Typing on past it leaves the
   // answer behind and offers the ask row again.
   const [asked, setAsked] = useState<string | null>(null);
+  // What the map showed when it was asked: panning on must not ask again.
+  const [askedView, setAskedView] = useState<LonLatBox | null>(null);
   // Tagged with the query it answers, so a stale or still-pending answer reads
   // as "no answer" without being cleared from an effect.
   const [search, setSearch] = useState<{
@@ -165,7 +174,7 @@ export function MapSearchBar({
   } | null>(null);
   const [recents, setRecents] = useState(loadRecentSearches);
   const trimmed = query.trim();
-  const coordinate = expanded ? parseCoordinates(trimmed) : null;
+  const coordinate = expanded ? parseCoordinates(trimmed, view) : null;
   const searchable = expanded && trimmed.length >= GEOCODE_MIN_QUERY_LENGTH;
   const askedHere = searchable && asked === trimmed;
   const answer = askedHere && search?.query === trimmed ? search : null;
@@ -248,7 +257,7 @@ export function MapSearchBar({
   useEffect(() => {
     if (asked === null) return;
     const controller = new AbortController();
-    geocode(asked, controller.signal)
+    geocode(asked, controller.signal, askedView)
       .then((found) => {
         setSearch({ query: asked, results: found, error: null });
       })
@@ -262,10 +271,12 @@ export function MapSearchBar({
         });
       });
     return () => controller.abort();
-  }, [asked]);
+  }, [asked, askedView]);
 
   const ask = () => {
-    if (searchable) setAsked(trimmed);
+    if (!searchable) return;
+    setAsked(trimmed);
+    setAskedView(view);
   };
 
   // Focus AFTER the expansion has committed, not from the tap handler: the

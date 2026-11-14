@@ -20,6 +20,7 @@ import {
   searchLocationsLabel,
   type Gauge,
   type GeocodeResult,
+  type LonLatBox,
   type PlaceResult,
   MAP_SEARCH_PLACEHOLDER,
 } from "@logjam/shared";
@@ -66,6 +67,7 @@ export default function MapSearchBox({
   onSelectGauge,
   onSelectLocation,
   onSearchPin,
+  getView,
   disabled = false,
 }: {
   /** Off while an area is being selected: a fly-to would move the frame's map
@@ -78,6 +80,9 @@ export default function MapSearchBox({
   onSelectLocation: (lat: number, lon: number) => void;
   /** The temporary pin for the searched location, or none (searchPinAfter). */
   onSearchPin: (pin: SearchPin | null) => void;
+  /** What the map shows now. It picks the geocoder's bias and reads a typed
+   *  coordinate's hemispheres, and is never sent as it is (geocodeBias). */
+  getView?: () => LonLatBox | null;
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -86,6 +91,8 @@ export default function MapSearchBox({
   // when an answer adds or removes rows around it.
   const [activeId, setActiveId] = useState<string | null>(null);
   const [locationQuery, setLocationQuery] = useState<string | null>(null);
+  // What the map showed when the user asked: panning on must not ask again.
+  const [askedView, setAskedView] = useState<LonLatBox | null>(null);
   const [locations, setLocations] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +162,7 @@ export default function MapSearchBox({
   useEffect(() => {
     if (locationQuery == null) return;
     const controller = new AbortController();
-    geocode(locationQuery, controller.signal)
+    geocode(locationQuery, controller.signal, askedView)
       .then(setLocations)
       .catch((err) => {
         if (controller.signal.aborted) return;
@@ -167,7 +174,7 @@ export default function MapSearchBox({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [locationQuery]);
+  }, [locationQuery, askedView]);
 
   const options = useMemo<Option[]>(() => {
     if (trimmed === "")
@@ -202,7 +209,7 @@ export default function MapSearchBox({
           : [];
       })
       .slice(0, GAUGE_RESULTS);
-    const point = parseCoordinates(trimmed);
+    const point = parseCoordinates(trimmed, getView?.() ?? null);
     const ours: Option[] = [
       ...(point
         ? [{ kind: "coordinate" as const, id: "coordinate", point }]
@@ -236,6 +243,7 @@ export default function MapSearchBox({
     answer,
     locationQuery,
     locations,
+    getView,
   ]);
 
   const open = focused && (trimmed !== "" || options.length > 0);
@@ -264,6 +272,7 @@ export default function MapSearchBox({
       // Offered only while the results are for another query, so this always
       // starts the search effect.
       setLocationQuery(trimmed);
+      setAskedView(getView?.() ?? null);
       setLoading(true);
       setError(null);
       return;

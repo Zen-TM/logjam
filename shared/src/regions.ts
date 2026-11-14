@@ -586,6 +586,19 @@ export type LonLatBox = {
 };
 
 /**
+ * The same box moved by whole turns until its centre is in [-180, 180): a map
+ * panned round the world reports longitudes past ±180, while a region's
+ * borders and a hemisphere are read in that range. Guard: `regions.test.ts`
+ * ("moves a box by whole turns until its centre is in [-180, 180)").
+ */
+export function wrapView(view: LonLatBox): LonLatBox {
+  const turn = 360 * Math.floor(((view.west + view.east) / 2 + 180) / 360);
+  return turn === 0
+    ? view
+    : { ...view, west: view.west - turn, east: view.east - turn };
+}
+
+/**
  * The box around a region's borders. Throws for a region with none (`WORLD`),
  * which has no box. Guard: `regions.test.ts` ("bounds the border, and refuses a
  * region with none").

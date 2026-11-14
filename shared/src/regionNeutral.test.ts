@@ -40,7 +40,6 @@ const STILL_NAMING = [
   "mobile/src/saved/SavedScreen.tsx",
   "shared/src/demSources.ts",
   "shared/src/geoPdfBaseLayers.ts",
-  "shared/src/geocode.ts",
   "shared/src/nswContours.ts",
   "shared/src/overlayLegends.ts",
   "shared/src/overlayZoom.ts",
