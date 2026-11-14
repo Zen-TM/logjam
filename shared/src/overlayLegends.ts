@@ -5,15 +5,9 @@
 // `OverlayLegendSheet` in `MapLayersSheet.tsx`).
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { MAP_INK } from "./designTokens.js";
-import {
-  CARRIERS,
-  COVERAGE_HATCH_IMAGE,
-  COVERAGE_HATCH_URIS,
-  NSW_COVERAGE,
-} from "./nswCoverage.js";
-import { FIRE_RAMP, fireLegendRows, NSW_FIRE } from "./nswFire.js";
-import { LAND_CLASSES } from "./nswLand.js";
-import { NSW_REGION } from "./regions.js";
+import { COVERAGE_HATCH_IMAGE, COVERAGE_HATCH_URIS } from "./coverage.js";
+import { FIRE_RAMP, fireLegendRows } from "./fireHistory.js";
+import { NSW_REGION, layerIn, type Region } from "./regions.js";
 import type { OverlayTerrainKey } from "./terrain.js";
 
 export type OverlayLegend = {
@@ -50,51 +44,74 @@ export type OverlayLegend = {
 
 const copy = MAP_TERRAIN.copy;
 
-export const OVERLAY_LEGENDS: Readonly<
-  Record<OverlayTerrainKey, OverlayLegend>
-> = {
-  land: {
-    title: copy.land,
-    about: copy.landAbout,
-    hue: LAND_CLASSES[0].colour,
-    intro: copy.landLegend,
-    rows: LAND_CLASSES.map(({ name, colour }) => ({ label: name, colour })),
-    caveat: copy.landCaveat,
-    credit: NSW_REGION.terrain.land.credit,
-  },
-  fire: {
-    title: copy.fire,
-    about: copy.fireAbout,
-    hue: FIRE_RAMP[0].colour,
-    intro: copy.fireLegend,
-    rows: fireLegendRows(),
-    caveat: copy.fireCaveat,
-    credit: NSW_FIRE.credit,
-  },
-  coverage: {
-    title: copy.coverage,
-    about: copy.coverageAbout,
-    hue: MAP_INK.casing,
-    intro: copy.coverageLegend,
-    // Over the light land of a basemap, as the hatch is drawn on the map.
-    rows: [
-      {
-        label:
-          copy.coverageNoReception[0]!.toUpperCase() +
-          copy.coverageNoReception.slice(1),
-        colour: MAP_INK.label,
-        pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE],
+/**
+ * The legends of the overlays a region has an archive for: a key is absent
+ * where the region lacks the layer. Each caveat and credit is the region's own.
+ */
+export function overlayLegends(
+  region: Region | null,
+): Partial<Record<OverlayTerrainKey, OverlayLegend>> {
+  const land = layerIn(region, "land");
+  const fire = layerIn(region, "fire");
+  const coverage = layerIn(region, "coverage");
+  return {
+    ...(land && {
+      land: {
+        title: copy.land,
+        about: copy.landAbout,
+        hue: land.classes[0].colour,
+        intro: copy.landLegend,
+        rows: land.classes.map(({ name, colour }) => ({ label: name, colour })),
+        caveat: land.caveat,
+        credit: land.credit,
       },
-    ],
-    choice: {
-      label: copy.coverageCarrier,
-      choose: copy.coverageChooseCarrier,
-      options: CARRIERS.map(({ id, name }) => ({ value: id, label: name })),
-    },
-    caveat: copy.coverageCaveat,
-    credit: NSW_COVERAGE.credit,
-  },
-};
+    }),
+    ...(fire && {
+      fire: {
+        title: copy.fire,
+        about: copy.fireAbout,
+        hue: FIRE_RAMP[0].colour,
+        intro: copy.fireLegend,
+        rows: fireLegendRows(),
+        caveat: fire.caveat,
+        credit: fire.credit,
+      },
+    }),
+    ...(coverage && {
+      coverage: {
+        title: copy.coverage,
+        about: copy.coverageAbout,
+        hue: MAP_INK.casing,
+        intro: copy.coverageLegend,
+        // Over the light land of a basemap, as the hatch is drawn on the map.
+        rows: [
+          {
+            label:
+              copy.coverageNoReception[0]!.toUpperCase() +
+              copy.coverageNoReception.slice(1),
+            colour: MAP_INK.label,
+            pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE],
+          },
+        ],
+        choice: {
+          label: copy.coverageCarrier,
+          choose: copy.coverageChooseCarrier,
+          options: coverage.carriers.map(({ id, name }) => ({
+            value: id,
+            label: name,
+          })),
+        },
+        caveat: coverage.caveat,
+        credit: coverage.credit,
+      },
+    }),
+  };
+}
+
+/** NSW's legends, for the screens that do not yet ask the region in view. */
+export const OVERLAY_LEGENDS = overlayLegends(NSW_REGION) as Readonly<
+  Record<OverlayTerrainKey, OverlayLegend>
+>;
 
 /**
  * Whether `legend`'s row offers its choice (one button that opens the legend)

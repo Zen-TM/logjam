@@ -60,7 +60,7 @@
     "'unsafe-inline' for style-src is required by MUI/emotion runtime style injection. Never relax script-src.",
     "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file.",
     "media-src allows blob: plus awsAssetHosts so uploaded videos (presigned S3 URLs) play inline via <video>; img-src/connect-src already cover photo display + presigned PUT uploads.",
-    "geocoderHosts (Nominatim) are connect-src only — used by the map-pick place search (frontend/src/geocode.ts). Only the user-typed place string is sent; no place data.",
+    "geocoderHosts (Nominatim) are connect-src only — used by the map's \"Search locations for …\" (shared/src/geocode.ts). The request carries the user-typed text and, when the map shows a covered region, that region's outline; never the view, the position or a place.",
     "weatherHosts (Open-Meteo) are connect-src only — used by the weather view (frontend/src/components/weather/). Only the 0.1° cell and height are sent, never the spot (docs/decisions/0038)."
   ]
 }

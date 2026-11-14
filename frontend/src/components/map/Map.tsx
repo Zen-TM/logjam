@@ -101,6 +101,7 @@ import {
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
+  type LonLatBox,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -113,6 +114,16 @@ const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 // The Terrain group's tiles once the user can see a sharpened area.
 maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
+
+/** MapLibre's bounds as the shared box. Longitudes are raw: past ±180 after a pan round the world. */
+function boxOf(bounds: maplibregl.LngLatBounds): LonLatBox {
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
+}
 
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
@@ -218,8 +229,6 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // same floor, and why that zoom (and why the route being drawn is exempt) is
 // documented there.
 
-const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
-const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
 /** Below this the pin's dot is under 13px across, no bigger than its badge. */
@@ -613,6 +622,7 @@ function Map({
   onMapBoundsChange,
   onMapViewChange,
   initialView,
+  homeView,
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToPlace,
@@ -759,6 +769,8 @@ function Map({
     bearing: number;
     pitch: number;
   } | null;
+  /** Where the map first opens, with no stored view: the account region's (`accountRegion`). */
+  homeView: { center: readonly [number, number]; zoom: number };
   // A footprint may be a Polygon OR a MultiPolygon (disconnected capture);
   // collectLngLatPairs walks either to its [lng,lat] leaf positions.
   topoFlyTarget?: GeoJsonPolygonal | null;
@@ -1036,8 +1048,10 @@ function Map({
         sources: {},
         layers: [],
       },
-      center: initialView ? [initialView.lng, initialView.lat] : INITIAL_CENTER,
-      zoom: initialView?.zoom ?? INITIAL_ZOOM,
+      center: initialView
+        ? [initialView.lng, initialView.lat]
+        : [...homeView.center],
+      zoom: initialView?.zoom ?? homeView.zoom,
       bearing: initialView?.bearing ?? 0,
       pitch: initialView?.pitch ?? 0,
       touchPitch: false, // pinch-rotate is enough for 3D; touch-pitch is a nuisance
@@ -1834,13 +1848,7 @@ function Map({
       // or pitched map reports MORE ground than is on screen. "Filter to the
       // current view" is a coarse convenience, and reporting slightly more than
       // is visible errs towards keeping places rather than hiding them.
-      const bounds = map.getBounds();
-      onMapBoundsChangeRef.current?.({
-        west: bounds.getWest(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        north: bounds.getNorth(),
-      });
+      onMapBoundsChangeRef.current?.(boxOf(map.getBounds()));
     };
 
     fireViewChange(); // report initial centre immediately on load
@@ -2261,16 +2269,7 @@ function Map({
       map.setLayoutProperty(id, "visibility", vis);
     if (!showMgaGrid) return;
     const draw = () => {
-      const b = map.getBounds();
-      const grid = mapGrid(
-        {
-          west: b.getWest(),
-          south: b.getSouth(),
-          east: b.getEast(),
-          north: b.getNorth(),
-        },
-        map.getZoom(),
-      );
+      const grid = mapGrid(boxOf(map.getBounds()), map.getZoom());
       (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
     };
     draw();
@@ -3004,7 +3003,11 @@ function Map({
       if (fmt === "coverage") {
         const carrier = coverageCarrierRef.current;
         if (!carrier) return;
-        const layer = coverageLayerSpec(srcId, carrier);
+        const layer = coverageLayerSpec(
+          NSW_REGION.terrain.coverage,
+          srcId,
+          carrier,
+        );
         if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
@@ -3012,7 +3015,11 @@ function Map({
       if (fmt === "fire") {
         // The tint ages by the month: a map left open for weeks is at most
         // that stale.
-        for (const layer of fireLayerSpecs(srcId, new Date()))
+        for (const layer of fireLayerSpecs(
+          NSW_REGION.terrain.fire,
+          srcId,
+          new Date(),
+        ))
           if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
@@ -3038,7 +3045,9 @@ function Map({
             "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
-              "line-color": landColor() as maplibregl.ExpressionSpecification,
+              "line-color": landColor(
+                NSW_REGION.terrain.land,
+              ) as maplibregl.ExpressionSpecification,
               "line-width": width,
               "line-offset": offset,
               "line-blur": blur,
@@ -3189,7 +3198,10 @@ function Map({
     if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
       mapRef.current.setFilter(
         COVERAGE_FILL_LAYER,
-        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+        coverageFilter(
+          NSW_REGION.terrain.coverage,
+          coverageCarrier,
+        ) as maplibregl.FilterSpecification,
       );
   }, [topoLayers, coverageCarrier, mapLoaded]);
 
@@ -3705,6 +3717,10 @@ function Map({
           // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
             disabled={selectingArea}
+            getView={() => {
+              const bounds = mapRef.current?.getBounds();
+              return bounds ? boxOf(bounds) : null;
+            }}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
@@ -3744,6 +3760,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
+          region={NSW_REGION}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

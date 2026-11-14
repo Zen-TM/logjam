@@ -111,7 +111,7 @@ version; the source last changed in October 2025.
 
    A new release can rename its layer: pass it with `--layer`
    (`ogrinfo -ro -q <gdb>` lists it). The build stops on a class that
-   `LAND_CLASSES` in `shared/src/nswLand.ts` doesn't have, because a client draws
+   `classes` of NSW's land archive in `shared/src/regions.ts` doesn't have, because a client draws
    nothing for one. A new version also changes `NSW_REGION.terrain.land.credit`.
 
 The December 2024 v2 file takes 20 minutes on 4 cores and 9 GB, and makes

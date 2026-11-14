@@ -4,7 +4,6 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
   drawsOverTerrain,
   NSW_REGION,
-  NSW_FIRE,
   TERRAIN_BASEMAP_ANCHORS,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
@@ -58,14 +57,16 @@ describe("landClassAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(landClassAt(off, [1, 2])).toBeNull();
+    expect(landClassAt(off, [1, 2], NSW_REGION.terrain.land)).toBeNull();
   });
 
   it("names the class drawn at the point", () => {
     const map = drawn({
       [NSW_REGION.terrain.land.classProperty]: "State Forest",
     });
-    expect(landClassAt(map, [1, 2])).toBe("State forest");
+    expect(landClassAt(map, [1, 2], NSW_REGION.terrain.land)).toBe(
+      "State forest",
+    );
   });
 });
 
@@ -79,7 +80,7 @@ describe("fireAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(fireAt(off, [1, 2])).toBeNull();
+    expect(fireAt(off, [1, 2], NSW_REGION.terrain.fire)).toBeNull();
   });
 
   // Mutation: query a layer id other than the fill, and a tap over a fire
@@ -96,15 +97,17 @@ describe("fireAt", () => {
         return [
           {
             properties: {
-              [NSW_FIRE.yearProperty]: 2019,
-              [NSW_FIRE.monthProperty]: 12,
-              [NSW_FIRE.typeProperty]: 1,
+              [NSW_REGION.terrain.fire.yearProperty]: 2019,
+              [NSW_REGION.terrain.fire.monthProperty]: 12,
+              [NSW_REGION.terrain.fire.typeProperty]: 1,
             },
           },
         ];
       },
     };
-    expect(fireAt(map, [1, 2])).toBe("Wildfire, Dec 2019");
+    expect(fireAt(map, [1, 2], NSW_REGION.terrain.fire)).toBe(
+      "Wildfire, Dec 2019",
+    );
     expect(asked).toEqual([[FIRE_FILL_LAYER]]);
   });
 });
@@ -119,7 +122,15 @@ describe("coverageAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(coverageAt(off, [1, 2], [150, -33], "telstra")).toBeNull();
+    expect(
+      coverageAt(
+        off,
+        [1, 2],
+        [150, -33],
+        "telstra",
+        NSW_REGION.terrain.coverage,
+      ),
+    ).toBeNull();
   });
 
   // Mutation: query a layer id other than the hatch, or name another carrier
@@ -133,9 +144,9 @@ describe("coverageAt", () => {
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
     };
-    expect(coverageAt(map, [1, 2], [150, -33], "tpg")).toBe(
-      "TPG: no mobile reception",
-    );
+    expect(
+      coverageAt(map, [1, 2], [150, -33], "tpg", NSW_REGION.terrain.coverage),
+    ).toBe("TPG: no mobile reception");
     expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
   });
 
@@ -172,9 +183,15 @@ describe("coverageAt", () => {
         },
       ],
     };
-    expect(coverageAt(map, [1, 2], [150.5, -33.5], "telstra")).toBe(
-      "Telstra: mobile reception",
-    );
+    expect(
+      coverageAt(
+        map,
+        [1, 2],
+        [150.5, -33.5],
+        "telstra",
+        NSW_REGION.terrain.coverage,
+      ),
+    ).toBe("Telstra: mobile reception");
   });
 });
 

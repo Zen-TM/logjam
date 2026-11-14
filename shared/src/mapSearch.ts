@@ -6,6 +6,7 @@
 // names, so each client keeps them on the device only and clears them when the
 // account leaves (frontend useAuth.ts, mobile wipeLocalData.ts).
 import { fromGrid, mgaZone } from "./grids.js";
+import { REGIONS, wrapView, type LonLatBox } from "./regions.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
 /** What the search box says while it works, finds nothing or fails: one set of
@@ -27,8 +28,7 @@ export interface SearchPoint {
   label: string;
 }
 
-// Australia, which is where Logjam is used. A bare "33.71 150.31" has no sign
-// to say which number is the latitude, and this is what tells them apart.
+// Australia's MGA zones 54-56: where a grid reference can be read.
 const LAT_MAG = [10, 44] as const;
 const LON_MAG = [112, 154] as const;
 const within = (v: number, [lo, hi]: readonly [number, number]) =>
@@ -38,7 +38,7 @@ const within = (v: number, [lo, hi]: readonly [number, number]) =>
 // optional minutes and seconds. A trailing letter must touch its number
 // ("33.71S"); a spaced one ("33.71 E") belongs to the next part. D M S need their marks (° ' ") so that
 // "33 42 36" is never guessed at.
-const PART = String.raw`([NSEW])?\s*(-?\d+(?:\.\d+)?)°?(?:\s*(\d+(?:\.\d+)?)\s*['′’])?(?:\s*(\d+(?:\.\d+)?)\s*(?:"|″|”|''))?([NSEW])?`;
+const PART = String.raw`([NSEW])?\s*(-?\d+(?:\.\d+)?)(?!\d)°?(?:\s*(\d+(?:\.\d+)?)\s*['′’])?(?:\s*(\d+(?:\.\d+)?)\s*(?:"|″|”|''))?([NSEW])?`;
 const PAIR = new RegExp(String.raw`^${PART}\s*[,;]?\s*${PART}$`, "i");
 
 interface Part {
@@ -67,7 +67,16 @@ function part(g: (string | undefined)[], at: number): Part | null {
 const fmt = (lat: number, lon: number) =>
   `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 
-function parseLatLon(text: string): SearchPoint | null {
+/**
+ * A typed latitude and longitude. With letters (33.71S) they decide. With a
+ * minus sign on either number the signs are as typed. A pair with neither
+ * takes each number's hemisphere from where the map is looking (`view`, else
+ * the first region's centre): "40.7 111.9" over Utah is 40.7 N, 111.9 W.
+ */
+function parseLatLon(
+  text: string,
+  view?: LonLatBox | null,
+): SearchPoint | null {
   const g = PAIR.exec(text);
   if (!g) return null;
   const a = part(g.slice(1, 6), 0);
@@ -83,13 +92,29 @@ function parseLatLon(text: string): SearchPoint | null {
     [lat, lon] = a.axis === "lat" ? [a.value, b.value] : [b.value, a.value];
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   } else {
-    // No letters: the magnitudes say which is which, and a canyon in NSW is
-    // south of the equator and east of Greenwich whatever the sign typed.
+    // No letters: latitude first, as written everywhere, and swapped only when
+    // the first number cannot be a latitude (over 90) and the second can. A
+    // longitude-first pair whose longitude is under 90 ("-74 40.7") therefore
+    // reads latitude first; letters settle it.
+    // Two numbers written together ("33.7-150.3") are not a pair
+    // (mapSearch.test.ts, "does not read").
+    if (!/[\s,;]/.test(text)) return null;
     const [am, bm] = [Math.abs(a.value), Math.abs(b.value)];
-    if (within(am, LAT_MAG) && within(bm, LON_MAG)) [lat, lon] = [am, bm];
-    else if (within(bm, LAT_MAG) && within(am, LON_MAG)) [lat, lon] = [bm, am];
+    let latPart: Part;
+    let lonPart: Part;
+    if (am <= 90 && bm <= 180) [latPart, lonPart] = [a, b];
+    else if (bm <= 90 && am <= 180) [latPart, lonPart] = [b, a];
     else return null;
-    lat = -lat;
+    const wrapped = view && wrapView(view);
+    const [centreLon, centreLat] = wrapped
+      ? [(wrapped.west + wrapped.east) / 2, (wrapped.south + wrapped.north) / 2]
+      : REGIONS[0].view.center;
+    const typed = (p: Part) => p.value < 0 || Object.is(p.value, -0);
+    const explicit = typed(a) || typed(b);
+    const sign = (p: Part, centre: number) =>
+      (explicit ? typed(p) : centre < 0) ? -1 : 1;
+    lat = Math.abs(latPart.value) * sign(latPart, centreLat);
+    lon = Math.abs(lonPart.value) * sign(lonPart, centreLon);
   }
   return { lat, lon, label: fmt(lat, lon) };
 }
@@ -111,9 +136,12 @@ function parseMga(text: string): SearchPoint | null {
 }
 
 /** The point a typed string names, or null when it is not a coordinate. */
-export function parseCoordinates(input: string): SearchPoint | null {
+export function parseCoordinates(
+  input: string,
+  view?: LonLatBox | null,
+): SearchPoint | null {
   const text = input.trim();
-  return parseMga(text) ?? parseLatLon(text);
+  return parseMga(text) ?? parseLatLon(text, view);
 }
 
 export const MAX_RECENT_SEARCHES = 6;

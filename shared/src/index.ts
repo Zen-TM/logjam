@@ -87,11 +87,11 @@ export * from "./demSources.js";
 export * from "./nswContours.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";
-export * from "./nswCoverage.js";
-export * from "./nswFire.js";
-export * from "./nswLand.js";
 export * from "./regions.js";
 export * from "./overlayLegends.js";
+export * from "./land.js";
+export * from "./fireHistory.js";
+export * from "./coverage.js";
 export * from "./terrain.js";
 export * from "./demTiles.js";
 export * from "./demSlope.js";
@@ -129,3 +129,16 @@ export * from "./tripPlans.js";
 export * from "./tripPlanAnswerDraft.js";
 export * from "./tripPlanEdits.js";
 export * from "./tripPlanTripLog.js";
+export {
+  LANGUAGES,
+  PSEUDO_LANGUAGE,
+  SOURCE_LANGUAGE,
+  intlLocale,
+  language,
+  matchLanguage,
+  plural,
+  rich,
+  setLanguageResolver,
+  t,
+} from "./i18n.js";
+export type { Catalogue, Language, RichPart } from "./i18n.js";

@@ -23,8 +23,6 @@ import {
   DEM_SOURCES,
   landClip,
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   demClipMinZoom,
@@ -67,11 +65,11 @@ export type RegionClipSpec = {
   contours?: boolean;
   /** Set when the clip is of the statewide slope: shared terrain.ts. */
   slope?: boolean;
-  /** Set when the clip is of the Land overlay: shared nswLand.ts. */
+  /** Set when the clip is of the Land overlay: shared land.ts. */
   land?: boolean;
-  /** Set when the clip is of the Fire history overlay: shared nswFire.ts. */
+  /** Set when the clip is of the Fire history overlay: shared fireHistory.ts. */
   fire?: boolean;
-  /** Set when the clip is of the Coverage overlay: shared nswCoverage.ts. */
+  /** Set when the clip is of the Coverage overlay: shared coverage.ts. */
   coverage?: boolean;
   /** Set when the clip is of a sharpened area's archive (sharpenedClips.ts). */
   area?: AreaClip;
@@ -133,8 +131,8 @@ function clipArchiveFor(spec: RegionClipSpec): {
   if (spec.contours) return cdn(NSW_REGION.terrain.contours);
   if (spec.slope) return cdn(NSW_REGION.terrain.slope);
   if (spec.land) return cdn(landClip(NSW_REGION.terrain.land));
-  if (spec.fire) return cdn(NSW_FIRE);
-  if (spec.coverage) return cdn(NSW_COVERAGE);
+  if (spec.fire) return cdn(NSW_REGION.terrain.fire);
+  if (spec.coverage) return cdn(NSW_REGION.terrain.coverage);
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
   return cdn({ archivePath: entry.urlTemplate });
@@ -498,9 +496,9 @@ export async function runRegionClip(
               : spec.land
                 ? NSW_REGION.terrain.land.id
                 : spec.fire
-                  ? NSW_FIRE.id
+                  ? NSW_REGION.terrain.fire.id
                   : spec.coverage
-                    ? NSW_COVERAGE.id
+                    ? NSW_REGION.terrain.coverage.id
                     : "protomaps")),
       format: "pmtiles",
       sourceType:

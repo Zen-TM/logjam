@@ -11,6 +11,7 @@ import {
   drawsCoverage,
   overlayChoiceLabel,
   normalizeCarrier,
+  carriersOf,
   type CarrierId,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
@@ -343,7 +344,10 @@ export default function LayersPopover({
                               choice: {
                                 value: coverageCarrier,
                                 onChange: (value: string) => {
-                                  const next = normalizeCarrier(value);
+                                  const next = normalizeCarrier(
+                                    value,
+                                    carriersOf(),
+                                  );
                                   if (next) onCoverageCarrierChange(next);
                                 },
                               },

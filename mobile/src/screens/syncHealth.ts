@@ -9,6 +9,8 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
+import { LONG_MONTHS } from "@logjam/shared";
+
 export type SyncTone = "ok" | "info" | "pending" | "problem";
 
 export type SyncHealth = {
@@ -102,20 +104,6 @@ const WEEKDAYS = [
   "Friday",
   "Saturday",
 ];
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 /**
  * The day something started, as someone would say it: "yesterday", "Tuesday",
@@ -132,7 +120,7 @@ function sinceDay(iso: string, now: number): string {
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 7) return WEEKDAYS[then.getDay()];
-  return `${then.getDate()} ${MONTHS[then.getMonth()]}`;
+  return `${then.getDate()} ${LONG_MONTHS[then.getMonth()]}`;
 }
 
 function plural(count: number, singular: string, pluralForm: string): string {

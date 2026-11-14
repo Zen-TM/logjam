@@ -12,15 +12,20 @@ import {
   overlayChoiceLabel,
 } from "./overlayLegends.js";
 import {
-  CARRIERS,
   COVERAGE_HATCH_IMAGE,
   COVERAGE_HATCH_URIS,
   coverageNameOf,
   coverageOpacity,
   drawsCoverage,
+  carriersOf,
+  coverageFilter,
   normalizeCarrier,
-  NSW_COVERAGE,
-} from "./nswCoverage.js";
+} from "./coverage.js";
+import { NSW_REGION } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
+
+const NSW_COVERAGE = NSW_REGION.terrain.coverage;
+const CARRIERS = NSW_COVERAGE.carriers;
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -101,7 +106,7 @@ describe("the Coverage layer's paint", () => {
   // a phone works; leave "external" clear, and an antenna's reach reads as
   // reception for a phone in the hand.
   it("hatches every level but a handset's and leaves that clear", () => {
-    expect(coverageOpacity()).toEqual([
+    expect(coverageOpacity(NSW_COVERAGE)).toEqual([
       "match",
       ["get", "level"],
       "outdoor",
@@ -125,15 +130,15 @@ describe("coverageNameOf", () => {
   // Mutation: name "external" as reception, or take the first feature found,
   // and a tap on a hatched spot says there is reception.
   it("names the carrier, and reception only where every level found has it", () => {
-    expect(coverageNameOf([at("outdoor")], "telstra", TAP)).toBe(
+    expect(coverageNameOf(NSW_COVERAGE, [at("outdoor")], "telstra", TAP)).toBe(
       "Telstra: mobile reception",
     );
-    expect(coverageNameOf([at("external")], "tpg", TAP)).toBe(
+    expect(coverageNameOf(NSW_COVERAGE, [at("external")], "tpg", TAP)).toBe(
       "TPG: no mobile reception",
     );
-    expect(coverageNameOf([at("outdoor"), at("none")], "optus", TAP)).toBe(
-      "Optus: no mobile reception",
-    );
+    expect(
+      coverageNameOf(NSW_COVERAGE, [at("outdoor"), at("none")], "optus", TAP),
+    ).toBe("Optus: no mobile reception");
   });
 
   // Mutation: drop the polygonHolds filter, and a tap in a clear patch that
@@ -161,18 +166,18 @@ describe("coverageNameOf", () => {
         ],
       },
     };
-    expect(coverageNameOf([holed, patch], "telstra", TAP)).toBe(
+    expect(coverageNameOf(NSW_COVERAGE, [holed, patch], "telstra", TAP)).toBe(
       "Telstra: mobile reception",
     );
     // Outside the hole the area holds the tap, and the patch doesn't.
-    expect(coverageNameOf([holed, patch], "telstra", [150.2, -33.2])).toBe(
-      "Telstra: no mobile reception",
-    );
+    expect(
+      coverageNameOf(NSW_COVERAGE, [holed, patch], "telstra", [150.2, -33.2]),
+    ).toBe("Telstra: no mobile reception");
     // Mutation: ask every polygon of a MultiPolygon to hold the tap, and a
     // tap on the patch's second polygon answers nothing.
-    expect(coverageNameOf([holed, patch], "telstra", [152.05, -34.95])).toBe(
-      "Telstra: mobile reception",
-    );
+    expect(
+      coverageNameOf(NSW_COVERAGE, [holed, patch], "telstra", [152.05, -34.95]),
+    ).toBe("Telstra: mobile reception");
   });
 
   // Mutation: fall back to every feature found when none holds the tap, or
@@ -188,14 +193,16 @@ describe("coverageNameOf", () => {
         ],
       },
     };
-    expect(coverageNameOf([lake], "telstra", TAP)).toBeNull();
+    expect(coverageNameOf(NSW_COVERAGE, [lake], "telstra", TAP)).toBeNull();
   });
 
   // Mutation: answer with a level for nothing found, and a tap at sea says
   // there is reception.
   it("says nothing where nothing was found", () => {
-    expect(coverageNameOf([], "telstra", TAP)).toBeNull();
-    expect(coverageNameOf([at("unknown")], "telstra", TAP)).toBeNull();
+    expect(coverageNameOf(NSW_COVERAGE, [], "telstra", TAP)).toBeNull();
+    expect(
+      coverageNameOf(NSW_COVERAGE, [at("unknown")], "telstra", TAP),
+    ).toBeNull();
   });
 });
 
@@ -204,9 +211,27 @@ describe("normalizeCarrier", () => {
   // user never picked; return the stored value unchecked, and a corrupt one
   // filters the layer down to nothing.
   it("keeps a known carrier and nothing else", () => {
-    expect(normalizeCarrier("tpg")).toBe("tpg");
-    expect(normalizeCarrier("vodafone")).toBeNull();
-    expect(normalizeCarrier(null)).toBeNull();
+    expect(normalizeCarrier("tpg", CARRIERS)).toBe("tpg");
+    expect(normalizeCarrier("vodafone", CARRIERS)).toBeNull();
+    expect(normalizeCarrier(null, CARRIERS)).toBeNull();
+  });
+
+  // Mutation: check a stored pick against NSW's list alone, and a carrier a
+  // second region lists is dropped, or take every region's out of `carriersOf`
+  // and a corrupt value passes.
+  it("checks a pick against the carriers of the regions it is given", () => {
+    expect(carriersOf().map((c) => c.id)).toEqual(CARRIERS.map((c) => c.id));
+    const all = carriersOf([NSW_REGION, ...SIM_REGIONS]);
+    expect(all.map((c) => c.id)).toEqual([
+      "telstra",
+      "optus",
+      "tpg",
+      "simone",
+      "simtwo",
+    ]);
+    expect(normalizeCarrier("simtwo", all)).toBe("simtwo");
+    expect(normalizeCarrier("simtwo", CARRIERS)).toBeNull();
+    expect(carriersOf([SIM_UTAH])).toEqual([]);
   });
 });
 
@@ -243,5 +268,32 @@ describe("the Coverage legend", () => {
     expect(overlayAwaitsChoice(legend, "tpg")).toBe(false);
     expect(overlayAwaitsChoice(OVERLAY_LEGENDS.land, null)).toBe(false);
     expect(legend.choice?.choose).toBe("Choose your carrier");
+  });
+});
+
+describe("a region's own coverage vocabulary", () => {
+  const nz = SIM_NZ.terrain.coverage!;
+
+  // Mutation: read NSW's property names or carriers in the filter, the
+  // opacity or the name, and a second region's hatch draws nothing or names
+  // a carrier it doesn't have.
+  it("draws and names from the archive it is given", () => {
+    expect(coverageFilter(nz, "simone")).toEqual([
+      "==",
+      ["get", "network"],
+      "simone",
+    ]);
+    expect(coverageOpacity(nz)).toEqual([
+      "match",
+      ["get", "reception"],
+      "outdoor",
+      0,
+      1,
+    ]);
+    const none = { properties: { reception: "none" } };
+    expect(coverageNameOf(nz, [none], "simtwo", TAP)).toBe(
+      "Simulated Two: no mobile reception",
+    );
+    expect(coverageNameOf(NSW_COVERAGE, [none], "simtwo", TAP)).toBeNull();
   });
 });

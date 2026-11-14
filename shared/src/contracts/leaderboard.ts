@@ -4,6 +4,9 @@
 // hero that wears their rank; for anyone else nothing on Friends mentions it,
 // and the one way in is the switch in Settings (`LEADERBOARD_SETTING`). Every number is
 // `computeLeaderboard` on the server (shared/src/leaderboard.ts).
+import { LONG_MONTHS } from "../dateNames.js";
+import { t } from "../i18n.js";
+import { seasonOpening, type SeasonRegion } from "../leaderboard.js";
 import { pluralCount } from "../logbook.js";
 import type { ScreenContract } from "./types.js";
 
@@ -33,10 +36,13 @@ export const LEADERBOARD = {
     // nudge names them instead.
     alone: "It's just you until a friend joins.",
     rulesTitle: "How it works",
-    rules: [
+    // The rules, a line each, either side of the season's dates, which
+    // depend on the account's region (`leaderboardRules`).
+    rulesBeforeSeason: [
       "You're ranked by how many different canyons your trips this season went to. Doing one canyon twice counts once.",
       "Only places of the built-in Canyon type count, linked to a trip dated in the season.",
-      "A season runs from 21 June to 20 June.",
+    ].join("\n"),
+    rulesAfterSeason: [
       "Friends who've joined see your username and your count, never which canyons.",
       "Ties share a rank: two people level on most are both first.",
       "Finish in the top three and you'll see it here for a week after the season ends.",
@@ -111,4 +117,15 @@ export function leaderboardNudge(notJoined: readonly string[]): string {
       ? notJoined[0]
       : `${notJoined.slice(0, -1).join(", ")} and ${notJoined[notJoined.length - 1]}`;
   return `${names} ${notJoined.length === 1 ? "isn't" : "aren't"} on it yet.`;
+}
+
+/** "How it works", a line each: the season's dates are the region's own (`seasonOpening`). */
+export function leaderboardRules(region: SeasonRegion): string {
+  const { month, day } = seasonOpening(region);
+  const season = t`A season runs from ${`${day} ${LONG_MONTHS[month - 1]}`} to ${`${day - 1} ${LONG_MONTHS[month - 1]}`}.`;
+  return [
+    LEADERBOARD.copy.rulesBeforeSeason,
+    season,
+    LEADERBOARD.copy.rulesAfterSeason,
+  ].join("\n");
 }

@@ -97,8 +97,6 @@ import {
   NSW_REGION,
   drawsCoverage,
   fireNameOf,
-  NSW_COVERAGE,
-  NSW_FIRE,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
@@ -185,8 +183,7 @@ import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import {
   CHROME_BOTTOM,
   CHROME_GAP,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
+  homeView,
   FAB_ICON,
   FAB_SIZE,
   MINI_FAB_ICON,
@@ -484,11 +481,6 @@ const SINGLE_POINT_ZOOM = 14;
  * moving it — a rounding error next to the screen being lit at all.
  */
 const MAP_MAX_FPS = 60;
-
-const CAMERA_DEFAULTS = {
-  center: DEFAULT_CENTER,
-  zoom: DEFAULT_ZOOM,
-};
 
 /**
  * The scale "where am I" always lands on: opening Logjam GPS, and entering either
@@ -1034,6 +1026,8 @@ export function MapScreen({
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
   const regionIds = useRegions();
+  // Read once: the camera's `initialViewState` is only honoured on the first render.
+  const [home] = useState(() => homeView(regionIds));
   // The pick can outlive its region (unchosen while the map is open).
   const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
@@ -1237,9 +1231,9 @@ export function MapScreen({
   // the camera continuously through its own ref (see scaleBarRef), because
   // re-rendering this screen at gesture rate would re-reconcile every layer.
   const [camera, setCamera] = useState({
-    zoom: DEFAULT_ZOOM,
-    latitude: DEFAULT_CENTER[1],
-    longitude: DEFAULT_CENTER[0],
+    zoom: home.zoom,
+    latitude: home.center[1],
+    longitude: home.center[0],
   });
   // Hand the settled camera to the module store the offline-download screen
   // reads, so it opens on this ground whether it was reached from here or from
@@ -1351,7 +1345,7 @@ export function MapScreen({
     followModeRef.current = followMode;
   });
   /** Live zoom and heading, so a pinch starts from what is actually on screen. */
-  const zoomRef = useRef(DEFAULT_ZOOM);
+  const zoomRef = useRef(home.zoom);
   const headingRef = useRef(0);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   // MLRN's native camera KEEPS the last stop handed to it imperatively, and
@@ -1645,7 +1639,10 @@ export function MapScreen({
   );
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
-  const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
+  const firePaints = useMemo(
+    () => fireLayerPaints(NSW_REGION.terrain.fire, fireNow),
+    [fireNow],
+  );
   const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
   const coverageResolved = useMemo(
     () =>
@@ -1664,9 +1661,15 @@ export function MapScreen({
     () => coverageResolved.map((r) => coverageLayerId(r.key)),
     [coverageResolved],
   );
-  const coveragePaint = useMemo(() => coverageLayerPaint(), []);
+  const coveragePaint = useMemo(
+    () => coverageLayerPaint(NSW_REGION.terrain.coverage),
+    [],
+  );
   const coverageFilterExpr = useMemo(
-    () => (coverageCarrier ? coverageLayerFilter(coverageCarrier) : undefined),
+    () =>
+      coverageCarrier
+        ? coverageLayerFilter(NSW_REGION.terrain.coverage, coverageCarrier)
+        : undefined,
     [coverageCarrier],
   );
   const slopeResolved = useMemo(
@@ -2372,7 +2375,7 @@ export function MapScreen({
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
+              setTappedLand(landNameOf(NSW_REGION.terrain.land, features));
           })
           // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
@@ -2384,7 +2387,7 @@ export function MapScreen({
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
+              setTappedFire(fireNameOf(NSW_REGION.terrain.fire, features));
           })
           .catch(() => undefined);
       }
@@ -2394,6 +2397,7 @@ export function MapScreen({
         [lon, lat],
         coverageLayerIdList,
         coverageCarrier,
+        NSW_REGION.terrain.coverage,
       )
         .then((name) => {
           if (landAskedFor.current === tapped) setTappedCoverage(name);
@@ -4624,7 +4628,7 @@ export function MapScreen({
    * definition of "where is this thing", not a second one for search.
    *
    * PRIVACY: names and coordinates stay in this array. Nothing here is sent
-   * anywhere; the geocoder only ever sees the typed string.
+   * anywhere. What the geocoder is sent is in MapSearchBar.tsx's PRIVACY note.
    */
   const savedSearchItems: SavedSearchItem[] = useMemo(
     () => [
@@ -5189,7 +5193,7 @@ export function MapScreen({
         onPress={handleMapOrArrowPress}
         onLongPress={handleMapLongPress}
       >
-        <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
+        <Camera ref={cameraRef} initialViewState={home} />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
@@ -5277,7 +5281,7 @@ export function MapScreen({
                 minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
                 paint={{
-                  "line-color": landColor() as LineColor,
+                  "line-color": landColor(NSW_REGION.terrain.land) as LineColor,
                   "line-width": width,
                   "line-offset": offset,
                   "line-blur": blur,
@@ -5295,7 +5299,7 @@ export function MapScreen({
                 key={fillId}
                 type="fill"
                 id={fillId}
-                source-layer={NSW_FIRE.sourceLayer}
+                source-layer={NSW_REGION.terrain.fire.sourceLayer}
                 beforeId={groundBefore[fillId]}
                 minzoom={fireMinZoom(r.layerMinZoom)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5305,7 +5309,7 @@ export function MapScreen({
                 key={edgeId}
                 type="line"
                 id={edgeId}
-                source-layer={NSW_FIRE.sourceLayer}
+                source-layer={NSW_REGION.terrain.fire.sourceLayer}
                 beforeId={groundBefore[edgeId]}
                 minzoom={fireMinZoom(r.layerMinZoom)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5325,7 +5329,7 @@ export function MapScreen({
                 key={id}
                 type="fill"
                 id={id}
-                source-layer={NSW_COVERAGE.sourceLayer}
+                source-layer={NSW_REGION.terrain.coverage.sourceLayer}
                 filter={coverageFilterExpr}
                 beforeId={groundBefore[id]}
                 minzoom={coverageMinZoom(r.layerMinZoom)}
@@ -5719,6 +5723,7 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSearchPin={setSearchPin}
+          view={viewportBbox}
           onSelectSaved={(item) => {
             if (item.gaugeId) {
               setShowGauges(true);

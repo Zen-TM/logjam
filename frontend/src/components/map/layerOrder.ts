@@ -6,6 +6,9 @@
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
 import {
   type CarrierId,
+  type CoverageArchive,
+  type FireArchive,
+  type LandArchive,
   coverageNameOf,
   fireNameOf,
   landNameOf,
@@ -74,9 +77,11 @@ type RenderedQuery = {
 export function landClassAt(
   map: RenderedQuery,
   point: [number, number],
+  land: LandArchive,
 ): string | null {
   if (!map.getLayer(LAND_FILL_LAYER)) return null;
   return landNameOf(
+    land,
     map.queryRenderedFeatures(point, { layers: [LAND_FILL_LAYER] }),
   );
 }
@@ -89,9 +94,11 @@ export function landClassAt(
 export function fireAt(
   map: RenderedQuery,
   point: [number, number],
+  fire: FireArchive,
 ): string | null {
   if (!map.getLayer(FIRE_FILL_LAYER)) return null;
   return fireNameOf(
+    fire,
     map.queryRenderedFeatures(point, { layers: [FIRE_FILL_LAYER] }),
   );
 }
@@ -107,9 +114,11 @@ export function coverageAt(
   point: [number, number],
   at: readonly [number, number],
   carrier: CarrierId,
+  coverage: CoverageArchive,
 ): string | null {
   if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
   return coverageNameOf(
+    coverage,
     map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
     carrier,
     at,
