@@ -6,7 +6,7 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
-import { wrapLon, type GridId } from "../grids.js";
+import { GRID_NAMES, wrapLon, type GridId } from "../grids.js";
 import { REGIONS, regionAt, type Region } from "../regions.js";
 import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
@@ -43,30 +43,30 @@ export const MAP_OVERLAYS = {
   },
 } as const satisfies ScreenContract;
 
-const GRID_NAMES: Record<GridId, string> = {
-  mga2020: "MGA",
-  nztm2000: "NZTM",
-  utm: "UTM",
-};
-
 /**
- * The grid row's title: the name of the grid the overlay draws at `at`, the
- * view's centre (`gridZonesFor` picks its grid the same way), so "MGA grid" in
- * NSW. Where the centre is in no region, one declared region still names its
- * own grid (MGA2020 is the grid of all Australia, so prod reads "MGA grid"
- * wherever the map is) and two or more name UTM, the grid drawn there. With no
- * view yet it names the first region's grid. Guard: `contracts.test.ts`, "the
- * grid row's title".
+ * The grid the overlay is named for at `at`, the view's centre (`gridZonesFor`
+ * picks its grid the same way): the region's there. Where the centre is in no
+ * region, one declared region still names its own grid (MGA2020 is the grid of
+ * all Australia, so prod reads "MGA" wherever the map is) and two or more name
+ * UTM, the grid drawn there. With no view yet it names the first region's grid.
+ * Guard: `contracts.test.ts`, "the grid row's title".
  */
+export function gridNamedAt(
+  at: { lon: number; lat: number } | null,
+  regions: readonly Region[] = REGIONS,
+): GridId {
+  const only = regions.length === 1 ? regions[0] : undefined;
+  return at
+    ? ((regionAt(wrapLon(at.lon), at.lat, regions) ?? only)?.grid ?? "utm")
+    : (regions[0]?.grid ?? "utm");
+}
+
+/** The grid row's title: "MGA grid" in NSW. */
 export function gridOverlayTitle(
   at: { lon: number; lat: number } | null,
   regions: readonly Region[] = REGIONS,
 ): string {
-  const only = regions.length === 1 ? regions[0] : undefined;
-  const grid = at
-    ? ((regionAt(wrapLon(at.lon), at.lat, regions) ?? only)?.grid ?? "utm")
-    : (regions[0]?.grid ?? "utm");
-  return `${GRID_NAMES[grid]} grid`;
+  return `${GRID_NAMES[gridNamedAt(at, regions)]} grid`;
 }
 
 /**

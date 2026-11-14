@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GeoPdfConfig } from "@logjam/shared";
+import { SIM_REGIONS } from "@logjam/shared/dist/simRegions.js";
 import type { Ctx } from "./common";
 import { drawCompass, drawGridLabel, drawGridLines } from "./elements";
 
@@ -10,6 +11,8 @@ type Op = {
   y: number;
   colour: string;
   width: number;
+  /** A line's points, in canvas pixels. */
+  points: [number, number][];
 };
 
 // Records what is drawn, with the colour and width in force, and a restore
@@ -17,6 +20,7 @@ type Op = {
 function recorder() {
   const ops: Op[] = [];
   const saved: { strokeStyle: string; lineWidth: number }[] = [];
+  let path: [number, number][] = [];
   const ctx = {
     font: "",
     strokeStyle: "black",
@@ -30,9 +34,15 @@ function recorder() {
       Object.assign(this, saved.pop());
     },
     measureText: (text: string) => ({ width: text.length * 5 }),
-    beginPath() {},
-    moveTo() {},
-    lineTo() {},
+    beginPath() {
+      path = [];
+    },
+    moveTo(x: number, y: number) {
+      path.push([x, y]);
+    },
+    lineTo(x: number, y: number) {
+      path.push([x, y]);
+    },
     stroke() {
       ops.push({
         op: "line",
@@ -41,6 +51,7 @@ function recorder() {
         y: 0,
         colour: this.strokeStyle,
         width: this.lineWidth,
+        points: path,
       });
     },
     strokeText(text: string, x: number, y: number) {
@@ -51,6 +62,7 @@ function recorder() {
         y,
         colour: this.strokeStyle,
         width: this.lineWidth,
+        points: [],
       });
     },
     fillText(text: string, x: number, y: number) {
@@ -61,6 +73,7 @@ function recorder() {
         y,
         colour: this.fillStyle,
         width: 0,
+        points: [],
       });
     },
   };
@@ -185,12 +198,101 @@ describe("a sheet across a grid zone edge", () => {
   });
 });
 
+// A sheet prints the grid of the ground it covers: NZTM over New Zealand's
+// regions, the UTM zone elsewhere. Each label is the hundreds of kilometres,
+// the two principal digits and "000" at this scale, as one string.
+// Mutation: call `sheetGrid(config.extent)` in `drawGridLines` without its
+// `regions`, and the NZ sheet prints UTM 59's numbers.
+describe("a sheet's grid follows the ground it covers", () => {
+  const printed = (box: GeoPdfConfig["extent"]) => {
+    const { ctx, ops } = recorder();
+    drawGridLines(
+      ctx,
+      {
+        extent: box,
+        scale: 25000,
+        elements: { gridLines: "enNorthing" },
+      } as GeoPdfConfig,
+      1000,
+      1000,
+      150,
+      SIM_REGIONS,
+    );
+    return labels(ops).map((run) =>
+      run
+        .filter((o) => o.op === "fill")
+        .map((o) => o.text)
+        .join(" "),
+    );
+  };
+  const through = (first: number, last: number, pad = (n: number) => n) =>
+    Array.from({ length: last - first + 1 }, (_, i) => pad(first + i));
+  const label = (km: number) =>
+    `${Math.floor(km / 100)} ${String(km % 100).padStart(2, "0")} 000`;
+
+  it("prints NZTM's eastings and northings over New Zealand", () => {
+    // Wanaka, E 1 291 018 to 1 298 422 and N 5 042 972 to 5 054 456 in NZTM.
+    const box = { north: -44.6, south: -44.7, east: 169.2, west: 169.1 };
+    expect(printed(box)).toEqual([
+      ...through(1292, 1298).map(label),
+      ...through(5043, 5054).map(label),
+    ]);
+  });
+
+  // Mutation: hard-wire the zone in `sheetGrid` to `mgaZone(56)`, and Utah
+  // prints MGA 56's numbers.
+  it("prints UTM's over the northern hemisphere outside every region", () => {
+    // Utah, UTM 13 north: E 230 197 to 239 393 and N 4 149 163 to 4 159 980.
+    const box = { north: 37.55, south: 37.45, east: -107.95, west: -108.05 };
+    expect(printed(box)).toEqual([
+      ...through(231, 239).map(label),
+      ...through(4150, 4159).map(label),
+    ]);
+  });
+});
+
+// The extent follows the map into another world copy, past 180°, while the
+// grid answers in [-180, 180]: a line unwrapped against the extent's centre
+// lands on the page, and one that is not lands millions of pixels off it.
+// Mutation: return `point.lon` as it is from `sheetGrid`'s `fromGrid`, and the
+// lines of a sheet either side of 180° leave the page.
+describe("a sheet over the date line", () => {
+  it.each([
+    ["in the copy east of 180", 179.95, 180.05],
+    ["in the copy west of -180", -180.05, -179.95],
+  ])("draws its grid lines on the page %s", (_name, west, east) => {
+    const { ctx, ops } = recorder();
+    drawGridLines(
+      ctx,
+      {
+        extent: { north: -15.95, south: -16.05, east, west },
+        scale: 25000,
+        elements: { gridLines: "enNorthing" },
+      } as GeoPdfConfig,
+      1000,
+      1000,
+      150,
+    );
+    const lines = ops.filter((o) => o.op === "line");
+    // UTM 1 south: 11 lines each way at 1 km over 10 by 11 km. Grid north is
+    // 3° off the page's, so lines run a little past its edge.
+    expect(lines).toHaveLength(22);
+    for (const [x, y] of lines.flatMap((l) => l.points)) {
+      expect(x).toBeGreaterThan(-200);
+      expect(x).toBeLessThan(1200);
+      expect(y).toBeGreaterThan(-200);
+      expect(y).toBeLessThan(1200);
+    }
+  });
+});
+
 // The compass prints the sheet's grid convergence from the zone at its centre.
 // A sheet near Sydney is 3 degrees west of MGA zone 56's meridian, so grid
 // north is east of true: as before. In Utah (UTM 13) the same offset west of
 // the meridian reads west, and south of the equator the sign flips back.
 // Mutation: take the zone from the wrong grid (always NSW's) and the Utah and
-// UTM 33 figures move.
+// UTM 33 figures move; drop `regions` from the `sheetGrid` call in
+// `drawCompass` and the Wanaka figure reads 1.3° E.
 describe("the compass's grid north", () => {
   const gn = (extent: GeoPdfConfig["extent"]) => {
     const { ctx, ops } = recorder();
@@ -198,7 +300,7 @@ describe("the compass's grid north", () => {
     const canvas = new Proxy(ctx as unknown as Record<string, unknown>, {
       get: (target, key) => (key in target ? target[key as string] : () => {}),
     }) as unknown as Ctx;
-    drawCompass(canvas, { extent } as GeoPdfConfig, 0, 10, 150);
+    drawCompass(canvas, { extent } as GeoPdfConfig, 0, 10, 150, SIM_REGIONS);
     const fills = ops.filter((o) => o.op === "fill").map((o) => o.text);
     // The readout's last row is "GN" and its figure.
     return fills[fills.length - 1];
@@ -219,6 +321,11 @@ describe("the compass's grid north", () => {
       "south of the equator in UTM 33",
       { north: -10.0, south: -10.1, east: 12.05, west: 11.95 },
       "0.5° E",
+    ],
+    [
+      "near Wanaka, in NZTM (UTM 59 would read 1.3° E)",
+      { north: -44.6, south: -44.7, east: 169.2, west: 169.1 },
+      "2.7° E",
     ],
   ])("prints the figure for a sheet %s", (_name, extent, text) => {
     expect(gn(extent)).toBe(text);

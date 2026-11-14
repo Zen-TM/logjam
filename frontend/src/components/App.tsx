@@ -628,12 +628,15 @@ function App() {
   }, []);
 
   /**
-   * The map's visible bounds, kept in a ref rather than in state: "Filter to
-   * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render App on every pan for a value nothing
-   * renders.
+   * The map's visible bounds, in a ref as well as in state: "Filter to the
+   * current view" reads them once, when the button is pressed, from a callback
+   * that must not see a stale render.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
+  // The Layers popover names the grid row for these bounds, which the grid
+  // lines are drawn from. `mapCenter` already re-renders App after every pan,
+  // so this costs no extra render.
+  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -2157,6 +2160,7 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setMapBounds(bounds);
             }}
             selectingBbox={boxFor(boxPick) !== null}
             onBboxSelected={(bbox) => {
@@ -2269,6 +2273,7 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          mapBounds={mapBounds}
         />
 
         <PlanInviteLinkDialog
