@@ -7,6 +7,7 @@ import {
   normalizeUserUiPreferences,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
+  offeredHere,
   offersRegionChoice,
   ownAttributeCountLabel,
   ownTypeCountLabel,
@@ -14,6 +15,7 @@ import {
   regionOffRefusal,
   REGIONS,
   SETTINGS,
+  showsLanguageChoice,
   toggleRegion,
   type Region,
   type SectionKeysOn,
@@ -42,6 +44,7 @@ import {
 } from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
+import LanguageChooser from "./LanguageChooser";
 import ThemeChooser from "./ThemeChooser";
 import classes from "./SettingsPanel.module.css";
 
@@ -97,6 +100,7 @@ function SettingsPanel({
   regions?: readonly Region[];
 }) {
   const toast = useToast();
+  const languages = offeredHere(regions);
   const [page, setPage] = useState<ListPage | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(
     null,
@@ -267,6 +271,9 @@ function SettingsPanel({
       <>
         <SectionHeader title={copy.display} />
         <ThemeChooser />
+        {showsLanguageChoice(languages) ? (
+          <LanguageChooser offered={languages} />
+        ) : null}
       </>
     ),
     regions: () =>

@@ -8,7 +8,7 @@ import { enUS } from "./i18nCatalogues/en-US.js";
 
 /** The language the code is written in: a message with no entry reads as itself. */
 export const SOURCE_LANGUAGE = "en-AU";
-/** Generated, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧, for development. `language()` accepts it anywhere; the API refuses it in a prod runtime (`api/src/lib/requestLanguage.unit.test.ts`). */
+/** Generated, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧, for development. `language()` accepts it anywhere; the API refuses it in a prod runtime (`api/src/lib/requestLanguage.unit.test.ts`) and both clients refuse it where the simulated regions are off (`frontend/src/languageSetting.test.ts`, `mobile/src/languageSetting.test.ts`). */
 export const PSEUDO_LANGUAGE = "en-XA";
 export const LANGUAGES = ["en-AU", "en-US", "en-XA"] as const;
 export type Language = (typeof LANGUAGES)[number];

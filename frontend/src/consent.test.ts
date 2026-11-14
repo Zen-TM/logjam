@@ -84,6 +84,20 @@ describe("the region step after Logjam Web's own sign-up form", () => {
   });
 });
 
+// A hook that takes `currentUser` and writes the account never names
+// `authenticated`, so the scan below cannot see it: this one names the call.
+// Mutation: drop `loadsUserData` from the `useRecordLanguage(…)` call in App.tsx.
+describe("App hands the account-writing language hook the gate's settled", () => {
+  it("calls useRecordLanguage with loadsUserData, once", () => {
+    const calls = readFileSync(join(__dirname, "components/App.tsx"), "utf8")
+      .split("\n")
+      .filter((line) => /\buseRecordLanguage\(/.test(line));
+    expect(calls.map((line) => line.trim())).toEqual([
+      "useRecordLanguage(currentUser, applyCurrentUser, loadsUserData);",
+    ]);
+  });
+});
+
 // A hook that takes `authenticated` instead of the gate's `settled` fetches
 // the user's data behind the consent gate, and nothing renders differently, so
 // no render test would notice. App is too heavy to mount; this reads its

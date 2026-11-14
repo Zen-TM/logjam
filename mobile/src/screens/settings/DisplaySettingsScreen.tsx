@@ -13,8 +13,13 @@
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
+  language,
+  LANGUAGE_SETTING,
+  offeredHere,
+  showsLanguageChoice,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
+  type Language,
   type ThemeSchemeId,
 } from "@logjam/shared";
 
@@ -35,6 +40,8 @@ import {
   wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
+import { chooseLanguage, languageRow } from "../../languageSetting";
+import { useTracks } from "../../tracks/useTracks";
 import {
   ScreenScroll,
   SectionHeader,
@@ -111,6 +118,8 @@ export function DisplaySettingsScreen() {
     [notify],
   );
 
+  const offered = offeredHere();
+
   return (
     <>
       <ScreenScroll>
@@ -141,10 +150,57 @@ export function DisplaySettingsScreen() {
               : "Applies next time you open Logjam GPS."
           }
         />
+
+        {/* A child, so prod (one language) reads no tracks for a row it never draws. */}
+        {showsLanguageChoice(offered) ? (
+          <LanguageRow offered={offered} notify={notify} />
+        ) : null}
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </>
+  );
+}
+
+/**
+ * The language choice. Its own component so that the track list it reads (to
+ * hold the row while one records) is read only where the row is drawn: with one
+ * language offered nothing here runs. Guard: languageSetting.test.ts ("the
+ * Display screen reads no tracks itself").
+ */
+function LanguageRow({
+  offered,
+  notify,
+}: {
+  offered: readonly Language[];
+  notify: (text: string, tone?: ToastMessage["tone"]) => void;
+}) {
+  const { tracks, loaded } = useTracks();
+  const row = languageRow(offered, tracks, loaded);
+  const pick = useCallback(
+    async (next: Language) => {
+      const result = await chooseLanguage(next);
+      if (result === "refused") {
+        notify(LANGUAGE_SETTING.saveFailed.gps, "error");
+      } else if (result === "stored") {
+        notify(LANGUAGE_SETTING.restartFailed);
+      }
+    },
+    [notify],
+  );
+  if (!row) return null;
+  return (
+    <ChoiceGroup
+      label={LANGUAGE_SETTING.title}
+      options={row.offered.map((lang) => ({
+        value: lang,
+        label: LANGUAGE_SETTING.names[lang],
+      }))}
+      value={language()}
+      hint={LANGUAGE_SETTING.hint.gps}
+      disabledReason={row.heldReason ?? undefined}
+      onChange={(next) => void pick(next)}
+    />
   );
 }
 

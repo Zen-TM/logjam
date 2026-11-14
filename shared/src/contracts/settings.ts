@@ -4,6 +4,7 @@
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
 // has no hero (shared/DESIGN.md §2).
 import type { NotificationPreferences } from "../themeSchemes.js";
+import { t, type Language } from "../i18n.js";
 import { REGIONS, regionsOf, type Region } from "../regions.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { ConfirmCopy } from "./confirm.js";
@@ -99,6 +100,37 @@ export const COPY_MEDIA_SETTING = {
   label: "Copy photos too",
   hint: "Shared place photos and files.",
   saveFailed: "Couldn't save that setting.",
+} as const;
+
+/**
+ * The language row in Display, drawn by both clients only while
+ * `showsLanguageChoice(offeredHere())` (`languageChoice.ts`), so prod shows
+ * none. Guards: `languageChoice.test.ts` ("offers the source alone where the
+ * simulated regions are off"), `SettingsPanel.render.test.tsx` ("is not drawn
+ * in prod: one region declaring no language, nothing for development") and
+ * `mobile/src/languageSetting.test.ts` ("is not drawn with one language
+ * offered, recording or not"). Choosing one stores it on the device and
+ * restarts the client: the text is read when the client starts, since contract
+ * text is evaluated at import (ADR 0050).
+ */
+export const LANGUAGE_SETTING = {
+  title: t`Language`,
+  names: {
+    "en-AU": t`English (Australia)`,
+    "en-US": t`English (United States)`,
+    "en-XA": t`Pseudo-language (development)`,
+  } satisfies Record<Language, string>,
+  hint: {
+    web: t`Logjam Web reloads to apply this.`,
+    gps: t`Logjam GPS restarts to apply this.`,
+  },
+  /** Logjam GPS holds the row while a track records: the restart would interrupt it. */
+  held: t`Not while a track is recording: Logjam GPS restarts to change language.`,
+  saveFailed: {
+    web: t`This browser wouldn't store that language.`,
+    gps: t`This phone wouldn't store that language.`,
+  },
+  restartFailed: t`Saved. Close Logjam GPS and open it again to apply it.`,
 } as const;
 
 /**

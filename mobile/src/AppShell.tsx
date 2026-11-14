@@ -37,6 +37,7 @@ import {
   currentConsentVersionOf,
   navLabel,
   isThemeSchemeId,
+  language,
   needsReconsent,
   SETTINGS,
   TRIP_PLANS_LIST,
@@ -46,9 +47,11 @@ import {
 import {
   fetchCurrentUser,
   getUnreadNotificationCount,
+  recordLanguage,
   useApiQuery,
 } from "./api/queries";
 import { AccountStateProvider } from "./auth/AccountStateContext";
+import { languageToSend } from "./languageSetting";
 import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
@@ -1097,6 +1100,23 @@ export function AppShell({
   useEffect(() => {
     if (!isGuest && accountLoaded) keepAccountRegions(accountRegions);
   }, [accountRegions, accountLoaded, isGuest]);
+
+  // Tell the account which language this phone runs in when it differs from
+  // the one recorded, for the messages sent with nobody asking. Nothing in
+  // prod (the source language is all there is), nothing for a guest, and
+  // nothing behind the consent gate or the new-account region step
+  // (`languageToSend`).
+  const accountUser = userQuery.data;
+  useEffect(() => {
+    const next = languageToSend({
+      accountState,
+      user: accountUser,
+      consented,
+      newAccount,
+      running: language(),
+    });
+    if (next) recordLanguage(next).catch(console.error);
+  }, [accountUser, accountState, consented, newAccount]);
 
   useEffect(() => {
     // A guest registers no token (it checks). The tap listener still mounts —

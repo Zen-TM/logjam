@@ -156,6 +156,7 @@ import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
+import { useRecordLanguage } from "../languageSetting";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { useToastOnce } from "./feedback/useToastOnce";
@@ -426,6 +427,7 @@ function App() {
   const { blocked: consentBlocked, settled: consentSettled } =
     consentGate(currentUser);
   const loadsUserData = authenticated && consentSettled;
+  useRecordLanguage(currentUser, applyCurrentUser, loadsUserData);
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
   const {

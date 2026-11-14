@@ -8,7 +8,7 @@ import {
   setLanguageResolver,
   type Language,
 } from "@logjam/shared";
-import { nonDevRuntime, type RuntimeEnv } from "./runtime";
+import { nonDevRuntime } from "./runtime";
 
 // The language of the request in hand, or of the recipient a message is being
 // written for. Importing this module is what installs the resolver `say` and
@@ -22,19 +22,19 @@ export function runInLanguage<T>(lang: Language, fn: () => T): T {
   return storage.run(lang, fn);
 }
 
-/** Every language but the pseudo-language in a prod runtime, which is for development only. Reads `process.env`, as the other dev-only refusals do, because `getEnv()` drops the AWS variables `nonDevRuntime` reads. */
-export function offeredLanguages(
-  env: RuntimeEnv = process.env,
+/** The languages a request may name and a message may be written in: every language but the pseudo-language in a prod runtime, which is for development only. Deliberately wider than what a client shows (`offeredLanguages` in `@logjam/shared`): the API accepts what any client build may send, and each client decides what to offer. Reads `process.env`, as the other dev-only refusals do, because `getEnv()` drops the AWS variables `nonDevRuntime` reads. */
+export function acceptedLanguages(
+  env: NodeJS.ProcessEnv = process.env,
 ): readonly Language[] {
   return nonDevRuntime(env).nonDev
     ? LANGUAGES.filter((lang) => lang !== PSEUDO_LANGUAGE)
     : LANGUAGES;
 }
 
-/** The first language an `Accept-Language` value names that is offered, else the source. Any `q` above 0 counts; the header's order breaks ties. */
+/** The first language an `Accept-Language` value names that is accepted, else the source. Any `q` above 0 counts; the header's order breaks ties. */
 export function languageFromHeader(
   header: string | undefined,
-  env: RuntimeEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env,
 ): Language {
   const wanted = (header ?? "")
     .split(",")
@@ -48,16 +48,16 @@ export function languageFromHeader(
     .filter(({ tag, q }) => tag !== "" && q > 0)
     .sort((a, b) => b.q - a.q || a.order - b.order)
     .map(({ tag }) => tag);
-  return matchLanguage(wanted, offeredLanguages(env));
+  return matchLanguage(wanted, acceptedLanguages(env));
 }
 
 /** The language a message for this account is written in: the one its client last ran in, else the source. */
 export function languageOfAccount(
   uiPreferences: unknown,
-  env: RuntimeEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env,
 ): Language {
   const stored = normalizeUserUiPreferences(uiPreferences).language;
-  return stored !== undefined && offeredLanguages(env).includes(stored)
+  return stored !== undefined && acceptedLanguages(env).includes(stored)
     ? stored
     : SOURCE_LANGUAGE;
 }

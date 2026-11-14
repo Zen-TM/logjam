@@ -3,6 +3,8 @@
 //     and URL (shared's endSessionUrl, the map archives' addresses).
 //  2. The simulated-regions switch: `@logjam/shared` reads it when it loads, so
 //     nothing but the polyfills may come before it (src/simRegions.test.ts).
+//     Then the language the phone kept, which shared also reads when it loads
+//     (src/language.test.ts).
 //  3. Sentry init (privacy-scrubbed; no-op without a DSN) — before anything
 //     that could crash.
 //  4. The OIDC provider check — a real-auth build without one fails here, not
@@ -10,6 +12,7 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 import "./src/simRegions";
+import "./src/language";
 
 import { createElement } from "react";
 import { LogBox } from "react-native";
@@ -19,6 +22,7 @@ import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
 import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { assertOidcConfigured } from "./src/auth/oidcSession";
+import { useStartInLanguage } from "./src/languageSetting";
 // Side-effect import: registers the background track-recording task at module
 // scope so it exists when Android relaunches the app headless.
 import "./src/tracks/trackRecorder";
@@ -38,10 +42,15 @@ LogBox.ignoreAllLogs();
 // catch the render that mounts it. createElement rather than JSX because this
 // entry stays a .ts (package.json "main"). The theme provider is outermost
 // because the boundary's own fallback is painted in the scheme.
-registerRootComponent(() =>
-  createElement(
+// The language restart is asked from here, in a mounted component, never at
+// module scope: Android evaluates this file for a headless relaunch of the track
+// recorder too (languageSetting.ts `useStartInLanguage`).
+function Root() {
+  useStartInLanguage();
+  return createElement(
     ThemeProvider,
     null,
     createElement(RootErrorBoundary, null, createElement(App)),
-  ),
-);
+  );
+}
+registerRootComponent(Root);
