@@ -53,7 +53,7 @@ describe("Logjam Web's place page", () => {
     expect(WEB).toContain("formatCanyonGrade(current.fieldValues)");
   });
 
-  it("shows one Grade row in its attribute table, not the three inputs", () => {
+  it("shows one Grade row in its attribute table, not the grade inputs", () => {
     expect(WEB).toContain(".filter((def) => !isCanyonGradeKey(def.key))");
     expect(WEB).toContain("canyonGradeRow(place.fieldValues)");
   });
@@ -71,7 +71,7 @@ describe("Logjam GPS's place page", () => {
     expect(GPS).toContain("formatCanyonGrade(place.fieldValues)");
   });
 
-  it("shows one Grade row in its attribute table, not the three inputs", () => {
+  it("shows one Grade row in its attribute table, not the grade inputs", () => {
     expect(GPS).toContain(
       "canyonGradeRows( attributeRows(labellingDefs, storedFields), place.fieldValues, )",
     );
@@ -79,7 +79,7 @@ describe("Logjam GPS's place page", () => {
 });
 
 describe("Logjam GPS's plan place sheet", () => {
-  it("shows one Grade row in place of the three grade inputs", () => {
+  it("shows one Grade row in place of the grade inputs", () => {
     expect(GPS_PLAN).toContain(
       "canyonGradeRows( attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)), place.fieldValues, )",
     );
