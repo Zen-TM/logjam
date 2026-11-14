@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_DEBOUNCE_MS,
+  type LonLatBox,
   type PlaceResult,
 } from "@logjam/shared";
 import { ApiError } from "../../errors/ApiError";
@@ -121,7 +122,47 @@ describe("MapSearchBox", () => {
       screen.getByRole("option", { name: /Search locations for/ }),
     );
     expect(geocode).toHaveBeenCalledOnce();
-    expect(geocode).toHaveBeenCalledWith("Hidden Gorge", expect.anything());
+    expect(geocode).toHaveBeenCalledWith(
+      "Hidden Gorge",
+      expect.anything(),
+      null,
+    );
+  });
+
+  // Mutation: stop passing the map's view to the geocoder (the bias then
+  // always falls to "none"), or read it when the box was last rendered
+  // instead of when the user asks.
+  it("hands the geocoder the view the map has when the user asks", () => {
+    let view: LonLatBox = {
+      west: -112,
+      south: 40.5,
+      east: -111.8,
+      north: 40.9,
+    };
+    const input = renderBox({ getView: () => view });
+    type(input, "Zion Narrows");
+    view = { west: -113.1, south: 37.2, east: -112.9, north: 37.4 };
+    fireEvent.pointerDown(
+      screen.getByRole("option", { name: /Search locations for/ }),
+    );
+    expect(geocode).toHaveBeenCalledWith(
+      "Zion Narrows",
+      expect.anything(),
+      view,
+    );
+  });
+
+  // Mutation: parse a typed coordinate without the view, which reads every
+  // unsigned pair as south and east, or against the view the box had when it
+  // took focus rather than the one the map has now.
+  it("reads an unsigned coordinate in the hemispheres of the map as it is now", () => {
+    let view: LonLatBox = { west: 151, south: -34, east: 151.4, north: -33.6 };
+    const input = renderBox({ getView: () => view });
+    view = { west: -112, south: 40.5, east: -111.8, north: 40.9 };
+    type(input, "40.7 111.9");
+    expect(screen.getAllByRole("option")[0].textContent).toContain(
+      "40.70000, -111.90000",
+    );
   });
 
   // Mutation: drop the timeout (a request per keystroke), or the abort in the

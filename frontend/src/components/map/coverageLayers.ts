@@ -2,9 +2,9 @@ import {
   type CarrierId,
   COVERAGE_HATCH_IMAGE,
   COVERAGE_MIN_ZOOM,
+  type CoverageArchive,
   coverageFilter,
   coverageOpacity,
-  NSW_COVERAGE,
   zoomFadeIn,
 } from "@logjam/shared";
 import type {
@@ -17,8 +17,9 @@ import { COVERAGE_FILL_LAYER } from "./layerOrder";
 
 type Expr = ExpressionSpecification;
 
-/** The Coverage hatch over the source `source`, for `carrier` alone. */
+/** The Coverage hatch over the source `source` of `coverage`, for `carrier` alone. */
 export function coverageLayerSpec(
+  coverage: CoverageArchive,
   source: string,
   carrier: CarrierId,
 ): Extract<LayerSpecification, { type: "fill" }> {
@@ -26,12 +27,15 @@ export function coverageLayerSpec(
     id: COVERAGE_FILL_LAYER,
     type: "fill",
     source,
-    "source-layer": NSW_COVERAGE.sourceLayer,
+    "source-layer": coverage.sourceLayer,
     minzoom: COVERAGE_MIN_ZOOM,
-    filter: coverageFilter(carrier) as FilterSpecification,
+    filter: coverageFilter(coverage, carrier) as FilterSpecification,
     paint: {
       "fill-pattern": COVERAGE_HATCH_IMAGE,
-      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity()) as Expr,
+      "fill-opacity": zoomFadeIn(
+        COVERAGE_MIN_ZOOM,
+        coverageOpacity(coverage),
+      ) as Expr,
     },
   };
 }

@@ -57,6 +57,7 @@ import {
   leaderboardButtonLabel,
   selfStanding,
   type LeaderboardResponse,
+  type Region,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -102,6 +103,7 @@ const copy = FRIENDS.copy;
 
 function FriendsPanel({
   leaderboardOptIn,
+  accountRegion,
   friends,
   friendRequests,
   onRefetchFriends,
@@ -109,6 +111,7 @@ function FriendsPanel({
   onRefetchNotifications,
 }: {
   leaderboardOptIn: boolean;
+  accountRegion: Region;
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
@@ -235,6 +238,7 @@ function FriendsPanel({
         error={boardError}
         onRetry={loadBoard}
         onBack={() => setLeaderboardOpen(false)}
+        region={accountRegion}
       />
     );
   }

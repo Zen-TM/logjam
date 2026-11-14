@@ -14,6 +14,7 @@ import {
   offeredBasemaps,
 } from "./geoPdfBaseLayers.js";
 import {
+  accountRegion,
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
@@ -29,6 +30,8 @@ import {
   regionTouchesBox,
   simRegionsOn,
   WORLD,
+  wrapView,
+  type LonLatBox,
   type Region,
 } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
@@ -209,6 +212,25 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("accountRegion", () => {
+  const all: readonly Region[] = [NSW_REGION, SIM_NZ, SIM_UTAH];
+  const home = (regions: unknown) => accountRegion({ regions }, all).id;
+
+  // Mutation: return the id the user ticked first, not the first in
+  // `REGIONS` order, and the season changes with the order they ticked.
+  it("is the first chosen region in REGIONS order", () => {
+    expect(home(["simutah", "simnz"])).toBe("simnz");
+    expect(home(["simutah", "nsw"])).toBe("nsw");
+  });
+
+  // Mutation: return null or throw for an account with no stored choice.
+  it("is NSW for an account that never chose", () => {
+    for (const prefs of [undefined, null, "nsw", {}, { regions: [] }])
+      expect(accountRegion(prefs, all)).toBe(NSW_REGION);
+    expect(accountRegion({ regions: ["atlantis"] }).id).toBe("nsw");
   });
 });
 
@@ -404,6 +426,28 @@ describe("the simulated regions", () => {
         );
   });
 
+  // Mutation: duplicate a `source` or `name` in a simulated region's land
+  // classes, or a carrier `id` in its coverage: `landColor` builds a `match`
+  // with a repeated label, which MapLibre rejects, and a picker lists one
+  // carrier twice.
+  it("list each land class and each carrier once", () => {
+    const declared = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD];
+    const unique = (values: string[]) => new Set(values).size === values.length;
+    const withLand = declared.filter((r) => r.terrain.land);
+    const withCoverage = declared.filter((r) => r.terrain.coverage);
+    expect(withLand.length).toBeGreaterThanOrEqual(3);
+    expect(withCoverage.length).toBeGreaterThanOrEqual(2);
+    for (const r of withLand) {
+      const classes = r.terrain.land!.classes;
+      expect(unique(classes.map((c) => c.source)), r.id).toBe(true);
+      expect(unique(classes.map((c) => c.name)), r.id).toBe(true);
+    }
+    for (const r of withCoverage)
+      expect(unique(r.terrain.coverage!.carriers.map((c) => c.id)), r.id).toBe(
+        true,
+      );
+  });
+
   // Mutation: draw a ring over the sea between the islands.
   it("give NZ one ring for each island", () => {
     expect(SIM_NZ.borders).toHaveLength(2);
@@ -564,13 +608,38 @@ describe("layerIn", () => {
   it("is the region's archive, or null where it has none", () => {
     expect(layerIn(NSW_REGION, "land")).toBe(NSW_REGION.terrain.land);
     expect(layerIn(SIM_NZ, "heights")).toBe(SIM_NZ.terrain.heights);
-    expect(layerIn(SIM_NZ, "land")).toBeNull();
-    expect(layerIn(SIM_NZ, "fire")).toBeNull();
+    expect(layerIn(SIM_NZ, "land")).toBe(SIM_NZ.terrain.land);
+    expect(layerIn(SIM_UTAH, "coverage")).toBeNull();
+    expect(layerIn(SIM_WORLD, "land")).toBeNull();
+    expect(layerIn(SIM_WORLD, "fire")).toBeNull();
     expect(layerIn(SIM_WORLD, "slope")).toBeNull();
     expect(layerIn(SIM_WORLD, "hillshade")).not.toBeNull();
   });
 
   it("is null for no region", () => {
     expect(layerIn(null, "heights")).toBeNull();
+  });
+});
+
+describe("wrapView", () => {
+  // Mutation: round the turn the other way, so a centre at 180 stays at 180.
+  it("moves a box by whole turns until its centre is in [-180, 180)", () => {
+    const at = (centre: number): LonLatBox => ({
+      west: centre - 1,
+      south: -1,
+      east: centre + 1,
+      north: 1,
+    });
+    const centreOf = (view: LonLatBox) => (view.west + view.east) / 2;
+    expect(centreOf(wrapView(at(-180)))).toBe(-180);
+    expect(centreOf(wrapView(at(179.9)))).toBeCloseTo(179.9);
+    expect(centreOf(wrapView(at(180)))).toBe(-180);
+    expect(centreOf(wrapView(at(540)))).toBe(-180);
+    expect(wrapView(at(-190))).toEqual({
+      west: 169,
+      south: -1,
+      east: 171,
+      north: 1,
+    });
   });
 });

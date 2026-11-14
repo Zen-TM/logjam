@@ -6,6 +6,11 @@
 const LOCAL_HOST =
   /^(localhost|127(\.\d+){3}|10(\.\d+){3}|192\.168(\.\d+){2}|172\.(1[6-9]|2\d|3[01])(\.\d+){2})$/;
 
+/** Whether a dev-only switch may stay on against this API address. */
+export function isLocalApi(apiUrl: string): boolean {
+  return LOCAL_HOST.test(new URL(apiUrl).hostname);
+}
+
 export function resolveAuthMode(
   mode: string | undefined,
   apiUrl: string,
@@ -14,7 +19,7 @@ export function resolveAuthMode(
   if (mode !== "fake") {
     throw new Error(`EXPO_PUBLIC_AUTH_MODE must be oidc or fake, got ${mode}`);
   }
-  if (!LOCAL_HOST.test(new URL(apiUrl).hostname)) {
+  if (!isLocalApi(apiUrl)) {
     throw new Error("Fake auth is only allowed against a local API");
   }
   return "fake";

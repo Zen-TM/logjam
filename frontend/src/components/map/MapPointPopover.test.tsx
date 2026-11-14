@@ -8,7 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MAP_POINT,
-  NSW_FIRE,
+  NSW_REGION,
   WEATHER,
   type ElevationPoint,
 } from "@logjam/shared";
@@ -75,6 +75,7 @@ function mount(
       point={point}
       from={null}
       coverageCarrier="optus"
+      region={NSW_REGION}
       {...(handlers.startAt ? { startAt: handlers.startAt } : {})}
       onClose={handlers.onClose ?? vi.fn()}
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
@@ -427,9 +428,9 @@ describe("the point popover's slope", () => {
 describe("MapPointPopover fire history", () => {
   const fireFeature = {
     properties: {
-      [NSW_FIRE.yearProperty]: 2019,
-      [NSW_FIRE.monthProperty]: 12,
-      [NSW_FIRE.typeProperty]: 1,
+      [NSW_REGION.terrain.fire.yearProperty]: 2019,
+      [NSW_REGION.terrain.fire.monthProperty]: 12,
+      [NSW_REGION.terrain.fire.typeProperty]: 1,
     },
   };
 

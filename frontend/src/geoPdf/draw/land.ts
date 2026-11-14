@@ -1,6 +1,5 @@
 // Land tenure on a print: the same classes and borders as a map.
 import {
-  LAND_CLASSES,
   LAND_EDGE_LINES,
   landClass,
   MAP_TERRAIN,
@@ -66,6 +65,7 @@ export function buildLand(
     };
     for (const feature of decoded.features) {
       const kind = landClass(
+        NSW_REGION.terrain.land,
         feature.properties[NSW_REGION.terrain.land.classProperty],
       );
       if (feature.type !== 3 || !kind) continue;
@@ -189,7 +189,9 @@ export function landClassesDrawn(
     });
     if (crosses) found.add(color);
   }
-  return LAND_CLASSES.filter(({ colour }) => found.has(colour));
+  return NSW_REGION.terrain.land.classes.filter(({ colour }) =>
+    found.has(colour),
+  );
 }
 
 /**

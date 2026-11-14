@@ -17,8 +17,6 @@
 import {
   BASEMAP_CATALOG,
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   type BasemapCatalogEntry,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
@@ -64,11 +62,11 @@ export type LogicalLayerRef =
    * `viewport` picks the one clip drawn offline. */
   | { kind: "nsw-slope"; viewport?: Viewport | null }
   | { kind: "nsw-hillshade"; viewport?: Viewport | null }
-  /** The Land overlay (`shared/src/nswLand.ts`); `viewport` as for the slope. */
+  /** The Land overlay (`shared/src/land.ts`); `viewport` as for the slope. */
   | { kind: "nsw-land"; viewport?: Viewport | null }
-  /** The Fire history overlay (`shared/src/nswFire.ts`), the same way. */
+  /** The Fire history overlay (`shared/src/fireHistory.ts`), the same way. */
   | { kind: "nsw-fire"; viewport?: Viewport | null }
-  /** The Coverage overlay (`shared/src/nswCoverage.ts`), the same way. */
+  /** The Coverage overlay (`shared/src/coverage.ts`), the same way. */
   | { kind: "nsw-coverage"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
@@ -775,7 +773,7 @@ export function resolveMapSource(
       );
     case "nsw-fire":
       return resolveStatewide(
-        NSW_FIRE,
+        NSW_REGION.terrain.fire,
         "vector",
         "fire-region",
         ctx,
@@ -783,7 +781,7 @@ export function resolveMapSource(
       );
     case "nsw-coverage":
       return resolveStatewide(
-        NSW_COVERAGE,
+        NSW_REGION.terrain.coverage,
         "vector",
         "coverage-region",
         ctx,

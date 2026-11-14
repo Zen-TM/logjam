@@ -64,7 +64,7 @@ paths_for() {
     # the topo tests that skip without GDAL, which this job runs in the image
     # (check-required-checks.py requires each to be named here), with the
     # shared sources they read.
-    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|topo/tests/(_native_stub|test_area_export|test_coverage|test_footprint_coverage|test_reprojection|test_sharpen_units|test_tile_compose)\\.py$|shared/src/(areaExport|sharpen|nswCoverage|regions)\\.ts$|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/prisma/(schema\\.prisma|migrations/)|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
+    topo_e2e) echo "$(bash -c "source '$(dirname "${BASH_SOURCE[0]}")/image-build-scope.sh'; image_paths_for worker")|^(topo/tests/e2e/|topo/tests/(_native_stub|test_area_export|test_coverage|test_footprint_coverage|test_reprojection|test_sharpen_units|test_tile_compose)\\.py$|shared/src/(areaExport|sharpen|coverage|regions)\\.ts$|scripts/sample-data\\.|infra/terraform/envs/prod/ecs\\.tf$|shared/src/topoSettings\\.ts$|api/prisma/(schema\\.prisma|migrations/)|api/src/(lib/ecsRunTask|routes/topoJobs|services/awsClients)\\.ts$)" ;;
     # A migration, run under the live release (rollback-compat.yml).
     rollback_compat) echo '^(api/prisma/migrations/|\.github/workflows/rollback-compat\.yml$)' ;;
     # Static Terraform checks and the plan-comment tests (terraform-ci.yml).

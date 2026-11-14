@@ -1,39 +1,12 @@
-// The Land overlay: who holds the land, statewide, from the NSW Land Tenure
-// layer (`NSW_REGION.terrain.land`, regions.ts). Its build keeps the source's
-// one attribute, so a class here is the source's own word for it.
+// The Land overlay: who holds the land, from a region's land archive
+// (`RegionTerrain.land`, regions.ts); NSW's is the NSW Land Tenure layer. Its
+// build keeps the source's one attribute, so a class is the source's own word
+// for it, and the region lists them with what a person reads and their colour.
 //
 // It answers who holds the land, not whether anyone may go there: no dataset
 // answers that, so neither a name nor a colour here says "allowed" or "no
 // access", and none is red or a traffic-light green.
-import { NSW_REGION } from "./regions.js";
-
-/**
- * The source's classes, in the order a legend lists them, with what a person
- * reads and their colour. `TENURE_CLASSES` in the build script lists the same
- * `source` values, and the build stops on any other, because `landColor` leaves
- * a class it doesn't know undrawn
- * (test_land_tenure.py).
- *
- * The source calls "Aboriginal Area" "Indigenous Owned", but all it holds there
- * are NPWS reserves of that type; Land Council freehold can be under Private.
- */
-export const LAND_CLASSES = [
-  { source: "Private", name: "Private land", colour: "#8e6bbf" },
-  { source: "National Park", name: "National park", colour: "#2f9c95" },
-  { source: "State Forest", name: "State forest", colour: "#7f8f3a" },
-  {
-    source: "Crownland-Leasehold",
-    name: "Crown leasehold",
-    colour: "#d9a441",
-  },
-  { source: "Crownland-Other", name: "Crown land", colour: "#e6d34f" },
-  { source: "Indigenous Owned", name: "Aboriginal Area", colour: "#3b78c4" },
-  {
-    source: "Unresolved Tenure",
-    name: "Tenure unresolved",
-    colour: "#8a8a8a",
-  },
-] as const;
+import type { LandArchive } from "./regions.js";
 
 /**
  * Land tenure draws from this zoom in. It is what someone standing at a fence
@@ -67,7 +40,7 @@ export const LAND_EDGE_LINES = [
 /**
  * How far a tile's polygons run past its edge, in pixels: the build script's
  * `BUFFER` (test_land_tenure.py). A line pushed in further than this from the
- * edge they're cut at would draw the tile grid (nswLand.test.ts).
+ * edge they're cut at would draw the tile grid (land.test.ts).
  */
 export const LAND_TILE_MARGIN_PX = 10;
 
@@ -88,18 +61,18 @@ export function landEdgeOpacity(opacity: number): unknown[] {
 }
 
 /** The `line-color` expression: a class's colour. */
-export function landColor(): unknown[] {
+export function landColor(land: LandArchive): unknown[] {
   return [
     "match",
-    ["get", NSW_REGION.terrain.land.classProperty],
-    ...LAND_CLASSES.flatMap((c) => [c.source, c.colour]),
+    ["get", land.classProperty],
+    ...land.classes.flatMap((c) => [c.source, c.colour]),
     "rgba(0,0,0,0)",
   ];
 }
 
 /** A feature's class, from its `classProperty`, or undefined if it is no class. */
-export function landClass(value: unknown) {
-  return LAND_CLASSES.find((c) => c.source === value);
+export function landClass(land: LandArchive, value: unknown) {
+  return land.classes.find((c) => c.source === value);
 }
 
 /**
@@ -108,10 +81,10 @@ export function landClass(value: unknown) {
  * else: a tap reads the tile already on the device.
  */
 export function landNameOf(
+  land: LandArchive,
   features: readonly { properties?: Record<string, unknown> | null }[],
 ): string | null {
   return (
-    landClass(features[0]?.properties?.[NSW_REGION.terrain.land.classProperty])
-      ?.name ?? null
+    landClass(land, features[0]?.properties?.[land.classProperty])?.name ?? null
   );
 }

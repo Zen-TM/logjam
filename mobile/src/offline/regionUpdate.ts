@@ -12,8 +12,6 @@ import { randomUUID } from "expo-crypto";
 import NetInfo from "@react-native-community/netinfo";
 import {
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   SHARPENED_SOURCE_PREFIX,
   type RegionBbox,
 } from "@logjam/shared";
@@ -80,8 +78,10 @@ export function regionUpdateSpecs(
         : {}),
       ...(a.logicalKey === NSW_REGION.terrain.slope.id ? { slope: true } : {}),
       ...(a.logicalKey === NSW_REGION.terrain.land.id ? { land: true } : {}),
-      ...(a.logicalKey === NSW_FIRE.id ? { fire: true } : {}),
-      ...(a.logicalKey === NSW_COVERAGE.id ? { coverage: true } : {}),
+      ...(a.logicalKey === NSW_REGION.terrain.fire.id ? { fire: true } : {}),
+      ...(a.logicalKey === NSW_REGION.terrain.coverage.id
+        ? { coverage: true }
+        : {}),
     };
   });
 }

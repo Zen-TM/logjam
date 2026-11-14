@@ -24,8 +24,6 @@ const STILL_NAMING = [
   "frontend/src/components/SignIn.tsx",
   "frontend/src/components/SignInTerrain.tsx",
   "frontend/src/components/map/Map.tsx",
-  "frontend/src/components/map/coverageLayers.ts",
-  "frontend/src/components/map/fireLayers.ts",
   "frontend/src/components/map/terrainEntries.ts",
   "frontend/src/components/map/terrainRouter.ts",
   "frontend/src/components/map/terrainSource.ts",
@@ -35,7 +33,6 @@ const STILL_NAMING = [
   "frontend/src/geoPdf/render.ts",
   "mobile/src/map/MapScreen.tsx",
   "mobile/src/map/RegionDownloadScreen.tsx",
-  "mobile/src/map/mapChrome.ts",
   "mobile/src/map/sourceResolver.ts",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",
@@ -43,12 +40,7 @@ const STILL_NAMING = [
   "mobile/src/saved/SavedScreen.tsx",
   "shared/src/demSources.ts",
   "shared/src/geoPdfBaseLayers.ts",
-  "shared/src/geocode.ts",
-  "shared/src/mapRegionEstimate.ts",
   "shared/src/nswContours.ts",
-  "shared/src/nswCoverage.ts",
-  "shared/src/nswFire.ts",
-  "shared/src/nswLand.ts",
   "shared/src/overlayLegends.ts",
   "shared/src/overlayZoom.ts",
   "shared/src/profileSeries.ts",
@@ -73,7 +65,7 @@ const naming = PACKAGES.flatMap(sources)
 describe("files that name NSW's region constants", () => {
   it("finds the declaration, so a pattern that stops matching fails", () => {
     expect(naming).toEqual(expect.arrayContaining(DECLARES));
-    expect(naming.length).toBeGreaterThanOrEqual(30);
+    expect(naming.length).toBeGreaterThanOrEqual(25);
   });
 
   // Mutation: a new file reads NSW_REGION.view.

@@ -23,7 +23,7 @@ from build_land_tenure import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARED = (ROOT / "shared/src/nswLand.ts").read_text()
+SHARED = (ROOT / "shared/src/land.ts").read_text()
 # The archive is declared in the region: only its `land: {` entry, so another
 # layer's zooms can't stand in for its own.
 REGIONS = (ROOT / "shared/src/regions.ts").read_text()
@@ -31,10 +31,10 @@ LAND = REGIONS[REGIONS.index("    land: {") :].split("\n    },", 1)[0]
 
 
 class TestClasses(unittest.TestCase):
-    # Mutation: change a class here or in LAND_CLASSES alone, and either the
-    # build refuses good data or that land is drawn with no tint.
+    # Mutation: change a class here or in the region's land `classes` alone,
+    # and either the build refuses good data or that land is drawn with no tint.
     def test_the_build_knows_the_classes_the_clients_draw(self):
-        drawn = re.findall(r'source: "([^"]+)"', SHARED)
+        drawn = re.findall(r'source: "([^"]+)"', LAND)
         self.assertEqual(list(TENURE_CLASSES), drawn)
 
     # Mutation: return nothing from `unknown_classes`, and a class the next

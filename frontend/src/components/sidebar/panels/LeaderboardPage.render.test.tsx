@@ -5,6 +5,8 @@ import {
   LEADERBOARD_SETTING,
   leaderboardNudge,
   leaderboardPodiumLine,
+  leaderboardRules,
+  NSW_REGION,
   leaderboardSeasonLine,
   type LeaderboardResponse,
 } from "@logjam/shared";
@@ -63,6 +65,7 @@ function show(
       error={error}
       onRetry={() => {}}
       onBack={() => {}}
+      region={NSW_REGION}
     />,
   );
 }
@@ -122,7 +125,7 @@ describe("LeaderboardPage", () => {
     fireEvent.click(screen.getByRole("button", { name: copy.rulesTitle }));
     expect(screen.getByRole("dialog", { name: copy.rulesTitle })).toBeTruthy();
     expect(screen.getAllByRole("listitem")).toHaveLength(
-      copy.rules.split("\n").length,
+      leaderboardRules(NSW_REGION).split("\n").length,
     );
   });
 

@@ -2,6 +2,8 @@
 // nothing else, so a string cannot reach a response unless `say` made it, and
 // `api/src/userCopy.unit.test.ts` holds every `say` to the copy rules.
 
+import { fillHoles, localisedTemplate } from "./i18n.js";
+
 declare const userSentence: unique symbol;
 
 /** Text a client may show as it is. Only `say` makes one. */
@@ -30,15 +32,14 @@ export function say(
   strings: TemplateStringsArray,
   ...holes: (number | UserSentence | Quoted)[]
 ): UserSentence {
-  let text = strings[0];
-  holes.forEach((hole, index) => {
-    text +=
+  return fillHoles(
+    localisedTemplate(strings),
+    holes.map((hole) =>
       typeof hole === "object"
         ? `“${hole.quoted.trim().replace(/[“”]/g, '"')}”`
-        : String(hole);
-    text += strings[index + 1];
-  });
-  return text as UserSentence;
+        : String(hole),
+    ),
+  ) as UserSentence;
 }
 
 /** A sentence with the user's own words taken out, for a log line. */
