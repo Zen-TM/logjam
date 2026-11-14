@@ -75,18 +75,33 @@ const held = new Map<string, Promise<void>>();
 const offlineOnly = { on: false };
 /** A download that waits for this promise before it answers. */
 const downloadGate = { current: Promise.resolve() };
+/** Hold the next downloads until the returned function is called. */
+function gateDownload() {
+  let release = () => {};
+  downloadGate.current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return release;
+}
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock("../api/presignedTransfer", () => ({
   downloadFromPresignedUrl: download,
 }));
+/** Every folder made and not yet deleted, as the slash-ended URI. */
+const dirs = new Set<string>();
 vi.mock("expo-file-system/legacy", () => ({
-  makeDirectoryAsync: async () => {},
+  makeDirectoryAsync: async (uri: string) => {
+    dirs.add(uri.endsWith("/") ? uri : `${uri}/`);
+  },
   // A folder goes with what is in it, named with or without its slash.
   deleteAsync: async (uri: string) => {
     const folder = uri.endsWith("/") ? uri : `${uri}/`;
     for (const key of [...files.keys()]) {
       if (key === uri || key.startsWith(folder)) files.delete(key);
+    }
+    for (const dir of [...dirs]) {
+      if (dir.startsWith(folder)) dirs.delete(dir);
     }
   },
   getFreeDiskStorageAsync: async () => disk.free,
@@ -307,13 +322,30 @@ beforeEach(() => {
   held.clear();
   fetchMock.mockClear();
   downloadGate.current = Promise.resolve();
-  download.mockReset().mockImplementation(async (url: string, to: string) => {
-    await downloadGate.current;
-    const body = served.get(url);
-    if (!(body instanceof Uint8Array)) return { status: 404 };
-    files.set(to, body);
-    return { status: 200 };
-  });
+  dirs.clear();
+  // A download waits for its gate, and is cancelled by its signal as the real
+  // transfer is (`presignedTransfer.test.ts`).
+  download
+    .mockReset()
+    .mockImplementation(
+      async (
+        url: string,
+        to: string,
+        _onBytes?: unknown,
+        signal?: AbortSignal,
+      ) => {
+        await new Promise<void>((resolve, reject) => {
+          const cancelled = () => reject(new Error("download cancelled"));
+          if (signal?.aborted) return cancelled();
+          signal?.addEventListener("abort", cancelled, { once: true });
+          void downloadGate.current.then(resolve);
+        });
+        const body = served.get(url);
+        if (!(body instanceof Uint8Array)) return { status: 404 };
+        files.set(to, body);
+        return { status: 200 };
+      },
+    );
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -329,7 +361,7 @@ describe("the first download", () => {
     expect(fetchMock.mock.calls).toEqual([
       [POINTER_URL, { signal: expect.any(AbortSignal) }],
     ]);
-    expect(download.mock.calls).toEqual([
+    expect(download.mock.calls.map(([url, to]) => [url, to])).toEqual([
       [`${CDN}/master/places/v1/${built.pointer.path}`, `${DIR}download.tmp`],
     ]);
   });
@@ -1035,8 +1067,8 @@ describe("the regions a phone fetches for", () => {
   });
 
   // A search that is loading the copy and a refresh that is fetching it when it
-  // lapses. Mutation: drop `await copy.fetching?.promise` from `forgetCopy`, and
-  // the fetch installs its build after the files went; drop the
+  // lapses. Mutation: drop `copy.fetching?.stop.abort()` from `forgetCopy`, and
+  // the fetch runs on and installs its build after the files went; drop the
   // `publish(region, { stored: null` from it, and the copy still reads as
   // stored, with a build whose files are gone.
   it("deletes a copy that a search is loading and a refresh is fetching", async () => {
@@ -1050,10 +1082,7 @@ describe("the regions a phone fetches for", () => {
         releaseLoad = resolve;
       }),
     );
-    let releaseDownload = () => {};
-    downloadGate.current = new Promise<void>((resolve) => {
-      releaseDownload = resolve;
-    });
+    gateDownload();
     const registry = await load();
     const loading = registry.loadPlaceIndex(OTHER.id);
     const fetching = registry.fetchPlaceRegistry(OTHER.id, {
@@ -1061,8 +1090,8 @@ describe("the regions a phone fetches for", () => {
     });
     await vi.waitFor(() => expect(download).toHaveBeenCalled());
     const lapsing = registry.lapsePlaceRegistries();
-    releaseDownload();
-    expect(await fetching).toBe("updated");
+    // The lapse cancels the transfer; the gate is never opened.
+    expect(await fetching).toBe("stopped");
     await lapsing;
     // The load was still reading when the files went.
     releaseLoad();
@@ -1079,14 +1108,6 @@ describe("the regions a phone fetches for", () => {
 });
 
 describe("the lapse and the wipe, around a fetch", () => {
-  /** A download held until `release()`. */
-  function gateDownload() {
-    let release = () => {};
-    downloadGate.current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return release;
-  }
   const outsideNsw = () =>
     [...files.keys()].filter((key) => key.startsWith(`${DIR}other`));
 
@@ -1118,9 +1139,9 @@ describe("the lapse and the wipe, around a fetch", () => {
     expect(prefs.get("placeRegistryUnreadable:nsw")).toBe("places-y.json");
   });
 
-  // Mutation: drop the `AppState.currentState` return from `requestCheck`, and
-  // a regained signal fetches in the background (ADR 0013).
-  it("checks only while the app is in the foreground", async () => {
+  // Mutation: drop the `AppState.currentState === "background"` return from
+  // `requestCheck`, and a regained signal fetches in the background (ADR 0013).
+  it("does not check while the app is in the background", async () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));
     app.state = "background";
@@ -1136,36 +1157,118 @@ describe("the lapse and the wipe, around a fetch", () => {
     await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
   });
 
-  // Mutation: drop `if (began !== generation) throw new StoppedError()` from
-  // `installBuild`, or `generation += 1` from `stopPlaceRegistryForWipe`, and a
-  // first fetch still in flight installs its copy after the wipe.
+  // Android reports "unknown" until the first AppState event, and the check at
+  // launch runs inside that window. Mutation: return unless the state is
+  // "active" in `requestCheck`, and the check at launch is dropped.
+  it("still checks while the app's state is not yet known", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    app.state = "unknown";
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  /** Hold the read of the downloaded file, so a fetch waits just before its install. */
+  function holdInstall() {
+    let release = () => {};
+    held.set(
+      `${DIR}download.tmp`,
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    return release;
+  }
+  const nonDefaultDirs = () => [...dirs].filter((dir) => dir !== DIR);
+
+  // Mutation: drop `if (stop.aborted) throw new StoppedError()` from
+  // `installBuild`, or the `abort()` loop from `stopPlaceRegistryForWipe`, and
+  // a fetch that has its file and is about to install does so after the wipe.
   it("installs nothing once a wipe has stopped the refresh", async () => {
     publish(build("2026-10-15"));
-    const release = gateDownload();
+    const releaseRead = holdInstall();
     const registry = await load();
     const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
-    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
     const stopping = registry.stopPlaceRegistryForWipe();
-    release();
+    releaseRead();
     await stopping;
     expect(await fetching).toBe("stopped");
     expect([...files.keys()]).toEqual([]);
     expect(registry.hasPlaceRegistry(NSW)).toBe(false);
   });
 
-  // Mutation: drop `if (began !== generation) return` from `refreshAll`, and a
-  // check the wipe stopped goes on to fetch and install the next region.
+  // The transfer is cancelled, so the stop (and the wipe, which gives its
+  // producers ten seconds) never waits for bytes. Mutation: drop the `abort()`
+  // loop from `stopPlaceRegistryForWipe`, or the `signal` argument from the
+  // `downloadFromPresignedUrl` call in `installBuild`, and the stop waits for a
+  // download that never finishes.
+  it("stops a download without waiting for its bytes", async () => {
+    publish(build("2026-10-15"));
+    gateDownload();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const outcome = await Promise.race([
+      registry.stopPlaceRegistryForWipe().then(() => "stopped"),
+      new Promise((resolve) => setTimeout(() => resolve("still waiting"), 500)),
+    ]);
+    expect(outcome).toBe("stopped");
+    expect(await fetching).toBe("stopped");
+    expect([...files.keys()]).toEqual([]);
+  });
+
+  // The wipe's stop, then the rest of the wipe, then its lapse: a check that
+  // begins in between does nothing, and after the wipe the refresh runs again.
+  // Mutation: drop `if (wiping) return` from `refreshAll`, or
+  // `if (wiping) return "stopped"` from `runFetch`, or the `wiping = false` from
+  // `resumePlaceRegistryAfterWipe`.
+  it("starts no check between a wipe's stop and its lapse, and runs again after", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW];
+    // A copy no account keeps: a check that began would lapse it.
+    holdOtherOnPhone(build("2026-09-15", ["Old"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.stopPlaceRegistryForWipe();
+    registry.registerPlaceRegistryRefresh();
+    expect(await registry.fetchPlaceRegistry(NSW, {})).toBe("stopped");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+    registry.resumePlaceRegistryAfterWipe();
+    // The next account chose both, and the gap between checks has passed.
+    chosen.ids = [NSW, OTHER.id];
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    for (const regained of app.reconnects) regained();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    vi.mocked(Date.now).mockRestore();
+  });
+
+  // The wipe resumes the refresh before the old check has finished with its
+  // stopped fetch. Mutation: drop `if (epoch.aborted) return` from `refreshAll`,
+  // and that old check goes on to fetch and install the next region for the
+  // account that has just signed in.
   it("fetches no further region once a wipe has stopped a check in progress", async () => {
     prefs.set("placeRegistryWanted", "on");
     chosen.ids = [NSW, OTHER.id];
     publish(build("2026-10-15"));
     publishOther(build("2026-10-15", ["Makarora"]));
-    const release = gateDownload();
+    const releaseRead = holdInstall();
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
-    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
     const stopping = registry.stopPlaceRegistryForWipe();
-    release();
+    registry.resumePlaceRegistryAfterWipe();
+    releaseRead();
     await stopping;
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
@@ -1174,21 +1277,56 @@ describe("the lapse and the wipe, around a fetch", () => {
     expect([...files.keys()]).toEqual([]);
   });
 
+  // `installBuild` makes the region's folder before it downloads. Mutation:
+  // drop the `deleteFolder` call from `runFetch`'s `finally`, and a failed or
+  // stopped first fetch leaves the folder; drop the `else` branch of
+  // `lapseExcept`, and a folder a crash left stays after the wipe.
+  it("leaves no folder for a region after a failed or stopped first fetch, or a lapse", async () => {
+    chosen.ids = [NSW];
+    // Failed: the pointer is served and the file is not.
+    served.set(OTHER_POINTER_URL, build("2026-10-15").pointer);
+    const registry = await load();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("failed");
+    expect(download).toHaveBeenCalled();
+    expect(nonDefaultDirs()).toEqual([]);
+
+    // Stopped.
+    publishOther(build("2026-10-15", ["Makarora"]));
+    gateDownload();
+    download.mockClear();
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    expect(nonDefaultDirs()).toEqual([`${DIR}other/`]);
+    await registry.stopPlaceRegistryForWipe();
+    registry.resumePlaceRegistryAfterWipe();
+    expect(await fetching).toBe("stopped");
+    expect(nonDefaultDirs()).toEqual([]);
+
+    // A folder a crash left, with no pointer in it.
+    dirs.add(`${DIR}other/`);
+    await registry.lapsePlaceRegistries();
+    expect(nonDefaultDirs()).toEqual([]);
+  });
+
   // Mutation: drop `&& !copies.get(region.id)?.fetching` from `lapseExcept`, and
   // a region's first fetch, with nothing stored yet, is skipped by the lapse and
   // installs its copy after it.
   it("deletes the first copy of a region that is still being fetched when it lapses", async () => {
     chosen.ids = [NSW];
     publishOther(build("2026-10-15", ["Makarora"]));
-    const release = gateDownload();
+    gateDownload();
     const registry = await load();
     const fetching = registry.fetchPlaceRegistry(OTHER.id, {
       allowMetered: true,
     });
     await vi.waitFor(() => expect(download).toHaveBeenCalled());
     const lapsing = registry.lapsePlaceRegistries();
-    release();
-    expect(await fetching).toBe("updated");
+    // The lapse cancels the transfer; the gate is never opened.
+    expect(await fetching).toBe("stopped");
     await lapsing;
     expect(outsideNsw()).toEqual([]);
     expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);

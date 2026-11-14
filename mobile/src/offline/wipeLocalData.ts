@@ -49,6 +49,7 @@ import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 import {
   lapsePlaceRegistries,
+  resumePlaceRegistryAfterWipe,
   stopPlaceRegistryForWipe,
 } from "./placeRegistry";
 import { OFFLINE_TABLES } from "./wipedStores";
@@ -104,8 +105,9 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopGaugesForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
     stoppedInTime(stopPlansForWipe()),
-    // The place registry refresh is a producer too: a copy fetched for the
-    // departing account's region landing after the lapse below would outlive it.
+    // The place registry refresh is a producer too: held from here until the
+    // lapse below has finished (nothing fetched, nothing installed), or a copy
+    // of the departing account's region landing after the lapse would outlive it.
     stoppedInTime(stopPlaceRegistryForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
@@ -184,6 +186,8 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   } catch (err) {
     console.error(err);
     failed.push("place names");
+  } finally {
+    resumePlaceRegistryAfterWipe();
   }
 
   // Files last: the registry rows that point at them are already gone, so a

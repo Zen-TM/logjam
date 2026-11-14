@@ -77,7 +77,7 @@ export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets
  * holds nothing about the user. What does show a user is WHICH regions have a
  * copy, so a copy is kept only for a region the account chose or saved a map
  * over, and when a different account signs in `wipeAllLocalData` deletes the
- * rest (`lapsePlaceRegistries`) once the chosen regions and saved maps are
+ * rest, and any folder named for such a region (`lapsePlaceRegistries`), once the chosen regions and saved maps are
  * gone: the default region's copy stays, as it did when it was the only one.
  * Guards: placeRegistry.test.ts ("leaves only the default region's copy when a
  * different account signs in") and wipeLocalData.test.ts ("lets the place

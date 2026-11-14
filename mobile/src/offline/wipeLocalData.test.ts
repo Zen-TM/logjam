@@ -88,6 +88,7 @@ vi.mock("./placeRegistry", () => ({
     record("stop:placeregistry");
     return Promise.resolve();
   },
+  resumePlaceRegistryAfterWipe: () => record("resume:registries"),
   lapsePlaceRegistries: () => {
     record("lapse:registries");
     return Promise.resolve();
@@ -173,6 +174,26 @@ describe("wipeAllLocalData", () => {
     expect(lapse).toBeGreaterThan(
       events.indexOf("sql:DELETE FROM map_artifact"),
     );
+  });
+
+  // The registry refresh is held from the wipe's stop until its lapse has
+  // finished, and runs again for the next account whatever the lapse did.
+  // Mutation: drop `resumePlaceRegistryAfterWipe()` from the wipe, or move it
+  // above the lapse, and the next account's place names are never fetched, or a
+  // check fetches between the two.
+  it("holds the place registry refresh until the lapse has finished, then lets it run again", async () => {
+    await wipeAllLocalData();
+    const stop = events.indexOf("stop:placeregistry");
+    const lapse = events.indexOf("lapse:registries");
+    const resume = events.indexOf("resume:registries");
+    expect(stop).toBeGreaterThanOrEqual(0);
+    expect(lapse).toBeGreaterThan(stop);
+    expect(resume).toBeGreaterThan(lapse);
+
+    events.length = 0;
+    failOn = (e) => e === "lapse:registries";
+    await wipeAllLocalData();
+    expect(events).toContain("resume:registries");
   });
 
   // Mutation: drop the try/catch around `lapsePlaceRegistries()` in the wipe, and

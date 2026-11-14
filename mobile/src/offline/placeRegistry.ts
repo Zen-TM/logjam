@@ -6,18 +6,25 @@
 // no other, so the chosen regions (`regionsPreference.ts`) also decide which
 // offline place-name copies the phone keeps; what a search offers at a location
 // still follows the map's view (ADR 0049). A saved map includes one still
-// downloading. A copy of any other region is deleted by the next check, and
-// when a DIFFERENT account signs in, `wipeAllLocalData` (from `finishSignIn`)
-// runs that check once the chosen regions and saved maps are gone, so the
-// default region's copy alone is left for the next user: which regions a phone
-// holds would otherwise show where its last user was interested. The same wipe
-// first stops the refresh (`stopPlaceRegistryForWipe`), so no copy lands after
-// it. Guards: placeRegistry.test.ts ("lets a copy lapse once its region is
-// neither chosen nor saved over", "keeps a copy for a region a queued save
-// touches", "leaves only the default region's copy when a different account
-// signs in", "installs nothing once a wipe has stopped the refresh") and
-// wipeLocalData.test.ts ("lets the place registries lapse after the chosen
-// regions and saved maps are gone").
+// queued, downloading or paused (`pendingRegionBoxes`). A copy of any other
+// region, and any folder named for one, is deleted by the next check. When a
+// DIFFERENT account signs in, `wipeAllLocalData` (from `finishSignIn`) first
+// stops the refresh and holds it (nothing fetched, nothing installed, a
+// transfer in flight cancelled) until it has run that check once the chosen
+// regions and saved maps are gone, so the default region's copy alone is left
+// for the next user: which regions a phone holds would otherwise show where its
+// last user was interested. Guards: placeRegistry.test.ts ("lets a copy lapse
+// once its region is neither chosen nor saved over", "keeps a copy for a region
+// a queued save touches", "leaves only the default region's copy when a
+// different account signs in", "installs nothing once a wipe has stopped the
+// refresh", "stops a download without waiting for its bytes", "starts no check
+// between a wipe's stop and its lapse, and runs again after", "leaves no folder
+// for a region after a failed or stopped first fetch, or a lapse"),
+// regionDownloadQueue.test.ts ("lists queued, downloading and paused jobs, and
+// not ready or failed ones") and wipeLocalData.test.ts ("lets the place
+// registries lapse after the chosen regions and saved maps are gone", "holds
+// the place registry refresh until the lapse has finished, then lets it run
+// again").
 //
 // WHEN A COPY IS FETCHED: once the phone has asked for the file (the user's
 // first region download, or a phone that already held a saved region), for each
@@ -26,11 +33,11 @@
 // ones at once, on the connection the user allowed for the maps (for a guest
 // too: the files are public CDN objects, not calls to our API). Every other
 // fetch is the automatic check, at app start, on return to the foreground and
-// on regained signal while the app is in the foreground, as
-// `topoAutoDownload.ts` is, Wi-Fi only by default, and never in offline-only
-// mode, in the background or on a timer (ADR 0013). Guard: placeRegistry.test.ts
-// ("checks only while the app is in the foreground"). A region that declares no
-// registry has no copy.
+// on regained signal, as `topoAutoDownload.ts` is, Wi-Fi only by default, and
+// never in offline-only mode, on a timer or while the app is in the background
+// (ADR 0013). Guards: placeRegistry.test.ts ("does not check while the app is in
+// the background", "still checks while the app's state is not yet known"). A
+// region that declares no registry has no copy.
 //
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
 // path, is parsed and its version checked, and only then takes the old one's
@@ -149,12 +156,21 @@ type Copy = {
     build: PlaceRegistryPointer;
     promise: Promise<PlaceIndex | null>;
   } | null;
-  /** The fetch in flight, and whether it may use mobile data. */
-  fetching: { promise: Promise<FetchOutcome>; allowMetered: boolean } | null;
+  /** The fetch in flight, whether it may use mobile data, and how to stop it. */
+  fetching: {
+    promise: Promise<FetchOutcome>;
+    allowMetered: boolean;
+    stop: AbortController;
+  } | null;
 };
 
-/** Bumped by a wipe: a fetch that began before it installs nothing. */
-let generation = 0;
+/**
+ * True from the moment a sign-in's wipe stops the refresh until its lapse has
+ * finished: a check that starts meanwhile does nothing, and no fetch starts.
+ */
+let wiping = false;
+/** Aborted by a wipe's stop: the check that holds it fetches no further region. */
+let checkEpoch = new AbortController();
 
 const NO_COPY: PlaceRegistryStatus = { stored: null, loadFailed: false };
 const copies = new Map<string, Copy>();
@@ -266,7 +282,7 @@ export function loadPlaceIndex(
 /** The file is not the build its pointer names. */
 class MismatchError extends Error {}
 
-/** A wipe stopped the fetch before it installed anything. */
+/** The fetch was stopped (by a wipe, or because its region lapsed) before it installed anything. */
 class StoppedError extends Error {}
 
 async function buildIndex(
@@ -371,7 +387,7 @@ export type FetchOutcome =
   | "offline-only"
   /** The CDN's build is one this phone could not index before. */
   | "unreadable"
-  /** A sign-in's wipe stopped it before it installed anything. */
+  /** Stopped before it installed anything: a wipe, or its region lapsed. */
   | "stopped"
   | "failed";
 
@@ -411,19 +427,27 @@ export async function fetchPlaceRegistry(
       return outcome;
     return fetchPlaceRegistry(regionId, options);
   }
-  const promise = runFetch(region, options.allowMetered).finally(() => {
-    copy.fetching = null;
-  });
-  copy.fetching = { promise, allowMetered: options.allowMetered === true };
+  const stop = new AbortController();
+  const promise = runFetch(region, options.allowMetered, stop.signal).finally(
+    () => {
+      copy.fetching = null;
+    },
+  );
+  copy.fetching = {
+    promise,
+    allowMetered: options.allowMetered === true,
+    stop,
+  };
   return promise;
 }
 
 async function runFetch(
   region: RegionWithRegistry,
-  allowMetered?: boolean,
+  allowMetered: boolean | undefined,
+  stop: AbortSignal,
 ): Promise<FetchOutcome> {
+  if (wiping) return "stopped";
   if (isOfflineOnly()) return "offline-only";
-  const began = generation;
   if (!(await canRunNow("placeNames", allowMetered))) return "skipped";
   try {
     const pointer = await fetchPointer(region);
@@ -438,7 +462,7 @@ async function runFetch(
     } else {
       await assertSpaceFor(onDisk);
     }
-    await installBuild(region, pointer, began);
+    await installBuild(region, pointer, stop);
     return "updated";
   } catch (err) {
     if (err instanceof StoppedError) return "stopped";
@@ -449,6 +473,19 @@ async function runFetch(
     await FileSystem.deleteAsync(downloadUri(region), {
       idempotent: true,
     }).catch(() => {});
+    // The folder `installBuild` made, when nothing is stored in it: a failed or
+    // stopped first fetch leaves no folder named for the region behind.
+    if (!copyOf(region).status.stored) {
+      await deleteFolder(region).catch(() => {});
+    }
+  }
+}
+
+/** A region's own folder, if it has one: the default region's is PLACE_REGISTRY_DIR itself. */
+async function deleteFolder(region: RegionWithRegistry): Promise<void> {
+  const dir = dirOf(region);
+  if (dir !== PLACE_REGISTRY_DIR) {
+    await FileSystem.deleteAsync(dir, { idempotent: true });
   }
 }
 
@@ -474,15 +511,20 @@ async function fetchPointer(
 async function installBuild(
   region: RegionWithRegistry,
   pointer: PlaceRegistryPointer,
-  began: number,
+  stop: AbortSignal,
 ): Promise<void> {
   const dir = dirOf(region);
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  // Not presigned, but the same first-byte timeout suits a public file.
+  // Not presigned, but the same first-byte timeout suits a public file. A stop
+  // cancels the transfer, so nothing waits on its bytes.
   const result = await downloadFromPresignedUrl(
     placeRegistryUrl(config.topoCdnBaseUrl, region.placeSearch, pointer),
     downloadUri(region),
-  );
+    undefined,
+    stop,
+  ).catch((err: unknown) => {
+    throw stop.aborted ? new StoppedError() : err;
+  });
   if (result.status !== 200) {
     throw new Error(`Place registry download answered ${result.status}`);
   }
@@ -493,8 +535,8 @@ async function installBuild(
     requestIdleCallback(() => resolve(), { timeout: 2000 }),
   );
   await readFile(downloadUri(region), pointer);
-  // A wipe stopped it meanwhile: nothing is in place yet to undo.
-  if (began !== generation) throw new StoppedError();
+  // Stopped meanwhile: nothing is in place yet to undo.
+  if (stop.aborted) throw new StoppedError();
 
   const target = dataUri(region, pointer);
   await FileSystem.deleteAsync(target, { idempotent: true });
@@ -587,36 +629,36 @@ async function regionsToKeep(): Promise<RegionWithRegistry[]> {
 }
 
 /**
- * Delete a region's copy. It leaves memory first, so a search or a load in flight over it sees no
- * stored build and drops its result (`buildIndex` compares the build it read
- * with the one stored), and a fetch in flight is let land first, or it would
- * install its build after the files went. Guard: placeRegistry.test.ts
+ * Delete a region's copy. A fetch in flight is stopped and awaited first (its
+ * transfer is cancelled, so the wait is short), or it would install its build
+ * after the files went; the copy then leaves memory, so a search or a load in
+ * flight over it sees no stored build and drops its result (`buildIndex`
+ * compares the build it read with the one stored). Guard: placeRegistry.test.ts
  * ("deletes a copy that a search is loading and a refresh is fetching").
  */
 async function forgetCopy(region: RegionWithRegistry): Promise<void> {
   const copy = copyOf(region);
+  copy.fetching?.stop.abort();
   await copy.fetching?.promise.catch(() => {});
   const stored = copy.status.stored;
   copy.index = null;
   publish(region, { stored: null, loadFailed: false });
-  const dir = dirOf(region);
   await FileSystem.deleteAsync(pointerUri(region), { idempotent: true });
   if (stored) {
     await FileSystem.deleteAsync(dataUri(region, stored), { idempotent: true });
   }
   await FileSystem.deleteAsync(downloadUri(region), { idempotent: true });
-  // A folder of its own goes whole, with whatever a crash left in it; the
-  // default region's is PLACE_REGISTRY_DIR, which holds the other folders.
-  if (dir !== PLACE_REGISTRY_DIR) {
-    await FileSystem.deleteAsync(dir, { idempotent: true });
-  }
+  // A folder of its own goes whole, with whatever a crash left in it.
+  await deleteFolder(region);
 }
 
 /**
  * Delete the copy of every region not in `keep`, and forget that a build of it
  * would not index (a preference that names a region the phone held). A region
- * whose first fetch is still in flight counts as held. Throws after trying them
- * all if any would not go.
+ * whose first fetch is still in flight counts as held, and the folder of a
+ * region with nothing stored goes too. Throws after trying them all if any
+ * would not go. Guards: placeRegistry.test.ts ("leaves no folder for a region
+ * after a failed or stopped first fetch, or a lapse").
  */
 async function lapseExcept(keep: readonly RegionWithRegistry[]): Promise<void> {
   let failed: unknown = null;
@@ -627,10 +669,14 @@ async function lapseExcept(keep: readonly RegionWithRegistry[]): Promise<void> {
     if (readPref(unreadableKey(region)) !== null) {
       writePref(unreadableKey(region), "");
     }
-    if (!hasPlaceRegistry(region.id) && !copies.get(region.id)?.fetching)
-      continue;
     try {
-      await forgetCopy(region);
+      if (hasPlaceRegistry(region.id) || copies.get(region.id)?.fetching) {
+        await forgetCopy(region);
+      } else {
+        // Nothing stored: a failed or crashed first fetch may have left its
+        // folder, which names a region the account does not keep.
+        await deleteFolder(region);
+      }
     } catch (err) {
       failed = err;
     }
@@ -649,33 +695,49 @@ export async function lapsePlaceRegistries(): Promise<void> {
 }
 
 /**
- * Stop the refresh for a wipe: a fetch that began earlier installs nothing, a
- * check that is mid-loop fetches no further region, and this waits for every
- * fetch in flight to settle. Guard: placeRegistry.test.ts ("installs nothing
- * once a wipe has stopped the refresh").
+ * Stop the refresh for a wipe, first among the wipe's producers: every fetch in
+ * flight is stopped (its transfer cancelled, so this returns as soon as they
+ * settle, not when the bytes arrive) and installs nothing, a check that is
+ * mid-loop fetches no further region, and no check or fetch starts until
+ * `resumePlaceRegistryAfterWipe`. Guards: placeRegistry.test.ts ("installs
+ * nothing once a wipe has stopped the refresh", "stops a download without
+ * waiting for its bytes", "fetches no further region once a wipe has stopped a
+ * check in progress", "starts no check between a wipe's stop and its lapse").
  */
 export async function stopPlaceRegistryForWipe(): Promise<void> {
-  generation += 1;
-  await Promise.allSettled(
-    [...copies.values()].map((copy) => copy.fetching?.promise),
-  );
+  wiping = true;
+  checkEpoch.abort();
+  const settling = [...copies.values()].flatMap((copy) => {
+    copy.fetching?.stop.abort();
+    return copy.fetching ? [copy.fetching.promise] : [];
+  });
+  await Promise.allSettled(settling);
+}
+
+/** The wipe has finished with the registries: the next account's refresh runs. */
+export function resumePlaceRegistryAfterWipe(): void {
+  wiping = false;
+  checkEpoch = new AbortController();
 }
 
 async function refreshAll(): Promise<void> {
-  const began = generation;
+  if (wiping) return;
+  const epoch = checkEpoch.signal;
   const keep = await regionsToKeep();
   await lapseExcept(keep).catch((err: unknown) => console.error(err));
   for (const region of keep) {
-    if (began !== generation) return;
+    if (epoch.aborted) return;
     await refreshPlaceRegistry(region.id);
   }
 }
 
 function requestCheck(): void {
   // A regained signal reaches a process kept alive in the background (a track
-  // recording): nothing is fetched there (ADR 0013). Returning to the
-  // foreground checks again.
-  if (AppState.currentState !== "active") return;
+  // recording): nothing is fetched there (ADR 0013), and returning to the
+  // foreground checks again. `=== "background"`, not `!== "active"`, as
+  // `sync/syncEngine.ts` has it: Android reports "unknown" until the first
+  // AppState event, and the check at launch runs inside that window.
+  if (AppState.currentState === "background") return;
   if (Date.now() - lastCheckAt < MIN_INTERVAL_MS) return;
   lastCheckAt = Date.now();
   refreshAll().catch((err: unknown) => console.error(err));
