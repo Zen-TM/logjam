@@ -29,9 +29,14 @@ const baseSchema = z.object({
 
   AUTH_MODE: z.enum(["fake", "oidc"]),
   // Set to "prod" by a host that has no AWS-injected variables for
-  // middleware/auth.ts to key on; there it forces real auth. Read from
+  // middleware/auth.ts and lib/runtime.ts to key on; there it forces real auth
+  // and refuses the dev-only switches. Read from
   // process.env at module load, declared here so it is validated at boot.
   LOGJAM_RUNTIME: z.enum(["prod"]).optional(),
+  // "1" adds the simulated regions of shared/src/simRegions.ts in a dev stack.
+  // loadEnv.ts reads it from process.env before shared loads and refuses it in
+  // a runtime lib/runtime.ts calls non-dev; declared here so a typo is caught.
+  SIM_REGIONS: z.enum(["1"]).optional(),
   FAKE_USER_SUB: z.string().optional(),
   // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
   // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens
