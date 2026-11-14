@@ -21,8 +21,8 @@ describe("regionShown", () => {
     expect(regionShown(around(169.1, -44.6), CAMERA, regions)).toBe(SIM_NZ);
   });
 
-  // Mutation: drop `wrapView`, and a map panned a turn round the world (its
-  // longitudes past 180) is over no region.
+  // Mutation: call `regionInView` in place of `regionInWrappedView`, and a map
+  // panned a turn round the world (its longitudes past 180) is over no region.
   it("reads a view panned past the antimeridian by whole turns", () => {
     expect(regionShown(around(150.3 + 360, -33.7), CAMERA, regions)).toBe(
       NSW_REGION,

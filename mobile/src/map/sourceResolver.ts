@@ -174,12 +174,6 @@ export interface ResolveContext {
    * Terrain group reads the clips saved of them.
    */
   keptSharpenedAreas?: readonly SharpenedArea[];
-  /**
-   * The regions whose clips a saved file may belong to: a clip saved in one
-   * region still draws offline when the map shows the next. `REGIONS` unless a
-   * test passes its own.
-   */
-  regions?: readonly Region[];
 }
 
 const RASTER_TILE_SIZE = 256;
@@ -590,8 +584,9 @@ function resolveStatewide(
  * zoomed out, so it is no clip for this: an area saved that way says "Needs a
  * connection" until it is saved again. Used by the layers sheet's switch and
  * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
- * Any of `regions` may hold it, so a clip saved in one region still draws when
- * the map shows the next. Guard: `sourceResolver.test.ts` ("holdsHillshade").
+ * Answers "is anything saved" over `regions`; what the map draws is only the
+ * shown region's clips (`resolveTerrain`). Guard: `sourceResolver.test.ts`
+ * ("holdsHillshade").
  */
 export function holdsHillshade(
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
@@ -773,21 +768,27 @@ export function bboxOnScreen(
 /**
  * One Terrain group layer of the region the map shows, as a list of sources:
  * none where that region has no such archive. Every source's key carries the
- * archive's id, so the map crossing into another region swaps it.
- * Guard: `sourceResolver.test.ts` ("draws the region the map shows").
+ * archive's id, so the map crossing into another region swaps it. Offline it
+ * draws that region's saved clips alone, so another region's data never
+ * carries this one's credit, source layer or paint.
+ * Guard: `sourceResolver.test.ts` ("draws the region the map shows", "offline:
+ * draws only the clips of the region the map shows").
  */
 function resolveTerrain(
   { layer, region, viewport }: Extract<LogicalLayerRef, { kind: "terrain" }>,
   ctx: ResolveContext,
 ): ResolvedTileSource[] {
-  const regions = ctx.regions ?? REGIONS;
   const archive = region && layerIn(region, layer);
   if (!region || !archive) return [];
   const main = mainRegion(viewport);
-  const holdsClip = {
-    contours: (a: MapArtifact) => holdsContours(a, regions),
-    slope: (a: MapArtifact) => holdsSlope(a, regions),
-    hillshade: (a: MapArtifact) => holdsHillshade(a, regions),
+  const holdsKind =
+    (kind: MapArtifact["kind"]) =>
+    (a: MapArtifact): boolean =>
+      a.kind === kind && a.logicalKey === archive.id;
+  const shown = {
+    contours: (a: MapArtifact) => holdsContours(a, [region]),
+    slope: (a: MapArtifact) => holdsSlope(a, [region]),
+    hillshade: (a: MapArtifact) => holdsHillshade(a, [region]),
   };
   switch (layer) {
     case "contours":
@@ -798,7 +799,7 @@ function resolveTerrain(
           "contours-region",
           ctx,
           undefined,
-          holdsClip.contours,
+          shown.contours,
         ),
         archive,
         "contours",
@@ -807,11 +808,32 @@ function resolveTerrain(
         region,
       );
     case "land":
-      return resolveStatewide(archive, "vector", "land-region", ctx, main);
+      return resolveStatewide(
+        archive,
+        "vector",
+        "land-region",
+        ctx,
+        main,
+        holdsKind("land-region"),
+      );
     case "fire":
-      return resolveStatewide(archive, "vector", "fire-region", ctx, main);
+      return resolveStatewide(
+        archive,
+        "vector",
+        "fire-region",
+        ctx,
+        main,
+        holdsKind("fire-region"),
+      );
     case "coverage":
-      return resolveStatewide(archive, "vector", "coverage-region", ctx, main);
+      return resolveStatewide(
+        archive,
+        "vector",
+        "coverage-region",
+        ctx,
+        main,
+        holdsKind("coverage-region"),
+      );
     case "slope":
       return routeTerrain(
         resolveStatewide(
@@ -820,12 +842,12 @@ function resolveTerrain(
           "slope-region",
           ctx,
           main,
-          holdsClip.slope,
+          shown.slope,
         ),
         archive,
         "slope",
         ctx,
-        holdsClip.slope,
+        shown.slope,
         region,
       );
     // The saved height clip is registered as a plain raster (the sampler
@@ -839,12 +861,12 @@ function resolveTerrain(
           ctx,
           (clips) =>
             main(clips).map((r) => ({ ...r, sourceType: "raster-dem" })),
-          holdsClip.hillshade,
+          shown.hillshade,
         ),
         archive,
         "heights",
         ctx,
-        holdsClip.hillshade,
+        shown.hillshade,
         region,
       );
   }

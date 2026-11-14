@@ -736,6 +736,20 @@ export function regionInView(
   );
 }
 
+/**
+ * `regionInView` for a view as a map reports it: its longitudes wrapped first
+ * (`wrapView`), since a map panned round the world reports them past ±180 and
+ * a region's borders are read in [-180, 180). What a map asks of the region it
+ * shows. Guard: `regions.test.ts` ("reads a view panned past the antimeridian").
+ */
+export function regionInWrappedView(
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): Region | null {
+  return regionInView(wrapView(view), regions, world);
+}
+
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */
 export function layerIn<K extends keyof RegionTerrain>(
   region: Region | null,

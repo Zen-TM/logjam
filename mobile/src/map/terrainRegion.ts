@@ -1,8 +1,7 @@
 import {
-  regionInView,
+  regionInWrappedView,
   REGIONS,
   WORLD,
-  wrapView,
   type Region,
 } from "@logjam/shared";
 
@@ -10,8 +9,8 @@ import type { Viewport } from "./sourceResolver";
 
 /**
  * The one region the Terrain group draws from: the one under the centre of
- * what is on screen (`regionInView`). Before the map first settles there is no
- * viewport, so the camera's own point stands in. The same `Region` comes back
+ * what is on screen (`regionInWrappedView`). Before the map first settles
+ * there is no viewport, so the camera's own point stands in. The same `Region` comes back
  * until the map crosses into another, so what depends on it changes only then.
  * Guard: `terrainRegion.test.ts`.
  */
@@ -27,5 +26,5 @@ export function regionShown(
     south: camera.latitude,
     north: camera.latitude,
   };
-  return regionInView(wrapView(box), regions, world);
+  return regionInWrappedView(box, regions, world);
 }

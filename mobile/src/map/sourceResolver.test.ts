@@ -1172,9 +1172,7 @@ describe("draws the region the map shows", () => {
   // map over another region draws New South Wales's archives.
   it.each(layers)("draws %s from the region's own archive", (layer) => {
     const url = (region: typeof SIM_NZ) =>
-      urls(
-        resolveMapSource({ kind: "terrain", layer, region }, ctx({ regions })),
-      );
+      urls(resolveMapSource({ kind: "terrain", layer, region }, ctx()));
     const archive = (r: typeof SIM_NZ) => r.terrain[layer]!.archivePath;
     // Coverage is NZ's alone: Utah has none to draw.
     expect(url(SIM_NZ)).toEqual([`pmtiles://${CDN}/${archive(SIM_NZ)}`]);
@@ -1209,42 +1207,51 @@ describe("draws the region the map shows", () => {
     ).toEqual([]);
   });
 
-  // Mutation: test a clip against the region in view alone (regions: [region]),
-  // and a clip saved in one region stops drawing where the map shows the next.
-  it("offline: a clip saved in one region still draws when the map shows another", () => {
-    const clip = (kind: MapArtifact["kind"], logicalKey: string) =>
-      artifact({
-        id: logicalKey,
-        kind,
-        logicalKey,
-        path: `/maps/${logicalKey}.pmtiles`,
-        bbox: [169, -44.7, 169.2, -44.55],
-        minzoom: 8,
-        maxzoom: 15,
+  // Mutation: match a saved clip by its kind alone (drop `&& a.logicalKey ===
+  // archive.id` in `holdsKind`), and where the map shows one region the clip
+  // of another is drawn, with this region's credit, source layer and paint.
+  it.each([
+    ["contours", "contours-region", "simnz-contours"],
+    ["slope", "slope-region", "simnz-slope"],
+    ["hillshade", "dem-region", "simnz-heights"],
+    ["land", "land-region", "simnz-land"],
+    ["fire", "fire-region", "simnz-fire"],
+    ["coverage", "coverage-region", "simnz-coverage"],
+  ] as const)(
+    "offline: draws only the clips of the region the map shows (%s)",
+    (layer, kind, logicalKey) => {
+      const offline = ctx({
+        connectivity: "offline",
+        artifacts: [
+          artifact({
+            id: logicalKey,
+            kind,
+            logicalKey,
+            path: `/maps/${logicalKey}.pmtiles`,
+            bbox: [169, -44.7, 169.2, -44.55],
+            minzoom: 8,
+            maxzoom: 15,
+          }),
+        ],
       });
-    const saved = [
-      clip("contours-region", "simnz-contours"),
-      clip("slope-region", "simnz-slope"),
-      clip("dem-region", "simnz-heights"),
-    ];
-    const offline = ctx({ connectivity: "offline", artifacts: saved, regions });
-    for (const layer of ["contours", "slope", "hillshade"] as const)
+      const [own, ...rest] = resolveMapSource(
+        { kind: "terrain", layer, region: SIM_NZ },
+        offline,
+      );
+      expect(rest).toEqual([]);
+      expect(own).toMatchObject({
+        status: "ok",
+        origin: "local",
+        attribution: SIM_NZ.terrain[layer]!.credit,
+      });
       expect(
-        urls(
-          resolveMapSource(
-            { kind: "terrain", layer, region: SIM_UTAH },
-            offline,
-          ),
-        ),
-      ).toHaveLength(1);
-    // The same clips are no clips of a region nobody lists.
-    expect(
-      resolveMapSource(
-        { kind: "terrain", layer: "slope", region: SIM_UTAH },
-        { ...offline, regions: [SIM_UTAH] },
-      ),
-    ).toMatchObject([{ status: "unavailable" }]);
-  });
+        resolveMapSource(
+          { kind: "terrain", layer, region: SIM_UTAH },
+          offline,
+        ).flatMap((r) => (r.status === "ok" ? [r] : [])),
+      ).toEqual([]);
+    },
+  );
 
   // Mutation: test `holdsContours` against NSW's id alone (REGIONS, not the
   // `regions` argument), and a simulated region's clip enables no switch.
