@@ -129,8 +129,13 @@ describe("the sentences the API sends", () => {
 
   // Mutation: write `const GONE = say`Couldn't find that.`;` at the top of any
   // file under api/src or shared/src, and it fails here, naming the file.
-  it("are written when a request needs them, never when a module loads", () => {
-    expect(atImport).toEqual([]);
+  it("are never a say literal outside a function", () => {
+    expect(
+      atImport,
+      "A say literal outside a function is evaluated when its module loads, in " +
+        "English, but the API's language is per request. Make the sentence a " +
+        "function and call it where it is thrown (docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md).",
+    ).toEqual([]);
   });
 
   it("reach a response only through say`…`", () => {

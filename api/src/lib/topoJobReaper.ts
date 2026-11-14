@@ -180,7 +180,7 @@ type ReapEntry = {
    * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` and
    * `exportEmail` mean "finishes or fails", so a reaped job
    * mails the same users a worker-detected failure would (no new pref key).
-   * `reason` is the generic REAPER_* message: the reaper never knows more.
+   * `reason` is the generic `reaperJobMessage()` or `topoExportStoppedMessage()`: the reaper never knows more.
    */
   email: {
     pref: "topoEmail" | "exportEmail";

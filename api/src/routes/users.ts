@@ -465,7 +465,7 @@ router.patch(
       }
       if (
         language !== undefined &&
-        !offeredLanguages(getEnv()).includes(language as Language)
+        !offeredLanguages().includes(language as Language)
       ) {
         throw malformed("Invalid language");
       }

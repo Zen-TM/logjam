@@ -8,7 +8,6 @@ import {
   setLanguageResolver,
   type Language,
 } from "@logjam/shared";
-import { getEnv } from "./env";
 import { nonDevRuntime, type RuntimeEnv } from "./runtime";
 
 // The language of the request in hand, or of the recipient a message is being
@@ -23,8 +22,10 @@ export function runInLanguage<T>(lang: Language, fn: () => T): T {
   return storage.run(lang, fn);
 }
 
-/** Every language but the pseudo-language in a prod runtime, which is for development only. */
-export function offeredLanguages(env: RuntimeEnv): readonly Language[] {
+/** Every language but the pseudo-language in a prod runtime, which is for development only. Reads `process.env`, as the other dev-only refusals do, because `getEnv()` drops the AWS variables `nonDevRuntime` reads. */
+export function offeredLanguages(
+  env: RuntimeEnv = process.env,
+): readonly Language[] {
   return nonDevRuntime(env).nonDev
     ? LANGUAGES.filter((lang) => lang !== PSEUDO_LANGUAGE)
     : LANGUAGES;
@@ -33,14 +34,14 @@ export function offeredLanguages(env: RuntimeEnv): readonly Language[] {
 /** The first language an `Accept-Language` value names that is offered, else the source. Any `q` above 0 counts; the header's order breaks ties. */
 export function languageFromHeader(
   header: string | undefined,
-  env: RuntimeEnv = getEnv(),
+  env: RuntimeEnv = process.env,
 ): Language {
   const wanted = (header ?? "")
     .split(",")
     .map((part, order) => {
       const [tag, ...params] = part.split(";");
       const q = params
-        .map((param) => /^\s*q\s*=\s*([\d.]+)\s*$/.exec(param)?.[1])
+        .map((param) => /^\s*q\s*=\s*([\d.]+)\s*$/i.exec(param)?.[1])
         .find((value) => value !== undefined);
       return { tag: tag.trim(), q: q === undefined ? 1 : Number(q), order };
     })
@@ -53,7 +54,7 @@ export function languageFromHeader(
 /** The language a message for this account is written in: the one its client last ran in, else the source. */
 export function languageOfAccount(
   uiPreferences: unknown,
-  env: RuntimeEnv = getEnv(),
+  env: RuntimeEnv = process.env,
 ): Language {
   const stored = normalizeUserUiPreferences(uiPreferences).language;
   return stored !== undefined && offeredLanguages(env).includes(stored)

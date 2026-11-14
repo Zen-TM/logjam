@@ -60,8 +60,11 @@ or that each client's entry file sets the global before it imports
 `@logjam/shared`; a later change adds it. The API installs the resolver from
 `AsyncLocalStorage` and refuses the pseudo-language in a prod runtime
 (`api/src/lib/requestLanguage.unit.test.ts`,
-`api/src/middleware/language.unit.test.ts`), and no `say` in `api/src` or
-`shared/src` is evaluated at import (`api/src/userCopy.unit.test.ts`).
+`api/src/middleware/language.unit.test.ts`), and no `say` literal in `api/src` or
+`shared/src` sits outside a function (`api/src/userCopy.unit.test.ts`); one
+import-time call of a sentence function remains (`visibleToLocked` in
+`shared/src/contracts/plans.ts`), which a later change to the plan contracts
+removes.
 (updated 2026-11-14)
 
 ## Consequences

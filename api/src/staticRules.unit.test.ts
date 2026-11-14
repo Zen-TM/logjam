@@ -143,6 +143,8 @@ describe("env is read through getEnv()", () => {
       "boot.ts runs it before getEnv(): it writes the secret getEnv() then validates",
     [join("lib", "resolveSmtpPassword.ts")]:
       "boot.ts runs it before getEnv(): it writes the password getEnv() then validates",
+    [join("lib", "requestLanguage.ts")]:
+      "the pseudo-language's prod check passes process.env to nonDevRuntime, as auth.ts and loadEnv.ts do, because getEnv() drops the AWS variables it reads (lib/requestLanguage.unit.test.ts)",
     [join("middleware", "auth.ts")]:
       "a second lock at module load that fails closed independently of validateEnv (middleware/auth.unit.test.ts)",
     [join("middleware", "rateLimit.ts")]:

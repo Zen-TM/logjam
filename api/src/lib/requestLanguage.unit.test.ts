@@ -49,6 +49,29 @@ describe("offeredLanguages", () => {
       offeredLanguages({ LOGJAM_RUNTIME: "prod", NODE_ENV: "development" }),
     ).not.toContain("en-XA");
   });
+
+  // Mutation: build the default from `getEnv()` instead of `process.env`
+  // (`import { getEnv } from "./env"`, `env: RuntimeEnv = getEnv()`), which
+  // drops the AWS variables, and a process that only an AWS variable gives away
+  // as not dev offers the pseudo-language.
+  it("reads the running process's environment, as the other dev-only refusals do", () => {
+    expect(offeredLanguages()).toContain("en-XA");
+    for (const [name, value] of [
+      ["NODE_ENV", "production"],
+      ["AWS_EXECUTION_ENV", "x"],
+      ["ECS_CONTAINER_METADATA_URI_V4", "x"],
+      ["AWS_LAMBDA_FUNCTION_NAME", "x"],
+    ] as const) {
+      const before = process.env[name];
+      process.env[name] = value;
+      try {
+        expect(offeredLanguages()).not.toContain("en-XA");
+      } finally {
+        if (before === undefined) delete process.env[name];
+        else process.env[name] = before;
+      }
+    }
+  });
 });
 
 describe("languageFromHeader", () => {
@@ -61,6 +84,7 @@ describe("languageFromHeader", () => {
     ["en-US;q=0.5, en-XA;q=0.9", "en-XA"],
     ["en-US;q=0, en-XA", "en-XA"],
     ["en-US;q=0", "en-AU"],
+    ["en-XA;Q=0, en-US", "en-US"],
     ["en-NZ, fr", "en-AU"],
     ["fr", "en-AU"],
     ["", "en-AU"],

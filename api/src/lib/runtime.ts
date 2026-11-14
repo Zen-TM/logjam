@@ -7,7 +7,7 @@
 //   4. LOGJAM_RUNTIME=prod, which a host with no AWS-injected variables (a
 //      plain Docker Compose host) sets itself
 // Guard: lib/runtime.unit.test.ts.
-/** The variables read: process.env has them all, getEnv() the first three. */
+/** The variables read; `process.env` has them all, and `getEnv()` drops the AWS ones. */
 export type RuntimeEnv = {
   NODE_ENV?: string;
   DB_HOST?: string;

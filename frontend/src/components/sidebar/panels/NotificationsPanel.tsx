@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   areaExportFailed,
+  inSourceLanguage,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -748,10 +749,11 @@ function NotificationsPanel({
     }
     // A failed export has no support to contact; the bug form is the way on,
     // for the failure that tells the owner nothing to do. Too large, outside
-    // NSW and the rest say their own next step.
+    // NSW and the rest say their own next step. The worker stored its sentence
+    // in English, so the comparison is made in English.
     if (
       n.type === "topo_export_complete" &&
-      n.payload.errorMessage === areaExportFailed()
+      n.payload.errorMessage === inSourceLanguage(areaExportFailed)
     ) {
       return (
         <Button

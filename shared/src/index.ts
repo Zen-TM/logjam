@@ -132,6 +132,7 @@ export {
   PSEUDO_LANGUAGE,
   isLanguage,
   SOURCE_LANGUAGE,
+  inSourceLanguage,
   intlLocale,
   language,
   matchLanguage,

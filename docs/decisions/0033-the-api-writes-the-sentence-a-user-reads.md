@@ -59,15 +59,19 @@ the API. A client shows it as it is.
   the language of the request's `Accept-Language` (`middleware/language.ts`).
   Both clients send their own `language()`; the pseudo-language is honoured
   outside a prod runtime only, and a header that names no offered language
-  reads as the source language. A `say` is therefore evaluated when a request
-  needs it, never when its module loads: a sentence several modules share is a
-  function (`malformedRequestSentence()`), not a constant. A sentence written
+  reads as the source language. A `say` is therefore written where a request
+  needs it, not as a module-level constant: a sentence several modules share is
+  a function (`malformedRequestSentence()`). The guard holds that no `say`
+  literal sits outside a function; one import-time call of such a function
+  remains (`visibleToLocked` in `shared/src/contracts/plans.ts`), which is
+  right for a client whose language is fixed at start and which a later
+  change to the plan contracts removes. A sentence written
   with nobody asking, a push title or a mail, is written in the language the
   recipient's account last ran in (`uiPreferences.language`); a sentence
   stored for later keeps the language it was written in. A reason code beside
   the status stays rejected, for the reason under Alternatives. Guards:
-  `api/src/userCopy.unit.test.ts` ("are written when a request needs them,
-  never when a module loads"), `api/src/middleware/language.unit.test.ts` and
+  `api/src/userCopy.unit.test.ts` ("are never a say literal outside a
+  function"), `api/src/middleware/language.unit.test.ts` and
   `api/src/__tests__/language.test.ts`. Everything else above stands.
 
 Guards:

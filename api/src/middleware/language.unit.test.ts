@@ -1,16 +1,7 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { quote, say } from "@logjam/shared";
-
-const runtime = vi.hoisted(() => ({ nodeEnv: "test" as string }));
-vi.mock("../lib/env", async (orig) => {
-  const real = await orig<typeof import("../lib/env")>();
-  return {
-    ...real,
-    getEnv: () => ({ ...real.getEnv(), NODE_ENV: runtime.nodeEnv }),
-  };
-});
 
 import { AppError, errorHandler } from "./errorHandler";
 import { languageForRequest } from "./language";
@@ -74,11 +65,12 @@ describe("a refusal's language", () => {
   // Mutation: have languageForRequest accept every `Language`, and a prod
   // runtime answers a request in the pseudo-language.
   it("is English in a prod runtime that is asked for the pseudo-language", async () => {
-    runtime.nodeEnv = "production";
+    const before = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     try {
       expect(await errorOf("/plain", "en-XA")).toBe(REFUSAL);
     } finally {
-      runtime.nodeEnv = "test";
+      process.env.NODE_ENV = before;
     }
   });
 
