@@ -62,6 +62,17 @@ export function lengthToInput(metres: number): number {
   return imperial() ? metres / METRES_PER_FOOT : metres;
 }
 
+/**
+ * Metres as a length field's text: the digits stored in metric, feet to one
+ * decimal ("98.4"). Always the figure alone: the field's label or
+ * `lengthUnitLabel()` says the unit. Guard: `units.test.ts` ("lengthInputText").
+ */
+export function lengthInputText(metres: number): string {
+  if (!imperial()) return String(metres);
+  const ft = Math.round((metres / METRES_PER_FOOT) * 10) / 10;
+  return formatNumber(ft, Number.isInteger(ft) ? 0 : 1);
+}
+
 /** Metres under 1 km, else km with one decimal; feet under 0.1 mi, else miles. */
 export function formatDistance(metres: number): string {
   if (!Number.isFinite(metres)) return UNKNOWN;
@@ -117,6 +128,53 @@ export function formatBoxSize(widthKm: number, heightKm: number): string {
  */
 export function formatFixedMetres(metres: number): string {
   return `${metres}m`;
+}
+
+const inFeet = (...values: number[]) => values.map((v) => v * METRES_PER_FOOT);
+const inMiles = (...values: number[]) => values.map((v) => v * METRES_PER_MILE);
+
+// Round ground distances a scale bar can span, in metres, smallest first. Each
+// list is round in its own units, so no unit's bar reads "164 ft". The screen's
+// ends at 500 km or mi, where a whole state fits and the bar stops helping; the
+// printed sheet's is the few steps a page of a map can hold.
+const SCALE_STEPS = {
+  screen: {
+    metric: [
+      1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
+      50_000, 100_000, 200_000, 500_000,
+    ],
+    imperial: [
+      ...inFeet(1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000),
+      ...inMiles(0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500),
+    ],
+  },
+  print: {
+    metric: [100, 250, 500, 1_000, 2_000, 5_000, 10_000],
+    imperial: [...inFeet(200, 500, 1_000, 2_000), ...inMiles(0.5, 1, 2, 5, 10)],
+  },
+} as const;
+
+/** The distances a scale bar of this kind can span, in metres, smallest first. */
+export function scaleBarSteps(kind: "screen" | "print"): readonly number[] {
+  return SCALE_STEPS[kind][current];
+}
+
+/**
+ * A scale bar's label: "500 m", "2 km", "0.5 mi", "200 ft". A whole number of
+ * km or mi drops its decimal (a bar says "1 km", where a distance says
+ * "1.0 km"), so this is not `formatDistance`. Metric is km from 1000 m,
+ * imperial miles from half a mile.
+ */
+export function formatScaleStep(metres: number): string {
+  if (imperial()) {
+    if (metres < METRES_PER_MILE / 2)
+      return `${formatNumber(Math.round(metres / METRES_PER_FOOT), 0)} ft`;
+    const mi = Math.round((metres / METRES_PER_MILE) * 10) / 10;
+    return `${formatNumber(mi, Number.isInteger(mi) ? 0 : 1)} mi`;
+  }
+  if (metres < 1_000) return `${formatNumber(Math.round(metres), 0)} m`;
+  const km = metres / 1_000;
+  return `${formatNumber(km, Number.isInteger(km) ? 0 : 1)} km`;
 }
 
 /** Speed with one decimal. Null (no timestamps) reads as unknown. */

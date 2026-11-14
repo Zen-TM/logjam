@@ -1,5 +1,5 @@
-import { metersPerPixel } from "@logjam/shared";
-import { describe, it, expect } from "vitest";
+import { metersPerPixel, setDisplayUnits } from "@logjam/shared";
+import { afterEach, describe, it, expect } from "vitest";
 import { chooseScaleStep, degreesPerDp, tileMetersPerPixel } from "./scaleBar";
 
 describe("tileMetersPerPixel", () => {
@@ -45,6 +45,24 @@ describe("chooseScaleStep", () => {
   it("labels kilometres once past 1000 m", () => {
     expect(chooseScaleStep(10, 300).label).toBe("2 km");
     expect(chooseScaleStep(100, 300).label).toBe("20 km");
+  });
+
+  afterEach(() => setDisplayUnits("metric"));
+
+  // Mutation: read `scaleBarSteps("screen")` as its metric list whatever the
+  // units, or label with `${meters} m`.
+  it("steps in feet then miles when the account reads imperial", () => {
+    setDisplayUnits("imperial");
+    // 1 m/px over 300 px offers 300 m = 984 ft: 500 ft is the largest step.
+    const near = chooseScaleStep(1, 300);
+    expect(near.label).toBe("500 ft");
+    expect(near.meters).toBeCloseTo(152.4, 6);
+    expect(near.widthPx).toBeCloseTo(152.4, 6);
+    // 10 m/px offers 3 km = 1.9 mi: 1 mi.
+    const far = chooseScaleStep(10, 300);
+    expect(far.label).toBe("1 mi");
+    expect(far.widthPx).toBeCloseTo(160.9344, 6);
+    expect(chooseScaleStep(100, 300).label).toBe("10 mi");
   });
 
   it("clamps to the offered width when even the smallest step overflows", () => {

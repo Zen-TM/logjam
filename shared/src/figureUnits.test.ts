@@ -8,9 +8,7 @@ import { describe, expect, it } from "vitest";
 // nowhere else: a hand-written "${n} m" prints metres to someone who chose
 // feet. This scans source for a figure followed by a unit, in a template, in
 // JSX text or after a `+`, and names every one outside `units.ts`.
-// There is no allow-list beyond `NOT_YET`, whose files each take a change that
-// needs logic and each record how many figures they hold, so a new one in a
-// listed file fails too. A figure that must stay in one unit takes its number
+// There is no allow-list. A figure that must stay in one unit takes its number
 // from `units.ts` too (`formatFixedMetres`), or is written as plain copy with
 // no figure hole.
 //
@@ -18,28 +16,11 @@ import { describe, expect, it } from "vitest";
 // `profileSeries.ts` or `frontend/src/components/routes/RouteDrawPanel.tsx`,
 // or `${Math.round(width)} × ${Math.round(height)} km` in
 // `contracts/placesFilterSheet.ts`, or `${Math.round(elevationM)} m` back in
-// `mobile/src/tracks/TrackStatsBody.tsx`.
+// `mobile/src/tracks/TrackStatsBody.tsx`, or the scale bar's `${meters} m`
+// back in `mobile/src/map/scaleBar.ts`.
 
 /** Directories scanned, from the repo root. Widening the guard adds one here. */
 const SCANNED = ["shared/src", "frontend/src", "mobile/src"];
-/**
- * Files whose figures this guard cannot hold yet, each with why and with how
- * many figures it holds today. A file is named here only while it still holds
- * that many: the test "names only files that still hold the figures it counts"
- * fails when a file is fixed or gains one, so its entry changes with it.
- */
-const NOT_YET: Record<string, { reason: string; hits: number }> = {
-  "frontend/src/geoPdf/draw/elements.ts": {
-    reason:
-      "the printed scale bar's step list is metric and its label drops the decimal (1 km, not 1.0 km), so units.ts's formatDistance would change what it prints",
-    hits: 2,
-  },
-  "mobile/src/map/scaleBar.ts": {
-    reason:
-      "the on-screen scale bar's step list is metric and its label drops the decimal (1 km, not 1.0 km), so units.ts's formatDistance would change what it prints",
-    hits: 2,
-  },
-};
 /** The one file that writes figures. */
 const UNITS_MODULE = "shared/src/units.ts";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -145,7 +126,7 @@ describe("figures and their units", () => {
     ).toBeGreaterThan(300);
     const found: string[] = [];
     for (const file of files) {
-      if (file === UNITS_MODULE || file in NOT_YET) continue;
+      if (file === UNITS_MODULE) continue;
       for (const line of figureUnitLines(
         file,
         readFileSync(join(REPO, file), "utf8"),
@@ -154,21 +135,9 @@ describe("figures and their units", () => {
     }
     expect(
       found,
-      "a figure with a unit is written by units.ts: use formatDistance, formatHeight, formatSpeed, formatArea, formatBoxSize, formatHeightRange, formatFixedMetres, or lengthToInput with lengthUnitLabel",
+      "a figure with a unit is written by units.ts: use formatDistance, formatHeight, formatSpeed, formatArea, formatBoxSize, formatHeightRange, formatFixedMetres, formatScaleStep, or lengthInputText with lengthUnitLabel",
     ).toEqual([]);
   }, 30_000);
-
-  // Mutation: name `shared/src/numberFormat.ts`, which holds no figure, in
-  // NOT_YET, make `elements.ts` or `scaleBar.ts` write its scale bar through
-  // units.ts and leave its entry, or write a third figure in one of them.
-  it("names only files that still hold the figures it counts", () => {
-    expect(Object.keys(NOT_YET).length).toBeGreaterThan(0);
-    for (const [file, { hits }] of Object.entries(NOT_YET))
-      expect(
-        figureUnitLines(file, readFileSync(join(REPO, file), "utf8")).length,
-        `${file} holds a different number of hand-written figures than NOT_YET records: fix it through units.ts, or change its entry`,
-      ).toBe(hits);
-  });
 
   // Mutation: `UNIT_AFTER` stops matching a space before the unit.
   it("still finds the figures in units.ts itself", () => {

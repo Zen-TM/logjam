@@ -1,6 +1,7 @@
 // Logjam Web's side of the GeoPDF renderer: starts the worker, relays
 // progress, and turns what comes back into a result. The dialog imports this
 // only when it opens, so the renderer is its own chunk.
+import { displayUnits } from "@logjam/shared";
 import { readCachedLimits, writeCachedLimits } from "./probe";
 import type {
   GeoPdfProgress,
@@ -134,6 +135,7 @@ export function runGeoPdfRender(
         type: "render",
         input,
         limits: readCachedLimits(),
+        units: displayUnits(),
         debug: opts.debug,
       };
       worker.postMessage(request);

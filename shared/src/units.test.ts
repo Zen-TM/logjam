@@ -13,15 +13,18 @@ import {
   formatHeight,
   formatHeightRange,
   formatRain,
+  formatScaleStep,
   formatSpeed,
   formatTemperature,
   formatTemperatureRange,
   formatWind,
   lengthFromInput,
+  lengthInputText,
   lengthToInput,
   lengthUnitLabel,
   choosesUnits,
   offersUnitsChoice,
+  scaleBarSteps,
   setDisplayUnits,
   unitsOf,
 } from "./units.js";
@@ -184,6 +187,95 @@ describe("imperial", () => {
     for (const metres of [0, 1, 12.5, 30, 250.25]) {
       expect(lengthFromInput(lengthToInput(metres))).toBeCloseTo(metres, 10);
     }
+  });
+});
+
+describe("scale bars", () => {
+  // The step lists and labels the two bars wrote before this module, verbatim.
+  const screenWas = [
+    1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
+    50_000, 100_000, 200_000, 500_000,
+  ];
+  const printWas = [100, 250, 500, 1000, 2000, 5000, 10000];
+  const screenLabelWas = (m: number) =>
+    m >= 1_000
+      ? `${Number.isInteger(m / 1_000) ? m / 1_000 : (m / 1_000).toFixed(1)} km`
+      : `${m} m`;
+  const printLabelWas = (m: number) =>
+    m >= 1000 ? `${m / 1000} km` : `${m} m`;
+
+  // Mutation: add a step to the metric `screen` or `print` list in units.ts,
+  // or change `formatScaleStep`'s metric branch to `formatDistance`.
+  it("are what Logjam drew in metric, label by label", () => {
+    expect(scaleBarSteps("screen")).toEqual(screenWas);
+    expect(scaleBarSteps("print")).toEqual(printWas);
+    for (const m of screenWas)
+      expect(formatScaleStep(m)).toBe(screenLabelWas(m));
+    for (const m of printWas) expect(formatScaleStep(m)).toBe(printLabelWas(m));
+    // A clamped bar's label is of an arbitrary whole number of metres.
+    expect(formatScaleStep(1500)).toBe("1.5 km");
+    expect(formatScaleStep(7)).toBe("7 m");
+  });
+
+  // Mutation: `SCALE_STEPS.screen.imperial` becomes the metric list, or
+  // `formatScaleStep` writes feet where it should write miles from half a mile.
+  it("are round in feet then miles in imperial", () => {
+    setDisplayUnits("imperial");
+    for (const kind of ["screen", "print"] as const) {
+      const steps = scaleBarSteps(kind);
+      expect(steps.length).toBeGreaterThan(6);
+      expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    }
+    const labels = (kind: "screen" | "print") =>
+      scaleBarSteps(kind).map(formatScaleStep);
+    expect(labels("screen")).toEqual([
+      "1 ft",
+      "2 ft",
+      "5 ft",
+      "10 ft",
+      "20 ft",
+      "50 ft",
+      "100 ft",
+      "200 ft",
+      "500 ft",
+      "1000 ft",
+      "2000 ft",
+      "0.5 mi",
+      "1 mi",
+      "2 mi",
+      "5 mi",
+      "10 mi",
+      "20 mi",
+      "50 mi",
+      "100 mi",
+      "200 mi",
+      "500 mi",
+    ]);
+    expect(labels("print")).toEqual([
+      "200 ft",
+      "500 ft",
+      "1000 ft",
+      "2000 ft",
+      "0.5 mi",
+      "1 mi",
+      "2 mi",
+      "5 mi",
+      "10 mi",
+    ]);
+    // A clamped bar: 2500 m is 1.55 mi.
+    expect(formatScaleStep(2500)).toBe("1.6 mi");
+  });
+});
+
+describe("lengthInputText", () => {
+  // Mutation: `lengthInputText` rounds in metric too (12.345 reads "12.3").
+  it("keeps the stored digits in metric and rounds feet to one decimal", () => {
+    expect(lengthInputText(12.345)).toBe("12.345");
+    expect(lengthInputText(40)).toBe("40");
+    setDisplayUnits("imperial");
+    expect(lengthInputText(30.48)).toBe("100");
+    expect(lengthInputText(35)).toBe("114.8");
+    expect(lengthInputText(0)).toBe("0");
   });
 });
 

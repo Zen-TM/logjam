@@ -1,6 +1,11 @@
 // What the dialog hands the renderer, what it gets back, and the messages
 // between the client (main thread) and the worker.
-import type { GeoPdfConfig, SharpenedOverlay, SlopeBand } from "@logjam/shared";
+import type {
+  GeoPdfConfig,
+  SharpenedOverlay,
+  SlopeBand,
+  Units,
+} from "@logjam/shared";
 import type { CanvasLimits } from "./probe";
 
 export type GeoPdfRenderInput = {
@@ -79,6 +84,8 @@ export type WorkerRequest = {
   input: GeoPdfRenderInput;
   /** Cached limits, or null to probe. */
   limits: CanvasLimits | null;
+  /** The page's display units: the worker's own scope holds the default. */
+  units: Units;
   debug?: RenderDebug;
 };
 
