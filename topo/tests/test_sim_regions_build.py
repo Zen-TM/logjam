@@ -30,6 +30,7 @@ class TestRetriable(unittest.TestCase):
     """What waiting can cure, and nothing else."""
 
     def test_a_refusal_or_a_dropped_connection_is_retried(self):
+        # Mutation: return False from retriable() for every error.
         for error in (
             http_error(429),
             http_error(503),
@@ -37,21 +38,33 @@ class TestRetriable(unittest.TestCase):
             http.client.IncompleteRead(b""),
             ConnectionResetError(),
             TimeoutError(),
-            failed("extract.go: HTTP 429 Too Many Requests"),
-            failed("read tcp: connection reset by peer"),
+            # go-pmtiles' own wording, read from a local server that answered
+            # 429 and from a socket that was closed.
+            failed("Failed to extract, Failed to create range reader, HTTP error: 429"),
+            failed("fetching chunks 50%\nFailed, HTTP error: 503"),
+            failed('Get "https://h/x.pmtiles": EOF'),
+            failed("dial tcp 1.2.3.4:443: connect: connection refused"),
+            failed("read tcp 1.2.3.4:5->6:443: read: connection reset by peer"),
+            failed("dial tcp: i/o timeout"),
         ):
             with self.subTest(error=error):
                 self.assertTrue(build.retriable(error))
 
     def test_a_wrong_url_a_bad_argument_or_a_missing_binary_is_not(self):
-        # Mutation: return True from retriable() for every error.
+        # Mutation: return True from retriable() for every error, or search stderr
+        # for a bare "429" or "503" in place of RETRY_STDERR.
         for error in (
             http_error(404),
             http_error(403),
             FileNotFoundError("pmtiles"),
             ValueError("bad"),
             failed("pmtiles: error: unknown flag --nope"),
+            failed("HTTP error: 404"),
             failed(None),
+            # Digits and words that are not a refusal: a permanent failure.
+            failed("fetching 1500/3000 chunks\nno space left on device"),
+            failed("wrote 5030 bytes; 503 tiles left: no space left on device"),
+            failed("Failed to extract: archive 4290 tiles, timeout flag unknown"),
         ):
             with self.subTest(error=error):
                 self.assertFalse(build.retriable(error))

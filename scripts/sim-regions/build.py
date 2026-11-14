@@ -15,6 +15,7 @@ network.
 import argparse
 import http.client
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -62,20 +63,25 @@ def run(*command: str, capture_stderr: bool = False) -> None:
 
 
 RETRY_STATUS = (429, 500, 502, 503, 504)
-# What go-pmtiles prints when a host refuses or drops it.
-RETRY_WORDS = tuple(map(str, RETRY_STATUS)) + ("timeout", "timed out", "connection")
+# How go-pmtiles words a refusal ("HTTP error: 429") and a dropped connection,
+# which is all of its errors that waiting can cure.
+RETRY_STDERR = re.compile(
+    rf"HTTP error: ({'|'.join(map(str, RETRY_STATUS))})\b"
+    r"|connection (refused|reset)|i/o timeout|TLS handshake timeout"
+    r"|unexpected EOF|: EOF\b"
+)
 
 
 def retriable(error: BaseException) -> bool:
     """Whether a host's refusal or a dropped connection, which waiting may cure,
-    and not a wrong URL, a bad argument or a missing binary, which it will not
-    (guard: topo/tests/test_sim_regions_build.py `TestRetriable`)."""
+    and not a wrong URL, a bad argument, a full disk or a missing binary, which
+    it will not (guard: topo/tests/test_sim_regions_build.py `TestRetriable`)."""
     if isinstance(error, urllib.error.HTTPError):
         return error.code in RETRY_STATUS
     if isinstance(error, urllib.error.URLError | http.client.HTTPException):
         return True
     if isinstance(error, subprocess.CalledProcessError):
-        return any(w in (error.stderr or "").lower() for w in RETRY_WORDS)
+        return bool(RETRY_STDERR.search(error.stderr or ""))
     return isinstance(error, ConnectionError | TimeoutError)
 
 
@@ -146,7 +152,7 @@ def merged(parts: list[Path], out: Path) -> None:
         written(out, lambda part: run("pmtiles", "merge", *map(str, parts), str(part)))
 
 
-def fit_metadata(archive: Path) -> None:
+def fit_metadata(archive: Path, scratch: Path) -> None:
     """Make the metadata's `bounds`, `center`, `minzoom` and `maxzoom` the
     header's, when they differ. A merge keeps the first input's metadata, and
     `pmtiles extract` the source's, so a reader of the metadata would take an
@@ -171,7 +177,7 @@ def fit_metadata(archive: Path) -> None:
     meta["bounds"] = f"{west},{south},{east},{north}"
     meta["center"] = f"{(west + east) / 2},{(south + north) / 2},{header['minzoom']}"
     meta["minzoom"], meta["maxzoom"] = str(header["minzoom"]), str(header["maxzoom"])
-    fixed = archive.with_suffix(".metadata.json")
+    fixed = scratch / f"{archive.name}.metadata.json"
     fixed.write_text(json.dumps(meta))
     run("pmtiles", "edit", str(archive), f"--metadata={fixed}")
     fixed.unlink()
@@ -282,17 +288,19 @@ def lidar(rid: str, cfg: dict, out: Path, work: Path) -> None:
     download(cfg["lidar"]["url"], out / cfg["lidar"]["path"])
 
 
-def fixtures(rid: str, cfg: dict, out: Path, dest: Path) -> None:
-    """A tile or two of each archive, over one small box, for the zooms it names,
-    with the metadata made to say what the cut holds."""
+def fixtures(rid: str, cfg: dict, out: Path, work: Path, dest: Path) -> None:
+    """A tile of each archive at each zoom it names, over one small box, with the
+    metadata made to say what the cut holds. Cut and fitted under `work`, and
+    moved into `dest` whole."""
     f = cfg["fixture"]
     for kind in ("heights", "slope", "contours", "vector"):
         if kind not in cfg:
             continue
-        target = dest / Path(cfg[kind]["path"]).name
+        name = Path(cfg[kind]["path"]).name
+        cut = work / "fixtures" / name
         lo, hi = cfg[kind]["fixtureZooms"]
         written(
-            target,
+            cut,
             lambda tmp, kind=kind, lo=lo, hi=hi: run(
                 "pmtiles",
                 "extract",
@@ -303,7 +311,8 @@ def fixtures(rid: str, cfg: dict, out: Path, dest: Path) -> None:
                 f"--maxzoom={hi}",
             ),
         )
-        fit_metadata(target)
+        fit_metadata(cut, work / "fixtures")
+        written(dest / name, lambda tmp, cut=cut: shutil.copy(cut, tmp))
 
 
 def main() -> None:
@@ -349,14 +358,13 @@ def main() -> None:
                 places(rid, cfg, out, work, args.force)
             else:
                 globals()[step](rid, cfg, out, work)
-        if len(cfg["boxes"]) > 1:
-            for kind in ("heights", "slope", "contours", "vector"):
-                if kind in cfg and (out / cfg[kind]["path"]).exists():
-                    fit_metadata(out / cfg[kind]["path"])
+        for kind in ("heights", "slope", "contours", "vector"):
+            if kind in cfg and (out / cfg[kind]["path"]).exists():
+                fit_metadata(out / cfg[kind]["path"], work)
         if args.fixtures:
             dest = Path("/fixtures")
             dest.mkdir(parents=True, exist_ok=True)
-            fixtures(rid, cfg, out, dest)
+            fixtures(rid, cfg, out, work, dest)
 
 
 if __name__ == "__main__":

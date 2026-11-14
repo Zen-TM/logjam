@@ -73,8 +73,8 @@ describe("scripts/sim-regions/boxes.json", () => {
   );
 
   it.each(Object.keys(DECLARED))("has well-formed boxes for %s", (id) => {
-    // Mutation: swap a box's west and east, give a heights credit of "", or move
-    // the fixture box outside the boxes.
+    // Mutation: swap a box's west and east, give a heights credit of "", move
+    // the fixture box outside the boxes, or widen it across a tile edge.
     const { boxes: bs, heights } = boxes[id];
     expect(bs.length).toBeGreaterThan(0);
     for (const [west, south, east, north] of bs) {
@@ -89,6 +89,22 @@ describe("scripts/sim-regions/boxes.json", () => {
     expect(
       bs.some(([w, s, e, n]) => w <= fw && fe <= e && s <= fs && fn <= n),
     ).toBe(true);
+    // One tile at every zoom it names: the box lies inside one tile of the
+    // deepest zoom of any archive, and so inside one tile of each coarser.
+    const deepest = Math.max(
+      ...(["heights", "slope", "contours", "vector"] as const).flatMap(
+        (kind) => boxes[id][kind]?.fixtureZooms.slice(1) ?? [],
+      ),
+    );
+    const tileAt = (lon: number, lat: number) => {
+      const n = 2 ** deepest;
+      const rad = (lat * Math.PI) / 180;
+      return [
+        Math.floor(((lon + 180) / 360) * n),
+        Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * n),
+      ];
+    };
+    expect(tileAt(fw, fn), `${id} fixture box corners`).toEqual(tileAt(fe, fs));
     for (const kind of ["heights", "slope", "contours", "vector"] as const) {
       const zooms = boxes[id][kind]?.fixtureZooms;
       if (zooms)

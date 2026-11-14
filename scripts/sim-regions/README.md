@@ -1,8 +1,10 @@
 # Simulated-region archives
 
 The simulated regions in `shared/src/simRegions.ts` (a made-up New Zealand
-with two rings, a made-up Utah, and the everywhere tier around each) draw
-real, published ground, so every place-aware path can be run end to end with
+whose border is two separate rings, a made-up Utah, and the world tier: the
+heights and basemap drawn outside every region, as in
+[ADR 0049](../../docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md))
+draw real, published ground, so every place-aware path can be run end to end with
 no real second region. This folder builds that ground's archives: heights,
 slope, contours, a vector basemap, the OpenStreetMap places inside each box,
 and one point cloud. Go here to rebuild them, or to cut the small copies the
@@ -40,33 +42,17 @@ The archives are large and never committed.
 Hosts read, each by a plain client with nothing that names the project or its
 maintainer: `download.mapterhorn.com` (heights, by byte range),
 `build.protomaps.com` (vector, `pmtiles extract`), `overpass-api.de` (places),
-`rockyweb.usgs.gov` (the point cloud). A refusal (429) is waited out, 2, 4, 8
-minutes and so on, never retried at once. The point cloud's host answered 429
-to its first three requests.
-If your machine cannot reach Overpass (it refused connections from two
-networks on 2026-11-14), put the `.osm` files in `out/places/` by hand, named
-`<region>-<box number>.osm` (`simnz-0.osm`): the step uses a file that exists,
-unless you pass `--force`, which fetches it again.
+`rockyweb.usgs.gov` (the point cloud). A refusal (429, 500, 502, 503, 504) or a dropped
+connection is waited out, 2, 4, 8 minutes and so on, never retried at once; any
+other failure stops the run. The `places` step has not been run against
+Overpass. If your machine cannot reach it, put the `.osm` files in `out/places/`
+by hand, named `<region>-<box number>.osm` (`simnz-0.osm`): the step uses a file
+that exists, unless you pass `--force`, which fetches it again.
 
 ## What is built
 
 The regions, their boxes, the archives each gets and their zoom ranges are in
-`boxes.json`. Sizes of the build on 2026-11-14 (Protomaps build 20261113),
-in MB as `pmtiles show` prints them:
-
-| Archive | Tiles | Size |
-|---|---|---|
-| `simnz` heights (two boxes) | 4,549 | 202 |
-| `simnz` slope, contours, vector | | 166, 3.4, 1.8 |
-| `simutah` heights | 201 | 9.6 |
-| `simutah` slope, contours, vector | | 8.1, 2.8, 1.7 |
-| `world` heights (two patches) | 2,226 | 98 |
-| `world` vector | | 29 |
-| `simutah` point cloud (metres) | | 176 |
-
-The `places` step (`simnz` and `simutah`) has not been run against Overpass: it
-refused connections the day this was built. The registry builder it calls was
-run on a 1 km Overpass sample and reads it.
+`boxes.json`; the Zion point cloud is in metres.
 
 A region with two boxes is one archive: the boxes are built apart and joined
 with `pmtiles merge`. A merge keeps the first input's metadata and an extract
@@ -75,8 +61,7 @@ the header's on a merged archive and on every fixture.
 
 Mapterhorn marks no edge where a fine survey ends, so a box's heights are 1 m
 only where the survey is, and each credit says "where that survey covers".
-The Makarora box was cut to lie inside the LINZ LiDAR; the other boxes were
-only looked at on samples.
+Only the Makarora box is known to lie wholly inside its survey.
 
 ## Sources and credit
 
@@ -94,11 +79,11 @@ examples holds for the fixtures below.
 
 ## Fixtures
 
-`build.sh --fixtures` also cuts a tile or two of each archive over one small
-box (`fixture` in `boxes.json`, and each archive's `fixtureZooms`) into
-`shared/src/__fixtures__/sim-regions/`, about 1.3 MB in all. Archives are
-ignored by git, so add a recut one with `git add -f`. A test holds the folder to
-exactly one fixture per archive built, each a PMTiles file under 300 KB whose
-metadata says what its header does. The credit travels with each: in its
-`attribution` metadata, except the contours', whose builder writes it in
-`description` ("Contours derived from: …").
+`build.sh --fixtures` also cuts one tile of each archive at each zoom it names
+(`fixtureZooms`), over a box inside one tile (`fixture` in `boxes.json`), into
+`shared/src/__fixtures__/sim-regions/`. Archives are ignored by git, so add a
+recut one with `git add -f`. Tests hold the folder to exactly one fixture per
+archive built, each a PMTiles file under 300 KB whose metadata says what its
+header does, and the box to lie inside one tile of the deepest zoom. The credit
+travels with each: in its `attribution` metadata, except the contours', whose
+builder writes it in `description` ("Contours derived from: …").
