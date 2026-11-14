@@ -5,6 +5,7 @@ import {
   formatRange,
   formatThreshold,
   isFullRange,
+  stopLabel,
   THRESHOLD_OPERATOR_LABELS as OPERATOR_LABEL,
   THRESHOLD_OPERATORS as OPERATORS,
   type AttributeFilterShape,
@@ -42,6 +43,7 @@ const SHAPES: Record<AttributeFilterShape, (props: Props) => ReactNode> = {
       label={def.label}
       bounds={[def.min as number, def.max as number]}
       value={value?.kind === "numberRange" ? value.range : null}
+      word={(stop) => stopLabel(def.key, stop)}
       onChange={(next) =>
         onChange(next == null ? null : { kind: "numberRange", range: next })
       }

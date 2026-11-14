@@ -23,6 +23,7 @@ import {
   SOURCES_FIELD_KEY,
   systemRowIds,
   fieldValueLabel,
+  stopLabel,
   assertSystemIdsAreUuidV4,
 } from "./placeTypes.js";
 import { isUuidV4 } from "./sync.js";
@@ -172,6 +173,15 @@ describe("system field definitions", () => {
     expect(fieldValueLabel("aca_water", 8)).toBeUndefined();
     expect(fieldValueLabel("aca_water", 1.5)).toBeUndefined();
     expect(fieldValueLabel("aca_water", "A")).toBeUndefined();
+  });
+
+  // Mutation: return the number for a labelled field, or the label for a
+  // field without any.
+  it("write a stop on the scale as its word where it has one, else its number", () => {
+    expect(stopLabel("aca_water", 5)).toBe("C2");
+    expect(stopLabel("commitment", 3)).toBe("3");
+    expect(stopLabel("my_own_field", 2)).toBe("2");
+    expect(stopLabel("aca_water", 8)).toBe("8");
   });
 
   it("have unique keys", () => {

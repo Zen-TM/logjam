@@ -1,6 +1,6 @@
 // `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
 // which is erased, so this edge does not close a runtime cycle.
-import { isReservedFieldKey, nameKey } from "./placeTypes.js";
+import { isReservedFieldKey, nameKey, stopLabel } from "./placeTypes.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
@@ -239,6 +239,24 @@ export function railStops(def: TripLogCustomFieldDef): number[] | null {
   const stops: number[] = [];
   for (let stop = def.min; stop <= def.max; stop += 1) stops.push(stop);
   return stops;
+}
+
+/** What a form's rail offers for a rail-shaped field: "—" for unset, first, then
+ *  each stop by its word where the field has labels (`stopLabel`). Null where
+ *  `railStops` is. The value is the stop's number as text, which is what a form
+ *  holds. */
+export function railChoices(
+  def: TripLogCustomFieldDef,
+): { value: string; label: string }[] | null {
+  const stops = railStops(def);
+  if (!stops) return null;
+  return [
+    { value: "", label: "—" },
+    ...stops.map((stop) => ({
+      value: String(stop),
+      label: stopLabel(def.key, stop),
+    })),
+  ];
 }
 
 export const CUSTOM_FIELD_TYPES: {

@@ -189,6 +189,7 @@ export const SIM_NZ: Region = {
   placeSearch: null,
   gauges: null,
   grid: "nztm2000",
+  canyonGrades: "french",
   units: "metric",
   canyons: null,
 };
@@ -218,6 +219,7 @@ export const SIM_UTAH: Region = {
   placeSearch: null,
   gauges: null,
   grid: "utm",
+  canyonGrades: "aca",
   units: "imperial",
   canyons: null,
 };
@@ -251,6 +253,7 @@ export const SIM_WORLD: Region = {
   placeSearch: null,
   gauges: null,
   grid: "utm",
+  canyonGrades: "french",
   units: "metric",
   canyons: null,
 };

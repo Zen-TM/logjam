@@ -431,6 +431,37 @@ describe("opChanges", () => {
     expect(opChanges(parked({ fields: { numAbseils: 5 } }))[0].value).toBe("5");
   });
 
+  // Mutation: drop the `fieldValueLabel` lookup in `fieldValueText`, and the
+  // line reads "ACA water grade: 5".
+  it("names an ACA grade and writes its rank as its letters", () => {
+    const changes = opChanges(
+      parked({
+        fields: {
+          fieldValues: {
+            aca_water: 5,
+            aca_risk: 3,
+            aca_technical: 3,
+            aca_time: 2,
+          },
+        },
+      }),
+    );
+    expect(changes.map((change) => [change.label, change.value])).toEqual([
+      ["ACA water grade", "C2"],
+      ["ACA risk rating", "R"],
+      ["ACA technical grade", "3"],
+      ["ACA time grade", "II"],
+    ]);
+  });
+
+  // Mutation: delete the `aca_water` entry of `FIELD_LABEL`, and a shelved
+  // conflict is titled with the raw key.
+  it("titles a conflict on an ACA field in words", () => {
+    expect(shelfTitle(shelved({ field: "aca_water" }))).toBe(
+      "ACA water grade for “Claustral” changed on two devices",
+    );
+  });
+
   it("shows a media op's filename and nothing else", () => {
     const changes = opChanges(
       parked({
