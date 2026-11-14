@@ -13,8 +13,11 @@
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
+  language,
+  LANGUAGE_SETTING,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
+  type Language,
   type ThemeSchemeId,
 } from "@logjam/shared";
 
@@ -35,6 +38,12 @@ import {
   wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
+import {
+  chooseLanguage,
+  languageRow,
+  offeredHere,
+} from "../../languageSetting";
+import { useTracks } from "../../tracks/useTracks";
 import {
   ScreenScroll,
   SectionHeader,
@@ -111,6 +120,21 @@ export function DisplaySettingsScreen() {
     [notify],
   );
 
+  // Only with more than one language offered, so prod draws nothing here.
+  const { tracks } = useTracks();
+  const languages = languageRow(offeredHere(), tracks);
+  const pickLanguage = useCallback(
+    async (next: Language) => {
+      const result = await chooseLanguage(next);
+      if (result === "refused") {
+        notify(LANGUAGE_SETTING.saveFailed.gps, "error");
+      } else if (result === "stored") {
+        notify(LANGUAGE_SETTING.restartFailed);
+      }
+    },
+    [notify],
+  );
+
   return (
     <>
       <ScreenScroll>
@@ -141,6 +165,20 @@ export function DisplaySettingsScreen() {
               : "Applies next time you open Logjam GPS."
           }
         />
+
+        {languages ? (
+          <ChoiceGroup
+            label={LANGUAGE_SETTING.title}
+            options={languages.offered.map((lang) => ({
+              value: lang,
+              label: LANGUAGE_SETTING.names[lang],
+            }))}
+            value={language()}
+            hint={LANGUAGE_SETTING.hint.gps}
+            disabledReason={languages.heldReason ?? undefined}
+            onChange={(next) => void pickLanguage(next)}
+          />
+        ) : null}
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

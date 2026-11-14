@@ -56,9 +56,11 @@ directory that may only fall, found by `shared/src/i18nSource.ts`; the same
 tests hold each message to its hygiene rules (no leading or trailing space, no
 literal `{0}`, a `#` in a plural, only tags `rich` can consume). No test yet
 holds that every call site uses it, since existing literals are not converted,
-or that each client's entry file sets the global before it imports
-`@logjam/shared`, or that the API installs the resolver from
-`AsyncLocalStorage`; a later change adds them. (updated 2026-11-14)
+or that the API installs the resolver from `AsyncLocalStorage`; a later
+change adds it. Each client's entry file sets the global before it imports
+`@logjam/shared` (`frontend/src/language.test.ts`,
+`frontend/src/mainLanguage.test.ts`, `mobile/src/language.test.ts`).
+(updated 2026-11-14)
 
 ## Consequences
 

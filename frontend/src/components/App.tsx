@@ -156,6 +156,7 @@ import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
+import { useRecordLanguage } from "../languageSetting";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { useToastOnce } from "./feedback/useToastOnce";
@@ -397,6 +398,7 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  useRecordLanguage(currentUser, applyCurrentUser);
   // Keyed by string: the fallback toast's effect depends on this list.
   const regionKey = normalizeUserUiPreferences(
     currentUser?.uiPreferences,

@@ -29,6 +29,7 @@ import {
   type TUser,
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
+import { offeredHere } from "../../../languageSetting";
 import { useToast } from "../../feedback/ToastProvider";
 import {
   Hero,
@@ -42,6 +43,7 @@ import {
 } from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
+import LanguageChooser from "./LanguageChooser";
 import ThemeChooser from "./ThemeChooser";
 import classes from "./SettingsPanel.module.css";
 
@@ -97,6 +99,7 @@ function SettingsPanel({
   regions?: readonly Region[];
 }) {
   const toast = useToast();
+  const languages = offeredHere(regions);
   const [page, setPage] = useState<ListPage | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(
     null,
@@ -267,6 +270,7 @@ function SettingsPanel({
       <>
         <SectionHeader title={copy.display} />
         <ThemeChooser />
+        {languages.length > 1 ? <LanguageChooser offered={languages} /> : null}
       </>
     ),
     regions: () =>

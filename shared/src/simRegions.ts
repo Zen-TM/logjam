@@ -216,6 +216,7 @@ export const SIM_UTAH: Region = {
   terrain: UTAH_TERRAIN,
   placeSearch: null,
   gauges: null,
+  languages: ["en-US"],
   grid: "mga2020",
   canyons: null,
 };

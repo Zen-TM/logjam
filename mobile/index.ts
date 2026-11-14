@@ -3,6 +3,8 @@
 //     and URL (shared's endSessionUrl, the map archives' addresses).
 //  2. The simulated-regions switch: `@logjam/shared` reads it when it loads, so
 //     nothing but the polyfills may come before it (src/simRegions.test.ts).
+//     Then the language the phone kept, which shared also reads when it loads
+//     (src/language.test.ts).
 //  3. Sentry init (privacy-scrubbed; no-op without a DSN) — before anything
 //     that could crash.
 //  4. The OIDC provider check — a real-auth build without one fails here, not
@@ -10,6 +12,7 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 import "./src/simRegions";
+import "./src/language";
 
 import { createElement } from "react";
 import { LogBox } from "react-native";
@@ -19,11 +22,15 @@ import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
 import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { assertOidcConfigured } from "./src/auth/oidcSession";
+import { reconcileLanguage } from "./src/languageSetting";
 // Side-effect import: registers the background track-recording task at module
 // scope so it exists when Android relaunches the app headless.
 import "./src/tracks/trackRecorder";
 import App from "./App";
 
+// Before the first render: a phone whose language should differ restarts in it,
+// once (languageSetting.ts).
+reconcileLanguage();
 initSentry();
 assertOidcConfigured();
 // A dev build's error toast covers the tab bar and takes its taps. It hides

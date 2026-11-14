@@ -142,6 +142,12 @@ export type Region = {
   placeSearch: string | null;
   /** The CDN prefix of the gauge feed (ADR 0044), or null. */
   gauges: string | null;
+  /**
+   * BCP 47 tags of the languages, beyond the source, that this region's users
+   * can read; absent where it declares none (NSW). Each tag a client offers must
+   * be one of `LANGUAGES` (`languageChoice.ts`, `offeredLanguages`).
+   */
+  languages?: readonly string[];
   /** The map grid coordinates are given in. */
   grid: "mga2020";
   /** Where the canyon-list import reads from, or null where there is none. */

@@ -16,6 +16,7 @@ import type {
   ElevationProfile,
   TrackClimb,
   SharableEntityType,
+  Language,
 } from "@logjam/shared";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
@@ -891,6 +892,7 @@ export function updateUserPreferences(
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
     regions: string[];
+    language: Language;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });

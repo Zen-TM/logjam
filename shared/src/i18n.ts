@@ -41,7 +41,7 @@ export function setLanguageResolver(read: Resolver): void {
   resolver = read;
 }
 
-function isLanguage(value: unknown): value is Language {
+export function isLanguage(value: unknown): value is Language {
   return LANGUAGES.includes(value as Language);
 }
 
