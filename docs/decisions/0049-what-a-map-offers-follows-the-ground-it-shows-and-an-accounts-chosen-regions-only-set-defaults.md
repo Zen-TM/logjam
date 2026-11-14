@@ -40,9 +40,8 @@ what is offered at a location.**
   below.)
 - **A box that is saved, printed or exported** uses every region in
   `regionsTouching(box)`, not one, except a printed sheet's Terrain layers,
-  which come from the one region at the sheet's centre, and the basemap
-  gallery, which lists every region the view touches (updated 2026-11-15; see
-  the Updates below).
+  which come from the one region at the sheet's centre (updated 2026-11-15;
+  see the Update below).
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.
 - **The declaration's shape.** A region's border is a list of rings; the
@@ -112,3 +111,6 @@ what is offered at a location.**
   archives. Rejected for now: the planner, the renderer's strips and the
   credit and legend blocks each assume one archive per layer, and no planned
   region is adjacent to another. Revisit when two regions are adjacent.
+- **The basemap gallery listing only the region `regionInView` names** (the
+  rule above, without the gallery's exception). Rejected: a view across a
+  border would hide the basemap that covers half of what the map shows.

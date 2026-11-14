@@ -58,18 +58,20 @@ describe("the declaration", () => {
     for (const id of claimed) expect(ids(BASEMAP_CATALOG)).toContain(id);
   });
 
-  // Mutation: set a default basemap the region doesn't list, and Logjam GPS
-  // opens on a map its picker can't show. A region with none opens on a
-  // worldwide entry, which no region lists.
+  // Mutation: set a default basemap the region doesn't list, or default to an
+  // `offered: false` entry, and Logjam GPS opens on a map its picker can't
+  // show. A region with none opens on a worldwide entry, which no region lists.
   it("opens each region on one of its own basemaps", () => {
     const owned = ALL.flatMap((region) => region.basemaps);
-    for (const region of ALL)
+    for (const region of ALL) {
+      expect(ids(LISTED_BASEMAPS)).toContain(region.defaultBasemap);
       if (region.basemaps.length > 0)
         expect(region.basemaps).toContain(region.defaultBasemap);
       else {
         expect(ids(BASEMAP_CATALOG)).toContain(region.defaultBasemap);
         expect(owned).not.toContain(region.defaultBasemap);
       }
+    }
   });
 
   // Mutation: an id with a capital or a hyphen, and a map's layer ids
