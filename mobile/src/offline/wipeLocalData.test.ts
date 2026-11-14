@@ -84,6 +84,10 @@ vi.mock("../regionsPreference", () => ({
   },
 }));
 vi.mock("./placeRegistry", () => ({
+  stopPlaceRegistryForWipe: () => {
+    record("stop:placeregistry");
+    return Promise.resolve();
+  },
   lapsePlaceRegistries: () => {
     record("lapse:registries");
     return Promise.resolve();
@@ -221,7 +225,9 @@ describe("wipeAllLocalData", () => {
   // delete: a live producer would re-create what the wipe just removed, and
   // the sharpened areas' transforms would keep their presigned URLs.
   // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
-  // landing after sign-out writes the departing user's plan back.
+  // landing after sign-out writes the departing user's plan back; drop
+  // `stopPlaceRegistryForWipe()`, and a place-name copy fetched for the
+  // departing account's region lands after the lapse.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -234,6 +240,7 @@ describe("wipeAllLocalData", () => {
       "stop:sharpened",
       "stop:sharpened-areas",
       "stop:plans",
+      "stop:placeregistry",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);

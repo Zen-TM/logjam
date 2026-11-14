@@ -47,7 +47,10 @@ import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
-import { lapsePlaceRegistries } from "./placeRegistry";
+import {
+  lapsePlaceRegistries,
+  stopPlaceRegistryForWipe,
+} from "./placeRegistry";
 import { OFFLINE_TABLES } from "./wipedStores";
 
 /**
@@ -101,6 +104,9 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopGaugesForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
     stoppedInTime(stopPlansForWipe()),
+    // The place registry refresh is a producer too: a copy fetched for the
+    // departing account's region landing after the lapse below would outlive it.
+    stoppedInTime(stopPlaceRegistryForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
 
@@ -171,7 +177,8 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // map over: with the chosen regions forgotten and the saved maps gone above,
   // only the default region's copy is left, as it was for an account that never
   // chose (placeRegistry.ts, WHICH COPIES). After the registry rows, because
-  // "saved a map over" is read from them.
+  // "saved a map over" is read from them, and after the downloads are
+  // cancelled, because a save still queued keeps its region.
   try {
     await lapsePlaceRegistries();
   } catch (err) {

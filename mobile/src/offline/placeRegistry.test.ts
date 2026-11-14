@@ -154,8 +154,27 @@ vi.mock("expo-file-system", () => ({
     }
   },
 }));
+/** The app's state, and the callbacks it registered (`active` returns, signal regained). */
+const app = {
+  state: "active",
+  changes: [] as ((state: string) => void)[],
+  reconnects: [] as (() => void)[],
+};
 vi.mock("react-native", () => ({
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    get currentState() {
+      return app.state;
+    },
+    addEventListener: (_: string, listener: (state: string) => void) => {
+      app.changes.push(listener);
+      return { remove: () => {} };
+    },
+  },
+}));
+/** The boxes of the saves still queued, downloading or paused. */
+const queued = { boxes: [] as LonLatBox[] };
+vi.mock("./regionDownloadQueue", () => ({
+  pendingRegionBoxes: () => queued.boxes,
 }));
 // React Native 0.88 removed InteractionManager; the module waits on the
 // runtime's requestIdleCallback instead. jsdom has none, so run it inline.
@@ -183,7 +202,12 @@ vi.mock("../prefsDb", () => ({
 vi.mock("./localStores", () => ({ PLACE_REGISTRY_DIR: DIR }));
 vi.mock("./offlineOnlyMode", () => ({ isOfflineOnly: () => offlineOnly.on }));
 vi.mock("../config", () => ({ config: { topoCdnBaseUrl: CDN } }));
-vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+vi.mock("../map/connectivity", () => ({
+  subscribeReconnect: (listener: () => void) => {
+    app.reconnects.push(listener);
+    return () => {};
+  },
+}));
 vi.mock("./registryDb", () => ({
   listArtifacts: async () =>
     artifacts.kinds.map((kind) => ({ kind, bbox: artifacts.bbox })),
@@ -271,6 +295,10 @@ beforeEach(() => {
   artifacts.kinds = [];
   artifacts.bbox = null;
   chosen.ids = [NSW];
+  queued.boxes = [];
+  app.state = "active";
+  app.changes.length = 0;
+  app.reconnects.length = 0;
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
@@ -642,7 +670,7 @@ describe("a load that fails", () => {
     expect(files.has(`${DIR}pointer.json`)).toBe(false);
   });
 
-  // Mutation: drop the `UNREADABLE_PREF_KEY` check in `runFetch`, or key it
+  // Mutation: drop the `unreadableKey(region)` check in `runFetch`, or key it
   // by the version rather than the path.
   it("never fetches again a build that would not index, but fetches its fixed rebuild", async () => {
     const unindexable = build("2026-10-15", ["Narrow Neck"], 2);
@@ -970,10 +998,10 @@ describe("the regions a phone fetches for", () => {
     ]);
   });
 
-  // The sign-out: the wipe has forgotten the chosen regions (the default
+  // A different account signing in: the wipe has forgotten the chosen regions (the default
   // returns) and deleted the saved maps. Mutation: leave the copies of regions
   // not chosen in `lapsePlaceRegistries`' keep list (e.g. keep every region held).
-  it("leaves only the default region's copy at sign-out", async () => {
+  it("leaves only the default region's copy when a different account signs in", async () => {
     chosen.ids = [NSW];
     artifacts.kinds = [];
     holdOnPhone(build("2026-10-15", ["Wollangambe"]));
@@ -1047,5 +1075,122 @@ describe("the regions a phone fetches for", () => {
       loadFailed: false,
     });
     expect(registry.placeIndex(OTHER.id)).toBeNull();
+  });
+});
+
+describe("the lapse and the wipe, around a fetch", () => {
+  /** A download held until `release()`. */
+  function gateDownload() {
+    let release = () => {};
+    downloadGate.current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
+  const outsideNsw = () =>
+    [...files.keys()].filter((key) => key.startsWith(`${DIR}other`));
+
+  // Mutation: leave `...saving` out of `regionsToKeep`, and the copy fetched at
+  // the start of a save over a region not chosen lapses while the save still
+  // downloads, and is refetched only on Wi-Fi.
+  it("keeps a copy for a region a queued save touches", async () => {
+    chosen.ids = [NSW];
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    queued.boxes = [OVER_OTHER];
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+    queued.boxes = [];
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+  });
+
+  // The unreadable-build preference names a region the phone held. Mutation:
+  // skip the emptying in `lapseExcept`, or do it for every region, kept ones
+  // too.
+  it("forgets which builds would not index for a region it does not keep", async () => {
+    chosen.ids = [NSW];
+    prefs.set("placeRegistryUnreadable:other", "places-x.json");
+    prefs.set("placeRegistryUnreadable:nsw", "places-y.json");
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(prefs.get("placeRegistryUnreadable:other")).toBe("");
+    expect(prefs.get("placeRegistryUnreadable:nsw")).toBe("places-y.json");
+  });
+
+  // Mutation: drop the `AppState.currentState` return from `requestCheck`, and
+  // a regained signal fetches in the background (ADR 0013).
+  it("checks only while the app is in the foreground", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    app.state = "background";
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    for (const regained of app.reconnects) regained();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    app.state = "active";
+    for (const change of app.changes) change("active");
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // Mutation: drop `if (began !== generation) throw new StoppedError()` from
+  // `installBuild`, or `generation += 1` from `stopPlaceRegistryForWipe`, and a
+  // first fetch still in flight installs its copy after the wipe.
+  it("installs nothing once a wipe has stopped the refresh", async () => {
+    publish(build("2026-10-15"));
+    const release = gateDownload();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const stopping = registry.stopPlaceRegistryForWipe();
+    release();
+    await stopping;
+    expect(await fetching).toBe("stopped");
+    expect([...files.keys()]).toEqual([]);
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // Mutation: drop `if (began !== generation) return` from `refreshAll`, and a
+  // check the wipe stopped goes on to fetch and install the next region.
+  it("fetches no further region once a wipe has stopped a check in progress", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW, OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const release = gateDownload();
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const stopping = registry.stopPlaceRegistryForWipe();
+    release();
+    await stopping;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+    expect([...files.keys()]).toEqual([]);
+  });
+
+  // Mutation: drop `&& !copies.get(region.id)?.fetching` from `lapseExcept`, and
+  // a region's first fetch, with nothing stored yet, is skipped by the lapse and
+  // installs its copy after it.
+  it("deletes the first copy of a region that is still being fetched when it lapses", async () => {
+    chosen.ids = [NSW];
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const release = gateDownload();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const lapsing = registry.lapsePlaceRegistries();
+    release();
+    expect(await fetching).toBe("updated");
+    await lapsing;
+    expect(outsideNsw()).toEqual([]);
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
   });
 });

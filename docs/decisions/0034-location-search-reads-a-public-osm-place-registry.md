@@ -100,23 +100,32 @@ feature in NSW, never a geocoding service.**
   region's when absent, for a build that predates regions). Both clients name
   the region the map shows (`placeRegistryIn`) and, over ground no registry
   covers, offer no registry rows and ask nothing, so the geocoder row alone
-  remains. Logjam GPS keeps one copy for each region the account chose or saved
-  a map over, and no other: once it asks for the file, each such region gets
-  its copy at the next check (app start, foreground, regained signal; Wi-Fi by
-  default, never in the background) without a region download of its own, and
-  a copy of any other region is deleted at the next check. Sign-out runs that
-  check after the chosen regions and saved maps are gone, so the default
-  region's copy alone stays, as it did when it was the only one: which regions
-  a phone holds would otherwise show where its last user was interested. The
-  ranking, the public file, what is never logged and the replacement rule stand
-  for each registry. Guards: `shared/src/regions.test.ts` ("placeRegistryIn"),
-  `api/src/routes/placeSearch.unit.test.ts` ("answers from the registry of the
-  region it names, and the default region's when it names none"),
-  `mobile/src/offline/placeRegistry.test.ts` ("keeps each region's copy apart",
-  "lets a copy lapse once its region is neither chosen nor saved over" and
-  "leaves only the default region's copy at sign-out"),
-  `mobile/src/offline/wipeLocalData.test.ts` ("lets the place registries lapse
-  after the chosen regions and saved maps are gone") and
+  remains (what a map offers at a location follows its view, as
+  [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)
+  says; online search does too). Logjam GPS keeps one copy for each region the
+  account chose or saved a map over (a save still downloading counts), and no
+  other, so the chosen regions also decide which offline place-name copies the
+  phone keeps. Once it asks for the file, each such region gets its copy at the
+  next check (app start, return to the foreground, or regained signal while the
+  app is in the foreground; Wi-Fi by default, never in the background, as
+  [0013](0013-background-work-battery-rules.md) says) without a region download
+  of its own, and a copy of any other region is deleted at the next check. When
+  a different account signs in, the wipe (`finishSignIn` → `wipeAllLocalData`)
+  stops the refresh, then runs that check once the chosen regions and saved maps
+  are gone, so the default region's copy alone stays, as it did when it was the
+  only one: which regions a phone holds would otherwise show where its last user
+  was interested. A copy that will not delete stops that sign-in, like any other
+  store. The ranking, the public file, what is never logged and the replacement
+  rule stand for each registry. Guards: `shared/src/regions.test.ts`
+  ("placeRegistryIn"), `api/src/routes/placeSearch.unit.test.ts` ("answers from
+  the registry of the region it names, and the default region's when it names
+  none"), `mobile/src/offline/placeRegistry.test.ts` ("keeps each region's copy
+  apart", "lets a copy lapse once its region is neither chosen nor saved over",
+  "keeps a copy for a region a queued save touches", "leaves only the default
+  region's copy when a different account signs in", "installs nothing once a
+  wipe has stopped the refresh" and "checks only while the app is in the
+  foreground"), `mobile/src/offline/wipeLocalData.test.ts` ("lets the place
+  registries lapse after the chosen regions and saved maps are gone") and
   `frontend/src/components/map/MapSearchBox.test.tsx` ("asks no registry over
   ground none covers, and shows no answer from the ground it left"). Everything
   else above stands.
