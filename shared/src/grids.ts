@@ -221,3 +221,61 @@ export function gridConvergence(
   const offset = wrapLon(lon - zone.centralMeridian);
   return offset * Math.sin((lat * Math.PI) / 180);
 }
+
+// A typed grid reference: an optional grid name, a zone number, an optional
+// latitude band letter (MGRS: C-M south of the equator, N-X north of it), then
+// an easting and a northing. The zone must be set off from the easting by a
+// space, comma or the letter, or "1576041 5180000" would read as zone 1.
+const REFERENCE =
+  /^(?:(MGA|UTM)\s*)?(?:zone\s*)?(\d{1,2})(?:\s*([C-HJ-NP-X])|(?=[\s,;]))\s*[,;]?\s*(\d{6}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{7}(?:\.\d+)?)\s*(?:m?N)?$/i;
+// "NZTM 1576041 5180000", or the bare pair when the map is over an NZTM region.
+const NZTM_REFERENCE =
+  /^(NZTM(?:2000)?\s*)?(\d{7}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{7}(?:\.\d+)?)\s*(?:m?N)?$/i;
+
+const within = (v: number, lo: number, hi: number) => v >= lo && v <= hi;
+
+/**
+ * The point a typed grid reference names, or null. The zone is required, as an
+ * easting alone fits every zone and would fly somewhere plausible and wrong.
+ * "MGA" and "UTM" name the grid; without either, a zone number is read in the
+ * grid of the ground at `near` (MGA, zones 54 to 56 only; UTM anywhere else).
+ * A band letter is a latitude band, never "south": "12S" is Utah. With no
+ * letter the hemisphere is `near`'s. MGA is Australia's: a reference that
+ * lands outside it is refused, as is one outside NZ for NZTM or past UTM's 80°S
+ * to 84°N. Guard: mapSearch.test.ts.
+ */
+export function parseGridReference(
+  text: string,
+  near: { lat: number; lon: number },
+  regions: readonly Region[] = REGIONS,
+): { lat: number; lon: number; label: string } | null {
+  const nz = NZTM_REFERENCE.exec(text);
+  if (nz && (nz[1] || gridIdAt(near.lon, near.lat, regions) === "nztm2000")) {
+    const [easting, northing] = [Number(nz[2]), Number(nz[3])];
+    const { lat, lon } = fromGrid(easting, northing, NZTM_ZONE);
+    if (!within(lat, -55, -25) || Math.abs(wrapLon(lon - 173)) > 15)
+      return null;
+    return { lat, lon, label: `NZTM ${easting} ${northing}` };
+  }
+  const g = REFERENCE.exec(text);
+  if (!g) return null;
+  const number = Number(g[2]);
+  const [easting, northing] = [Number(g[4]), Number(g[5])];
+  if (!within(number, 1, 60)) return null;
+  const prefix = g[1]?.toUpperCase();
+  const mga =
+    prefix === "MGA" ||
+    (!prefix && gridIdAt(near.lon, near.lat, regions) === "mga2020");
+  if (mga) {
+    if (!within(number, 54, 56)) return null;
+    const zone = mgaZone(number as 54 | 55 | 56);
+    const { lat, lon } = fromGrid(easting, northing, zone);
+    if (!within(lat, -44, -10) || !within(lon, 112, 154)) return null;
+    return { lat, lon, label: `${zone.name} ${easting} ${northing}` };
+  }
+  const south = g[3] ? g[3].toUpperCase() < "N" : near.lat < 0;
+  const zone = utmZone(number - 1, south);
+  const { lat, lon } = fromGrid(easting, northing, zone);
+  if (!within(lat, -80, 84)) return null;
+  return { lat, lon, label: `${zone.name} ${easting} ${northing}` };
+}

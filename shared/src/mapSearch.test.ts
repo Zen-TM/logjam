@@ -178,6 +178,94 @@ describe("parseCoordinates", () => {
     expect(back.northing).toBeCloseTo(6264000.4, 1);
   });
 
+  // 40.7 N, 111.9 W is 12 423966 4505845 (a made-up point near Salt Lake City).
+  // A band letter is a latitude band: "12S" is north of the equator, and "N" is
+  // the first band north of it. Mutation: read any band letter as "south", or
+  // "N" as south (the `south` line of `parseGridReference`).
+  it.each([
+    ["12S 423966 4505845", OVER_UTAH],
+    ["12S 423966E 4505845N", OVER_NZ],
+    ["UTM 12T 423966 4505845", OVER_SYDNEY],
+    ["12N 423966 4505845", OVER_UTAH],
+    ["utm zone 12 423966 4505845", OVER_UTAH],
+  ])("reads the UTM reference %j", (text, view) => {
+    const p = parseCoordinates(text, view)!;
+    expect(p.label).toBe(`UTM 12 423966 4505845`);
+    expect(p.lat).toBeCloseTo(40.7, 3);
+    expect(p.lon).toBeCloseTo(-111.9, 3);
+  });
+
+  // With no letter the hemisphere is the map's. Mutation: always north, or
+  // always south, for a reference with no letter.
+  it.each([
+    ["12 423966 4505845", OVER_UTAH, 40.7, -111.9],
+    ["19 351205 6303224", viewAround(-33.4, -70.6), -33.4, -70.6],
+    ["19M 351205 6303224", OVER_UTAH, -33.4, -70.6],
+  ])(
+    "takes the hemisphere of the UTM reference %j from the map",
+    (text, view, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect(p.lat).toBeCloseTo(lat, 3);
+      expect(p.lon).toBeCloseTo(lon, 3);
+    },
+  );
+
+  // Mutation: ignore the "MGA" prefix and take the grid from the map, which
+  // here reads zone 56 as UTM north.
+  it("reads MGA over a map that is not over Australia when the text says MGA", () => {
+    const p = parseCoordinates("MGA 56 245000 6264000", OVER_UTAH)!;
+    expect(p.label).toBe("MGA 56 245000 6264000");
+    expect(p.lat).toBeCloseTo(-33.7, 0);
+  });
+
+  // The map decides what an unprefixed zone means: over Australia's grid only
+  // zones 54 to 56 are zones. Mutation: read a zone outside 54-56 as UTM even
+  // when the map is over MGA's region.
+  it("reads a zone number in the grid of the map: no UTM zone 12 over NSW without the name", () => {
+    expect(parseCoordinates("12 423966 4505845", OVER_SYDNEY)).toBeNull();
+    expect(parseCoordinates("12S 423966 4505845", OVER_SYDNEY)).toBeNull();
+    expect(
+      parseCoordinates("UTM 12S 423966 4505845", OVER_SYDNEY),
+    ).not.toBeNull();
+  });
+
+  // Mutation: read an NZTM reference without the "NZTM" prefix whatever the
+  // map shows, or drop the check on where the point lands.
+  it.each([
+    ["NZTM 1749046 5427521", OVER_UTAH],
+    ["nztm2000 1749046E 5427521N", OVER_SYDNEY],
+  ])("reads the NZTM reference %j wherever the map is", (text, view) => {
+    const p = parseCoordinates(text, view)!;
+    expect(p.label).toBe("NZTM 1749046 5427521");
+    expect(p.lat).toBeCloseTo(-41.29, 3);
+    expect(p.lon).toBeCloseTo(174.78, 3);
+  });
+
+  // A bare pair of seven-digit numbers is a reference only over an NZTM region
+  // (grids.test.ts, "reads a bare NZTM pair over an NZTM region"). Mutation:
+  // delete the lookahead after the zone in `REFERENCE`, which reads
+  // "1749046 5427521" as zone 1.
+  it.each([
+    ["1749046 5427521", OVER_UTAH],
+    ["1749046 5427521", OVER_SYDNEY],
+    ["1749046 5427521", null],
+  ])("does not read a bare pair %j far from NZ", (text, view) => {
+    expect(parseCoordinates(text, view)).toBeNull();
+  });
+
+  // Mutation: drop the zone range check, which reads zone 61 as zone 1, or
+  // drop the latitude check on a UTM point, or the latitude or the longitude check on an NZTM one.
+  it.each([
+    ["61 423966 4505845", OVER_UTAH],
+    ["0 423966 4505845", OVER_UTAH],
+    ["12S 423966 9500000", OVER_UTAH], // past 84 N
+    ["NZTM 1749046 1000000", OVER_UTAH], // nowhere near NZ
+    ["NZTM 1749046 9000000", OVER_UTAH],
+    ["NZTM 2900000 5427521", OVER_UTAH], // the right latitude, 1,300 km east of the zone
+  ])("does not read the grid reference %j", (text, view) => {
+    expect(parseCoordinates(text, view)).toBeNull();
+  });
+
   it.each([
     "",
     "Katoomba",
