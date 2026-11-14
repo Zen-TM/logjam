@@ -10,9 +10,6 @@ vi.mock("./prefsDb", () => ({
 const patch = vi.hoisted(() => vi.fn());
 vi.mock("./api/apiFetch", () => ({ apiFetch: patch }));
 
-// The first import of `@logjam/shared` in a cold run takes longer than the 5 s default.
-vi.setConfig({ testTimeout: 30_000 });
-
 const load = async () => {
   vi.resetModules();
   return import("./unitsPreference");
