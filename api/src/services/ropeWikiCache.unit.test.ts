@@ -164,6 +164,44 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   });
 });
 
+// The grade system is the region's, so the same file reads into different
+// fields: ACA fields from the snapshot and from a live fetch alike.
+describe("getRopeWikiCanyons — the region's grade system", () => {
+  const ACA_CSV = readFileSync(
+    join(__dirname, "__fixtures__", "ropewiki-aca-synthetic.csv"),
+    "utf8",
+  );
+
+  // Mutation: call `parseRopeWikiCsv(body)` without `grades` in
+  // `loadSnapshotFromS3`: the snapshot is read as French and every canyon's
+  // water grade is missing.
+  it("reads the S3 snapshot into the ACA fields", async () => {
+    mockS3Object(ACA_CSV);
+    const { places } = await getRopeWikiCanyons(NSW, false, "aca");
+    expect(places.find((c) => c.ropeWikiId === 910001)).toMatchObject({
+      acaTechnical: 3,
+      acaWater: 2,
+      acaTime: 3,
+      vGrade: null,
+    });
+  });
+
+  // Mutation: call `fetchAndParseRopeWiki(source)` without `grades` in
+  // `getRopeWikiCanyons`.
+  it("reads a live fetch into the ACA fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => ACA_CSV,
+      }),
+    );
+    const { places } = await getRopeWikiCanyons(NSW, true, "aca");
+    expect(places[0]).toHaveProperty("acaWater", 2);
+  });
+});
+
 describe("getRopeWikiCanyons — fresh=true live path", () => {
   it("bypasses S3 and goes to RopeWiki", async () => {
     vi.stubGlobal(

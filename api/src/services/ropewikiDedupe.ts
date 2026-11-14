@@ -14,7 +14,7 @@ import {
 import type { Place } from "@prisma/client";
 import {
   ROPE_WIKI_FIELD_KEYS,
-  ROPE_WIKI_OWNABLE_FIELDS,
+  ropeWikiFieldsOf,
   ropeWikiFieldValues,
   type RopeWikiCanyon,
   type RopeWikiOwnableField,
@@ -229,7 +229,7 @@ export function mergeFillNulls(
 
   const ropeWikiOwnedFields: RopeWikiOwnableField[] = [];
   const merged: Record<string, unknown> = { ...existingValues };
-  for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+  for (const field of ropeWikiFieldsOf(fresh)) {
     const key = ROPE_WIKI_FIELD_KEYS[field];
     if (fieldValue(existingValues, key) !== undefined) continue;
     ropeWikiOwnedFields.push(field);

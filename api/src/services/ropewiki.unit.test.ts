@@ -4,7 +4,10 @@ import { isReservedFieldKey, NSW_REGION } from "@logjam/shared";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   fetchAndParseRopeWiki,
+  parseRopeWikiCsv,
   ropeWikiCsvUrl,
+  ropeWikiFieldsOf,
+  ropeWikiFieldValues,
   withExtraLinks,
   ROPE_WIKI_FIELD_KEYS,
   ROPE_WIKI_OWNABLE_FIELDS,
@@ -400,5 +403,131 @@ describe("a region's canyon source", () => {
     expect(withExtraLinks(NSW_REGION.canyons, once)).toEqual(once);
     const { extraLinks: _none, ...plain } = NSW_REGION.canyons;
     expect(withExtraLinks(plain, rw)).toBe(rw);
+  });
+});
+
+// ── a region that grades in the ACA system ──────────────────────────────────
+//
+// The parser reads a rating by the system of the region its file is for. The
+// rows below are made up in the export's column layout (the corpus is in
+// `ropewikiParse.unit.test.ts`).
+describe("a rating in an ACA region", () => {
+  const COORD = "38.30 N, 110.80 W";
+  const HEADER = "pageid,location,coords,quality,rating";
+  const csv = (rating: string) =>
+    `${HEADER}\n1,Made Up,"${COORD}",3,"${rating}"`;
+  const acaOf = (rating: string) => {
+    const [c] = parseRopeWikiCsv(csv(rating), "aca").places;
+    return [c.acaTechnical, c.acaWater, c.acaTime, c.acaRisk];
+  };
+
+  // Mutation: return the index in the label list without the field's first
+  // value added, in `fieldValueOfLabel` (shared): C2 is stored as 4. Or drop
+  // `C[1-4]?` from the pattern in `parseAcaRating`, and "4C1 IV R" reads as nothing.
+  it.each([
+    ["3B III", [3, 2, 3, null]],
+    ["4C1 IV R", [4, 4, 4, 3]],
+    ["3C4 VI XX", [3, 7, 6, 5]],
+    ["2A", [2, 1, null, null]],
+    ["4", [4, null, null, null]],
+    ["3<i>B</i> <i>III</i>", [3, 2, 3, null]],
+  ])("reads %j as the ranks of its words", (rating, ranks) => {
+    expect(acaOf(rating)).toEqual(ranks);
+  });
+
+  // Mutation: map a "G" to `PG` (rank 1) in `parseAcaRating`, or map "PG" to
+  // unset: ADR 0051 stores no extra risk as unset and keeps PG as a level.
+  it("stores a risk of G as unset and PG as its own level", () => {
+    expect(acaOf("2B IV G")[3]).toBeNull();
+    expect(acaOf("2B IV PG")[3]).toBe(1);
+  });
+
+  // Mutation: return the words matched so far when the whole rating does not
+  // match in `parseAcaRating`: "3B III Q" stores 3, 2, 3.
+  it.each(["", "v3a2 III", "(v3a2 III)", "5B III", "3D II", "3B III Q", "III"])(
+    "reads nothing from %j",
+    (rating) => {
+      expect(acaOf(rating)).toEqual([null, null, null, null]);
+    },
+  );
+
+  // Mutation: fill the French fields from the parentheses for an ACA source in
+  // `parseRopeWikiCsv`: this canyon gains `vGrade` 2.
+  it("leaves the French grade empty whatever the parentheses hold", () => {
+    const [c] = parseRopeWikiCsv(csv("3B III (v2a2 III)"), "aca").places;
+    expect([c.vGrade, c.aGrade, c.commitment]).toEqual([null, null, null]);
+    expect(c.acaWater).toBe(2);
+  });
+
+  // Mutation: change a key in `ROPE_WIKI_FIELD_KEYS` (`acaWater: "aca_watr"`):
+  // the value is written under a key nothing renders.
+  it("writes the four ranks under their system keys and no nulls", () => {
+    const [c] = parseRopeWikiCsv(csv("4C1 III"), "aca").places;
+    expect(ropeWikiFieldValues(c)).toMatchObject({
+      aca_technical: 4,
+      aca_water: 4,
+      aca_time: 3,
+    });
+    expect(ropeWikiFieldValues(c)).not.toHaveProperty("aca_risk");
+    expect(ropeWikiFieldValues(c)).not.toHaveProperty("v_grade");
+  });
+
+  // Mutation: leave `acaRatingOf` out of `snapshotFromCreate`: the snapshot
+  // loses the four values.
+  it("keeps the four in the snapshot", () => {
+    const [c] = parseRopeWikiCsv(csv("3B III"), "aca").places;
+    expect(snapshotFromCreate(c)).toMatchObject({
+      acaTechnical: 3,
+      acaWater: 2,
+      acaTime: 3,
+      acaRisk: null,
+    });
+  });
+
+  // Mutation: compare `a[field] === b[field]` without `?? null` in
+  // `snapshotsEqual`: a snapshot stored before the four existed differs from
+  // one whose four are null, and a refresh reads every place as changed.
+  it("reads a snapshot with no ACA key as one whose four are null", () => {
+    const [c] = parseRopeWikiCsv(csv("v3a2 III"), "aca").places;
+    const nulls = snapshotFromCreate(c);
+    const old: RopeWikiSnapshot = { ...nulls };
+    for (const key of [
+      "acaTechnical",
+      "acaWater",
+      "acaTime",
+      "acaRisk",
+    ] as const) {
+      delete old[key];
+    }
+    expect(snapshotsEqual(old, nulls)).toBe(true);
+    const held = snapshotFromCreate(
+      parseRopeWikiCsv(csv("3B III"), "aca").places[0],
+    );
+    expect(snapshotsEqual(old, held)).toBe(false);
+  });
+});
+
+describe("a rating in a French region", () => {
+  // Mutation: give every canyon the ACA four in `parseRopeWikiCsv` (drop the
+  // `grades === "aca"` test on `parseAcaRating`), or return every ownable field
+  // from `ropeWikiFieldsOf`: an NSW canyon gains four fields and a snapshot four keys.
+  it("leave an NSW canyon, its snapshot and its fields without the ACA four", () => {
+    const [c] = parseRopeWikiCsv(
+      'pageid,location,coords,quality,rating\n1,Made Up,"33° 1′ 1″ S, 150° 1′ 1″ E",3,3B (v3a2 III)',
+    ).places;
+    expect(Object.keys(c).filter((key) => key.startsWith("aca"))).toEqual([]);
+    expect(
+      Object.keys(snapshotFromCreate(c)).filter((key) => key.startsWith("aca")),
+    ).toEqual([]);
+    expect(ropeWikiFieldsOf(c)).toEqual([
+      "numAbseils",
+      "longestAbseil",
+      "vGrade",
+      "aGrade",
+      "commitment",
+      "quality",
+      "hours",
+    ]);
+    expect(Object.keys(ropeWikiFieldValues(c))).not.toContain("aca_water");
   });
 });

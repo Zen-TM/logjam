@@ -50,6 +50,22 @@ describe("buildPlaceExport", () => {
       true,
     );
   });
+
+  // Mutation: write `String(value)` for every field in `placesToCsv`: the ACA
+  // cells read 5 and 3 where the words are C2 and R, and a field with no
+  // words (`hours`) is the one that must stay a number.
+  it("writes a field that has words as its word and any other as its number", () => {
+    const aca = {
+      ...place,
+      name: "Plain",
+      fieldValues: { hours: 4, aca_water: 5, aca_risk: 3 },
+    } as unknown as TPlace;
+    const [header, row] = buildPlaceExport([aca], "csv").content.split("\r\n");
+    const at = (key: string) => row.split(",")[header.split(",").indexOf(key)];
+    expect(at("attr:aca_water")).toBe("C2");
+    expect(at("attr:aca_risk")).toBe("R");
+    expect(at("attr:hours")).toBe("4");
+  });
 });
 
 // Mutation: write the grade as `Grade:` (a user field labelled "Grade" would

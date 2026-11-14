@@ -10,8 +10,9 @@ import {
   snapshotsEqual,
   isRopeWikiOwned,
   attributesSourcesEqual,
+  acaRatingOf,
   ROPE_WIKI_FIELD_KEYS,
-  ROPE_WIKI_OWNABLE_FIELDS,
+  ropeWikiFieldsOf,
   ropeWikiFieldValues,
   withExtraLinks,
   type RopeWikiCanyon,
@@ -29,6 +30,7 @@ import {
 import {
   asFieldValues,
   fieldValue,
+  type CanyonGradeSystem,
   NSW_REGION,
   REGIONS,
   SOURCES_FIELD_KEY,
@@ -42,13 +44,17 @@ const UPDATE_CHUNK_SIZE = 200;
 
 /**
  * The canyon source of the region a request names in `?region=`, or NSW's
- * when it names none: every build before regions sends none.
+ * when it names none (every build before regions sends none), with the grade
+ * system that region's canyons are parsed into.
  */
-function canyonSource(req: AuthenticatedRequest): RopeWikiSource {
+function canyonSource(req: AuthenticatedRequest): {
+  source: RopeWikiSource;
+  grades: CanyonGradeSystem;
+} {
   const id = req.query.region ?? NSW_REGION.id;
-  const source = REGIONS.find((region) => region.id === id)?.canyons;
-  if (!source) throw malformed("region has no canyon source");
-  return source;
+  const region = REGIONS.find((r) => r.id === id);
+  if (!region?.canyons) throw malformed("region has no canyon source");
+  return { source: region.canyons, grades: region.canyonGrades };
 }
 
 type ReviewCandidatePayload = {
@@ -171,14 +177,14 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
-    const source = canyonSource(req);
+    const { source, grades } = canyonSource(req);
 
     const fresh = req.query.fresh === "true";
     const {
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, fresh);
+    } = await getRopeWikiCanyons(source, fresh, grades);
 
     const allUserPlaces = await prisma.place.findMany({
       where: { ownerId: user.id },
@@ -244,7 +250,7 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
-    const source = canyonSource(req);
+    const { source, grades } = canyonSource(req);
 
     const decisions = req.body?.decisions;
     if (!Array.isArray(decisions) || decisions.length === 0) {
@@ -277,7 +283,7 @@ router.post(
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, false);
+    } = await getRopeWikiCanyons(source, false, grades);
     const parsedByRwId = new Map(parsed.map((c) => [c.ropeWikiId, c]));
 
     const targetIds = normalized
@@ -382,14 +388,14 @@ router.post(
   ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await loadUser(req.user!.sub);
-    const source = canyonSource(req);
+    const { source, grades } = canyonSource(req);
 
     const fresh = req.query.fresh === "true";
     const {
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, fresh);
+    } = await getRopeWikiCanyons(source, fresh, grades);
 
     // Load all existing RopeWiki-sourced places for this user
     const existingPlaces = await prisma.place.findMany({
@@ -444,6 +450,7 @@ router.post(
         commitment: freshWithOz.commitment,
         quality: freshWithOz.quality,
         hours: freshWithOz.hours,
+        ...acaRatingOf(freshWithOz),
         attributes: { ...freshWithOz.attributes },
       };
 
@@ -474,10 +481,9 @@ router.post(
 
       // Per-field: check user edits and RopeWiki upstream changes.
       const placeData: Record<string, unknown> = {};
+      const fields = ropeWikiFieldsOf(freshWithOz);
       const newOwnedFields: RopeWikiOwnableField[] =
-        effectiveOwnership === "*"
-          ? [...ROPE_WIKI_OWNABLE_FIELDS]
-          : [...effectiveOwnership];
+        effectiveOwnership === "*" ? [...fields] : [...effectiveOwnership];
 
       // The snapshot keeps RopeWiki's own camelCase names — it is persisted and
       // compared field by field on every refresh, so renaming its keys would
@@ -488,7 +494,7 @@ router.post(
       const nextValues: Record<string, unknown> = { ...existingValues };
       let valuesChanged = false;
 
-      for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+      for (const field of fields) {
         const key = ROPE_WIKI_FIELD_KEYS[field];
         const existingVal = fieldValue(existingValues, key) ?? null;
         const snapshotVal = effectiveSnapshot[field];
@@ -540,7 +546,7 @@ router.post(
       const placeDataChanged = Object.keys(placeData).length > 0;
       const ownershipChanged =
         effectiveOwnership === "*"
-          ? newOwnedFields.length !== ROPE_WIKI_OWNABLE_FIELDS.length
+          ? newOwnedFields.length !== fields.length
           : JSON.stringify([...newOwnedFields].sort()) !==
             JSON.stringify([...effectiveOwnership].sort());
       const snapshotValuesChanged = !snapshotsEqual(
