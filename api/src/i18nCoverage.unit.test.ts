@@ -16,11 +16,11 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  lib: 9,
+  lib: 3,
   middleware: 4,
   routes: 9,
   scripts: 3,
-  services: 27,
+  services: 9,
 };
 
 function sources(dir: string): string[] {

@@ -42,9 +42,9 @@ the API. A client shows it as it is.
   does not exist.
 - A request only a broken client or a hand-made request can send is
   `malformed(detail)` (`api/src/lib/appError.ts`): the user gets
-  `MALFORMED_REQUEST_SENTENCE`, and the developer's detail is logged and
+  `malformedRequestSentence()`, and the developer's detail is logged and
   returned in the response's `detail`, which no client renders. A state of
-  ours that should be impossible is `fault(detail)`: `SERVER_FAULT_SENTENCE`,
+  ours that should be impossible is `fault(detail)`: `serverFaultSentence()`,
   with the detail logged only.
 - A developer detail is logged, so it never holds a place's name, a
   coordinate, a tag, or a field's value or label. Words a sentence quotes from
@@ -53,6 +53,22 @@ the API. A client shows it as it is.
   sent. Its own fallback is for a response that carries no sentence.
 - Text the API stores for a client to show later, such as a job's
   `errorMessage`, follows the same rule.
+- **Update 2026-11-14: the sentence is written in the language the request
+  names.** The API still writes the sentence a user reads, from the catalogue
+  of [0050](0050-user-facing-text-goes-through-one-catalogue-function.md), in
+  the language of the request's `Accept-Language` (`middleware/language.ts`).
+  Both clients send their own `language()`; the pseudo-language is honoured
+  outside a prod runtime only, and a header that names no offered language
+  reads as the source language. A `say` is therefore evaluated when a request
+  needs it, never when its module loads: a sentence several modules share is a
+  function (`malformedRequestSentence()`), not a constant. A sentence written
+  with nobody asking, a push title or a mail, is written in the language the
+  recipient's account last ran in (`uiPreferences.language`); a sentence
+  stored for later keeps the language it was written in. A reason code beside
+  the status stays rejected, for the reason under Alternatives. Guards:
+  `api/src/userCopy.unit.test.ts` ("are written when a request needs them,
+  never when a module loads"), `api/src/middleware/language.unit.test.ts` and
+  `api/src/__tests__/language.test.ts`. Everything else above stands.
 
 Guards:
 
@@ -79,8 +95,9 @@ Guards:
   has no supported way to get them.
 - **Negative:** The response has no machine-readable reason. A client that
   must behave differently for one refusal can branch only on the status code
-  (a credit refusal also carries `used`, `quota` and `resetAt`), and translating the app would mean translating in the API or adding codes
-  then.
+  (a credit refusal also carries `used`, `quota` and `resetAt`). Translating
+  Logjam means translating in the API (updated 2026-11-14: it now does, by the
+  request's language, per the Update under Decision) or adding codes then.
 - **Negative:** Rewording a sentence is an API deploy, and a Logjam GPS build
   already in the field shows whatever the server it reaches sends.
 - **Neutral (updated 2026-10-18):** the "too large" words that older Logjam GPS

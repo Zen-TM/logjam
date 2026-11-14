@@ -10,6 +10,7 @@ import { getEnv } from "./lib/env";
 import { logger, safeErrorForLog, serializeRequestForLog } from "./lib/logger";
 import prisma from "./services/prisma";
 import { AppError, errorHandler } from "./middleware/errorHandler";
+import { languageForRequest } from "./middleware/language";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import { startPlaceRegistry } from "./services/placeRegistry";
@@ -105,6 +106,9 @@ app.use(
     },
   }),
 );
+
+// Before any route, so every sentence a request writes is in its language.
+app.use(languageForRequest);
 
 app.use(express.json({ limit: "1mb" }));
 

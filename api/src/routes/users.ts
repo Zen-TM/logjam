@@ -17,6 +17,7 @@ import {
   USERNAME_PATTERN,
   usernameRule,
   usernameTaken,
+  type Language,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
 import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
@@ -34,6 +35,7 @@ import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
+import { offeredLanguages } from "../lib/requestLanguage";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { handOverPlans } from "../lib/planItems";
@@ -363,6 +365,7 @@ router.patch(
       leaderboardOptIn,
       slopeBands,
       regions,
+      language,
       consentVersion,
     } = req.body as {
       username?: unknown;
@@ -373,6 +376,7 @@ router.patch(
       leaderboardOptIn?: unknown;
       slopeBands?: unknown;
       regions?: unknown;
+      language?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -424,7 +428,8 @@ router.patch(
       copyPlaceMedia !== undefined ||
       leaderboardOptIn !== undefined ||
       slopeBands !== undefined ||
-      regions !== undefined
+      regions !== undefined ||
+      language !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -457,6 +462,12 @@ router.patch(
         slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
       if (nextSlopeBands === null) {
         throw malformed("Invalid slopeBands");
+      }
+      if (
+        language !== undefined &&
+        !offeredLanguages(getEnv()).includes(language as Language)
+      ) {
+        throw malformed("Invalid language");
       }
       if (regions !== undefined) {
         if (
@@ -510,6 +521,7 @@ router.patch(
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),
+        ...(language !== undefined ? { language: language as Language } : {}),
       };
     }
 

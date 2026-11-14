@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { serverFaultSentence, withoutQuoted } from "@logjam/shared";
 import { AppError, malformed } from "../lib/appError";
 import { logger, redactTilePathPatterns, safeErrorForLog } from "../lib/logger";
+import { languageFromHeader, runInLanguage } from "../lib/requestLanguage";
 
 // The class lives apart so that auth.ts can refuse a request without loading
 // the logger, which reads the environment as it loads.
@@ -20,6 +21,15 @@ export function errorHandler(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction,
 ) {
+  // The handler writes two sentences itself (a body that is not JSON, a fault
+  // with no sentence), and an error raised from a stream callback reaches it
+  // outside the language middleware's context, so it sets its own.
+  runInLanguage(languageFromHeader(req.headers["accept-language"]), () =>
+    respondToError(thrown, req, res),
+  );
+}
+
+function respondToError(thrown: Error, req: Request, res: Response) {
   // express.json's SyntaxError quotes the body it could not parse, which may
   // hold a place name the user typed: answer it as malformed, without the
   // message (placeSearch.unit.test.ts, "never logs the query").

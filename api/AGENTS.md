@@ -45,6 +45,11 @@
   that is missing. A request only a broken client can send is
   `malformed(detail)`; the detail is logged, so it holds no name, coordinate,
   tag, field value or label. Guard: `src/userCopy.unit.test.ts`.
+  A `say` is evaluated when a request needs it, never at module level (a
+  shared sentence is a function): the language is per request, so a constant
+  is frozen in English. A push title or mail goes through `runInLanguage`
+  (`lib/requestLanguage.ts`) with the recipient's language (guards:
+  `services/push.unit.test.ts`, `lib/topoJobReaper.unit.test.ts`).
   [0033](../docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md)
 - **An array in a request body is capped at both ends:** empty is 400 (unless empty is meaningful), over
   its limit 413; the body-size cap is no substitute (`src/__tests__/placesBulk.test.ts`).

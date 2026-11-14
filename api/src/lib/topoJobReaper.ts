@@ -13,8 +13,10 @@ import { sweepEgress } from "./egressMeter";
 import {
   normalizeUserUiPreferences,
   say,
+  t,
   type UserSentence,
 } from "@logjam/shared";
+import { languageOfAccount, runInLanguage } from "./requestLanguage";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { createSweepLeader } from "./sweepLeader";
@@ -182,9 +184,8 @@ type ReapEntry = {
    */
   email: {
     pref: "topoEmail" | "exportEmail";
-    subject: string;
-    headline: string;
-    reason: string;
+    /** The mail's words, written when it is sent, in the recipient's language. */
+    words: () => { subject: string; headline: string; reason: string };
     /** Query string for the FRONTEND_URL deep link, e.g. `topoJob=<id>`. */
     deepLink: string;
   };
@@ -219,16 +220,22 @@ async function emailReaped(entries: ReapEntry[]): Promise<void> {
       recipient.uiPreferences,
     ).notifications;
     if (!wanted[entry.email.pref]) continue;
+    // Nobody asked, so the words are in the language the account's client
+    // last ran in.
+    const { subject, headline, reason, open } = runInLanguage(
+      languageOfAccount(recipient.uiPreferences),
+      () => ({ ...entry.email.words(), open: t`Open Logjam Web` }),
+    );
     const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
-    const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
+    const openLink = openUrl ? `\n\n${open}: ${openUrl}` : "";
     const openLinkHtml = openUrl
-      ? `<p><a href="${openUrl}">Open Logjam Web</a></p>`
+      ? `<p><a href="${openUrl}">${open}</a></p>`
       : "";
     await sendEmail({
       to: recipient.email,
-      subject: entry.email.subject,
-      text: `${entry.email.headline}\n\n${entry.email.reason}${openLink}`,
-      html: `${logoHtml}<p>${entry.email.headline}</p><p><strong>${entry.email.reason}</strong></p>${openLinkHtml}`,
+      subject,
+      text: `${headline}\n\n${reason}${openLink}`,
+      html: `${logoHtml}<p>${headline}</p><p><strong>${reason}</strong></p>${openLinkHtml}`,
     });
   }
 }
@@ -380,10 +387,12 @@ function topoJobEntry(row: {
     push: { type: "topo_failed", jobId: row.id },
     email: {
       pref: "topoEmail",
-      // Mirrors worker.py's "Topo map ready — Logjam".
-      subject: "Topo map failed — Logjam",
-      headline: "Your topo map job failed.",
-      reason: reaperJobMessage(),
+      words: () => ({
+        // Mirrors worker.py's "Topo map ready — Logjam".
+        subject: t`Topo map failed — Logjam`,
+        headline: t`Your topo map job failed.`,
+        reason: reaperJobMessage(),
+      }),
       deepLink: `topoJob=${row.id}`,
     },
   };
@@ -407,10 +416,12 @@ function exportJobEntry(row: {
     push: { type: "topo_export_complete", exportId: row.id },
     email: {
       pref: "exportEmail",
-      // Same subject export_worker.py's failure mail uses.
-      subject: `Map failed — ${row.format.toUpperCase()}`,
-      headline: "Your map couldn't be made.",
-      reason: topoExportStoppedMessage(),
+      words: () => ({
+        // Same subject export_worker.py's failure mail uses.
+        subject: t`Map failed — ${row.format.toUpperCase()}`,
+        headline: t`Your map couldn't be made.`,
+        reason: topoExportStoppedMessage(),
+      }),
       deepLink: `export=${row.id}`,
     },
   };
