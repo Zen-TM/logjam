@@ -52,7 +52,7 @@ let pinned: Language | undefined;
  * comparing with a sentence that was stored in it (a worker's, written in
  * English). `render` is synchronous; a message it builds after an `await`
  * reads the language in force again. Held by "writes in the source language
- * whatever is in force" in i18n.test.ts.
+ * whatever is in force, and puts the language back" in i18n.test.ts.
  */
 export function inSourceLanguage<T>(render: () => T): T {
   const before = pinned;
