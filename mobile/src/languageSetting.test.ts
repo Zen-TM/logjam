@@ -183,7 +183,7 @@ describe("chooseLanguage", () => {
     expect(restart).toHaveBeenCalledTimes(1);
   }, 30_000);
 
-  // Mutation: delete the `changesLanguage` line in chooseLanguage (a re-tap of
+  // Mutation: delete the `changesLanguage` test in chooseLanguage (a re-tap of
   // the language already running would store it and restart for no change).
   it("does nothing for the language already running", async () => {
     const { chooseLanguage } = await load({ sim: true, running: "en-US" });
@@ -191,6 +191,41 @@ describe("chooseLanguage", () => {
     expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
     expect(prefs.get("language")).toBeUndefined();
     expect(restart).not.toHaveBeenCalled();
+  }, 30_000);
+
+  // Mutation: delete `kept === null || kept === next` from chooseLanguage (a
+  // re-tap with nothing to take back would write again, and fail on a phone
+  // that will not store).
+  it("writes nothing for the running language when nothing else is kept", async () => {
+    writeOk.value = false;
+    const { chooseLanguage } = await load({ sim: true, running: "en-US" });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
+    prefs.set("language", "en-US");
+    expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
+  }, 30_000);
+
+  // Mutation: return "unchanged" before the `readPref` test in chooseLanguage
+  // (after a restart that failed, choosing the running language would leave the
+  // phone to start in the language just un-chosen).
+  it("takes back a kept language the restart never applied, when the running one is chosen", async () => {
+    const { chooseLanguage } = await load({ sim: true, running: "en-AU" });
+    // Chosen after the phone started in en-AU, and the restart never came.
+    prefs.set("language", "en-US");
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await chooseLanguage("en-AU", restart)).toBe("unchanged");
+    expect(prefs.get("language")).toBe("en-AU");
+    expect(restart).not.toHaveBeenCalled();
+  }, 30_000);
+
+  // Mutation: ignore `writePref`'s answer in the take-back branch of chooseLanguage.
+  it("refuses when the phone will not store the take-back", async () => {
+    const { chooseLanguage } = await load({ sim: true, running: "en-AU" });
+    prefs.set("language", "en-US");
+    writeOk.value = false;
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await chooseLanguage("en-AU", restart)).toBe("refused");
+    expect(prefs.get("language")).toBe("en-US");
   }, 30_000);
 
   // Mutation: delete `!mayChooseLanguage(next, offeredHere()) ||` in chooseLanguage.
