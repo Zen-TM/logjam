@@ -23,7 +23,6 @@ const STILL_NAMING = [
   "api/src/routes/ropewiki.ts",
   "frontend/src/components/SignIn.tsx",
   "frontend/src/components/SignInTerrain.tsx",
-  "frontend/src/components/map/terrainSource.ts",
   "mobile/src/map/RegionDownloadScreen.tsx",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",

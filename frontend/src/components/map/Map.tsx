@@ -59,7 +59,11 @@ import {
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
-import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import {
+  WORLDWIDE_TERRAIN_SOURCE,
+  applyTerrain,
+  terrainReapplyKey,
+} from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
@@ -194,7 +198,6 @@ import { fireLayerSpecs } from "./fireLayers";
 import type { RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
-  areasKey,
   isAbsentTerrainTile,
   terrainTile,
 } from "./terrainRouter";
@@ -1220,8 +1223,8 @@ function Map({
 
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // The worldwide source in shared/src/demSources.ts. The NSW one is
-        // added when 3D is switched on over NSW: see terrainSource.ts.
+        // The worldwide source in shared/src/demSources.ts. A region's own is
+        // added when 3D is switched on over it: see terrainSource.ts.
         tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
         attribution: TERRARIUM.creditHtml,
@@ -3634,13 +3637,18 @@ function Map({
       tilt,
     );
   };
-  // A change of areas while 3D is on draws terrain again from the new set:
-  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
-  // ("applyTerrain": the new source, the old one removed).
-  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
-    const map = mapRef.current;
-    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
-  });
+  // A change of areas, or of the region the map shows, while 3D is on draws
+  // terrain again from the new set: `useTerrainReapply.test.ts` (the trigger)
+  // and `terrainSource.test.ts` ("applyTerrain": the new source, the old one
+  // removed).
+  useTerrainReapply(
+    terrainReapplyKey(region, sharpenedAreas ?? []),
+    is3D,
+    () => {
+      const map = mapRef.current;
+      if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+    },
+  );
   const toggleTerrain = () => setTerrainOn(!is3D);
   const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
