@@ -15,7 +15,7 @@ import {
 } from "../lib/importSnapshot";
 import { parseTripTypes, parseDisplayName } from "./tripLogsGlobal";
 import {
-  MALFORMED_REQUEST_SENTENCE,
+  malformedRequestSentence,
   enforceCanyoningTag,
   linksCanyon,
   say,
@@ -110,7 +110,7 @@ router.post(
       const t = body.trips[i];
 
       if (typeof t.sourcePlaceName !== "string") {
-        errors.push({ index: i, error: MALFORMED_REQUEST_SENTENCE });
+        errors.push({ index: i, error: malformedRequestSentence() });
         continue;
       }
 

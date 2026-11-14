@@ -26,6 +26,7 @@ import {
   parseRouteColor,
   parseRoutePoints,
   pickNextTrackColor,
+  type UserSentence,
 } from "@logjam/shared";
 import {
   applyRoutePlaceLink,
@@ -58,12 +59,14 @@ const router = Router();
 // /places, /trips and /waypoints).
 const LIST_TAKE = 500;
 
-const NOT_FOUND = say`Couldn't find that route.`;
+function routeNotFound(): UserSentence {
+  return say`Couldn't find that route.`;
+}
 
 /** Load a route for a mutation, or throw. none → 404, sharee → 403. */
 async function requireOwnedRoute(userId: string, id: string) {
   const route = await prisma.route.findUnique({ where: { id } });
-  if (!route) throw new AppError(404, NOT_FOUND);
+  if (!route) throw new AppError(404, routeNotFound());
   requireShareOwner(
     await getRouteRole(userId, route),
     "route",
@@ -111,7 +114,7 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     const id = getParam(req.params.id);
     const route = await prisma.route.findUnique({ where: { id } });
-    if (!route) throw new AppError(404, NOT_FOUND);
+    if (!route) throw new AppError(404, routeNotFound());
     requireShareAccess(await getRouteRole(user.id, route), "route");
     res.json(route);
   },
@@ -142,7 +145,7 @@ router.post(
         where: { id: clientId },
       });
       if (existing) {
-        assertClientIdReplayable(existing.ownerId, user.id, NOT_FOUND);
+        assertClientIdReplayable(existing.ownerId, user.id, routeNotFound());
         res.status(200).json(existing);
         return;
       }
@@ -235,7 +238,7 @@ router.post(
     const user = await resolveUser(req.user!.sub);
     const id = getParam(req.params.id);
     const source = await prisma.route.findUnique({ where: { id } });
-    if (!source) throw new AppError(404, NOT_FOUND);
+    if (!source) throw new AppError(404, routeNotFound());
     requireShareAccess(await getRouteRole(user.id, source), "route");
 
     const copy = await copyRouteFor(user.id, source);

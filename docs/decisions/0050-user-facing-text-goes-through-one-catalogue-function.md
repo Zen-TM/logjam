@@ -57,8 +57,15 @@ tests hold each message to its hygiene rules (no leading or trailing space, no
 literal `{0}`, a `#` in a plural, only tags `rich` can consume). No test yet
 holds that every call site uses it, since existing literals are not converted,
 or that each client's entry file sets the global before it imports
-`@logjam/shared`, or that the API installs the resolver from
-`AsyncLocalStorage`; a later change adds them. (updated 2026-11-14)
+`@logjam/shared`; a later change adds it. The API installs the resolver from
+`AsyncLocalStorage` and refuses the pseudo-language in a prod runtime
+(`api/src/lib/requestLanguage.unit.test.ts`,
+`api/src/middleware/language.unit.test.ts`), and no `say` literal in `api/src` or
+`shared/src` sits outside a function (`api/src/userCopy.unit.test.ts`); one
+import-time call of a sentence function remains (`visibleToLocked` in
+`shared/src/contracts/plans.ts`), which a later change to the plan contracts
+removes.
+(updated 2026-11-14)
 
 ## Consequences
 

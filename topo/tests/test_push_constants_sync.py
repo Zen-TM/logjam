@@ -38,13 +38,13 @@ def _read(path):
 
 
 def _ts_titles():
-    """`{ type_name: "Title" }` from push.ts's title map."""
+    """`{ type_name: "Title" }` from the `t` templates of push.ts's title map."""
     src = _read(_PUSH_TS)
-    block = re.search(r"PUSH_TITLES[^=]*=\s*\{(.*?)\n\};", src, re.S) or re.search(
-        r"const\s+\w*TITLES\w*[^=]*=\s*\{(.*?)\n\};", src, re.S
-    )
+    block = re.search(r"PUSH_TITLES\b[^{]*\{(.*?)\n\};", src, re.S)
     assert block, "no title map found in push.ts"
-    return dict(re.findall(r'^\s*(\w+):\s*"([^"]+)"', block.group(1), re.M))
+    return dict(
+        re.findall(r"^\s*(\w+):\s*\(\)\s*=>\s*t`([^`]+)`", block.group(1), re.M)
+    )
 
 
 def _ts_allowed_keys():

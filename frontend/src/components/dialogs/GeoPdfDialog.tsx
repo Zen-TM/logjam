@@ -68,16 +68,16 @@ import {
   AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_LAYERS_BY_FORMAT,
-  AREA_EXPORT_OUTSIDE_TERRAIN,
-  AREA_EXPORT_TOO_LARGE,
+  areaExportOutsideTerrain,
+  areaExportTooLargeSentence,
   areasInBox,
   areaExportTooLarge,
   areaInTerrainRegion,
   areaSizeKm,
   EXPORT_FORMAT_LABELS,
   isOverlayTerrainKey,
+  geoPdfTooLargeSentence,
   geoPdfTooLarge,
-  GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
   type AreaExportFormat,
   type AreaExportLayer,
@@ -626,9 +626,9 @@ function GeoPdfDialog({
     : gisArea.north <= gisArea.south || gisArea.east <= gisArea.west
       ? "That box has no size. Draw it again on the map."
       : areaExportTooLarge(gisArea)
-        ? AREA_EXPORT_TOO_LARGE
+        ? areaExportTooLargeSentence()
         : !areaInTerrainRegion(gisArea)
-          ? AREA_EXPORT_OUTSIDE_TERRAIN
+          ? areaExportOutsideTerrain()
           : null;
   const gisEdges = {
     ...(gisArea ?? NO_AREA),
@@ -859,7 +859,7 @@ function GeoPdfDialog({
         toast.done("Your GeoPDF is downloading.");
         onClose();
       } else if (result.reason === "too-large") {
-        setError(GEOPDF_TOO_LARGE);
+        setError(geoPdfTooLargeSentence());
       } else if (result.reason === "failed") {
         setError(RENDER_FAILED);
       }
@@ -1317,7 +1317,9 @@ function GeoPdfDialog({
                     </div>
                   </div>
                 )}
-                <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
+                <FieldError
+                  message={tooLarge ? geoPdfTooLargeSentence() : null}
+                />
               </section>
 
               <section className={classes.group}>

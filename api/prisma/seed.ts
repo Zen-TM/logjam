@@ -12,8 +12,8 @@ import {
   mintFriendInviteToken,
 } from "../src/lib/friendInviteToken";
 import {
-  TOPO_EXPORT_STOPPED_MESSAGE,
-  TOPO_UNREADABLE_MESSAGE,
+  topoExportStoppedMessage,
+  topoUnreadableMessage,
 } from "../src/lib/failureCopy";
 import {
   NOTIFICATION_TYPES,
@@ -2274,7 +2274,7 @@ async function main() {
         name: "Wollangambe LiDAR",
         tileCount: 2,
         estimatedSeconds: 1200,
-        errorMessage: TOPO_UNREADABLE_MESSAGE,
+        errorMessage: topoUnreadableMessage(),
         createdAt: ago(200),
         ...topoRun(188, 120),
       },
@@ -2339,7 +2339,7 @@ async function main() {
         sourceTileCount: 1,
         estimatedSeconds: 60,
         status: "failed",
-        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        errorMessage: topoExportStoppedMessage(),
         startedAt: ago(70),
         createdAt: ago(75),
         completedAt: ago(67),
@@ -3181,7 +3181,7 @@ async function main() {
         sourceTileCount: 1,
         estimatedSeconds: 60,
         status: "failed",
-        errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+        errorMessage: topoExportStoppedMessage(),
         createdAt: ago(65),
         startedAt: ago(60),
         completedAt: ago(58),
@@ -3424,7 +3424,7 @@ async function main() {
           format: "gpkg",
           jobName: "Classic layers",
           status: "failed",
-          errorMessage: TOPO_EXPORT_STOPPED_MESSAGE,
+          errorMessage: topoExportStoppedMessage(),
         },
         read: false,
         createdAt: ago(58),

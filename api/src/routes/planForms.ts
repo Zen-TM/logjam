@@ -29,11 +29,11 @@ import {
   parseTripPlanFormPatch,
   parseTripPlanOrder,
   say,
-  TRIP_PLAN_CHANGED_SENTENCE,
-  TRIP_PLAN_FORM_CHANGED_SENTENCE,
+  tripPlanChangedSentence,
+  tripPlanFormChangedSentence,
   TRIP_PLAN_MAX_FORMS,
-  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
-  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
+  tripPlanVisibilityChangedSentence,
+  tripPlanVisibilityLockedSentence,
   type TripPlanQuestion,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -153,7 +153,7 @@ router.put(
       });
       const stored = new Set(current.map((row) => row.id));
       if (stored.size !== ids.length || ids.some((id) => !stored.has(id)))
-        throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+        throw new AppError(409, tripPlanChangedSentence());
       for (const [position, id] of ids.entries())
         await tx.tripPlanForm.updateMany({
           where: { id, planId },
@@ -198,7 +198,7 @@ router.patch(
             where: { formId: id, userId: { not: userId } },
           })) > 0;
         if (answeredByOthers)
-          throw new AppError(409, TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE);
+          throw new AppError(409, tripPlanVisibilityLockedSentence());
       }
       const { count } = await tx.tripPlanForm.updateMany({
         where: {
@@ -218,7 +218,7 @@ router.patch(
           ...(patch.visibleTo && { visibleTo: patch.visibleTo.to }),
         },
       });
-      if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+      if (count === 0) throw new AppError(409, tripPlanChangedSentence());
     });
     res.json(await viewOf(id, userId, access));
   },
@@ -269,9 +269,9 @@ router.put(
         select: { questions: true, visibleTo: true, updatedAt: true },
       });
       if (form.visibleTo !== seen)
-        throw new AppError(409, TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE);
+        throw new AppError(409, tripPlanVisibilityChangedSentence());
       if (form.updatedAt.toISOString() !== shown)
-        throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
+        throw new AppError(409, tripPlanFormChangedSentence());
       const parsed = parseTripPlanAnswers(
         form.questions as unknown as TripPlanQuestion[],
         req.body?.answers,

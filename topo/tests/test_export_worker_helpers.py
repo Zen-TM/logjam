@@ -55,14 +55,17 @@ class TestFailureSentence(unittest.TestCase):
         self.assertNotIn("support", GENERIC_FAILURE.lower())
 
     # Logjam Web offers Report a bug beside exactly this sentence
-    # (AREA_EXPORT_FAILED). Mutation: reword one copy only, and the button
+    # (areaExportFailed()). Mutation: reword one copy only, and the button
     # vanishes from the failures it is for.
     def test_the_generic_sentence_matches_shared(self):
         src = (
             Path(__file__).resolve().parents[2] / "shared" / "src" / "areaExport.ts"
         ).read_text()
-        match = re.search(r"AREA_EXPORT_FAILED = say`([^`]*)`", src)
-        self.assertIsNotNone(match, "AREA_EXPORT_FAILED not found in areaExport.ts")
+        match = re.search(
+            r"function areaExportFailed\(\): UserSentence \{\s*return say`([^`]*)`",
+            src,
+        )
+        self.assertIsNotNone(match, "areaExportFailed() not found in areaExport.ts")
         self.assertEqual(match.group(1), GENERIC_FAILURE)
 
     def test_too_large_says_what_to_do(self):

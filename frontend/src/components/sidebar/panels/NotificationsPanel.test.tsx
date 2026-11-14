@@ -8,8 +8,8 @@ import {
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  AREA_EXPORT_FAILED,
-  AREA_EXPORT_TOO_LARGE,
+  areaExportFailed,
+  areaExportTooLargeSentence,
   INBOX,
 } from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
@@ -309,7 +309,7 @@ describe("NotificationsPanel: a failed export", () => {
     payload: {
       format: "gpkg",
       status: "failed",
-      errorMessage: AREA_EXPORT_FAILED,
+      errorMessage: areaExportFailed(),
     },
     read: false,
     createdAt: new Date().toISOString(),
@@ -329,13 +329,38 @@ describe("NotificationsPanel: a failed export", () => {
     open.mockRestore();
   });
 
+  // The worker stores its sentence in English, so it is recognised whatever
+  // language Logjam Web runs in. Mutation: compare against `areaExportFailed()`
+  // directly in NotificationsPanel.tsx, and no button shows in en-XA.
+  it("offers Report a bug for the English the worker stored, in any language", () => {
+    const languageOf = globalThis as { LOGJAM_LANGUAGE?: string };
+    languageOf.LOGJAM_LANGUAGE = "en-XA";
+    try {
+      renderPanel([
+        {
+          ...failed,
+          payload: {
+            ...failed.payload,
+            errorMessage: "This map couldn't be made. Start it again.",
+          },
+        },
+      ]);
+      expect(screen.getByRole("button", { name: "Report a bug" })).toBeTruthy();
+    } finally {
+      delete languageOf.LOGJAM_LANGUAGE;
+    }
+  });
+
   // Mutation: show the button for any failed export, and a row that already
   // says "Choose a smaller area" also offers a bug report.
   it("leaves it off a failure that says what to do", () => {
     renderPanel([
       {
         ...failed,
-        payload: { ...failed.payload, errorMessage: AREA_EXPORT_TOO_LARGE },
+        payload: {
+          ...failed.payload,
+          errorMessage: areaExportTooLargeSentence(),
+        },
       },
     ]);
     expect(screen.queryByRole("button", { name: "Report a bug" })).toBeNull();

@@ -130,7 +130,9 @@ export * from "./tripPlanTripLog.js";
 export {
   LANGUAGES,
   PSEUDO_LANGUAGE,
+  isLanguage,
   SOURCE_LANGUAGE,
+  inSourceLanguage,
   intlLocale,
   language,
   matchLanguage,

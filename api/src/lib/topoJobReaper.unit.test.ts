@@ -683,6 +683,29 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
     }
   });
 
+  // Nobody asked, so the mail is written in the language the account's client
+  // last ran in; the sentence stored on the row keeps the language it was
+  // written in. Mutation: write the mail outside `runInLanguage(…)` in
+  // emailReaped, and a recipient on en-XA gets English.
+  it("writes the mail in the recipient's stored language and the stored sentence in English", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: "Claustral run" }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockResolvedValue([
+      { ...RECIPIENT, uiPreferences: { language: "en-XA" } },
+    ]);
+
+    await reapStuckTopoJobs(NOW);
+
+    const mail = emailSend.mock.calls[0][0];
+    expect(mail.subject.startsWith("⟦")).toBe(true);
+    expect(mail.text).not.toContain("stopped because it took too long");
+    expect(jobUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
+      "This LiDAR map was stopped because it took too long. Make it again to try again.",
+    );
+  });
+
   it("uses an export's own subject", async () => {
     stageByStatus(exportFindMany, {
       queued: [{ id: "e1", userId: "u1", format: "geotiff" }],

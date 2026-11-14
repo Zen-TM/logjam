@@ -4,7 +4,7 @@ import {
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
-  AREA_EXPORT_OUTSIDE_TERRAIN,
+  areaExportOutsideTerrain,
   areaInTerrainRegion,
   areaSizeKm,
   type AreaBbox,
@@ -68,7 +68,7 @@ describe("areaInTerrainRegion", () => {
   // Mutation: add terrain to a region and leave the sentence alone.
   it("names every region with terrain in its refusal", () => {
     for (const region of REGIONS.filter((r) => layerIn(r, "heights")))
-      expect(AREA_EXPORT_OUTSIDE_TERRAIN).toContain(region.name);
+      expect(areaExportOutsideTerrain()).toContain(region.name);
   });
 });
 

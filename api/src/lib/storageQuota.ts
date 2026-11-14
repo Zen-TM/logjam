@@ -1,4 +1,4 @@
-import { say } from "@logjam/shared";
+import { say, type UserSentence } from "@logjam/shared";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -12,7 +12,9 @@ import { logger } from "./logger";
 export type DbClient = PrismaClient | Prisma.TransactionClient;
 
 /** What a refusal for the site-wide storage cap says. */
-const SITE_STORAGE_FULL_SENTENCE = say`The storage everyone on Logjam shares is full, so nothing new can be added right now. Try again later.`;
+function siteStorageFullSentence(): UserSentence {
+  return say`The storage everyone on Logjam shares is full, so nothing new can be added right now. Try again later.`;
+}
 
 export async function getStorageUsage(userId: string, db: DbClient = prisma) {
   const user = await db.user.findUnique({
@@ -64,7 +66,7 @@ export async function assertHasStorageQuota(
   ) {
     // No user data in the line; no alarm watches it yet.
     logger.warn({ siteCap }, "site_storage_cap_reached");
-    throw new AppError(429, SITE_STORAGE_FULL_SENTENCE);
+    throw new AppError(429, siteStorageFullSentence());
   }
 }
 

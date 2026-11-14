@@ -355,10 +355,14 @@ export type TripPlanRedeemResult =
 
 /** A leaders-only form someone else answered can't be opened to everyone
  *  (form PATCH); Logjam Web's builder says it before Save. */
-export const TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE = say`People answered this form for leaders only. Make a new form to share answers with everyone.`;
+export function tripPlanVisibilityLockedSentence(): UserSentence {
+  return say`People answered this form for leaders only. Make a new form to share answers with everyone.`;
+}
 
 /** An answer's visibility changed since the form was shown (answer PUT, join). */
-export const TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE = say`Who sees the answers to this form has changed. Check it, then answer again.`;
+export function tripPlanVisibilityChangedSentence(): UserSentence {
+  return say`Who sees the answers to this form has changed. Check it, then answer again.`;
+}
 
 export const TRIP_PLAN_FORM_PRESET_IDS = [
   "gear",
@@ -617,7 +621,9 @@ export type TripPlanFormPatch = {
 };
 
 /** What the API answers when a compare-and-set finds the row changed. */
-export const TRIP_PLAN_CHANGED_SENTENCE = say`Not saved: someone else changed this. Check their change, then save yours again.`;
+export function tripPlanChangedSentence(): UserSentence {
+  return say`Not saved: someone else changed this. Check their change, then save yours again.`;
+}
 
 // ── Validators: one per write shape, run by the API and by both clients ──
 
@@ -880,9 +886,11 @@ function questionId(value: unknown, what: string, seen: Set<string>): string {
 }
 
 /** What a stale client is told: the form moved under the person answering. */
-export const TRIP_PLAN_FORM_CHANGED_SENTENCE = say`This form changed since you opened it. Check it, then answer again.`;
+export function tripPlanFormChangedSentence(): UserSentence {
+  return say`This form changed since you opened it. Check it, then answer again.`;
+}
 function stale(): never {
-  refuse(TRIP_PLAN_FORM_CHANGED_SENTENCE, 409);
+  refuse(tripPlanFormChangedSentence(), 409);
 }
 
 function formTitle(value: unknown): string {
@@ -1075,7 +1083,9 @@ function answerValue(
   }
 }
 
-export const TRIP_PLAN_ANSWER_REQUIRED_SENTENCE = say`Answer every question marked required.`;
+export function tripPlanAnswerRequiredSentence(): UserSentence {
+  return say`Answer every question marked required.`;
+}
 
 /**
  * PUT …/answers/me, and the answers a joiner gives. An answer to a question
@@ -1098,7 +1108,7 @@ export function parseTripPlanAnswers(
           ? undefined
           : answerValue(question, raw);
       if (answer !== undefined) answers[question.id] = answer;
-      else if (question.required) refuse(TRIP_PLAN_ANSWER_REQUIRED_SENTENCE);
+      else if (question.required) refuse(tripPlanAnswerRequiredSentence());
     }
     return answers;
   });

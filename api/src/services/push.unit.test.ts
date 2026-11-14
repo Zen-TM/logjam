@@ -154,3 +154,32 @@ describe("sendPushToUser — EXPO_PUSH_URL", () => {
     pushUrl.value = undefined;
   });
 });
+
+// The title is written for the recipient, in the language their account's
+// client last ran in: nobody's request is there to name one. Mutation: build
+// the messages outside `runInLanguage(languageOfAccount(…))` in sendPushToUser,
+// and every push title is English.
+describe("sendPushToUser — the recipient's language", () => {
+  async function titleSentTo(uiPreferences: unknown) {
+    findMany.mockResolvedValueOnce([
+      { token: "ExponentPushToken[a]", user: { uiPreferences } },
+    ]);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })));
+    await sendPushToUser("u1", { type: "friend_request" });
+    const sent = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string) as {
+      title: string;
+    }[];
+    fetchSpy.mockRestore();
+    return sent[0].title;
+  }
+
+  it("is the one the account's client last ran in, and English when it stored none", async () => {
+    const title = await titleSentTo({ language: "en-XA" });
+    expect(title).not.toBe("New friend request");
+    expect(title.startsWith("⟦")).toBe(true);
+    expect(await titleSentTo(null)).toBe("New friend request");
+    expect(await titleSentTo({})).toBe("New friend request");
+  });
+});
