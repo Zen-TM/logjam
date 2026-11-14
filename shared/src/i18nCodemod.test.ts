@@ -364,6 +364,20 @@ describe("extractMessages: what is not text for t", () => {
   });
 });
 
+describe("extractMessages: attribute strings", () => {
+  // Mutation: delete `(attribute && /[\r\n]/.test(text))` from `literal`.
+  it("leaves an attribute string that holds a line break, which compilers read differently", () => {
+    const source = 'const a = <B label="Save\n    your work" />;';
+    const out = run(source);
+    expect(out.source).toBe(source);
+    expect(out.skipped).toEqual([
+      expect.objectContaining({
+        reason: expect.stringContaining("line break"),
+      }),
+    ]);
+  });
+});
+
 describe("extractMessages: one-word labels", () => {
   // Mutation: set `words: true` where `extractMessages` calls `bareCopyIn`.
   it("converts a capitalised word outside a copy position only when asked", () => {

@@ -107,7 +107,7 @@ function inTemplate(text: string): string {
 const COUNTS = /(?:[!=]==?|[<>]=?)\s*\d|\d\s*(?:[!=]==?|[<>]=?)/;
 
 const UNREADABLE =
-  "an unknown entity or a tab inside the text: compilers read those differently";
+  "an unknown entity, a tab inside the text, or a line break in an attribute string: compilers read those differently";
 
 const LEADING_NEWLINE = /^[ \t]*[\r\n]/;
 const TRAILING_NEWLINE = /[\r\n][ \t]*$/;
@@ -292,7 +292,10 @@ export function extractMessages(
     const attribute = ts.isJsxAttribute(node.parent);
     const text = attribute ? decodeEntities(node.text) : node.text;
     const start = node.getStart();
-    if (text === undefined) return skip(start, node.text, UNREADABLE);
+    // TypeScript keeps a line break in an attribute string; Babel folds it and
+    // the indent after it to one space.
+    if (text === undefined || (attribute && /[\r\n]/.test(text)))
+      return skip(start, node.text, UNREADABLE);
     const message = `t\`${inTemplate(text)}\``;
     write(
       {

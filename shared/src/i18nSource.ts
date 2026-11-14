@@ -542,7 +542,7 @@ export function ceilingFailures(
           lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
       failures.push(
         [
-          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). \`node scripts/i18n-extract.mjs <the directory>\` writes most of it (after \`make shared\`), and \`node scripts/i18n-identity-check.mjs origin/main\` shows any text a change altered. Where they are:`,
+          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the new text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). A change that converts a whole directory runs \`node scripts/i18n-extract.mjs <directory>\` (after \`make shared\`), then \`node scripts/i18n-identity-check.mjs <base>\`. Where they are:`,
           ...[...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`),
         ].join("\n"),
       );

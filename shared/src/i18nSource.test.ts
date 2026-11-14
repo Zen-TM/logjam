@@ -408,9 +408,13 @@ describe("ratchetReads", () => {
 });
 
 describe("ceilingFailures", () => {
-  // Mutation: delete the two commands from the `count > ceiling` message.
-  it("tells whoever is over a ceiling how to move the text", () => {
+  // Mutation: delete the codemod's two commands from the `count > ceiling` message.
+  it("tells whoever is over a ceiling to write the new text through t, and names the codemod for a whole directory", () => {
     const [failure] = ceilingFailures({ a: 3 }, { a: 2 });
+    expect(failure).toContain(
+      "Write the new text through t, plural, rich or say",
+    );
+    expect(failure).toContain("converts a whole directory");
     expect(failure).toContain("node scripts/i18n-extract.mjs");
     expect(failure).toContain("node scripts/i18n-identity-check.mjs");
   });
