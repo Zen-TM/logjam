@@ -7,8 +7,8 @@
 
 import {
   basemapHere,
-  BASEMAP_CATALOG,
   defaultBasemapFor,
+  LISTED_BASEMAPS,
   offeredBasemaps,
   type LonLatBox,
 } from "@logjam/shared";
@@ -28,9 +28,7 @@ export const mobileBasemaps = (view: LonLatBox): BasemapId[] =>
 
 /** Every id a picker lists somewhere: the ids a stored pick may name. */
 export const knownBasemaps = (): BasemapId[] =>
-  BASEMAP_CATALOG.filter((entry) => entry.offered !== false).map(
-    (entry) => entry.id,
-  );
+  LISTED_BASEMAPS.map((entry) => entry.id);
 
 /** Shown until the user has picked one (and when a stored pick is unreadable). */
 export const defaultBasemap = (regionIds: readonly string[]): BasemapId =>

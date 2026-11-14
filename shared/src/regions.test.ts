@@ -12,6 +12,7 @@ import {
   BASEMAP_CATALOG,
   basemapHere,
   defaultBasemapFor,
+  LISTED_BASEMAPS,
   offeredBasemaps,
   vectorBasemapIn,
 } from "./geoPdfBaseLayers.js";
@@ -428,6 +429,16 @@ describe("offeredBasemaps", () => {
   // sea draws a sheet that covers none of it.
   it("shows the first offered where no region is in view", () => {
     expect(basemapHere("six-base", atSea, two)).toBe("osm-topo");
+  });
+});
+
+describe("LISTED_BASEMAPS", () => {
+  // Mutation: drop the `offered` test, and Logjam Web mounts, and Logjam GPS
+  // accepts a stored pick of, the raster "Default" no picker lists.
+  it("is the catalogue without what no picker lists, in its order", () => {
+    expect(ids(LISTED_BASEMAPS)).toEqual(
+      ids(BASEMAP_CATALOG).filter((id) => id !== "osm"),
+    );
   });
 });
 

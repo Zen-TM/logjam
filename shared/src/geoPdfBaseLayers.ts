@@ -288,16 +288,22 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
 ];
 
-/** The catalogue entries a picker lists, minus those a region owns unless `covering` has them. */
+/**
+ * Every catalogue entry some picker lists: all but those marked `offered:
+ * false`. What each client derives its stored-pick check and its mounted
+ * sources from. Guard: `regions.test.ts`.
+ */
+export const LISTED_BASEMAPS: readonly BasemapCatalogEntry[] =
+  BASEMAP_CATALOG.filter((entry) => entry.offered !== false);
+
+/** The listed entries, minus those a region owns unless `covering` has them. */
 function listed(
   regions: readonly Region[],
   covering: ReadonlySet<string>,
 ): BasemapCatalogEntry[] {
   const owned = new Set(regions.flatMap((r) => r.basemaps));
-  return BASEMAP_CATALOG.filter(
-    (entry) =>
-      entry.offered !== false &&
-      (!owned.has(entry.id) || covering.has(entry.id)),
+  return LISTED_BASEMAPS.filter(
+    (entry) => !owned.has(entry.id) || covering.has(entry.id),
   );
 }
 

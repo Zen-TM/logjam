@@ -69,7 +69,7 @@ import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
 import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps, settledView } from "./basemapMeta";
-import { readBasemapPreference } from "./basemapPreference";
+import { pickPointStart } from "./pickPointStart";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { BAND_MARKERS } from "./layerOrder";
@@ -91,10 +91,6 @@ import { TrackMapLayers } from "../tracks/TrackMapLayers";
 /** The selection ring's width, and the amount its radius has to exceed the
  *  thumb's for the two curves to sit concentric. */
 const THUMB_RING = 2;
-
-/** Zoom for a picker opened on a coordinate someone already typed: close enough
- *  to see which side of the creek the point is on. */
-const TYPED_POINT_ZOOM = 15;
 
 export type PickedPoint = { latitude: number; longitude: number };
 
@@ -135,19 +131,16 @@ export function PickPointScreen({
   // Read once: `initialViewState` is only honoured on the first render, and
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as RegionDownloadScreen.
-  const [lastCamera] = useState(() => readLastMapCamera());
+  const [start] = useState(() =>
+    pickPointStart(initialPoint, readLastMapCamera(), home),
+  );
   const [pickedBasemapId, setBasemapId] = useState<BasemapId>(
-    () => lastCamera?.basemapId ?? readBasemapPreference(),
+    start.pickedBasemapId,
   );
   const [picked, setPicked] = useState<PickedPoint | null>(initialPoint);
   const mapRef = useRef<MapRef>(null);
 
-  const startCenter: [number, number] = initialPoint
-    ? [initialPoint.longitude, initialPoint.latitude]
-    : (lastCamera?.center ?? home.center);
-  const startZoom = initialPoint
-    ? TYPED_POINT_ZOOM
-    : (lastCamera?.zoom ?? home.zoom);
+  const { center: startCenter, zoom: startZoom } = start;
   // The ground the map shows decides its basemaps (ADR 0049): the bounds of
   // its last settle, the opening point before the first.
   const [startLon, startLat] = startCenter;

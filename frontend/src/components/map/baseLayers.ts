@@ -1,5 +1,5 @@
 import {
-  BASEMAP_CATALOG,
+  LISTED_BASEMAPS,
   basemapHere,
   offeredBasemaps,
   vectorBasemapIn,
@@ -61,6 +61,4 @@ export const viewForBasemaps = (prev: LonLatBox, next: LonLatBox): LonLatBox =>
  * stays mounted and the GeoPDF dialog lists them all. A stored pick that
  * `baseLayersFor` does not list shows `basemapPicked`'s (App.tsx).
  */
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.offered !== false,
-).map(toBaseLayer);
+export const BASE_LAYERS = LISTED_BASEMAPS.map(toBaseLayer);
