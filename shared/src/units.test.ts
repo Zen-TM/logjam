@@ -9,6 +9,7 @@ import {
   formatDistance,
   formatBoxSize,
   formatFixedMetres,
+  formatGroundStep,
   formatHeight,
   formatHeightRange,
   formatRain,
@@ -240,6 +241,23 @@ describe("one unit after two figures", () => {
     setDisplayUnits("imperial");
     expect(formatHeightRange(300, 600)).toBe("984–1969 ft");
     expect(formatBoxSize(16.09344, 8.04672)).toBe("10 × 5 mi");
+  });
+});
+
+describe("formatGroundStep", () => {
+  // Mutation: `formatGroundStep` rounds `metres` where it should round the
+  // converted `value` (imperial 9 m would read "29.5 ft", not "30 ft"), or
+  // drops the `Number.isInteger` check ("2 m" reads "2.0 m").
+  it("writes a map's ground step in the shown unit, whole from 10 up", () => {
+    expect(formatGroundStep(0.5)).toBe("0.5 m");
+    expect(formatGroundStep(2.04)).toBe("2 m");
+    expect(formatGroundStep(2.4)).toBe("2.4 m");
+    expect(formatGroundStep(31.6)).toBe("32 m");
+    setDisplayUnits("imperial");
+    expect(formatGroundStep(0.5)).toBe("1.6 ft");
+    expect(formatGroundStep(2.4)).toBe("7.9 ft");
+    expect(formatGroundStep(9)).toBe("30 ft");
+    expect(formatGroundStep(31.6)).toBe("104 ft");
   });
 });
 

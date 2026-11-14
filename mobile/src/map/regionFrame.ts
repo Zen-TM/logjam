@@ -11,7 +11,7 @@
 // axis-aligned box around a rotated view, which no linear mapping can undo. The
 // download screen disables rotation and pitch for exactly this reason.
 import { tileMetersPerPixel } from "./scaleBar";
-import type { RegionBbox } from "@logjam/shared";
+import { formatGroundStep, type RegionBbox } from "@logjam/shared";
 
 export type FrameInsets = {
   top: number;
@@ -233,7 +233,5 @@ const DETAIL_NAMES: Record<number, string> = {
 /** A detail level named by the ground it resolves: "Fine, 2 m". */
 export function detailLabel(zoom: number, latitudeDeg: number): string {
   const metres = tileMetersPerPixel(latitudeDeg, zoom);
-  const rounded =
-    metres >= 10 ? Math.round(metres) : Math.round(metres * 10) / 10;
-  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${rounded} m`;
+  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${formatGroundStep(metres)}`;
 }

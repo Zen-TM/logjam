@@ -9,7 +9,7 @@ Pure TypeScript that `api`, `frontend` and `mobile` all import.
   re-lists its values; a client that needs something shaped differently
   derives it here, with a test.
 - **A distance, height, speed, area or rain figure is written by `src/units.ts`
-  alone, here and in `frontend/src`:** never a hand-written `${n} m`.
+  alone, here and in `frontend/src` and `mobile/src`:** never a hand-written `${n} m`.
   Guard: `src/figureUnits.test.ts`.
 - **Before changing a token, scheme, icon, the kit list or a screen contract,
   read `DESIGN.md` here.**
