@@ -129,13 +129,14 @@ describe("figures and their units", () => {
   // Mutation: write `${Math.round(gainM)} m` back in `profileSeries.ts`.
   it("are written by units.ts alone", () => {
     const files = SCANNED.flatMap(sourceFiles);
-    // shared/src holds about 200 source files today: a directory this stops
-    // reaching, or a filter that drops them all, cannot pass by finding none.
-    // Parsing about 480 files takes seconds, hence the timeout below.
-    expect(files.length).toBeGreaterThan(150);
+    // The three trees hold about 900 source files today (181 shared, 278
+    // frontend, 443 mobile): a directory this stops reaching, or a filter that
+    // drops them all, cannot pass by finding none. Parsing them all takes
+    // seconds, hence the timeout below. This floor is for the whole set; the
+    // two below hold the frontend and mobile trees up on their own.
+    expect(files.length).toBeGreaterThan(700);
     expect(files).toContain(UNITS_MODULE);
-    // frontend/src holds about 280 and mobile/src about 440: dropping either
-    // from SCANNED turns this red.
+    // Dropping frontend/src or mobile/src from SCANNED turns one of these red.
     expect(
       files.filter((f) => f.startsWith("frontend/src/")).length,
     ).toBeGreaterThan(200);

@@ -12,6 +12,7 @@ import {
   isTransientSyncError,
   lengthToInput,
   lengthUnitLabel,
+  trimNumber,
   SYSTEM_FIELD_DEFS,
 } from "@logjam/shared";
 
@@ -313,7 +314,7 @@ function fieldValueText(field: string, value: unknown): string {
   if (typeof value === "number") {
     if (field === "hours") return `${value} ${value === 1 ? "hour" : "hours"}`;
     if (field === "longestAbseil")
-      return `${Math.round(lengthToInput(value) * 10) / 10} ${lengthUnitLabel()}`;
+      return `${trimNumber(lengthToInput(value))} ${lengthUnitLabel()}`;
     if (field === "quality") return `${value}/5`;
   }
   return previewValue(field, value);

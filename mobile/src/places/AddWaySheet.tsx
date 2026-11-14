@@ -37,9 +37,8 @@ import {
   addWayNoImports,
   addWayNoTracks,
   attachableRoutes,
-  formatDistance,
-  formatDurationMs,
   formatDistanceM,
+  formatDurationMs,
   routeLengthM,
   routesMatching,
   TRIP_FORM,
@@ -595,7 +594,7 @@ export function AddWaySheet({
 }
 
 function trackSummary(track: Track): string {
-  return `${formatDistance(track.distanceM)} · ${formatDurationMs(track.durationMs)}`;
+  return `${formatDistanceM(track.distanceM)} · ${formatDurationMs(track.durationMs)}`;
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

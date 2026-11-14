@@ -246,8 +246,8 @@ describe("one unit after two figures", () => {
 
 describe("formatGroundStep", () => {
   // Mutation: `formatGroundStep` rounds `metres` where it should round the
-  // converted `value` (imperial "2.4 m" would read "7.9 ft"), or drops the
-  // `Number.isInteger` check ("2 m" reads "2.0 m").
+  // converted `value` (imperial 9 m would read "29.5 ft", not "30 ft"), or
+  // drops the `Number.isInteger` check ("2 m" reads "2.0 m").
   it("writes a map's ground step in the shown unit, whole from 10 up", () => {
     expect(formatGroundStep(0.5)).toBe("0.5 m");
     expect(formatGroundStep(2.04)).toBe("2 m");
