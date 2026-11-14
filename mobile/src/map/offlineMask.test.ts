@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NSW_REGION } from "@logjam/shared";
+import { NSW_REGION, SIM_REGIONS } from "@logjam/shared";
 
 import {
   offlineCoverageMask,
@@ -132,6 +132,25 @@ describe("offlineMaskBoxes", () => {
     const boxes = offlineMaskBoxes([savedBasemap], [terrain])!;
     expect(boxes).toEqual([AREA_A, AREA_B]);
     expect(masked(offlineCoverageMask(boxes)!, 148.5, -29.5)).toBe(false);
+  });
+
+  // Mutation: leave `regions` off the `drawsTerrain` call, and a clip saved
+  // in a simulated region is masked over, the Terrain group with it.
+  it("leaves clear a clip saved in any listed region", () => {
+    const [nz] = SIM_REGIONS;
+    const terrain = [
+      clip("contours-region", nz!.terrain.contours!.id),
+      clip("slope-region", nz!.terrain.slope!.id),
+      clip("dem-region", nz!.terrain.heights!.id),
+    ];
+    expect(offlineMaskBoxes([savedBasemap], terrain, SIM_REGIONS)).toEqual([
+      AREA_A,
+      AREA_B,
+      AREA_B,
+      AREA_B,
+    ]);
+    // With only NSW listed, they are no Terrain clips.
+    expect(offlineMaskBoxes([savedBasemap], terrain)).toEqual([AREA_A]);
   });
 
   it("does not clear a clip that draws nothing", () => {

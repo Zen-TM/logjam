@@ -85,6 +85,7 @@ export * from "./nswContours.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";
 export * from "./regions.js";
+export * from "./simRegions.js";
 export * from "./overlayLegends.js";
 export * from "./land.js";
 export * from "./fireHistory.js";
