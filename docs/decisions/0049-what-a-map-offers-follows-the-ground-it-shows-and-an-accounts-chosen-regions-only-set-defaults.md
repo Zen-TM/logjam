@@ -47,9 +47,10 @@ what is offered at a location.**
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
   and on a listed file that no longer does; a new entry is an added line a
-  reviewer sees. No test yet fails on code that gates an offer by the
-  chosen regions: `offeredBasemaps(regionIds)` still does, until the gallery
-  reads the view.
+  reviewer sees. (updated 2026-11-14) The basemap gallery reads the view:
+  `offeredBasemaps` and `basemapHere` take a box, so a call that passes the
+  chosen region ids does not compile (the typecheck covers the tests), and
+  `regions.test.ts` ("offeredBasemaps") holds what each view lists.
 
 ## Consequences
 

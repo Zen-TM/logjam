@@ -1,7 +1,8 @@
-// The regions the user chose (`uiPreferences.regions`): what Logjam GPS offers
-// (the basemap picker today), never what draws or answers for a location
-// (shared/src/regions.ts). Kept on the phone as last seen, so the picker is
-// right with no signal, and for a guest, who has no account to send it to.
+// The regions the user chose (`uiPreferences.regions`): where the map first
+// opens, the first-run basemap and the canyon-list offers, never what draws,
+// is offered or answers for a location (ADR 0049, shared/src/regions.ts). Kept
+// on the phone as last seen, so they are right with no signal, and for a
+// guest, who has no account to send it to.
 import { useSyncExternalStore } from "react";
 import { normalizeRegionIds } from "@logjam/shared";
 

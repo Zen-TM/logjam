@@ -9,7 +9,7 @@ import {
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
-import { nswContourStyle } from "./nswContours.js";
+import { nswContourStyle } from "./contourRules.js";
 import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 

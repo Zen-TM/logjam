@@ -41,13 +41,12 @@ import {
 } from "./terrainRoutes";
 import type { TileJson } from "./tileJsonFile";
 
-export type BasemapId =
-  | "protomaps"
-  | "six-topo"
-  | "six-base"
-  | "six-imagery"
-  | "osm-topo"
-  | "osm-cycle";
+/**
+ * A string, as the catalogue's ids are data: `resolveMapSource` throws on one it
+ * does not hold, and `basemapMeta.test.ts` ("are all ids the resolver draws")
+ * covers every id a picker lists.
+ */
+export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =
   | { kind: "basemap"; basemapId: BasemapId }

@@ -70,7 +70,7 @@ function config(
 }
 
 // Which overlays a base can carry: hillshade over every sheet but imagery,
-// the statewide contours only over imagery (shared/src/nswContours.ts).
+// the statewide contours only over imagery (shared/src/contourRules.ts).
 export const SCENARIOS: Record<string, GeoPdfConfig> = {
   shade: config({ baseLayer: "six-base", overlays: ["hillshade", "slope"] }),
   contours: config({
