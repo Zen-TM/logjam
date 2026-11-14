@@ -172,6 +172,11 @@ const API_CLIENT_USERS: Entry[] = [
     gate: "shell triggers",
     why: "runs in the sync cycle (`upgradeTrackClimbs`), which never starts for a guest",
   },
+  {
+    file: "unitsPreference.ts",
+    gate: "guest check",
+    why: "the `signedIn` argument: a guest keeps it on the phone",
+  },
 ];
 
 /** Files that call the global `fetch` (or expo's): none goes through apiFetch. */

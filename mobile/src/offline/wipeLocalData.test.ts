@@ -78,6 +78,8 @@ const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
 vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
 const forgetRegions = vi.hoisted(() => vi.fn());
 vi.mock("../regionsPreference", () => ({ forgetRegions }));
+const forgetUnits = vi.hoisted(() => vi.fn());
+vi.mock("../unitsPreference", () => ({ forgetUnits }));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -143,6 +145,14 @@ describe("wipeAllLocalData", () => {
     forgetRegions.mockClear();
     await wipeAllLocalData();
     expect(forgetRegions).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop forgetUnits() from wipeAllLocalData, and the next account
+  // on this phone reads the previous one's units until its own arrive.
+  it("forgets the chosen units", async () => {
+    forgetUnits.mockClear();
+    await wipeAllLocalData();
+    expect(forgetUnits).toHaveBeenCalledOnce();
   });
 
   it("deletes every declared directory", async () => {

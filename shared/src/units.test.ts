@@ -20,8 +20,13 @@ import {
   lengthFromInput,
   lengthToInput,
   lengthUnitLabel,
+  choosesUnits,
+  offersUnitsChoice,
   setDisplayUnits,
+  unitsOf,
 } from "./units.js";
+import { NSW_REGION, simRegionsOn } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
 afterEach(() => setDisplayUnits("metric"));
 
@@ -269,5 +274,81 @@ describe("formatFixedMetres", () => {
     expect(formatFixedMetres(0.5)).toBe("0.5m");
     setDisplayUnits("imperial");
     expect(formatFixedMetres(1200)).toBe("1200m");
+  });
+});
+
+describe("offersUnitsChoice", () => {
+  // Mutation: test `regions.length > 0` instead of a region that uses feet,
+  // and prod, which declares NSW alone, shows a choice with nothing to choose.
+  it("is not offered while every region is metric, prod's NSW alone included", () => {
+    expect(offersUnitsChoice([NSW_REGION])).toBe(false);
+    expect(offersUnitsChoice([NSW_REGION, SIM_NZ])).toBe(false);
+    // Prod's own declaration: the premise is that the simulated regions are off.
+    expect(simRegionsOn()).toBe(false);
+    expect(offersUnitsChoice()).toBe(false);
+  });
+
+  // Mutation: return false, or declare `SIM_UTAH` metric, and an account whose
+  // region uses feet is never asked its units.
+  it("is offered once a region uses feet", () => {
+    expect(offersUnitsChoice([NSW_REGION, SIM_UTAH])).toBe(true);
+    // The simulated regions, which the switch declares, hold one that does.
+    expect(offersUnitsChoice(SIM_REGIONS)).toBe(true);
+  });
+});
+
+describe("unitsOf", () => {
+  const REGIONS_THREE = [NSW_REGION, SIM_NZ, SIM_UTAH];
+
+  // Mutation: ignore `uiPreferences.units`, and a choice made in Settings
+  // never changes a figure; or prefer the region over it, and it is undone.
+  it("is the user's choice, whichever region is home", () => {
+    expect(
+      unitsOf({ units: "imperial", regions: ["nsw"] }, REGIONS_THREE),
+    ).toBe("imperial");
+    expect(
+      unitsOf({ units: "metric", regions: ["simutah"] }, REGIONS_THREE),
+    ).toBe("metric");
+  });
+
+  // Mutation: take the last chosen region instead of the first in `REGIONS`
+  // order, or default to metric whatever the region says.
+  it("is the home region's when nothing was chosen, and never throws on damage", () => {
+    expect(unitsOf({ regions: ["simutah"] }, REGIONS_THREE)).toBe("imperial");
+    expect(unitsOf({ regions: ["simnz", "simutah"] }, REGIONS_THREE)).toBe(
+      "metric",
+    );
+    expect(unitsOf({ regions: ["nsw", "simutah"] }, REGIONS_THREE)).toBe(
+      "metric",
+    );
+    for (const prefs of [undefined, null, {}, { units: "furlongs" }, 7]) {
+      expect(unitsOf(prefs, REGIONS_THREE)).toBe("metric");
+    }
+  });
+});
+
+describe("unitsOf where no choice is offered", () => {
+  // Mutation: read the stored choice without `offersUnitsChoice(regions)`, and a
+  // crafted PATCH leaves a prod account in feet with no row to undo it.
+  it("reads the region's units over a stored choice, and the choice again once one is offered", () => {
+    const stored = { units: "imperial", regions: ["nsw"] };
+    expect(unitsOf(stored, [NSW_REGION])).toBe("metric");
+    expect(unitsOf(stored, [NSW_REGION, SIM_UTAH])).toBe("imperial");
+  });
+});
+
+describe("choosesUnits", () => {
+  // Mutation: compare with the units in force (what the home region gives)
+  // instead of the stored choice, and tapping the default with nothing stored
+  // stores nothing, so a later change of home region moves the figures.
+  it("stores a tap unless that choice is already stored, the region's default included", () => {
+    // Nothing stored: even the tap that matches the home region's units stores.
+    expect(unitsOf({}, [NSW_REGION, SIM_UTAH])).toBe("metric");
+    expect(choosesUnits(undefined, "metric")).toBe(true);
+    expect(choosesUnits(undefined, "imperial")).toBe(true);
+    expect(choosesUnits("metric", "imperial")).toBe(true);
+    expect(choosesUnits("imperial", "imperial")).toBe(false);
+    // A damaged stored value is no choice.
+    expect(choosesUnits("furlongs", "metric")).toBe(true);
   });
 });

@@ -24,6 +24,7 @@ import {
   COPY_MEDIA_SETTING,
   SETTINGS,
   SETTINGS_PHONE_ONLY,
+  UNITS_CHOICE,
   SELECTION_GESTURES,
   noFriendsMatch,
   noFriendsMessage,
@@ -868,6 +869,17 @@ describe("the map's layers", () => {
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
       ...withBands,
       "sharpenedAreas",
+    ]);
+  });
+});
+
+describe("UNITS_CHOICE", () => {
+  // Mutation: add a third option, or retype a value: a client would send a
+  // value the API refuses (`isUnits`) or draw one the formatters do not know.
+  it("offers exactly the two stored values, metric first", () => {
+    expect(UNITS_CHOICE.options.map((option) => option.value)).toEqual([
+      "metric",
+      "imperial",
     ]);
   });
 });

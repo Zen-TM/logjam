@@ -12,6 +12,7 @@
 // Test: `units.test.ts` holds the metric output to what Logjam wrote before.
 
 import { formatNumber } from "./numberFormat.js";
+import { accountRegion, REGIONS, type Region } from "./regions.js";
 
 export type Units = "metric" | "imperial";
 
@@ -176,4 +177,49 @@ export function formatWind(kmh: number): string {
   return imperial()
     ? `${formatNumber(Math.round(kmh / KM_PER_MILE), 0)}${NBSP}mph`
     : `${formatNumber(Math.round(kmh), 0)}${NBSP}km/h`;
+}
+
+/**
+ * Whether a units choice is shown: only once a region writes feet, since
+ * metric needs no choosing. Guard: `units.test.ts` ("offersUnitsChoice").
+ */
+export function offersUnitsChoice(
+  regions: readonly Region[] = REGIONS,
+): boolean {
+  return regions.some((region) => region.units === "imperial");
+}
+
+/**
+ * The units an account reads: its own choice (`uiPreferences.units`) while a
+ * choice is offered, else its home region's. Where none is offered (prod's NSW
+ * alone) a stored choice is not read, since nothing there could undo it; it
+ * counts again once a region uses feet. Guard: `units.test.ts` ("unitsOf").
+ */
+export function unitsOf(
+  uiPreferences: unknown,
+  regions: readonly Region[] = REGIONS,
+): Units {
+  const chosen =
+    typeof uiPreferences === "object" && uiPreferences !== null
+      ? (uiPreferences as { units?: unknown }).units
+      : undefined;
+  return isUnits(chosen) && offersUnitsChoice(regions)
+    ? chosen
+    : accountRegion(uiPreferences, regions).units;
+}
+
+/**
+ * Whether choosing `next` stores something: yes unless that very choice is
+ * already stored. Tapping the units the home region gives, with nothing
+ * stored, still stores them, so the choice survives a later change of home
+ * region. Both clients decide a tap here. Guard: `units.test.ts`
+ * ("choosesUnits").
+ */
+export function choosesUnits(stored: unknown, next: Units): boolean {
+  return stored !== next;
+}
+
+/** A stored or sent value that names a units choice. */
+export function isUnits(value: unknown): value is Units {
+  return value === "metric" || value === "imperial";
 }
