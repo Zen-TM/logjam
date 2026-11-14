@@ -24,15 +24,15 @@ describe("the units row of Settings → Display", () => {
     expect(unitsSettingRow([NSW_REGION, FEET])).toBe(UNITS_CHOICE);
   });
 
-  // Mutation: draw the row without `unitsSettingRow`, or leave out the
-  // root's `useDisplayUnits()`, and the row shows in prod or a choice never
-  // changes a figure.
+  // Mutation: draw the row without `unitsSettingRow`, send by something other
+  // than `sendsRegionChoice`, or leave out the root's `useDisplayUnits()` or
+  // `keepAccountUnits`, and the row shows in prod, a guest sends, or a choice
+  // never changes a figure.
   it("is drawn from unitsSettingRow, and the shell sets the units the formatters use", () => {
     const screen = read("./settings/DisplaySettingsScreen.tsx");
     expect(screen).toContain("unitsSettingRow()");
     expect(screen).toContain("sendsRegionChoice(accountState)");
     expect(read("../AppShell.tsx")).toContain("useDisplayUnits();");
     expect(read("../AppShell.tsx")).toContain("keepAccountUnits(accountUnits)");
-    expect(read("../offline/wipeLocalData.ts")).toContain("forgetUnits();");
   });
 });

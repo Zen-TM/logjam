@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prefs = vi.hoisted(() => new Map<string, string>());
+const reads = vi.hoisted(() => ({ count: 0 }));
 vi.mock("./prefsDb", () => ({
-  readPref: (key: string) => prefs.get(key) ?? null,
+  readPref: (key: string) => (reads.count++, prefs.get(key) ?? null),
   writePref: (key: string, value: string) => (prefs.set(key, value), true),
 }));
 
@@ -19,6 +20,7 @@ const load = async () => {
 
 beforeEach(() => {
   prefs.clear();
+  reads.count = 0;
   patch.mockReset().mockResolvedValue({});
 });
 
@@ -37,6 +39,15 @@ describe("the units chosen on Logjam GPS", () => {
       expect((await load()).readChosenUnits()).toBe(expected);
     },
   );
+
+  // Mutation: memoise with `current ??= stored()`: nothing chosen is null, which
+  // `??=` reads as unread, so prod (one region, never a choice) reads storage
+  // on every render of the shell.
+  it("reads storage once, whether or not a choice was kept", async () => {
+    const store = await load();
+    for (let i = 0; i < 3; i++) store.readChosenUnits();
+    expect(reads.count).toBe(1);
+  });
 
   // Mutation: send the PATCH for a guest too (drop the `signedIn` check), and
   // a guest makes a server call (ADR 0007).

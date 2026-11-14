@@ -23,7 +23,7 @@ import {
   setDisplayUnits,
   unitsOf,
 } from "./units.js";
-import { NSW_REGION, REGIONS } from "./regions.js";
+import { NSW_REGION, simRegionsOn } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
 afterEach(() => setDisplayUnits("metric"));
@@ -264,8 +264,9 @@ describe("offersUnitsChoice", () => {
   it("is not offered while every region is metric, prod's NSW alone included", () => {
     expect(offersUnitsChoice([NSW_REGION])).toBe(false);
     expect(offersUnitsChoice([NSW_REGION, SIM_NZ])).toBe(false);
-    // Prod's declaration, unless the simulated-regions switch is on.
-    if (REGIONS.length === 1) expect(offersUnitsChoice()).toBe(false);
+    // Prod's own declaration: the premise is that the simulated regions are off.
+    expect(simRegionsOn()).toBe(false);
+    expect(offersUnitsChoice()).toBe(false);
   });
 
   // Mutation: return false, or declare `SIM_UTAH` metric, and an account whose

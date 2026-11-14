@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   displayUnits,
@@ -39,5 +41,14 @@ describe("applyDisplayUnits", () => {
     expect(applyDisplayUnits({ regions: ["simutah"] }, REGIONS)).toBe(
       "imperial",
     );
+  });
+});
+
+describe("Logjam Web's root", () => {
+  // Mutation: delete the `applyDisplayUnits(currentUser?.uiPreferences)` line
+  // from App.tsx, and a figure never follows the account's units.
+  it("sets the units from the account while it renders", () => {
+    const app = readFileSync(join(__dirname, "components/App.tsx"), "utf8");
+    expect(app).toContain("applyDisplayUnits(currentUser?.uiPreferences);");
   });
 });

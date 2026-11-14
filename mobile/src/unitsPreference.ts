@@ -26,7 +26,10 @@ function stored(): Units | null {
 
 /** The units chosen on this phone or by the account, or null. */
 export function readChosenUnits(): Units | null {
-  return (current ??= stored());
+  // `undefined` is "not read yet": none chosen (null) is remembered too, so a
+  // render reads storage once, not every time.
+  if (current === undefined) current = stored();
+  return current;
 }
 
 const subscribe = (listener: () => void) => {

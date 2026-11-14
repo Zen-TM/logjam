@@ -50,7 +50,7 @@ const user = {
   uiPreferences: { leaderboardOptIn: false },
 } as TUser;
 
-function renderPanel(
+function panelElement(
   onCurrentUserChange = vi.fn(),
   {
     currentUser = user as TUser | null,
@@ -59,7 +59,7 @@ function renderPanel(
     regions = undefined as readonly Region[] | undefined,
   } = {},
 ) {
-  render(
+  return (
     <SettingsPanel
       currentUser={currentUser}
       currentUserError={currentUserError}
@@ -72,8 +72,12 @@ function renderPanel(
       onPlaceTypesChange={() => {}}
       onCurrentUserChange={onCurrentUserChange}
       regions={regions}
-    />,
+    />
   );
+}
+
+function renderPanel(...args: Parameters<typeof panelElement>) {
+  return render(panelElement(...args));
 }
 
 function show(onCurrentUserChange = vi.fn()) {
@@ -356,6 +360,49 @@ describe("the Units row of Display", () => {
     ).toBe("true");
   });
 
+  // Mutation: seed the row once (state set when the user id changes) instead
+  // of reading `unitsOf(currentUser.uiPreferences, regions)` on each render,
+  // or return early when the tapped chip is the one shown: after the home
+  // region changes the chip keeps its old value, or Metric cannot be chosen.
+  it("follows a change of home region, and Metric can still be chosen over it", async () => {
+    vi.mocked(updateUserPreferences).mockResolvedValue(user);
+    const account = (regionIds: string[]) =>
+      ({ ...user, uiPreferences: { regions: regionIds } }) as TUser;
+    const checked = (name: string) =>
+      screen.getByRole("radio", { name }).getAttribute("aria-checked");
+    const { rerender } = renderPanel(vi.fn(), {
+      regions: FEET,
+      currentUser: account(["nz"]),
+    });
+    expect(checked("Imperial")).toBe("true");
+    rerender(
+      panelElement(vi.fn(), { regions: FEET, currentUser: account(["nsw"]) }),
+    );
+    expect(checked("Metric")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Metric" }));
+    await waitFor(() =>
+      expect(updateUserPreferences).toHaveBeenCalledWith({ units: "metric" }),
+    );
+  });
+
+  // Mutation: drop the `pendingUnits` hint, and the chips are off with no
+  // reason given.
+  it("says Saving… while a save is in flight, and holds the chips", async () => {
+    let settle!: (value: TUser) => void;
+    vi.mocked(updateUserPreferences).mockReturnValue(
+      new Promise<TUser>((resolve) => (settle = resolve)),
+    );
+    renderPanel(vi.fn(), { regions: FEET });
+    fireEvent.click(screen.getByRole("radio", { name: "Imperial" }));
+    await screen.findByText(UNITS_CHOICE.saving);
+    expect(
+      (screen.getByRole("radio", { name: "Metric" }) as HTMLInputElement)
+        .disabled,
+    ).toBe(true);
+    settle(user);
+    await screen.findByText(UNITS_CHOICE.hint);
+  });
+
   // Mutation: send the other value, or leave the choice out of the request.
   it("saves the choice and hands the updated account up", async () => {
     const saved = { ...user, uiPreferences: { units: "imperial" } } as TUser;
@@ -373,7 +420,8 @@ describe("the Units row of Display", () => {
     );
   });
 
-  // Mutation: leave the optimistic value standing after a failed save.
+  // Mutation: drop `setPendingUnits(null)` from the `finally`, and the failed
+  // choice stays shown.
   it("goes back and says so when the save fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(updateUserPreferences).mockRejectedValue(new Error("offline"));
