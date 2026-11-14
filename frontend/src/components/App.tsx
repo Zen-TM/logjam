@@ -11,7 +11,11 @@ import { useIsMobile } from "../useIsMobile";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { type SnapMode } from "./map/Map";
-import { baseLayersFor, viewForBasemaps } from "./map/baseLayers";
+import {
+  baseLayersFor,
+  basemapPicked,
+  viewForBasemaps,
+} from "./map/baseLayers";
 import { useRouteDraft } from "./routes/useRouteDraft";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
@@ -150,7 +154,6 @@ import {
   type TripPlanItemKind,
   type TripPlanPageView,
   accountRegion,
-  basemapHere,
   pointBox,
   type LonLatBox,
 } from "@logjam/shared";
@@ -417,9 +420,9 @@ function App() {
       : pointBox(...accountRegion(currentUser?.uiPreferences).view.center),
   );
   const baseLayers = useMemo(() => baseLayersFor(basemapView), [basemapView]);
-  // A pick the map's ground does not offer shows `basemapHere`'s, with no way
+  // A pick the map's ground does not offer shows `basemapPicked`'s, with no way
   // to switch off it otherwise; the pick stays and returns with the ground.
-  const pickedLayerId = basemapHere(storedLayerId, basemapView);
+  const pickedLayerId = basemapPicked(storedLayerId, basemapView);
   const {
     shownLayerId: activeLayerId,
     down: downBasemaps,

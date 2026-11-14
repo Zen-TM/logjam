@@ -37,7 +37,11 @@ import {
 } from "./terrainRoutes";
 import type { TileJson } from "./tileJsonFile";
 
-/** An id of `BASEMAP_CATALOG`: `resolveMapSource` throws on one it does not hold. */
+/**
+ * A string, as the catalogue's ids are data: `resolveMapSource` throws on one it
+ * does not hold, and `basemapMeta.test.ts` ("are all ids the resolver draws")
+ * covers every id a picker lists.
+ */
 export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =

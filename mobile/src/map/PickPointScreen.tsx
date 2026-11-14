@@ -68,7 +68,7 @@ import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
 import { useRegions } from "../regionsPreference";
-import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
+import { effectiveBasemap, mobileBasemaps, settledView } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -148,14 +148,21 @@ export function PickPointScreen({
   const startZoom = initialPoint
     ? TYPED_POINT_ZOOM
     : (lastCamera?.zoom ?? home.zoom);
-  // The ground this screen opens on decides its basemaps (ADR 0049); the map
-  // here is for placing one point, so the list does not follow a pan.
+  // The ground the map shows decides its basemaps (ADR 0049): the bounds of
+  // its last settle, the opening point before the first.
   const [startLon, startLat] = startCenter;
   const startView = useMemo(
     () => pointBox(startLon, startLat),
     [startLon, startLat],
   );
-  const basemapId = effectiveBasemap(pickedBasemapId, startView);
+  const [settledBounds, setSettledBounds] = useState<readonly number[] | null>(
+    null,
+  );
+  const view = useMemo(
+    () => settledView(settledBounds, startView),
+    [settledBounds, startView],
+  );
+  const basemapId = effectiveBasemap(pickedBasemapId, view);
 
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(
@@ -250,6 +257,9 @@ export function PickPointScreen({
         logo={false}
         compass={false}
         onPress={handleMapPress}
+        onRegionDidChange={(event) =>
+          setSettledBounds(event.nativeEvent.bounds)
+        }
       >
         <Camera initialViewState={{ center: startCenter, zoom: startZoom }} />
 
@@ -315,7 +325,7 @@ export function PickPointScreen({
       {/* Basemaps down the side the action column is NOT on, mirroring the map
           screen's own split so the two feel like the same map. */}
       <View style={[styles.basemaps, { top: insets.top + spacing(2) }]}>
-        {mobileBasemaps(startView).map((id) => (
+        {mobileBasemaps(view).map((id) => (
           <Pressable
             key={id}
             accessibilityRole="button"

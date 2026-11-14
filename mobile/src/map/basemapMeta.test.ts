@@ -6,6 +6,7 @@ import {
   effectiveBasemap,
   knownBasemaps,
   mobileBasemaps,
+  settledView,
 } from "./basemapMeta";
 import { resolveMapSource } from "./sourceResolver";
 
@@ -59,5 +60,19 @@ describe("the basemap in use while the map moves", () => {
     expect(effectiveBasemap("six-imagery", atSea)).toBe(
       effectiveBasemap("no-such-basemap", atSea),
     );
+  });
+});
+
+describe("the view a map offers basemaps for", () => {
+  // Mutation: return `start` always, and the gallery stays on the opening
+  // ground while the map is panned elsewhere.
+  it("is the last settle's bounds, else the start", () => {
+    expect(settledView(null, inNsw)).toBe(inNsw);
+    expect(settledView([150, -34, 151, -33], inNsw)).toEqual({
+      west: 150,
+      south: -34,
+      east: 151,
+      north: -33,
+    });
   });
 });

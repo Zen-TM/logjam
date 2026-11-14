@@ -29,6 +29,20 @@ const toBaseLayer = (entry: BasemapCatalogEntry) => ({
 export const baseLayersFor = (view: LonLatBox) =>
   offeredBasemaps(view).map(toBaseLayer);
 
+/**
+ * The basemap Logjam Web draws for a stored pick: the pick where the view
+ * offers it, else the vector map where that is offered (what an unoffered pick
+ * has always shown), else `basemapHere`'s. Guard: `baseLayers.test.ts`.
+ */
+export function basemapPicked(stored: string, view: LonLatBox): string {
+  const offered = offeredBasemaps(view).map((entry) => entry.id);
+  return offered.includes(stored)
+    ? stored
+    : offered.includes("protomaps")
+      ? "protomaps"
+      : basemapHere(stored, view);
+}
+
 const offerOf = (view: LonLatBox) =>
   [
     ...offeredBasemaps(view).map((entry) => entry.id),

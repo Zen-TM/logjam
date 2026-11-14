@@ -45,3 +45,21 @@ export const effectiveBasemap = (
   picked: BasemapId,
   view: LonLatBox,
 ): BasemapId => basemapHere(picked, view);
+
+/**
+ * The view a map offers basemaps for: the bounds of its last settle, a
+ * `[west, south, east, north]` as MapLibre reports them, or `start` before the
+ * first. Guard: basemapMeta.test.ts.
+ */
+export const settledView = (
+  bounds: readonly number[] | null,
+  start: LonLatBox,
+): LonLatBox =>
+  bounds
+    ? {
+        west: bounds[0]!,
+        south: bounds[1]!,
+        east: bounds[2]!,
+        north: bounds[3]!,
+      }
+    : start;

@@ -1,6 +1,6 @@
 import { pointBox } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
-import { baseLayersFor, viewForBasemaps } from "./baseLayers";
+import { baseLayersFor, basemapPicked, viewForBasemaps } from "./baseLayers";
 
 const ids = (view: Parameters<typeof baseLayersFor>[0]) =>
   baseLayersFor(view).map((layer) => layer.id);
@@ -40,5 +40,27 @@ describe("viewForBasemaps", () => {
   // map leaves it.
   it("takes the new view once the offer changes", () => {
     expect(viewForBasemaps(inNsw, overNz)).toBe(overNz);
+  });
+});
+
+describe("basemapPicked", () => {
+  // Mutation: return `basemapHere`'s answer for an unoffered pick, and a stored
+  // raster "Default" over NSW shows SIX Maps Topo where it showed the vector
+  // map.
+  it("shows the vector map for a pick not offered over NSW", () => {
+    expect(basemapPicked("osm", inNsw)).toBe("protomaps");
+    expect(basemapPicked("removed", inNsw)).toBe("protomaps");
+  });
+
+  // Mutation: return "protomaps" whatever the view, and over ground outside
+  // our archive a stale pick shows a vector map that draws nothing there.
+  it("shows the worldwide default where the vector map is not offered", () => {
+    expect(basemapPicked("osm", overNz)).toBe("osm-topo");
+  });
+
+  // Mutation: always return the vector map, and a pick the view offers is
+  // swapped for it.
+  it("keeps a pick the view offers", () => {
+    expect(basemapPicked("six-topo", inNsw)).toBe("six-topo");
   });
 });
