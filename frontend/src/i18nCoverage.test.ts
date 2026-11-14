@@ -11,9 +11,6 @@ import { ceilingFailures, I18N_ADR, scanSources } from "@logjam/shared";
 // copy in Logjam Web goes through the catalogue, and a directory that moves its
 // text lowers its number in the same change. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
-//
-// Mutation that turns it red: add `const x = "Open the file";` to any file in
-// frontend/src, or move the text of a directory into `t` without lowering its ceiling.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +29,7 @@ const CEILINGS: Record<string, number> = {
   "components/routes": 25,
   "components/sidebar": 8,
   "components/sidebar/panels": 346,
-  csvImport: 65,
+  csvImport: 67,
   geoPdf: 4,
   "geoPdf/draw": 3,
   ui: 39,
@@ -63,6 +60,7 @@ beforeAll(() => {
 }, 30_000);
 
 describe("Logjam Web i18n coverage", () => {
+  // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(200);
     // Nothing in Logjam Web is written through the catalogue yet, so the
@@ -70,6 +68,7 @@ describe("Logjam Web i18n coverage", () => {
     expect(scan.bare.length).toBeGreaterThan(1000);
   });
 
+  // Mutation: add ``export const zz = t` leading`;`` to any source file.
   it("holds every message to the hygiene rules", () => {
     expect(
       scan.messages
@@ -81,7 +80,9 @@ describe("Logjam Web i18n coverage", () => {
     ).toEqual([]);
   });
 
+  // Mutation: add `export const zz = "Open the file";` to any source file, or
+  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
   it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS)).toEqual([]);
+    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
   });
 });

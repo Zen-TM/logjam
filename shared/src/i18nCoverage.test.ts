@@ -21,9 +21,6 @@ import {
 // copy in @logjam/shared goes through the catalogue, and a directory that moves its
 // text lowers its number in the same change. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
-//
-// Mutation that turns it red: add `const x = "Open the file";` to any file in
-// shared/src, or move the text of a directory into `t` without lowering its ceiling.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 
@@ -59,12 +56,14 @@ beforeAll(() => {
 }, 30_000);
 
 describe("@logjam/shared i18n coverage", () => {
+  // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(130);
     // About 46 messages today, all `say`.
     expect(scan.messages.length).toBeGreaterThan(40);
   });
 
+  // Mutation: add ``export const zz = t` leading`;`` to any source file.
   it("holds every message to the hygiene rules", () => {
     expect(
       scan.messages
@@ -76,8 +75,10 @@ describe("@logjam/shared i18n coverage", () => {
     ).toEqual([]);
   });
 
+  // Mutation: add `export const zz = "Open the file";` to any source file, or
+  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
   it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS)).toEqual([]);
+    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
   });
 });
 
@@ -94,12 +95,15 @@ describe("the en-US catalogue", () => {
   beforeAll(() => {
     for (const pkg of ["shared", "frontend", "mobile", "api"]) {
       const root = join(REPO, pkg, "src");
-      for (const path of sources(root))
+      // Logjam GPS's root component sits beside its `src`.
+      const extra = pkg === "mobile" ? [join(REPO, "mobile", "App.tsx")] : [];
+      for (const path of [...sources(root), ...extra])
         for (const message of messagesIn(ts, path, readFileSync(path, "utf8")))
           keys.add(message.key);
     }
   }, 30_000);
 
+  // Mutation: drop "api" from the package list in `beforeAll`.
   it("reads the messages of every package — a silent zero would pass forever", () => {
     expect(keys.size).toBeGreaterThan(150);
   });

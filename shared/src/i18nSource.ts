@@ -9,7 +9,7 @@ import {
   MESSAGE_TAGS,
   pluralNames,
 } from "./copyRules.js";
-import { type Catalogue, RICH_TAG } from "./i18n.js";
+import { type Catalogue, RICH_TAG, templateKey } from "./i18n.js";
 
 /** Where the reasoning for the guards that read this scan lives. */
 export const I18N_ADR =
@@ -96,10 +96,7 @@ export function messagesIn(
       MESSAGE_TAGS.has(node.tag.getText())
     ) {
       const parts = templateParts(ts, node.template);
-      const key = parts.reduce(
-        (text, part, i) => (i === 0 ? part : `${text}{${i - 1}}${part}`),
-        "",
-      );
+      const key = templateKey(parts);
       const kind = node.tag.getText() as MessageKind;
       found.push({
         line: lineOf(node),
@@ -169,6 +166,13 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
  */
 const CODE =
   /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=/;
+
+/** A map style property ("text-font", "icon-image"): its value is a font, an expression or an id. Another hyphenated key ("six-base") names a thing, and its value may be words. */
+const MAP_STYLE_KEY =
+  /^(?:text|icon|line|circle|symbol|fill|raster|background|heatmap|hillshade|source)-/;
+
+/** The catalogue folder: its keys and values are text by design, read by `messagesIn`'s consumers, never counted as bare. */
+const CATALOGUE_FILE = /(?:^|[\\/])i18nCatalogues[\\/]/;
 
 /** Files whose every flagged string is not words a user reads, with why. Paths from the repo root. */
 export const EXEMPT_FILES: Readonly<Record<string, string>> = {
@@ -322,8 +326,7 @@ export function bareCopyIn(
     }
     if (ts.isPropertyAssignment(node)) {
       const key = node.name.getText().replace(/["']/g, "");
-      // A kebab-case key is a map style property ("text-font"), not words.
-      if (key.includes("-")) return;
+      if (MAP_STYLE_KEY.test(key)) return;
       into(node.initializer, COPY_PROPS.has(key));
       return;
     }
@@ -360,26 +363,36 @@ export function directoryOf(relativePath: string): string {
  * What a ratchet ceiling map says is wrong with `counts` (bare literals per
  * directory): a count above its ceiling is new copy outside the catalogue; one
  * below is a ceiling left higher than the code needs, which would let new copy
- * in. An empty list means the map is exactly the code's.
+ * in. An empty list means the map is exactly the code's. A directory above its
+ * ceiling lists where its literals are (`found`), a file to a line, so the new
+ * one can be found.
  */
 export function ceilingFailures(
   counts: Readonly<Record<string, number>>,
   ceilings: Readonly<Record<string, number>>,
+  found: readonly { file: string; line: number; dir: string }[] = [],
 ): string[] {
   const failures: string[] = [];
   for (const dir of new Set([
     ...Object.keys(counts),
     ...Object.keys(ceilings),
   ])) {
-    const found = counts[dir] ?? 0;
+    const count = counts[dir] ?? 0;
     const ceiling = ceilings[dir] ?? 0;
-    if (found > ceiling)
+    if (count > ceiling) {
+      const lines = new Map<string, number[]>();
+      for (const hit of found)
+        if (hit.dir === dir)
+          lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
       failures.push(
-        `${dir}: ${found} bare literals, ceiling ${ceiling}. Write the text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}).`,
+        [
+          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). Where they are:`,
+          ...[...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`),
+        ].join("\n"),
       );
-    else if (found < ceiling)
+    } else if (count < ceiling)
       failures.push(
-        `${dir}: ${found} bare literals, ceiling ${ceiling}. Lower the ceiling to ${found}${found === 0 ? " (delete the entry)" : ""}.`,
+        `${dir}: ${count} bare literals, ceiling ${ceiling}. Lower the ceiling to ${count}${count === 0 ? " (delete the entry)" : ""}.`,
       );
   }
   return failures.sort();
@@ -404,7 +417,8 @@ export function scanSources(
   for (const { path, source } of files) {
     for (const message of messagesIn(tsModule, path, source))
       scan.messages.push({ ...message, file: path });
-    if (`${pkg}/src/${path}` in EXEMPT_FILES) continue;
+    if (`${pkg}/src/${path}` in EXEMPT_FILES || CATALOGUE_FILE.test(path))
+      continue;
     const dir = directoryOf(path);
     for (const bare of bareCopyIn(tsModule, path, source)) {
       scan.bare.push({ ...bare, file: path, dir });

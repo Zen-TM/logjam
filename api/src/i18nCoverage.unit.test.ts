@@ -11,9 +11,6 @@ import { ceilingFailures, I18N_ADR, scanSources } from "@logjam/shared";
 // copy in the API goes through the catalogue, and a directory that moves its
 // text lowers its number in the same change. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
-//
-// Mutation that turns it red: add `const x = "Open the file";` to any file in
-// api/src, or move the text of a directory into `t` without lowering its ceiling.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 
@@ -23,7 +20,7 @@ const CEILINGS: Record<string, number> = {
   middleware: 4,
   routes: 11,
   scripts: 3,
-  services: 27,
+  services: 28,
 };
 
 function sources(dir: string): string[] {
@@ -51,6 +48,7 @@ beforeAll(() => {
 }, 30_000);
 
 describe("the API i18n coverage", () => {
+  // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(80);
     // About 247 `say` messages today; the floor sits well under, so a few can
@@ -58,6 +56,7 @@ describe("the API i18n coverage", () => {
     expect(scan.messages.length).toBeGreaterThan(200);
   });
 
+  // Mutation: add ``export const zz = t` leading`;`` to any source file.
   it("holds every message to the hygiene rules", () => {
     expect(
       scan.messages
@@ -69,7 +68,9 @@ describe("the API i18n coverage", () => {
     ).toEqual([]);
   });
 
+  // Mutation: add `export const zz = "Open the file";` to any source file, or
+  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
   it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS)).toEqual([]);
+    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
   });
 });

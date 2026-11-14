@@ -75,8 +75,11 @@ describe("messagesIn", () => {
     expect(found.problems).toEqual(["its two forms are not string literals"]);
   });
 
+  // Mutation: drop the `MESSAGE_TAGS.has` test from `messagesIn`, so any tagged template is a message.
   it("finds nothing in a file with no message", () => {
-    expect(messages('const a = "t";')).toEqual([]);
+    expect(
+      messages('const a = "t"; const b = other`x`; const c = sql`y ${z}`;'),
+    ).toEqual([]);
   });
 });
 
@@ -91,12 +94,14 @@ describe("messageProblems", () => {
     ["plural", "places", ["place", "places"], "holds no # for the count"],
     // Mutation: change RICH_TAG's `[^<]*` to `.*`, so a nested tag is consumed.
     ["rich", "<a><b>x</b></a>", ["<a><b>x</b></a>"], "holds a tag rich can't"],
+    // Mutation: drop the `.match(/[<>]/)` leftover test from the `rich` check.
     ["rich", "<a>x", ["<a>x"], "holds a tag rich can't"],
     ["rich", "Under <5 m", ["Under <5 m"], "holds a tag rich can't"],
   ] as const)("%s %j is refused", (kind, key, parts, problem) => {
     expect(messageProblems(kind, key, parts).join()).toContain(problem);
   });
 
+  // Mutation: push a problem into `messageProblems` for every message.
   it.each([
     ["t", "Showing {0} of {1}", ["Showing ", " of ", ""]],
     ["plural", "# places in {0}", []],
@@ -183,7 +188,7 @@ describe("bareCopyIn", () => {
       "an href",
       'const a = <a href="https://example.com/open the file">{x}</a>;',
     ],
-    ["a kebab-case key", 'const a = { "text-font": "Noto Sans Medium" };'],
+    ["a map style key", 'const a = { "text-font": "Noto Sans Medium" };'],
     ["SQL", 'db.run("SELECT id FROM places WHERE id = ?");'],
     [
       "a template of SQL",
@@ -198,12 +203,22 @@ describe("bareCopyIn", () => {
     expect(bare(source)).toEqual([]);
   });
 
+  // Mutation: restore the blanket `key.includes("-")` skip in place of `MAP_STYLE_KEY`.
+  it("reads the words under an id-keyed map's hyphenated key", () => {
+    expect(
+      bare(
+        'const a = { "six-base": "Base Map", "new-attr": "New custom attribute" };',
+      ),
+    ).toEqual(["Base Map", "New custom attribute"]);
+  });
+
   // Mutation: have the arrow-function branch pass `copy` into a block body.
   it("ends the net at a block body, and reads a concise arrow's value", () => {
     expect(bare('const a = { label: () => { return "Save"; } };')).toEqual([]);
     expect(bare('const a = { label: () => "Save" };')).toEqual(["Save"]);
   });
 
+  // Mutation: have `codeArguments` read no argument (delete its `into(arg, false)`).
   it("flags a string passed to a callback inside a log call", () => {
     expect(bare('logger.info(() => { notify("Saved the place"); });')).toEqual([
       "Saved the place",
@@ -212,6 +227,7 @@ describe("bareCopyIn", () => {
 });
 
 describe("scanSources", () => {
+  // Mutation: drop the `in EXEMPT_FILES` test from `scanSources`.
   it("counts bare literals per directory and skips an exempt file", () => {
     const scan = scanSources(ts, "shared", [
       { path: "a.ts", source: 'export const a = "Open the file";' },
@@ -222,9 +238,25 @@ describe("scanSources", () => {
     expect(scan.counts).toEqual({ ".": 1, sub: 2 });
   });
 
+  // Mutation: make `directoryOf` return "." for every path.
   it("names the directory of a path", () => {
     expect(directoryOf("a.ts")).toBe(".");
     expect(directoryOf("components/dialogs/A.tsx")).toBe("components/dialogs");
+  });
+});
+
+describe("scanSources and the catalogue folder", () => {
+  const source = 'export const enUS = { "Abseil rope": "Rappel rope" };';
+
+  // Mutation: drop the `CATALOGUE_FILE` test from `scanSources`.
+  it("does not count a catalogue's entries as bare copy, anywhere else it does", () => {
+    expect(
+      scanSources(ts, "shared", [{ path: "i18nCatalogues/en-US.ts", source }])
+        .counts,
+    ).toEqual({});
+    expect(
+      scanSources(ts, "shared", [{ path: "other/en-US.ts", source }]).counts,
+    ).toEqual({ other: 1 });
   });
 });
 
@@ -241,6 +273,24 @@ describe("ceilingFailures", () => {
       "3 bare literals, ceiling 2",
     );
     expect(ceilingFailures({ new: 1 }, {}).join()).toContain("new: 1");
+  });
+
+  const hits = [
+    { file: "a.ts", line: 3, dir: "a" },
+    { file: "a.ts", line: 9, dir: "a" },
+    { file: "sub/b.ts", line: 1, dir: "b" },
+  ];
+
+  // Mutation: delete the `hit.dir === dir` test, so every directory's hits are listed.
+  it("lists file and lines for a directory above its ceiling only", () => {
+    const [failure] = ceilingFailures({ a: 2, b: 1 }, { a: 1, b: 1 }, hits);
+    expect(failure).toContain("a.ts: 3, 9");
+    expect(failure).not.toContain("b.ts");
+  });
+
+  // Mutation: list the hits for a directory below its ceiling too.
+  it("keeps a stale ceiling's message to one line", () => {
+    expect(ceilingFailures({ a: 1 }, { a: 2 }, hits)[0]).not.toContain("\n");
   });
 
   // Mutation: delete the `found < ceiling` branch.

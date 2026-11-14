@@ -9,7 +9,7 @@ import {
   refreshGaugeHistories,
   resetGaugeFeed,
 } from "./gaugeFeed";
-import { gaugeFixture } from "./gaugeFixture";
+import { gaugeFixture } from "./__fixtures__/gaugeFixture";
 
 const h = vi.hoisted(() => ({
   fetch: vi.fn(),

@@ -11,23 +11,22 @@ import { ceilingFailures, I18N_ADR, scanSources } from "@logjam/shared";
 // copy in Logjam GPS goes through the catalogue, and a directory that moves its
 // text lowers its number in the same change. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
-//
-// Mutation that turns it red: add `const x = "Open the file";` to any file in
-// mobile/src, or move the text of a directory into `t` without lowering its ceiling.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
+// The root component holds user copy too ("Update required"); it is counted with `.`.
+const APP = join(SRC, "..", "App.tsx");
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  ".": 8,
+  ".": 21,
   api: 2,
   auth: 20,
   customFields: 31,
-  gauges: 2,
+  gauges: 1,
   geopdf: 28,
   imports: 19,
   logs: 40,
-  map: 165,
+  map: 167,
   media: 45,
   notifications: 4,
   offline: 85,
@@ -59,8 +58,8 @@ function sources(dir: string): string[] {
 let scan: ReturnType<typeof scanSources>;
 let fileCount = 0;
 beforeAll(() => {
-  const files = sources(SRC).map((path) => ({
-    path: relative(SRC, path),
+  const files = [...sources(SRC), APP].map((path) => ({
+    path: path === APP ? "App.tsx" : relative(SRC, path),
     source: readFileSync(path, "utf8"),
   }));
   fileCount = files.length;
@@ -68,6 +67,7 @@ beforeAll(() => {
 }, 30_000);
 
 describe("Logjam GPS i18n coverage", () => {
+  // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(300);
     // Nothing in Logjam GPS is written through the catalogue yet, so the
@@ -75,6 +75,7 @@ describe("Logjam GPS i18n coverage", () => {
     expect(scan.bare.length).toBeGreaterThan(1000);
   });
 
+  // Mutation: add ``export const zz = t` leading`;`` to any source file.
   it("holds every message to the hygiene rules", () => {
     expect(
       scan.messages
@@ -86,7 +87,10 @@ describe("Logjam GPS i18n coverage", () => {
     ).toEqual([]);
   });
 
+  // Mutation: drop `APP` from the list in `beforeAll`, or add
+  // `export const zz = "Open the file";` to any source file, or
+  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
   it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS)).toEqual([]);
+    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
   });
 });

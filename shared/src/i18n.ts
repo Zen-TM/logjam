@@ -110,7 +110,8 @@ export function pseudo(text: string): string {
   return `⟦${body}${padding}⟧`;
 }
 
-function key(strings: TemplateStringsArray): string {
+/** The catalogue key of a template's literal parts: the English with each hole written `{0}`, `{1}`, … The scanner (i18nSource.ts) keys messages with this too. */
+export function templateKey(strings: readonly string[]): string {
   let text = strings[0];
   for (let i = 1; i < strings.length; i++) text += `{${i - 1}}${strings[i]}`;
   return text;
@@ -121,7 +122,7 @@ const keys = new WeakMap<TemplateStringsArray, string>();
 function keyOf(strings: TemplateStringsArray): string {
   let text = keys.get(strings);
   if (text === undefined) {
-    text = key(strings);
+    text = templateKey(strings);
     keys.set(strings, text);
   }
   return text;
