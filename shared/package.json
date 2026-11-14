@@ -10,7 +10,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "topo-regions": "node scripts/topo-regions.mjs"
   },
   "dependencies": {
     "@cantoo/pdf-lib": "^2.11.1",

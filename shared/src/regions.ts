@@ -480,9 +480,19 @@ export function simRegionsOn(): boolean {
   );
 }
 
+/**
+ * NSW and the simulated regions, whatever the switch says: what
+ * topo/regions.json lists (topoRegions.ts). A client reads `REGIONS`, never
+ * this, or a prod build would offer regions with no data.
+ */
+export const REGIONS_WITH_SIMULATED: readonly Region[] = [
+  NSW_REGION,
+  ...SIM_REGIONS,
+];
+
 /** Every region, in the order a picker lists them. */
 export const REGIONS: readonly Region[] = simRegionsOn()
-  ? [NSW_REGION, ...SIM_REGIONS]
+  ? REGIONS_WITH_SIMULATED
   : [NSW_REGION];
 
 /**

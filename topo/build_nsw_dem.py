@@ -64,6 +64,8 @@ import numpy as np
 from osgeo import gdal, osr
 from PIL import Image
 
+from regions import region
+
 gdal.UseExceptions()
 
 TILE = 256
@@ -777,12 +779,12 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     pack(work, out, attribution, layer, zmax, zmin)
 
 
-# `NSW_REGION.terrain.heights.archivePath` in shared/src/regions.ts, and the slope archive's twin
-# beside it: test_nsw_dem.py `TestSlopeS3` holds the first.
-HEIGHT_KEY = "master/dem/nsw-5m.pmtiles"
-SLOPE_KEY = "master/dem/nsw-5m-slope.pmtiles"
-# `NSW_REGION.terrain.contours.archivePath` in shared/src/regions.ts (test_nsw_dem.py).
-CONTOUR_KEY = "master/contours/nsw-10m.pmtiles"
+# NSW's archives, as regions.json names them (test_regions.py holds these
+# reading it, not a path written here).
+_NSW_TERRAIN = region("nsw")["terrain"]
+HEIGHT_KEY = _NSW_TERRAIN["heights"]["archivePath"]
+SLOPE_KEY = _NSW_TERRAIN["slope"]["archivePath"]
+CONTOUR_KEY = _NSW_TERRAIN["contours"]["archivePath"]
 
 
 def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:

@@ -1,0 +1,265 @@
+{
+ "note": "Written from shared/src/regions.ts: change the declaration and rerun the script in shared/scripts, not this file.",
+ "regions": [
+  {
+   "id": "nsw",
+   "name": "NSW",
+   "borders": [
+    [
+     [141.49, -34.32],
+     [140.9, -34.04],
+     [140.96, -28.91],
+     [148.91, -28.9],
+     [149.47, -28.48],
+     [150.29, -28.44],
+     [151.06, -28.65],
+     [151.39, -29.02],
+     [151.66, -28.78],
+     [151.92, -28.82],
+     [151.87, -28.45],
+     [152.49, -28.15],
+     [153.06, -28.24],
+     [153.63, -28.04],
+     [154.29, -28.41],
+     [154.24, -37.73],
+     [150.01, -37.63],
+     [148.05, -36.89],
+     [147.92, -36.2],
+     [147.69, -36.05],
+     [146.94, -36.22],
+     [145.11, -35.94],
+     [145.04, -36.16],
+     [144.7, -36.22],
+     [143.32, -35.27],
+     [143.14, -34.82],
+     [142.53, -34.88],
+     [142.13, -34.28]
+    ]
+   ],
+   "terrain": {
+    "heights": {
+     "id": "nsw-5m",
+     "archivePath": "master/dem/nsw-5m.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+     "creditHtml": "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href=\"https://www.spatial.nsw.gov.au\">Spatial Services</a>), extracted October 2026. <a href=\"https://creativecommons.org/licenses/by/3.0/au/\">CC BY 3.0 AU</a>.",
+     "sampleZoom": 15
+    },
+    "slope": {
+     "id": "nsw-5m-slope",
+     "archivePath": "master/dem/nsw-5m-slope.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Slope: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+     "creditHtml": "Slope: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href=\"https://www.spatial.nsw.gov.au\">Spatial Services</a>), extracted October 2026. <a href=\"https://creativecommons.org/licenses/by/3.0/au/\">CC BY 3.0 AU</a>.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "hillshade": {
+     "id": "nsw-5m-hillshade",
+     "archivePath": "master/dem/nsw-5m.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Hillshade: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+     "creditHtml": "Hillshade: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href=\"https://www.spatial.nsw.gov.au\">Spatial Services</a>), extracted October 2026. <a href=\"https://creativecommons.org/licenses/by/3.0/au/\">CC BY 3.0 AU</a>.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "contours": {
+     "id": "nsw-contours",
+     "archivePath": "master/contours/nsw-10m.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Contours: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+     "creditHtml": "Contours: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href=\"https://www.spatial.nsw.gov.au\">Spatial Services</a>), extracted October 2026. <a href=\"https://creativecommons.org/licenses/by/3.0/au/\">CC BY 3.0 AU</a>.",
+     "minzoom": 11,
+     "maxzoom": 14
+    },
+    "land": {
+     "id": "nsw-land",
+     "archivePath": "master/land/nsw-tenure.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
+     "creditHtml": "Land: <a href=\"https://data.nsw.gov.au/data/dataset/nsw-land-tenure\">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href=\"https://creativecommons.org/licenses/by/4.0/\">CC BY 4.0</a>",
+     "minzoom": 8,
+     "maxzoom": 13
+    },
+    "fire": {
+     "id": "nsw-fire",
+     "archivePath": "master/fire/nsw-fire-history.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
+     "creditHtml": "Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href=\"https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6\">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href=\"https://creativecommons.org/licenses/by/4.0/\">CC BY 4.0</a>)",
+     "minzoom": 8,
+     "maxzoom": 12
+    },
+    "coverage": {
+     "id": "nsw-coverage",
+     "archivePath": "master/coverage/nsw-coverage.pmtiles",
+     "coverage": [140.9, -37.6, 153.7, -28],
+     "credit": "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
+     "creditHtml": "Mobile coverage: <a href=\"https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release\">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href=\"https://creativecommons.org/licenses/by/2.5/au/\">CC BY 2.5 AU</a>; coastline &copy; <a href=\"https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3\">ABS</a>, <a href=\"https://creativecommons.org/licenses/by/4.0/\">CC BY 4.0</a>",
+     "minzoom": 12,
+     "maxzoom": 12
+    }
+   },
+   "placeSearch": "master/places/v1/",
+   "gauges": "master/gauges/v1/",
+   "grid": "mga2020"
+  },
+  {
+   "id": "simnz",
+   "name": "Simulated New Zealand",
+   "sim": true,
+   "borders": [
+    [
+     [168.98, -44.720000000000006],
+     [169.22, -44.720000000000006],
+     [169.22, -44.529999999999994],
+     [168.98, -44.529999999999994]
+    ],
+    [
+     [175.48, -37.120000000000005],
+     [175.72, -37.120000000000005],
+     [175.72, -36.93],
+     [175.48, -36.93]
+    ]
+   ],
+   "terrain": {
+    "heights": {
+     "id": "simnz-heights",
+     "archivePath": "master/dem/simnz-heights.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Elevation: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Elevation: simulated data for New Zealand, not a real survey.",
+     "sampleZoom": 15
+    },
+    "slope": {
+     "id": "simnz-slope",
+     "archivePath": "master/dem/simnz-slope.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Slope: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Slope: simulated data for New Zealand, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "hillshade": {
+     "id": "simnz-hillshade",
+     "archivePath": "master/dem/simnz-heights.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Hillshade: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Hillshade: simulated data for New Zealand, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "contours": {
+     "id": "simnz-contours",
+     "archivePath": "master/contours/simnz-10m.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Contours: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Contours: simulated data for New Zealand, not a real survey.",
+     "minzoom": 11,
+     "maxzoom": 14
+    },
+    "land": {
+     "id": "simnz-land",
+     "archivePath": "master/land/simnz-tenure.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Land: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Land: simulated data for New Zealand, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 13
+    },
+    "fire": {
+     "id": "simnz-fire",
+     "archivePath": "master/fire/simnz-fire-history.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Fire history: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Fire history: simulated data for New Zealand, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 12
+    },
+    "coverage": {
+     "id": "simnz-coverage",
+     "archivePath": "master/coverage/simnz-coverage.pmtiles",
+     "coverage": [169, -44.7, 175.7, -36.95],
+     "credit": "Mobile coverage: simulated data for New Zealand, not a real survey.",
+     "creditHtml": "Mobile coverage: simulated data for New Zealand, not a real survey.",
+     "minzoom": 12,
+     "maxzoom": 12
+    }
+   },
+   "placeSearch": null,
+   "gauges": null,
+   "grid": "mga2020"
+  },
+  {
+   "id": "simutah",
+   "name": "Simulated Utah",
+   "sim": true,
+   "borders": [
+    [
+     [-110.92, 38.18],
+     [-110.68, 38.18],
+     [-110.68, 38.370000000000005],
+     [-110.92, 38.370000000000005]
+    ]
+   ],
+   "terrain": {
+    "heights": {
+     "id": "simutah-heights",
+     "archivePath": "master/dem/simutah-heights.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Elevation: simulated data for Utah, not a real survey.",
+     "creditHtml": "Elevation: simulated data for Utah, not a real survey.",
+     "sampleZoom": 15
+    },
+    "slope": {
+     "id": "simutah-slope",
+     "archivePath": "master/dem/simutah-slope.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Slope: simulated data for Utah, not a real survey.",
+     "creditHtml": "Slope: simulated data for Utah, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "hillshade": {
+     "id": "simutah-hillshade",
+     "archivePath": "master/dem/simutah-heights.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Hillshade: simulated data for Utah, not a real survey.",
+     "creditHtml": "Hillshade: simulated data for Utah, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 15
+    },
+    "contours": {
+     "id": "simutah-contours",
+     "archivePath": "master/contours/simutah-10m.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Contours: simulated data for Utah, not a real survey.",
+     "creditHtml": "Contours: simulated data for Utah, not a real survey.",
+     "minzoom": 11,
+     "maxzoom": 14
+    },
+    "land": {
+     "id": "simutah-land",
+     "archivePath": "master/land/simutah-tenure.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Land: simulated data for Utah, not a real survey.",
+     "creditHtml": "Land: simulated data for Utah, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 13
+    },
+    "fire": {
+     "id": "simutah-fire",
+     "archivePath": "master/fire/simutah-fire-history.pmtiles",
+     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "credit": "Fire history: simulated data for Utah, not a real survey.",
+     "creditHtml": "Fire history: simulated data for Utah, not a real survey.",
+     "minzoom": 8,
+     "maxzoom": 12
+    }
+   },
+   "placeSearch": null,
+   "gauges": null,
+   "grid": "mga2020"
+  }
+ ]
+}

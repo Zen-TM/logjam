@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
+from regions import region  # noqa: E402
+
 from build_nsw_dem import (  # noqa: E402
     BLOCK_ZOOM,
     block_zoom,
@@ -1024,22 +1026,14 @@ class TestSlopeS3(unittest.TestCase):
                 slope_s3("bkt", Path(tmp), 8, Client())
         self.assertEqual(calls, ["download", "build"])
 
-    # Mutation: change HEIGHT_KEY alone and the task reads an archive the
-    # clients do not.
-    def test_the_height_key_is_the_one_the_clients_read(self):
-        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        with open(os.path.join(root, "shared/src/regions.ts")) as f:
-            self.assertIn(f'archivePath: "{HEIGHT_KEY}"', f.read())
-        self.assertEqual(
-            SLOPE_KEY, HEIGHT_KEY.replace("5m.pmtiles", "5m-slope.pmtiles")
-        )
-
-    # Mutation: change CONTOUR_KEY alone and an area export draws contours
-    # from an archive the clients do not read.
-    def test_the_contour_key_is_the_one_the_clients_read(self):
-        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        with open(os.path.join(root, "shared/src/regions.ts")) as f:
-            self.assertIn(f'archivePath: "{CONTOUR_KEY}"', f.read())
+    # Mutation: write one of the three keys in build_nsw_dem.py as a path that
+    # is not NSW's archive in regions.json, and a task reads or writes an
+    # archive the clients do not.
+    def test_the_keys_are_the_archives_regions_json_declares_for_nsw(self):
+        terrain = region("nsw")["terrain"]
+        self.assertEqual(HEIGHT_KEY, terrain["heights"]["archivePath"])
+        self.assertEqual(SLOPE_KEY, terrain["slope"]["archivePath"])
+        self.assertEqual(CONTOUR_KEY, terrain["contours"]["archivePath"])
 
 
 class TestHalveMax(unittest.TestCase):

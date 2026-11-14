@@ -11,6 +11,10 @@ covers flags, output format and troubleshooting.
 - **The API launches the workers** through ECS RunTask (`api/src/routes/topoJobs.ts`),
   so a worker CLI or output change ships with its API change. Task
   definitions live in `infra/terraform/envs/prod/ecs.tf`.
+- **`regions.json` is generated, not edited.** It is `shared/src/regions.ts`
+  as the workers read it (`regions.py`): after changing a region there, run
+  `npm run build && npm run topo-regions` in `shared/`. Guard:
+  `shared/src/topoRegions.test.ts` ("is what the script writes").
 - **A terminal status write is guarded by the status it expects**
   (`WHERE status = 'processing'` or `'running'`), so a reaped job cannot be
   resurrected; a new transition keeps the guard (`tests/test_status_guards.py`).
