@@ -329,6 +329,7 @@ export function bareCopyIn(
       return codeArguments(node);
     if (ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return all(false);
     if (ts.isArrowFunction(node)) {
+      for (const parameter of node.parameters) into(parameter, false);
       // A concise body is an expression the caller may show; a block is code.
       into(node.body, ts.isBlock(node.body) ? false : copy);
       return;
@@ -421,6 +422,10 @@ const MESSAGE_FUNCTIONS = new Set([...MESSAGE_TAGS, "plural"]);
  * (`import { t as tr }`) or through a namespace (`i18n.t`): the scanner finds
  * a message by the name it is written with, so such a message would go
  * uncounted and unchecked.
+ *
+ * It catches those two forms from `MESSAGE_MODULE` and no others: not
+ * `export { t as tr }`, `const tr = t`, a default import, or a local function
+ * named `t`, `say` or `rich`. None exists today.
  */
 export function importProblems(
   tsModule: unknown,

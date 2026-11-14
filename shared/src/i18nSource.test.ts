@@ -23,7 +23,7 @@ const bare = (source: string, file = "x.tsx") =>
 const IMPORT_PLURAL = 'import { plural } from "@logjam/shared";\n';
 
 describe("messagesIn", () => {
-  // Mutation: in `messagesIn`, join the parts with "" instead of `{i}`.
+  // Mutation: in `templateKey` (i18n.ts), change `{${i - 1}}` to an empty string.
   it("keys a template by its English with the holes written {0}, {1}", () => {
     expect(
       messages("const a = t`Showing ${shown} of ${total}`;").map((m) => m.key),
@@ -256,6 +256,13 @@ describe("bareCopyIn", () => {
     ).toEqual(["Base Map", "New custom attribute"]);
   });
 
+  // Mutation: stop visiting an arrow's parameters.
+  it("reads a string default in an arrow's parameters", () => {
+    expect(
+      bare('const a = ({ label = "Select the canyon" }) => label;'),
+    ).toEqual(["Select the canyon"]);
+  });
+
   // Mutation: have the arrow-function branch pass `copy` into a block body.
   it("ends the net at a block body, and reads a concise arrow's value", () => {
     expect(bare('const a = { label: () => { return "Save"; } };')).toEqual([]);
@@ -345,13 +352,13 @@ describe("scanSources and the catalogue folder", () => {
 });
 
 describe("ceilingFailures", () => {
-  // Mutation: change `found > ceiling` to `found >= ceiling`.
+  // Mutation: change `count > ceiling` to `count >= ceiling`.
   it("is empty when the ceilings are exactly the counts", () => {
     expect(ceilingFailures({ a: 2, b: 1 }, { a: 2, b: 1 })).toEqual([]);
     expect(ceilingFailures({ a: 0 }, {})).toEqual([]);
   });
 
-  // Mutation: delete the `found > ceiling` branch.
+  // Mutation: delete the `count > ceiling` branch.
   it("fails on new copy above a ceiling, and on a directory with no ceiling", () => {
     expect(ceilingFailures({ a: 3 }, { a: 2 }).join()).toContain(
       "3 bare literals, ceiling 2",
@@ -377,7 +384,7 @@ describe("ceilingFailures", () => {
     expect(ceilingFailures({ a: 1 }, { a: 2 }, hits)[0]).not.toContain("\n");
   });
 
-  // Mutation: delete the `found < ceiling` branch.
+  // Mutation: delete the `count < ceiling` branch.
   it("fails on a ceiling left above the count, so it only falls", () => {
     expect(ceilingFailures({ a: 1 }, { a: 2 }).join()).toContain(
       "Lower the ceiling to 1",
