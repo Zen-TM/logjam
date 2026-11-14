@@ -17,6 +17,7 @@ import http.client
 import json
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -74,15 +75,26 @@ RETRY_STDERR = re.compile(
 
 def retriable(error: BaseException) -> bool:
     """Whether a host's refusal or a dropped connection, which waiting may cure,
-    and not a wrong URL, a bad argument, a full disk or a missing binary, which
-    it will not (guard: topo/tests/test_sim_regions_build.py `TestRetriable`)."""
+    and not a wrong URL, a failed certificate, a bad argument, a full disk or a
+    missing binary, which it will not (guard:
+    topo/tests/test_sim_regions_build.py `TestRetriable`). A name that does not
+    resolve is waited on too: it is what a dropped network looks like mid-run, so
+    a mistyped host waits out the tries before it fails."""
     if isinstance(error, urllib.error.HTTPError):
         return error.code in RETRY_STATUS
-    if isinstance(error, urllib.error.URLError | http.client.HTTPException):
-        return True
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(
+            error.reason, ConnectionError | TimeoutError | socket.gaierror
+        )
     if isinstance(error, subprocess.CalledProcessError):
         return bool(RETRY_STDERR.search(error.stderr or ""))
-    return isinstance(error, ConnectionError | TimeoutError)
+    return isinstance(
+        error,
+        ConnectionError
+        | TimeoutError
+        | http.client.IncompleteRead
+        | http.client.BadStatusLine,
+    )
 
 
 def retrying(what: str, attempt, tries: int = 5):

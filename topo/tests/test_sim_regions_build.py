@@ -6,6 +6,8 @@ with docker and the network (scripts/sim-regions/README.md).
 import http.client
 import http.server
 import importlib.util
+import socket
+import ssl
 import threading
 import subprocess
 import tempfile
@@ -37,7 +39,12 @@ class TestRetriable(unittest.TestCase):
             http_error(429),
             http_error(503),
             urllib.error.URLError(ConnectionRefusedError()),
+            urllib.error.URLError(TimeoutError()),
+            # A name that does not resolve: also a dropped network mid-run.
+            urllib.error.URLError(socket.gaierror(-2, "Name or service not known")),
             http.client.IncompleteRead(b""),
+            http.client.RemoteDisconnected("closed"),
+            http.client.BadStatusLine(""),
             ConnectionResetError(),
             TimeoutError(),
             # go-pmtiles' own wording, read from a local server that answered
@@ -53,11 +60,15 @@ class TestRetriable(unittest.TestCase):
                 self.assertTrue(build.retriable(error))
 
     def test_a_wrong_url_a_bad_argument_or_a_missing_binary_is_not(self):
-        # Mutation: return True from retriable() for every error, or search stderr
-        # for a bare "429" or "503" in place of RETRY_STDERR.
+        # Mutation: return True from retriable() for every error, retry every
+        # URLError whatever its reason, or search stderr for a bare "429" or
+        # "503" in place of RETRY_STDERR.
         for error in (
             http_error(404),
             http_error(403),
+            urllib.error.URLError(ssl.SSLCertVerificationError("bad certificate")),
+            urllib.error.URLError("unknown url type: htp"),
+            http.client.InvalidURL("nonnumeric port"),
             FileNotFoundError("pmtiles"),
             ValueError("bad"),
             failed("pmtiles: error: unknown flag --nope"),
@@ -174,8 +185,12 @@ class TestDownload(unittest.TestCase):
         return f"http://127.0.0.1:{server.server_port}/f.laz", asked
 
     def test_a_whole_body_lands(self):
+        # Mutation: make download() reject a body of exactly Content-Length bytes.
         url, asked = self.serve(short_first=0)
-        with tempfile.TemporaryDirectory() as tmp:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(build.time, "sleep"),
+        ):
             dest = Path(tmp) / "f.laz"
             build.download(url, dest)
             self.assertEqual(dest.read_bytes(), BODY)

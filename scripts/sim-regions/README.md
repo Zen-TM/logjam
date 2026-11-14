@@ -41,10 +41,14 @@ The archives are large and never committed.
 
 Hosts read, each by a plain client with nothing that names the project or its
 maintainer: `download.mapterhorn.com` (heights, by byte range),
-`build.protomaps.com` (vector, `pmtiles extract`), `overpass-api.de` (places),
+`build.protomaps.com` (vector, `pmtiles extract`),
+`build-metadata.protomaps.dev` (the list of Protomaps builds, to find the
+latest unless `--protomaps-build` names one), `overpass-api.de` (places),
 `rockyweb.usgs.gov` (the point cloud). A refusal (429, 500, 502, 503, 504) or a dropped
-connection is waited out, 2, 4, 8 minutes and so on, never retried at once; any
-other failure stops the run. The `places` step has not been run against
+connection is waited out, 2, 4, 8 minutes and so on, never retried at once; so
+is a name that does not resolve, which a dropped network looks like (a mistyped
+host waits out the tries before it fails). Any other failure, a certificate
+failure included, stops the run. The `places` step has not been run against
 Overpass. If your machine cannot reach it, put the `.osm` files in `out/places/`
 by hand, named `<region>-<box number>.osm` (`simnz-0.osm`): the step uses a file
 that exists, unless you pass `--force`, which fetches it again.
@@ -61,7 +65,8 @@ the header's on a merged archive and on every fixture.
 
 Mapterhorn marks no edge where a fine survey ends, so a box's heights are 1 m
 only where the survey is, and each credit says "where that survey covers".
-Only the Makarora box is known to lie wholly inside its survey.
+Only the first `simnz` box (169.20, -44.10, 169.30, -44.01, near Makarora) is
+known to lie wholly inside its survey.
 
 ## Sources and credit
 
