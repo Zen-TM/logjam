@@ -53,9 +53,13 @@ Sizes are in MB as `pmtiles show` prints them, from the build on 2026-11-14
 
 | Region | Boxes (W, S, E, N) | Archives |
 |---|---|---|
-| `simnz` | 169.20, -44.10, 169.30, -44.01 (Makarora, Haast Pass; 1 m LiDAR throughout) and 175.58, -37.14, 175.68, -37.06 (Kauaeranga, Coromandel) | heights z8–17 (4,549 tiles, 202 MB), slope (166 MB), contours z11–14 (3.4 MB), vector z0–15 (1.8 MB), places |
-| `simutah` | -113.00, 37.24, -112.89, 37.33 (Zion) | heights z8–15 (201 tiles, 9.6 MB), slope (8.1 MB), contours (2.8 MB), vector (1.7 MB), places, one USGS point cloud tile (176 MB) |
+| `simnz` | 169.20, -44.10, 169.30, -44.01 (Makarora, Haast Pass) and 175.58, -37.14, 175.68, -37.06 (Kauaeranga, Coromandel) | heights z8–17 (4,549 tiles, 202 MB), slope (166 MB), contours z11–14 (3.4 MB), vector z0–15 (1.8 MB) |
+| `simutah` | -113.00, 37.24, -112.89, 37.33 (Zion) | heights z8–15 (201 tiles, 9.6 MB), slope (8.1 MB), contours (2.8 MB), vector (1.7 MB), one USGS point cloud tile (176 MB, in metres) |
 | `world` | 168.8, -44.6, 169.8, -43.6 and -113.5, 36.8, -112.5, 37.8 | heights z8–13 (2,226 tiles, 98 MB), vector z0–15 (29 MB) |
+
+The `places` step (`simnz` and `simutah`) has not been run against Overpass: it
+refused connections the day this was built. The registry builder it calls was
+run on a 1 km Overpass sample and reads it.
 
 A region with two boxes is one archive: the boxes are built apart and joined
 with `pmtiles merge`, and the metadata's `bounds` and `center` are set to the
@@ -63,9 +67,8 @@ header's afterwards, because a merge keeps the first input's.
 
 Mapterhorn marks no edge where a fine survey ends, so a box's heights are 1 m
 only where the survey is, and each credit says "where that survey covers".
-The Makarora box was cut to lie inside the LINZ LiDAR (its z17 heights were
-compared with the survey's own 1 m DEM, in the PR that added this); the other
-boxes were only looked at on samples.
+The Makarora box was cut to lie inside the LINZ LiDAR; the other boxes were
+only looked at on samples.
 
 ## Sources and credit
 
