@@ -1,7 +1,5 @@
 import {
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -35,15 +33,15 @@ export const TERRAIN_ENTRIES = {
   },
   coverage: {
     id: "nswcoverage",
-    pmtilesUrl: `${window.location.origin}/${NSW_COVERAGE.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.coverage.archivePath}`,
     format: "coverage" as const,
-    attribution: NSW_COVERAGE.creditHtml,
+    attribution: NSW_REGION.terrain.coverage.creditHtml,
   },
   fire: {
     id: "nswfire",
-    pmtilesUrl: `${window.location.origin}/${NSW_FIRE.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.fire.archivePath}`,
     format: "fire" as const,
-    attribution: NSW_FIRE.creditHtml,
+    attribution: NSW_REGION.terrain.fire.creditHtml,
   },
   land: {
     id: "nswland",

@@ -2,13 +2,24 @@
 // GeoPDF extent). Used only to help the user recentre the map on a place they
 // type — e.g. "Newnes Plateau".
 //
-// PRIVACY: the only thing sent to the external service (OpenStreetMap Nominatim)
-// is the user-typed place string. No place names, coordinates, or account data
-// ever leave the app through this path (geocode.test.ts). It goes only when
-// the user asks (shared/DESIGN.md §13): Nominatim's usage policy forbids
-// search-as-you-type on its API. Results bias toward NSW, Australia.
+// PRIVACY: what goes to the external service (OpenStreetMap Nominatim) is the
+// user-typed place string and, when the map shows a region, that region's
+// whole bounds so its places rank first. The bounds are the same for everyone
+// looking at that region: the map's own view, centre and zoom never leave the
+// device, and outside every region nothing about the view is sent. No place
+// names, coordinates, or account data go through this path (geocode.test.ts).
+// It goes only when the user asks (shared/DESIGN.md §13): Nominatim's usage
+// policy forbids search-as-you-type on its API.
 
-import { NSW_REGION, regionBounds } from "./regions.js";
+import {
+  regionBounds,
+  regionInView,
+  REGIONS,
+  WORLD,
+  type LonLatBox,
+  wrapView,
+  type Region,
+} from "./regions.js";
 
 export interface GeocodeResult {
   displayName: string;
@@ -17,10 +28,26 @@ export interface GeocodeResult {
 }
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-// Bias toward NSW, Australia (the canyoning region) without hard-restricting:
-// lon1,lat1,lon2,lat2 (two opposite corners).
-const VIEWBOX = (({ west, south, east, north }) =>
-  `${west},${north},${east},${south}`)(regionBounds(NSW_REGION));
+
+/**
+ * The box to bias a search by: the bounds of the region the map shows, or
+ * null outside every region (and for the worldwide entry, which has no
+ * border). Never the view itself. Guard: geocode.test.ts ("is the bounds of
+ * the region in view and nothing outside every region").
+ */
+export function geocodeBias(
+  view: LonLatBox | null | undefined,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): LonLatBox | null {
+  const region = view ? regionInView(wrapView(view), regions, world) : null;
+  return region && region.borders.length > 0 ? regionBounds(region) : null;
+}
+
+// Nominatim's viewbox is lon1,lat1,lon2,lat2 (two opposite corners); with
+// bounded=0 it ranks by it without restricting.
+const viewbox = ({ west, south, east, north }: LonLatBox) =>
+  `${west},${north},${east},${south}`;
 
 /** Shorter than this, the geocoder has nothing useful to say. */
 export const GEOCODE_MIN_QUERY_LENGTH = 3;
@@ -62,23 +89,27 @@ function waitForSlot(signal?: AbortSignal): Promise<void> {
 const CACHE_LIMIT = 20;
 const answers = new Map<string, GeocodeResult[]>();
 
+/** `view` is what the map shows: it picks the bias (geocodeBias) and is never sent. */
 export async function geocode(
   query: string,
   signal?: AbortSignal,
+  view?: LonLatBox | null,
 ): Promise<GeocodeResult[]> {
   const trimmed = query.trim();
   if (trimmed.length < GEOCODE_MIN_QUERY_LENGTH) return [];
-  const cached = answers.get(trimmed.toLowerCase());
+  const bias = geocodeBias(view);
+  // The bias is part of the key: the same name asked from another region has
+  // another answer.
+  const key = `${trimmed.toLowerCase()}|${bias ? viewbox(bias) : ""}`;
+  const cached = answers.get(key);
   if (cached) return cached;
   await waitForSlot(signal);
 
   const params = new URLSearchParams({
     format: "jsonv2",
     q: trimmed,
-    countrycodes: "au",
     limit: String(RESULT_LIMIT),
-    viewbox: VIEWBOX,
-    bounded: "0",
+    ...(bias ? { viewbox: viewbox(bias), bounded: "0" } : {}),
   });
 
   // Raw fetch, not apiFetch: this is a third-party host with no app auth or
@@ -117,6 +148,6 @@ export async function geocode(
   if (answers.size >= CACHE_LIMIT) {
     answers.delete(answers.keys().next().value!);
   }
-  answers.set(trimmed.toLowerCase(), results);
+  answers.set(key, results);
   return results;
 }

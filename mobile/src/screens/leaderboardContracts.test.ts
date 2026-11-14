@@ -25,6 +25,7 @@ vi.mock("react-native", () => ({
   Text: "Text",
   View: "View",
 }));
+vi.mock("../regionsPreference", () => ({ useRegions: () => ["nsw"] }));
 vi.mock("../theme", () => ({
   makeStyles: () => () => ({}),
   muted: () => ({}),

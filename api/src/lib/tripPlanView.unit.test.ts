@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NSW_REGION } from "@logjam/shared";
 import { planSummary } from "./tripPlanView";
 
 const plan = (over: Partial<Parameters<typeof planSummary>[0]> = {}) => ({
@@ -11,12 +12,17 @@ const plan = (over: Partial<Parameters<typeof planSummary>[0]> = {}) => ({
   updatedAt: new Date("2026-11-01"),
   ...over,
 });
+// What a simulated northern region declares (shared/src/simRegions.ts).
+const DENVER = "America/Denver";
 const active = { role: "member", status: "active", invitedBy: null };
 const owed = (
   over: Partial<Parameters<typeof planSummary>[0]>,
   now: string,
   member = active,
-) => planSummary(plan(over), member, null, 2, new Date(now)).unansweredForms;
+  timeZone = NSW_REGION.timeZone,
+) =>
+  planSummary(plan(over), member, null, 2, timeZone, new Date(now))
+    .unansweredForms;
 
 // The list count follows `tripPlanFormsToAnswer`. Mutation: drop the archive
 // or the over test from `owing`.
@@ -32,6 +38,13 @@ describe("planSummary unansweredForms", () => {
     expect(owed({}, "2026-11-10T00:00:00Z")).toBe(0);
     // 09 Nov 14:00Z is already 10 Nov in Sydney.
     expect(owed({}, "2026-11-09T14:00:00Z")).toBe(0);
+  });
+  // Mutation: read Sydney's day whatever time zone is passed.
+  it("is zero once the trip is over, in the account region's calendar day", () => {
+    // 10 Nov 03:00Z is 9 Nov 20:00 in Denver: the trip's last day is not over.
+    expect(owed({}, "2026-11-10T03:00:00Z", active, DENVER)).toBe(2);
+    // 10 Nov 08:00Z is 10 Nov 01:00 in Denver: it is.
+    expect(owed({}, "2026-11-10T08:00:00Z", active, DENVER)).toBe(0);
   });
   // Mutation: drop the leader test from `owing`.
   it("is zero for a leader, whatever is unanswered", () => {

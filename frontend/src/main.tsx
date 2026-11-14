@@ -1,3 +1,5 @@
+// First: shared reads this switch when it loads (src/mainSimRegions.test.ts).
+import "./simRegions";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";

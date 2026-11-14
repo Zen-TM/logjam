@@ -1,12 +1,15 @@
 // App entry. Order matters:
 //  1. Polyfills Hermes lacks: crypto.getRandomValues (ids minted on the phone)
 //     and URL (shared's endSessionUrl, the map archives' addresses).
-//  2. Sentry init (privacy-scrubbed; no-op without a DSN) — before anything
+//  2. The simulated-regions switch: `@logjam/shared` reads it when it loads, so
+//     nothing but the polyfills may come before it (src/simRegions.test.ts).
+//  3. Sentry init (privacy-scrubbed; no-op without a DSN) — before anything
 //     that could crash.
-//  3. The OIDC provider check — a real-auth build without one fails here, not
+//  4. The OIDC provider check — a real-auth build without one fails here, not
 //     as an opaque sign-in failure.
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
+import "./src/simRegions";
 
 import { createElement } from "react";
 import { LogBox } from "react-native";
