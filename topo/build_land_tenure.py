@@ -30,14 +30,15 @@ SOURCE_LAYER = "land"
 ATTRIBUTE = "TenureClass"
 ZMIN = 8
 ZMAX = 13
-# `LAND_TILE_MARGIN_PX` in shared/src/nswLand.ts, at 256 units to a tile
+# `LAND_TILE_MARGIN_PX` in shared/src/land.ts, at 256 units to a tile
 # (test_land_tenure.py).
 BUFFER = 5
 CREDIT = (
     "NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of"
     " Primary Industries and Regional Development), CC BY 4.0"
 )
-# `LAND_CLASSES` in shared/src/nswLand.ts (test_land_tenure.py). A client draws
+# The `classes` of the NSW region's land archive (shared/src/regions.ts)
+# (test_land_tenure.py). A client draws
 # nothing for a class it doesn't know, so a new one has to stop the build.
 TENURE_CLASSES = (
     "Private",

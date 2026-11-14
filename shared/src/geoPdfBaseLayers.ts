@@ -1,6 +1,11 @@
-import { NSW_FIRE } from "./nswFire.js";
 import type { TopoLayerName } from "./topoSettings.js";
-import { NSW_REGION, REGIONS, regionsOf, type Region } from "./regions.js";
+import {
+  NSW_REGION,
+  REGIONS,
+  regionsOf,
+  type Region,
+  type TileBytes,
+} from "./regions.js";
 
 // Data from NSW Spatial Services' web services is licensed CC BY, subject to one
 // extra term in their Terms and Conditions (cl. 3.1.1): they assert the right to
@@ -27,7 +32,7 @@ const SIX_ATTRIBUTION_HTML =
 // at 300 DPI. Guard: geoPdfTileMath.test.ts.
 const LABELLED_TILE_DPI = 85;
 
-export type BasemapCatalogEntry = {
+type BasemapCatalogBase = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
   name: string;
@@ -57,13 +62,6 @@ export type BasemapCatalogEntry = {
   /** HTML attribution (web AttributionControl). */
   attributionHtml: string;
   /**
-   * Whether offline region downloads may target this provider.
-   * OSM-family tile servers are online-only by policy (their usage policies
-   * prohibit bulk scraping); SIX rasters and the self-hosted Protomaps
-   * basemap are download-eligible.
-   */
-  offlineCapable: boolean;
-  /**
    * Whether a GeoPDF may be made from this provider. A print fetches every
    * tile of its page at once, none of them on screen, so this asks the
    * provider's tile terms, not the licence: every entry's licence allows a
@@ -84,6 +82,21 @@ export type BasemapCatalogEntry = {
   /** False for an entry neither client's picker lists (`offeredBasemaps`). */
   offered?: false;
 };
+
+/**
+ * Whether offline region downloads may target this provider.
+ * OSM-family tile servers are online-only by policy (their usage policies
+ * prohibit bulk scraping); SIX rasters and the self-hosted Protomaps
+ * basemap are download-eligible. A raster one is saved as a tile pyramid, so
+ * it carries the measured size of its tiles: an entry without them does not
+ * compile.
+ */
+type BasemapOffline =
+  | { offlineCapable: false; tileBytes?: undefined }
+  | { offlineCapable: true; kind: "vector"; tileBytes?: undefined }
+  | { offlineCapable: true; kind: "raster"; tileBytes: TileBytes };
+
+export type BasemapCatalogEntry = BasemapCatalogBase & BasemapOffline;
 
 // Order is the pickers' order: the OSM family, then the SIX sheets.
 export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
@@ -177,6 +190,29 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    // MEASURED bytes per tile per zoom, by
+    // `shared/scripts/calibrate-basemap-tile-sizes.mjs` against the live SIXMaps
+    // caches: 14 random tiles per zoom, half from Blue Mountains bush (dense
+    // contours, no streets) and half from the Katoomba–Blackheath strip. Re-run
+    // that script and update the three SIX entries' `tileBytes` together.
+    //
+    // Per ZOOM rather than one figure per source, because `six-base` varies 10x
+    // across the range (60 KB at z12 down to 6 KB at z18: a road-and-label map
+    // has less to draw per tile the further in you go, where imagery has the
+    // same amount of photo everywhere). A flat mean would over-estimate a deep
+    // download by an order of magnitude and under-estimate a shallow one.
+    //
+    // BOTH terrain types: a topo tile over a town carries streets, labels and
+    // building fill and measures ~1.5x a bush tile at the same zoom. People
+    // save the area around a trailhead, and a trailhead is usually near a
+    // town, so bush-only sampling would systematically under-estimate downloads.
+    tileBytes: {
+      12: { meanBytes: 12_441, p90Bytes: 13_085 },
+      13: { meanBytes: 16_414, p90Bytes: 23_139 },
+      14: { meanBytes: 14_754, p90Bytes: 17_674 },
+      15: { meanBytes: 18_013, p90Bytes: 24_397 },
+      16: { meanBytes: 18_199, p90Bytes: 28_638 },
+    },
     printable: true,
     requiresExtractionDate: true,
   },
@@ -191,6 +227,15 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    tileBytes: {
+      12: { meanBytes: 59_847, p90Bytes: 65_983 },
+      13: { meanBytes: 43_479, p90Bytes: 53_631 },
+      14: { meanBytes: 41_651, p90Bytes: 51_895 },
+      15: { meanBytes: 26_577, p90Bytes: 41_196 },
+      16: { meanBytes: 18_518, p90Bytes: 25_044 },
+      17: { meanBytes: 9_113, p90Bytes: 15_942 },
+      18: { meanBytes: 5_720, p90Bytes: 8_066 },
+    },
     printable: true,
     printTileDpi: LABELLED_TILE_DPI,
     requiresExtractionDate: true,
@@ -207,6 +252,18 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    // `six-imagery` returns 404 for some z18 tiles, where advertised LOD differs
+    // from cached tiles. Those are gaps, not errors: the downloader records them
+    // and the UI counts them separately.
+    tileBytes: {
+      12: { meanBytes: 15_885, p90Bytes: 21_250 },
+      13: { meanBytes: 15_663, p90Bytes: 19_351 },
+      14: { meanBytes: 13_828, p90Bytes: 17_858 },
+      15: { meanBytes: 14_433, p90Bytes: 18_393 },
+      16: { meanBytes: 16_907, p90Bytes: 18_596 },
+      17: { meanBytes: 20_080, p90Bytes: 23_563 },
+      18: { meanBytes: 17_347, p90Bytes: 20_444 },
+    },
     printable: true,
     requiresExtractionDate: true,
   },
@@ -305,7 +362,7 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
     "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
   vegetation:
     "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
-    NSW_FIRE.credit,
+    NSW_REGION.terrain.fire.credit,
   features: "Features © OpenStreetMap contributors",
   land: NSW_REGION.terrain.land.credit,
 };

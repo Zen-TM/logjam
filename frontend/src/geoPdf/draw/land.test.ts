@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { PbfWriter } from "pbf";
 import {
   computeTileToMapTransform,
-  LAND_CLASSES,
   LAND_EDGE_LINES,
   MAP_TERRAIN,
   NSW_REGION,
@@ -17,6 +16,8 @@ import {
   landClassesDrawn,
   type LandShape,
 } from "./land";
+
+const LAND_CLASSES = NSW_REGION.terrain.land.classes;
 
 const zig = (v: number) => (v << 1) ^ (v >> 31);
 

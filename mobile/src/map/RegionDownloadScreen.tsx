@@ -44,11 +44,9 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
+  DOWNLOADABLE_BASEMAP_IDS,
   NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   planRegionForBasemaps,
-  type OfflineBasemapId,
   type RegionBbox,
   MAP_TERRAIN,
 } from "@logjam/shared";
@@ -127,8 +125,8 @@ import { resolveMapSource, type BasemapId } from "./sourceResolver";
  * against tens for one raster, and the route and measure tools snap to it, so
  * leaving it optional would mean a tool that quietly stops working in the field.
  */
-type SelectableId = OfflineBasemapId;
-const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
+const DOWNLOADABLE = DOWNLOADABLE_BASEMAP_IDS;
+type SelectableId = (typeof DOWNLOADABLE)[number];
 
 /**
  * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
@@ -175,8 +173,9 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_REGION.terrain.contours.id) return "Contours";
   if (basemapId === NSW_REGION.terrain.slope.id) return "Slope";
   if (basemapId === NSW_REGION.terrain.land.id) return MAP_TERRAIN.copy.land;
-  if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
-  if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
+  if (basemapId === NSW_REGION.terrain.fire.id) return MAP_TERRAIN.copy.fire;
+  if (basemapId === NSW_REGION.terrain.coverage.id)
+    return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return name ?? "Map";
 }
@@ -509,7 +508,9 @@ export function RegionDownloadScreen({
         })),
         ...regionClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
-          job.demArchives.map(({ sourceId }) => sourceId),
+          job.clips
+            .filter(({ kind }) => kind === "heights")
+            .map(({ archive }) => archive.id),
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
       ]);

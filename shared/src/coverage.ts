@@ -1,5 +1,6 @@
 // The Coverage overlay: where the user's carrier predicts a phone won't work,
-// statewide, from the ACCC Mobile Infrastructure Report data. One archive,
+// from a region's coverage archive (`RegionTerrain.coverage`, regions.ts); NSW's
+// is the ACCC Mobile Infrastructure Report data. One archive,
 // rebuilt by `topo/build_coverage.py` when the ACCC publishes a new year,
 // holds every carrier: each area is a carrier's `level` there, and the map
 // draws only the user's carrier.
@@ -9,29 +10,30 @@
 // and Land.
 import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
-import { NSW_REGION } from "./regions.js";
+import { REGIONS, type CoverageArchive, type Region } from "./regions.js";
 
-/** NSW's archive, declared in the region (regions.ts). */
-export const NSW_COVERAGE = NSW_REGION.terrain.coverage;
+/** A network's id, as a coverage archive's `carriers` and a stored choice hold it. */
+export type CarrierId = string;
 
 /**
- * The networks a user picks from: the three that own one. `NETWORKS` in the
- * build script has the same ids (test_coverage.py). A reseller uses one of
- * these; Telstra's resellers get less than Telstra's own map, which the legend
- * says.
+ * A stored carrier, or null for anything that isn't one of `carriers`: until
+ * the user picks, the overlay has no carrier and draws nothing.
  */
-export const CARRIERS = [
-  { id: "telstra", name: "Telstra" },
-  { id: "optus", name: "Optus" },
-  { id: "tpg", name: "TPG" },
-] as const;
+export function normalizeCarrier(
+  value: unknown,
+  carriers: readonly { id: string }[],
+): CarrierId | null {
+  return carriers.find((c) => c.id === value)?.id ?? null;
+}
 
-export type CarrierId = (typeof CARRIERS)[number]["id"];
-
-/** A stored carrier, or null for anything that isn't one: until the user
- *  picks, the overlay has no carrier and draws nothing. */
-export function normalizeCarrier(value: unknown): CarrierId | null {
-  return CARRIERS.find((c) => c.id === value)?.id ?? null;
+// ponytail: one stored carrier for every region, checked against every
+// region's list, so a pick the region in view doesn't list draws nothing there
+// and the traveller picks again on return. Upgrade: a pick per region.
+/** Every network any of `regions` lists: what a stored pick is checked against. */
+export function carriersOf(
+  regions: readonly Region[] = REGIONS,
+): { id: string; name: string }[] {
+  return regions.flatMap((r) => r.terrain.coverage?.carriers ?? []);
 }
 
 /** The style image's name, registered on each map with `COVERAGE_HATCH_URIS`. */
@@ -63,16 +65,19 @@ export function drawsCoverage(on: boolean, carrier: CarrierId | null): boolean {
 }
 
 /** The layer's `filter`: the user's carrier alone. */
-export function coverageFilter(carrier: CarrierId): unknown[] {
-  return ["==", ["get", NSW_COVERAGE.carrierProperty], carrier];
+export function coverageFilter(
+  coverage: CoverageArchive,
+  carrier: CarrierId,
+): unknown[] {
+  return ["==", ["get", coverage.carrierProperty], carrier];
 }
 
 /**
  * The `fill-opacity` expression: clear where there is reception, so the area
  * is still there for a tap to read, and hatched everywhere else.
  */
-export function coverageOpacity(): unknown[] {
-  return ["match", ["get", NSW_COVERAGE.levelProperty], RECEPTION_LEVEL, 0, 1];
+export function coverageOpacity(coverage: CoverageArchive): unknown[] {
+  return ["match", ["get", coverage.levelProperty], RECEPTION_LEVEL, 0, 1];
 }
 
 type Ring = readonly (readonly number[])[];
@@ -126,18 +131,19 @@ export function polygonHolds(
  * should their levels differ, any without reception wins.
  */
 export function coverageNameOf(
+  coverage: CoverageArchive,
   features: readonly QueriedFeature[],
   carrier: CarrierId,
   at: readonly [number, number],
 ): string | null {
   const levels = features
     .filter((f) => polygonHolds(f.geometry, at))
-    .map((f) => f.properties?.[NSW_COVERAGE.levelProperty]);
+    .map((f) => f.properties?.[coverage.levelProperty]);
   const known = levels.filter((l) =>
     (COVERAGE_LEVELS as readonly unknown[]).includes(l),
   );
   if (known.length === 0) return null;
-  const name = CARRIERS.find((c) => c.id === carrier)?.name ?? carrier;
+  const name = coverage.carriers.find((c) => c.id === carrier)?.name ?? carrier;
   const copy = MAP_TERRAIN.copy;
   return `${name}: ${
     known.every((l) => l === RECEPTION_LEVEL)

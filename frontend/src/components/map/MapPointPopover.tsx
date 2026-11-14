@@ -10,6 +10,8 @@ import {
   mapPointVerbs,
   type MapPointView,
   type CarrierId,
+  type Region,
+  layerIn,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
@@ -48,6 +50,7 @@ export default function MapPointPopover({
   point,
   from,
   coverageCarrier,
+  region,
   startAt,
   onClose,
   onAddPlace,
@@ -60,6 +63,8 @@ export default function MapPointPopover({
   from: MapPointCoord | null;
   /** The carrier the Coverage overlay draws, or null before one is picked. */
   coverageCarrier: CarrierId | null;
+  /** The region whose Terrain group the map draws: its overlays answer the tap. */
+  region: Region | null;
   /** A right-click opens the panel on Options, with no facts to go back to. */
   startAt?: "options";
   onClose: () => void;
@@ -84,16 +89,23 @@ export default function MapPointPopover({
   const metres = reading?.elevationM ?? null;
   const [{ land, fire, coverage }] = useState(() => {
     const { x, y } = map.project([point.longitude, point.latitude]);
+    const [landArchive, fireArchive, coverageArchive] = [
+      layerIn(region, "land"),
+      layerIn(region, "fire"),
+      layerIn(region, "coverage"),
+    ];
     return {
-      land: landClassAt(map, [x, y]),
-      fire: fireAt(map, [x, y]),
+      land: landArchive && landClassAt(map, [x, y], landArchive),
+      fire: fireArchive && fireAt(map, [x, y], fireArchive),
       coverage:
         coverageCarrier &&
+        coverageArchive &&
         coverageAt(
           map,
           [x, y],
           [point.longitude, point.latitude],
           coverageCarrier,
+          coverageArchive,
         ),
     };
   });
