@@ -91,7 +91,7 @@ logjam/
 │   ├── envs/prod/          # real AWS (S3 backend)
 │   ├── envs/local/         # MiniStack S3 + ECS task defs + generates root .env.local
 │   └── templates/
-├── scripts/                # snapshot, log-retention, task-def template
+├── scripts/                # snapshot, log-retention, task-def template, i18n codemod
 ├── docs/                   # architecture, ADRs, operations, dev-setup
 ├── docker-compose.yml      # local Postgres + MiniStack
 └── Makefile                # dev / reset / snapshot targets
