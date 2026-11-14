@@ -8,6 +8,7 @@ import {
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   offersRegionChoice,
+  offersUnitsChoice,
   ownAttributeCountLabel,
   ownTypeCountLabel,
   REGION_CHOICE,
@@ -15,11 +16,14 @@ import {
   REGIONS,
   SETTINGS,
   toggleRegion,
+  UNITS_CHOICE,
+  unitsOf,
   type Region,
   type SectionKeysOn,
   type NotificationPreferenceGroup,
   type NotificationPreferences,
   type ScopedCustomFieldDef,
+  type Units,
 } from "@logjam/shared";
 
 import {
@@ -31,6 +35,7 @@ import {
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import {
+  ChipRail,
   Hero,
   IconTile,
   Row,
@@ -115,6 +120,8 @@ function SettingsPanel({
   const [copyMediaSaving, setCopyMediaSaving] = useState(false);
   const [chosenRegions, setChosenRegions] = useState<string[] | null>(null);
   const [regionsSaving, setRegionsSaving] = useState(false);
+  const [units, setUnits] = useState<Units | null>(null);
+  const [unitsSaving, setUnitsSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -133,6 +140,7 @@ function SettingsPanel({
       setChosenRegions(
         normalizeUserUiPreferences(currentUser.uiPreferences).regions,
       );
+      setUnits(unitsOf(currentUser.uiPreferences, regions));
     }
   }
 
@@ -217,6 +225,22 @@ function SettingsPanel({
     }
   }
 
+  async function handleChooseUnits(next: Units) {
+    if (units === null || next === units) return;
+    const previous = units;
+    setUnits(next);
+    setUnitsSaving(true);
+    try {
+      onCurrentUserChange(await updateUserPreferences({ units: next }));
+    } catch (err) {
+      console.error(err);
+      setUnits(previous);
+      toast.error(messageFromError(err, UNITS_CHOICE.saveFailed));
+    } finally {
+      setUnitsSaving(false);
+    }
+  }
+
   if (page === "placeTypes") {
     return (
       <PlaceTypeSection
@@ -267,6 +291,27 @@ function SettingsPanel({
       <>
         <SectionHeader title={copy.display} />
         <ThemeChooser />
+        {offersUnitsChoice(regions) ? (
+          <>
+            <SectionHeader title={UNITS_CHOICE.title} />
+            {units === null ? (
+              <LoadingState />
+            ) : (
+              <ChipRail
+                label={UNITS_CHOICE.title}
+                options={UNITS_CHOICE.options.map((option) => ({
+                  ...option,
+                  // One at a time: a failed save puts back the choice before it.
+                  disabled: unitsSaving,
+                }))}
+                value={units}
+                onChange={handleChooseUnits}
+                hint={UNITS_CHOICE.hint}
+                wrap
+              />
+            )}
+          </>
+        ) : null}
       </>
     ),
     regions: () =>

@@ -12,6 +12,7 @@
 // Test: `units.test.ts` holds the metric output to what Logjam wrote before.
 
 import { formatNumber } from "./numberFormat.js";
+import { accountRegion, REGIONS, type Region } from "./regions.js";
 
 export type Units = "metric" | "imperial";
 
@@ -166,4 +167,34 @@ export function formatWind(kmh: number): string {
   return imperial()
     ? `${formatNumber(Math.round(kmh / KM_PER_MILE), 0)}${NBSP}mph`
     : `${formatNumber(Math.round(kmh), 0)}${NBSP}km/h`;
+}
+
+/**
+ * Whether a units choice is shown: only once a region writes feet, since
+ * metric needs no choosing. Guard: `units.test.ts` ("offersUnitsChoice").
+ */
+export function offersUnitsChoice(
+  regions: readonly Region[] = REGIONS,
+): boolean {
+  return regions.some((region) => region.units === "imperial");
+}
+
+/**
+ * The units an account reads: its own choice (`uiPreferences.units`), else
+ * its home region's. Guard: `units.test.ts` ("unitsOf").
+ */
+export function unitsOf(
+  uiPreferences: unknown,
+  regions: readonly Region[] = REGIONS,
+): Units {
+  const chosen =
+    typeof uiPreferences === "object" && uiPreferences !== null
+      ? (uiPreferences as { units?: unknown }).units
+      : undefined;
+  return isUnits(chosen) ? chosen : accountRegion(uiPreferences, regions).units;
+}
+
+/** A stored or sent value that names a units choice. */
+export function isUnits(value: unknown): value is Units {
+  return value === "metric" || value === "imperial";
 }

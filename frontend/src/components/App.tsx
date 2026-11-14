@@ -155,6 +155,7 @@ import {
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { applyDisplayUnits } from "../displayUnits";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
@@ -397,6 +398,9 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Set while rendering, so every formatter below reads the account's units on
+  // this render; a choice in Settings replaces `currentUser` and re-renders from here.
+  applyDisplayUnits(currentUser?.uiPreferences);
   // Keyed by string: the fallback toast's effect depends on this list.
   const regionKey = normalizeUserUiPreferences(
     currentUser?.uiPreferences,

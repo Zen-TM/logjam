@@ -15,6 +15,7 @@ import {
   notificationGroupLead,
   NSW_REGION,
   REGION_CHOICE,
+  UNITS_CHOICE,
   regionChoiceProblem,
   SETTINGS,
   type Region,
@@ -26,6 +27,14 @@ import SettingsPanel from "./SettingsPanel";
 const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("./ThemeChooser", () => ({ default: () => null }));
+
+// jsdom has no ResizeObserver, which the chip rail of the units row measures
+// with. Assigned, not stubbed: `unstubAllGlobals` runs after every test.
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   updateUserPreferences: vi.fn(),
@@ -298,5 +307,85 @@ describe("the Regions section", () => {
       expect(toast.error).toHaveBeenCalledWith(REGION_CHOICE.saveFailed),
     );
     expect(nz.getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+describe("the Units row of Display", () => {
+  const FEET: Region[] = [
+    { ...TWO_REGIONS[1]!, units: "imperial" },
+    NSW_REGION,
+  ];
+
+  // Mutation: draw the row whatever `offersUnitsChoice` says, and the first
+  // of these (prod's own regions, then NSW alone) goes red.
+  it("is not drawn while every region is metric, with prod's regions or with NSW alone", () => {
+    renderPanel(vi.fn());
+    expect(screen.queryByText(UNITS_CHOICE.title)).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Imperial" })).toBeNull();
+    cleanup();
+    renderPanel(vi.fn(), { regions: [NSW_REGION] });
+    expect(screen.queryByText(UNITS_CHOICE.title)).toBeNull();
+    cleanup();
+    renderPanel(vi.fn(), { regions: TWO_REGIONS });
+    expect(screen.queryByText(UNITS_CHOICE.title)).toBeNull();
+  });
+
+  // Mutation: seed the row with "metric" instead of `unitsOf(...)`, and an
+  // account that chose imperial sees metric selected.
+  it("is drawn once a region uses feet, on the account's units", () => {
+    renderPanel(vi.fn(), { regions: FEET });
+    expect(screen.getByText(UNITS_CHOICE.title)).toBeTruthy();
+    expect(screen.getByText(UNITS_CHOICE.hint)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("radio", { name: "Metric" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    cleanup();
+    renderPanel(vi.fn(), {
+      regions: FEET,
+      currentUser: {
+        ...user,
+        uiPreferences: { units: "imperial" },
+      } as TUser,
+    });
+    expect(
+      screen
+        .getByRole("radio", { name: "Imperial" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  // Mutation: send the other value, or leave the choice out of the request.
+  it("saves the choice and hands the updated account up", async () => {
+    const saved = { ...user, uiPreferences: { units: "imperial" } } as TUser;
+    vi.mocked(updateUserPreferences).mockResolvedValue(saved);
+    const onCurrentUserChange = vi.fn();
+    renderPanel(onCurrentUserChange, { regions: FEET });
+    fireEvent.click(screen.getByRole("radio", { name: "Imperial" }));
+    await waitFor(() =>
+      expect(updateUserPreferences).toHaveBeenCalledWith({
+        units: "imperial",
+      }),
+    );
+    await waitFor(() =>
+      expect(onCurrentUserChange).toHaveBeenCalledWith(saved),
+    );
+  });
+
+  // Mutation: leave the optimistic value standing after a failed save.
+  it("goes back and says so when the save fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(updateUserPreferences).mockRejectedValue(new Error("offline"));
+    renderPanel(vi.fn(), { regions: FEET });
+    fireEvent.click(screen.getByRole("radio", { name: "Imperial" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(UNITS_CHOICE.saveFailed),
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: "Metric" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 });

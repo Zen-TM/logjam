@@ -22,6 +22,7 @@
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
 import type { GridId } from "./grids.js";
+import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
@@ -145,6 +146,8 @@ export type Region = {
   gauges: string | null;
   /** The map grid coordinates are given in. */
   grid: GridId;
+  /** How distances and heights are first written for an account whose home this is (`unitsOf`). */
+  units: Units;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
@@ -458,6 +461,7 @@ export const NSW_REGION = {
   placeSearch: PLACE_REGISTRY_PREFIX,
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
+  units: "metric",
   canyons: {
     kind: "ropewiki",
     ropewikiRegion: "New South Wales",
@@ -510,6 +514,7 @@ const EMPTY_WORLD: Region = {
   placeSearch: null,
   gauges: null,
   grid: "mga2020",
+  units: "metric",
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;

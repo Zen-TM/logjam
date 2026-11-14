@@ -1,5 +1,6 @@
 import { INK } from "./designTokens.js";
 import { normalizeRegionIds } from "./regions.js";
+import { isUnits, type Units } from "./units.js";
 import {
   parseSlopeBands,
   RASTER_TEMPLATE_DEFAULTS,
@@ -131,6 +132,12 @@ export type UserUiPreferences = {
    * first-login gate and Settings once there is more than one region.
    */
   regions: string[];
+  /**
+   * How distances and heights are written, when the user chose: absent until
+   * then, when the home region's units apply (`unitsOf`, units.ts). Chosen in
+   * Settings once a region uses feet.
+   */
+  units?: Units;
 };
 
 export function isNotificationPreferences(
@@ -435,6 +442,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       regions: normalizeRegionIds(prefs.regions),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
+    if (isUnits(prefs.units)) result.units = prefs.units;
     return result;
   }
 

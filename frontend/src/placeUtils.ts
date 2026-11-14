@@ -12,6 +12,7 @@ import type {
   MediaOrigin,
   PlaceMergePolicy,
   SlopeBand,
+  Units,
   ElevationPoint,
   ElevationProfile,
   TrackClimb,
@@ -891,6 +892,7 @@ export function updateUserPreferences(
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
     regions: string[];
+    units: Units;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });

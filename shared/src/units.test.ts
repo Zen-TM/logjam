@@ -19,8 +19,12 @@ import {
   lengthFromInput,
   lengthToInput,
   lengthUnitLabel,
+  offersUnitsChoice,
   setDisplayUnits,
+  unitsOf,
 } from "./units.js";
+import { NSW_REGION, REGIONS } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
 afterEach(() => setDisplayUnits("metric"));
 
@@ -251,5 +255,54 @@ describe("formatFixedMetres", () => {
     expect(formatFixedMetres(0.5)).toBe("0.5m");
     setDisplayUnits("imperial");
     expect(formatFixedMetres(1200)).toBe("1200m");
+  });
+});
+
+describe("offersUnitsChoice", () => {
+  // Mutation: test `regions.length > 0` instead of a region that uses feet,
+  // and prod, which declares NSW alone, shows a choice with nothing to choose.
+  it("is not offered while every region is metric, prod's NSW alone included", () => {
+    expect(offersUnitsChoice([NSW_REGION])).toBe(false);
+    expect(offersUnitsChoice([NSW_REGION, SIM_NZ])).toBe(false);
+    // Prod's declaration, unless the simulated-regions switch is on.
+    if (REGIONS.length === 1) expect(offersUnitsChoice()).toBe(false);
+  });
+
+  // Mutation: return false, or declare `SIM_UTAH` metric, and an account whose
+  // region uses feet is never asked its units.
+  it("is offered once a region uses feet", () => {
+    expect(offersUnitsChoice([NSW_REGION, SIM_UTAH])).toBe(true);
+    // The simulated regions, which the switch declares, hold one that does.
+    expect(offersUnitsChoice(SIM_REGIONS)).toBe(true);
+  });
+});
+
+describe("unitsOf", () => {
+  const REGIONS_THREE = [NSW_REGION, SIM_NZ, SIM_UTAH];
+
+  // Mutation: ignore `uiPreferences.units`, and a choice made in Settings
+  // never changes a figure; or prefer the region over it, and it is undone.
+  it("is the user's choice, whichever region is home", () => {
+    expect(
+      unitsOf({ units: "imperial", regions: ["nsw"] }, REGIONS_THREE),
+    ).toBe("imperial");
+    expect(
+      unitsOf({ units: "metric", regions: ["simutah"] }, REGIONS_THREE),
+    ).toBe("metric");
+  });
+
+  // Mutation: take the last chosen region instead of the first in `REGIONS`
+  // order, or default to metric whatever the region says.
+  it("is the home region's when nothing was chosen, and never throws on damage", () => {
+    expect(unitsOf({ regions: ["simutah"] }, REGIONS_THREE)).toBe("imperial");
+    expect(unitsOf({ regions: ["simnz", "simutah"] }, REGIONS_THREE)).toBe(
+      "metric",
+    );
+    expect(unitsOf({ regions: ["nsw", "simutah"] }, REGIONS_THREE)).toBe(
+      "metric",
+    );
+    for (const prefs of [undefined, null, {}, { units: "furlongs" }, 7]) {
+      expect(unitsOf(prefs, REGIONS_THREE)).toBe("metric");
+    }
   });
 });

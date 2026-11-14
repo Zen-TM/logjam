@@ -1,13 +1,17 @@
-// Settings → Display: the two things that change how the whole app looks.
+// Settings → Display: what changes how the whole app looks.
 //
 // The theme repaints the running app the moment it is picked. The text size
 // applies at the NEXT LAUNCH and says so: a type role's size is a module
 // constant every style reads (DESIGN.md).
 //
-// The theme is the one preference here with an account copy: it is a single
-// scalar with no merge hazard, and a scheme picked in a browser is what this
-// phone should open in. The text size is device-only — it answers "how well can
+// The theme and the units are the preferences here with an account copy: each is
+// a single scalar with no merge hazard, and a scheme picked in a browser is what
+// this phone should open in. The text size is device-only — it answers "how well can
 // I read THIS screen in THIS light", which is not a fact about the user.
+//
+// The units row is drawn only once a region uses feet (`unitsSettingRow`). Like
+// the regions, a guest's choice stays on the phone and a linked account's goes
+// to the account (`unitsPreference.ts`).
 //
 // PRIVACY: nothing here touches user data.
 import { useCallback, useState } from "react";
@@ -16,6 +20,8 @@ import {
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type ThemeSchemeId,
+  UNITS_CHOICE,
+  type Units,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
@@ -42,6 +48,9 @@ import {
   type ToastMessage,
   Icon,
 } from "../../ui";
+import { chooseUnits, useDisplayUnits } from "../../unitsPreference";
+import { sendsRegionChoice } from "../regionChoice";
+import { unitsSettingRow } from "../unitsChoice";
 import { ChoiceGroup } from "./settingsKit";
 
 /** Chip labels for the multiplier. The number is the honest label here — a
@@ -111,6 +120,23 @@ export function DisplaySettingsScreen() {
     [notify],
   );
 
+  // Where the units row is drawn, when it is (`unitsSettingRow`): a guest's
+  // choice stays on the phone (ADR 0007). One send at a time, since a failed
+  // send puts the choice before it back.
+  const unitsRow = unitsSettingRow();
+  const units = useDisplayUnits();
+  const [unitsSaving, setUnitsSaving] = useState(false);
+  const chooseUnitsFor = useCallback(
+    async (next: Units) => {
+      if (next === units) return;
+      setUnitsSaving(true);
+      const reached = await chooseUnits(next, sendsRegionChoice(accountState));
+      setUnitsSaving(false);
+      if (!reached) notify(UNITS_CHOICE.saveFailed, "error");
+    },
+    [accountState, notify, units],
+  );
+
   return (
     <>
       <ScreenScroll>
@@ -141,6 +167,17 @@ export function DisplaySettingsScreen() {
               : "Applies next time you open Logjam GPS."
           }
         />
+
+        {unitsRow ? (
+          <ChoiceGroup
+            label={unitsRow.title}
+            options={[...unitsRow.options]}
+            value={units}
+            onChange={(next) => void chooseUnitsFor(next)}
+            hint={unitsRow.hint}
+            disabledReason={unitsSaving ? unitsRow.saving : undefined}
+          />
+        ) : null}
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

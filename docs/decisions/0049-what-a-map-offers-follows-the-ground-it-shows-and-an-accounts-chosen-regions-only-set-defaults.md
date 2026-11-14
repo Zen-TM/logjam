@@ -50,6 +50,13 @@ what is offered at a location.**
   reviewer sees. No test yet fails on code that gates an offer by the
   chosen regions: `offeredBasemaps(regionIds)` still does, until the gallery
   reads the view.
+- **Update 2026-11-14: the chosen regions also set the first-run units.** An
+  account that never chose its units reads those of its home region, the first
+  of its chosen regions in `REGIONS` order (`unitsOf`,
+  `shared/src/units.ts`); its own choice in Settings, offered only once a
+  region uses feet (`offersUnitsChoice`), replaces them. What a map offers at
+  a place still never reads the choice. Guard: `shared/src/units.test.ts`
+  ("unitsOf", "offersUnitsChoice"). Everything else above stands.
 
 ## Consequences
 
