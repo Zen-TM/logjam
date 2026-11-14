@@ -14,6 +14,7 @@ import {
   offeredBasemaps,
 } from "./geoPdfBaseLayers.js";
 import {
+  accountRegion,
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
@@ -211,6 +212,25 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("accountRegion", () => {
+  const all: readonly Region[] = [NSW_REGION, SIM_NZ, SIM_UTAH];
+  const home = (regions: unknown) => accountRegion({ regions }, all).id;
+
+  // Mutation: return the id the user ticked first, not the first in
+  // `REGIONS` order, and the season changes with the order they ticked.
+  it("is the first chosen region in REGIONS order", () => {
+    expect(home(["simutah", "simnz"])).toBe("simnz");
+    expect(home(["simutah", "nsw"])).toBe("nsw");
+  });
+
+  // Mutation: return null or throw for an account with no stored choice.
+  it("is NSW for an account that never chose", () => {
+    for (const prefs of [undefined, null, "nsw", {}, { regions: [] }])
+      expect(accountRegion(prefs, all)).toBe(NSW_REGION);
+    expect(accountRegion({ regions: ["atlantis"] }).id).toBe("nsw");
   });
 });
 

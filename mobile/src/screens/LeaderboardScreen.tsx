@@ -18,6 +18,7 @@ import {
 } from "react";
 import { Text, View } from "react-native";
 import {
+  accountRegion,
   contractSectionKeys,
   LEADERBOARD,
   LEADERBOARD_SETTING,
@@ -25,6 +26,7 @@ import {
   leaderboardHeroTitle,
   leaderboardNudge,
   leaderboardPodiumLine,
+  leaderboardRules,
   leaderboardSeasonLine,
   medalFor,
   messageFromError,
@@ -37,6 +39,7 @@ import {
 } from "@logjam/shared";
 
 import { getLeaderboard } from "../api/friends";
+import { useRegions } from "../regionsPreference";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
@@ -137,6 +140,7 @@ export function LeaderboardScreen({
   onBack: () => void;
   backLabel: string;
 }) {
+  const regionIds = useRegions();
   const theme = useTheme();
   const pull = useRefreshFromTop();
   const styles = useStyles();
@@ -269,11 +273,13 @@ export function LeaderboardScreen({
         title={copy.rulesTitle}
       >
         <View style={styles.rules}>
-          {copy.rules.split("\n").map((rule) => (
-            <Text key={rule} style={styles.rule}>
-              {rule}
-            </Text>
-          ))}
+          {leaderboardRules(accountRegion({ regions: regionIds }))
+            .split("\n")
+            .map((rule) => (
+              <Text key={rule} style={styles.rule}>
+                {rule}
+              </Text>
+            ))}
         </View>
       </BottomSheet>
       <Toast message={toast} onDismissed={() => setToast(null)} />

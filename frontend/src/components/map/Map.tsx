@@ -229,8 +229,6 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // same floor, and why that zoom (and why the route being drawn is exempt) is
 // documented there.
 
-const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
-const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
 /** Below this the pin's dot is under 13px across, no bigger than its badge. */
@@ -624,6 +622,7 @@ function Map({
   onMapBoundsChange,
   onMapViewChange,
   initialView,
+  homeView,
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToPlace,
@@ -770,6 +769,8 @@ function Map({
     bearing: number;
     pitch: number;
   } | null;
+  /** Where the map first opens, with no stored view: the account region's (`accountRegion`). */
+  homeView: { center: readonly [number, number]; zoom: number };
   // A footprint may be a Polygon OR a MultiPolygon (disconnected capture);
   // collectLngLatPairs walks either to its [lng,lat] leaf positions.
   topoFlyTarget?: GeoJsonPolygonal | null;
@@ -1047,8 +1048,10 @@ function Map({
         sources: {},
         layers: [],
       },
-      center: initialView ? [initialView.lng, initialView.lat] : INITIAL_CENTER,
-      zoom: initialView?.zoom ?? INITIAL_ZOOM,
+      center: initialView
+        ? [initialView.lng, initialView.lat]
+        : [...homeView.center],
+      zoom: initialView?.zoom ?? homeView.zoom,
       bearing: initialView?.bearing ?? 0,
       pitch: initialView?.pitch ?? 0,
       touchPitch: false, // pinch-rotate is enough for 3D; touch-pitch is a nuisance

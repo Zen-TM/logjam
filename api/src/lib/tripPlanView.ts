@@ -7,7 +7,6 @@ import {
   isTripPlanFormVisibility,
   isTripPlanMemberStatus,
   isTripPlanRole,
-  SYDNEY_TZ,
   type TripPlanAnswerView,
   type TripPlanFormView,
   type TripPlanMemberStatus,
@@ -65,22 +64,24 @@ export function planSummary(
   /** For a request: who it waits for (lib/planMembership.ts `waitingFor`). */
   waitingFor: { id: string; username: string } | null = null,
   /** Forms the caller has not answered (`unansweredBy`). */
-  unansweredForms = 0,
+  unansweredForms: number,
+  /** The caller's own: a plan's day is theirs (`accountRegion(...).timeZone`). */
+  timeZone: string,
   now = new Date(),
 ): TripPlanSummary {
   const startDate = dateOnly(plan.startDate);
   const endDate = dateOnly(plan.endDate);
   // A leader is never nudged. Nothing to answer once the plan is archived or
   // the trip is over, as
-  // `tripPlanFormsToAnswer` says on the plan's page. NSW's calendar day, as
-  // the server doesn't know the caller's.
+  // `tripPlanFormsToAnswer` says on the plan's page. The day in the caller's
+  // account region, as the server doesn't know where they stand.
   const owing =
     membership.status === "active" &&
     membership.role !== "leader" &&
     !plan.archivedAt &&
     !tripPlanIsOver(
       { startDate, endDate },
-      now.toLocaleDateString("en-CA", { timeZone: SYDNEY_TZ }),
+      now.toLocaleDateString("en-CA", { timeZone }),
     );
   const summary: TripPlanSummary = {
     id: plan.id,

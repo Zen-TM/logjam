@@ -150,6 +150,7 @@ import {
   tripPlanTripLogPrefill,
   type TripPlanItemKind,
   type TripPlanPageView,
+  accountRegion,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
@@ -2200,6 +2201,7 @@ function App() {
             }}
             onMapViewChange={(view) => setMapCenter(view)}
             initialView={mapCenter}
+            homeView={accountRegion(currentUser?.uiPreferences).view}
             topoFlyTarget={topoFlyTarget}
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
