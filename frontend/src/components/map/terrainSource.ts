@@ -26,8 +26,26 @@ import {
 } from "./terrainRouter";
 
 export const WORLDWIDE_TERRAIN_SOURCE = "3d-terrain-dem";
-/** A region's source is this and its id; a region id has no dash, so no id is another's prefix. */
+/**
+ * A region's source is this and its id, then `-` and the areas' key when areas
+ * are routed. Region ids are lower-case letters and digits, so one region's
+ * `<prefix><id>-<key>` never equals another's `<prefix><id>`. Guard:
+ * `shared/src/regions.test.ts` ("keeps each id to lower-case letters and
+ * digits").
+ */
 export const REGION_TERRAIN_SOURCE = "3d-terrain-dem-";
+
+/**
+ * What a drawn 3D terrain depends on: the region the map shows and the set of
+ * sharpened areas. A change of it draws terrain again (`useTerrainReapply`); a
+ * pan inside one region keeps it, so nothing is read again.
+ */
+export function terrainReapplyKey(
+  region: Region | null,
+  areas: readonly SharpenedOverlay[],
+): string {
+  return `${region?.id ?? ""}|${areasKey(areas)}`;
+}
 
 /**
  * The terrain source to use for where the map is now. Adds the region's source

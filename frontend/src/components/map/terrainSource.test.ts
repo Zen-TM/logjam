@@ -337,6 +337,35 @@ describe("terrainSourceFor", () => {
       );
     });
 
+    // Mutation: drop `dropStaleTerrainSources` from `applyTerrain`, and the
+    // source of the region the map has left stays in the style.
+    it("moves to the source of the region the map has entered, and drops the one it left", async () => {
+      const map = terrainMap();
+      const view: { lng: number; lat: number } = {
+        lng: KATOOMBA[0],
+        lat: KATOOMBA[1],
+      };
+      map.getBounds = () =>
+        ({
+          getWest: () => view.lng - 0.01,
+          getEast: () => view.lng + 0.01,
+          getSouth: () => view.lat - 0.01,
+          getNorth: () => view.lat + 0.01,
+        }) as never;
+      const go = () =>
+        applyTerrain(map as never, [], opens, "https://web.test", () => true);
+      await go();
+      expect(map.setTerrain.mock.calls[0]![0].source).toBe(NSW_TERRAIN_SOURCE);
+      // Perth: no declared region, and prod has no everywhere tier.
+      view.lng = 115.86;
+      view.lat = -31.95;
+      await go();
+      expect(map.setTerrain.mock.calls[1]![0].source).toBe(
+        WORLDWIDE_TERRAIN_SOURCE,
+      );
+      expect(map.removeSource).toHaveBeenCalledWith(NSW_TERRAIN_SOURCE);
+    });
+
     it("draws nothing for a stale answer, and tilts once idle", async () => {
       const map = terrainMap();
       await applyTerrain(
