@@ -92,9 +92,10 @@ and Logjam GPS inflates PNG by hand with `fflate`
   their URLs).
 - **Neutral:** Logjam's build applies no vertical datum conversion. Whether
   Mapterhorn converted its sources to one datum was not examined.
-- **Later work:** `slope` and `contours` in `topo/build_nsw_dem.py` read an
-  archive of NSW's zooms only; a region's need them to take any heights
-  archive.
+- **Later work (updated 2026-11-14):** `slope` and `contours-archive` in
+  `topo/build_nsw_dem.py` read any heights archive; NSW's own `contours` step
+  reads the Spatial Services sheets and stays as it is, and `slope-s3` takes no
+  region yet.
 
 ## Alternatives considered
 

@@ -69,15 +69,16 @@ from build_nsw_dem import (
     CONTOUR_LAYER,
     CONTOUR_MAJOR_M,
     CONTOUR_ZOOMS,
+    FETCH_THREADS,
     HALF_WORLD_M,
     HEIGHT_KEY,
     NODATA,
     SLOPE_KEY,
+    SLOPE_NODATA,
     ZMAX,
-    decode_terrarium,
-    lonlat_to_tile,
-    tile_bounds_3857,
+    tile_range,
 )
+from build_nsw_dem import write_mosaic as _write_mosaic
 from pipeline import (
     COMPOSITE_LAYER_ORDER,
     HILLSHADE_DEFAULTS,
@@ -113,17 +114,12 @@ LAYERS_BY_FORMAT = {
 MBTILES_ZOOMS = (11, 16)
 CONTOUR_ZMAX = max(zmax for _, zmax in CONTOUR_ZOOMS.values())
 CELL_M = 5
-SLOPE_NODATA = 255
 # An area's cell at its deepest zoom: ~2 m at z16 and ~1 m at z17 at NSW's
 # latitudes, the cells topo/sharpen.py `zoom_for_cell` makes each zoom from
 # (tests/test_area_export.py `AreaCells`).
 AREA_CELL_M = {16: 2, 17: 1}
 # shared/src/sharpen.ts TERRAIN_ROUTED_FROM (tests/test_area_export.py).
 ROUTED_FROM = {"heights": 15, "slope": 15, "contours": 14}
-# Tiles fetched and decoded at once, and how many are handed out together: a
-# decoded tile is 256 KB of floats, so at most a chunk of them is ever held.
-FETCH_THREADS = 16
-FETCH_CHUNK = 256
 
 
 class AreaExportError(Exception):
@@ -268,14 +264,6 @@ def tile_archive(
     return "statewide" if z == start else "absent"
 
 
-def tile_range(bbox: Bbox, zoom: int) -> Tuple[int, int, int, int]:
-    """(x0, y0, x1, y1), inclusive, of the tiles covering a box."""
-    west, south, east, north = bbox
-    x0, y0 = lonlat_to_tile(west, north, zoom)
-    x1, y1 = lonlat_to_tile(east, south, zoom)
-    return x0, y0, x1, y1
-
-
 def mga_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
     """The MGA rectangle a box is warped to, on the cell's grid, and that
     rectangle's own lon/lat bounds. The box is rotated in MGA, so the rectangle
@@ -349,66 +337,8 @@ def write_mosaic(
     attribution: str,
     zoom: int = ZMAX,
 ) -> None:
-    """The archive's tiles at `zoom` (z15 statewide, an area's zmax) over the
-    box as one tiled web-mercator GeoTIFF:
-    heights as Float32 (no-data NODATA), slope as Byte degrees (no-data 255).
-    Tiles are fetched and decoded in threads and written by this one, a chunk
-    at a time."""
-    x0, y0, x1, y1 = tile_range(bbox, zoom)
-    cols, rows = x1 - x0 + 1, y1 - y0 + 1
-    west, _, _, north = tile_bounds_3857(zoom, x0, y0)
-    span = tile_bounds_3857(zoom, x0, y0)[2] - west
-    heights = kind == "heights"
-    dataset = gdal.GetDriverByName("GTiff").Create(
-        str(path),
-        cols * 256,
-        rows * 256,
-        1,
-        gdal.GDT_Float32 if heights else gdal.GDT_Byte,
-        options=[
-            "TILED=YES",
-            "BLOCKXSIZE=256",
-            "BLOCKYSIZE=256",
-            "COMPRESS=DEFLATE",
-            "PREDICTOR=3" if heights else "PREDICTOR=2",
-            "BIGTIFF=IF_SAFER",
-            "SPARSE_OK=TRUE",
-        ],
-    )
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(3857)
-    dataset.SetProjection(srs.ExportToWkt())
-    dataset.SetGeoTransform((west, span / 256, 0, north, 0, -span / 256))
-    # gdalwarp carries a source's metadata to what it writes.
-    dataset.SetMetadataItem("TIFFTAG_COPYRIGHT", attribution)
-    band = dataset.GetRasterBand(1)
-    band.SetNoDataValue(NODATA if heights else SLOPE_NODATA)
-    band.Fill(NODATA if heights else SLOPE_NODATA)
-
-    def fetch(xy: Tuple[int, int]):
-        x, y = xy
-        png = reader.get(zoom, x, y)
-        if not png:
-            return xy, None
-        rgb = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
-        values = decode_terrarium(rgb)
-        if heights:
-            return xy, np.where(np.isnan(values), NODATA, values).astype(np.float32)
-        return xy, np.where(np.isnan(values), SLOPE_NODATA, values).astype(np.uint8)
-
-    tiles = [(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
-    found = 0
-    with ThreadPoolExecutor(FETCH_THREADS) as pool:
-        for start in range(0, len(tiles), FETCH_CHUNK):
-            chunk = tiles[start : start + FETCH_CHUNK]
-            for (x, y), values in pool.map(fetch, chunk):
-                if values is None:
-                    continue
-                band.WriteArray(values, (x - x0) * 256, (y - y0) * 256)
-                found += 1
-    band.FlushCache()
-    dataset = None
-    if found == 0:
+    """`build_nsw_dem.write_mosaic`, refusing a box the archive has no tiles in."""
+    if _write_mosaic(reader, bbox, path, kind, attribution, zoom) == 0:
         raise AreaOutsideNsw(f"no {kind} tiles in the box")
 
 

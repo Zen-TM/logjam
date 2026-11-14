@@ -138,7 +138,7 @@ in one PMTiles file. It is a one-off build, separate from the LiDAR pipeline
 above, and needs GDAL with its Python bindings (installed separately, as in
 [Running without Docker](#running-without-docker-linux)), and NumPy, Pillow and
 the [`pmtiles`](https://pypi.org/project/pmtiles/) Python package (in
-`requirements.txt`). Only `contours` and the `pmtiles show` check below need the
+`requirements.txt`). Only `contours`, `contours-archive` and the `pmtiles show` check below need the
 [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary.
 
 `pack` and `slope` write PMTiles with the Python package, which spools the
@@ -232,7 +232,7 @@ that has the archive:
 python3 build_nsw_dem.py slope dem/nsw-5m.pmtiles dem/nsw-5m-slope.pmtiles --jobs 8
 ```
 
-The archive's credit takes the month from the height archive's own credit. The
+The archive's credit is the height archive's own, so its month follows. The
 work files go in `dem/nsw-5m-slope.work/` (`--work` moves them), one per block,
 and a stopped run on the same disk carries on from the blocks it finished. A
 block that fails stops the run at once with its traceback, and a child killed
@@ -246,6 +246,39 @@ state's 1.03 M tiles that is about 13 core-hours, or under two hours on 8 vCPU,
 and 11 to 13 GB out. The statewide archive's directories are bigger than this
 sheet's and every tile read decodes one, which could add a fifth: allow three
 hours. It has not been run statewide.
+
+#### Another height archive
+
+`slope` and `contours-archive` read any [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md)
+height archive, not only `nsw-5m`: a 1 m archive to z17, say. The deepest and
+coarsest zoom come from the archive's header; the slope archive's name is the
+archive's name and "slope", and its credit is the archive's credit after "Slope
+derived from" (a credit that does not start "Derived from" follows a colon). A
+block is 32 × 32 tiles of the deepest zoom, so a z17 archive's blocks are z12
+tiles and take the same memory as NSW's.
+
+```bash
+python3 build_nsw_dem.py slope dem/zion-1m.pmtiles dem/zion-1m-slope.pmtiles --jobs 4
+python3 build_nsw_dem.py contours-archive dem/zion-1m.pmtiles dem/zion-contours-work \
+  dem/zion-contours.pmtiles --interval 10
+```
+
+`contours-archive` makes the same vector tiles `contours` does (one `contours`
+layer, `elev` in metres, a major line every 50 m, z11 to z14), from the archive's
+deepest tiles. Each block plus a tile around it is averaged to a cell, contoured,
+and clipped to the block, so the lines of two blocks line up at the edge. The
+cell is a power-of-two number of pixels, the one whose cell is nearest 10 m of
+ground as a ratio, worked out once from the archive's centre latitude so every block uses
+the same grid: a z17 pixel at 37° is 0.95 m, so 8 of them (a 7.6 m cell); at 44°
+it is 0.86 m, so 16 (13.8 m). It needs the `pmtiles` binary, and resumes like
+`slope`: a finished block's lines are kept in the work directory whatever
+interval or archive made them, so a changed `--interval` or a different archive
+needs a fresh work directory. `--interval` is a whole number of metres. A major
+line is a line on a multiple of 50 m, which is what the clients style, so an
+interval that does not divide 50 gives fewer of them (20 m: every 100 m; 12 m:
+every 300 m), and as minor lines draw only at the deepest styled zoom, the mid
+zooms get sparse. A region shown in feet gets metric lines too; the label is the
+clients' to convert.
 
 #### Building it in AWS
 
