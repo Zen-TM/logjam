@@ -659,6 +659,23 @@ describe("comparePlaces", () => {
     expect(sorted(rows, "grade")).toEqual(["EasyV", "SameVWetA", "HardV"]);
   });
 
+  // Mutation: ignore the `gradeSystem` argument in `comparePlaces`, and the
+  // ACA-only canyons sort as ungraded, after the French one.
+  it("sorts a canyon graded only in ACA among the graded ones", () => {
+    const rows = [
+      placeWith({}, { name: "Ungraded" }),
+      placeWith({ v_grade: 2 }, { name: "French" }),
+      placeWith({ aca_technical: 4 }, { name: "AcaHard" }),
+      placeWith({ aca_technical: 2, aca_water: 3 }, { name: "AcaEasy" }),
+    ];
+    const by = (system: "french" | "aca") =>
+      [...rows]
+        .sort((a, b) => comparePlaces(a, b, "grade", system))
+        .map((c) => c.name);
+    expect(by("french")).toEqual(["French", "AcaEasy", "AcaHard", "Ungraded"]);
+    expect(by("aca")).toEqual(["AcaEasy", "AcaHard", "French", "Ungraded"]);
+  });
+
   it("sorts quality best first and puts an unrated place last, not first", () => {
     const rows = [
       placeWith({ quality: null }, { name: "Unrated" }),

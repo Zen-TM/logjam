@@ -76,6 +76,9 @@ import {
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
+import { readLastMapCamera } from "../map/lastCamera";
+import { readRegions } from "../regionsPreference";
+import { gradeSystemOfView } from "./gradeSystemOfView";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -321,6 +324,19 @@ export function PlacesScreen({
   }, [closeMenu]);
   useFocusEffect(onFocus);
 
+  // The grade system "Easiest first" sorts by: that of the ground the map was
+  // last looking at, read on arrival at this tab (the map is another screen).
+  const [gradeSystem, setGradeSystem] = useState(() =>
+    gradeSystemOfView(readLastMapCamera()?.center ?? null, readRegions()),
+  );
+  useFocusEffect(
+    useCallback(() => {
+      setGradeSystem(
+        gradeSystemOfView(readLastMapCamera()?.center ?? null, readRegions()),
+      );
+    }, []),
+  );
+
   // The viewer's OWN trip tally per place, derived locally from the mirrored
   // trips — the server's `_count` never reaches the mirror. Trips of others
   // never reach it either, so a shared place naturally tallies zero.
@@ -375,8 +391,8 @@ export function PlacesScreen({
             matchesSearchAndFilters(place) &&
             (bucket === "all" || statusOf(place) === bucket),
         )
-        .sort((a, b) => comparePlaces(a, b, sort)),
-    [bucket, countable, matchesSearchAndFilters, sort, statusOf],
+        .sort((a, b) => comparePlaces(a, b, sort, gradeSystem)),
+    [bucket, countable, matchesSearchAndFilters, sort, statusOf, gradeSystem],
   );
 
   // --- Multi-select ---------------------------------------------------------

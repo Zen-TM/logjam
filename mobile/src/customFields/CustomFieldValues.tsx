@@ -16,7 +16,7 @@ import {
   customFieldDisplayLabel,
   formatDateKey,
   formatFieldValue,
-  railStops,
+  railChoices,
   type AttributeRow,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -132,11 +132,9 @@ function CustomFieldValueInput({
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
   // know" into a wrong answer, which is why the first stop is "—".
-  const stops = railStops(def);
-  if (stops) {
-    const options: ChipOption<string>[] = [{ value: "", label: "—" }];
-    for (const stop of stops)
-      options.push({ value: String(stop), label: String(stop) });
+  // A labelled field (the ACA grades) draws each stop as its word.
+  const options = railChoices(def);
+  if (options) {
     return (
       <Field label={def.label}>
         <Beside trailing={trailing}>

@@ -18,6 +18,9 @@
 // source like the walk tests above; Web's plan place page is rendered in
 // planPlace.render.test.tsx.
 //
+// Delete the grade system from the `comparePlaces` call of either places list,
+// or the `gradeSystem` prop Logjam Web's sidebar hands its list, and "Easiest first" sorts a canyon graded only in ACA among the ungraded.
+//
 // Not covered: the order inside a section, which key a section draws under
 // (`tsc` holds the keys of the `sections` map against the contract), and the
 // rendered DOM or native tree, which only a render test would see.
@@ -32,6 +35,10 @@ const read = (file: string) =>
 const WEB = read("frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx");
 const GPS = read("mobile/src/places/PlaceDetailScreen.tsx");
 const GPS_PLAN = read("mobile/src/plans/PlanPlaceSheet.tsx");
+const WEB_LIST = read("frontend/src/components/sidebar/panels/PlacesPanel.tsx");
+const GPS_LIST = read("mobile/src/places/PlacesScreen.tsx");
+const GPS_FORM = read("mobile/src/places/PlaceEditSheet.tsx");
+const WEB_SIDEBAR = read("frontend/src/components/sidebar/SidebarPanel.tsx");
 
 /** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
 const uses = (source: string) =>
@@ -83,5 +90,31 @@ describe("Logjam GPS's plan place sheet", () => {
     expect(GPS_PLAN).toContain(
       "canyonGradeRows( attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)), place.fieldValues, )",
     );
+  });
+});
+
+describe("the places lists", () => {
+  // Mutation: drop `gradeSystem` from either `comparePlaces` call, or the prop
+  // the sidebar hands its list.
+  it("sort by the grade system of the ground in view", () => {
+    expect(WEB_LIST).toContain(
+      "comparePlaces(a.place, b.place, sort, gradeSystem)",
+    );
+    expect(GPS_LIST).toContain("comparePlaces(a, b, sort, gradeSystem)");
+    expect(WEB_SIDEBAR).toContain("gradeSystem={placesGradeSystem}");
+  });
+});
+
+// Logjam GPS's place form has no render harness, so it is read like the
+// screens above; Logjam Web's is rendered in PlaceDialog.grades.render.test.tsx.
+describe("Logjam GPS's place form", () => {
+  // Mutation: build `typeFieldDefs` with `defsForType` in PlaceEditSheet, or
+  // pass `placeFormDefs` no position, and an NSW canyon is offered the ACA
+  // fields.
+  it("offers the grade fields of the system where the place stands", () => {
+    expect(GPS_FORM).toContain(
+      "placeFormDefs( customFieldDefs, placeTypeId, draft.longitude, draft.latitude, { ...place?.fieldValues,",
+    );
+    expect(GPS_FORM).not.toContain("defsForType(");
   });
 });

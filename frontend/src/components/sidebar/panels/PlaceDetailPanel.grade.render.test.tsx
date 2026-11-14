@@ -116,6 +116,23 @@ describe("the place page's attribute table", () => {
     expect(screen.queryByText("Commitment")).toBeNull();
   });
 
+  // Mutation: drop `acaGradeRow` from `attributes`, and the ACA values of a
+  // canyon that also holds a French grade are readable only in its edit form.
+  it("gives a canyon holding both systems a second row for the ACA grade", async () => {
+    renderPlace(placeWith({ v_grade: 3, aca_technical: 3, aca_water: 2 }));
+    const grade = await screen.findByText("Grade", { selector: "dt" });
+    expect(grade.nextElementSibling?.textContent).toBe("v3");
+    const aca = screen.getByText("ACA grade", { selector: "dt" });
+    expect(aca.nextElementSibling?.textContent).toBe("3B");
+  });
+
+  it("has a Grade row for the ACA grade alone, and no second one", async () => {
+    renderPlace(placeWith({ aca_technical: 3, aca_water: 2 }));
+    const grade = await screen.findByText("Grade", { selector: "dt" });
+    expect(grade.nextElementSibling?.textContent).toBe("3B");
+    expect(screen.queryByText("ACA grade", { selector: "dt" })).toBeNull();
+  });
+
   it("has no Grade row for a place with no grade", async () => {
     renderPlace(placeWith({}));
     await screen.findAllByText("Claustral");

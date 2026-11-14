@@ -13,7 +13,7 @@ import {
   ADD_WAY,
   ATTRIBUTE_NOUN,
   contractSectionKeys,
-  defsForType,
+  placeFormDefs,
   isValidLatitude,
   isValidLongitude,
   placeAttributesTitle,
@@ -320,22 +320,6 @@ export function PlaceEditSheet({
     [placeTypes.data],
   );
 
-  /**
-   * The fields THIS type's form asks for — ALL of them, with nothing cut.
-   *
-   * Canyon axes are ordinary bounded field values with definitions rendered
-   * by the generic renderer: a bounded integer is a rail
-   * (`CustomFieldValues.tsx`), by rule instead of by name. A canyon's own
-   * fields appear in "Your place attributes"; `quality` is a FLOAT and gets a
-   * decimal box rather than a rail that cannot express the 4.5 Logjam Web
-   * stores; and a user's own "Difficulty, 1-5" is drawn like a V grade without
-   * anything knowing about canyons.
-   */
-  const typeFieldDefs = useMemo(
-    () => defsForType(customFieldDefs, placeTypeId),
-    [customFieldDefs, placeTypeId],
-  );
-
   const latitudeShown = coordinateText(
     latitude,
     latitudeEdited,
@@ -368,6 +352,45 @@ export function PlaceEditSheet({
       name,
       notes,
       place,
+    ],
+  );
+
+  /**
+   * The fields THIS type's form asks for here — every one it has, bar the
+   * grade fields of the other system (`placeFormDefs`): a canyon in Utah is
+   * graded in ACA, one in NSW in the French system, and a field that holds a
+   * value stays, stored or typed, so a save never drops it (guard:
+   * `shared/src/canyonGrade.test.ts`).
+   *
+   * Canyon axes are ordinary bounded field values with definitions rendered
+   * by the generic renderer: a bounded integer is a rail
+   * (`CustomFieldValues.tsx`), by rule instead of by name. A canyon's own
+   * fields appear in "Your place attributes"; `quality` is a FLOAT and gets a
+   * decimal box rather than a rail that cannot express the 4.5 Logjam Web
+   * stores; and a user's own "Difficulty, 1-5" is drawn like a V grade without
+   * anything knowing about canyons.
+   */
+  const typeFieldDefs = useMemo(
+    () =>
+      placeFormDefs(
+        customFieldDefs,
+        placeTypeId,
+        draft.longitude,
+        draft.latitude,
+        {
+          ...place?.fieldValues,
+          ...Object.fromEntries(
+            Object.entries(fieldValues).filter(([, value]) => value !== ""),
+          ),
+        },
+      ),
+    [
+      customFieldDefs,
+      placeTypeId,
+      draft.longitude,
+      draft.latitude,
+      place?.fieldValues,
+      fieldValues,
     ],
   );
 

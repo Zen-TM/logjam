@@ -12,6 +12,7 @@ import {
   renameCustomFieldLabel,
   tripFieldDefs,
   isSystemFieldDef,
+  railChoices,
 } from "./tripLogFields.js";
 import type {
   ScopedCustomFieldDef,
@@ -574,5 +575,56 @@ describe("isSystemFieldDef", () => {
 
   it("is false when the owner id is absent entirely — offer the verbs, let the server refuse", () => {
     expect(isSystemFieldDef(scoped({}))).toBe(false);
+  });
+});
+
+describe("railChoices", () => {
+  const field = (
+    key: string,
+    min: number | null,
+    max: number | null,
+    type: TripLogCustomFieldDef["type"] = "integer",
+  ) => ({ key, label: key, type, min, max }) as TripLogCustomFieldDef;
+
+  // Mutation: put "—" last, or drop it.
+  it("offers unset first, then each stop of a rail-shaped field", () => {
+    expect(railChoices(field("difficulty", 1, 3))).toEqual([
+      { value: "", label: "—" },
+      { value: "1", label: "1" },
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+    ]);
+  });
+
+  // Mutation: label every stop by its number.
+  it("writes a labelled field's stops as their words and holds their ranks", () => {
+    const choices = railChoices(field("aca_water", 1, 7))!;
+    expect(choices.map((c) => c.label)).toEqual([
+      "—",
+      "A",
+      "B",
+      "C",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+    ]);
+    expect(choices.map((c) => c.value)).toEqual([
+      "",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+    ]);
+  });
+
+  // Mutation: return `[]` instead of null for a field that is not rail-shaped.
+  it("is null where `railStops` is", () => {
+    expect(railChoices(field("hours", 0, null))).toBeNull();
+    expect(railChoices(field("quality", 1, 5, "float"))).toBeNull();
+    expect(railChoices(field("wide", 1, 40))).toBeNull();
   });
 });

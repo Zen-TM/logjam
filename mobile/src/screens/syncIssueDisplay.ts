@@ -8,9 +8,11 @@
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
 import {
+  fieldValueLabel,
   invalidPlaceFields,
   isTransientSyncError,
   SYSTEM_FIELD_DEFS,
+  t,
 } from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
@@ -56,6 +58,10 @@ const FIELD_LABEL: Record<string, string> = {
   v_grade: "water grade",
   a_grade: "difficulty grade",
   commitment: "commitment grade",
+  aca_technical: t`ACA technical grade`,
+  aca_water: t`ACA water grade`,
+  aca_time: t`ACA time grade`,
+  aca_risk: t`ACA risk rating`,
   quality: "star rating",
   hours: "trip time",
   date: "date",
@@ -305,10 +311,13 @@ export function opChanges(op: ParkedOp): OpChange[] {
  * "Trip time: 6" is not a fact about anything, and the rest of the app never
  * shows these bare either (the place screen labels them HOURS and LONGEST
  * DROP). Only the fields whose unit is not in their own name are listed — an
- * abseil count is a count.
+ * abseil count is a count. A lettered grade reads as its letters.
  */
 function fieldValueText(field: string, value: unknown): string {
   if (typeof value === "number") {
+    // A lettered grade is stored as its rank: "C2" reads 5 to nobody.
+    const word = fieldValueLabel(field, value);
+    if (word !== undefined) return word;
     if (field === "hours") return `${value} ${value === 1 ? "hour" : "hours"}`;
     if (field === "longestAbseil") return `${value} m`;
     if (field === "quality") return `${value}/5`;

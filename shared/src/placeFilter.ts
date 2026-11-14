@@ -17,9 +17,11 @@ import {
   type CustomFieldFilter,
   type FieldDateRange,
 } from "./customFieldFilter.js";
+import { gradeSortKeys } from "./canyonGrade.js";
 import { numericFieldValue } from "./fieldValues.js";
 import type { RegionBbox } from "./mapRegionEstimate.js";
 import { lonWithin } from "./placeGeo.js";
+import type { CanyonGradeSystem } from "./regions.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** [start, end] inclusive ISO-date bounds (yyyy-mm-dd); either bound nullable. */
@@ -309,7 +311,8 @@ export function reconcileCustomFilters(
 
 /**
  * Sort orders offered for a place list. `recent` = newest first; `grade` =
- * easiest first (V then A); `quality` = best first. Nulls sort last for every
+ * easiest first (V then A, or ACA technical then water where the list is
+ * looking at ACA ground); `quality` = best first. Nulls sort last for every
  * key so places missing the sort field don't crowd the top, and every
  * comparison falls back to name so the order is total and stable.
  */
@@ -319,19 +322,20 @@ export function comparePlaces(
   a: PlaceFilterFields,
   b: PlaceFilterFields,
   sort: PlaceSortKey,
+  gradeSystem: CanyonGradeSystem = "french",
 ): number {
   switch (sort) {
     case "recent":
       return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
     case "grade": {
-      // Reads the reserved canyon keys out of `fieldValues`. A place of a type
+      // Reads the reserved canyon keys out of `fieldValues`, the system used
+      // where the list is looking first (`gradeSortKeys`). A place of a type
       // that has no grades sorts to the bottom, like an ungraded canyon.
-      const av = numericFieldValue(a.fieldValues, "v_grade") ?? Infinity;
-      const bv = numericFieldValue(b.fieldValues, "v_grade") ?? Infinity;
-      if (av !== bv) return av - bv;
-      const aa = numericFieldValue(a.fieldValues, "a_grade") ?? Infinity;
-      const ba = numericFieldValue(b.fieldValues, "a_grade") ?? Infinity;
-      if (aa !== ba) return aa - ba;
+      for (const key of gradeSortKeys(gradeSystem)) {
+        const ar = numericFieldValue(a.fieldValues, key) ?? Infinity;
+        const br = numericFieldValue(b.fieldValues, key) ?? Infinity;
+        if (ar !== br) return ar - br;
+      }
       return a.name.localeCompare(b.name);
     }
     case "quality": {

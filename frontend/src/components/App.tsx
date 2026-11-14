@@ -2027,6 +2027,7 @@ function App() {
               refetchStandaloneFiles();
               refetchPlaceTracks();
             }}
+            mapCenter={mapCenter}
             currentUser={currentUser}
             currentUserError={currentUserError}
             onRetryCurrentUser={refetchCurrentUser}
