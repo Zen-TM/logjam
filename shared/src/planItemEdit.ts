@@ -49,8 +49,11 @@ export const sameValue = (a: unknown, b: unknown) =>
  * that already hold a value (`gradeFieldsAt`). The list follows the place as
  * given, so it can differ between the place as a form opened on it and the
  * place as the plan now has it: a form draws and checks the list of the place
- * it holds, and hands that same list to `itemPatch`. Guard:
- * `planItemEdit.test.ts`.
+ * it holds, and hands that same list to `itemPatch`. Guards:
+ * `planItemEdit.test.ts` ("are the list the form drew when the plan has moved
+ * the place since") for the patch, and the two clients' calls in
+ * `contracts/placePageClients.test.ts` ("Logjam Web's plan item form" and
+ * "Logjam GPS's plan item sheet").
  */
 export function itemFieldDefs(
   place: Pick<
@@ -111,6 +114,7 @@ export function itemWords(item: TripPlanItem): ItemWords {
  * assumed valid (the form checks them first). `defs` is the list the form
  * drew and checked, not one worked out again from `seen`: the plan may have
  * moved the place since, and a field the user typed into must still be sent.
+ * Guard: the clients' calls, `contracts/placePageClients.test.ts`.
  */
 export function itemPatch(
   seen: TripPlanItem,

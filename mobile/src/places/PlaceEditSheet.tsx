@@ -359,8 +359,9 @@ export function PlaceEditSheet({
    * The fields THIS type's form asks for here — every one it has, bar the
    * grade fields of the other system (`placeFormDefs`): a canyon in Utah is
    * graded in ACA, one in NSW in the French system, and a field that holds a
-   * value stays, stored or typed, so a save never drops it (guard:
-   * `shared/src/canyonGrade.test.ts`).
+   * value stays, stored or typed, so a save never drops it (guards:
+   * `shared/src/canyonGrade.test.ts` for the rule, "Logjam GPS's place form"
+   * in `shared/src/contracts/placePageClients.test.ts` for this call).
    *
    * Canyon axes are ordinary bounded field values with definitions rendered
    * by the generic renderer: a bounded integer is a rail

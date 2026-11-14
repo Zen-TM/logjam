@@ -190,7 +190,10 @@ function holdsValue(fieldValues: unknown, key: string): boolean {
  * cut to `gradeFieldsAt` over the values stored on the place and the form's
  * typed ones (an empty text is not a value). The one rule both clients apply,
  * so a canyon in Utah offers the same fields on a phone and in a browser.
- * Guard: `canyonGrade.test.ts`.
+ * Guards: `canyonGrade.test.ts` for the rule; for each client applying it,
+ * "Logjam GPS's place form" in `contracts/placePageClients.test.ts` and, for
+ * Logjam Web, `PlaceDialog.grades.render.test.tsx` ("are the French ones in
+ * NSW and the ACA ones in Utah").
  */
 export function placeFormDefs(
   defs: readonly ScopedCustomFieldDef[],
@@ -234,8 +237,11 @@ export function gradeSortKeys(system: CanyonGradeSystem): readonly string[] {
 /**
  * The grade system of the ground a map is looking at: the system of the region
  * under the centre (`[lon, lat]`), and with no centre yet (a map that has not
- * settled) of the account's opening view (`accountRegion`). Each client says
- * where its centre comes from. Guard: `canyonGrade.test.ts`.
+ * settled) of the account's opening view (`accountRegion`). Only the centre
+ * counts, where ADR 0049's `regionInView` also falls back to the first region
+ * touching the view and to the world: no client hands this a view box, and a
+ * grade system has no world entry to fall to. Each client says where its
+ * centre comes from. Guard: `canyonGrade.test.ts`.
  */
 export function gradeSystemOfView(
   center: readonly [number, number] | null,

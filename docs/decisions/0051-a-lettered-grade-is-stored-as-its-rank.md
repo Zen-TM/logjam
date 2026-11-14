@@ -45,7 +45,10 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   `shared/src/canyonGrade.ts`), and a plan place's edit form does the same
   (`itemFieldDefs`). An NSW canyon is offered no ACA field. A place filter offers
   the axes of the system in view, plus any a listed place holds a value for or
-  the filter is set on (`placeFilterDefs`). A canyon
+  the filter is set on (`placeFilterDefs`). The system in view is that of the region
+  at the view's centre only (`gradeSystemOfView`), not [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)'s
+  `regionInView`, which also falls back to a region touching the view and to the
+  world; a grade system has no world entry. A canyon
   holding both systems shows the French grade as its Grade row and the ACA one as a
   second row, "ACA grade". Guards: `shared/src/canyonGrade.test.ts` ("keeps a field
   that already holds a value, whatever the system", "keeps the axis an active filter
@@ -55,7 +58,8 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
 ## Consequences
 
 - **Positive:** the field type, the database, sync, the bounds check and the
-  filter need no change, and ranks order correctly with no mapping, so "C2" sorts
+  filter's storage and matching need no change (its axes and words follow the grade
+  system in view, updated 2026-11-15), and ranks order correctly with no mapping, so "C2" sorts
   after "C1" where letters would sort as text. The places list's Grade sort
   (`comparePlaces` in `shared/src/placeFilter.ts`) reads the two difficulty fields of
   the system the map in view uses, then the other system's, so a canyon graded in

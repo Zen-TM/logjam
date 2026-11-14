@@ -39,6 +39,10 @@ const WEB_LIST = read("frontend/src/components/sidebar/panels/PlacesPanel.tsx");
 const GPS_LIST = read("mobile/src/places/PlacesScreen.tsx");
 const GPS_FORM = read("mobile/src/places/PlaceEditSheet.tsx");
 const GPS_FILTER = read("mobile/src/places/PlaceFilterSheet.tsx");
+const WEB_PLAN_ITEM = read(
+  "frontend/src/components/plans/PlanItemEditDialog.tsx",
+);
+const GPS_PLAN_ITEM = read("mobile/src/plans/PlanItemSheet.tsx");
 const WEB_SIDEBAR = read("frontend/src/components/sidebar/SidebarPanel.tsx");
 
 /** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
@@ -143,5 +147,32 @@ describe("Logjam GPS's place filter sheet", () => {
     expect(GPS_LIST).toContain(
       "gradeSystem={gradeSystem} listedPlaces={places}",
     );
+  });
+});
+
+// A plan item's edit form patches the list it drew and checked, not one worked
+// out again from the item the plan now holds (`itemFieldDefs`'s doc). Logjam
+// Web's dialog is rendered nowhere with a plan that moves, so both are read.
+describe("Logjam Web's plan item form", () => {
+  // Mutation: call `itemPatch(seen, values, itemFieldDefs(seen))` in
+  // PlanItemEditDialog.
+  it("hands the patch the list it draws and checks", () => {
+    expect(WEB_PLAN_ITEM).toContain(
+      "const defs = place ? itemFieldDefs(place) : [];",
+    );
+    expect(WEB_PLAN_ITEM).toContain("itemPatch(seen, values, defs)");
+    expect(WEB_PLAN_ITEM.match(/\bitemPatch\(/g)).toHaveLength(1);
+  });
+});
+
+describe("Logjam GPS's plan item sheet", () => {
+  // Mutation: call `itemPatch(base, values, itemFieldDefs(base))` in
+  // PlanItemSheet.
+  it("hands the patch the list it validates", () => {
+    expect(GPS_PLAN_ITEM).toContain(
+      'const defs = target.kind === "place" ? itemFieldDefs(target) : [];',
+    );
+    expect(GPS_PLAN_ITEM).toContain("itemPatch(base, values, defs)");
+    expect(GPS_PLAN_ITEM.match(/\bitemPatch\(/g)).toHaveLength(1);
   });
 });
