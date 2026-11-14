@@ -636,8 +636,8 @@ describe("placeRegistryIn", () => {
     expect(placeRegistryIn(undefined, two)).toBeNull();
   });
 
-  // Mutation: drop the `wrapView` call, and a map panned once round the world
-  // matches no region.
+  // Mutation: call `regionInView` and not `regionInWrappedView` in
+  // `placeRegistryIn`, and a map panned once round the world matches no region.
   it("reads a map panned round the world", () => {
     const [lon, lat] = nz.view.center;
     expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
