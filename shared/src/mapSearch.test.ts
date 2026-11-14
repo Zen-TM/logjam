@@ -178,7 +178,7 @@ describe("parseCoordinates", () => {
     "57 245000 6264000",
     "56 245000 5000000", // lands outside Australia
     "-33.71", // one number
-    "2024", // one number is not a pair that splits in two
+    "2024",
     "33.71S 150.31S", // two latitudes
     "33.71S 150.31", // letter on one part only
     "200 300",
@@ -189,6 +189,10 @@ describe("parseCoordinates", () => {
     // Mutation: delete the `(?!\d)` after the degrees in `PART`.
     `33 42' 36"`,
     "33° 42'",
+    // Written together, two numbers are not a pair. Mutation: delete the
+    // separator check in `parseLatLon`.
+    "33.7-150.3",
+    "33.7°150.3°",
   ])("does not read %j", (text) => {
     expect(parseCoordinates(text)).toBeNull();
   });

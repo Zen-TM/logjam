@@ -4630,8 +4630,7 @@ export function MapScreen({
    * definition of "where is this thing", not a second one for search.
    *
    * PRIVACY: names and coordinates stay in this array. Nothing here is sent
-   * anywhere; the geocoder sees the typed string and, over a covered region,
-   * that region's outline, never a saved item.
+   * anywhere. What the geocoder is sent is in MapSearchBar.tsx's PRIVACY note.
    */
   const savedSearchItems: SavedSearchItem[] = useMemo(
     () => [

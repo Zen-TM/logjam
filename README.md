@@ -132,6 +132,14 @@ basemap, upload just that file, run `node scripts/dev-master.mjs`, and use
 and takes the rest from the prod CDN. On a phone, also run
 `adb reverse tcp:4567 tcp:4567`.
 
+To try the screens a second region adds, switch on the simulated regions: a
+made-up New Zealand and Utah, with no data behind them. Set `SIM_REGIONS=1` for
+the API (in the shell that starts it; `.env.local` is regenerated), `VITE_SIM_REGIONS=1`
+in `frontend/.env`, and `EXPO_PUBLIC_SIM_REGIONS=1` in `mobile/.env`. A new
+account then sees the region step, and Settings lists the regions. Each
+runtime refuses the switch outside a dev stack: the API in a prod runtime,
+Logjam Web unless it uses fake auth, Logjam GPS unless its API is local.
+
 ### Command reference
 
 | Command | What it does |

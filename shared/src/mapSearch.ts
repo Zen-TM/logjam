@@ -96,8 +96,8 @@ function parseLatLon(
     // the first number cannot be a latitude (over 90) and the second can. A
     // longitude-first pair whose longitude is under 90 ("-74 40.7") therefore
     // reads latitude first; letters settle it.
-    // The two numbers must be written apart: one number ("-33.71", "2024") is
-    // not a pair that happens to split in two.
+    // Two numbers written together ("33.7-150.3") are not a pair
+    // (mapSearch.test.ts, "does not read").
     if (!/[\s,;]/.test(text)) return null;
     const [am, bm] = [Math.abs(a.value), Math.abs(b.value)];
     let latPart: Part;

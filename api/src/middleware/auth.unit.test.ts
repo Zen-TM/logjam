@@ -309,8 +309,10 @@ describe("requireAuth — oidc mode, real tokens", () => {
 describe("auth module-load fail-closed guards", () => {
   // Mutation: delete the positive check, let it accept "cognito" again, or
   // drop the fake-refused guard, and the matching test goes red. Dropping
-  // `isProdRuntime` from either check in auth.ts turns the LOGJAM_RUNTIME
-  // tests red.
+  // `isProdRuntime` from the oidc-required check in auth.ts turns "refuses any
+  // other AUTH_MODE when LOGJAM_RUNTIME=prod" red; dropping the LOGJAM_RUNTIME
+  // signal from `nonDevRuntime` (lib/runtime.ts) turns "refuses AUTH_MODE=fake
+  // when LOGJAM_RUNTIME=prod, however the rest reads" red.
 
   function plainComposeHost() {
     delete process.env.ECS_CONTAINER_METADATA_URI_V4;
@@ -378,7 +380,7 @@ describe("auth module-load fail-closed guards", () => {
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
-  // Mutation: drop AWS_LAMBDA_FUNCTION_NAME from hasAwsRuntime in auth.ts.
+  // Mutation: drop AWS_LAMBDA_FUNCTION_NAME from hasAwsRuntime in lib/runtime.ts.
   it("refuses AUTH_MODE=fake in a Lambda runtime, with every other signal reading local", async () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
