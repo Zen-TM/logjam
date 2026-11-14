@@ -250,7 +250,7 @@ export const SIM_WORLD: Region = {
   },
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
   units: "metric",
   canyons: null,
 };

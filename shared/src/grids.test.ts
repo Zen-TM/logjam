@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  boxCentre,
   fromGrid,
   gridConvergence,
   gridIdAt,
@@ -11,7 +12,8 @@ import {
   toGridAt,
   type GridId,
 } from "./grids.js";
-import { NSW_REGION, REGIONS, type Region } from "./regions.js";
+import { NSW_REGION, REGIONS, WORLD, type Region } from "./regions.js";
+import { SIM_WORLD } from "./simRegions.js";
 
 /** A made-up region with a box border. */
 const region = (
@@ -372,3 +374,38 @@ describe("gridConvergence", () => {
 it("is NSW's alone in prod", () => {
   expect(REGIONS).toEqual([NSW_REGION]);
 });
+
+describe("boxCentre", () => {
+  // Mutation: return the box's west and south edges in place of the middle.
+  it("is the middle of the box, unwrapped past 180°", () => {
+    expect(
+      boxCentre({ west: 179.5, south: -17, east: 180.5, north: -16 }),
+    ).toEqual({
+      lon: 180,
+      lat: -16.5,
+    });
+  });
+
+  // `gridZonesFor` reads its grid at this point, so a title named from the
+  // same point cannot disagree with the lines.
+  // Mutation: have `gridZonesFor` take its point from the box's west edge.
+  it("is the point gridZonesFor reads the grid at", () => {
+    const box = { west: 160, south: -45, east: 180, north: -43 };
+    const { lon, lat } = boxCentre(box);
+    expect(gridZonesFor(box, MADE_UP)).toEqual([gridZoneAt(lon, lat, MADE_UP)]);
+  });
+});
+
+// A world entry answers where no region does, and there the grid is UTM
+// (gridIdAt), so the entry that declares the ground outside every region
+// names the same grid.
+// Mutation: set the grid of `SIM_WORLD` or of the prod world entry to "mga2020".
+it.each([
+  ["the simulated world entry", SIM_WORLD],
+  ["the prod world entry", WORLD],
+])(
+  "%s names the grid gridIdAt answers outside every region",
+  (_name, world) => {
+    expect(world.grid).toBe(gridIdAt(0, 0, []));
+  },
+);

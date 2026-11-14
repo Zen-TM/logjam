@@ -5,14 +5,14 @@
 import { model as magneticModel } from "geomagnetism";
 import {
   extractionCreditLine,
-  fromGrid,
   BASEMAP_CATALOG,
   gridConvergence,
-  gridZoneAt,
   overlayAttributionLines,
-  toGrid,
+  REGIONS,
   type GeoPdfConfig,
+  type Region,
 } from "@logjam/shared";
+import { sheetGrid } from "../sheetGrid";
 import {
   ACCENT,
   DEG_TO_RAD,
@@ -210,6 +210,7 @@ export function drawCompass(
   stackY: number,
   margin: number,
   dpi: number,
+  regions: readonly Region[] = REGIONS,
 ): number {
   const midLat = (config.extent.north + config.extent.south) / 2;
   const midLon = (config.extent.east + config.extent.west) / 2;
@@ -220,7 +221,11 @@ export function drawCompass(
   const magDecl = magInfo.decl as number; // degrees, positive = east
 
   // Grid convergence
-  const gridConv = gridConvergence(midLat, midLon, gridZoneAt(midLon, midLat));
+  const gridConv = gridConvergence(
+    midLat,
+    midLon,
+    sheetGrid(config.extent, regions).zone,
+  );
 
   // ── Layout ───────────────────────────────────────────────────────────────
   // Standard declination diagram: three arms from one origin at their TRUE
@@ -523,7 +528,7 @@ function drawHaloed(
 }
 
 /**
- * Draw an MGA grid label with the principal 2-digit grid reference in a
+ * Draw a grid label with the principal 2-digit grid reference in a
  * larger bold font, following standard topographic map conventions.
  */
 export function drawGridLabel(
@@ -561,6 +566,7 @@ export function drawGridLines(
   widthPx: number,
   heightPx: number,
   dpi: number,
+  regions: readonly Region[] = REGIONS,
 ) {
   const { north, south, east, west } = config.extent;
   const fontPx = mmToPx(2, dpi);
@@ -576,11 +582,9 @@ export function drawGridLines(
 
     // One grid zone, the one at the sheet's centre, read at both corners so a
     // sheet across a zone edge or the equator gets one set of numbers
-    const midLon = (east + west) / 2;
-    const zone = gridZoneAt(midLon, (north + south) / 2);
-
-    const swEN = toGrid(south, west, zone);
-    const neEN = toGrid(north, east, zone);
+    const grid = sheetGrid(config.extent, regions);
+    const swEN = grid.toGrid(south, west);
+    const neEN = grid.toGrid(north, east);
 
     const toPixel = (lat: number, lon: number) =>
       latLonToCanvasPx(lat, lon, config.extent, widthPx, heightPx);
@@ -589,8 +593,8 @@ export function drawGridLines(
     const startE = Math.ceil(swEN.easting / interval) * interval;
     const endE = Math.floor(neEN.easting / interval) * interval;
     for (let e = startE; e <= endE; e += interval) {
-      const topLL = fromGrid(e, neEN.northing, zone);
-      const botLL = fromGrid(e, swEN.northing, zone);
+      const topLL = grid.fromGrid(e, neEN.northing);
+      const botLL = grid.fromGrid(e, swEN.northing);
       const topPx = toPixel(topLL.lat, topLL.lon);
       const botPx = toPixel(botLL.lat, botLL.lon);
       ctx.beginPath();
@@ -612,8 +616,8 @@ export function drawGridLines(
     const startN = Math.ceil(swEN.northing / interval) * interval;
     const endN = Math.floor(neEN.northing / interval) * interval;
     for (let n = startN; n <= endN; n += interval) {
-      const leftLL = fromGrid(swEN.easting, n, zone);
-      const rightLL = fromGrid(neEN.easting, n, zone);
+      const leftLL = grid.fromGrid(swEN.easting, n);
+      const rightLL = grid.fromGrid(neEN.easting, n);
       const leftPx = toPixel(leftLL.lat, leftLL.lon);
       const rightPx = toPixel(rightLL.lat, rightLL.lon);
       ctx.beginPath();

@@ -76,6 +76,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   GAUGE_UNITS_DEFAULT,
+  boxCentre,
   gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_OVERLAY_DEFAULTS,
@@ -4825,12 +4826,7 @@ export function MapScreen({
       key: "mgaGrid",
       icon: "mgaGrid",
       hue: theme.neutral,
-      title: gridOverlayTitle(
-        viewportBbox && {
-          lon: (viewportBbox.west + viewportBbox.east) / 2,
-          lat: (viewportBbox.south + viewportBbox.north) / 2,
-        },
-      ),
+      title: gridOverlayTitle(viewportBbox && boxCentre(viewportBbox)),
       value: showMgaGrid,
       onChange: setShowMgaGrid,
     },

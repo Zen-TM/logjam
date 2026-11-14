@@ -3,6 +3,7 @@ import {
   contractSectionKeys,
   isOverlayTerrainKey,
   MAP_LAYERS,
+  boxCentre,
   gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_TERRAIN,
@@ -13,6 +14,7 @@ import {
   normalizeCarrier,
   carriersOf,
   type CarrierId,
+  type LonLatBox,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
@@ -91,6 +93,7 @@ export default function LayersPopover({
   slopeBands,
   onSlopeBandsChange,
   mapView,
+  mapBounds,
   onImportFile,
   startView,
   sharpenedLoaded,
@@ -132,6 +135,8 @@ export default function LayersPopover({
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  /** The ground the map shows, which the grid row is named for (null until the map reports it). */
+  mapBounds: LonLatBox | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
   /**
@@ -365,9 +370,7 @@ export default function LayersPopover({
                   <OverlayRow
                     icon="mgaGrid"
                     hue="var(--color-neutral)"
-                    title={gridOverlayTitle(
-                      mapView && { lon: mapView.lng, lat: mapView.lat },
-                    )}
+                    title={gridOverlayTitle(mapBounds && boxCentre(mapBounds))}
                     checked={showMgaGrid}
                     onToggle={setShowMgaGrid}
                   />
