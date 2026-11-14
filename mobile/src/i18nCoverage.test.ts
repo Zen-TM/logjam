@@ -34,7 +34,7 @@ const CEILINGS: Record<string, number> = {
   plans: 16,
   routes: 23,
   saved: 172,
-  screens: 333,
+  screens: 335,
   "screens/settings": 101,
   sharing: 72,
   sync: 13,

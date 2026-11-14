@@ -153,8 +153,14 @@ const NOT_COPY_TAGS = /^(?:sql|Prisma\.sql|css|glsl|html)$/;
 /** `new X(…)` whose argument is a developer's message. */
 const NOT_COPY_NEW = /^(?:\w*Error|RegExp|URL|URLSearchParams|Set|Map)$/;
 
+/** A word: two or more letters, or letters round an inner apostrophe ("You're"). */
+const WORD = String.raw`(?:\p{L}{2,}|\p{L}+['’]\p{L}+)`;
+
 /** Two words with a space between, or a one-word sentence: what reads as prose. */
-const PROSE = /\p{L}{2,}\W*\s\W*\p{L}{2,}|^\p{Lu}\p{Ll}+[.!?…]$/u;
+const PROSE = new RegExp(
+  String.raw`${WORD}\W*\s\W*${WORD}|^\p{Lu}\p{Ll}+[.!?…]$`,
+  "u",
+);
 
 /** A colour such as `#F7F3EC`: it has letters but no words. */
 const HEX = /^#[0-9a-f]{3,8}$/i;
@@ -230,12 +236,8 @@ export function bareCopyIn(
     const words = joined.split(HOLE).join("xx");
     const written = joined.split(HOLE).join("…");
     if (
-      (
-        joined
-          .split(HOLE)
-          .join(" ")
-          .match(/\p{L}{2,}/gu) ?? []
-      ).length < 2 ||
+      (joined.split(HOLE).join(" ").match(new RegExp(WORD, "gu")) ?? [])
+        .length < 2 ||
       SQL.test(written) ||
       !PROSE.test(words) ||
       CODE.test(words)

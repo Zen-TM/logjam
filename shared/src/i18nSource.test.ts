@@ -144,6 +144,15 @@ describe("bareCopyIn", () => {
     ]);
   });
 
+  // Mutation: take the apostrophe form out of the word pattern (`WORD`).
+  it("flags prose whose first word is a contraction, and not a lone one", () => {
+    expect(
+      bare(
+        'const a = "Can\'t undo"; const b = "x\'s"; const c = "You\u2019re in";',
+      ),
+    ).toEqual(["Can't undo", "You’re in"]);
+  });
+
   // Mutation: change the template case's `if (!copy) {` to `if (true) {`, so a
   // template in a copy position is judged as one unit too.
   it("flags each part of a template in a copy position", () => {
