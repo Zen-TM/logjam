@@ -83,7 +83,8 @@ export function mgaZone(zone: 54 | 55 | 56): GridZone {
   return MGA_ZONES.find((z) => z.name === `MGA ${zone}`)!;
 }
 
-const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
+export const wrapLon = (lon: number) =>
+  ((((lon + 180) % 360) + 360) % 360) - 180;
 
 /** Whole world copies from the wrapped longitude to `lon`: exactly 0 inside [-180, 180]. */
 const copyShift = (lon: number) => 360 * Math.round((lon - wrapLon(lon)) / 360);
@@ -183,7 +184,7 @@ export function toGridAt(
 /**
  * Latitude and longitude of a point in `zone`. The longitude is in [-180, 180]
  * whatever world copy the zone was chosen for; a caller working in another
- * copy shifts it, as `mgaGrid` does.
+ * copy shifts it, as `mapGrid` does.
  */
 export function fromGrid(
   easting: number,

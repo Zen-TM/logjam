@@ -362,7 +362,7 @@ describe("GAUGE_LAYER", () => {
 // Mutation: add the grid layers without a `GAUGE_BELOW` anchor, or drop the
 // ids, and the grid lines draw over every pin; or rename an id on one client
 // only and the two layerOrder files disagree.
-describe("MGA grid layers", () => {
+describe("grid layers", () => {
   const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
   const mobile = readFileSync(
     join(__dirname, "../../../../mobile/src/map/layerOrder.ts"),
@@ -380,6 +380,27 @@ describe("MGA grid layers", () => {
   it("have the ids Logjam GPS uses", () => {
     expect(mobile).toContain(`GRID_LINES = "${GRID_LINES}"`);
     expect(mobile).toContain(`GRID_LABELS = "${GRID_LABELS}"`);
+  });
+
+  // Both clients draw the one shared grid and title it from the same function
+  // (ADR 0020). Mutation: build the lines or the row's title in one client
+  // with its own code, or leave the old `mgaGrid` call, and that client's
+  // file stops naming `mapGrid(` or `gridOverlayTitle(`.
+  it("are built by shared mapGrid and titled by gridOverlayTitle on both clients", () => {
+    const mobileSrc = (file: string) =>
+      readFileSync(join(__dirname, "../../../../mobile/src/map", file), "utf8");
+    const clients = [
+      {
+        draws: source,
+        titles: readFileSync(join(__dirname, "LayersPopover.tsx"), "utf8"),
+      },
+      { draws: mobileSrc("GridLayer.tsx"), titles: mobileSrc("MapScreen.tsx") },
+    ];
+    expect(clients).toHaveLength(2);
+    for (const { draws, titles } of clients) {
+      expect(draws).toMatch(/\bmapGrid\(/);
+      expect(titles).toMatch(/\bgridOverlayTitle\(/);
+    }
   });
 });
 

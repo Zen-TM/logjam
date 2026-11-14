@@ -13,17 +13,14 @@ import {
 } from "./grids.js";
 import { NSW_REGION, REGIONS, type Region } from "./regions.js";
 
-/**
- * A made-up region with a box border. `Region.grid` is typed "mga2020"
- * alone, so `grid` is cast.
- */
+/** A made-up region with a box border. */
 const region = (
   grid: GridId,
   [west, south, east, north]: [number, number, number, number],
 ): Region => ({
   ...NSW_REGION,
   id: `made-up-${grid}`,
-  grid: grid as never,
+  grid,
   borders: [
     [
       [west, south],

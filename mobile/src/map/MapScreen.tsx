@@ -76,6 +76,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   GAUGE_UNITS_DEFAULT,
+  gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_OVERLAY_DEFAULTS,
   messageFromError,
@@ -309,7 +310,7 @@ import { MapHoldSheet, type MapHoldRun } from "./MapHoldSheet";
 import { MapPointSheet, type MapPoint, type OwnFix } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
-import { MgaGridLayer } from "./MgaGridLayer";
+import { GridLayer } from "./GridLayer";
 import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
@@ -4820,7 +4821,12 @@ export function MapScreen({
       key: "mgaGrid",
       icon: "mgaGrid",
       hue: theme.neutral,
-      title: MAP_OVERLAYS.copy.mgaGrid,
+      title: gridOverlayTitle(
+        viewportBbox && {
+          lon: (viewportBbox.west + viewportBbox.east) / 2,
+          lat: (viewportBbox.south + viewportBbox.north) / 2,
+        },
+      ),
       value: showMgaGrid,
       onChange: setShowMgaGrid,
     },
@@ -5518,7 +5524,7 @@ export function MapScreen({
         ) : null}
 
         {showMgaGrid && viewportBbox ? (
-          <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
+          <GridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
         {showGauges && gaugeFile ? (

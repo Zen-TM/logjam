@@ -91,7 +91,7 @@ export const SIM_NZ: Region = {
   terrain: NZ_TERRAIN,
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "nztm2000",
   canyons: null,
 };
 
@@ -115,7 +115,7 @@ export const SIM_UTAH: Region = {
   terrain: UTAH_TERRAIN,
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
   canyons: null,
 };
 

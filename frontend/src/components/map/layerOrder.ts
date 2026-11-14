@@ -28,7 +28,7 @@ export const GAUGE_LABELS = "gauge-labels";
 export const GAUGE_BELOW = "place-highlight";
 
 /**
- * The MGA grid sits at the gauges' height, over the topo band and under every
+ * The map grid sits at the gauges' height, over the topo band and under every
  * pin, as on Logjam GPS. Guard: `layerOrder.test.ts`.
  */
 export const GRID_LINES = "mga-grid-lines";

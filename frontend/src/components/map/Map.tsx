@@ -18,8 +18,8 @@ setWorkerUrl(maplibreWorkerUrl);
 import { PMTiles, Protocol } from "pmtiles";
 import {
   MAP_INK,
-  mgaGrid,
-  MGA_GRID_STYLE,
+  mapGrid,
+  GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
   MAP_LABEL_SIZE,
   PIN_CASING_COLOR,
@@ -1638,8 +1638,8 @@ function Map({
           layout: { visibility: "none" },
           paint: {
             "line-color": MAP_INK.grid,
-            "line-width": MGA_GRID_STYLE.lineWidth,
-            "line-opacity": MGA_GRID_STYLE.lineOpacity,
+            "line-width": GRID_STYLE.lineWidth,
+            "line-opacity": GRID_STYLE.lineOpacity,
           },
         },
         GAUGE_BELOW,
@@ -1652,7 +1652,7 @@ function Map({
           layout: {
             visibility: "none",
             "symbol-placement": "line",
-            "symbol-spacing": MGA_GRID_STYLE.labelSpacing,
+            "symbol-spacing": GRID_STYLE.labelSpacing,
             "text-rotation-alignment": "viewport",
             "text-field": ["get", "text"],
             "text-font": ["Noto Sans Medium"],
@@ -2252,7 +2252,7 @@ function Map({
     });
   }, [showGauges, gaugeFile, mapLoaded]);
 
-  // The MGA grid, rebuilt for the view each time the camera settles.
+  // The map grid, rebuilt for the view each time the camera settles.
   useEffect(() => {
     const map = mapRef.current;
     if (!mapLoaded || !map) return;
@@ -2262,7 +2262,7 @@ function Map({
     if (!showMgaGrid) return;
     const draw = () => {
       const b = map.getBounds();
-      const grid = mgaGrid(
+      const grid = mapGrid(
         {
           west: b.getWest(),
           south: b.getSouth(),

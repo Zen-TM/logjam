@@ -1,24 +1,19 @@
-// The MGA grid for the view that last settled (shared mgaGrid), under the pins.
+// The map grid for the view that last settled (shared mapGrid), under the pins.
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
-import {
-  MAP_INK,
-  MGA_GRID_STYLE,
-  mgaGrid,
-  type GridBbox,
-} from "@logjam/shared";
+import { MAP_INK, GRID_STYLE, mapGrid, type GridBbox } from "@logjam/shared";
 
 import { GRID_LABELS, GRID_LINES, PIN_FLOOR } from "./layerOrder";
 import { PIN_LABEL_TEXT } from "./mapLabelText";
 
-export const MgaGridLayer = memo(function MgaGridLayer({
+export const GridLayer = memo(function GridLayer({
   bbox,
   zoom,
 }: {
   bbox: GridBbox;
   zoom: number;
 }) {
-  const grid = useMemo(() => mgaGrid(bbox, zoom), [bbox, zoom]);
+  const grid = useMemo(() => mapGrid(bbox, zoom), [bbox, zoom]);
   return (
     <>
       <GeoJSONSource id="mga-grid" data={grid}>
@@ -29,8 +24,8 @@ export const MgaGridLayer = memo(function MgaGridLayer({
           beforeId={PIN_FLOOR}
           style={{
             lineColor: MAP_INK.grid,
-            lineWidth: MGA_GRID_STYLE.lineWidth,
-            lineOpacity: MGA_GRID_STYLE.lineOpacity,
+            lineWidth: GRID_STYLE.lineWidth,
+            lineOpacity: GRID_STYLE.lineOpacity,
           }}
         />
         <Layer
@@ -40,7 +35,7 @@ export const MgaGridLayer = memo(function MgaGridLayer({
           beforeId={PIN_FLOOR}
           style={{
             symbolPlacement: "line",
-            symbolSpacing: MGA_GRID_STYLE.labelSpacing,
+            symbolSpacing: GRID_STYLE.labelSpacing,
             textRotationAlignment: "viewport",
             textField: ["get", "text"] as unknown as string,
             ...PIN_LABEL_TEXT,
