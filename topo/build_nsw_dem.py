@@ -707,6 +707,33 @@ def slope_block(job: Tuple[int, int, str, int, int]) -> Optional[str]:
     return f"{bx}/{by}: {count} tiles"
 
 
+def archive_blocks(reader) -> Tuple[int, int, int, List[Tuple[int, int]]]:
+    """(deepest zoom, coarsest zoom, block zoom, blocks) of a height archive:
+    the zooms from its header, and the blocks over its bounds that have a tile.
+    `build_slope` and `contours_archive` both build exactly these blocks. A
+    block's tile exists exactly where one of its deepest tiles has a height
+    (test_nsw_dem.py `TestArchiveBlocks`)."""
+    header = reader.header()
+    zmax, zmin = header["max_zoom"], header["min_zoom"]
+    bzoom = block_zoom(zmax, zmin)
+    x0, y0, x1, y1 = tile_range(
+        (
+            header["min_lon_e7"] / 1e7,
+            header["min_lat_e7"] / 1e7,
+            header["max_lon_e7"] / 1e7,
+            header["max_lat_e7"] / 1e7,
+        ),
+        bzoom,
+    )
+    blocks = [
+        (bx, by)
+        for bx in range(x0, x1 + 1)
+        for by in range(y0, y1 + 1)
+        if reader.get(bzoom, bx, by) is not None
+    ]
+    return zmax, zmin, bzoom, blocks
+
+
 def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     """The slope archive of a height archive: see the module docstring.
 
@@ -729,25 +756,8 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     metadata = reader.metadata()
     layer = dataclasses.replace(SLOPE, name=f"{metadata.get('name', 'DEM')} slope")
     attribution = derived_credit("Slope", metadata["attribution"])
-    header = reader.header()
-    zmax, zmin = header["max_zoom"], header["min_zoom"]
-    bzoom = block_zoom(zmax, zmin)
-    x0, y0, x1, y1 = tile_range(
-        (
-            header["min_lon_e7"] / 1e7,
-            header["min_lat_e7"] / 1e7,
-            header["max_lon_e7"] / 1e7,
-            header["max_lat_e7"] / 1e7,
-        ),
-        bzoom,
-    )
-    # A block's tile exists exactly where one of its deepest tiles has a height.
-    todo = [
-        (bx, by, str(work), zmax, zmin)
-        for bx in range(x0, x1 + 1)
-        for by in range(y0, y1 + 1)
-        if reader.get(bzoom, bx, by) is not None
-    ]
+    zmax, zmin, _, blocks = archive_blocks(reader)
+    todo = [(bx, by, str(work), zmax, zmin) for bx, by in blocks]
     print(f"{len(todo)} blocks", flush=True)
     with ProcessPoolExecutor(
         jobs, initializer=init_worker, initargs=(heights,)
@@ -978,7 +988,8 @@ def contours_archive(
     are mosaicked with one extra tile around, averaged on a grid every block
     shares (`archive_smoothing`), contoured, and clipped to the block, so the
     lines of two blocks line up at their edge with none doubled. A block file
-    already in `work` is kept, as in `build_slope`.
+    already in `work` is kept, as in `build_slope`, whatever interval or archive
+    made it: a changed `interval` or a different archive needs a fresh `work`.
     """
     need_pmtiles("contours-archive")
     work.mkdir(parents=True, exist_ok=True)
@@ -986,24 +997,8 @@ def contours_archive(
     reader = open_heights(heights)
     metadata = reader.metadata()
     header = reader.header()
-    zmax, zmin = header["max_zoom"], header["min_zoom"]
-    bzoom = block_zoom(zmax, zmin)
+    zmax, _, bzoom, todo = archive_blocks(reader)
     tiles = 2 ** (zmax - bzoom)
-    x0, y0, x1, y1 = tile_range(
-        (
-            header["min_lon_e7"] / 1e7,
-            header["min_lat_e7"] / 1e7,
-            header["max_lon_e7"] / 1e7,
-            header["max_lat_e7"] / 1e7,
-        ),
-        bzoom,
-    )
-    todo = [
-        (bx, by)
-        for bx in range(x0, x1 + 1)
-        for by in range(y0, y1 + 1)
-        if reader.get(bzoom, bx, by) is not None
-    ]
     print(f"{len(todo)} blocks", flush=True)
     cell = str(archive_smoothing(header, zmax) * 2 * HALF_WORLD_M / (2**zmax * TILE))
     for n, (bx, by) in enumerate(todo, 1):
@@ -1055,7 +1050,7 @@ def contours_archive(
 def positive_int(text: str) -> int:
     """An `--interval`: a whole number of metres, so `contour_lines` can pick
     the major lines by `cast(elev as integer)` (test_nsw_dem.py
-    `TestContoursArchive`)."""
+    `TestPositiveInt`)."""
     if not (text.isascii() and text.isdigit()) or int(text) < 1:
         raise argparse.ArgumentTypeError(f"{text!r} is not a whole number of metres")
     return int(text)
@@ -1092,7 +1087,7 @@ def main() -> None:
         "--interval",
         type=positive_int,
         default=CONTOUR_INTERVAL_M,
-        help="whole metres between lines (default %(default)s); major lines stay every 50 m",
+        help="whole metres between lines (default %(default)s); a line on a multiple of 50 m is major, so an interval that does not divide 50 gives fewer major lines",
     )
     p = sub.add_parser("slope")
     p.add_argument("heights", type=Path, help="a height archive, e.g. nsw-5m.pmtiles")

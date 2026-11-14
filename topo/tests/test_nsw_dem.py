@@ -430,9 +430,10 @@ class TestBlockZoom(unittest.TestCase):
 
 
 class TestSlopeFromAnyArchive(unittest.TestCase):
-    # Mutation: `block_slope` or `slope_block` leaves `pixel_size_m` at its
-    # default z15: a z17 archive's pixels are a quarter the size, so every
-    # slope reads a quarter of its real angle.
+    # Mutation: `block_slope` leaves `pixel_size_m` at its default z15: a z17
+    # archive's pixels are a quarter the size, so every slope reads a quarter
+    # of its real angle. (`slope_block` passing the zoom on is held by the next
+    # test.)
     def test_a_z17_block_uses_z17_pixels(self):
         flat_rise = np.tile(np.arange(TILE, dtype=np.float32), (TILE, 1))
         got = block_slope(lambda x, y: flat_rise, 5, 6, 1, 17)
@@ -449,8 +450,10 @@ class TestSlopeFromAnyArchive(unittest.TestCase):
             ),
         )
 
-    # Mutation: `slope_block` ignores `zmax` and reads and writes z15: the z17
-    # tile is missing and the block's tile is z10, not z12.
+    # Mutations: `slope_block` reads at z15 instead of `zmax` (it finds no tile,
+    # so the block is never written); saves at z15 (no z17 row to read back);
+    # or does not pass `zmax` on to `block_slope` (Horn runs with z15's pixel
+    # size, so the z17 tile's decoded values are not Horn's at z17).
     def test_a_z17_block_is_written_at_z17_down_to_its_z12_tile(self):
         import sqlite3
         import tempfile
@@ -470,10 +473,22 @@ class TestSlopeFromAnyArchive(unittest.TestCase):
                 build_nsw_dem.slope_block((3, 4, work, 17, 8))
                 db = sqlite3.connect(os.path.join(work, "3-4.sqlite"))
                 zooms = {z for (z,) in db.execute("select z from tiles")}
+                z17 = db.execute(
+                    "select data from tiles where z = 17 and x = ? and y = ?",
+                    (3 * 32, 4 * 32),
+                ).fetchone()[0]
                 db.close()
         finally:
             build_nsw_dem._heights = None
         self.assertEqual(zooms, set(range(12, 18)))
+        got = decode_terrarium(np.asarray(Image.open(io.BytesIO(z17)).convert("RGB")))
+        want = np.round(
+            horn_slope(
+                np.pad(rise, 1, constant_values=np.nan),
+                pixel_size_m(4 * 32 * TILE, TILE, 17),
+            )
+        )
+        np.testing.assert_array_equal(got[1:-1, 1:-1], want[1:-1, 1:-1])
 
 
 class TestSlopeOfAZ17Archive(unittest.TestCase):
@@ -575,9 +590,11 @@ class TestNswSlopeUnchanged(unittest.TestCase):
     # The slope archive of a heights archive built the NSW way (the Katoomba
     # fixture's tiles through `save_block` and `pack`) is what it was before
     # `build_slope` read its zooms and credit from the archive: the same tiles
-    # to the whole degree, the same name and credit. The hash was taken with
-    # build_nsw_dem.py before that change. Mutation: change `halve_max`, the
-    # slope rounding, a zoom, or the credit's wording for NSW, and it is red.
+    # to the whole degree, the same name and credit. It checks the tile count,
+    # the name and the credit, and a hash of the tiles' decoded values, taken
+    # with build_nsw_dem.py before that change (not of the archive's bytes).
+    # Mutation: change `halve_max`, the slope rounding, a zoom, or the credit's
+    # wording for NSW, and it is red.
     HASH = "8ef0ef71f2a81aa48fc68a2c2db5e785f34e91f4328c74342861bc28aab3d07d"
 
     def test_the_katoomba_slope_archive_is_unchanged(self):
@@ -814,9 +831,9 @@ class TestContoursArchive(unittest.TestCase):
 
 
 class TestPositiveInt(unittest.TestCase):
-    # Mutation: `type=float` again, or a check of `< 0`: `--interval 0.5` makes
-    # `cast(elev as integer) % 50` pick 50.5 m as a major line, and 0 asks
-    # gdal_contour for no spacing.
+    # Mutation: a check of `< 0` in `positive_int`: 0 asks gdal_contour for no
+    # spacing, and a decimal (`--interval 0.5`) makes `cast(elev as integer) % 50`
+    # pick 50.5 m as a major line.
     def test_only_a_whole_positive_number_of_metres(self):
         import argparse
 
@@ -826,6 +843,58 @@ class TestPositiveInt(unittest.TestCase):
         for bad in ("0", "-5", "0.5", "ten", "", "\u00b2"):
             with self.assertRaises(argparse.ArgumentTypeError, msg=bad):
                 positive_int(bad)
+
+    # Mutation: `--interval` wired to `type=float` again: the parser then lets
+    # 0.5 through to `contours_archive`.
+    def test_the_command_line_uses_it(self):
+        import contextlib
+        from unittest import mock
+
+        import build_nsw_dem
+
+        def run(*interval):
+            argv = ["build_nsw_dem.py", "contours-archive", "h", "w", "o", *interval]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch("build_nsw_dem.contours_archive") as archive,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                build_nsw_dem.main()
+            return archive.call_args.args[3]
+
+        self.assertEqual(run("--interval", "20"), 20)
+        with self.assertRaises(SystemExit):
+            run("--interval", "0.5")
+
+
+class TestArchiveBlocks(unittest.TestCase):
+    # Mutation: drop the `is not None` filter in `archive_blocks`: a block over
+    # sea, where the archive has no tile, is built (slope and contours alike).
+    def test_blocks_are_the_ones_over_the_bounds_that_have_a_tile(self):
+        from build_nsw_dem import archive_blocks
+
+        west, north = lonlat(1000, 2000, 12)
+        east, south = lonlat(1002, 2002, 12)  # blocks 1000..1001 by 2000..2001
+
+        class Reader:
+            def header(self):
+                return dict(
+                    min_lon_e7=int((west + 1e-6) * 1e7),
+                    max_lon_e7=int((east - 1e-6) * 1e7),
+                    min_lat_e7=int((south + 1e-6) * 1e7),
+                    max_lat_e7=int((north - 1e-6) * 1e7),
+                    min_zoom=10,
+                    max_zoom=17,
+                )
+
+            def get(self, z, x, y):
+                return (
+                    b"x" if (z, x, y) in {(12, 1000, 2000), (12, 1001, 2001)} else None
+                )
+
+        zmax, zmin, bzoom, blocks = archive_blocks(Reader())
+        self.assertEqual((zmax, zmin, bzoom), (17, 10, 12))
+        self.assertEqual(blocks, [(1000, 2000), (1001, 2001)])
 
 
 def lonlat(x, y, z):

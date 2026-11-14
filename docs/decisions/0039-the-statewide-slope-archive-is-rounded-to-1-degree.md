@@ -94,8 +94,9 @@ level 9.
   credit come from the archive's metadata. Horn, the 1° rounding, the max
   pyramid and PNG level 6 are unchanged. NSW's archive is unchanged:
   `topo/tests/test_nsw_dem.py` `TestNswSlopeUnchanged` builds a heights archive
-  the NSW way from the Katoomba fixture and holds its slope archive, z15 to z8,
-  to a hash taken before the change. Everything else above stands.
+  the NSW way from the Katoomba fixture and holds its slope archive, z15 to z8:
+  the decoded values of its tiles (to a hash taken before the change), the tile
+  count, the name and the credit. Everything else above stands.
 
 Guard: `topo/tests/test_nsw_dem.py` holds the terrarium encoding with
 `(0, 0, 0)` for no data, the 1° rounding, PNG level 6, the credit, and Horn

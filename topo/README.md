@@ -271,9 +271,13 @@ cell is a power-of-two number of pixels, the one that brings it nearest 10 m of
 ground, worked out once from the archive's centre latitude so every block uses
 the same grid: a z17 pixel at 37° is 0.95 m, so 8 of them (a 7.6 m cell); at 44°
 it is 0.86 m, so 16 (13.8 m). It needs the `pmtiles` binary, and resumes like
-`slope`: a finished block's lines are kept in the work directory. `--interval`
-is a whole number of metres and changes the spacing, not the 50 m major lines the
-clients style. A region shown in feet gets metric lines too; the label is the
+`slope`: a finished block's lines are kept in the work directory whatever
+interval or archive made them, so a changed `--interval` or a different archive
+needs a fresh work directory. `--interval` is a whole number of metres. A major
+line is a line on a multiple of 50 m, which is what the clients style, so an
+interval that does not divide 50 gives fewer of them (20 m: every 100 m; 12 m:
+every 300 m), and as minor lines draw only at the deepest styled zoom, the mid
+zooms get sparse. A region shown in feet gets metric lines too; the label is the
 clients' to convert.
 
 #### Building it in AWS
