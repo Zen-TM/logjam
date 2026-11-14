@@ -27,6 +27,7 @@ import {
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
+  formatFixedMetres,
 } from "@logjam/shared";
 import {
   Button,
@@ -664,7 +665,7 @@ function ZipSummary({
     stats.demCount > 0
       ? [
           "DEM",
-          `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${stats.demResolutionMeters}m` : ""}`,
+          `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${formatFixedMetres(stats.demResolutionMeters)}` : ""}`,
         ]
       : null,
     ["Size", formatBytes(stats.uncompressedBytes)],
