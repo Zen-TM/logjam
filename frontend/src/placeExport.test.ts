@@ -9,6 +9,7 @@ import {
   parseSources,
 } from "./csvImport/placeValueParsers";
 import { detectPlaceColumns } from "./csvImport/placeColumns";
+import { preparePlaceRows } from "./csvImport/prepareRows";
 import { placeTypeOfFile } from "./csvImport/placeTypeColumn";
 import type { TPlace } from "./placeUtils";
 
@@ -520,5 +521,71 @@ describe("buildPlaceExport — CSV", () => {
       expect(rows[0].name).toBe("Empress Canyon");
       expect(rows[0].notes).toBe("Nice place");
     });
+  });
+});
+
+// A built-in field with words is stored as a rank (ADR 0051), which means
+// nothing in a file someone else opens: the CSV writes the word, and the
+// import reads the word, or the rank an older file holds.
+describe("a labelled field in a CSV", () => {
+  const acaPlace = () =>
+    placeWith({ aca_technical: 3, aca_water: 5, aca_time: 3, aca_risk: 3 });
+
+  const csvOfAcaPlace = async () =>
+    await text(buildPlaceExport([acaPlace()], "csv").blob);
+
+  async function readBack(csv: string) {
+    const { headers, rows } = await parseCsv(
+      new File([csv], "in.csv", { type: "text/csv" }),
+    );
+    return { rows, headers, assignments: detectPlaceColumns(headers) };
+  }
+
+  // Mutation: write `String(value)` for every field in `placesToCsv`: the
+  // cells read 5 and 3 where the words are C2 and R.
+  it("leaves as its word", async () => {
+    const { rows } = await readBack(await csvOfAcaPlace());
+    expect(rows[0]).toMatchObject({
+      "attr:aca_technical": "3",
+      "attr:aca_water": "C2",
+      "attr:aca_time": "III",
+      "attr:aca_risk": "R",
+    });
+  });
+
+  // Mutation: store the cell as it is for a labelled field in
+  // `buildPlaceInput`: the values come back as the text "C2".
+  it("comes back from the file it left in as the same values", async () => {
+    const { rows, assignments } = await readBack(await csvOfAcaPlace());
+    const { rows: prepared, warnings } = preparePlaceRows(rows, assignments);
+    expect(warnings).toEqual([]);
+    expect(prepared[0].input.fieldValues).toMatchObject({
+      aca_technical: 3,
+      aca_water: 5,
+      aca_time: 3,
+      aca_risk: 3,
+    });
+  });
+
+  // Mutation: read only the words in `fieldValueOfLabel`, or only the rank: a
+  // file with the numbers (an older export) or lower-case words loses them.
+  // Or drop the warning in `buildPlaceInput`.
+  it("is read by word or by rank, and a cell that is neither is left empty with a warning", async () => {
+    const csv = [
+      "name,latitude,longitude,attr:aca_water,attr:aca_risk",
+      "By word,-33,150,c2,PG13",
+      "By rank,-33,150,5,2",
+      "Neither,-33,150,D,",
+    ].join("\r\n");
+    const { rows, assignments } = await readBack(csv);
+    const { rows: prepared, warnings } = preparePlaceRows(rows, assignments);
+    expect(prepared.map((row) => row.input.fieldValues)).toEqual([
+      { aca_water: 5, aca_risk: 2 },
+      { aca_water: 5, aca_risk: 2 },
+      undefined,
+    ]);
+    expect(warnings).toEqual([
+      'Row 4: ACA water "D" isn\'t one of its values — left empty',
+    ]);
   });
 });

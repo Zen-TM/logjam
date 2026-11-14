@@ -7,6 +7,9 @@ import {
   SOURCES_FIELD_KEY,
   makeCustomFieldKey,
   coerceFieldValueStrict,
+  fieldValueOfLabel,
+  systemFieldDef,
+  t,
   type MatchResult,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
@@ -200,7 +203,21 @@ export function buildPlaceInput(
         // carries its storage key in the role (the exporter's convention); a
         // brand-new attribute has no key yet, so the CSV header is the key.
         if (typeof role === "string" && role.startsWith("attr:")) {
-          values[role.slice(5)] = value ?? null;
+          const key = role.slice(5);
+          const def = systemFieldDef(key);
+          if (def?.labels) {
+            // A built-in field with words is stored as a rank: read the word
+            // ("C2") or the rank, and say so when the cell is neither.
+            const rank = fieldValueOfLabel(key, raw);
+            if (rank === undefined && raw.trim() !== "") {
+              warnings.push(
+                t`${def.label} "${raw.trim()}" isn't one of its values — left empty`,
+              );
+            }
+            values[key] = rank ?? null;
+          } else {
+            values[key] = value ?? null;
+          }
         } else if (role === "new-attr") {
           values[header] = value ?? null;
         }

@@ -532,6 +532,26 @@ export function systemFieldDef(key: string): SystemFieldDef | undefined {
 }
 
 /**
+ * The stored whole number for what a cell says on a built-in field that gives
+ * its values words: the word ("C2", any case) or the number itself ("5"). The
+ * inverse of `fieldValueLabel`. Undefined for a field with no words, a blank
+ * cell, a word the field does not have and a number outside its list: the
+ * caller leaves the value unset rather than guess.
+ */
+export function fieldValueOfLabel(
+  key: string,
+  text: string,
+): number | undefined {
+  const def = systemFieldDef(key);
+  const said = text.trim().toUpperCase();
+  if (!def?.labels || def.min === null || said === "") return undefined;
+  const at = def.labels.findIndex((label) => label.toUpperCase() === said);
+  if (at !== -1) return def.min + at;
+  const number = /^\d+$/.test(said) ? Number(said) : NaN;
+  return fieldValueLabel(key, number) === undefined ? undefined : number;
+}
+
+/**
  * How a stored whole number reads where a built-in field gives its values
  * words ("C2" for 5), or undefined for a field that has none and for a value
  * outside the list: the caller prints the number it holds.

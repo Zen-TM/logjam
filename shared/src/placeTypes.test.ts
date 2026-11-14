@@ -22,6 +22,7 @@ import {
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
   systemRowIds,
+  fieldValueOfLabel,
   fieldValueLabel,
   assertSystemIdsAreUuidV4,
 } from "./placeTypes.js";
@@ -153,6 +154,30 @@ describe("system field definitions", () => {
       aca_time: ["I", "II", "III", "IV", "V", "VI"],
       aca_risk: ["PG", "PG13", "R", "X", "XX"],
     });
+  });
+
+  // Mutation: return the index in `labels` without adding the field's `min`
+  // in `fieldValueOfLabel`, or drop `.toUpperCase()` from `said`.
+  it("read a labelled cell as its rank, by word or by number", () => {
+    expect(fieldValueOfLabel("aca_water", "C2")).toBe(5);
+    expect(fieldValueOfLabel("aca_water", " c2 ")).toBe(5);
+    expect(fieldValueOfLabel("aca_risk", "XX")).toBe(5);
+    expect(fieldValueOfLabel("aca_time", "IV")).toBe(4);
+    expect(fieldValueOfLabel("aca_technical", "3")).toBe(3);
+    expect(fieldValueOfLabel("aca_water", "5")).toBe(5);
+  });
+
+  // Mutation: return the number for a field without labels, or accept a
+  // number outside the list in `fieldValueOfLabel`.
+  it("read no rank from a blank cell, a word the field lacks or a field without labels", () => {
+    expect(fieldValueOfLabel("aca_water", "")).toBeUndefined();
+    expect(fieldValueOfLabel("aca_water", "D")).toBeUndefined();
+    expect(fieldValueOfLabel("aca_water", "8")).toBeUndefined();
+    expect(fieldValueOfLabel("aca_water", "0")).toBeUndefined();
+    expect(fieldValueOfLabel("aca_water", "2.5")).toBeUndefined();
+    expect(fieldValueOfLabel("aca_risk", "G")).toBeUndefined();
+    expect(fieldValueOfLabel("commitment", "3")).toBeUndefined();
+    expect(fieldValueOfLabel("my_own_field", "A")).toBeUndefined();
   });
 
   // Mutation: index `labels` by the value instead of the value less `min`.

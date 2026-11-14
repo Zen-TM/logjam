@@ -28,6 +28,12 @@ import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 
+/**
+ * The rating system a canyon's grade is written in: the French one (V, A and
+ * commitment) or the American Canyoneering Association's. ADR 0051.
+ */
+export type CanyonGradeSystem = "french" | "aca";
+
 /** One closed outline of [lon, lat]; the last vertex joins the first. */
 export type Ring = readonly (readonly [lon: number, lat: number])[];
 
@@ -145,6 +151,11 @@ export type Region = {
   gauges: string | null;
   /** The map grid coordinates are given in. */
   grid: GridId;
+  /**
+   * The system a canyon's grade is written in here: the canyon-list import
+   * fills that system's fields. Outside every region it is French.
+   */
+  canyonGrades: CanyonGradeSystem;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
@@ -458,6 +469,7 @@ export const NSW_REGION = {
   placeSearch: PLACE_REGISTRY_PREFIX,
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
+  canyonGrades: "french",
   canyons: {
     kind: "ropewiki",
     ropewikiRegion: "New South Wales",
@@ -510,6 +522,7 @@ const EMPTY_WORLD: Region = {
   placeSearch: null,
   gauges: null,
   grid: "utm",
+  canyonGrades: "french",
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;

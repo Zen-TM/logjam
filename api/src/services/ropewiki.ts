@@ -1,5 +1,11 @@
 import { parse } from "csv-parse/sync";
-import { SOURCES_FIELD_KEY, say, type Region } from "@logjam/shared";
+import {
+  fieldValueOfLabel,
+  SOURCES_FIELD_KEY,
+  say,
+  type CanyonGradeSystem,
+  type Region,
+} from "@logjam/shared";
 
 import { AppError } from "../middleware/errorHandler";
 
@@ -62,7 +68,17 @@ export function withExtraLinks(
   };
 }
 
-export type RopeWikiCanyon = {
+/**
+ * The four ACA rating fields, in the camelCase the snapshot keeps. Present on a
+ * canyon (null when the rating does not give it) only when its region grades
+ * in the ACA system, absent otherwise, so an NSW canyon, its snapshot and its
+ * ownership list read as they did before the system existed.
+ */
+const ACA_FIELDS = ["acaTechnical", "acaWater", "acaTime", "acaRisk"] as const;
+type AcaField = (typeof ACA_FIELDS)[number];
+type AcaRating = Partial<Record<AcaField, number | null>>;
+
+export type RopeWikiCanyon = AcaRating & {
   ropeWikiId: number;
   name: string;
   latitude: number;
@@ -88,7 +104,8 @@ export type RopeWikiOwnableField =
   | "aGrade"
   | "commitment"
   | "quality"
-  | "hours";
+  | "hours"
+  | AcaField;
 
 export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
   "numAbseils",
@@ -98,7 +115,30 @@ export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
   "commitment",
   "quality",
   "hours",
+  ...ACA_FIELDS,
 ];
+
+/**
+ * The ownable fields a canyon takes part in: every one it has a key for, which
+ * is the ACA four only when its source grades in ACA. Every loop over the
+ * fields goes through this, so a French source never sees the ACA four.
+ * Guard: `ropewiki.unit.test.ts` ("leave an NSW canyon, its snapshot and its
+ * fields without the ACA four").
+ */
+export function ropeWikiFieldsOf(c: RopeWikiCanyon): RopeWikiOwnableField[] {
+  return ROPE_WIKI_OWNABLE_FIELDS.filter((field) => c[field] !== undefined);
+}
+
+/** The ACA four a canyon carries, as an object to spread: empty for a canyon
+ *  with none, which keeps the snapshot of a French source as it was. */
+export function acaRatingOf(c: AcaRating): AcaRating {
+  return Object.fromEntries(
+    ACA_FIELDS.filter((field) => c[field] !== undefined).map((field) => [
+      field,
+      c[field],
+    ]),
+  );
+}
 
 /**
  * RopeWiki's field name -> the reserved `fieldValues` key it writes.
@@ -121,6 +161,10 @@ export const ROPE_WIKI_FIELD_KEYS: Record<RopeWikiOwnableField, string> = {
   commitment: "commitment",
   quality: "quality",
   hours: "hours",
+  acaTechnical: "aca_technical",
+  acaWater: "aca_water",
+  acaTime: "aca_time",
+  acaRisk: "aca_risk",
 };
 
 /**
@@ -148,7 +192,7 @@ export function ropeWikiFieldValues(
 // Values are always the RopeWiki upstream values at last sync time.
 // ropeWikiOwnedFields lists scalar fields RopeWiki contributed on link.
 // "*" means all fields are RopeWiki-owned (fresh create, no pre-existing data).
-export type RopeWikiSnapshot = {
+export type RopeWikiSnapshot = AcaRating & {
   name: string;
   latitude: number;
   longitude: number;
@@ -176,6 +220,7 @@ export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
     commitment: c.commitment,
     quality: c.quality,
     hours: c.hours,
+    ...acaRatingOf(c),
     attributes: { ...c.attributes },
     ropeWikiOwnedFields: "*",
   };
@@ -198,6 +243,7 @@ export function snapshotFromLink(
     commitment: c.commitment,
     quality: c.quality,
     hours: c.hours,
+    ...acaRatingOf(c),
     attributes: { ...c.attributes },
     ropeWikiOwnedFields,
   };
@@ -241,6 +287,7 @@ export function snapshotsEqual(
     a.commitment === b.commitment &&
     a.quality === b.quality &&
     a.hours === b.hours &&
+    ACA_FIELDS.every((field) => (a[field] ?? null) === (b[field] ?? null)) &&
     sourcesEqual(a.attributes?.sources, b.attributes?.sources)
   );
 }
@@ -365,6 +412,48 @@ function parseRating(html: string): {
   return result;
 }
 
+/**
+ * Parse the ACA part of rating HTML: technical 1 to 4, water A to C4, time
+ * I to VI and risk, written together ("3B III", "4C1 III R"), where the French
+ * grade, if there is one, sits in parentheses after it. The words are read by
+ * the field's own labels (`fieldValueOfLabel`), so what is stored is the rank
+ * ADR 0051 defines. A rating that is not that shape, or has no technical grade,
+ * gives nothing: a half-read grade would be stored as fact. A risk of "G"
+ * (no more than the technical difficulty gives) is no word in the field's list
+ * and stays unset, never `PG`.
+ *
+ * Examples:
+ *   `3B <i>III</i>  (v2a2 III)`  → technical 3, water B, time III
+ *   `<i>4C1 III</i>  (v4a4 <i>III</i>)` → technical 4, water C1, time III
+ *   `3B III R`                   → technical 3, water B, time III, risk R
+ *   `<i>2A</i>   (v1a1)`         → technical 2, water A
+ */
+function parseAcaRating(html: string): Record<AcaField, number | null> {
+  const none = {
+    acaTechnical: null,
+    acaWater: null,
+    acaTime: null,
+    acaRisk: null,
+  };
+  const text = (html ?? "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .trim()
+    .toUpperCase();
+  const m = text.match(
+    /^([1-4])\s*(C[1-4]?|[AB])?\s*(VI|IV|V|I{1,3})?\s*(PG13|PG|XX|X|R|G)?$/,
+  );
+  if (!m) return none;
+  const rank = (key: string, word: string | undefined) =>
+    word ? (fieldValueOfLabel(key, word) ?? null) : null;
+  return {
+    acaTechnical: rank("aca_technical", m[1]),
+    acaWater: rank("aca_water", m[2]),
+    acaTime: rank("aca_time", m[3]),
+    acaRisk: rank("aca_risk", m[4]),
+  };
+}
+
 /** Parse "50 feet" or "15 m" to meters. */
 function parseLongestRappel(value: string): number | null {
   if (!value || !value.trim()) return null;
@@ -438,7 +527,10 @@ function parseQuality(value: string): number | null {
  * go through getRopeWikiCanyons() in ./ropeWikiCache, which reads a
  * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
  */
-export async function fetchAndParseRopeWiki(source: RopeWikiSource): Promise<{
+export async function fetchAndParseRopeWiki(
+  source: RopeWikiSource,
+  grades: CanyonGradeSystem = "french",
+): Promise<{
   places: RopeWikiCanyon[];
   errors: string[];
 }> {
@@ -461,7 +553,7 @@ export async function fetchAndParseRopeWiki(source: RopeWikiSource): Promise<{
     );
   }
 
-  return parseRopeWikiCsv(await response.text());
+  return parseRopeWikiCsv(await response.text(), grades);
 }
 
 /**
@@ -480,8 +572,16 @@ export const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available r
  * generic 500 with nothing to act on. The `devDetail` names the fault for
  * whoever re-exports the file; neither it nor the row contents are logged.
  * (src/services/ropeWikiCache.unit.test.ts)
+ *
+ * `grades` is the system of the region the file is for, and a region grades in
+ * one. A French source gets the French grade and no ACA key at all; an ACA
+ * source gets the four ACA fields (null where the rating gives none) and an
+ * empty French grade, whatever the rating also says in parentheses.
  */
-export function parseRopeWikiCsv(csvText: string): {
+export function parseRopeWikiCsv(
+  csvText: string,
+  grades: CanyonGradeSystem = "french",
+): {
   places: RopeWikiCanyon[];
   errors: string[];
 } {
@@ -571,7 +671,10 @@ export function parseRopeWikiCsv(csvText: string): {
         continue;
       }
 
-      const rating = ratingCol >= 0 ? parseRating(row[ratingCol] || "") : {};
+      const ratingHtml = ratingCol >= 0 ? row[ratingCol] || "" : "";
+      const rating: ReturnType<typeof parseRating> =
+        grades === "aca" ? {} : parseRating(ratingHtml);
+      const aca = grades === "aca" ? parseAcaRating(ratingHtml) : {};
       const quality =
         qualityCol >= 0 ? parseQuality(row[qualityCol] || "") : null;
       const numAbseils =
@@ -597,6 +700,7 @@ export function parseRopeWikiCsv(csvText: string): {
         vGrade: rating.v_grade ?? null,
         aGrade: rating.a_grade ?? null,
         commitment: rating.commitment ?? null,
+        ...aca,
         quality: quality ?? null,
         hours: hours ?? null,
         attributes: {

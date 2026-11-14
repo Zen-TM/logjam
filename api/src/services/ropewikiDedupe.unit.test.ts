@@ -120,6 +120,45 @@ describe("mergeFillNulls", () => {
     expect(merged.ropeWikiOwnedFields).toContain("hours");
   });
 
+  // Mutation: return every ownable field from `ropeWikiFieldsOf`: an NSW link
+  // is made the owner of four fields it has no value for.
+  it("makes a French canyon's link own none of the ACA four", () => {
+    const merged = mergeFillNulls(place(), rwCanyon());
+    expect(merged.ropeWikiOwnedFields).toEqual([
+      "numAbseils",
+      "longestAbseil",
+      "vGrade",
+      "aGrade",
+      "commitment",
+      "quality",
+      "hours",
+    ]);
+  });
+
+  // Mutation: let `mergeFillNulls` write over a value the user holds on the
+  // ACA four: the user's water grade is overwritten.
+  it("fills an ACA canyon's empty ACA fields and keeps the ones the user holds", () => {
+    const merged = mergeFillNulls(
+      placeWith({ aca_water: 6 }),
+      rwCanyon({
+        acaTechnical: 3,
+        acaWater: 2,
+        acaTime: 3,
+        acaRisk: null,
+      }),
+    );
+    expect(merged.fieldValues).toMatchObject({
+      aca_technical: 3,
+      aca_water: 6,
+      aca_time: 3,
+    });
+    expect(merged.fieldValues).not.toHaveProperty("aca_risk");
+    expect(merged.ropeWikiOwnedFields).toEqual(
+      expect.arrayContaining(["acaTechnical", "acaTime", "acaRisk"]),
+    );
+    expect(merged.ropeWikiOwnedFields).not.toContain("acaWater");
+  });
+
   it("unions sources by URL, preserving existing entries", () => {
     const existing = placeWith({ _sources: [["OzUltimate", "http://oz/1"]] });
     const merged = mergeFillNulls(existing, rwCanyon());
