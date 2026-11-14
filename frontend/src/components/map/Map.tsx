@@ -1220,8 +1220,8 @@ function Map({
 
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // The worldwide source in shared/src/demSources.ts. The NSW one is
-        // added when 3D is switched on over NSW: see terrainSource.ts.
+        // The worldwide source in shared/src/demSources.ts. A region's own is
+        // added when 3D is switched on over it: see terrainSource.ts.
         tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
         attribution: TERRARIUM.creditHtml,
