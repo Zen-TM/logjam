@@ -92,8 +92,9 @@ def quarters(z: int, x: int, y: int, grid: np.ndarray) -> Iterator[tuple]:
 
 def rounding_for(z: int) -> dem.Layer:
     """ADR 0030's heights at zoom `z`: a quarter metre to z15, then halved each
-    zoom deeper (what a sharpened area's archive has). PNG level 9, as the NSW
-    archive: this is a one-off build and the smaller file is what is hosted."""
+    zoom deeper (what a sharpened area's archive has;
+    tests/test_region_dem.py `TestRounding`). PNG level 9, as the NSW archive:
+    this is a one-off build and the smaller file is what is hosted."""
     layer = sharpen.rounding_at(sharpen.HEIGHTS, max(z, sharpen.ZMIN))
     return dataclasses.replace(layer, png_level=dem.HEIGHTS.png_level)
 
@@ -156,7 +157,8 @@ def fetch_range(
     Retried with a growing wait (to a minute) on a dropped or short reply, a
     5xx and a 429 or 503, which wait as long as `Retry-After` says. Any other
     4xx, and a reply that is not 206, is raised at once: asking again changes
-    nothing, and a 200 would be a whole file read into memory.
+    nothing, and a 200 would be a whole file read into memory
+    (tests/test_region_dem.py `TestFetchRange`).
     """
     request = urllib.request.Request(
         url,
@@ -200,7 +202,8 @@ def http_reader(url: str):
     # The reader asks for the header and the directories on every tile, so
     # they are worth keeping. The cache is small because it also gets every
     # tile body, which is read exactly once: a large one would hold hundreds
-    # of megabytes per worker for nothing.
+    # of megabytes per worker for nothing (tests/test_region_dem.py
+    # `TestFetchRange.test_the_reader_keeps_few_bodies`).
     @functools.lru_cache(maxsize=128)
     def get_bytes(offset: int, length: int) -> bytes:
         return fetch_range(url, offset, length)
@@ -265,7 +268,7 @@ def build_block(job: Tuple[int, int, int, int, list]):
 
     Runs in a pool worker, so whatever it raises is rebuilt as a plain
     RuntimeError: an exception that cannot be unpickled in the parent leaves
-    the run waiting for ever."""
+    the run waiting for ever (tests/test_region_dem.py `TestInitFailure`)."""
     try:
         if _init_failure:
             raise RuntimeError(f"cannot open the sources: {_init_failure}")
@@ -310,7 +313,8 @@ def heights(args: argparse.Namespace) -> None:
     for source in sources:
         # Once, here, before any worker starts: a source that cannot be opened
         # (a mistyped path, an empty file, no boto3) stops the run with a
-        # sentence, whatever kind of source it is.
+        # sentence, whatever kind of source it is
+        # (tests/test_region_dem.py `TestInitFailure`).
         try:
             open_source(source).header()
         except Exception as e:
@@ -350,7 +354,8 @@ def heights(args: argparse.Namespace) -> None:
                     yield from block_rows
             except BaseException:
                 # Cancel what is queued: the `with`'s own shutdown would run
-                # every queued block first.
+                # every queued block first (tests/test_region_dem.py
+                # `TestWriterFails`).
                 pool.shutdown(cancel_futures=True)
                 raise
         if not count:
@@ -361,7 +366,8 @@ def heights(args: argparse.Namespace) -> None:
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Without bounds a reader takes the archive to cover the world.
+    # Without bounds a reader takes the archive to cover the world
+    # (tests/test_region_dem.py `TestBuild`).
     west, north = dem.tile_lonlat(*tile_corner(tiles, min), zmax - 1)
     east, south = dem.tile_lonlat(*tile_corner(tiles, max, 1), zmax - 1)
     meta = {
