@@ -23,10 +23,19 @@ import type { Region } from "./regions.js";
 const SEASON_START_DAY = 21;
 
 /** What a season reads of a region: where its winter is, and its calendar day. */
-type SeasonRegion = Pick<Region, "timeZone" | "view">;
+export type SeasonRegion = Pick<Region, "timeZone" | "view">;
 
-const seasonStartMonth = (region: SeasonRegion) =>
-  region.view.center[1] < 0 ? 6 : 12;
+/**
+ * The day a region's seasons open, month 1 to 12: the one rule the season
+ * maths and the leaderboard's rules text both read. Each season ends the day
+ * before the next opens.
+ */
+export function seasonOpening(region: SeasonRegion): {
+  month: number;
+  day: number;
+} {
+  return { month: region.view.center[1] < 0 ? 6 : 12, day: SEASON_START_DAY };
+}
 
 export type Season = {
   /** Inclusive, UTC midnight of the opening day. */
@@ -39,10 +48,10 @@ export type Season = {
 
 function seasonStartingIn(year: number, region: SeasonRegion): Season {
   const endYear = (year + 1) % 100;
-  const month = seasonStartMonth(region) - 1;
+  const { month, day } = seasonOpening(region);
   return {
-    start: new Date(Date.UTC(year, month, SEASON_START_DAY)),
-    end: new Date(Date.UTC(year + 1, month, SEASON_START_DAY)),
+    start: new Date(Date.UTC(year, month - 1, day)),
+    end: new Date(Date.UTC(year + 1, month - 1, day)),
     label: `${year}–${endYear.toString().padStart(2, "0")}`,
   };
 }

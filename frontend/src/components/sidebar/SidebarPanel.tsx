@@ -30,6 +30,7 @@ import type {
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import {
+  accountRegion,
   canyonOffersFor,
   TRIPS_LIST,
   type LoadState,
@@ -422,6 +423,7 @@ function SidebarPanel({
             leaderboardOptIn={
               currentUser?.uiPreferences?.leaderboardOptIn ?? false
             }
+            accountRegion={accountRegion(currentUser?.uiPreferences)}
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={onRefetchFriends}

@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRIENDS, LEADERBOARD_SETTING } from "@logjam/shared";
+import { FRIENDS, LEADERBOARD_SETTING, NSW_REGION } from "@logjam/shared";
 
 import {
   declineFriendRequest,
@@ -154,6 +154,7 @@ describe("the leaderboard button on Friends", () => {
     render(
       <FriendsPanel
         leaderboardOptIn={leaderboardOptIn}
+        accountRegion={NSW_REGION}
         friends={friends as never}
         friendRequests={[]}
         onRefetchFriends={() => {}}
@@ -240,6 +241,7 @@ describe("declining a friend request on Friends", () => {
     render(
       <FriendsPanel
         leaderboardOptIn={false}
+        accountRegion={NSW_REGION}
         friends={[]}
         friendRequests={
           [

@@ -1314,7 +1314,8 @@ test.describe("desktop", () => {
           ? route.fulfill({ json: [] })
           : route.continue(),
     );
-    // Open on the gauge, past GAUGES_MIN_ZOOM: the start view (z7) draws none.
+    // Open on the gauge, past GAUGES_MIN_ZOOM: a stored view, so the test does
+    // not depend on where a first-run map opens.
     await page.addInitScript(() => {
       localStorage.setItem("logjam.showGauges", "true");
       localStorage.setItem(
@@ -1335,7 +1336,7 @@ test.describe("desktop", () => {
     const box = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
     const panel = page.getByRole("dialog", { name: "River gauge" });
     // The dot is drawn once the file has arrived, which nothing on the page
-    // announces: press the gauge at the map's start view until the panel opens.
+    // announces: press the gauge at the stored view's centre until the panel opens.
     await expect(async () => {
       await page.keyboard.press("Escape");
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
