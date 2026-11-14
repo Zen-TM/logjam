@@ -8,6 +8,7 @@ import {
   formatArea,
   formatDistance,
   formatBoxSize,
+  formatFixedMetres,
   formatHeight,
   formatHeightRange,
   formatRain,
@@ -239,5 +240,16 @@ describe("one unit after two figures", () => {
     setDisplayUnits("imperial");
     expect(formatHeightRange(300, 600)).toBe("984–1969 ft");
     expect(formatBoxSize(16.09344, 8.04672)).toBe("10 × 5 mi");
+  });
+});
+
+describe("formatFixedMetres", () => {
+  // Mutation: `formatFixedMetres` converts when the units are imperial, or
+  // writes a space before the "m".
+  it("writes a contour label and a resolution tight, in metres, in either setting", () => {
+    expect(formatFixedMetres(1200)).toBe("1200m");
+    expect(formatFixedMetres(0.5)).toBe("0.5m");
+    setDisplayUnits("imperial");
+    expect(formatFixedMetres(1200)).toBe("1200m");
   });
 });

@@ -1,9 +1,9 @@
 // Writes a distance, height, speed, area, temperature, rain or wind figure in
 // metric or imperial. It converts at display and at input and never changes a
 // stored value: a distance is metres, a forecast is km/h, mm and °C, before and
-// after. Gauge readings and contour labels have no formatter here, because a
-// gauge reading is the agency's own number and a contour line is every 10 m of
-// height.
+// after. A gauge reading has no formatter here, because it is the agency's own
+// number; a contour label and a source's resolution are `formatFixedMetres`,
+// which never converts.
 //
 // The unit is module-level state, set with `setDisplayUnits` (metric until a
 // client sets it), so a formatter takes no unit parameter (ADR 0020: the
@@ -97,6 +97,15 @@ export function formatBoxSize(widthKm: number, heightKm: number): string {
     formatNumber(Math.round(imperial() ? km / KM_PER_MILE : km), 0),
   );
   return `${width} × ${height} ${imperial() ? "mi" : "km"}`;
+}
+
+/**
+ * A length that is metres in every setting, written tight ("1200m"): a contour
+ * line's label (the lines are every 10 m of height) and a source file's
+ * resolution. It is never converted.
+ */
+export function formatFixedMetres(metres: number): string {
+  return `${metres}m`;
 }
 
 /** Speed with one decimal. Null (no timestamps) reads as unknown. */
