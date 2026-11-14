@@ -7,12 +7,12 @@ import * as Updates from "expo-updates";
 import { I18nManager } from "react-native";
 import {
   changesLanguage,
-  isLanguage,
   language,
-  needsReconsent,
   languageToRecord,
   languageToStart,
   LANGUAGE_SETTING,
+  mayChooseLanguage,
+  needsReconsent,
   offeredHere,
   showsLanguageChoice,
   type Language,
@@ -134,8 +134,7 @@ export async function chooseLanguage(
 ): Promise<"restarting" | "stored" | "refused" | "unchanged"> {
   if (!changesLanguage(language(), next)) return "unchanged";
   if (
-    !isLanguage(next) ||
-    !offeredHere().includes(next) ||
+    !mayChooseLanguage(next, offeredHere()) ||
     !writePref(LANGUAGE_PREF_KEY, next)
   ) {
     return "refused";

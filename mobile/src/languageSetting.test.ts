@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_CONSENT_VERSION } from "@logjam/shared";
 
 // Starting in the right language and choosing another (languageSetting.ts).
 // Shared reads the simulated-regions switch and the language when it loads, so
@@ -192,7 +193,7 @@ describe("chooseLanguage", () => {
     expect(restart).not.toHaveBeenCalled();
   }, 30_000);
 
-  // Mutation: delete `!offeredHere().includes(next) ||` in chooseLanguage.
+  // Mutation: delete `!mayChooseLanguage(next, offeredHere()) ||` in chooseLanguage.
   it("refuses a language this phone does not offer", async () => {
     const { chooseLanguage } = await load({ sim: false });
     const restart = vi.fn().mockResolvedValue(undefined);
@@ -266,10 +267,9 @@ describe("languageRow", () => {
 });
 
 describe("languageToSend", () => {
-  const CURRENT = "2026-11-02";
   const settled = (language?: string) => ({
     id: "u",
-    consentVersion: CURRENT,
+    consentVersion: CURRENT_CONSENT_VERSION,
     uiPreferences: language ? { language } : null,
   });
   const ask = (over: Record<string, unknown> = {}) => ({

@@ -142,7 +142,7 @@ describe("chooseLanguage", () => {
     expect(reload).not.toHaveBeenCalled();
   }, 30_000);
 
-  // Mutation: delete `!offeredHere().includes(next) ||` in chooseLanguage.
+  // Mutation: delete `!mayChooseLanguage(next, offeredHere()) ||` in chooseLanguage.
   it("refuses a language this browser does not offer", async () => {
     const { chooseLanguage } = await load({ sim: false });
     const reload = vi.fn();

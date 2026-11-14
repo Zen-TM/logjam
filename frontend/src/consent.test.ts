@@ -6,6 +6,7 @@ import { NSW_REGION, type Region } from "@logjam/shared";
 
 import {
   CURRENT_CONSENT_VERSION,
+  accountWriteSettled,
   consentGate,
   showsRegionStep,
 } from "./consent";
@@ -84,17 +85,64 @@ describe("the region step after Logjam Web's own sign-up form", () => {
   });
 });
 
+// Whether an automatic account write may go out: consent settled, and the
+// region step after a form sign-up past, or the write races the step's own.
+describe("accountWriteSettled", () => {
+  // Mutation: return `settled` alone in accountWriteSettled.
+  it("waits for the region step that follows a form sign-up", () => {
+    expect(
+      accountWriteSettled({
+        settled: true,
+        signedUpNow: true,
+        regions: TWO_REGIONS,
+      }),
+    ).toBe(false);
+  });
+
+  // Mutation: return `!showsRegionStep(…)` alone in accountWriteSettled.
+  it("waits for consent to settle", () => {
+    expect(
+      accountWriteSettled({
+        settled: false,
+        signedUpNow: false,
+        regions: TWO_REGIONS,
+      }),
+    ).toBe(false);
+  });
+
+  // Mutation: return `false` always in accountWriteSettled.
+  it("is open once consent has settled and the step is past, or there is no step", () => {
+    expect(
+      accountWriteSettled({
+        settled: true,
+        signedUpNow: false,
+        regions: TWO_REGIONS,
+      }),
+    ).toBe(true);
+    expect(
+      accountWriteSettled({
+        settled: true,
+        signedUpNow: true,
+        regions: [NSW_REGION],
+      }),
+    ).toBe(true);
+  });
+});
+
 // A hook that takes `currentUser` and writes the account never names
 // `authenticated`, so the scan below cannot see it: this one names the call.
-// Mutation: drop `loadsUserData` from the `useRecordLanguage(…)` call in App.tsx.
+// Mutation: drop `accountWriteSettled(…)` for `loadsUserData`, or drop its
+// `signedUpNow` argument, in the `useRecordLanguage(…)` call in App.tsx.
 describe("App hands the account-writing language hook the gate's settled", () => {
-  it("calls useRecordLanguage with loadsUserData, once", () => {
-    const calls = readFileSync(join(__dirname, "components/App.tsx"), "utf8")
-      .split("\n")
-      .filter((line) => /\buseRecordLanguage\(/.test(line));
-    expect(calls.map((line) => line.trim())).toEqual([
-      "useRecordLanguage(currentUser, applyCurrentUser, loadsUserData);",
-    ]);
+  it("calls useRecordLanguage once, with accountWriteSettled over loadsUserData and the new account", () => {
+    const app = readFileSync(
+      join(__dirname, "components/App.tsx"),
+      "utf8",
+    ).replace(/\s+/g, " ");
+    expect(app.match(/\buseRecordLanguage\(/g)).toHaveLength(1);
+    expect(app).toMatch(
+      /useRecordLanguage\( currentUser, applyCurrentUser, accountWriteSettled\(\{ settled: loadsUserData, signedUpNow: auth\.newAccount,? \}\),? \)/,
+    );
   });
 });
 

@@ -43,3 +43,23 @@ export function showsRegionStep({
 }): boolean {
   return signedUpNow && offersRegionChoice(regions);
 }
+
+/**
+ * Whether an automatic write to the account may go out: consent has settled and
+ * the region step that follows a form sign-up is past, so the write cannot race
+ * the step's own `PATCH {regions}` and be applied over it. Guard:
+ * consent.test.ts ("accountWriteSettled"). Logjam GPS's twin is
+ * `languageToSend` (mobile/src/languageSetting.ts, guard
+ * mobile/src/languageSetting.test.ts).
+ */
+export function accountWriteSettled({
+  settled,
+  signedUpNow,
+  regions,
+}: {
+  settled: boolean;
+  signedUpNow: boolean;
+  regions?: readonly Region[];
+}): boolean {
+  return settled && !showsRegionStep({ signedUpNow, regions });
+}

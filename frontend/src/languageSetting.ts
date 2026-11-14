@@ -5,10 +5,10 @@
 import { useEffect } from "react";
 import {
   changesLanguage,
-  isLanguage,
   language,
   languageToRecord,
   languageToStart,
+  mayChooseLanguage,
   offeredHere,
   type Language,
   type TUser,
@@ -55,7 +55,7 @@ export function chooseLanguage(
 ): boolean {
   // The language already running: nothing to store or reload, and not a failure.
   if (!changesLanguage(language(), next)) return true;
-  if (!isLanguage(next) || !offeredHere().includes(next) || !store(next)) {
+  if (!mayChooseLanguage(next, offeredHere()) || !store(next)) {
     return false;
   }
   reload();
@@ -66,8 +66,8 @@ export function chooseLanguage(
  * Tell the account which language this browser runs in when it differs from
  * the one recorded, for the messages sent with nobody asking (a push title, a
  * mail). Writes nothing in prod, where the source language is all there is,
- * and nothing before consent settles: `enabled` is the consent gate's `settled`
- * (frontend/AGENTS.md, Data).
+ * and nothing before consent settles or while the sign-up region step shows:
+ * `enabled` is `accountWriteSettled(…)` (frontend/src/consent.ts; frontend/AGENTS.md, Data).
  */
 export function useRecordLanguage(
   currentUser: TUser | null,

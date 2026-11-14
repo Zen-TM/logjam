@@ -5,6 +5,7 @@ import type { Language } from "./i18n";
 import {
   changesLanguage,
   languageToRecord,
+  mayChooseLanguage,
   languageToStart,
   offeredHere,
   offeredLanguages,
@@ -156,6 +157,21 @@ describe("languageToStart", () => {
     expect(languageToStart("en-AU", null, ["en-US"], ALL)).toBe("en-US");
     // en-XA stored on a build that no longer offers it
     expect(languageToStart("en-XA", "en-XA", [], ["en-AU"])).toBe("en-AU");
+  });
+});
+
+describe("mayChooseLanguage", () => {
+  // Mutation: return `true` always in mayChooseLanguage.
+  it("refuses a language this client does not offer, or that is not one", () => {
+    expect(mayChooseLanguage("en-XA", ["en-AU", "en-US"])).toBe(false);
+    expect(mayChooseLanguage("fr", ["en-AU", "en-US"])).toBe(false);
+    expect(mayChooseLanguage(undefined, ["en-AU"])).toBe(false);
+  });
+
+  // Mutation: return `false` always in mayChooseLanguage, or drop `offered.includes(next)`
+  // and the first case in the test above goes red.
+  it("allows an offered language", () => {
+    expect(mayChooseLanguage("en-US", ["en-AU", "en-US"])).toBe(true);
   });
 });
 

@@ -4,6 +4,7 @@
 // docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
 import {
   LANGUAGES,
+  isLanguage,
   PSEUDO_LANGUAGE,
   SOURCE_LANGUAGE,
   matchLanguage,
@@ -77,6 +78,16 @@ export function languageToStart(
   const wanted = wantedLanguage(stored, device, offered);
   return wanted === running ? null : wanted;
 }
+
+/**
+ * Whether `next` may be chosen in the language row: a language the catalogue
+ * knows and this client offers. The row only draws offered choices, so a
+ * refusal is a stale value. Guard: languageChoice.test.ts.
+ */
+export const mayChooseLanguage = (
+  next: unknown,
+  offered: readonly Language[],
+): next is Language => isLanguage(next) && offered.includes(next);
 
 /**
  * Whether choosing `next` in the language row changes anything: choosing the
