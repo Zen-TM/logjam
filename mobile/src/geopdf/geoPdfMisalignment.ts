@@ -4,6 +4,7 @@
 // `residualFraction` is how far that fit misses its worst point, as a fraction
 // of the map's width. Past `RESIDUAL_WARN_FRACTION` the map says so while that
 // GeoPDF is in view, because that is when a position is being read off it.
+import { formatHeight } from "@logjam/shared";
 import { RESIDUAL_WARN_FRACTION } from "@logjam/shared/dist/geoPdfImport/transform.js";
 
 import { bboxOnScreen, type Viewport } from "../map/sourceResolver";
@@ -44,6 +45,6 @@ export function misalignedGeoPdfNotice(
     }
   }
   return worst
-    ? `${worst.label} may be up to ${worst.metres} m out of position`
+    ? `${worst.label} may be up to ${formatHeight(worst.metres)} out of position`
     : null;
 }

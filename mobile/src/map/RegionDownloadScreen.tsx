@@ -49,6 +49,7 @@ import {
   planRegionForBasemaps,
   type RegionBbox,
   MAP_TERRAIN,
+  formatGroundStep,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -772,7 +773,7 @@ export function RegionDownloadScreen({
                   archive comes with you. */}
                 {vectorOnly
                   ? "Detailed map only · sharp at any zoom"
-                  : `Sharp to about ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m on the ground`}
+                  : `Sharp to about ${formatGroundStep(metresPerPixel(centreLat, deepestZoom))} on the ground`}
               </Text>
             }
           >

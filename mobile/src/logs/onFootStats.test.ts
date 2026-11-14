@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { STAT_PAIRS } from "@logjam/shared";
+import { STAT_PAIRS, setDisplayUnits } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { onFootStats } from "./onFootStats";
@@ -27,6 +27,21 @@ describe("onFootStats", () => {
     expect(labels.slice(2)).toEqual(["Ascent", "Longest"]);
     expect(stats.every((stat) => !("span" in stat))).toBe(true);
     expect(stats.find((s) => s.label === "Ascent")?.value).toBe("410 m");
+  });
+  // Mutation: write `${Math.round(t.ascentM)} m` in onFootStats.ts again.
+  it("writes the ascent in feet when the display units are imperial", () => {
+    setDisplayUnits("imperial");
+    try {
+      const imperial = onFootStats({
+        distanceM: 12_300,
+        durationMs: 3_600_000,
+        ascentM: 410.4,
+        longestM: 5000,
+      });
+      expect(imperial.find((s) => s.label === "Ascent")?.value).toBe("1346 ft");
+    } finally {
+      setDisplayUnits("metric");
+    }
   });
 });
 
