@@ -749,10 +749,10 @@ function Map({
   onGeoPdfExtentCancelled?: () => void;
   /**
    * The visible bounds, on load and after every pan/zoom. Separate from
-   * `onMapViewChange` because its consumer keeps the answer in a ref: "filter
-   * to the current view" needs the bounds only at the moment the button is
-   * pressed, and routing them through state would re-render Logjam Web on every
-   * frame of a pan for a value nothing renders.
+   * `onMapViewChange` because the consumer uses them two ways: a ref for
+   * "filter to the current view", which needs them only when the button is
+   * pressed, and state for the Layers popover's grid row, which is named for
+   * them. The state update lands in the same batched render as the view's.
    */
   onMapBoundsChange?: (bounds: TBbox) => void;
   onMapViewChange?: (view: {

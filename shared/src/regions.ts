@@ -521,7 +521,7 @@ const EMPTY_WORLD: Region = {
   terrain: {},
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
   canyonGrades: "french",
   canyons: null,
 };

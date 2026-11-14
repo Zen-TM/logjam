@@ -58,6 +58,7 @@ function popover(
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}
+        mapBounds={null}
         onImportFile={noop}
         startView={startView}
         sharpenedLoaded
