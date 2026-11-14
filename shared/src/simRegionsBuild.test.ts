@@ -4,6 +4,7 @@
 // leave the dev stack serving a 404 for a layer that was built.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PMTiles, type Source } from "pmtiles";
 import { describe, expect, it } from "vitest";
 import { SIM_NZ, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
@@ -130,6 +131,50 @@ describe("scripts/sim-regions/boxes.json", () => {
       const bytes = readFileSync(join(dir, name));
       expect(bytes.subarray(0, 7).toString("latin1"), name).toBe("PMTiles");
       expect(bytes.length, name).toBeLessThan(300_000);
+    }
+  });
+
+  it("keeps each fixture's metadata to what its header says, and its credit", async () => {
+    // Mutation: `pmtiles edit` a fixture's metadata to maxzoom 17 (its header
+    // says 15), or to a description that is empty, or that names no source.
+    const dir = join(import.meta.dirname, "__fixtures__/sim-regions");
+    const contours = new Set(
+      Object.values(boxes).flatMap((r) =>
+        r.contours ? [r.contours.path.split("/").pop()] : [],
+      ),
+    );
+    const files = readdirSync(dir);
+    expect(files.length).toBeGreaterThanOrEqual(10);
+    for (const name of files) {
+      const bytes = new Uint8Array(readFileSync(join(dir, name)));
+      const source: Source = {
+        getKey: () => name,
+        getBytes: async (offset, length) => ({
+          data: bytes.slice(offset, offset + length).buffer,
+        }),
+      };
+      const archive = new PMTiles(source);
+      const header = await archive.getHeader();
+      const meta = (await archive.getMetadata()) as Record<string, string>;
+      expect(Number(meta.minzoom), `${name} minzoom`).toBe(header.minZoom);
+      expect(Number(meta.maxzoom), `${name} maxzoom`).toBe(header.maxZoom);
+      const bounds = meta.bounds.split(",").map(Number);
+      const fromHeader = [
+        header.minLon,
+        header.minLat,
+        header.maxLon,
+        header.maxLat,
+      ];
+      fromHeader.forEach((v, i) =>
+        expect(bounds[i], `${name} bounds`).toBeCloseTo(v, 5),
+      );
+      // The credit travels with the fixture: contours keep it in `description`
+      // (as the contours builder writes it), every other archive in
+      // `attribution`, and it names where the data is from.
+      const credit = contours.has(name) ? meta.description : meta.attribution;
+      expect(credit, `${name} credit`).toMatch(
+        /OpenStreetMap|Land Information New Zealand|Geological Survey|COPERNICUS/,
+      );
     }
   });
 });

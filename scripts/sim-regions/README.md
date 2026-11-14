@@ -27,7 +27,8 @@ scripts/sim-regions/build.sh --fixtures               # also cut the committed c
 
 `--only` takes `simnz`, `simutah`, `world`; `--step` takes `heights`, `slope`,
 `contours`, `vector`, `places`, `lidar`. A step whose output exists is skipped,
-so a run that stopped carries on; `--force` redoes everything. Never run it
+so a run that stopped carries on (an archive is written under a `.part` name
+and renamed when whole); `--force` redoes everything, fetches included. Never run it
 from CI: the heights come from Mapterhorn's download host, which states no
 terms for ranged reads, and the build is the only thing that should make them.
 
@@ -44,26 +45,33 @@ minutes and so on, never retried at once. The point cloud's host answered 429
 to its first three requests.
 If your machine cannot reach Overpass (it refused connections from two
 networks on 2026-11-14), put the `.osm` files in `out/places/` by hand, named
-`<region>-<box number>.osm` (`simnz-0.osm`): the step reads a file that exists.
+`<region>-<box number>.osm` (`simnz-0.osm`): the step uses a file that exists,
+unless you pass `--force`, which fetches it again.
 
 ## What is built
 
-Sizes are in MB as `pmtiles show` prints them, from the build on 2026-11-14
-(Protomaps build 20261113).
+The regions, their boxes, the archives each gets and their zoom ranges are in
+`boxes.json`. Sizes of the build on 2026-11-14 (Protomaps build 20261113),
+in MB as `pmtiles show` prints them:
 
-| Region | Boxes (W, S, E, N) | Archives |
+| Archive | Tiles | Size |
 |---|---|---|
-| `simnz` | 169.20, -44.10, 169.30, -44.01 (Makarora, Haast Pass) and 175.58, -37.14, 175.68, -37.06 (Kauaeranga, Coromandel) | heights z8–17 (4,549 tiles, 202 MB), slope (166 MB), contours z11–14 (3.4 MB), vector z0–15 (1.8 MB) |
-| `simutah` | -113.00, 37.24, -112.89, 37.33 (Zion) | heights z8–15 (201 tiles, 9.6 MB), slope (8.1 MB), contours (2.8 MB), vector (1.7 MB), one USGS point cloud tile (176 MB, in metres) |
-| `world` | 168.8, -44.6, 169.8, -43.6 and -113.5, 36.8, -112.5, 37.8 | heights z8–13 (2,226 tiles, 98 MB), vector z0–15 (29 MB) |
+| `simnz` heights (two boxes) | 4,549 | 202 |
+| `simnz` slope, contours, vector | | 166, 3.4, 1.8 |
+| `simutah` heights | 201 | 9.6 |
+| `simutah` slope, contours, vector | | 8.1, 2.8, 1.7 |
+| `world` heights (two patches) | 2,226 | 98 |
+| `world` vector | | 29 |
+| `simutah` point cloud (metres) | | 176 |
 
 The `places` step (`simnz` and `simutah`) has not been run against Overpass: it
 refused connections the day this was built. The registry builder it calls was
 run on a 1 km Overpass sample and reads it.
 
 A region with two boxes is one archive: the boxes are built apart and joined
-with `pmtiles merge`, and the metadata's `bounds` and `center` are set to the
-header's afterwards, because a merge keeps the first input's.
+with `pmtiles merge`. A merge keeps the first input's metadata and an extract
+the source's, so `build.py` sets `bounds`, `center`, `minzoom` and `maxzoom` to
+the header's on a merged archive and on every fixture.
 
 Mapterhorn marks no edge where a fine survey ends, so a box's heights are 1 m
 only where the survey is, and each credit says "where that survey covers".
@@ -79,7 +87,7 @@ only looked at on samples.
 | Heights outside a survey, and the world patches | COPERNICUS GLO-30 through Mapterhorn | COPERNICUS full, free and open licence | © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved |
 | Vector basemap, places | OpenStreetMap, as the Protomaps daily build and as Overpass answers | ODbL | © OpenStreetMap contributors |
 | Point cloud | `USGS_LPC_UT_Zion_2015_12SUG225265.laz`, USGS 3DEP | public domain | U.S. Geological Survey 3D Elevation Program |
-| Slope, contours | derived from the heights above | as the heights | each archive's attribution names the heights it derives from |
+| Slope, contours | derived from the heights above | as the heights | the archive's credit (the contours': its `description`) names the heights it derives from |
 
 Everything is published data, none a user's, so the Privacy rule on committed
 examples holds for the fixtures below.
@@ -90,5 +98,7 @@ examples holds for the fixtures below.
 box (`fixture` in `boxes.json`, and each archive's `fixtureZooms`) into
 `shared/src/__fixtures__/sim-regions/`, about 1.3 MB in all. Archives are
 ignored by git, so add a recut one with `git add -f`. A test holds the folder to
-exactly one fixture per archive built, each a PMTiles file under 300 KB. Each
-carries its archive's attribution, which is its credit.
+exactly one fixture per archive built, each a PMTiles file under 300 KB whose
+metadata says what its header does. The credit travels with each: in its
+`attribution` metadata, except the contours', whose builder writes it in
+`description` ("Contours derived from: …").

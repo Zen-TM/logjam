@@ -5,11 +5,15 @@ topo worker image; see README.md.
     build.py [--only simnz,simutah,world] [--step heights,slope,...] [--fixtures] [--force]
 
 Writes under /out (out/master/<kind>/<id>-... is the layout the CDN serves), and
-with --fixtures a small cut of each archive under /fixtures. A step whose output
-exists is skipped, so a run that stopped carries on; --force redoes everything.
+with --fixtures a small cut of each archive under /fixtures. An archive is built
+under a `.part` name and renamed when whole, so a file at its final name is a
+finished one: a step whose output exists is skipped, and a run that stopped
+carries on. --force redoes everything, including the files fetched from the
+network.
 """
 
 import argparse
+import http.client
 import json
 import shutil
 import subprocess
@@ -39,39 +43,75 @@ def say(text: str) -> None:
     print(f"==> {text}", flush=True)
 
 
-def run(*command: str) -> None:
+def run(*command: str, capture_stderr: bool = False) -> None:
+    """Run a command, echoing it. With `capture_stderr` its stderr is kept on the
+    error that a failure raises, for `retriable`, and echoed after it ends."""
     say(" ".join(command))
-    subprocess.run(command, check=True)
+    done = subprocess.run(
+        command,
+        check=False,
+        stderr=subprocess.PIPE if capture_stderr else None,
+        text=True,
+    )
+    if capture_stderr and done.stderr:
+        print(done.stderr, file=sys.stderr, flush=True)
+    if done.returncode:
+        raise subprocess.CalledProcessError(
+            done.returncode, command, stderr=done.stderr
+        )
+
+
+RETRY_STATUS = (429, 500, 502, 503, 504)
+# What go-pmtiles prints when a host refuses or drops it.
+RETRY_WORDS = tuple(map(str, RETRY_STATUS)) + ("timeout", "timed out", "connection")
+
+
+def retriable(error: BaseException) -> bool:
+    """Whether a host's refusal or a dropped connection, which waiting may cure,
+    and not a wrong URL, a bad argument or a missing binary, which it will not
+    (guard: topo/tests/test_sim_regions_build.py `TestRetriable`)."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in RETRY_STATUS
+    if isinstance(error, urllib.error.URLError | http.client.HTTPException):
+        return True
+    if isinstance(error, subprocess.CalledProcessError):
+        return any(w in (error.stderr or "").lower() for w in RETRY_WORDS)
+    return isinstance(error, ConnectionError | TimeoutError)
 
 
 def retrying(what: str, attempt, tries: int = 5):
-    """`attempt()` until it works. A refusal (429 or 503, from urllib or from a
-    child's output reaching us as a failure) waits a growing time, never retries
-    at once."""
+    """`attempt()` until it works. What `retriable` accepts waits a growing time,
+    never retries at once; anything else fails at once."""
     wait = WAIT_S
     for n in range(1, tries + 1):
         try:
             return attempt()
-        except (urllib.error.URLError, subprocess.CalledProcessError, OSError) as e:
-            if n == tries:
+        except Exception as e:
+            if n == tries or not retriable(e):
                 raise
             say(f"{what} failed ({e}); waiting {wait} s ({n}/{tries})")
             time.sleep(wait)
             wait *= 2
 
 
-def download(url: str, dest: Path, data: bytes | None = None) -> None:
-    def attempt():
-        request = urllib.request.Request(
-            url, data=data, headers={"User-Agent": BROWSER_AGENT}
-        )
-        part = dest.with_suffix(dest.suffix + ".part")
+def written(target: Path, build) -> None:
+    """`build(path)` writes the file under a `.part` name, which becomes `target`
+    only when it returns, so `target` exists only whole (guard:
+    topo/tests/test_sim_regions_build.py `TestWritten`)."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    part = target.with_name(target.name + ".part")
+    part.unlink(missing_ok=True)
+    build(part)
+    part.rename(target)
+
+
+def download(url: str, dest: Path) -> None:
+    def fetch(part: Path) -> None:
+        request = urllib.request.Request(url, headers={"User-Agent": BROWSER_AGENT})
         with urllib.request.urlopen(request, timeout=300) as r, open(part, "wb") as f:
             shutil.copyfileobj(r, f)
-        part.rename(dest)
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    retrying(url, attempt)
+    retrying(url, lambda: written(dest, fetch))
 
 
 def bbox_arg(box) -> str:
@@ -100,18 +140,19 @@ def region_geojson(boxes, path: Path) -> None:
 
 def merged(parts: list[Path], out: Path) -> None:
     """One archive from disjoint ones."""
-    out.parent.mkdir(parents=True, exist_ok=True)
     if len(parts) == 1:
-        shutil.copy(parts[0], out)
+        written(out, lambda part: shutil.copy(parts[0], part))
     else:
-        out.unlink(missing_ok=True)
-        run("pmtiles", "merge", *map(str, parts), str(out))
+        written(out, lambda part: run("pmtiles", "merge", *map(str, parts), str(part)))
 
 
-def fit_bounds(archive: Path) -> None:
-    """Make the metadata's `bounds` and `center` the header's. A merge keeps the
-    first input's metadata, and a reader of the metadata would take an archive of
-    two boxes to cover one."""
+def fit_metadata(archive: Path) -> None:
+    """Make the metadata's `bounds`, `center`, `minzoom` and `maxzoom` the
+    header's, when they differ. A merge keeps the first input's metadata, and
+    `pmtiles extract` the source's, so a reader of the metadata would take an
+    archive of two boxes to cover one, or a fixture of a tile to hold a whole
+    archive's zooms (guard: shared/src/simRegionsBuild.test.ts, "keeps each
+    fixture's metadata to what its header says")."""
 
     def shown(flag: str) -> dict:
         return json.loads(
@@ -120,8 +161,16 @@ def fit_bounds(archive: Path) -> None:
 
     header, meta = shown("--header-json"), shown("--metadata")
     west, south, east, north = header["bounds"]
+    now = [float(v) for v in meta.get("bounds", "0,0,0,0").split(",")]
+    if (
+        all(map(lambda a, b: abs(a - b) < 1e-6, now, header["bounds"]))
+        and meta.get("minzoom") == str(header["minzoom"])
+        and meta.get("maxzoom") == str(header["maxzoom"])
+    ):
+        return
     meta["bounds"] = f"{west},{south},{east},{north}"
     meta["center"] = f"{(west + east) / 2},{(south + north) / 2},{header['minzoom']}"
+    meta["minzoom"], meta["maxzoom"] = str(header["minzoom"]), str(header["maxzoom"])
     fixed = archive.with_suffix(".metadata.json")
     fixed.write_text(json.dumps(meta))
     run("pmtiles", "edit", str(archive), f"--metadata={fixed}")
@@ -134,53 +183,47 @@ def heights(rid: str, cfg: dict, out: Path, work: Path) -> None:
     for n, box in enumerate(cfg["boxes"]):
         part = work / f"{rid}-heights-{n}.pmtiles"
         if not part.exists():
-            run(
-                "python3",
-                str(TOPO / "build_region_dem.py"),
-                "heights",
-                bbox_arg(box),
-                "--zmax",
-                str(h["zmax"]),
-                "--zmin",
-                str(h["zmin"]),
-                "--jobs",
-                "3",
-                "--credit",
-                h["credit"],
-                "--name",
-                h["name"],
-                str(part),
+            written(
+                part,
+                lambda tmp, box=box: run(
+                    "python3",
+                    str(TOPO / "build_region_dem.py"),
+                    "heights",
+                    bbox_arg(box),
+                    *["--zmax", str(h["zmax"]), "--zmin", str(h["zmin"])],
+                    *["--jobs", "3", "--credit", h["credit"], "--name", h["name"]],
+                    str(tmp),
+                ),
             )
         parts.append(part)
     merged(parts, out / h["path"])
 
 
 def slope(rid: str, cfg: dict, out: Path, work: Path) -> None:
-    target = out / cfg["slope"]["path"]
-    target.parent.mkdir(parents=True, exist_ok=True)
-    run(
-        "python3",
-        str(TOPO / "build_nsw_dem.py"),
-        "slope",
-        str(out / cfg["heights"]["path"]),
-        str(target),
-        "--work",
-        str(work / f"{rid}-slope"),
-        "--jobs",
-        "3",
+    written(
+        out / cfg["slope"]["path"],
+        lambda tmp: run(
+            "python3",
+            str(TOPO / "build_nsw_dem.py"),
+            "slope",
+            str(out / cfg["heights"]["path"]),
+            str(tmp),
+            *["--work", str(work / f"{rid}-slope"), "--jobs", "3"],
+        ),
     )
 
 
 def contours(rid: str, cfg: dict, out: Path, work: Path) -> None:
-    target = out / cfg["contours"]["path"]
-    target.parent.mkdir(parents=True, exist_ok=True)
-    run(
-        "python3",
-        str(TOPO / "build_nsw_dem.py"),
-        "contours-archive",
-        str(out / cfg["heights"]["path"]),
-        str(work / f"{rid}-contours"),
-        str(target),
+    written(
+        out / cfg["contours"]["path"],
+        lambda tmp: run(
+            "python3",
+            str(TOPO / "build_nsw_dem.py"),
+            "contours-archive",
+            str(out / cfg["heights"]["path"]),
+            str(work / f"{rid}-contours"),
+            str(tmp),
+        ),
     )
 
 
@@ -196,34 +239,35 @@ def latest_build() -> str:
 
 def vector(rid: str, cfg: dict, out: Path, work: Path, build: str) -> None:
     v = cfg["vector"]
-    target = out / v["path"]
-    target.parent.mkdir(parents=True, exist_ok=True)
     region = work / f"{rid}-vector.geojson"
     region_geojson([grown(b, v["margin"]) for b in cfg["boxes"]], region)
-    part = target.with_suffix(".part")
-    retrying(
-        "pmtiles extract",
-        lambda: run(
-            "pmtiles",
-            "extract",
-            PROTOMAPS.format(build),
-            str(part),
-            f"--region={region}",
-            f"--maxzoom={v['maxzoom']}",
+    written(
+        out / v["path"],
+        lambda tmp: retrying(
+            "pmtiles extract",
+            lambda: run(
+                "pmtiles",
+                "extract",
+                PROTOMAPS.format(build),
+                str(tmp),
+                f"--region={region}",
+                f"--maxzoom={v['maxzoom']}",
+                capture_stderr=True,
+            ),
         ),
     )
-    part.rename(target)
 
 
-def places(rid: str, cfg: dict, out: Path, work: Path) -> None:
+def places(rid: str, cfg: dict, out: Path, work: Path, force: bool = False) -> None:
     """OpenStreetMap inside each box, as an .osm file for the place registry
     (OVERPASS is a GET of one box), and a registry built from it as a check
-    that it reads. One file a box: joining two would put one box's nodes after
+    that it reads. An .osm file already there is kept unless `force`, so one
+    placed by hand is used. One file a box: joining two would put one box's nodes after
     the other's ways, and the registry builder needs nodes first."""
     for n, box in enumerate(cfg["boxes"]):
         name = f"{rid}-{n}"
         osm = out / "places" / f"{name}.osm"
-        if not osm.exists():
+        if force or not osm.exists():
             download(OVERPASS.format(*box), osm)
         run(
             "python3",
@@ -239,23 +283,27 @@ def lidar(rid: str, cfg: dict, out: Path, work: Path) -> None:
 
 
 def fixtures(rid: str, cfg: dict, out: Path, dest: Path) -> None:
-    """A tile or two of each archive, over one small box, for the zooms it names."""
+    """A tile or two of each archive, over one small box, for the zooms it names,
+    with the metadata made to say what the cut holds."""
     f = cfg["fixture"]
     for kind in ("heights", "slope", "contours", "vector"):
         if kind not in cfg:
             continue
-        source = out / cfg[kind]["path"]
         target = dest / Path(cfg[kind]["path"]).name
-        target.unlink(missing_ok=True)
-        run(
-            "pmtiles",
-            "extract",
-            str(source),
-            str(target),
-            bbox_arg(f["bbox"]),
-            f"--minzoom={cfg[kind]['fixtureZooms'][0]}",
-            f"--maxzoom={cfg[kind]['fixtureZooms'][1]}",
+        lo, hi = cfg[kind]["fixtureZooms"]
+        written(
+            target,
+            lambda tmp, kind=kind, lo=lo, hi=hi: run(
+                "pmtiles",
+                "extract",
+                str(out / cfg[kind]["path"]),
+                str(tmp),
+                bbox_arg(f["bbox"]),
+                f"--minzoom={lo}",
+                f"--maxzoom={hi}",
+            ),
         )
+        fit_metadata(target)
 
 
 def main() -> None:
@@ -297,12 +345,14 @@ def main() -> None:
             if step == "vector":
                 build = build or args.protomaps_build or latest_build()
                 vector(rid, cfg, out, work, build)
+            elif step == "places":
+                places(rid, cfg, out, work, args.force)
             else:
                 globals()[step](rid, cfg, out, work)
         if len(cfg["boxes"]) > 1:
             for kind in ("heights", "slope", "contours", "vector"):
                 if kind in cfg and (out / cfg[kind]["path"]).exists():
-                    fit_bounds(out / cfg[kind]["path"])
+                    fit_metadata(out / cfg[kind]["path"])
         if args.fixtures:
             dest = Path("/fixtures")
             dest.mkdir(parents=True, exist_ok=True)
