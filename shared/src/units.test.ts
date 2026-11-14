@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { formatNumber } from "./numberFormat.js";
 import { formatElevationM } from "./profileSeries.js";
 import { formatDistanceM, formatSpeedMps } from "./trackStats.js";
-import { formatRainMm, weatherDayFacts } from "./contracts/weather.js";
+import {
+  formatRainMm,
+  weatherDayFacts,
+  weatherRows,
+} from "./contracts/weather.js";
 import {
   displayUnits,
   formatArea,
@@ -211,6 +215,48 @@ describe("weather facts in imperial", () => {
       rain: `0.01${NBSP}in`,
       wind: `1${NBSP}mph`,
     });
+  });
+
+  // Mutation: `temperature` in `weatherDayFacts` goes back to
+  // `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°`, or the hour
+  // card's goes back to `${Math.round(hour.tempC)}°`.
+  it("converts a day's and an hour's temperature, and keeps its degrees sign", () => {
+    setDisplayUnits("imperial");
+    // 4 °C is 39.2 °F and 17 °C is 62.6 °F.
+    expect(facts(0, 0).temperature).toBe("39–63°");
+    const hour = { at: 0, time: "2026-11-19T12:00", code: 3 } as const;
+    const forecast = {
+      fetchedAt: 0,
+      hours: [{ ...hour, tempC: 14, rainMm: 0, rainChance: null, windKmh: 0 }],
+      days: [],
+      past: { source: "model", days: [] },
+    } as unknown as Parameters<typeof weatherRows>[0];
+    expect(weatherRows(forecast, 0)[0].cards[0].temperature).toBe("57°");
+  });
+
+  // Mutation: `rainLevels` in weather.ts goes back to
+  // `value >= RAIN_SHOWN_MM ? value / full : 0`.
+  it("draws no bar for rain its text reads as the dash", () => {
+    const level = (rainMm: number) => {
+      const forecast = {
+        fetchedAt: 0,
+        hours: [],
+        days: [],
+        past: {
+          source: "model",
+          days: [{ date: "2026-11-18", rainMm }],
+        },
+      } as unknown as Parameters<typeof weatherRows>[0];
+      const [card] = weatherRows(forecast, Date.UTC(2026, 10, 19, 12))[0].cards;
+      return [card.rain, card.rainLevel] as const;
+    };
+    setDisplayUnits("imperial");
+    // 0.1 mm is 0.004 in, which reads "0.00 in": the dash and an empty bar.
+    expect(level(0.1)).toEqual(["–", 0]);
+    expect(level(0.2)[1]).toBeGreaterThan(0);
+    setDisplayUnits("metric");
+    expect(level(0.1)[1]).toBeGreaterThan(0);
+    expect(level(0.04)).toEqual(["–", 0]);
   });
 
   // Mutation: `RAIN_SHOWN_MM = 0.1` in weather.ts.
