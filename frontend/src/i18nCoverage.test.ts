@@ -19,8 +19,8 @@ const CEILINGS: Record<string, number> = {
   ".": 27,
   components: 86,
   "components/common": 7,
-  "components/dialogs": 511,
-  "components/dialogs/topoSettings": 22,
+  "components/dialogs": 506,
+  "components/dialogs/topoSettings": 21,
   "components/feedback": 4,
   "components/gauges": 1,
   "components/map": 65,
@@ -28,8 +28,8 @@ const CEILINGS: Record<string, number> = {
   "components/plans": 41,
   "components/routes": 25,
   "components/sidebar": 8,
-  "components/sidebar/panels": 346,
-  csvImport: 67,
+  "components/sidebar/panels": 345,
+  csvImport: 65,
   geoPdf: 4,
   "geoPdf/draw": 3,
   ui: 39,
@@ -77,6 +77,15 @@ describe("Logjam Web i18n coverage", () => {
           ({ file, line, key, problems }) =>
             `${file}:${line} "${key}": ${problems.join("; ")} (${I18N_ADR})`,
         ),
+    ).toEqual([]);
+  });
+
+  // Mutation: add `import { t as tr } from "@logjam/shared";` to any source file.
+  it("imports the message functions by their own names", () => {
+    expect(
+      scan.imports.map(
+        ({ file, line, problem }) => `${file}:${line} ${problem} (${I18N_ADR})`,
+      ),
     ).toEqual([]);
   });
 

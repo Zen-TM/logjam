@@ -16,11 +16,11 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  lib: 11,
+  lib: 9,
   middleware: 4,
-  routes: 11,
+  routes: 9,
   scripts: 3,
-  services: 28,
+  services: 27,
 };
 
 function sources(dir: string): string[] {
@@ -65,6 +65,15 @@ describe("the API i18n coverage", () => {
           ({ file, line, key, problems }) =>
             `${file}:${line} "${key}": ${problems.join("; ")} (${I18N_ADR})`,
         ),
+    ).toEqual([]);
+  });
+
+  // Mutation: add `import { t as tr } from "@logjam/shared";` to any source file.
+  it("imports the message functions by their own names", () => {
+    expect(
+      scan.imports.map(
+        ({ file, line, problem }) => `${file}:${line} ${problem} (${I18N_ADR})`,
+      ),
     ).toEqual([]);
   });
 

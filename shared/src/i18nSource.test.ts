@@ -5,6 +5,7 @@ import {
   ceilingFailures,
   directoryOf,
   messageProblems,
+  importProblems,
   messagesIn,
   missingEntries,
   orphanKeys,
@@ -143,12 +144,55 @@ describe("bareCopyIn", () => {
     ]);
   });
 
-  // Mutation: have the template branch read only the head.
-  it("flags every part of a template with holes", () => {
-    expect(bare("const a = `You shared ${n} places with a friend`;")).toEqual([
+  // Mutation: change the template case's `if (!copy) {` to `if (true) {`, so a
+  // template in a copy position is judged as one unit too.
+  it("flags each part of a template in a copy position", () => {
+    expect(bare("const a = <p>{`You shared ${n} places`}</p>;")).toEqual([
       "You shared ",
-      " places with a friend",
+      " places",
     ]);
+  });
+
+  // Mutation: change the template case's `if (!copy) {` to `if (false) {`, so
+  // a template outside a copy position is judged a fragment at a time again.
+  it("flags a template with substitutions once, as one sentence", () => {
+    expect(bare("const a = `Saved ${n} places`;")).toEqual(["Saved … places"]);
+    expect(bare("return `${shown} of ${total} places`;")).toEqual([
+      "… of … places",
+    ]);
+  });
+
+  // Mutation: drop the `isPlus` branch.
+  it("flags a + chain with a string operand once, as one sentence", () => {
+    expect(bare('const a = "Saved " + n + " places";')).toEqual([
+      "Saved … places",
+    ]);
+    expect(bare("const a = b + c;")).toEqual([]);
+  });
+
+  // Mutation: drop the two-word minimum from `addJoined`.
+  it("does not read a pieced string with fewer than two words of its own", () => {
+    expect(
+      bare(
+        "const a = [`${name}:`, `Bearer ${token}`, `${n} MB`, `${a}, ${b}`, 'x' + y];",
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: drop the PROSE test from `addJoined`.
+  it("does not read a path or an id built from pieces", () => {
+    expect(
+      bare(
+        "const a = `${dir}/latest.json`; const b = 'users/' + id + '/photos';",
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: drop `className` from `NOT_COPY_ATTRS`.
+  it("does not read a templated className", () => {
+    expect(
+      bare("const a = <p className={`flex ${on} items-center`} />;"),
+    ).toEqual([]);
   });
 
   // Mutation: stop skipping the template of a message tag.
@@ -226,7 +270,47 @@ describe("bareCopyIn", () => {
   });
 });
 
+describe("importProblems", () => {
+  const found = (source: string) =>
+    importProblems(ts, "x.tsx", source).map(({ problem }) => problem);
+
+  // Mutation: drop the `element.propertyName` test.
+  it("refuses a message function imported under another name", () => {
+    expect(
+      found('import { t as tr, say, plural as p } from "@logjam/shared";'),
+    ).toHaveLength(2);
+    expect(found('import { t, say, rich, plural } from "./i18n.js";')).toEqual(
+      [],
+    );
+  });
+
+  // Mutation: drop the namespace branch.
+  it("refuses a message function reached through a namespace", () => {
+    expect(
+      found(
+        'import * as i18n from "@logjam/shared";\ni18n.plural(n, "a", "b"); i18n.t`x`; i18n.other();',
+      ),
+    ).toHaveLength(2);
+  });
+
+  // Mutation: drop the `MESSAGE_MODULE` test.
+  it("leaves another module's t alone", () => {
+    expect(found('import { t as tr } from "i18next";')).toEqual([]);
+  });
+});
+
 describe("scanSources", () => {
+  // Mutation: drop the backslash replacement at the top of `scanSources`.
+  it("keys a path from any platform the same way", () => {
+    const source = 'export const a = "Open the file";';
+    expect(
+      scanSources(ts, "shared", [
+        { path: "sub\\b.ts", source },
+        { path: "i18nCatalogues\\en-US.ts", source },
+      ]).counts,
+    ).toEqual({ sub: 1 });
+  });
+
   // Mutation: drop the `in EXEMPT_FILES` test from `scanSources`.
   it("counts bare literals per directory and skips an exempt file", () => {
     const scan = scanSources(ts, "shared", [

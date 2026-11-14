@@ -165,14 +165,14 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
  * an HTTP header value.
  */
 const CODE =
-  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=/;
+  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx/;
 
 /** A map style property ("text-font", "icon-image"): its value is a font, an expression or an id. Another hyphenated key ("six-base") names a thing, and its value may be words. */
 const MAP_STYLE_KEY =
   /^(?:text|icon|line|circle|symbol|fill|raster|background|heatmap|hillshade|source)-/;
 
 /** The catalogue folder: its keys and values are text by design, read by `messagesIn`'s consumers, never counted as bare. */
-const CATALOGUE_FILE = /(?:^|[\\/])i18nCatalogues[\\/]/;
+const CATALOGUE_FILE = /(?:^|\/)i18nCatalogues\//;
 
 /** Files whose every flagged string is not words a user reads, with why. Paths from the repo root. */
 export const EXEMPT_FILES: Readonly<Record<string, string>> = {
@@ -222,6 +222,31 @@ export function bareCopyIn(
       why: copy ? "copy" : "prose",
     });
   };
+  // Outside a copy position, text built from pieces is one sentence: its static
+  // text with a stand-in word for each substitution, judged as a whole. It needs
+  // two words of its own, so `Bearer ${token}` and `${n} MB` are not sentences.
+  const HOLE = "\uE000";
+  const addJoined = (node: TypeScript.Node, joined: string) => {
+    const words = joined.split(HOLE).join("xx");
+    const written = joined.split(HOLE).join("…");
+    if (
+      (
+        joined
+          .split(HOLE)
+          .join(" ")
+          .match(/\p{L}{2,}/gu) ?? []
+      ).length < 2 ||
+      SQL.test(written) ||
+      !PROSE.test(words) ||
+      CODE.test(words)
+    )
+      return;
+    found.push({
+      line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      text: written,
+      why: "prose",
+    });
+  };
   const equality = new Set([
     ts.SyntaxKind.EqualsEqualsToken,
     ts.SyntaxKind.EqualsEqualsEqualsToken,
@@ -229,6 +254,21 @@ export function bareCopyIn(
     ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ts.SyntaxKind.InKeyword,
   ]);
+  const isPlus = (n: TypeScript.Node): n is TypeScript.BinaryExpression =>
+    ts.isBinaryExpression(n) &&
+    n.operatorToken.kind === ts.SyntaxKind.PlusToken;
+  const plusOperands = (n: TypeScript.Node): TypeScript.Node[] =>
+    isPlus(n) ? [...plusOperands(n.left), ...plusOperands(n.right)] : [n];
+  const isTextLike = (n: TypeScript.Node) =>
+    ts.isStringLiteralLike(n) || ts.isTemplateExpression(n);
+  /** A piece's static text; each substitution, or an operand that is not text, is `HOLE`. */
+  const joinedText = (n: TypeScript.Node): string =>
+    ts.isStringLiteralLike(n)
+      ? n.text
+      : ts.isTemplateExpression(n)
+        ? n.head.text +
+          n.templateSpans.map((x) => HOLE + x.literal.text).join("")
+        : HOLE;
   // `copy`: the value is where the net reads. A call or a function body ends
   // it: `friendShareVerb("unshare")` passes an id, not words.
   const visit = (node: TypeScript.Node, copy: boolean): void => {
@@ -340,6 +380,11 @@ export function bareCopyIn(
         for (const span of node.templateSpans) into(span.expression, false);
         return;
       }
+      if (!copy) {
+        addJoined(node, joinedText(node));
+        for (const span of node.templateSpans) into(span.expression, false);
+        return;
+      }
       add(node.head, node.head.text, copy);
       for (const span of node.templateSpans) {
         into(span.expression, copy);
@@ -347,10 +392,86 @@ export function bareCopyIn(
       }
       return;
     }
+    if (!copy && isPlus(node)) {
+      const operands = plusOperands(node);
+      if (operands.some(isTextLike)) {
+        addJoined(node, operands.map(joinedText).join(""));
+        for (const operand of operands)
+          if (!isTextLike(operand)) into(operand, false);
+          else if (ts.isTemplateExpression(operand))
+            for (const span of operand.templateSpans)
+              into(span.expression, false);
+        return;
+      }
+    }
     all();
   };
   visit(sf, false);
   return found;
+}
+
+/** The modules the message functions come from: the package, and its own files that hold them. */
+const MESSAGE_MODULE =
+  /^@logjam\/shared$|(?:^|\/)(?:i18n|userSentence)(?:\.js)?$/;
+
+const MESSAGE_FUNCTIONS = new Set([...MESSAGE_TAGS, "plural"]);
+
+/**
+ * Where a file brings in `t`, `say`, `rich` or `plural` under another name
+ * (`import { t as tr }`) or through a namespace (`i18n.t`): the scanner finds
+ * a message by the name it is written with, so such a message would go
+ * uncounted and unchecked.
+ */
+export function importProblems(
+  tsModule: unknown,
+  fileName: string,
+  source: string,
+): { line: number; problem: string }[] {
+  const ts = tsModule as typeof TypeScript;
+  const sf = loadFile(ts, fileName, source);
+  const problems: { line: number; problem: string }[] = [];
+  const namespaces = new Set<string>();
+  const at = (node: TypeScript.Node, problem: string) =>
+    problems.push({
+      line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      problem,
+    });
+  for (const statement of sf.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !MESSAGE_MODULE.test(statement.moduleSpecifier.text)
+    )
+      continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings))
+      namespaces.add(bindings.name.text);
+    else if (bindings)
+      for (const element of bindings.elements)
+        if (
+          element.propertyName &&
+          MESSAGE_FUNCTIONS.has(element.propertyName.text)
+        )
+          at(
+            element,
+            `${element.propertyName.text} is imported as ${element.name.text}: import it by its own name, so the scanner finds its messages`,
+          );
+  }
+  const visit = (node: TypeScript.Node): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      namespaces.has(node.expression.text) &&
+      MESSAGE_FUNCTIONS.has(node.name.text)
+    )
+      at(
+        node,
+        `${node.getText()} reaches ${node.name.text} through a namespace: import it by its own name, so the scanner finds its messages`,
+      );
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return problems;
 }
 
 /** The folder a source file sits in, relative to the package's `src`: the key of a ceiling. `.` for a file at the root. */
@@ -405,18 +526,24 @@ export type SourceScan = {
   bare: (BareLiteral & { file: string; dir: string })[];
   /** Bare literals per directory: what a ceiling map is held to. */
   counts: Record<string, number>;
+  /** Every message function imported under another name, with its file. */
+  imports: { file: string; line: number; problem: string }[];
 };
 
-/** Scan one package's source. `files` are paths relative to its `src`; `pkg` is its folder at the repo root. */
+/** Scan one package's source. `files` are paths relative to its `src` (either separator); `pkg` is its folder at the repo root. */
 export function scanSources(
   tsModule: unknown,
   pkg: string,
   files: readonly { path: string; source: string }[],
 ): SourceScan {
-  const scan: SourceScan = { messages: [], bare: [], counts: {} };
-  for (const { path, source } of files) {
+  const scan: SourceScan = { messages: [], bare: [], counts: {}, imports: [] };
+  for (const { path: given, source } of files) {
+    // One separator, so a path from any platform keys the same ceiling.
+    const path = given.replace(/\\/g, "/");
     for (const message of messagesIn(tsModule, path, source))
       scan.messages.push({ ...message, file: path });
+    for (const found of importProblems(tsModule, path, source))
+      scan.imports.push({ ...found, file: path });
     if (`${pkg}/src/${path}` in EXEMPT_FILES || CATALOGUE_FILE.test(path))
       continue;
     const dir = directoryOf(path);

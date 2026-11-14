@@ -20,25 +20,25 @@ const APP = join(SRC, "..", "App.tsx");
 const CEILINGS: Record<string, number> = {
   ".": 21,
   api: 2,
-  auth: 20,
-  customFields: 31,
+  auth: 19,
+  customFields: 29,
   gauges: 1,
-  geopdf: 28,
+  geopdf: 26,
   imports: 19,
   logs: 40,
-  map: 167,
+  map: 168,
   media: 45,
-  notifications: 4,
-  offline: 85,
+  notifications: 7,
+  offline: 84,
   places: 88,
   plans: 16,
   routes: 23,
   saved: 172,
-  screens: 331,
-  "screens/settings": 104,
-  sharing: 71,
+  screens: 333,
+  "screens/settings": 101,
+  sharing: 72,
   sync: 13,
-  tracks: 56,
+  tracks: 58,
   ui: 49,
 };
 
@@ -84,6 +84,15 @@ describe("Logjam GPS i18n coverage", () => {
           ({ file, line, key, problems }) =>
             `${file}:${line} "${key}": ${problems.join("; ")} (${I18N_ADR})`,
         ),
+    ).toEqual([]);
+  });
+
+  // Mutation: add `import { t as tr } from "@logjam/shared";` to any source file.
+  it("imports the message functions by their own names", () => {
+    expect(
+      scan.imports.map(
+        ({ file, line, problem }) => `${file}:${line} ${problem} (${I18N_ADR})`,
+      ),
     ).toEqual([]);
   });
 

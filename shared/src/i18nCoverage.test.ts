@@ -26,9 +26,9 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  ".": 645,
-  contracts: 994,
-  geoPdfImport: 2,
+  ".": 642,
+  contracts: 988,
+  geoPdfImport: 1,
 };
 
 function sources(dir: string): string[] {
@@ -75,6 +75,15 @@ describe("@logjam/shared i18n coverage", () => {
     ).toEqual([]);
   });
 
+  // Mutation: add `import { t as tr } from "@logjam/shared";` to any source file.
+  it("imports the message functions by their own names", () => {
+    expect(
+      scan.imports.map(
+        ({ file, line, problem }) => `${file}:${line} ${problem} (${I18N_ADR})`,
+      ),
+    ).toEqual([]);
+  });
+
   // Mutation: add `export const zz = "Open the file";` to any source file, or
   // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
   it("writes no new text outside the catalogue, and every ceiling is the count", () => {
@@ -83,8 +92,9 @@ describe("@logjam/shared i18n coverage", () => {
 });
 
 // Spellings the Australian source writes and US English does not: a message
-// holding one has an entry in `i18nCatalogues/en-US.ts`. No message in source
-// holds one yet, so the list is empty.
+// holding one has an entry in `i18nCatalogues/en-US.ts`. The list is empty
+// because no entry is wanted yet; a word added to it needs an entry for every
+// message that holds it.
 const AUSTRALIAN_WORDS: readonly string[] = [];
 
 describe("the en-US catalogue", () => {
@@ -120,7 +130,8 @@ describe("the en-US catalogue", () => {
   });
 
   // Mutation: put a word in `AUSTRALIAN_WORDS` that a message in source holds,
-  // such as "abseil", without an entry for that message.
+  // such as "cancell" (say`You cancelled this.` in api/src/routes/topoJobs.ts),
+  // without an entry for that message.
   it("has an entry for every message that holds an Australian spelling", () => {
     expect(missingEntries(enUS, keys, AUSTRALIAN_WORDS)).toEqual([]);
   });
@@ -138,6 +149,11 @@ describe("the files the scan leaves out", () => {
         return true;
       }
     });
-    expect(stale).toEqual([]);
+    expect(
+      stale.map(
+        (path) =>
+          `${path} is in EXEMPT_FILES (i18nSource.ts) but is gone or has no text left to leave out: update the entry, or delete it (${I18N_ADR}).`,
+      ),
+    ).toEqual([]);
   });
 });
