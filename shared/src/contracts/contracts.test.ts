@@ -1043,7 +1043,28 @@ describe("the grid row's title", () => {
   it("names the grid in view", () => {
     expect(gridOverlayTitle(wanaka, SIM_REGIONS)).toBe("NZTM grid");
     expect(gridOverlayTitle(bryce, SIM_REGIONS)).toBe("UTM grid");
-    expect(gridOverlayTitle({ lon: 2.35, lat: 48.85 })).toBe("UTM grid");
+  });
+
+  // Mutation: drop the one-region rule (name a centre outside every region
+  // "UTM grid") and Queensland and the sea off Sydney stop reading "MGA grid".
+  it('reads "MGA grid" over Queensland and just offshore with only New South Wales', () => {
+    expect(gridOverlayTitle({ lon: 153.03, lat: -27.47 })).toBe("MGA grid"); // Brisbane
+    expect(gridOverlayTitle({ lon: 151.6, lat: -33.9 })).toBe("MGA grid"); // off Sydney
+  });
+
+  // Mutation: apply the one-region rule whatever the count (return
+  // `regions[0]`'s grid for a centre in no region) and, with two regions
+  // declared, a centre outside them reads "NZTM grid" instead of "UTM grid".
+  it('reads "UTM grid" for a centre outside every region when there are several', () => {
+    expect(gridOverlayTitle({ lon: 2.35, lat: 48.85 }, SIM_REGIONS)).toBe(
+      "UTM grid",
+    );
+    expect(
+      gridOverlayTitle({ lon: 144.9, lat: -37.8 }, [
+        ...REGIONS,
+        ...SIM_REGIONS,
+      ]),
+    ).toBe("UTM grid");
   });
 
   // Mutation: name a view not yet reported "UTM grid" (drop the fallback to

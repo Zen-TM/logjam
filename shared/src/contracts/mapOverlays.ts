@@ -6,8 +6,8 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
-import { gridIdAt, type GridId } from "../grids.js";
-import { REGIONS, type Region } from "../regions.js";
+import { wrapLon, type GridId } from "../grids.js";
+import { REGIONS, regionAt, type Region } from "../regions.js";
 import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_TERRAIN } from "./mapTerrain.js";
@@ -52,16 +52,19 @@ const GRID_NAMES: Record<GridId, string> = {
 /**
  * The grid row's title: the name of the grid the overlay draws at `at`, the
  * view's centre (`gridZonesFor` picks its grid the same way), so "MGA grid" in
- * NSW. With no view yet it names the first region's grid, which is NSW's when
- * NSW is the only region. Guard: `contracts.test.ts`, "the grid row's title"
- * ("reads "MGA grid" with only New South Wales" and the zone-agreement case).
+ * NSW. Where the centre is in no region, one declared region still names its
+ * own grid (MGA2020 is the grid of all Australia, so prod reads "MGA grid"
+ * wherever the map is) and two or more name UTM, the grid drawn there. With no
+ * view yet it names the first region's grid. Guard: `contracts.test.ts`, "the
+ * grid row's title".
  */
 export function gridOverlayTitle(
   at: { lon: number; lat: number } | null,
   regions: readonly Region[] = REGIONS,
 ): string {
+  const only = regions.length === 1 ? regions[0] : undefined;
   const grid = at
-    ? gridIdAt(at.lon, at.lat, regions)
+    ? ((regionAt(wrapLon(at.lon), at.lat, regions) ?? only)?.grid ?? "utm")
     : (regions[0]?.grid ?? "utm");
   return `${GRID_NAMES[grid]} grid`;
 }
