@@ -1,5 +1,6 @@
 import { INK } from "./designTokens.js";
 import { normalizeRegionIds } from "./regions.js";
+import { isLanguage, type Language } from "./i18n.js";
 import {
   parseSlopeBands,
   RASTER_TEMPLATE_DEFAULTS,
@@ -131,6 +132,13 @@ export type UserUiPreferences = {
    * first-login gate and Settings once there is more than one region.
    */
   regions: string[];
+  /**
+   * The language the account's client last ran in, written by that client when
+   * it differs from this. Only what a message sent while nobody is asking (a
+   * push title, a mail) reads; the setting itself is per device. Absent until a
+   * client writes one.
+   */
+  language?: Language;
 };
 
 export function isNotificationPreferences(
@@ -435,6 +443,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       regions: normalizeRegionIds(prefs.regions),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
+    if (isLanguage(prefs.language)) result.language = prefs.language;
     return result;
   }
 

@@ -7,7 +7,7 @@ import {
   currentTripPlanAnswers,
   TRIP_PLAN_INVITE_TTL_DAYS,
   TRIP_PLAN_ROLES,
-  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
+  tripPlanVisibilityLockedSentence,
   type DateOnly,
   type TripPlanAnswerValue,
   type TripPlanAnswerView,
@@ -935,7 +935,7 @@ export const TRIP_PLAN_FORMS = {
     visibleToLeaders: "Leaders",
     visibleToMembers: "Everyone in the plan",
     // The API's refusal, said before Save.
-    visibleToLocked: TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
+    visibleToLocked: tripPlanVisibilityLockedSentence(),
     questions: "Questions",
     // After a 409, over questions another leader saved meanwhile.
     questionsChanged:

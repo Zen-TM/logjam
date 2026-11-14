@@ -259,3 +259,27 @@ describe("a scheme nobody picked", () => {
     );
   });
 });
+
+describe("the stored language", () => {
+  // Mutation: copy `prefs.language` as it is, and an unknown language (or any
+  // text) a client wrote reaches the code that writes a mail or a push title.
+  it("is kept when it is a language Logjam has, and absent otherwise", () => {
+    expect(normalizeUserUiPreferences({ language: "en-US" }).language).toBe(
+      "en-US",
+    );
+    for (const language of ["fr", "", 7, null, undefined]) {
+      expect(normalizeUserUiPreferences({ language })).not.toHaveProperty(
+        "language",
+      );
+    }
+    expect(normalizeUserUiPreferences(null)).not.toHaveProperty("language");
+  });
+
+  // Mutation: delete the `if (isLanguage(prefs.language))` line, and saving any
+  // other preference forgets the language the account last ran in.
+  it("survives the round trip a PATCH makes", () => {
+    expect(
+      normalizeUserUiPreferencesKeepingNoPick({ language: "en-US" }).language,
+    ).toBe("en-US");
+  });
+});

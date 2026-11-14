@@ -2,12 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import type { Request, Response, NextFunction } from "express";
 import { quote, say } from "@logjam/shared";
 import { AppError, errorHandler, fault, malformed } from "./errorHandler";
+import { runInLanguage } from "../lib/requestLanguage";
 
-function mockReqRes() {
+function mockReqRes(headers: Record<string, string> = {}) {
   const json = vi.fn();
   const status = vi.fn().mockReturnValue({ json });
   const log = { warn: vi.fn(), error: vi.fn() };
-  const req = { id: "req-1", log } as unknown as Request;
+  const req = { id: "req-1", log, headers } as unknown as Request;
   const res = { status } as unknown as Response;
   return { req, res, status, json, log };
 }
@@ -200,5 +201,37 @@ describe("a sentence that quotes the user", () => {
       vi.fn() as NextFunction,
     );
     expect(JSON.stringify(log.warn.mock.calls[0][0])).not.toContain("exits");
+  });
+});
+
+// A refusal written in another language is still a sentence the log must not
+// carry the user's words from. Mutation: log `safe.message` as it is, and the
+// quoted name reaches the log in the pseudo-language too.
+describe("a refusal in another language", () => {
+  it("reaches the user in that language, with their words, and the log without them", () => {
+    const { req, res, json, log } = mockReqRes();
+    runInLanguage("en-XA", () =>
+      errorHandler(
+        new AppError(
+          409,
+          say`You already have a place type called ${quote("Ranon exits")}.`,
+        ),
+        req,
+        res,
+        vi.fn() as NextFunction,
+      ),
+    );
+    const sent = json.mock.calls[0][0].error as string;
+    expect(sent.startsWith("⟦")).toBe(true);
+    expect(sent).toContain("“Ranon exits”");
+    expect(JSON.stringify(log.warn.mock.calls[0][0])).not.toContain("Ranon");
+  });
+
+  // Mutation: call `respondToError` without the handler's own `runInLanguage`,
+  // and a fault the handler writes itself is English whatever the request asked.
+  it("is the language the request asked for when the handler writes the fault itself", () => {
+    const { req, res, json } = mockReqRes({ "accept-language": "en-XA" });
+    errorHandler(new Error("DB exploded"), req, res, vi.fn() as NextFunction);
+    expect(json.mock.calls[0][0].error.startsWith("⟦")).toBe(true);
   });
 });

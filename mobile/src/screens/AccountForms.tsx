@@ -16,7 +16,7 @@ import {
   SIGN_IN_COPY,
   signUpFormProblem,
   USERNAME_HINT,
-  USERNAME_TAKEN,
+  usernameTaken,
   verifyIntro,
 } from "@logjam/shared";
 
@@ -173,7 +173,7 @@ export function AccountForms({
     if (problem) return;
     return submit("Couldn't sign up. Try again.", async () => {
       if (!(await isUsernameFree(username.trim()))) {
-        setUsernameError(USERNAME_TAKEN);
+        setUsernameError(usernameTaken());
         return;
       }
       await accountCalls.signUp({

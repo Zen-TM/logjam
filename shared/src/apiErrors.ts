@@ -6,7 +6,7 @@
 // so every client must construct and check the SAME class — always import it
 // from @logjam/shared, never redeclare locally.
 
-import { SERVER_FAULT_SENTENCE } from "./userSentence.js";
+import { serverFaultSentence } from "./userSentence.js";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -74,7 +74,6 @@ export function mapAuthError(err: unknown): string | null {
 
 // ── User-facing message derivation ────────────────────────────────────────────
 
-const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
 const NETWORK_ERROR_MESSAGE =
   "Couldn't reach Logjam. Check your connection and try again.";
 
@@ -83,7 +82,6 @@ const NETWORK_ERROR_MESSAGE =
 const STATUS_MESSAGES: Record<number, string | undefined> = {
   401: "You're signed out. Sign in and try again.",
   429: "Too many requests. Wait a moment and try again.",
-  500: SERVER_ERROR_MESSAGE,
   503: "Logjam is unavailable for a moment. Try again shortly.",
 };
 
@@ -99,7 +97,7 @@ export function messageFromError(err: unknown, fallback: string): string {
     if (err.serverMessage) return err.serverMessage;
     const statusMsg = STATUS_MESSAGES[err.status];
     if (statusMsg) return statusMsg;
-    if (err.status >= 500) return SERVER_ERROR_MESSAGE;
+    if (err.status >= 500) return serverFaultSentence();
     if (err.status >= 400) return fallback;
   }
 

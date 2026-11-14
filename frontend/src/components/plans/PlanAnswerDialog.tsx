@@ -11,11 +11,11 @@ import {
   draftFromAnswers,
   fitAnswerDraft,
   parseTripPlanAnswers,
-  TRIP_PLAN_ANSWER_REQUIRED_SENTENCE,
+  tripPlanAnswerRequiredSentence,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH,
   TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH,
-  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
+  tripPlanVisibilityChangedSentence,
   tripPlanRequiredSummary,
   tripPlanVisibilityLine,
   type TripPlanAnswerDraft as AnswerDraft,
@@ -248,7 +248,7 @@ function AnswerForm({
         if (!("value" in one)) {
           const empty =
             "sentence" in one &&
-            one.sentence === TRIP_PLAN_ANSWER_REQUIRED_SENTENCE;
+            one.sentence === tripPlanAnswerRequiredSentence();
           if (empty) owed += 1;
           found[question.id] = empty
             ? copy.required
@@ -333,7 +333,7 @@ function AnswerForm({
           />
           {visibilityChanged && (
             <p className={classes.note} role="status">
-              {TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE}
+              {tripPlanVisibilityChangedSentence()}
             </p>
           )}
           {error && <ErrorBanner message={error} />}

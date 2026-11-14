@@ -12,6 +12,7 @@ import {
   messagesIn,
   missingEntries,
   orphanKeys,
+  ratchetReads,
   scanSources,
 } from "./i18nSource.js";
 
@@ -35,10 +36,8 @@ function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory())
-      return /^__(?:tests|fixtures)__$/.test(entry.name) ? [] : sources(path);
-    return /\.tsx?$/.test(entry.name) && !/\.(test|d)\./.test(entry.name)
-      ? [path]
-      : [];
+      return ratchetReads(entry.name, true) ? sources(path) : [];
+    return ratchetReads(entry.name, false) ? [path] : [];
   });
 }
 

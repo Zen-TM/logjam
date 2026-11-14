@@ -34,6 +34,9 @@ type Found = { where: string; text: string };
 
 const sentences: Found[] = [];
 const offences: string[] = [];
+// A say written outside any function or class runs when its module loads, in
+// the language the process started in; the API's language is per request.
+const atImport: string[] = [];
 
 for (const file of [...sourceFiles(API_SRC), ...sourceFiles(SHARED_SRC)]) {
   const inApi = file.startsWith(API_SRC);
@@ -49,8 +52,9 @@ for (const file of [...sourceFiles(API_SRC), ...sourceFiles(SHARED_SRC)]) {
   const isText = (node: ts.Node) =>
     ts.isStringLiteralLike(node) || ts.isTemplateExpression(node);
 
-  const visit = (node: ts.Node): void => {
+  const visit = (node: ts.Node, inFunction = false): void => {
     if (ts.isTaggedTemplateExpression(node) && node.tag.getText() === "say") {
+      if (!inFunction) atImport.push(at(node));
       const template = node.template;
       sentences.push({
         where: at(node),
@@ -84,7 +88,9 @@ for (const file of [...sourceFiles(API_SRC), ...sourceFiles(SHARED_SRC)]) {
       if (key === "errorMessage" && isText(node.initializer))
         offences.push(`${at(node)}: errorMessage is user copy, say\`…\``);
     }
-    ts.forEachChild(node, visit);
+    const inside =
+      inFunction || ts.isFunctionLike(node) || ts.isClassLike(node);
+    ts.forEachChild(node, (child) => visit(child, inside));
   };
   visit(sf);
 }
@@ -118,6 +124,17 @@ describe("the sentences the API sends", () => {
           (id) => `${where}: "${text}" — ${copySay(id)}`,
         ),
       ),
+    ).toEqual([]);
+  });
+
+  // Mutation: write `const GONE = say`Couldn't find that.`;` at the top of any
+  // file under api/src or shared/src, and it fails here, naming the file.
+  it("are never a say literal outside a function", () => {
+    expect(
+      atImport,
+      "A say literal outside a function is evaluated when its module loads, in " +
+        "English, but the API's language is per request. Make the sentence a " +
+        "function and call it where it is thrown (docs/decisions/0033-the-api-writes-the-sentence-a-user-reads.md).",
     ).toEqual([]);
   });
 

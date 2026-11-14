@@ -3,7 +3,12 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ceilingFailures, I18N_ADR, scanSources } from "@logjam/shared";
+import {
+  ceilingFailures,
+  I18N_ADR,
+  ratchetReads,
+  scanSources,
+} from "@logjam/shared";
 
 // User-facing text goes through `t`, `plural`, `rich` or `say`
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
@@ -16,21 +21,19 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  lib: 9,
+  lib: 3,
   middleware: 4,
   routes: 9,
   scripts: 3,
-  services: 27,
+  services: 9,
 };
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory())
-      return /^__(?:tests|fixtures)__$/.test(entry.name) ? [] : sources(path);
-    return /\.tsx?$/.test(entry.name) && !/\.(test|d)\./.test(entry.name)
-      ? [path]
-      : [];
+      return ratchetReads(entry.name, true) ? sources(path) : [];
+    return ratchetReads(entry.name, false) ? [path] : [];
   });
 }
 

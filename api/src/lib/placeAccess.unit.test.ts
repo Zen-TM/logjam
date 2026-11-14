@@ -159,7 +159,7 @@ describe("sharee single-trip denial (privacy.html: per-trip data 'remain private
         body = payload;
       },
     };
-    const req = { log: { warn: vi.fn(), error: vi.fn() } };
+    const req = { log: { warn: vi.fn(), error: vi.fn() }, headers: {} };
     errorHandler(denial!, req as never, res as never, (() => {}) as never);
 
     expect(status).toBe(404);

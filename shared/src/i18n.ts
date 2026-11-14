@@ -8,7 +8,7 @@ import { enUS } from "./i18nCatalogues/en-US.js";
 
 /** The language the code is written in: a message with no entry reads as itself. */
 export const SOURCE_LANGUAGE = "en-AU";
-/** Generated, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧, for development. `language()` accepts it anywhere; nothing refuses it in a prod runtime yet. */
+/** Generated, never written: the source with every letter accented, padded and wrapped in ⟦ ⟧, for development. `language()` accepts it anywhere; the API refuses it in a prod runtime (`api/src/lib/requestLanguage.unit.test.ts`) and both clients refuse it where the simulated regions are off (`frontend/src/languageSetting.test.ts`, `mobile/src/languageSetting.test.ts`). */
 export const PSEUDO_LANGUAGE = "en-XA";
 export const LANGUAGES = ["en-AU", "en-US", "en-XA"] as const;
 export type Language = (typeof LANGUAGES)[number];
@@ -45,12 +45,32 @@ export function isLanguage(value: unknown): value is Language {
   return LANGUAGES.includes(value as Language);
 }
 
+let pinned: Language | undefined;
+
+/**
+ * What `render` writes in the source language, whatever is in force: for
+ * comparing with a sentence that was stored in it (a worker's, written in
+ * English). `render` is synchronous; a message it builds after an `await`
+ * reads the language in force again. Held by "writes in the source language
+ * whatever is in force, and puts the language back" in i18n.test.ts.
+ */
+export function inSourceLanguage<T>(render: () => T): T {
+  const before = pinned;
+  pinned = SOURCE_LANGUAGE;
+  try {
+    return render();
+  } finally {
+    pinned = before;
+  }
+}
+
 /**
  * The language in force: the API's per-request one, else the one the client
  * started in (`globalThis.LOGJAM_LANGUAGE`, set before this package loads
  * because contract text is evaluated at import).
  */
 export function language(): Language {
+  if (pinned) return pinned;
   const wanted =
     resolver() ?? (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
   return isLanguage(wanted) ? wanted : SOURCE_LANGUAGE;

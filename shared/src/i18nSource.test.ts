@@ -9,6 +9,7 @@ import {
   messagesIn,
   missingEntries,
   orphanKeys,
+  ratchetReads,
   scanSources,
 } from "./i18nSource.js";
 
@@ -142,6 +143,28 @@ describe("bareCopyIn", () => {
     expect(bare('const a = "Open the file"; const b = "button";')).toEqual([
       "Open the file",
     ]);
+  });
+
+  // Mutation: in `bareCopyIn`, change `!!options.words && LABEL.test(text)` to `LABEL.test(text)`.
+  it("reports a capitalised word outside the net only when asked, and a lowercase one never", () => {
+    const source =
+      'const a = "Friends"; const b = "button"; const c = <p>Delete</p>; const d = "Open the file";';
+    expect(bare(source)).toEqual(["Delete", "Open the file"]);
+    expect(
+      bareCopyIn(ts, "x.tsx", source, { words: true }).map(
+        ({ text, why }) => `${why}:${text}`,
+      ),
+    ).toEqual(["word:Friends", "copy:Delete", "prose:Open the file"]);
+  });
+
+  // Mutation: in `bareCopyIn`'s `add`, report `start: 0`.
+  it("says where each literal starts, which a rewrite finds it by", () => {
+    const source = 'const a = "x"; const b = <p>\n  Hello there\n</p>;';
+    expect(
+      bareCopyIn(ts, "x.tsx", source).map(({ start }) =>
+        source.slice(start, start + 5),
+      ),
+    ).toEqual(["Hello"]);
   });
 
   // Mutation: take the apostrophe form out of the word pattern (`WORD`).
@@ -360,7 +383,42 @@ describe("scanSources and the catalogue folder", () => {
   });
 });
 
+describe("ratchetReads", () => {
+  // Mutation: change the directory test to `true`.
+  it.each([
+    ["lib", true],
+    ["__tests__", false],
+    ["__fixtures__", false],
+  ])("walks into %s: %s", (name, walked) => {
+    expect(ratchetReads(name, true)).toBe(walked);
+  });
+
+  // Mutation: change `/\.(test|d)\./` to `/\.test\./`.
+  it.each([
+    ["a.ts", true],
+    ["a.tsx", true],
+    ["a.test.ts", false],
+    ["a.unit.test.ts", false],
+    ["a.d.ts", false],
+    ["a.json", false],
+    ["a.js", false],
+  ])("reads the file %s: %s", (name, read) => {
+    expect(ratchetReads(name, false)).toBe(read);
+  });
+});
+
 describe("ceilingFailures", () => {
+  // Mutation: delete the codemod's two commands from the `count > ceiling` message.
+  it("tells whoever is over a ceiling to write the new text through t, and names the codemod for a whole directory", () => {
+    const [failure] = ceilingFailures({ a: 3 }, { a: 2 });
+    expect(failure).toContain(
+      "Write the new text through t, plural, rich or say",
+    );
+    expect(failure).toContain("converts a whole directory");
+    expect(failure).toContain("node scripts/i18n-extract.mjs");
+    expect(failure).toContain("node scripts/i18n-identity-check.mjs");
+  });
+
   // Mutation: change `count > ceiling` to `count >= ceiling`.
   it("is empty when the ceilings are exactly the counts", () => {
     expect(ceilingFailures({ a: 2, b: 1 }, { a: 2, b: 1 })).toEqual([]);

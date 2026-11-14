@@ -10,11 +10,17 @@ import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
 import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
-import { normalizeUserUiPreferences, say } from "@logjam/shared";
+import {
+  normalizeUserUiPreferences,
+  say,
+  t,
+  type UserSentence,
+} from "@logjam/shared";
+import { languageOfAccount, runInLanguage } from "./requestLanguage";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { createSweepLeader } from "./sweepLeader";
-import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
+import { topoExportStoppedMessage } from "./failureCopy";
 
 // Stuck-job reaper for both topo pipelines.
 //
@@ -56,8 +62,9 @@ import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
 
 // Retry means submitting a new job/export — the reaper never re-launches
 // anything (see the attempt_count comment in schema.prisma).
-const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
-const REAPER_EXPORT_MESSAGE = TOPO_EXPORT_STOPPED_MESSAGE;
+function reaperJobMessage(): UserSentence {
+  return say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
+}
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -173,13 +180,12 @@ type ReapEntry = {
    * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` and
    * `exportEmail` mean "finishes or fails", so a reaped job
    * mails the same users a worker-detected failure would (no new pref key).
-   * `reason` is the generic REAPER_* message: the reaper never knows more.
+   * `reason` is the generic `reaperJobMessage()` or `topoExportStoppedMessage()`: the reaper never knows more.
    */
   email: {
     pref: "topoEmail" | "exportEmail";
-    subject: string;
-    headline: string;
-    reason: string;
+    /** The mail's words, written when it is sent, in the recipient's language. */
+    words: () => { subject: string; headline: string; reason: string };
     /** Query string for the FRONTEND_URL deep link, e.g. `topoJob=<id>`. */
     deepLink: string;
   };
@@ -214,16 +220,22 @@ async function emailReaped(entries: ReapEntry[]): Promise<void> {
       recipient.uiPreferences,
     ).notifications;
     if (!wanted[entry.email.pref]) continue;
+    // Nobody asked, so the words are in the language the account's client
+    // last ran in.
+    const { subject, headline, reason, open } = runInLanguage(
+      languageOfAccount(recipient.uiPreferences),
+      () => ({ ...entry.email.words(), open: t`Open Logjam Web` }),
+    );
     const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
-    const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
+    const openLink = openUrl ? `\n\n${open}: ${openUrl}` : "";
     const openLinkHtml = openUrl
-      ? `<p><a href="${openUrl}">Open Logjam Web</a></p>`
+      ? `<p><a href="${openUrl}">${open}</a></p>`
       : "";
     await sendEmail({
       to: recipient.email,
-      subject: entry.email.subject,
-      text: `${entry.email.headline}\n\n${entry.email.reason}${openLink}`,
-      html: `${logoHtml}<p>${entry.email.headline}</p><p><strong>${entry.email.reason}</strong></p>${openLinkHtml}`,
+      subject,
+      text: `${headline}\n\n${reason}${openLink}`,
+      html: `${logoHtml}<p>${headline}</p><p><strong>${reason}</strong></p>${openLinkHtml}`,
     });
   }
 }
@@ -301,7 +313,7 @@ async function failReapedTopoJob(
 ): Promise<{ count: number }> {
   const claim = await prisma.topoJob.updateMany({
     where: { id, status: from },
-    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+    data: { status: "failed", errorMessage: reaperJobMessage() },
   });
   if (claim.count === 1) {
     try {
@@ -375,10 +387,12 @@ function topoJobEntry(row: {
     push: { type: "topo_failed", jobId: row.id },
     email: {
       pref: "topoEmail",
-      // Mirrors worker.py's "Topo map ready — Logjam".
-      subject: "Topo map failed — Logjam",
-      headline: "Your topo map job failed.",
-      reason: REAPER_JOB_MESSAGE,
+      words: () => ({
+        // Mirrors worker.py's "Topo map ready — Logjam".
+        subject: t`Topo map failed — Logjam`,
+        headline: t`Your topo map job failed.`,
+        reason: reaperJobMessage(),
+      }),
       deepLink: `topoJob=${row.id}`,
     },
   };
@@ -397,15 +411,17 @@ function exportJobEntry(row: {
       exportJobId: row.id,
       format: row.format,
       status: "failed",
-      errorMessage: REAPER_EXPORT_MESSAGE,
+      errorMessage: topoExportStoppedMessage(),
     },
     push: { type: "topo_export_complete", exportId: row.id },
     email: {
       pref: "exportEmail",
-      // Same subject export_worker.py's failure mail uses.
-      subject: `Map failed — ${row.format.toUpperCase()}`,
-      headline: "Your map couldn't be made.",
-      reason: REAPER_EXPORT_MESSAGE,
+      words: () => ({
+        // Same subject export_worker.py's failure mail uses.
+        subject: t`Map failed — ${row.format.toUpperCase()}`,
+        headline: t`Your map couldn't be made.`,
+        reason: topoExportStoppedMessage(),
+      }),
       deepLink: `export=${row.id}`,
     },
   };
@@ -489,7 +505,7 @@ export async function reapStuckTopoJobs(
     (id) =>
       prisma.topoExportJob.updateMany({
         where: { id, status: "queued" },
-        data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+        data: { status: "failed", errorMessage: topoExportStoppedMessage() },
       }),
     exportJobEntry,
   );
@@ -517,7 +533,7 @@ export async function reapStuckTopoJobs(
           // completedAt ends the export's credits (topo_export_job_credits).
           data: {
             status: "failed",
-            errorMessage: REAPER_EXPORT_MESSAGE,
+            errorMessage: topoExportStoppedMessage(),
             completedAt: new Date(),
           },
         }),

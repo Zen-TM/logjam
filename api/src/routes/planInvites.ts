@@ -21,6 +21,7 @@ import {
   TRIP_PLAN_INVITE_TTL_DAYS,
   type TripPlanLinkPreview,
   type TripPlanRedeemResult,
+  type UserSentence,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -52,9 +53,13 @@ import { joinInvited } from "./planMembers";
 
 const TTL_MS = TRIP_PLAN_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
-const ONLY_LEADERS_MINT = say`Only a leader can make an invite link.`;
+function onlyLeadersMint(): UserSentence {
+  return say`Only a leader can make an invite link.`;
+}
 /** A leader invited the caller by username while they used a link. */
-const RACED = say`Someone in this plan just invited you. Open the plan from your list.`;
+function invitedWhileUsingALink(): UserSentence {
+  return say`Someone in this plan just invited you. Open the plan from your list.`;
+}
 
 // ── /plans/:planId/invites: a leader's links ──────────────────
 
@@ -69,7 +74,7 @@ planInviteLinksRouter.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const access = await requirePlanWrite(user.id, getParam(req.params.planId));
-    requirePlanRole(access, ["leader"], ONLY_LEADERS_MINT);
+    requirePlanRole(access, ["leader"], onlyLeadersMint());
     const planId = access.plan.id;
     const token = mintFriendInviteToken();
     const expiresAt = new Date(Date.now() + TTL_MS);
@@ -265,7 +270,8 @@ async function request(
       result = { planId, status: "active" };
       return () => {};
     }
-    if (existing?.status === "invited") throw new AppError(409, RACED);
+    if (existing?.status === "invited")
+      throw new AppError(409, invitedWhileUsingALink());
     result = { planId, status: "requested", waitingFor: leader };
     // Asked already: the leaders are not told twice.
     if (existing) {

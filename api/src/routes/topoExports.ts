@@ -18,8 +18,8 @@ import {
   say,
   AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
-  AREA_EXPORT_OUTSIDE_TERRAIN,
-  AREA_EXPORT_TOO_LARGE,
+  areaExportOutsideTerrain,
+  areaExportTooLargeSentence,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areasInBox,
@@ -127,10 +127,10 @@ router.post(
     const detail = areaExportRequestError(area.data);
     if (detail) throw malformed(detail);
     if (areaExportTooLarge(area.data.bbox)) {
-      throw new AppError(400, AREA_EXPORT_TOO_LARGE);
+      throw new AppError(400, areaExportTooLargeSentence());
     }
     if (!areaInTerrainRegion(area.data.bbox)) {
-      throw new AppError(400, AREA_EXPORT_OUTSIDE_TERRAIN);
+      throw new AppError(400, areaExportOutsideTerrain());
     }
     // The sharpened areas in the box this user may read (ADR 0040), in the
     // router's order: the worker reads only these, so a stranger's area never

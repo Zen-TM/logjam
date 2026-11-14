@@ -1,7 +1,7 @@
 // What Logjam Web's and Logjam GPS's own sign-in and sign-up forms decide
 // before and after they reach Cognito (ADR 0045), so the two cannot drift
 // (ADR 0020). Each client draws the forms itself.
-import { USERNAME_RULE, isValidUsername } from "./username.js";
+import { usernameRule, isValidUsername } from "./username.js";
 
 /**
  * The words both clients' sign-up, verify and reset forms draw. The age line
@@ -74,7 +74,7 @@ export function signUpFormProblem(form: {
     return { field: "email", message: "Enter a valid email address." };
   }
   if (!isValidUsername(form.username)) {
-    return { field: "username", message: USERNAME_RULE };
+    return { field: "username", message: usernameRule() };
   }
   if (form.password !== form.confirmPassword) {
     return { field: "form", message: "Passwords do not match" };

@@ -7,7 +7,11 @@ import {
   type Part,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { TOPO_UPLOAD_PART_URL_TTL_SECONDS, say } from "@logjam/shared";
+import {
+  TOPO_UPLOAD_PART_URL_TTL_SECONDS,
+  say,
+  type UserSentence,
+} from "@logjam/shared";
 import { s3 } from "../services/awsClients";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { abortS3MultipartUploads, deleteS3Prefix } from "./s3Cleanup";
@@ -34,7 +38,9 @@ export const TOPO_UPLOAD_MAX_PARTS = Math.ceil(
   MAX_INPUT_ZIP_COMPRESSED_BYTES / TOPO_UPLOAD_PART_BYTES,
 );
 
-const PART_MISSING = say`Part of that ZIP didn't upload. Try again.`;
+function partMissing(): UserSentence {
+  return say`Part of that ZIP didn't upload. Try again.`;
+}
 
 /** Presigned PUT URLs for parts of a ZIP of `sizeBytes`. Each signs its
  *  part's exact length, so no part outgrows TOPO_UPLOAD_PART_BYTES, and a size
@@ -127,7 +133,7 @@ export async function joinTopoUpload(
     parts.length !== partCount ||
     parts.some((p, i) => p.PartNumber !== i + 1)
   )
-    throw new AppError(400, PART_MISSING);
+    throw new AppError(400, partMissing());
   // Full-size parts but the last, as signed. Only a client that ignored the
   // signed lengths gets here, so its upload is dropped rather than kept.
   const last = parts.length - 1;
@@ -163,7 +169,7 @@ export async function joinTopoUpload(
     if (isNoSuchUpload(err)) return confirmJoined(bucket, key);
     const name = (err as { name?: string }).name;
     if (name === "EntityTooSmall" || name === "InvalidPart")
-      throw new AppError(400, PART_MISSING);
+      throw new AppError(400, partMissing());
     throw err;
   }
 }

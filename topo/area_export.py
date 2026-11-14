@@ -134,7 +134,7 @@ class AreaOutsideNsw(AreaExportError):
     """No statewide tiles in the box: the API checks the box against NSW's
     border, drawn a little outside the real one, so a box just over it gets
     this far. `SENTENCE` is what the owner reads, the API's
-    AREA_EXPORT_OUTSIDE_TERRAIN (tests/test_area_export.py)."""
+    areaExportOutsideTerrain() (tests/test_area_export.py)."""
 
     SENTENCE = (
         "That area is outside NSW, where the statewide terrain is. Choose an "

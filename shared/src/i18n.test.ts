@@ -106,6 +106,32 @@ describe("language", () => {
   });
 });
 
+describe("inSourceLanguage", () => {
+  // Mutation: return `render()` without pinning the language, and a stored
+  // English sentence no longer equals the sentence rendered to compare with it.
+  it("writes in the source language whatever is in force, and puts the language back", async () => {
+    const { inSourceLanguage, language, t } = await load();
+    use("en-XA");
+    const render = () => t`Couldn't find that place.`;
+    expect(render()).not.toBe("Couldn't find that place.");
+    expect(inSourceLanguage(render)).toBe("Couldn't find that place.");
+    expect(language()).toBe("en-XA");
+  });
+
+  // Mutation: drop the `finally`, and a render that throws leaves every later
+  // message in the source language.
+  it("puts the language back when the render throws", async () => {
+    const { inSourceLanguage, language } = await load();
+    use("en-US");
+    expect(() =>
+      inSourceLanguage(() => {
+        throw new Error("render failed");
+      }),
+    ).toThrow("render failed");
+    expect(language()).toBe("en-US");
+  });
+});
+
 describe("matchLanguage", () => {
   const offered = ["en-AU", "en-US"] as const;
   // Mutation: match on the primary subtag only (so en-NZ matches en-US), or skip the `_` and case folding.

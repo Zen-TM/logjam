@@ -21,6 +21,7 @@ import type {
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
   PLACE_SEARCH_API_PATH,
+  language,
   loadStateOf,
   tallyNotifications,
   type PlaceSearchRequest,
@@ -103,6 +104,14 @@ function notifySessionExpired() {
   if (sessionExpiredHandler) sessionExpiredHandler();
 }
 
+/** What every API call carries: who is asking, and the language its refusals are written in. */
+function authHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Accept-Language": language(),
+  };
+}
+
 async function getIdToken(): Promise<string> {
   if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
   // loadSession refreshes with the refresh token when the ID token has
@@ -131,7 +140,7 @@ export async function apiFetch<T>(
     method: options?.method ?? "GET",
     signal: options?.signal,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options?.body != null && { "Content-Type": "application/json" }),
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
@@ -162,7 +171,7 @@ export async function apiFetchWithTotal<T>(
 ): Promise<{ data: T; total: number | null }> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
   });
   if (!res.ok) {
     if (res.status === 401) notifySessionExpired();
@@ -190,7 +199,7 @@ export async function apiFetchBlob(
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options?.body != null && { "Content-Type": "application/json" }),
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
@@ -223,7 +232,7 @@ export async function apiFetchBlobStreamed(
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options.body != null && { "Content-Type": "application/json" }),
     },
     ...(options.body != null && { body: JSON.stringify(options.body) }),
