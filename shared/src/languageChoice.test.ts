@@ -9,10 +9,10 @@ import {
   wantedLanguage,
 } from "./languageChoice";
 import { LANGUAGES } from "./i18n";
-import { NSW_REGION, REGIONS } from "./regions";
+import { NSW_REGION, REGIONS, type Region } from "./regions";
 import { SIM_REGIONS, SIM_UTAH } from "./simRegions";
 
-const ALL: readonly Language[] = ["en-AU", "en-US", "en-XA"];
+const ALL: Language[] = ["en-AU", "en-US", "en-XA"];
 
 describe("offeredLanguages", () => {
   // Mutation: change `if (dev)` to `if (true)` in offeredLanguages.
@@ -62,7 +62,7 @@ describe("offeredLanguages", () => {
 
   // Mutation: set SIM_UTAH's `languages` to ["en-ZZ"] in simRegions.ts.
   it("every tag a declared region carries is a language the catalogue knows", () => {
-    const declared = [NSW_REGION, ...SIM_REGIONS].flatMap(
+    const declared = ([NSW_REGION, ...SIM_REGIONS] as Region[]).flatMap(
       (r) => r.languages ?? [],
     );
     expect(declared.length).toBeGreaterThanOrEqual(1);
