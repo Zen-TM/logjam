@@ -34,7 +34,7 @@ DECLARE
   suffix INT;
 BEGIN
   FOR def IN
-    SELECT id, owner_id, key, label FROM custom_field_defs
+    SELECT id, owner_id, key FROM custom_field_defs
      WHERE entity = 'place' AND owner_id IS NOT NULL
        AND key IN ('aca_technical', 'aca_water', 'aca_time', 'aca_risk')
   LOOP
@@ -48,8 +48,9 @@ BEGIN
       suffix := suffix + 1;
     END LOOP;
 
-    RAISE NOTICE 'ACA grades: renaming custom field "%" (key %) to % for owner % — the key is now reserved by a system field',
-      def.label, def.key, candidate, def.owner_id;
+    -- The key and the owner, never the label: a label is the user's own words.
+    RAISE NOTICE 'ACA grades: renaming custom field key % to % for owner % — the key is now reserved by a system field',
+      def.key, candidate, def.owner_id;
 
     -- The VALUES move first: they are keyed by the old key, and once the
     -- definition moves nothing else knows where they were. `updated_at` is set by
