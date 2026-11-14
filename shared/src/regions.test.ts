@@ -480,13 +480,13 @@ describe("simRegionsOn", () => {
 
 describe("regionAt", () => {
   const two = [NSW_REGION, ...SIM_REGIONS];
-  const wanaka: [number, number] = [169.1, -44.62];
-  const coromandel: [number, number] = [175.6, -37.0];
+  const makarora: [number, number] = [169.25, -44.055];
+  const coromandel: [number, number] = [175.63, -37.1];
 
   // Mutation: test only `borders[0]`, and a point on the second island
   // belongs to no region.
   it("finds a point on each island of a region", () => {
-    expect(regionAt(...wanaka, two)).toBe(SIM_NZ);
+    expect(regionAt(...makarora, two)).toBe(SIM_NZ);
     expect(regionAt(...coromandel, two)).toBe(SIM_NZ);
   });
 
@@ -501,7 +501,7 @@ describe("regionAt", () => {
 
   // Mutation: return NSW whatever the point, and Utah is New South Wales.
   it("tells the hemispheres apart", () => {
-    expect(regionAt(-110.8, 38.27, two)).toBe(SIM_UTAH);
+    expect(regionAt(-112.945, 37.285, two)).toBe(SIM_UTAH);
     expect(regionAt(150.31, -33.7, two)).toBe(NSW_REGION);
   });
 
@@ -513,8 +513,8 @@ describe("regionAt", () => {
   // Mutation: search from the end, and an overlap reads as the later region.
   it("takes the first region in order where two overlap", () => {
     const twin: Region = { ...SIM_NZ, id: "twin" };
-    expect(regionAt(...wanaka, [SIM_NZ, twin])).toBe(SIM_NZ);
-    expect(regionAt(...wanaka, [twin, SIM_NZ])).toBe(twin);
+    expect(regionAt(...makarora, [SIM_NZ, twin])).toBe(SIM_NZ);
+    expect(regionAt(...makarora, [twin, SIM_NZ])).toBe(twin);
   });
 });
 
@@ -531,7 +531,7 @@ describe("regionsTouching", () => {
     ).toEqual(["simnz"]);
     expect(
       ids(
-        regionsTouching({ west: -111, south: -40, east: 155, north: 40 }, two),
+        regionsTouching({ west: -113, south: -40, east: 155, north: 40 }, two),
       ),
     ).toEqual(["nsw", "simutah"]);
   });

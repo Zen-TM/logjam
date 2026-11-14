@@ -407,8 +407,19 @@ describe("planRegionForBasemaps", () => {
   // Mutation: read the clips from `REGIONS` instead of the `regions` argument,
   // and a simulated box is priced as a box in the sea.
   it("clips the archives of the simulated region a box lies in, and only those", () => {
-    const wanaka = { west: 169.05, south: -44.65, east: 169.15, north: -44.6 };
-    const job = planRegionForBasemaps(wanaka, [], 15, maxZoomFor, SIM_REGIONS);
+    const makarora = {
+      west: 169.22,
+      south: -44.08,
+      east: 169.28,
+      north: -44.03,
+    };
+    const job = planRegionForBasemaps(
+      makarora,
+      [],
+      15,
+      maxZoomFor,
+      SIM_REGIONS,
+    );
     expect(job.clips.map((c) => [c.archive.id, c.kind])).toEqual([
       ["simnz-heights", "heights"],
       ["simnz-slope", "slope"],
@@ -419,10 +430,10 @@ describe("planRegionForBasemaps", () => {
     ]);
     // Placeholder figures, 30 KB a tile at every zoom: the tile counts say the rest.
     const tiles = (min: number, max: number) =>
-      planRegionTiles(wanaka, min, max).totalTiles;
+      planRegionTiles(makarora, min, max).totalTiles;
     expect(job.clips.map((c) => c.size.meanBytes)).toEqual([
-      tiles(8, 15) * 30_000,
-      tiles(8, 15) * 30_000,
+      tiles(8, 17) * 30_000,
+      tiles(8, 17) * 30_000,
       tiles(11, 14) * 30_000,
       tiles(12, 13) * 30_000,
       tiles(8, 12) * 30_000,
@@ -458,7 +469,9 @@ describe("planRegionForBasemaps", () => {
       ]).clips.map((c) => c.archive.id.split("-")[0]);
     expect(new Set(only(TEN_KM))).toEqual(new Set(["nsw"]));
     expect(
-      new Set(only({ west: -110.85, south: 38.25, east: -110.8, north: 38.3 })),
+      new Set(
+        only({ west: -112.95, south: 37.27, east: -112.9, north: 37.32 }),
+      ),
     ).toEqual(new Set(["simutah"]));
   });
 

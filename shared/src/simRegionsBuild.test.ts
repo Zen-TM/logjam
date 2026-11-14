@@ -2,10 +2,23 @@
 // region's archives; simRegions.ts says where the clients read them. Two lists
 // that must agree, held equal here, so a path renamed on one side does not
 // leave the dev stack serving a 404 for a layer that was built.
-import { readdirSync, readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { PMTiles, type Source } from "pmtiles";
 import { describe, expect, it } from "vitest";
+import { regionAt } from "./regions.js";
 import { SIM_NZ, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 type Box = [number, number, number, number];
@@ -71,6 +84,43 @@ describe("scripts/sim-regions/boxes.json", () => {
       ).toEqual(checked.sort());
     },
   );
+
+  it.each([
+    ["simnz", SIM_NZ],
+    ["simutah", SIM_UTAH],
+  ])(
+    "draws %s's borders round the boxes it builds, and reads heights to the zoom it builds",
+    (id, region) => {
+      // Mutation: move a box in boxes.json (or NZ_NORTH_BOX / UTAH_BOX in
+      // simRegions.ts), or set the `topZoom` that `simTerrain` gets for
+      // "simnz" back to 15.
+      const { boxes: bs, heights } = boxes[id];
+      expect(region.borders).toHaveLength(bs.length);
+      region.borders.forEach((ring, i) => {
+        const lons = ring.map(([lon]) => lon);
+        const lats = ring.map(([, lat]) => lat);
+        const got = [
+          Math.min(...lons),
+          Math.min(...lats),
+          Math.max(...lons),
+          Math.max(...lats),
+        ];
+        const [w, s, e, n] = bs[i];
+        [w - 0.02, s - 0.02, e + 0.02, n + 0.02].forEach((v, k) =>
+          expect(got[k], `${id} border ${i}`).toBeCloseTo(v, 6),
+        );
+      });
+      expect(region.terrain.heights?.sampleZoom).toBe(heights.zmax);
+      expect(regionAt(...region.view.center, [region])).toBe(region);
+    },
+  );
+
+  it("reads the world's heights to the zoom it builds", () => {
+    // Mutation: set the `topZoom` that `simTerrain` gets for "simworld" to 15.
+    expect(SIM_WORLD.terrain.heights?.sampleZoom).toBe(
+      boxes.world.heights.zmax,
+    );
+  });
 
   it.each(Object.keys(DECLARED))("has well-formed boxes for %s", (id) => {
     // Mutation: swap a box's west and east, give a heights credit of "", move
@@ -192,5 +242,78 @@ describe("scripts/sim-regions/boxes.json", () => {
         /OpenStreetMap|Land Information New Zealand|Geological Survey|COPERNICUS/,
       );
     }
+  });
+});
+
+describe("scripts/sim-regions/build.sh up", () => {
+  const script = join(
+    import.meta.dirname,
+    "../../scripts/sim-regions/build.sh",
+  );
+
+  /** Runs `build.sh up` over `files` (paths under OUT) against a bucket that
+   *  answers each PUT with `status`; resolves with what the bucket received. */
+  async function up(files: string[], status = 200) {
+    const out = mkdtempSync(join(tmpdir(), "sim-up-"));
+    for (const f of files) {
+      mkdirSync(join(out, f, ".."), { recursive: true });
+      writeFileSync(join(out, f), `bytes of ${f}`);
+    }
+    const got: string[] = [];
+    const server = createServer((req, res) => {
+      const body: Buffer[] = [];
+      req.on("data", (c) => body.push(c));
+      req.on("end", () => {
+        got.push(`${req.method} ${req.url} ${Buffer.concat(body)}`);
+        res.writeHead(status).end();
+      });
+    });
+    await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const run = await promisify(execFile)("bash", [script, "up"], {
+        env: {
+          ...process.env,
+          OUT: out,
+          BUCKET_URL: `http://127.0.0.1:${port}/logjam-topo-local`,
+        },
+      }).then(
+        () => ({ ok: true }),
+        (e: { code: number }) => ({ ok: false, code: e.code }),
+      );
+      return { ...run, got };
+    } finally {
+      server.close();
+      rmSync(out, { recursive: true, force: true });
+    }
+  }
+
+  it("uploads each archive under master/ to its own key, and nothing else", async () => {
+    // Mutation: find under "$out" instead of "$out/master" (the scratch
+    // archive in work/ goes up too), or drop `${file#"$out"/}` so the key is the full local path.
+    const result = await up([
+      "master/dem/simnz-heights.pmtiles",
+      "master/basemap/protomaps-simnz.pmtiles",
+      "places/simnz-0.osm",
+      "work/simnz-heights-0.pmtiles",
+    ]);
+    expect(result.ok).toBe(true);
+    expect(result.got).toEqual([
+      "PUT /logjam-topo-local/master/basemap/protomaps-simnz.pmtiles bytes of master/basemap/protomaps-simnz.pmtiles",
+      "PUT /logjam-topo-local/master/dem/simnz-heights.pmtiles bytes of master/dem/simnz-heights.pmtiles",
+    ]);
+  });
+
+  it("fails when the bucket refuses a file", async () => {
+    // Mutation: drop `-f` from the curl call in build.sh up.
+    const result = await up(["master/dem/simnz-heights.pmtiles"], 500);
+    expect(result.ok).toBe(false);
+  });
+
+  it("fails when there is nothing to upload", async () => {
+    // Mutation: drop the `[ "$count" -gt 0 ]` line from build.sh up.
+    const result = await up(["places/simnz-0.osm", "master/readme.txt"]);
+    expect(result.ok).toBe(false);
+    expect(result.got).toEqual([]);
   });
 });
