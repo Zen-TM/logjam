@@ -5,34 +5,43 @@
 // (`BasemapThumb`), which says more than any icon can. Where there is no tile
 // (the vector source, offline) the fallback is the `map` idea.
 
-import { defaultBasemapFor, offeredBasemaps } from "@logjam/shared";
+import {
+  basemapHere,
+  BASEMAP_CATALOG,
+  defaultBasemapFor,
+  offeredBasemaps,
+  type LonLatBox,
+} from "@logjam/shared";
 
 import type { BasemapId } from "./sourceResolver";
 
 /**
- * What the picker lists for these regions, in the catalogue's order: the worldwide
- * maps, then each chosen region's. The catalogue leaves out the Logjam
- * Web-only "osm" raster (`offered: false`): the same cartography as
- * `protomaps`, fetched instead of drawn and online-only, so two rows of one map
- * with one that can't be saved. Guard: basemapMeta.test.ts, that every id
- * offered is one the resolver draws.
+ * What the picker lists for the ground a map shows, in the catalogue's order:
+ * the worldwide maps, then those of each region the view touches (ADR 0049).
+ * The catalogue leaves out the Logjam Web-only "osm" raster (`offered: false`):
+ * the same cartography as `protomaps`, fetched instead of drawn and
+ * online-only, so two rows of one map with one that can't be saved. Guard:
+ * basemapMeta.test.ts, that every id offered is one the resolver draws.
  */
-export const mobileBasemaps = (regionIds: readonly string[]): BasemapId[] =>
-  offeredBasemaps(regionIds).map((entry) => entry.id as BasemapId);
+export const mobileBasemaps = (view: LonLatBox): BasemapId[] =>
+  offeredBasemaps(view).map((entry) => entry.id);
+
+/** Every id a picker lists somewhere: the ids a stored pick may name. */
+export const knownBasemaps = (): BasemapId[] =>
+  BASEMAP_CATALOG.filter((entry) => entry.offered !== false).map(
+    (entry) => entry.id,
+  );
 
 /** Shown until the user has picked one (and when a stored pick is unreadable). */
 export const defaultBasemap = (regionIds: readonly string[]): BasemapId =>
-  defaultBasemapFor(regionIds) as BasemapId;
+  defaultBasemapFor(regionIds);
 
 /**
- * The basemap to use now: the stored pick while these regions still offer it,
- * else their default. The pick itself is left alone, so choosing the region
- * again brings it back. Guard: basemapMeta.test.ts.
+ * The basemap to use now: the stored pick while the view offers it, else the
+ * default of the region in view. The pick itself is left alone, so a map
+ * returning to ground that offers it brings it back. Guard: basemapMeta.test.ts.
  */
 export const effectiveBasemap = (
   picked: BasemapId,
-  regionIds: readonly string[],
-): BasemapId =>
-  mobileBasemaps(regionIds).includes(picked)
-    ? picked
-    : defaultBasemap(regionIds);
+  view: LonLatBox,
+): BasemapId => basemapHere(picked, view);

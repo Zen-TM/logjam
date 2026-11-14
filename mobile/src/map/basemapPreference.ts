@@ -16,7 +16,7 @@ import {
 
 import { readPref, writePref } from "../prefsDb";
 import { readRegions } from "../regionsPreference";
-import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
+import { defaultBasemap, knownBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 const BASEMAP_PREF_KEY = "mapBasemapId";
@@ -24,12 +24,10 @@ const BASEMAP_PREF_KEY = "mapBasemapId";
 /** The last chosen basemap, or the default when nothing usable is recorded. */
 export function readBasemapPreference(): BasemapId {
   const stored = readPref(BASEMAP_PREF_KEY);
-  // An id we no longer offer (a removed source, an older build's pick) reads as
+  // An id no picker lists (a removed source, an older build's pick) reads as
   // "nothing recorded" rather than throwing out of the resolver later.
-  const regions = readRegions();
   return (
-    mobileBasemaps(regions).find((id) => id === stored) ??
-    defaultBasemap(regions)
+    knownBasemaps().find((id) => id === stored) ?? defaultBasemap(readRegions())
   );
 }
 

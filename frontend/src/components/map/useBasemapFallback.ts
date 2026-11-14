@@ -6,12 +6,13 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../feedback/ToastProvider";
 
-const FALLBACK = "protomaps";
+const VECTOR = "protomaps";
 
 /**
- * The basemap to draw for `pickedId`: the default while the pick's tile server
- * is down, with a toast saying so. The pick itself is kept, so it returns with
- * its server.
+ * The basemap to draw for `pickedId`: the vector map while the pick's tile
+ * server is down, with a toast saying so, where `layers` offer it (a view
+ * outside its archive has no other basemap to fall to, so the pick stays). The
+ * pick itself is kept, so it returns with its server.
  */
 export function useBasemapFallback(
   pickedId: string,
@@ -22,12 +23,13 @@ export function useBasemapFallback(
   const setHealth = useCallback((id: string, isDown: boolean) => {
     setDown((prev) => withBasemapDown(prev, id, isDown));
   }, []);
-  const shownLayerId = basemapToShow(pickedId, down, FALLBACK);
+  const fallback = layers.some((l) => l.id === VECTOR) ? VECTOR : pickedId;
+  const shownLayerId = basemapToShow(pickedId, down, fallback);
   const fellBack = shownLayerId !== pickedId;
   useEffect(() => {
     if (!fellBack) return;
     const name = (id: string) => layers.find((l) => l.id === id)?.name ?? id;
-    toast.error(basemapFallbackNotice(name(pickedId), name(FALLBACK)));
-  }, [fellBack, pickedId, layers, toast]);
+    toast.error(basemapFallbackNotice(name(pickedId), name(fallback)));
+  }, [fellBack, pickedId, fallback, layers, toast]);
   return { shownLayerId, down, setHealth };
 }

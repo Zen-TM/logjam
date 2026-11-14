@@ -276,6 +276,7 @@ import {
   BASEMAP_CATALOG,
   basemapFallbackNotice,
   basemapToShow,
+  pointBox,
   ROUTE_ARROW_SDF_URI,
   placeStatus,
 } from "@logjam/shared";
@@ -1021,22 +1022,44 @@ export function MapScreen({
     },
     [],
   );
+  /**
+   * The ground actually on screen, read back from the map when a move settles.
+   *
+   * Asked of MapLibre rather than derived from centre + zoom + window size,
+   * because the map ROTATES: a course-up view's axis-aligned extent is up to
+   * √2 wider than the same camera facing north, and the offline notice would be
+   * wrong at exactly the moment (walking, map turning) it matters. Null until
+   * the first settle. Coordinates stay in component state — never logged.
+   */
+  const [viewportBbox, setViewportBbox] = useState<{
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  } | null>(null);
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
   const regionIds = useRegions();
   // Read once: the camera's `initialViewState` is only honoured on the first render.
   const [home] = useState(() => homeView(regionIds));
-  // The pick can outlive its region (unchosen while the map is open).
-  const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
+  // The ground the map shows decides the basemaps on offer, not the account's
+  // regions (ADR 0049): the settled view, or the opening point before the first.
+  const basemapView = useMemo(
+    () => viewportBbox ?? pointBox(...home.center),
+    [viewportBbox, home],
+  );
+  // The pick can outlive its ground: the map panned somewhere that does not
+  // offer it.
+  const basemapId = effectiveBasemap(pickedBasemapId, basemapView);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
     connectivity === "online",
-    regionIds,
+    basemapView,
   );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId, downBasemaps, regionIds),
-  ) as BasemapId;
+    basemapFallbackFor(basemapId, downBasemaps, basemapView),
+  );
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
   // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
@@ -1244,21 +1267,6 @@ export function MapScreen({
       basemapId,
     });
   }, [camera, basemapId]);
-  /**
-   * The ground actually on screen, read back from the map when a move settles.
-   *
-   * Asked of MapLibre rather than derived from centre + zoom + window size,
-   * because the map ROTATES: a course-up view's axis-aligned extent is up to
-   * √2 wider than the same camera facing north, and the offline notice would be
-   * wrong at exactly the moment (walking, map turning) it matters. Null until
-   * the first settle. Coordinates stay in component state — never logged.
-   */
-  const [viewportBbox, setViewportBbox] = useState<{
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-  } | null>(null);
   const scaleBarRef = useRef<ScaleBarHandle>(null);
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
@@ -1724,13 +1732,13 @@ export function MapScreen({
     const covering = basemapsCoveringViewport(
       artifacts,
       viewportBbox,
-      mobileBasemaps(regionIds),
+      mobileBasemaps(viewportBbox),
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, regionIds]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is
@@ -6233,6 +6241,7 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        view={basemapView}
         downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}

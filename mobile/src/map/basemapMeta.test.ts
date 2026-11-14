@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { offeredBasemaps, REGIONS } from "@logjam/shared";
+import { pointBox } from "@logjam/shared";
 
 import {
   defaultBasemap,
   effectiveBasemap,
+  knownBasemaps,
   mobileBasemaps,
 } from "./basemapMeta";
-import { resolveMapSource, type BasemapId } from "./sourceResolver";
+import { resolveMapSource } from "./sourceResolver";
+
+const inNsw = pointBox(150.3, -33.7);
+// The Tasman Sea: outside every region.
+const atSea = pointBox(160, -40);
 
 describe("the basemaps Logjam GPS offers", () => {
   // Mutation: change a catalogue entry's order or `offered`, or a region's
   // `defaultBasemap`, and NSW users' picker or opening map changes.
-  it("are, for NSW, the list and default Logjam GPS always had", () => {
-    expect(mobileBasemaps(["nsw"])).toEqual([
+  it("are, over NSW, the list and default Logjam GPS always had", () => {
+    expect(mobileBasemaps(inNsw)).toEqual([
       "protomaps",
       "osm-topo",
       "osm-cycle",
@@ -23,16 +28,20 @@ describe("the basemaps Logjam GPS offers", () => {
     expect(defaultBasemap(["nsw"])).toBe("six-topo");
   });
 
+  // Mutation: list by the account's chosen regions again, and a phone carried
+  // out of NSW still offers SIX Maps there.
+  it("leave out NSW's own over ground outside it", () => {
+    expect(mobileBasemaps(atSea)).toEqual(["osm-topo", "osm-cycle"]);
+  });
+
   // Mutation: add a catalogue entry to a region without teaching the
-  // resolver (and `BasemapId`) the id, and resolveMapSource throws on it.
+  // resolver the id, and resolveMapSource throws on it.
   it("are all ids the resolver draws", () => {
-    const ids = new Set([
-      ...offeredBasemaps([]),
-      ...offeredBasemaps(REGIONS.map((region) => region.id)),
-    ]);
-    for (const { id } of ids) {
+    const ids = knownBasemaps();
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
       const [source] = resolveMapSource(
-        { kind: "basemap", basemapId: id as BasemapId },
+        { kind: "basemap", basemapId: id },
         { connectivity: "online", artifacts: [], cdnBaseUrl: "https://cdn" },
       );
       expect(source?.status, id).toBe("ok");
@@ -40,17 +49,15 @@ describe("the basemaps Logjam GPS offers", () => {
   });
 });
 
-describe("the basemap in use while regions change under an open map", () => {
-  // Mutation: return `picked` unconditionally, and a basemap no chosen region
-  // offers keeps drawing after its region is unchosen.
-  it("is the pick while a chosen region offers it, else the default", () => {
-    expect(effectiveBasemap("osm-cycle", ["nsw"])).toBe("osm-cycle");
-    // `[]` stands in for "NSW unchosen", which only a second region makes
-    // real (`useRegions()` never returns none): only the worldwide maps
-    // remain, so the NSW-only pick falls to that choice's default.
-    expect(effectiveBasemap("six-imagery", [])).toBe(defaultBasemap([]));
-    expect(mobileBasemaps([])).not.toContain("six-imagery");
-    // The pick is not rewritten: choosing the region again restores it.
-    expect(effectiveBasemap("six-imagery", ["nsw"])).toBe("six-imagery");
+describe("the basemap in use while the map moves", () => {
+  // Mutation: return `picked` unconditionally, and a basemap the view does not
+  // offer keeps drawing blank after the map leaves its region.
+  it("is the pick while the view offers it, else the default there", () => {
+    expect(effectiveBasemap("osm-cycle", inNsw)).toBe("osm-cycle");
+    expect(effectiveBasemap("six-imagery", inNsw)).toBe("six-imagery");
+    expect(effectiveBasemap("six-imagery", atSea)).toBe("osm-topo");
+    expect(effectiveBasemap("six-imagery", atSea)).toBe(
+      effectiveBasemap("no-such-basemap", atSea),
+    );
   });
 });

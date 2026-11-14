@@ -37,13 +37,8 @@ import {
 } from "./terrainRoutes";
 import type { TileJson } from "./tileJsonFile";
 
-export type BasemapId =
-  | "protomaps"
-  | "six-topo"
-  | "six-base"
-  | "six-imagery"
-  | "osm-topo"
-  | "osm-cycle";
+/** An id of `BASEMAP_CATALOG`: `resolveMapSource` throws on one it does not hold. */
+export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =
   | { kind: "basemap"; basemapId: BasemapId }
@@ -56,7 +51,7 @@ export type LogicalLayerRef =
       remoteUrl: string | null;
       attribution?: string;
     }
-  /** The statewide contour lines (`shared/src/nswContours.ts`). */
+  /** The statewide contour lines (`shared/src/contourRules.ts`). */
   | { kind: "nsw-contours" }
   /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
    * `viewport` picks the one clip drawn offline. */

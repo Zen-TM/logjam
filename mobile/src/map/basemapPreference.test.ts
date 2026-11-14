@@ -5,7 +5,8 @@ vi.mock("../prefsDb", () => ({
   writePref: vi.fn(() => true),
 }));
 
-vi.mock("../regionsPreference", () => ({ readRegions: () => ["nsw"] }));
+let chosenRegions = ["nsw"];
+vi.mock("../regionsPreference", () => ({ readRegions: () => chosenRegions }));
 
 let storedValue: string | null = null;
 
@@ -23,6 +24,15 @@ describe("readBasemapPreference", () => {
   it("returns the stored basemap", () => {
     storedValue = "osm-cycle";
     expect(readBasemapPreference()).toBe("osm-cycle");
+  });
+
+  // Mutation: read the pick against the chosen regions' basemaps, and a pick
+  // a map would show over NSW is lost for an account that chose another region.
+  it("keeps a pick whatever regions the account chose", () => {
+    chosenRegions = [];
+    storedValue = "six-imagery";
+    expect(readBasemapPreference()).toBe("six-imagery");
+    chosenRegions = ["nsw"];
   });
 
   it("falls back to the default when nothing is recorded", () => {

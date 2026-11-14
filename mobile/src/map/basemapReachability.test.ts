@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { basemapToShow, serverAnswers } from "@logjam/shared";
+import { basemapToShow, pointBox, serverAnswers } from "@logjam/shared";
 
 import { defaultBasemap } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
@@ -25,8 +25,10 @@ vi.mock("react", async (original) => ({
   useEffect: () => {},
 }));
 
-const NSW = ["nsw"];
-const DEFAULT_BASEMAP = defaultBasemap(NSW);
+const NSW = pointBox(150.3, -33.7);
+// The Tasman Sea: outside every region, so no vector map is on offer.
+const AT_SEA = pointBox(160, -40);
+const DEFAULT_BASEMAP = defaultBasemap(["nsw"]);
 const PROBED_BASEMAPS = probedBasemaps(NSW);
 
 const settle = () => new Promise((resolve) => setTimeout(resolve));
@@ -73,6 +75,21 @@ describe("the basemap shown while a server is down", () => {
         basemapFallbackFor("six-imagery", down, NSW),
       ),
     ).toBe("protomaps");
+  });
+});
+
+describe("the basemap shown over ground the vector map does not cover", () => {
+  // Mutation: return "protomaps" whatever the view, and a down pick outside
+  // our archive is swapped for a map that draws nothing there.
+  it("keeps the pick, as no drawn basemap is offered", () => {
+    const down = new Set<BasemapId>(["osm-topo"]);
+    expect(basemapFallbackFor("osm-topo", down, AT_SEA)).toBe("osm-topo");
+  });
+
+  // Mutation: probe every catalogue entry, and a phone looking at the sea asks
+  // SIX Maps' server for a tile.
+  it("probes only what the view offers", () => {
+    expect(probedBasemaps(AT_SEA)).toEqual(["osm-topo", "osm-cycle"]);
   });
 });
 

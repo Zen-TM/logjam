@@ -1,5 +1,6 @@
-// Settings → Regions: which regions' maps Logjam GPS offers. Heights and
-// terrain show wherever the map is, whatever is chosen (shared/src/regions.ts).
+// Settings → Regions: where the map first opens and which canyon lists are
+// offered. Basemaps, heights and terrain follow where the map is, whatever is
+// chosen (ADR 0049).
 //
 // A guest chooses too, kept on the phone (ADR 0007). A linked account sends
 // the choice, so it waits for a connection.

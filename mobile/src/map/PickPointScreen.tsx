@@ -46,7 +46,7 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BASEMAP_CATALOG, MAP_INK } from "@logjam/shared";
+import { BASEMAP_CATALOG, MAP_INK, pointBox } from "@logjam/shared";
 
 import { config } from "../config";
 import {
@@ -68,7 +68,7 @@ import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
 import { useRegions } from "../regionsPreference";
-import { mobileBasemaps } from "./basemapMeta";
+import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -136,7 +136,7 @@ export function PickPointScreen({
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as RegionDownloadScreen.
   const [lastCamera] = useState(() => readLastMapCamera());
-  const [basemapId, setBasemapId] = useState<BasemapId>(
+  const [pickedBasemapId, setBasemapId] = useState<BasemapId>(
     () => lastCamera?.basemapId ?? readBasemapPreference(),
   );
   const [picked, setPicked] = useState<PickedPoint | null>(initialPoint);
@@ -148,6 +148,14 @@ export function PickPointScreen({
   const startZoom = initialPoint
     ? TYPED_POINT_ZOOM
     : (lastCamera?.zoom ?? home.zoom);
+  // The ground this screen opens on decides its basemaps (ADR 0049); the map
+  // here is for placing one point, so the list does not follow a pan.
+  const [startLon, startLat] = startCenter;
+  const startView = useMemo(
+    () => pointBox(startLon, startLat),
+    [startLon, startLat],
+  );
+  const basemapId = effectiveBasemap(pickedBasemapId, startView);
 
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(
@@ -307,7 +315,7 @@ export function PickPointScreen({
       {/* Basemaps down the side the action column is NOT on, mirroring the map
           screen's own split so the two feel like the same map. */}
       <View style={[styles.basemaps, { top: insets.top + spacing(2) }]}>
-        {mobileBasemaps(regionIds).map((id) => (
+        {mobileBasemaps(startView).map((id) => (
           <Pressable
             key={id}
             accessibilityRole="button"

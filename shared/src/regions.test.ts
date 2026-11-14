@@ -10,6 +10,7 @@ import {
 } from "./contracts/settings.js";
 import {
   BASEMAP_CATALOG,
+  basemapHere,
   defaultBasemapFor,
   offeredBasemaps,
 } from "./geoPdfBaseLayers.js";
@@ -332,41 +333,99 @@ describe("regionTouchesBox", () => {
 
 describe("offeredBasemaps", () => {
   const nz: Region = {
-    ...NSW_REGION,
-    id: "nz",
-    name: "New Zealand",
+    ...SIM_NZ,
     basemaps: ["osm-cycle"],
     defaultBasemap: "osm-cycle",
   };
   const two = [NSW_REGION, nz];
+  const around = (
+    [lon, lat]: readonly [number, number],
+    r = 0.1,
+  ): LonLatBox => ({
+    west: lon - r,
+    south: lat - r,
+    east: lon + r,
+    north: lat + r,
+  });
+  const inNsw = around([150.3, -33.7]);
+  const inNz = around([169.1, -44.62]);
+  const atSea = around([160, -40]);
+  const both: LonLatBox = { west: 140, south: -45, east: 175, north: -30 };
 
-  // Mutation: list every catalogue entry, and a user who chose New Zealand is
+  // Mutation: list every catalogue entry, and a map over New Zealand is
   // offered SIX Maps of NSW.
-  it("lists the worldwide basemaps and the chosen regions' own", () => {
-    expect(ids(offeredBasemaps(["nz"], two))).toEqual([
-      "osm-topo",
-      "osm-cycle",
-    ]);
-    expect(ids(offeredBasemaps(["nsw"], two))).toEqual([
+  it("lists the worldwide basemaps and the own ones of what the view touches", () => {
+    expect(ids(offeredBasemaps(inNz, two))).toEqual(["osm-topo", "osm-cycle"]);
+    expect(ids(offeredBasemaps(inNsw, two))).toEqual([
       "protomaps",
       "osm-topo",
       "six-topo",
       "six-base",
       "six-imagery",
     ]);
+    expect(ids(offeredBasemaps(atSea, two))).toEqual(["osm-topo"]);
+  });
+
+  // Mutation: read only the region under the centre, and a view that shows
+  // two regions loses one's basemaps.
+  it("lists every region the view touches, in the catalogue's order", () => {
+    expect(ids(offeredBasemaps(both, two))).toEqual([
+      "protomaps",
+      "osm-topo",
+      "osm-cycle",
+      "six-topo",
+      "six-base",
+      "six-imagery",
+    ]);
+  });
+
+  // Mutation: drop `wrapView`, and a map panned a turn past the antimeridian
+  // loses New Zealand's basemaps.
+  it("reads a view panned past the antimeridian where it is on the globe", () => {
+    expect(
+      ids(
+        offeredBasemaps(
+          { ...inNz, west: inNz.west + 360, east: inNz.east + 360 },
+          two,
+        ),
+      ),
+    ).toEqual(["osm-topo", "osm-cycle"]);
   });
 
   // Mutation: drop the `offered` test, and both pickers grow a second
   // OpenStreetMap row that can't be saved.
   it("leaves out what no picker lists", () => {
-    expect(ids(offeredBasemaps(["nsw"]))).not.toContain("osm");
+    expect(ids(offeredBasemaps(inNsw))).not.toContain("osm");
   });
 
+  // Mutation: take the last chosen region's, and an account that chose two
+  // opens on the second's map.
   it("opens on the first chosen region's default, else a worldwide one", () => {
     expect(defaultBasemapFor(["nsw"])).toBe("six-topo");
-    expect(defaultBasemapFor(["nz", "nsw"], two)).toBe("six-topo");
-    expect(defaultBasemapFor(["nz"], two)).toBe("osm-cycle");
+    expect(defaultBasemapFor([nz.id, "nsw"], two)).toBe("six-topo");
+    expect(defaultBasemapFor([nz.id], two)).toBe("osm-cycle");
     expect(defaultBasemapFor([], two)).toBe("osm-topo");
+  });
+
+  // Mutation: return the region's default for any pick, and a pick the view
+  // offers is swapped for the default.
+  it("keeps a pick the view offers", () => {
+    expect(basemapHere("six-base", inNsw, two)).toBe("six-base");
+    expect(basemapHere("osm-topo", inNz, two)).toBe("osm-topo");
+  });
+
+  // Mutation: fall back to the first offered, and over New Zealand a picked
+  // NSW sheet shows OSM Topo instead of the region's own default.
+  it("shows the default of the region in view for a pick it does not offer", () => {
+    expect(basemapHere("six-base", inNz, two)).toBe("osm-cycle");
+    expect(basemapHere("osm-cycle", inNsw, two)).toBe("six-topo");
+    expect(basemapHere("gone", both, two)).toBe("six-topo");
+  });
+
+  // Mutation: return the pick when no region is in view, and a map over open
+  // sea draws a sheet that covers none of it.
+  it("shows the first offered where no region is in view", () => {
+    expect(basemapHere("six-base", atSea, two)).toBe("osm-topo");
   });
 });
 

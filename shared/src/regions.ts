@@ -6,8 +6,9 @@
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
 // first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
-// saved, printed or exported; nothing draws from either yet, and
-// `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by the chosen regions. Heights, gauges and the area-export check never took a
+// saved, printed or exported; the basemap gallery asks them through
+// `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts); no Terrain layer
+// reads either. Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
 // (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
@@ -584,6 +585,11 @@ export type LonLatBox = {
   east: number;
   north: number;
 };
+
+/** The box of one point: the view of a map that has not yet said what it shows. */
+export function pointBox(lon: number, lat: number): LonLatBox {
+  return { west: lon, south: lat, east: lon, north: lat };
+}
 
 /**
  * The same box moved by whole turns until its centre is in [-180, 180): a map

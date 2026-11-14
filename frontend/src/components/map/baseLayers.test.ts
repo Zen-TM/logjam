@@ -1,11 +1,17 @@
+import { pointBox } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
-import { baseLayersFor } from "./baseLayers";
+import { baseLayersFor, viewForBasemaps } from "./baseLayers";
+
+const ids = (view: Parameters<typeof baseLayersFor>[0]) =>
+  baseLayersFor(view).map((layer) => layer.id);
+const inNsw = pointBox(150.3, -33.7);
+const overNz = pointBox(169.1, -44.62);
 
 describe("baseLayersFor", () => {
   // Mutation: drop a basemap from NSW's `basemaps`, or list "osm" again, and
-  // an NSW account's gallery is no longer today's.
-  it("gives an NSW account the gallery it has always had", () => {
-    expect(baseLayersFor(["nsw"]).map((layer) => layer.id)).toEqual([
+  // a map over NSW is no longer today's gallery.
+  it("gives a map over NSW the gallery it has always had", () => {
+    expect(ids(inNsw)).toEqual([
       "protomaps",
       "osm-topo",
       "osm-cycle",
@@ -13,5 +19,26 @@ describe("baseLayersFor", () => {
       "six-base",
       "six-imagery",
     ]);
+  });
+
+  // Mutation: list by the account's chosen regions again (a constant "nsw"),
+  // and a map panned to New Zealand still offers NSW's sheets.
+  it("leaves out NSW's own basemaps over ground outside it", () => {
+    expect(ids(overNz)).toEqual(["osm-topo", "osm-cycle"]);
+  });
+});
+
+describe("viewForBasemaps", () => {
+  // Mutation: return `next` always, and every pan makes a new view, so the
+  // page redraws on each one.
+  it("keeps the view while a pan offers the same basemaps", () => {
+    const next = pointBox(151.2, -33.87);
+    expect(viewForBasemaps(inNsw, next)).toBe(inNsw);
+  });
+
+  // Mutation: return `prev` always, and the gallery stays on NSW's after the
+  // map leaves it.
+  it("takes the new view once the offer changes", () => {
+    expect(viewForBasemaps(inNsw, overNz)).toBe(overNz);
   });
 });

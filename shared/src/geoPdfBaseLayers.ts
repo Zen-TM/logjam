@@ -2,7 +2,11 @@ import type { TopoLayerName } from "./topoSettings.js";
 import {
   NSW_REGION,
   REGIONS,
+  regionInView,
   regionsOf,
+  regionsTouching,
+  wrapView,
+  type LonLatBox,
   type Region,
   type TileBytes,
 } from "./regions.js";
@@ -81,6 +85,16 @@ type BasemapCatalogBase = {
   requiresExtractionDate?: boolean;
   /** False for an entry neither client's picker lists (`offeredBasemaps`). */
   offered?: false;
+  /**
+   * The sheet prints its own contour lines, so the statewide ones are not drawn
+   * over it (`takesContours`). Guard: `contourRules.test.ts`.
+   */
+  printsContours?: true;
+  /**
+   * The map is photographs, which carry their own shadows, so the hillshade is
+   * not drawn over it (`takesHillshade`). Guard: `contourRules.test.ts`.
+   */
+  photo?: true;
 };
 
 /**
@@ -147,6 +161,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "osm-topo",
+    printsContours: true,
     name: "OSM Topo",
     kind: "raster",
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
@@ -165,6 +180,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "osm-cycle",
+    printsContours: true,
     name: "OSM Cycle Topo",
     kind: "raster",
     urlTemplate:
@@ -181,6 +197,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "six-topo",
+    printsContours: true,
     name: "SIX Maps Topo",
     kind: "raster",
     urlTemplate:
@@ -218,6 +235,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "six-base",
+    printsContours: true,
     name: "SIX Maps Base Map",
     kind: "raster",
     urlTemplate:
@@ -242,6 +260,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "six-imagery",
+    photo: true,
     name: "SIX Maps Imagery",
     kind: "raster",
     urlTemplate:
@@ -269,24 +288,52 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
 ];
 
-/**
- * The basemaps a picker lists for a user who chose `regionIds`, in the
- * catalogue's order: the worldwide ones and their regions' own. A stored pick
- * that is no longer offered falls back to the default on both clients.
- * Guard: `regions.test.ts`.
- */
-export function offeredBasemaps(
-  regionIds: readonly string[],
-  regions: readonly Region[] = REGIONS,
+/** The catalogue entries a picker lists, minus those a region owns unless `covering` has them. */
+function listed(
+  regions: readonly Region[],
+  covering: ReadonlySet<string>,
 ): BasemapCatalogEntry[] {
-  const chosen = new Set(
-    regionsOf(regionIds, regions).flatMap((r) => r.basemaps),
-  );
   const owned = new Set(regions.flatMap((r) => r.basemaps));
   return BASEMAP_CATALOG.filter(
     (entry) =>
-      entry.offered !== false && (!owned.has(entry.id) || chosen.has(entry.id)),
+      entry.offered !== false &&
+      (!owned.has(entry.id) || covering.has(entry.id)),
   );
+}
+
+/**
+ * The basemaps a picker lists for the ground a map shows, in the catalogue's
+ * order: the worldwide ones and those of every region the view touches. The
+ * regions an account chose play no part (ADR 0049). Guard: `regions.test.ts`.
+ */
+export function offeredBasemaps(
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+): BasemapCatalogEntry[] {
+  return listed(
+    regions,
+    new Set(
+      regionsTouching(wrapView(view), regions).flatMap((r) => r.basemaps),
+    ),
+  );
+}
+
+/**
+ * The basemap a map draws for the user's pick: the pick where the view offers
+ * it, else the default of the region in view (always one the view offers, which
+ * `regions.test.ts` holds for every region), else the first offered. The pick
+ * itself is left alone, so it comes back when the map returns to ground that
+ * offers it. Guard: `regions.test.ts`.
+ */
+export function basemapHere(
+  picked: string,
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+): string {
+  const offered = offeredBasemaps(view, regions).map((entry) => entry.id);
+  return offered.includes(picked)
+    ? picked
+    : (regionInView(wrapView(view), regions)?.defaultBasemap ?? offered[0]!);
 }
 
 /**
@@ -299,7 +346,7 @@ export function defaultBasemapFor(
 ): string {
   return (
     regionsOf(regionIds, regions)[0]?.defaultBasemap ??
-    offeredBasemaps(regionIds, regions)[0]!.id
+    listed(regions, new Set())[0]!.id
   );
 }
 
