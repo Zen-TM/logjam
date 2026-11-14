@@ -82,8 +82,8 @@ DEGREES = {
 class TestCellMetres(unittest.TestCase):
     """Mutations that turn each test red: `a_metre_cell_is_itself`: a cell in
     metres taken as degrees (`linear_m is not None` made `linear_m != 1.0`);
-    `a_foot_cell`: a cell returned in its own units (the old `dem_cell`), or a
-    US survey foot read as the international one; `a_degree_cell`: the
+    `a_foot_cell`: a cell returned in its own units (the old `dem_cell`);
+    `a_degree_cell`: the
     east-west size not shrunk with latitude, or the north-south size ignored;
     `the_zoom_a_cell_supports`: a cell returned in its own units."""
 
@@ -93,9 +93,6 @@ class TestCellMetres(unittest.TestCase):
     def test_a_foot_cell_is_scaled_to_metres(self):
         self.assertAlmostEqual(sharpen.cell_metres(3.0, 3.0, FOOT), 0.9144)
         self.assertAlmostEqual(sharpen.cell_metres(3.0, 3.0, US_FOOT), 3 * 1200 / 3937)
-        self.assertNotAlmostEqual(
-            sharpen.cell_metres(3.0, 3.0, US_FOOT), sharpen.cell_metres(3.0, 3.0, FOOT)
-        )
 
     def test_a_degree_cell_is_its_ground_size_at_the_latitude(self):
         one_metre_of_latitude = 1 / 111_320
@@ -319,9 +316,9 @@ class TestLonLat(unittest.TestCase):
 
 class TestSurveyZone(unittest.TestCase):
     """Mutations that turn each test red: `the_zone_is_the_surveys`: the zone
-    taken from the first tile alone, or per tile (a survey across a zone edge
-    is cut in two grids); `a_survey_of_metric_tiles`: metric tiles given a
-    zone; `a_tile_with_z_in_feet`: a tile with Z in feet left out of it;
+    taken from the first tile alone (a survey across a zone edge is then cut in
+    two grids); `a_survey_of_metric_tiles`: metric tiles given a zone;
+    `a_tile_with_z_in_feet`: a tile with Z in feet left out of it;
     `the_southern_hemisphere`: the hemisphere read from the longitude, or the
     southern offset (32700) dropped."""
 
