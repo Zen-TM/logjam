@@ -15,7 +15,7 @@
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
 // location detail (shared/DESIGN.md §13). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
-import { numericFieldValue } from "@logjam/shared";
+import { gradeSystemOfView, numericFieldValue } from "@logjam/shared";
 import {
   Fragment,
   memo,
@@ -78,7 +78,6 @@ import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import { readLastMapCamera } from "../map/lastCamera";
 import { readRegions } from "../regionsPreference";
-import { gradeSystemOfView } from "./gradeSystemOfView";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -154,6 +153,13 @@ type Countable = MirrorPlace & {
 
 /** The page's name: the full hero's eyebrow and the compact row's title. */
 const PAGE_NAME = "Places";
+
+/** The grade system "Easiest first" sorts by: that of the ground the map was
+ *  last looking at, else of the account's opening view. */
+const readGradeSystem = () =>
+  gradeSystemOfView(readLastMapCamera()?.center ?? null, {
+    regions: readRegions(),
+  });
 
 export function PlacesScreen({
   onOpenPlace,
@@ -324,18 +330,9 @@ export function PlacesScreen({
   }, [closeMenu]);
   useFocusEffect(onFocus);
 
-  // The grade system "Easiest first" sorts by: that of the ground the map was
-  // last looking at, read on arrival at this tab (the map is another screen).
-  const [gradeSystem, setGradeSystem] = useState(() =>
-    gradeSystemOfView(readLastMapCamera()?.center ?? null, readRegions()),
-  );
-  useFocusEffect(
-    useCallback(() => {
-      setGradeSystem(
-        gradeSystemOfView(readLastMapCamera()?.center ?? null, readRegions()),
-      );
-    }, []),
-  );
+  // Read on arrival at this tab: the map is another screen.
+  const [gradeSystem, setGradeSystem] = useState(readGradeSystem);
+  useFocusEffect(useCallback(() => setGradeSystem(readGradeSystem()), []));
 
   // The viewer's OWN trip tally per place, derived locally from the mirrored
   // trips — the server's `_count` never reaches the mirror. Trips of others
@@ -948,6 +945,8 @@ export function PlacesScreen({
         onChangeShowFilteredOnMap={setPlaceMapFilterEnabled}
         filteredCount={visible.length}
         totalCount={places.length}
+        gradeSystem={gradeSystem}
+        listedPlaces={places}
       />
 
       <PlaceEditSheet

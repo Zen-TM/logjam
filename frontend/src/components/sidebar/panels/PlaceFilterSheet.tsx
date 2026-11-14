@@ -3,12 +3,13 @@ import {
   areaSizeLabel,
   contractSectionKeys,
   dateSummary,
-  defsForType,
+  placeFilterDefs,
   PLACE_ROPEWIKI_OPTIONS,
   PLACE_SORT_OPTIONS,
   PLACE_STATUS_FILTER_OPTIONS,
   PLACES_FILTER_SHEET,
   placesCountLabel,
+  type CanyonGradeSystem,
   type PlaceFilters,
   type PlaceSortKey,
   type ScopedCustomFieldDef,
@@ -52,6 +53,10 @@ type Props = {
   sort: PlaceSortKey;
   onChangeSort: (next: PlaceSortKey) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
+  /** The system the map in view grades in, and every place listed (the
+   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`). */
+  gradeSystem: CanyonGradeSystem;
+  listedPlaces: readonly { fieldValues?: unknown }[];
   /** Close the panel and draw the area box on the map. */
   onDrawArea: () => void;
   /** Set the area to whatever the map shows now. */
@@ -222,11 +227,20 @@ export const FILTER_SHEET_SECTIONS: Record<
  * them is drawn from its definition's SHAPE, never its key.
  */
 export default function PlaceFilterSheet(props: Props) {
-  const { filters, onChangeFilters, placeCustomFieldDefs } = props;
-  const fieldDefs =
-    filters.placeTypeId == null
-      ? placeCustomFieldDefs
-      : defsForType(placeCustomFieldDefs, filters.placeTypeId);
+  const {
+    filters,
+    onChangeFilters,
+    placeCustomFieldDefs,
+    gradeSystem,
+    listedPlaces,
+  } = props;
+  const fieldDefs = placeFilterDefs(
+    placeCustomFieldDefs,
+    filters.placeTypeId,
+    gradeSystem,
+    listedPlaces,
+    filters.custom,
+  );
 
   const patch = (next: Partial<PlaceFilters>) =>
     onChangeFilters({ ...filters, ...next });

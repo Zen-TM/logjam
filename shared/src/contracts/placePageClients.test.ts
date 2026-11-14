@@ -38,6 +38,7 @@ const GPS_PLAN = read("mobile/src/plans/PlanPlaceSheet.tsx");
 const WEB_LIST = read("frontend/src/components/sidebar/panels/PlacesPanel.tsx");
 const GPS_LIST = read("mobile/src/places/PlacesScreen.tsx");
 const GPS_FORM = read("mobile/src/places/PlaceEditSheet.tsx");
+const GPS_FILTER = read("mobile/src/places/PlaceFilterSheet.tsx");
 const WEB_SIDEBAR = read("frontend/src/components/sidebar/SidebarPanel.tsx");
 
 /** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
@@ -116,5 +117,21 @@ describe("Logjam GPS's place form", () => {
       "placeFormDefs( customFieldDefs, placeTypeId, draft.longitude, draft.latitude, { ...place?.fieldValues,",
     );
     expect(GPS_FORM).not.toContain("defsForType(");
+  });
+});
+
+// Logjam GPS's filter sheet has no render harness either; Logjam Web's is
+// rendered in PlaceFilterSheet.grades.render.test.tsx.
+describe("Logjam GPS's place filter sheet", () => {
+  // Mutation: build `typeDefs` in PlaceFilterSheet with `defsForType`, or drop
+  // `listedPlaces` or `gradeSystem` from the `PlaceFilterSheet` call in
+  // PlacesScreen: the ACA axes show over NSW.
+  it("offers the grade axes of the system in view, and of the places listed", () => {
+    expect(GPS_FILTER).toContain(
+      "placeFilterDefs( defs, filters.placeTypeId, props.gradeSystem, props.listedPlaces, filters.custom, )",
+    );
+    expect(GPS_LIST).toContain(
+      "gradeSystem={gradeSystem} listedPlaces={places}",
+    );
   });
 });

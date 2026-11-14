@@ -4,8 +4,10 @@
 // position, elevation and one `attr:<key>` per attribute of its system type; a
 // file with no name of its own is blank, so saving untouched never writes its
 // filename as its name.
+import { gradeFieldsAt, isCanyonGradeKey } from "./canyonGrade.js";
 import { fieldValue } from "./fieldValues.js";
 import { SYSTEM_FIELD_DEFS, SYSTEM_PLACE_TYPES } from "./placeTypes.js";
+import { REGIONS, type Region } from "./regions.js";
 import {
   coerceFieldValue,
   type TripLogCustomFieldDef,
@@ -41,13 +43,33 @@ const sorted = (value: unknown): unknown =>
 export const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
-/** The attributes a plan place records: its system type's definitions. */
+/**
+ * The attributes a plan place records: its system type's definitions, with the
+ * grade fields cut to those of the system used where the place stands, plus any
+ * that already hold a value (`gradeFieldsAt`). The one list the form, its
+ * check, `itemWords` and `itemPatch` all use; it follows the place as stored,
+ * so the form's fields do not change as its position is typed. Guard:
+ * `planItemEdit.test.ts`.
+ */
 export function itemFieldDefs(
-  place: Pick<TripPlanPlace, "placeTypeId">,
+  place: Pick<
+    TripPlanPlace,
+    "placeTypeId" | "latitude" | "longitude" | "fieldValues"
+  >,
+  regions: readonly Region[] = REGIONS,
 ): TripLogCustomFieldDef[] {
   const type = SYSTEM_PLACE_TYPES.find((each) => each.id === place.placeTypeId);
+  const grades = gradeFieldsAt(
+    place.longitude,
+    place.latitude,
+    place.fieldValues,
+    regions,
+  );
   return SYSTEM_FIELD_DEFS.filter(
-    (def) => type != null && def.placeTypes.includes(type.key),
+    (def) =>
+      type != null &&
+      def.placeTypes.includes(type.key) &&
+      (!isCanyonGradeKey(def.key) || grades.includes(def.key)),
   ).map(({ key, label, type, min, max }) => ({
     key,
     label,

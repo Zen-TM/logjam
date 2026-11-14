@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { itemPatch, itemWords } from "./planItemEdit.js";
+import { itemFieldDefs, itemPatch, itemWords } from "./planItemEdit.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
+import { NSW_REGION } from "./regions.js";
+import { SIM_REGIONS } from "./simRegions.js";
 import type { TripPlanItem } from "./tripPlans.js";
 
 const place = {
@@ -78,5 +80,56 @@ describe("itemPatch", () => {
         notes: "Exit left.",
       }),
     ).toEqual({ notes: { from: "", to: "Exit left." } });
+  });
+});
+
+describe("the attributes a plan place's edit form offers", () => {
+  const canyonAt = (
+    latitude: number,
+    longitude: number,
+    fieldValues: Record<string, unknown> = {},
+  ) =>
+    ({
+      ...place,
+      latitude,
+      longitude,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      fieldValues,
+    }) as unknown as Extract<TripPlanItem, { kind: "place" }>;
+  const regions = [NSW_REGION, ...SIM_REGIONS];
+  const keys = (item: ReturnType<typeof canyonAt>) =>
+    itemFieldDefs(item, regions).map((def) => def.key);
+  const FRENCH = ["v_grade", "a_grade", "commitment"];
+  const ACA = ["aca_technical", "aca_water", "aca_time", "aca_risk"];
+  const NON_GRADE = ["quality", "hours", "num_abseils", "longest_abseil"];
+
+  // Mutation: return every definition of the type, as before.
+  it("are the French grades in NSW and the ACA ones in the simulated Utah", () => {
+    expect(keys(canyonAt(-33.5, 150.25))).toEqual([...FRENCH, ...NON_GRADE]);
+    expect(keys(canyonAt(38.27, -110.8))).toEqual([...NON_GRADE, ...ACA]);
+  });
+
+  // Mutation: drop `place.fieldValues` from the `gradeFieldsAt` call.
+  it("keep a grade field the place already holds, in either system", () => {
+    expect(keys(canyonAt(-33.5, 150.25, { aca_water: 5 }))).toEqual([
+      ...FRENCH,
+      ...NON_GRADE,
+      "aca_water",
+    ]);
+  });
+
+  // Mutation: loop over every canyon definition in `itemWords` or in
+  // `itemPatch`, instead of `itemFieldDefs`.
+  it("are the words the form opens on, and what a patch compares", () => {
+    const item = canyonAt(-33.5, 150.25, { v_grade: 3 });
+    const words = itemWords(item as TripPlanItem);
+    expect(Object.keys(words).filter((key) => key.startsWith("attr:"))).toEqual(
+      [...FRENCH, ...NON_GRADE].map((key) => `attr:${key}`),
+    );
+    expect(itemPatch(item as TripPlanItem, words)).toBeNull();
+    // A word for a field the form did not offer is not a change.
+    expect(
+      itemPatch(item as TripPlanItem, { ...words, "attr:aca_water": "5" }),
+    ).toBeNull();
   });
 });

@@ -172,6 +172,7 @@ describe("PlaceDialog, a canyon's grade fields", () => {
     expect(has("ACA risk")).toBe(false);
   });
 
+  // Mutation: make `gradeSystemAt` answer "aca" for a null position.
   it("start French with no position yet", () => {
     render(dialog(null));
     expect(has("V grade")).toBe(true);

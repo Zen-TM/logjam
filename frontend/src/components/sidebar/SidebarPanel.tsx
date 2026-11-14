@@ -32,7 +32,7 @@ import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import {
   accountRegion,
   canyonOffersFor,
-  gradeSystemAt,
+  gradeSystemOfView,
   TRIPS_LIST,
   type LoadState,
   type NotificationPlanTarget,
@@ -377,11 +377,10 @@ function SidebarPanel({
 
   const accountFailed =
     !currentUser && currentUserError !== null && waitsOnAccount(activePanel);
-  // A map that has not moved is looking at the account region's opening view.
-  const [gradeLon, gradeLat] = mapCenter
-    ? [mapCenter.lng, mapCenter.lat]
-    : accountRegion(currentUser?.uiPreferences).view.center;
-  const placesGradeSystem = gradeSystemAt(gradeLon, gradeLat);
+  const placesGradeSystem = gradeSystemOfView(
+    mapCenter ? [mapCenter.lng, mapCenter.lat] : null,
+    currentUser?.uiPreferences,
+  );
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (

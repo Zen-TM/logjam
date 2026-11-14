@@ -841,6 +841,8 @@ function PlacesPanel({
       sort={sort}
       onChangeSort={setSort}
       placeCustomFieldDefs={placeCustomFieldDefs}
+      gradeSystem={gradeSystem}
+      listedPlaces={collection.map(({ place }) => place)}
       onDrawArea={onDrawFilterArea}
       onAreaToView={onFilterToMapView}
       onReset={() => onChangeFilters(clearSheetFilters(filters))}

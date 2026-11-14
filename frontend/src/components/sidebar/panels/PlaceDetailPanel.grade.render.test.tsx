@@ -126,6 +126,7 @@ describe("the place page's attribute table", () => {
     expect(aca.nextElementSibling?.textContent).toBe("3B");
   });
 
+  // Mutation: remove the French condition in `acaGradeRow`.
   it("has a Grade row for the ACA grade alone, and no second one", async () => {
     renderPlace(placeWith({ aca_technical: 3, aca_water: 2 }));
     const grade = await screen.findByText("Grade", { selector: "dt" });

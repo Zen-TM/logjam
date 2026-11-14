@@ -15,6 +15,7 @@ import { t } from "./i18n.js";
 import type { AttributeRow } from "./logbook.js";
 import { fieldValueLabel } from "./placeTypes.js";
 import {
+  accountRegion,
   regionAt,
   REGIONS,
   type CanyonGradeSystem,
@@ -167,13 +168,17 @@ export function gradeFieldsAt(
   regions: readonly Region[] = REGIONS,
 ): readonly string[] {
   const used = SYSTEM_KEYS[gradeSystemAt(lon, lat, regions)];
-  const values =
-    typeof fieldValues === "object" && fieldValues !== null
-      ? (fieldValues as Record<string, unknown>)
-      : {};
-  const held = (key: string) =>
-    values[key] !== undefined && values[key] !== null && values[key] !== "";
-  return GRADE_KEYS.filter((key) => used.includes(key) || held(key));
+  return GRADE_KEYS.filter(
+    (key) => used.includes(key) || holdsValue(fieldValues, key),
+  );
+}
+
+/** Whether a values object holds a value for a key: not absent, null or an
+ *  empty string, so a form's own text and stored values both count. */
+function holdsValue(fieldValues: unknown, key: string): boolean {
+  if (typeof fieldValues !== "object" || fieldValues === null) return false;
+  const value = (fieldValues as Record<string, unknown>)[key];
+  return value !== undefined && value !== null && value !== "";
 }
 
 /**
@@ -207,4 +212,46 @@ export function gradeSortKeys(system: CanyonGradeSystem): readonly string[] {
     ...SYSTEM_KEYS[system].slice(0, 2),
     ...SYSTEM_KEYS[other].slice(0, 2),
   ];
+}
+
+/**
+ * The grade system of the ground a map is looking at: the system of the region
+ * under the centre (`[lon, lat]`), and with no centre yet (a map that has not
+ * settled) of the account's opening view (`accountRegion`). Each client says
+ * where its centre comes from. Guard: `canyonGrade.test.ts`.
+ */
+export function gradeSystemOfView(
+  center: readonly [number, number] | null,
+  uiPreferences: unknown,
+  regions: readonly Region[] = REGIONS,
+): CanyonGradeSystem {
+  const [lon, lat] =
+    center ?? accountRegion(uiPreferences, regions).view.center;
+  return gradeSystemAt(lon, lat, regions);
+}
+
+/**
+ * The definitions a place filter offers, for a type tab (`placeTypeId`) or
+ * every type (null): the grade fields cut to the system in view, plus any grade
+ * field a listed place holds a value for and any the filter already has an
+ * entry for. The last two keep a row from vanishing: a filter set on an axis
+ * stays on screen when the map pans to ground that grades otherwise. `places`
+ * is the whole unfiltered list, never the filtered one, or a row would
+ * disappear as its own filter narrowed the list. Guard: `canyonGrade.test.ts`.
+ */
+export function placeFilterDefs(
+  defs: readonly ScopedCustomFieldDef[],
+  placeTypeId: string | null,
+  gradeSystem: CanyonGradeSystem,
+  places: readonly { fieldValues?: unknown }[],
+  custom: Readonly<Record<string, unknown>>,
+): ScopedCustomFieldDef[] {
+  const shown = placeTypeId === null ? defs : defsForType(defs, placeTypeId);
+  return shown.filter(
+    (def) =>
+      !isCanyonGradeKey(def.key) ||
+      SYSTEM_KEYS[gradeSystem].includes(def.key) ||
+      def.key in custom ||
+      places.some((place) => holdsValue(place.fieldValues, def.key)),
+  );
 }

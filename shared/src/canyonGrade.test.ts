@@ -6,9 +6,11 @@ import {
   gradeFieldsAt,
   gradeSortKeys,
   gradeSystemAt,
+  gradeSystemOfView,
   isCanyonGradeKey,
   canyonGradeRows,
   formatCanyonGrade,
+  placeFilterDefs,
   placeFormDefs,
   withoutCanyonGradeRows,
 } from "./canyonGrade.js";
@@ -240,8 +242,8 @@ describe("the definitions a place form shows", () => {
     ).toEqual([...ACA_KEYS, "quality", "permit"]);
   });
 
-  // Mutation: filter `defs` itself in `placeFormDefs`, not `defsForType`'s
-  // answer.
+  // Mutation: replace the `defsForType(defs, placeTypeId)` call in
+  // `placeFormDefs` with `defs`: a campsite is offered the canyon's fields.
   it("still follows the place type, and never hides a field that is not a grade", () => {
     expect(
       keys(placeFormDefs(defs, "campsite", ...at(UTAH), {}, REGIONS_WITH_UTAH)),
@@ -299,5 +301,104 @@ describe("the grades a list sorts by", () => {
       "v_grade",
       "a_grade",
     ]);
+  });
+});
+
+describe("the grade system of the ground in view", () => {
+  const regionsOnly = (id: string) => ({ regions: [id] });
+
+  // Mutation: read the account's opening view and ignore the centre.
+  it("is that of the region under the centre", () => {
+    expect(
+      gradeSystemOfView([...UTAH], regionsOnly("nsw"), REGIONS_WITH_UTAH),
+    ).toBe("aca");
+    expect(
+      gradeSystemOfView(
+        [...BLUE_MOUNTAINS],
+        regionsOnly("simutah"),
+        REGIONS_WITH_UTAH,
+      ),
+    ).toBe("french");
+  });
+
+  // Mutation: answer with `[0, 0]` when there is no centre yet.
+  it("is that of the account's opening view when there is no centre", () => {
+    expect(
+      gradeSystemOfView(null, regionsOnly("simutah"), REGIONS_WITH_UTAH),
+    ).toBe("aca");
+    expect(gradeSystemOfView(null, regionsOnly("nsw"), REGIONS_WITH_UTAH)).toBe(
+      "french",
+    );
+  });
+});
+
+describe("the definitions a place filter offers", () => {
+  const def = (key: string, placeTypeIds = ["canyon"]) =>
+    ({
+      key,
+      label: key,
+      type: "integer",
+      appliesToAllTypes: false,
+      placeTypeIds,
+    }) as unknown as ScopedCustomFieldDef;
+  const defs = [
+    ...[...FRENCH_KEYS, ...ACA_KEYS].map((key) => def(key)),
+    def("quality"),
+    def("capacity", ["campsite"]),
+  ];
+  const keys = (shown: ScopedCustomFieldDef[]) => shown.map((d) => d.key);
+  const none = {};
+
+  // Mutation: return the type's definitions unfiltered.
+  it("cuts the grade axes to the system in view", () => {
+    expect(keys(placeFilterDefs(defs, "canyon", "french", [], none))).toEqual([
+      ...FRENCH_KEYS,
+      "quality",
+    ]);
+    expect(keys(placeFilterDefs(defs, "canyon", "aca", [], none))).toEqual([
+      ...ACA_KEYS,
+      "quality",
+    ]);
+  });
+
+  // Mutation: filter `defsForType`'s answer only when a type is given, so the
+  // every-type tab keeps all seven axes.
+  it("cuts them on the every-type tab too, and keeps what is not a grade", () => {
+    expect(keys(placeFilterDefs(defs, null, "french", [], none))).toEqual([
+      ...FRENCH_KEYS,
+      "quality",
+      "capacity",
+    ]);
+  });
+
+  // Mutation: drop the `places.some(...)` clause in `placeFilterDefs`.
+  it("adds the axis of a value a listed place holds", () => {
+    const places = [{ fieldValues: { aca_risk: 3 } }, { fieldValues: {} }];
+    expect(
+      keys(placeFilterDefs(defs, "canyon", "french", places, none)),
+    ).toEqual([...FRENCH_KEYS, "aca_risk", "quality"]);
+    // An empty value is not held.
+    expect(
+      keys(
+        placeFilterDefs(
+          defs,
+          "canyon",
+          "french",
+          [{ fieldValues: { aca_risk: "" } }],
+          none,
+        ),
+      ),
+    ).toEqual([...FRENCH_KEYS, "quality"]);
+  });
+
+  // Mutation: drop the `def.key in custom` clause in `placeFilterDefs`.
+  it("keeps the axis an active filter is set on", () => {
+    expect(
+      keys(
+        placeFilterDefs(defs, "canyon", "french", [], {
+          aca_water: { kind: "numberRange", range: [1, 2] },
+        }),
+      ),
+    ).toEqual([...FRENCH_KEYS, "aca_water", "quality"]);
   });
 });

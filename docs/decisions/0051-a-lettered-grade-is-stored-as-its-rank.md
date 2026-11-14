@@ -42,10 +42,15 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   and a Canyon form offers that system's fields at the place's position, the French
   ones outside every region, plus any grade field that already holds a value, stored
   or typed, so a save never drops one (`gradeFieldsAt`, `placeFormDefs` in
-  `shared/src/canyonGrade.ts`). An NSW canyon is offered no ACA field. A canyon
+  `shared/src/canyonGrade.ts`), and a plan place's edit form does the same
+  (`itemFieldDefs`). An NSW canyon is offered no ACA field. A place filter offers
+  the axes of the system in view, plus any a listed place holds a value for or
+  the filter is set on (`placeFilterDefs`). A canyon
   holding both systems shows the French grade as its Grade row and the ACA one as a
-  second row, "ACA grade". Guard: `shared/src/canyonGrade.test.ts` ("keeps a field
-  that already holds a value, whatever the system"). Everything else above stands.
+  second row, "ACA grade". Guards: `shared/src/canyonGrade.test.ts` ("keeps a field
+  that already holds a value, whatever the system", "keeps the axis an active filter
+  is set on") and `shared/src/planItemEdit.test.ts` ("keep a grade field the place
+  already holds, in either system"). Everything else above stands.
 
 ## Consequences
 
