@@ -1,3 +1,4 @@
+import { setDisplayUnits } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { misalignedGeoPdfNotice } from "./geoPdfMisalignment";
@@ -24,6 +25,18 @@ describe("misalignedGeoPdfNotice", () => {
     expect(misalignedGeoPdfNotice([sheet(0.01)], view)).toBe(
       "Wollangambe may be up to 100 m out of position",
     );
+  });
+
+  // Mutation: write `${worst.metres} m` in geoPdfMisalignment.ts again.
+  it("states the distance in feet when the display units are imperial", () => {
+    setDisplayUnits("imperial");
+    try {
+      expect(misalignedGeoPdfNotice([sheet(0.01)], view)).toBe(
+        "Wollangambe may be up to 328 ft out of position",
+      );
+    } finally {
+      setDisplayUnits("metric");
+    }
   });
 
   // Mutation: test the GeoPDF's bbox against something other than the view.
