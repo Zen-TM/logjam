@@ -28,10 +28,7 @@ export function sheetGrid(extent: Edges, regions: readonly Region[] = REGIONS) {
     toGrid: (lat: number, lon: number) => toGrid(lat, lon, zone),
     fromGrid: (easting: number, northing: number) => {
       const point = fromGrid(easting, northing, zone);
-      // A projection of an absurd easting answers Infinity, which has no copy.
-      const copies = Number.isFinite(point.lon)
-        ? Math.round((centre.lon - point.lon) / 360)
-        : 0;
+      const copies = Math.round((centre.lon - point.lon) / 360);
       return { lat: point.lat, lon: point.lon + 360 * copies };
     },
   };

@@ -230,16 +230,18 @@ it.each([
 
 // An easting the grid cannot place is refused in the name of the grid the sheet
 // is in; with only NSW declared that is MGA wherever the sheet is, as the
-// Layers popover reads. Mutation: write "MGA" in the message whatever the
-// grid, and the Utah and NZ rows read it; drop the `Number.isFinite` guard in
-// `sheetGrid`'s `fromGrid` and an Infinity longitude becomes NaN, which no
-// range check refuses.
+// Layers popover reads. A projection of such an easting answers Infinity, which
+// `sheetGrid` shifts to NaN, and `rangeError`'s `!(... <= 180)` refuses NaN.
 describe("a typed easting no grid can place", () => {
   const SYDNEY = { north: -33.6, south: -33.7, east: 150.4, west: 150.3 };
   const MELBOURNE = { north: -37.7, south: -37.9, east: 145.0, west: 144.8 };
   const UTAH = { north: 37.55, south: 37.45, east: -107.95, west: -108.05 };
   const WANAKA = { north: -44.6, south: -44.7, east: 169.2, west: 169.1 };
 
+  // Mutation: name the grid by the zone (`sheetGrid(state).zone.grid`) in
+  // `gridOf` in place of `gridNamedAt`, and the Melbourne row reads UTM; test
+  // `Math.abs(deg - centreLon) > 180` in `rangeError`, which lets NaN through,
+  // and both rows find no error.
   it.each([
     ["Sydney", SYDNEY],
     ["Melbourne, which no region holds", MELBOURNE],
@@ -249,6 +251,8 @@ describe("a typed easting no grid can place", () => {
     );
   });
 
+  // Mutation: write "MGA" in the message whatever the grid, and the Utah,
+  // Wanaka and Melbourne rows read it.
   it.each([
     ["Utah", UTAH, "UTM"],
     ["Wanaka", WANAKA, "NZTM"],
