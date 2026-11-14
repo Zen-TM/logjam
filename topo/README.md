@@ -19,12 +19,13 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 |--------|----------|---------|-----------------|
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
-| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_FIRE.credit` in `shared/src/nswFire.ts` |
+| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_REGION.terrain.fire.credit` in `shared/src/regions.ts` |
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_REGION.terrain.land.credit` in `shared/src/regions.ts` |
-| **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
-| **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
+| **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_REGION.terrain.coverage.credit` in `shared/src/regions.ts` |
+| **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_REGION.terrain.coverage.credit` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
+| **Mapterhorn** elevation tiles (a new region's heights, `build_region_dem.py`) | heights | each source's own, in Mapterhorn's `attribution.json` | the sources the box draws on, written into the build's `--credit` |
 
 > **SVTM licence — unconfirmed.** NSW open data on the SEED portal
 > (<https://datasets.seed.nsw.gov.au/>) is typically CC BY 4.0, but the exact
@@ -124,7 +125,7 @@ the topo bucket at the path `NSW_REGION.terrain.land.archivePath` names, and nee
 ```bash
 aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/land/nsw-tenure.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/land/nsw-tenure.pmtiles   # 206
 ```
 
 ---
@@ -203,7 +204,7 @@ the topo bucket at the path `NSW_REGION.terrain.heights.archivePath` names in
 ```bash
 aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m.pmtiles   # 206
 ```
 
 No deploy is needed. The API looks for the archive every five minutes and
@@ -384,8 +385,65 @@ there is no resuming across tasks. Check the result as for the height archive;
 it should print `206`:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m-slope.pmtiles
 ```
+
+---
+
+## Building a region's heights from Mapterhorn
+
+`build_region_dem.py` cuts a box out of [Mapterhorn](https://mapterhorn.com)'s
+elevation tiles and writes it as a height archive in the form of the NSW one:
+terrarium PNG, 256 px, in one PMTiles file. Mapterhorn's tiles are 512 px WebP,
+so each becomes four 256 px PNG tiles one zoom deeper; the heights are not
+resampled. Why this and not a pipeline per country, and why not reading
+Mapterhorn from the apps:
+[ADR 0052](../docs/decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md).
+NSW does not use it.
+
+Run it in the worker image (`make build-workers` builds it), which has NumPy,
+Pillow, the `pmtiles` Python package and the GDAL bindings it shares with
+`build_nsw_dem.py`. It reads Mapterhorn by byte range, fetching only the tiles
+over the box, and writes the archive and a temporary MBTiles beside it, so
+mount an output directory with room for both. The `pmtiles show` check below
+needs the [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary, on the
+host.
+
+```bash
+# W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, where its files
+# for New Zealand and Utah stop.
+mkdir -p out
+docker run --rm -v "$PWD/out:/out" logjam-topo-worker:latest \
+  python3 /app/build_region_dem.py heights --bbox 169.20,-44.20,169.32,-44.11 \
+  --zmax 17 --zmin 8 --jobs 3 \
+  --credit "Elevation data: …" --name "Example heights" /out/example.pmtiles
+pmtiles show out/example.pmtiles
+```
+
+A west edge below zero (the Americas) is written with an equals sign,
+`--bbox=-112.2,40.5,-111.6,41`: the image's Python reads `--bbox -112.2,…` as
+a missing value.
+
+The box above took 6 minutes 38 seconds in the image on a 4-thread machine (3
+jobs) and wrote 77 MB, byte for byte what the same command gave on a laptop. It
+is mostly coarse ground; a box of 1 m ground would be larger (an estimate from
+the tile sizes, not measured).
+`--source` replaces the files it would read (a URL or a path to a PMTiles file,
+as often as needed, tried in order); without it they are the ones in
+Mapterhorn's `download_urls.json` that hold the zoom over the box. In
+`pmtiles show`, `bounds` is the box's tiles and `attribution` is the credit
+given.
+
+**The credit is yours to write.** Name the sources you can show the box draws
+on, from Mapterhorn's `attribution.json` and its coverage, with each licence.
+Mapterhorn keeps no mark of where a fine survey ends: a tile over ground with no
+survey is made from a coarser source and has the same zoom. Say in the credit
+that the finest heights exist only where the survey covers, and do not claim
+the finest resolution for the whole box. A pixel Mapterhorn marks as no height
+is written as no-data.
+
+Do not run it from CI: Mapterhorn states no terms we found for ranged reads of
+its download host, and the build is the only thing that should make them.
 
 ---
 
@@ -443,7 +501,7 @@ the one it replaces. Publishing is a prod change and the maintainer's to make:
 
 ```bash
 python3 build_place_registry.py publish --bucket logjam-topo-jobs
-curl -s https://logjamnsw.com/master/places/v1/latest.json
+curl -s https://logjam.earth/master/places/v1/latest.json
 ```
 
 After changing the file's shape, regenerate the fixture both sides test
@@ -462,8 +520,8 @@ REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 `build_fire_history.py` turns NPWS Fire History into two files from one read:
 the most-recent-fire-year raster the vegetation pass marks burnt ground from
 (`fire/fire_history_year.tif` in the topo bucket, with its legend beside it),
-and the Fire history overlay's vector archive (`NSW_FIRE.archivePath` in
-`shared/src/nswFire.ts`), which holds each area once, with its most recent
+and the Fire history overlay's vector archive (`NSW_REGION.terrain.fire.archivePath` in
+`shared/src/regions.ts`), which holds each area once, with its most recent
 fire's year, month and type. A scheduled ECS task runs `publish` monthly; these
 commands are for trying a change by hand, from `topo/`, in the worker image:
 
@@ -510,7 +568,7 @@ of the month.
 ## Refreshing the coverage overlay
 
 `build_coverage.py` turns the ACCC's mobile coverage maps into the Coverage
-overlay's archive (`NSW_COVERAGE.archivePath` in `shared/src/nswCoverage.ts`).
+overlay's archive (`NSW_REGION.terrain.coverage.archivePath` in `shared/src/regions.ts`).
 For each of Telstra, Optus and TPG it holds where a phone works in the hand
 outdoors, works only with an external antenna, or has no predicted coverage,
 over the land of the NSW box. Its docstring says which of the release's maps

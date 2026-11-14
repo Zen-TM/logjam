@@ -181,6 +181,7 @@ jobs:
         env:
           BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
           DISTRIBUTION: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          API_URL: ${{ vars.PROD_API_URL }}
         run: |
           set -euo pipefail
           # Every file the release shipped must still be there.
@@ -192,6 +193,15 @@ jobs:
           MISSING=$(sort "$RUNNER_TEMP/files.txt" | comm -23 - "$RUNNER_TEMP/present.txt")
           if [ -n "$MISSING" ]; then
             echo "::error::release $SHA is missing files (pruned?):"; echo "$MISSING"; exit 1
+          fi
+
+          # A release built for another API address cannot work, and the smoke
+          # test would not notice: it loads the page and never calls the API.
+          # The page's CSP names the API address first in connect-src, held
+          # to PROD_API_URL by frontend/src/cspAgreement.test.ts.
+          aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "$RUNNER_TEMP/index.html"
+          if [ -z "$API_URL" ] || ! grep -qF "connect-src 'self' $API_URL " "$RUNNER_TEMP/index.html"; then
+            echo "::error::release $SHA was built for another API address than '$API_URL' (PROD_API_URL): rolling back to it would serve a page that cannot reach the API"; exit 1
           fi
 
           # REPLACE drops the source's headers, so each is restated.
