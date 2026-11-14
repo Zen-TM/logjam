@@ -120,7 +120,7 @@ describe("terrainSourceFor", () => {
       expect(id).not.toBe(NSW_TERRAIN_SOURCE);
       const spec = map.addSource.mock.calls[0]![1] as Record<string, unknown>;
       expect(spec).toMatchObject({
-        tiles: [expect.stringMatching(/^logjam-terrain:\/\/hillshade\//)],
+        tiles: [expect.stringMatching(/^logjam-terrain:\/\/nsw\/hillshade\//)],
         maxzoom: 16,
         encoding: "terrarium",
       });

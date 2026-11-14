@@ -92,6 +92,15 @@ found three problems:
   maker's alone and reaches anyone else only if the maker hands it on. The
   server render's guard went with it; `sharpenedAreas.test.ts` holds the
   route. Everything else above stands.
+- **Update 2026-11-14: a map routes an area only inside the region that holds
+  it.** Logjam Web's Terrain group draws the region the map shows
+  ([0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)),
+  so `terrainTile` hands `terrainTileArchive` only the areas whose survey is
+  centred inside that region's border, and a region with none reads its own
+  archives directly. An area that straddles a border is routed only in the
+  region it is centred in. Guard:
+  `frontend/src/components/map/terrainRouter.test.ts` ("routes an area only
+  inside the region that holds it"). Everything else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of

@@ -1,61 +1,17 @@
 import {
-  NSW_REGION,
+  layerIn,
+  type Region,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
 
+import { terrainEntryId } from "./layerOrder";
 import {
-  TERRAIN_STATEWIDE,
+  areasIn,
+  isRouted,
   routedAttribution,
   terrainTileTemplate,
-  type RoutedTerrainKey,
 } from "./terrainRouter";
-
-/**
- * The Terrain group's layers as entries of `topoLayers`, beside the topo
- * areas' layers. Same origin, like the vector basemap: `/master/*` is served
- * by the web distribution and proxied in dev. No id has a dash, and the
- * contours' contains "contours": Map.tsx splits a layer id at its first
- * dash and styles an entry as contours by that word.
- */
-export const TERRAIN_ENTRIES = {
-  contours: {
-    id: "nswcontours",
-    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.contours.archivePath}`,
-    format: "vector" as const,
-    attribution: TERRAIN_STATEWIDE.contours.creditHtml,
-  },
-  slope: {
-    id: "nswslope",
-    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.slope.archivePath}`,
-    format: "slope" as const,
-    attribution: TERRAIN_STATEWIDE.slope.creditHtml,
-  },
-  coverage: {
-    id: "nswcoverage",
-    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.coverage.archivePath}`,
-    format: "coverage" as const,
-    attribution: NSW_REGION.terrain.coverage.creditHtml,
-  },
-  fire: {
-    id: "nswfire",
-    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.fire.archivePath}`,
-    format: "fire" as const,
-    attribution: NSW_REGION.terrain.fire.creditHtml,
-  },
-  land: {
-    id: "nswland",
-    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.land.archivePath}`,
-    format: "land" as const,
-    attribution: NSW_REGION.terrain.land.creditHtml,
-  },
-  hillshade: {
-    id: "nswhillshade",
-    pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.hillshade.archivePath}`,
-    format: "hillshade" as const,
-    attribution: TERRAIN_STATEWIDE.hillshade.creditHtml,
-  },
-} satisfies Record<TerrainLayerKey, unknown>;
 
 /** A tile source the router answers, in place of an archive's own URL. */
 export type RoutedTiles = {
@@ -65,42 +21,75 @@ export type RoutedTiles = {
   bounds: readonly [number, number, number, number];
 };
 
+/** One Terrain layer as an entry of `topoLayers`, beside the topo areas' layers. */
+export type TerrainEntry = {
+  id: string;
+  pmtilesUrl: string;
+  format: "vector" | "slope" | "coverage" | "fire" | "land" | "hillshade";
+  attribution: string;
+  tiles?: RoutedTiles;
+};
+
 /**
- * The Terrain group's entries for a user who can see `areas`: today's
- * entries when there are none (nothing changes for them), else each layer
- * read through the router (terrainRouter.ts), to the deepest zoom an area
- * holds. Contours stop at z14 either way, and deeper zooms overzoom it.
+ * The Terrain group's layers of `region` as entries of `topoLayers`, beside the
+ * topo areas' layers. A layer the region has no archive for has no entry, and
+ * a map over no region has none at all. Same origin, like the vector basemap:
+ * `/master/*` is served by the web distribution and proxied in dev. An id is
+ * `terrainEntryId`'s, with no dash, and the contours' ends in "contours":
+ * Map.tsx splits a layer id at its first dash and styles an entry as contours
+ * by that word. Guard: `terrainEntries.test.ts` ("names each entry so its
+ * layer is read back from the id").
+ *
+ * For a user who can see sharpened `areas` that `region` holds, the surfaces
+ * a sharpened area replaces are read through the router (terrainRouter.ts), to
+ * the deepest zoom an area holds. Contours stop at z14 either way, and deeper
+ * zooms overzoom it.
  */
 export function terrainEntries(
+  region: Region | null,
   areas: readonly SharpenedOverlay[],
-): Record<
-  TerrainLayerKey,
-  (typeof TERRAIN_ENTRIES)[TerrainLayerKey] & { tiles?: RoutedTiles }
-> {
-  if (areas.length === 0) return TERRAIN_ENTRIES;
-  const deepest = Math.max(...areas.map((a) => a.zmax));
-  const routed = (key: RoutedTerrainKey, maxzoom: number) => {
-    const statewide = TERRAIN_STATEWIDE[key];
-    const template = terrainTileTemplate(key, areas);
+): Partial<Record<TerrainLayerKey, TerrainEntry>> {
+  if (!region) return {};
+  const held = areasIn(region, areas);
+  const deepest = Math.max(...held.map((a) => a.zmax));
+
+  const entry = (
+    key: TerrainLayerKey,
+    format: TerrainEntry["format"],
+  ): TerrainEntry | null => {
+    const archive = layerIn(region, key);
+    if (!archive) return null;
+    const plain = {
+      id: terrainEntryId(region, key),
+      pmtilesUrl: `${window.location.origin}/${archive.archivePath}`,
+      format,
+      attribution: archive.creditHtml,
+    };
+    if (held.length === 0 || !isRouted(key)) return plain;
+    const template = terrainTileTemplate(region, key, held);
     return {
-      ...TERRAIN_ENTRIES[key],
+      ...plain,
       // In the source key, so a new set of areas gets a new source.
       pmtilesUrl: template,
-      attribution: routedAttribution(statewide.creditHtml, areas),
+      attribution: routedAttribution(archive.creditHtml, held),
       tiles: {
         template,
-        minzoom: statewide.minzoom,
-        maxzoom,
-        bounds: NSW_REGION.terrain.heights.coverage,
+        minzoom: archive.minzoom,
+        maxzoom: key === "contours" ? archive.maxzoom : deepest,
+        bounds: layerIn(region, "heights")?.coverage ?? archive.coverage,
       },
     };
   };
-  return {
-    contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
-    slope: routed("slope", deepest),
-    coverage: TERRAIN_ENTRIES.coverage,
-    fire: TERRAIN_ENTRIES.fire,
-    land: TERRAIN_ENTRIES.land,
-    hillshade: routed("hillshade", deepest),
-  };
+
+  const made = {
+    contours: entry("contours", "vector"),
+    land: entry("land", "land"),
+    coverage: entry("coverage", "coverage"),
+    fire: entry("fire", "fire"),
+    slope: entry("slope", "slope"),
+    hillshade: entry("hillshade", "hillshade"),
+  } satisfies Record<TerrainLayerKey, TerrainEntry | null>;
+  return Object.fromEntries(
+    Object.entries(made).filter(([, entry]) => entry !== null),
+  ) as Partial<Record<TerrainLayerKey, TerrainEntry>>;
 }
