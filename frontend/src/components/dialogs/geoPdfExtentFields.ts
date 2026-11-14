@@ -1,17 +1,26 @@
 // Pure helpers for the GeoPdfDialog extent inputs.
 //
 // The four extent fields are free-text numeric inputs whose displayed value
-// depends on the coord mode: WGS84 degrees in "latlon", MGA2020 metres in
-// "enNorthing". A typed value must be parsed in the active coord mode (rather
-// than fed straight to degree-based helpers), and inverted or non-numeric
-// values are surfaced inline with validation errors:
+// depends on the coord mode: WGS84 degrees in "latlon", metres of the grid of
+// the ground the extent covers in "enNorthing" (MGA2020 in NSW, NZTM2000 in
+// New Zealand, UTM elsewhere: `sheetGrid`). A typed value must be parsed in
+// the active coord mode (rather than fed straight to degree-based helpers),
+// and inverted or non-numeric values are surfaced inline with validation
+// errors:
 //   - parseExtentField: raw string → WGS84 degrees honouring the coord mode
-//     (inverse MGA projection, paired with the same corner the display uses);
+//     (inverse grid projection, paired with the same corner the display uses);
 //   - extentFieldErrors: per-field inline messages (number required, lat/lng
 //     range, North > South, East > West — sign-correct comparisons only, no
 //     hemisphere assumptions).
 
-import { toGridAt, fromGrid, type ExtentState } from "@logjam/shared";
+import {
+  boxCentre,
+  GRID_NAMES,
+  gridNamedAt,
+  t,
+  type ExtentState,
+} from "@logjam/shared";
+import { sheetGrid } from "../../geoPdf/sheetGrid";
 
 export type ExtentFieldKey = "n" | "s" | "e" | "w";
 export type ExtentFieldValues = Record<ExtentFieldKey, string>;
@@ -37,7 +46,7 @@ function rawToNumber(raw: string): number | null {
  * N as the northing of the (north, west) corner, S of (south, east), E as the
  * easting of (north, east), W of (south, west) — so the typed metre value is
  * paired with the current corner's other coordinate and inverse-projected in
- * the same MGA zone.
+ * the one zone at the extent's centre, as the printed grid is.
  */
 export function parseExtentField(
   field: ExtentFieldKey,
@@ -48,28 +57,23 @@ export function parseExtentField(
   if (v === null) return null;
   if (state.coordMode === "latlon") return v;
 
+  const grid = sheetGrid(state);
   switch (field) {
-    case "n": {
-      const base = toGridAt(state.north, state.west);
-      return fromGrid(base.easting, v, base.zone).lat;
-    }
-    case "s": {
-      const base = toGridAt(state.south, state.east);
-      return fromGrid(base.easting, v, base.zone).lat;
-    }
-    case "e": {
-      const base = toGridAt(state.north, state.east);
-      return fromGrid(v, base.northing, base.zone).lon;
-    }
-    case "w": {
-      const base = toGridAt(state.south, state.west);
-      return fromGrid(v, base.northing, base.zone).lon;
-    }
+    case "n":
+      return grid.fromGrid(grid.toGrid(state.north, state.west).easting, v).lat;
+    case "s":
+      return grid.fromGrid(grid.toGrid(state.south, state.east).easting, v).lat;
+    case "e":
+      return grid.fromGrid(v, grid.toGrid(state.north, state.east).northing)
+        .lon;
+    case "w":
+      return grid.fromGrid(v, grid.toGrid(state.south, state.west).northing)
+        .lon;
   }
 }
 
 /**
- * One field's text for the edges as they stand: degrees in "latlon", MGA2020
+ * One field's text for the edges as they stand: degrees in "latlon", grid
  * metres in "enNorthing", at the corner `parseExtentField` pairs it with, so
  * parsing the text gives the edge back (geoPdfExtentFields.test.ts).
  */
@@ -82,8 +86,27 @@ export function extentFieldText(field: ExtentFieldKey, state: Edges): string {
   }[field];
   const latitude = field === "n" || field === "s";
   if (state.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
-  const en = toGridAt(lat, lon);
+  const en = sheetGrid(state).toGrid(lat, lon);
   return (latitude ? en.northing : en.easting).toFixed(1);
+}
+
+/** The grid the copy names for these edges: the one the Layers popover names for the same ground. */
+const gridOf = (
+  state: Pick<ExtentState, "north" | "south" | "east" | "west">,
+) => gridNamedAt(boxCentre(state));
+
+/** What the E/N chip says it is: the grid printed on the maps of the ground the extent covers. */
+export function coordTooltip(
+  state: Pick<ExtentState, "north" | "south" | "east" | "west">,
+): string {
+  switch (gridOf(state)) {
+    case "mga2020":
+      return t`Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.`;
+    case "nztm2000":
+      return t`Lat/Lon is what a GPS shows you. E/N is the NZTM2000 grid, the one printed on New Zealand topo maps.`;
+    case "utm":
+      return t`Lat/Lon is what a GPS shows you. E/N is the UTM grid, the one printed on topo maps in much of the world.`;
+  }
 }
 
 const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
@@ -91,14 +114,18 @@ const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
 function rangeError(
   field: ExtentFieldKey,
   deg: number,
-  latlon: boolean,
+  grid: string | null,
 ): string | null {
   if (LAT_FIELDS.includes(field)) {
     if (deg < -90 || deg > 90) {
-      return latlon ? "Must be between -90 and 90" : "Not a valid MGA northing";
+      return grid === null
+        ? "Must be between -90 and 90"
+        : t`Not a valid ${grid} northing`;
     }
   } else if (deg < -180 || deg > 180) {
-    return latlon ? "Must be between -180 and 180" : "Not a valid MGA easting";
+    return grid === null
+      ? "Must be between -180 and 180"
+      : t`Not a valid ${grid} easting`;
   }
   return null;
 }
@@ -112,7 +139,7 @@ export function extentFieldErrors(
   values: ExtentFieldValues,
   state: Edges,
 ): ExtentFieldErrors {
-  const latlon = state.coordMode === "latlon";
+  const grid = state.coordMode === "latlon" ? null : GRID_NAMES[gridOf(state)];
   const errors: ExtentFieldErrors = { n: null, s: null, e: null, w: null };
   const degrees: Record<ExtentFieldKey, number | null> = {
     n: null,
@@ -127,11 +154,11 @@ export function extentFieldErrors(
       errors[field] = "Enter a number";
       continue;
     }
-    errors[field] = rangeError(field, deg, latlon);
+    errors[field] = rangeError(field, deg, grid);
     if (errors[field] === null) degrees[field] = deg;
   }
 
-  // Sign-correct orientation checks (work in both hemispheres; MGA northings/
+  // Sign-correct orientation checks (work in both hemispheres; grid northings/
   // eastings compare the same way after conversion to degrees).
   if (degrees.n !== null && degrees.s !== null && degrees.n <= degrees.s) {
     errors.n = "Must be north of the South value";

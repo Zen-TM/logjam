@@ -509,7 +509,7 @@ const EMPTY_WORLD: Region = {
   terrain: {},
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;
