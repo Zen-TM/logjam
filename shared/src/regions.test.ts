@@ -20,6 +20,8 @@ import {
   DEFAULT_REGION_IDS,
   layerIn,
   placeRegistryIn,
+  regionsWithRegistry,
+  regionWithRegistry,
   NSW_REGION,
   normalizeRegionIds,
   offersRegionChoice,
@@ -37,6 +39,7 @@ import {
   type LonLatBox,
   type Region,
 } from "./regions.js";
+import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
@@ -642,6 +645,49 @@ describe("placeRegistryIn", () => {
   it("reads a map panned round the world", () => {
     const [lon, lat] = nz.view.center;
     expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
+  });
+});
+
+describe("regionsWithRegistry and regionWithRegistry", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const all = [NSW_REGION, nz, SIM_UTAH];
+
+  // Mutation: return `regions` unfiltered from `regionsWithRegistry`.
+  it("lists, in order, the regions that declare a registry", () => {
+    expect(regionsWithRegistry(all)).toEqual([NSW_REGION, nz]);
+    expect(regionsWithRegistry([SIM_UTAH])).toEqual([]);
+  });
+
+  // Mutation: find by id in `regions` without the registry filter, and a
+  // region with no registry is answered as having one.
+  it("finds a region by its id only when it declares a registry, whatever the id's type", () => {
+    expect(regionWithRegistry(nz.id, all)).toBe(nz);
+    expect(regionWithRegistry(SIM_UTAH.id, all)).toBeNull();
+    expect(regionWithRegistry("nowhere", all)).toBeNull();
+    for (const id of [7, [nz.id], {}, null, undefined]) {
+      expect(regionWithRegistry(id, all), JSON.stringify(id)).toBeNull();
+    }
+  });
+});
+
+describe("a region's registry prefix", () => {
+  const current = new RegExp(`/v${PLACE_REGISTRY_FORMAT}/$`);
+
+  // The prefix carries the file's format, so a bump moves every region's
+  // registry (ADR 0034). Mutation: give any declared region a literal prefix
+  // for another format, e.g. NSW's `placeSearch` as "master/places/v0/", or a
+  // simulated region's `placeSearch` as "master/places/simnz/v0/".
+  it("carries the current registry format, for every declared and simulated region", () => {
+    const declared = regionsWithRegistry([
+      NSW_REGION,
+      ...SIM_REGIONS,
+      SIM_WORLD,
+    ]);
+    // A floor: a filter that stopped matching would check nothing.
+    expect(declared.length).toBeGreaterThanOrEqual(1);
+    for (const region of declared) {
+      expect(region.placeSearch, region.id).toMatch(current);
+    }
   });
 });
 

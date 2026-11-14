@@ -17,9 +17,11 @@ import {
   placeRegistryPointerPath,
   placeRegistryUrl,
   REGIONS,
+  regionsWithRegistry,
   type PlaceIndex,
   type PlaceRegistryFile,
   type Region,
+  type RegionWithRegistry,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { logger, safeErrorForLog } from "../lib/logger";
@@ -33,16 +35,6 @@ const POINTER_TIMEOUT_MS = 8_000;
 // About 5 MB from our own CDN; generous, because a stalled transfer only delays the
 // next version, never a request.
 const FILE_TIMEOUT_MS = 60_000;
-
-/** A region with a registry: `placeSearch` is its CDN prefix. */
-type Registered = Pick<Region, "id"> & { placeSearch: string };
-
-/** The regions whose registry this process holds. */
-function registered(regions: readonly Region[]): Registered[] {
-  return regions.filter(
-    (r): r is Region & Registered => r.placeSearch !== null,
-  );
-}
 
 /** By region id. */
 const held = new Map<
@@ -95,10 +87,15 @@ export async function refreshPlaceRegistry(
 ): Promise<void> {
   const base = getEnv().TOPO_CDN_BASE_URL?.replace(/\/$/, "");
   if (!base) return;
-  for (const region of registered(regions)) await refreshRegion(base, region);
+  for (const region of regionsWithRegistry(regions)) {
+    await refreshRegion(base, region);
+  }
 }
 
-async function refreshRegion(base: string, region: Registered): Promise<void> {
+async function refreshRegion(
+  base: string,
+  region: RegionWithRegistry,
+): Promise<void> {
   const loaded = held.get(region.id);
   try {
     const pointerResponse = await fetch(
@@ -168,7 +165,9 @@ export function startPlaceRegistry(
   const run = () =>
     void refreshPlaceRegistry(regions).then(() => {
       if (stopped) return;
-      const allLoaded = registered(regions).every((r) => held.has(r.id));
+      const allLoaded = regionsWithRegistry(regions).every((r) =>
+        held.has(r.id),
+      );
       timer = setTimeout(run, allLoaded ? REFRESH_MS : FIRST_LOAD_RETRY_MS);
       timer.unref();
     });

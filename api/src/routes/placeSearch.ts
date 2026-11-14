@@ -15,6 +15,7 @@ import {
   DEFAULT_REGION_IDS,
   PLACE_SEARCH_MAX_RESULTS,
   REGIONS,
+  regionWithRegistry,
   say,
   searchPlaces,
   type PlaceSearchResponse,
@@ -47,8 +48,10 @@ router.post(
     const limit = typeof asked === "number" ? asked : PLACE_SEARCH_MAX_RESULTS;
 
     // Only a broken client names a region with no registry.
-    const regionId: unknown = req.body?.region ?? UNNAMED_REGION;
-    const region = REGIONS.find((r) => r.id === regionId && r.placeSearch);
+    const region = regionWithRegistry(
+      req.body?.region ?? UNNAMED_REGION,
+      REGIONS,
+    );
     if (!region) throw malformed("region has no place registry");
 
     const registry = placeIndex(region.id);

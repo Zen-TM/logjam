@@ -2,13 +2,26 @@
 // region, one copy for each region the user chose or saved a map of, searched
 // as the user types with nothing typed leaving the phone (ADR 0034).
 //
-// WHEN A COPY IS FETCHED: first with the user's first region download (for a
-// guest too: the file is a public CDN object, not a call to our API), for each
-// region that download touches and each region the user chose. After that
-// every copy is kept fresh at app start, on return to the foreground and on
-// regained signal, as `topoAutoDownload.ts` is, Wi-Fi only by default, and
-// never in offline-only mode or on a timer (ADR 0013). A region that declares
-// no registry has no copy.
+// WHICH COPIES: one for each region the account chose or saved a map over, and
+// no other. A copy of a region that is neither is deleted by the next check, and
+// sign-out runs that check once the chosen regions and saved maps are gone, so
+// the default region's copy alone is left for the next user: which regions a
+// phone holds would otherwise show where its last user was interested. Guards:
+// placeRegistry.test.ts ("lets a copy lapse once its region is neither chosen
+// nor saved over", "leaves only the default region's copy at sign-out") and
+// wipeLocalData.test.ts ("lets the place registries lapse after the chosen
+// regions and saved maps are gone").
+//
+// WHEN A COPY IS FETCHED: once the phone has asked for the file (the user's
+// first region download, or a phone that already held a saved region), for each
+// of those regions it does not hold yet, with no region download of its own
+// needed. A region download fetches the regions its box touches and the chosen
+// ones at once, on the connection the user allowed for the maps (for a guest
+// too: the files are public CDN objects, not calls to our API). Every other
+// fetch is the automatic check, at app start, on return to the foreground and
+// on regained signal, as `topoAutoDownload.ts` is, Wi-Fi only by default, and
+// never in offline-only mode, in the background or on a timer (ADR 0013). A
+// region that declares no registry has no copy.
 //
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
 // path, is parsed and its version checked, and only then takes the old one's
@@ -48,12 +61,14 @@ import {
   PLACE_REGISTRY_PREFIX,
   regionsOf,
   regionsTouching,
+  regionsWithRegistry,
+  regionWithRegistry,
   REGIONS,
   type LonLatBox,
   type PlaceIndex,
   type PlaceRegistryFile,
   type PlaceRegistryPointer,
-  type Region,
+  type RegionWithRegistry,
 } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
@@ -67,23 +82,16 @@ import { canRunNow } from "./networkPolicy";
 import { isOfflineOnly } from "./offlineOnlyMode";
 import { listArtifacts } from "./registryDb";
 
-/** A region that declares a registry: `placeSearch` is its CDN prefix. */
-type Registered = Region & { placeSearch: string };
-
-/** The region with this id, if it declares a registry. */
-function registered(regionId: string | null): Registered | null {
-  const region = REGIONS.find((r) => r.id === regionId);
-  return region?.placeSearch ? (region as Registered) : null;
-}
-
 /** The folder a region's copy is saved in: see WHERE A COPY LIVES above. */
-function dirOf(region: Registered): string {
+function dirOf(region: RegionWithRegistry): string {
   return region.placeSearch === PLACE_REGISTRY_PREFIX
     ? PLACE_REGISTRY_DIR
     : `${PLACE_REGISTRY_DIR}${region.id}/`;
 }
-const pointerUri = (region: Registered) => `${dirOf(region)}pointer.json`;
-const downloadUri = (region: Registered) => `${dirOf(region)}download.tmp`;
+const pointerUri = (region: RegionWithRegistry) =>
+  `${dirOf(region)}pointer.json`;
+const downloadUri = (region: RegionWithRegistry) =>
+  `${dirOf(region)}download.tmp`;
 
 /** "on" once the user started a region download. Unset (null) on a phone that
  *  has not. The files cannot be removed from the phone, so nothing writes "off"
@@ -96,7 +104,7 @@ const WANTED_PREF_KEY = "placeRegistryWanted";
  *  fetched again; keyed by the content-hashed path, not the version, which is
  *  the extract's date and stays the same for a fixed rebuild of the same
  *  extract. */
-const unreadableKey = (region: Registered) =>
+const unreadableKey = (region: RegionWithRegistry) =>
   `placeRegistryUnreadable:${region.id}`;
 
 /** A build's download, for its price before this phone has seen a pointer,
@@ -140,7 +148,7 @@ const copies = new Map<string, Copy>();
 const listeners = new Set<() => void>();
 let lastCheckAt = 0;
 
-function copyOf(region: Registered): Copy {
+function copyOf(region: RegionWithRegistry): Copy {
   let copy = copies.get(region.id);
   if (!copy) {
     copy = {
@@ -154,7 +162,10 @@ function copyOf(region: Registered): Copy {
   return copy;
 }
 
-function publish(region: Registered, next: Partial<PlaceRegistryStatus>): void {
+function publish(
+  region: RegionWithRegistry,
+  next: Partial<PlaceRegistryStatus>,
+): void {
   const copy = copyOf(region);
   copy.status = { ...copy.status, ...next };
   for (const listener of listeners) listener();
@@ -164,7 +175,7 @@ function publish(region: Registered, next: Partial<PlaceRegistryStatus>): void {
 export function placeRegistryStatus(
   regionId: string | null,
 ): PlaceRegistryStatus {
-  const region = registered(regionId);
+  const region = regionWithRegistry(regionId, REGIONS);
   return region ? copyOf(region).status : NO_COPY;
 }
 
@@ -180,7 +191,9 @@ export function usePlaceRegistryStatus(
   );
 }
 
-function readStoredPointer(region: Registered): PlaceRegistryPointer | null {
+function readStoredPointer(
+  region: RegionWithRegistry,
+): PlaceRegistryPointer | null {
   try {
     const file = new File(pointerUri(region));
     if (!file.exists) return null;
@@ -192,14 +205,17 @@ function readStoredPointer(region: Registered): PlaceRegistryPointer | null {
   }
 }
 
-function dataUri(region: Registered, pointer: PlaceRegistryPointer): string {
+function dataUri(
+  region: RegionWithRegistry,
+  pointer: PlaceRegistryPointer,
+): string {
   return `${dirOf(region)}${pointer.path}`;
 }
 
 /** A region's index, if it is loaded. Synchronous, for a search on every
  *  keystroke. */
 export function placeIndex(regionId: string | null): PlaceIndex | null {
-  const region = registered(regionId);
+  const region = regionWithRegistry(regionId, REGIONS);
   return region ? copyOf(region).index : null;
 }
 
@@ -216,7 +232,7 @@ export function hasPlaceRegistry(regionId: string | null): boolean {
 export function loadPlaceIndex(
   regionId: string | null,
 ): Promise<PlaceIndex | null> {
-  const region = registered(regionId);
+  const region = regionWithRegistry(regionId, REGIONS);
   if (!region) return Promise.resolve(null);
   const copy = copyOf(region);
   if (copy.index) return Promise.resolve(copy.index);
@@ -238,7 +254,7 @@ export function loadPlaceIndex(
 class MismatchError extends Error {}
 
 async function buildIndex(
-  region: Registered,
+  region: RegionWithRegistry,
   stored: PlaceRegistryPointer,
 ): Promise<PlaceIndex | null> {
   const copy = copyOf(region);
@@ -355,7 +371,7 @@ export async function fetchPlaceRegistry(
   regionId: string,
   options: { allowMetered?: boolean },
 ): Promise<FetchOutcome> {
-  const region = registered(regionId);
+  const region = regionWithRegistry(regionId, REGIONS);
   if (!region) return "failed";
   const copy = copyOf(region);
   const running = copy.fetching;
@@ -385,7 +401,7 @@ export async function fetchPlaceRegistry(
 }
 
 async function runFetch(
-  region: Registered,
+  region: RegionWithRegistry,
   allowMetered?: boolean,
 ): Promise<FetchOutcome> {
   if (isOfflineOnly()) return "offline-only";
@@ -417,7 +433,7 @@ async function runFetch(
 }
 
 async function fetchPointer(
-  region: Registered,
+  region: RegionWithRegistry,
 ): Promise<PlaceRegistryPointer | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), POINTER_TIMEOUT_MS);
@@ -436,7 +452,7 @@ async function fetchPointer(
 }
 
 async function installBuild(
-  region: Registered,
+  region: RegionWithRegistry,
   pointer: PlaceRegistryPointer,
 ): Promise<void> {
   const dir = dirOf(region);
@@ -487,10 +503,6 @@ async function installBuild(
   }
 }
 
-/** The regions that have a registry among `regions`, as ids. */
-const withRegistry = (regions: readonly Region[]): Registered[] =>
-  regions.filter((r): r is Registered => r.placeSearch !== null);
-
 /**
  * A region download started. The first one brings the registries, on the
  * connection the user allowed for the maps: one for each region the saved box
@@ -502,7 +514,7 @@ export function placeRegistryWithRegion(
   box: LonLatBox,
 ): void {
   if (readPref(WANTED_PREF_KEY) !== "on") writePref(WANTED_PREF_KEY, "on");
-  for (const region of withRegistry([
+  for (const region of regionsWithRegistry([
     ...regionsTouching(box, REGIONS),
     ...regionsOf(readRegions(), REGIONS),
   ])) {
@@ -521,10 +533,10 @@ export function refreshPlaceRegistry(regionId: string): Promise<FetchOutcome> {
 }
 
 /**
- * The regions whose copy this phone keeps current: the ones the user chose,
- * the ones a saved map touches, and the ones it already holds.
+ * The regions whose copy this phone keeps: the ones the account chose and the
+ * ones a saved map touches. A copy it holds for any other region lapses.
  */
-async function regionsToKeep(): Promise<Registered[]> {
+async function regionsToKeep(): Promise<RegionWithRegistry[]> {
   const saved = (await listArtifacts()).flatMap((artifact) =>
     artifact.kind === "basemap-region" && artifact.bbox
       ? regionsTouching(
@@ -538,16 +550,64 @@ async function regionsToKeep(): Promise<Registered[]> {
         )
       : [],
   );
-  const wanted = new Set([
-    ...regionsOf(readRegions(), REGIONS),
-    ...saved,
-    ...REGIONS.filter((r) => hasPlaceRegistry(r.id)),
-  ]);
-  return withRegistry(REGIONS.filter((r) => wanted.has(r)));
+  const wanted = new Set([...regionsOf(readRegions(), REGIONS), ...saved]);
+  return regionsWithRegistry(REGIONS.filter((r) => wanted.has(r)));
+}
+
+/**
+ * Delete a region's copy. It leaves memory first, so a search or a load in flight over it sees no
+ * stored build and drops its result (`buildIndex` compares the build it read
+ * with the one stored), and a fetch in flight is let land first, or it would
+ * install its build after the files went. Guard: placeRegistry.test.ts
+ * ("deletes a copy that a search is loading and a refresh is fetching").
+ */
+async function forgetCopy(region: RegionWithRegistry): Promise<void> {
+  const copy = copyOf(region);
+  await copy.fetching?.promise.catch(() => {});
+  const stored = copy.status.stored;
+  copy.index = null;
+  publish(region, { stored: null, loadFailed: false });
+  const dir = dirOf(region);
+  await FileSystem.deleteAsync(pointerUri(region), { idempotent: true });
+  if (stored) {
+    await FileSystem.deleteAsync(dataUri(region, stored), { idempotent: true });
+  }
+  await FileSystem.deleteAsync(downloadUri(region), { idempotent: true });
+  // A folder of its own goes whole, with whatever a crash left in it; the
+  // default region's is PLACE_REGISTRY_DIR, which holds the other folders.
+  if (dir !== PLACE_REGISTRY_DIR) {
+    await FileSystem.deleteAsync(dir, { idempotent: true });
+  }
+}
+
+/** Delete the copy of every region not in `keep`; throws after trying them all if any would not go. */
+async function lapseExcept(keep: readonly RegionWithRegistry[]): Promise<void> {
+  let failed: unknown = null;
+  for (const region of regionsWithRegistry(REGIONS)) {
+    if (keep.some((r) => r.id === region.id) || !hasPlaceRegistry(region.id))
+      continue;
+    try {
+      await forgetCopy(region);
+    } catch (err) {
+      failed = err;
+    }
+  }
+  if (failed) throw failed;
+}
+
+/**
+ * Delete the copy of every region the account neither chose nor saved a map
+ * over. Run by every check, and by sign-out once the chosen regions and the
+ * saved maps are gone, which leaves only the default region's copy.
+ */
+export async function lapsePlaceRegistries(): Promise<void> {
+  await lapseExcept(await regionsToKeep());
 }
 
 async function refreshAll(): Promise<void> {
-  for (const region of await regionsToKeep()) {
+  const keep = await regionsToKeep();
+  await lapseExcept(keep).catch((err: unknown) => console.error(err));
+  for (const region of keep) {
     await refreshPlaceRegistry(region.id);
   }
 }

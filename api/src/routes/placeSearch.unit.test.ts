@@ -238,9 +238,9 @@ describe("POST /places/search", () => {
     expect(unnamed.body.results[0].name).toBe("Katoomba");
   });
 
-  // Mutation: drop the `placeSearch` test from the route's lookup, and a
-  // region with no registry answers 503 "try again" for something that will
-  // never load.
+  // Mutation: look the region up in the route by `REGIONS.find` on its id,
+  // without `regionWithRegistry`, and a region with no registry answers 503
+  // "try again" for something that will never load.
   it("refuses a region that is unknown, has no registry, or is not text", async () => {
     serve(POINTER, 200, false, "served");
     await refreshPlaceRegistry();

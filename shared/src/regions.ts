@@ -751,6 +751,31 @@ export function regionInView(
   );
 }
 
+/** A region that declares a place registry (ADR 0034): `placeSearch` is its CDN prefix. */
+export type RegionWithRegistry = Region & { placeSearch: string };
+
+/**
+ * The regions that declare a place registry, in `REGIONS` order. Guard:
+ * `regions.test.ts` ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionsWithRegistry(
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry[] {
+  return regions.filter((r): r is RegionWithRegistry => r.placeSearch !== null);
+}
+
+/**
+ * The region with this id if it declares a place registry, else null. `id` is
+ * `unknown` because a request body names it. Guard: `regions.test.ts`
+ * ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionWithRegistry(
+  id: unknown,
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry | null {
+  return regionsWithRegistry(regions).find((r) => r.id === id) ?? null;
+}
+
 /**
  * The region the map shows, when it has a place registry (ADR 0034), or null:
  * no registry answers here, and a client offers only the geocoder row. An
@@ -760,11 +785,9 @@ export function placeRegistryIn(
   view: LonLatBox | null | undefined,
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
-): (Region & { placeSearch: string }) | null {
+): RegionWithRegistry | null {
   const region = view ? regionInWrappedView(view, regions, world) : null;
-  return region?.placeSearch
-    ? (region as Region & { placeSearch: string })
-    : null;
+  return region ? regionWithRegistry(region.id, [region]) : null;
 }
 
 /**

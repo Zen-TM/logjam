@@ -73,6 +73,8 @@ const failing = new Set<string>();
 /** Reads held until their promise settles, by URI. */
 const held = new Map<string, Promise<void>>();
 const offlineOnly = { on: false };
+/** A download that waits for this promise before it answers. */
+const downloadGate = { current: Promise.resolve() };
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock("../api/presignedTransfer", () => ({
@@ -276,7 +278,9 @@ beforeEach(() => {
   failing.clear();
   held.clear();
   fetchMock.mockClear();
+  downloadGate.current = Promise.resolve();
   download.mockReset().mockImplementation(async (url: string, to: string) => {
+    await downloadGate.current;
     const body = served.get(url);
     if (!(body instanceof Uint8Array)) return { status: 404 };
     files.set(to, body);
@@ -810,8 +814,9 @@ describe("one copy for each region", () => {
     ]);
   });
 
-  // Mutation: build `registered` without the `placeSearch` test, or answer
-  // an id it does not know with NSW's copy.
+  // Mutation: look the region up with `REGIONS.find` on its id in the copy's
+  // lookups, without `regionWithRegistry`, or answer an id it does not know
+  // with NSW's copy.
   it("has no copy for a region that is unknown or declares no registry", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
@@ -919,20 +924,128 @@ describe("the regions a phone fetches for", () => {
     expect(registry.hasPlaceRegistry(NSW)).toBe(false);
   });
 
-  // Mutation: drop the held part of `regionsToKeep`, and a copy the user no
-  // longer chose or saved a map over goes stale while it still answers.
-  it("keeps current a copy it holds", async () => {
+  // Mutation: add the regions the phone already holds to `regionsToKeep`, and a
+  // copy of a region that is neither chosen nor saved over is refreshed for ever
+  // and shows where the last user was interested.
+  it("lets a copy lapse once its region is neither chosen nor saved over", async () => {
     prefs.set("placeRegistryWanted", "on");
     chosen.ids = [NSW];
+    holdOnPhone(build("2026-09-15"));
     holdOtherOnPhone(build("2026-09-15", ["Old"]));
     publish(build("2026-10-15"));
     publishOther(build("2026-10-15", ["Makarora"]));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
     await vi.waitFor(() =>
-      expect(registry.placeRegistryStatus(OTHER.id).stored?.version).toBe(
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false),
+    );
+    expect(
+      [...files.keys()].filter((key) => key.startsWith(`${DIR}other`)),
+    ).toEqual([]);
+    // NSW's, chosen, was refreshed; the other's was never fetched.
+    await vi.waitFor(() =>
+      expect(registry.placeRegistryStatus(NSW).stored?.version).toBe(
         "2026-10-15",
       ),
     );
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+  });
+
+  // Mutation: drop the `saved` part of `regionsToKeep` from the lapse's keep
+  // list, and a region only a saved map touches loses its copy.
+  it("keeps a copy for a region only a saved map touches", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    artifacts.kinds = ["basemap-region"];
+    artifacts.bbox = [10.4, 10.4, 10.6, 10.6];
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+    expect((await registry.loadPlaceIndex(OTHER.id))?.names).toEqual([
+      "Makarora",
+    ]);
+  });
+
+  // The sign-out: the wipe has forgotten the chosen regions (the default
+  // returns) and deleted the saved maps. Mutation: leave the copies of regions
+  // not chosen in `lapsePlaceRegistries`' keep list (e.g. keep every region held).
+  it("leaves only the default region's copy at sign-out", async () => {
+    chosen.ids = [NSW];
+    artifacts.kinds = [];
+    holdOnPhone(build("2026-10-15", ["Wollangambe"]));
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect([...files.keys()].sort()).toEqual([
+      `${DIR}places-2026-10-15.json`,
+      `${DIR}pointer.json`,
+    ]);
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+  });
+
+  // With one region nothing changes. Mutation: leave `regionsOf(readRegions(),
+  // REGIONS)` out of `regionsToKeep`, and the only region's copy is deleted.
+  it("leaves the only region's copy alone, whatever the account has saved", async () => {
+    chosen.ids = [NSW];
+    artifacts.kinds = [];
+    const only = build("2026-10-15", ["Wollangambe"]);
+    holdOnPhone(only);
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(files.has(`${DIR}pointer.json`)).toBe(true);
+    expect(files.has(`${DIR}${only.pointer.path}`)).toBe(true);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+  });
+
+  // A search that is loading the copy and a refresh that is fetching it when it
+  // lapses. Mutation: drop `await copy.fetching?.promise` from `forgetCopy`, and
+  // the fetch installs its build after the files went; drop the
+  // `publish(region, { stored: null` from it, and the copy still reads as
+  // stored, with a build whose files are gone.
+  it("deletes a copy that a search is loading and a refresh is fetching", async () => {
+    const old = build("2026-09-15", ["Old"]);
+    holdOtherOnPhone(old);
+    publishOther(build("2026-10-15", ["Makarora"]));
+    let releaseLoad = () => {};
+    held.set(
+      `${DIR}other/${old.pointer.path}`,
+      new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+      }),
+    );
+    let releaseDownload = () => {};
+    downloadGate.current = new Promise<void>((resolve) => {
+      releaseDownload = resolve;
+    });
+    const registry = await load();
+    const loading = registry.loadPlaceIndex(OTHER.id);
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const lapsing = registry.lapsePlaceRegistries();
+    releaseDownload();
+    expect(await fetching).toBe("updated");
+    await lapsing;
+    // The load was still reading when the files went.
+    releaseLoad();
+    expect(await loading).toBeNull();
+    expect(
+      [...files.keys()].filter((key) => key.startsWith(`${DIR}other`)),
+    ).toEqual([]);
+    expect(registry.placeRegistryStatus(OTHER.id)).toEqual({
+      stored: null,
+      loadFailed: false,
+    });
+    expect(registry.placeIndex(OTHER.id)).toBeNull();
   });
 });

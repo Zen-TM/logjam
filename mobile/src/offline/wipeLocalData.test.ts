@@ -77,7 +77,18 @@ vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
 const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
 vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
 const forgetRegions = vi.hoisted(() => vi.fn());
-vi.mock("../regionsPreference", () => ({ forgetRegions }));
+vi.mock("../regionsPreference", () => ({
+  forgetRegions: () => {
+    forgetRegions();
+    record("forget:regions");
+  },
+}));
+vi.mock("./placeRegistry", () => ({
+  lapsePlaceRegistries: () => {
+    record("lapse:registries");
+    return Promise.resolve();
+  },
+}));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -143,6 +154,30 @@ describe("wipeAllLocalData", () => {
     forgetRegions.mockClear();
     await wipeAllLocalData();
     expect(forgetRegions).toHaveBeenCalledOnce();
+  });
+
+  // The place registries a departing account holds are kept by what it chose
+  // and saved over, which the wipe has just deleted. Mutation: drop
+  // `lapsePlaceRegistries()` from the wipe, move it above `forgetRegions()`, or
+  // move it above the offline registry's DELETE, and the next user's phone keeps
+  // the regions the last one chose or saved a map over.
+  it("lets the place registries lapse after the chosen regions and saved maps are gone", async () => {
+    await wipeAllLocalData();
+    const lapse = events.indexOf("lapse:registries");
+    expect(lapse).toBeGreaterThanOrEqual(0);
+    expect(lapse).toBeGreaterThan(events.indexOf("forget:regions"));
+    expect(lapse).toBeGreaterThan(
+      events.indexOf("sql:DELETE FROM map_artifact"),
+    );
+  });
+
+  // Mutation: drop the try/catch around `lapsePlaceRegistries()` in the wipe, and
+  // a copy that will not delete stops the rest of the wipe, or goes unreported.
+  it("reports a place registry that will not delete, and still clears the others", async () => {
+    failOn = (e) => e === "lapse:registries";
+    const { failed } = await wipeAllLocalData();
+    expect(failed).toContain("place names");
+    expect(events).toContain("delete:file:///cache/logjam-scratch/");
   });
 
   it("deletes every declared directory", async () => {
