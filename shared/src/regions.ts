@@ -21,6 +21,7 @@
 // Guard: `regions.test.ts` ("keeps NSW's stored ids and paths").
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
+import type { GridId } from "./grids.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
@@ -110,7 +111,7 @@ export type Region = {
   /** The CDN prefix of the gauge feed (ADR 0044), or null. */
   gauges: string | null;
   /** The map grid coordinates are given in. */
-  grid: "mga2020";
+  grid: GridId;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";

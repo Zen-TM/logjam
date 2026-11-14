@@ -6,6 +6,8 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
+import { gridIdAt, type GridId } from "../grids.js";
+import { REGIONS, type Region } from "../regions.js";
 import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_TERRAIN } from "./mapTerrain.js";
@@ -36,16 +38,38 @@ export const MAP_OVERLAYS = {
     fire: MAP_TERRAIN.copy.fire,
     coverage: MAP_TERRAIN.copy.coverage,
     gauges: GAUGES.copy.overlay,
-    mgaGrid: "MGA grid",
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },
 } as const satisfies ScreenContract;
 
+const GRID_NAMES: Record<GridId, string> = {
+  mga2020: "MGA",
+  nztm2000: "NZTM",
+  utm: "UTM",
+};
+
+/**
+ * The grid row's title: the name of the grid the overlay draws at `at`, the
+ * view's centre (`gridZonesFor` picks its grid the same way), so "MGA grid" in
+ * NSW. With no view yet it names the first region's grid, which is NSW's when
+ * NSW is the only region. Guard: `contracts.test.ts`, "the grid row's title"
+ * ("reads "MGA grid" with only New South Wales" and the zone-agreement case).
+ */
+export function gridOverlayTitle(
+  at: { lon: number; lat: number } | null,
+  regions: readonly Region[] = REGIONS,
+): string {
+  const grid = at
+    ? gridIdAt(at.lon, at.lat, regions)
+    : (regions[0]?.grid ?? "utm");
+  return `${GRID_NAMES[grid]} grid`;
+}
+
 /**
  * What a fresh install draws, on both clients: the user's own pins, and
  * nothing that fetches a public file (river gauges) or draws across every map
- * (the MGA grid) until it is asked for. Ways are left out: Logjam GPS splits
+ * (the map grid) until it is asked for. Ways are left out: Logjam GPS splits
  * them into the sub-switches below. Guards: `contracts.test.ts`, and each
  * client's test that a fresh install reads these.
  */

@@ -183,7 +183,7 @@ export function toGridAt(
 /**
  * Latitude and longitude of a point in `zone`. The longitude is in [-180, 180]
  * whatever world copy the zone was chosen for; a caller working in another
- * copy shifts it, as `mgaGrid` does.
+ * copy shifts it, as `mapGrid` does.
  */
 export function fromGrid(
   easting: number,

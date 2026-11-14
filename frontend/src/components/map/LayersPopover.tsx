@@ -3,6 +3,7 @@ import {
   contractSectionKeys,
   isOverlayTerrainKey,
   MAP_LAYERS,
+  gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
@@ -57,7 +58,7 @@ const countOf = (count: number, noun: string) =>
  * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
  * inside it than a switch (the slope bands) opens a sub-view in place.
  */
-/** "Show river gauges", but "Show MGA grid": an acronym keeps its capitals. */
+/** "Show river gauges", but "Show MGA grid" or "Show NZTM grid": an acronym keeps its capitals. */
 function showLabel(title: string) {
   return `Show ${/^[A-Z]{2}/.test(title) ? title : title[0].toLowerCase() + title.slice(1)}`;
 }
@@ -360,7 +361,9 @@ export default function LayersPopover({
                   <OverlayRow
                     icon="mgaGrid"
                     hue="var(--color-neutral)"
-                    title={MAP_OVERLAYS.copy.mgaGrid}
+                    title={gridOverlayTitle(
+                      mapView && { lon: mapView.lng, lat: mapView.lat },
+                    )}
                     checked={showMgaGrid}
                     onToggle={setShowMgaGrid}
                   />
