@@ -3,8 +3,8 @@ import {
   LAND_EDGE_LINES,
   landClass,
   MAP_TERRAIN,
-  NSW_REGION,
   TILE_SIZE,
+  type LandArchive,
   type TileToMapTransform,
 } from "@logjam/shared";
 import { decodeVectorTileLayer } from "../vectorTile";
@@ -31,23 +31,22 @@ export type LandShape = {
 
 /**
  * Decode every land tile and lay its polygons out on the map image. A tile that
- * does not decode is skipped. A tile's polygons run past its edge into its
+ * does not decode is skipped. `land` is the sheet's region's archive: its layer
+ * and class property read the tile. A tile's polygons run past its edge into its
  * neighbour's, so each is clipped to a whole-pixel square: two neighbours then
  * share an edge exactly, with no doubled line and no seam.
  */
 export function buildLand(
   tiles: readonly LandTileInput[],
   transform: TileToMapTransform,
+  land: LandArchive,
 ): LandShape[] {
   const shapes: LandShape[] = [];
   const size = TILE_SIZE;
   for (const tile of tiles) {
     let decoded;
     try {
-      decoded = decodeVectorTileLayer(
-        tile.data,
-        NSW_REGION.terrain.land.sourceLayer,
-      );
+      decoded = decodeVectorTileLayer(tile.data, land.sourceLayer);
     } catch {
       continue;
     }
@@ -64,10 +63,7 @@ export function buildLand(
       bottom: Math.round(dy + size * transform.scaleY),
     };
     for (const feature of decoded.features) {
-      const kind = landClass(
-        NSW_REGION.terrain.land,
-        feature.properties[NSW_REGION.terrain.land.classProperty],
-      );
+      const kind = landClass(land, feature.properties[land.classProperty]);
       if (feature.type !== 3 || !kind) continue;
       const scaleX = (size / feature.extent) * transform.scaleX;
       const scaleY = (size / feature.extent) * transform.scaleY;
@@ -169,6 +165,7 @@ export function landClassesDrawn(
   shapes: readonly LandShape[],
   width: number,
   height: number,
+  land: LandArchive,
 ) {
   const found = new Set<string>();
   for (const { color, rings, clip } of shapes) {
@@ -189,9 +186,7 @@ export function landClassesDrawn(
     });
     if (crosses) found.add(color);
   }
-  return NSW_REGION.terrain.land.classes.filter(({ colour }) =>
-    found.has(colour),
-  );
+  return land.classes.filter(({ colour }) => found.has(colour));
 }
 
 /**

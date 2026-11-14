@@ -6,14 +6,16 @@ import { terrainCreditLines } from "./terrain";
  * drew, and every area on the page supplied all of them. The attribution is
  * only known once the last tile has settled, so the strips under its block
  * wait for that; this bound finds which strips those are. The real block is
- * never taller. Guard: credits.test.ts.
+ * never taller. `credit` is the sheet's region's heights credit
+ * (`SheetTerrain.credit`). Guard: credits.test.ts.
  */
 export function upperBoundTerrainLines(
   requested: ReadonlySet<TerrainLayerKey>,
   areas: readonly SharpenedArea[],
+  credit: string | null,
 ): string[] {
   const upperAreas = new Map(
     areas.map((a) => [a, new Set(requested)] as const),
   );
-  return terrainCreditLines(requested, upperAreas);
+  return terrainCreditLines(requested, upperAreas, credit);
 }

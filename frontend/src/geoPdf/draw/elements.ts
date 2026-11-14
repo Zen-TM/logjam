@@ -687,8 +687,10 @@ export function drawGridLines(
 /** What the credits are made of: the page's config and what drew. */
 export type AttributionInput = {
   baseLayer: string;
-  /** Overlay layer names whose data is on the page (`overlayAttributionLines`). */
+  /** Overlay layer names whose data is on the page (`overlayAttributionLines`), never `land`. */
   renderedOverlays: readonly string[];
+  /** The credit of the sheet's region's Land archive when Land drew, else null. */
+  landCredit: string | null;
   /** `terrainCreditLines` of what drew. */
   terrainLines: readonly string[];
   /** When the base tiles were taken (the dated NSW Spatial Services credit). */
@@ -735,6 +737,7 @@ export function attributionLines(
     extractionCreditLine(input.baseLayer, input.extractedAt),
     ...input.terrainLines,
     ...overlayAttributionLines([...input.renderedOverlays]),
+    input.landCredit,
   ]
     .filter((line): line is string => line !== null)
     .flatMap(wrap);

@@ -807,6 +807,90 @@ describe("GeoPdfDialog, the Terrain layers", () => {
       expect(rendered()[0]!.config.overlays).not.toContain("hillshade");
     });
   });
+
+  // A box made up in the open ocean, in no region.
+  const ocean: TBbox = { north: -10, south: -10.05, east: -140, west: -140.05 };
+  // Over imagery, which prints no contours of its own: only Hillshade is off.
+  const layerButtons = ["Contours", "Slope", "Land tenure"];
+  const imagery = { activeLayerId: "six-imagery" };
+
+  // Mutation: drop the `layerMissingHere` test from `offReason` and from the
+  // Land tenure chip, and a sheet in no region offers layers that draw
+  // nothing; test `sheet` without `extentValid` and the unset form (no area
+  // yet) says the same about NSW's own ground.
+  it("says no layer is available where no region holds the sheet", () => {
+    const { rerender } = render(dialog({ open: true, ...imagery }));
+    for (const name of layerButtons)
+      expect(
+        (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+        `${name} before an area is set`,
+      ).toBe(false);
+
+    rerender(
+      dialog({
+        open: true,
+        ...imagery,
+        pendingExtent: ocean,
+        pendingScale: 25000,
+      }),
+    );
+    for (const name of layerButtons)
+      expect(
+        (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+        name,
+      ).toBe(true);
+    expect(screen.getAllByText("Not available here.").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Hillshade" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByText(`${MAP_TERRAIN.copy.hillshadeImagery}.`),
+    ).toBeNull();
+
+    rerender(
+      dialog({
+        open: true,
+        ...imagery,
+        pendingExtent: extent,
+        pendingScale: 25000,
+      }),
+    );
+    expect(
+      (screen.getByRole("button", { name: "Slope" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Land tenure" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  // Mutation: drop `!layerMissingHere(sheet, id)` from `printedOverlays`, and a
+  // slope ticked in NSW is still sent for a sheet outside every region.
+  it("sends none of the layers the sheet's region lacks", async () => {
+    render(
+      dialog({
+        open: true,
+        pendingExtent: ocean,
+        pendingScale: 25000,
+        terrainLayers: {
+          ...TERRAIN_LAYER_DEFAULTS,
+          slope: true,
+          contours: true,
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => {
+      expect(rendered()).toHaveLength(1);
+      const sent = rendered()[0]!.config.overlays;
+      expect(sent).not.toContain("slope");
+      expect(sent).not.toContain("contours");
+    });
+  });
 });
 
 // Over a job of the user's, the Terrain boxes turn on, so the job's own slope

@@ -15,7 +15,8 @@ import {
   computeZoom,
   extentFromCentreAndSize,
   geoPdfMaxNativeZoom,
-  NSW_REGION,
+  layerIn,
+  REGIONS,
   TARGET_DPI,
   getMapDimensions,
   RASTER_TEMPLATE_DEFAULTS,
@@ -92,12 +93,15 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
 
 /**
  * A3 landscape at 1:25 000 (about 17 MP, the A3 timing target) centred on
- * the middle of the served height archive's coverage: for timing against a
- * dev copy of the statewide archives, so no coordinate is written down here.
+ * the middle of the served height archive's coverage (the first region's): for
+ * timing against a dev copy of the statewide archives, so no coordinate is
+ * written down here.
  */
 async function a3Scenario(scale = 25000): Promise<GeoPdfConfig> {
+  const heights = layerIn(REGIONS[0] ?? null, "hillshade");
+  if (!heights) throw new Error("The first region has no heights to time");
   const header = await new PMTiles(
-    `${location.origin}/${NSW_REGION.terrain.hillshade.archivePath}`,
+    `${location.origin}/${heights.archivePath}`,
   ).getHeader();
   return config(
     { baseLayer: "six-base", overlays: ["hillshade", "slope"] },

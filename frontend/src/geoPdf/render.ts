@@ -24,7 +24,6 @@ import {
   GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_PADDING_MM,
   getPaperDimensions,
-  NSW_REGION,
   nswContourStyle,
   TILE_SIZE,
   type SharpenedOverlay,
@@ -40,14 +39,15 @@ import { canvasRows, planStrips, type Strip } from "./strips";
 import {
   areasOnPage,
   contourTilesBySource,
-  nswVectorZoom,
   overlaysDrawn,
   STATEWIDE,
   terrainCreditLines,
   terrainGrid,
   terrainReadKey,
+  vectorReadZoom,
   type TerrainTileRead,
 } from "./terrain";
+import { sheetTerrain } from "./sheetTerrain";
 import type { TileCache } from "./cache";
 import {
   planTerrainBlocks,
@@ -363,26 +363,29 @@ async function renderInner(
   fetcher.scheduler.onSettle = () => report();
 
   // ── What is drawn, and from where ────────────────────────────────────────
-  const drawn = overlaysDrawn(config);
-  const wantSlope = config.overlays.includes("slope");
+  const sheet = sheetTerrain(extent);
+  const drawn = overlaysDrawn(config, sheet);
+  const heights = drawn.hillshade ? sheet.heights : null;
+  const slope = config.overlays.includes("slope") ? sheet.slope : null;
   const wantVegetation =
     config.overlays.includes("vegetation") && input.vegetationUrls.length > 0;
   const areas = areasOnPage(input.areas, extent);
   const areaById = new Map(areas.map((a) => [a.id, a]));
-  const contourZoom = nswVectorZoom(
-    NSW_REGION.terrain.contours,
+  const contourZoom = vectorReadZoom(
+    sheet.contours,
     config.scale,
     centreLat,
     overlayZoom,
   );
   const wantContours = contourZoom !== null && drawn.contours;
-  const landZoom = nswVectorZoom(
-    NSW_REGION.terrain.land,
+  const landZoom = vectorReadZoom(
+    sheet.land,
     config.scale,
     centreLat,
     overlayZoom,
   );
-  const wantLand = landZoom !== null && config.overlays.includes("land");
+  const landArchive = config.overlays.includes("land") ? sheet.land : null;
+  const wantLand = landZoom !== null && landArchive !== null;
   const baseExtractedAt = new Date();
 
   const statewideUrl = (path: string) => `${input.origin}/${path}`;
@@ -428,18 +431,12 @@ async function renderInner(
     vectorBaseUrl
       ? fetcher.open(archiveAt(vectorBaseUrl), vectorBaseUrl)
       : false,
-    drawn.hillshade
-      ? openStatewide("heights", NSW_REGION.terrain.hillshade.archivePath)
+    heights ? openStatewide("heights", heights.archivePath) : null,
+    slope ? openStatewide("slope", slope.archivePath) : null,
+    wantContours && sheet.contours
+      ? openStatewide("contours", sheet.contours.archivePath)
       : null,
-    wantSlope
-      ? openStatewide("slope", NSW_REGION.terrain.slope.archivePath)
-      : null,
-    wantContours
-      ? openStatewide("contours", NSW_REGION.terrain.contours.archivePath)
-      : null,
-    wantLand
-      ? openStatewide("land", NSW_REGION.terrain.land.archivePath)
-      : null,
+    wantLand ? openStatewide("land", landArchive.archivePath) : null,
   ]);
   check();
 
@@ -544,6 +541,7 @@ async function renderInner(
   const planTerrain = (
     key: "hillshade" | "slope",
     archiveLayer: "heights" | "slope",
+    archive: { maxzoom: number },
     smooth: boolean,
   ): TerrainPlan => {
     const { demZoom, t, cols, read, blocks } = planTerrainBlocks(
@@ -551,6 +549,7 @@ async function renderInner(
       geometry,
       areas,
       archiveLayer,
+      archive,
       strips.map(drawnRows),
     );
     const entries = new Map<string, TerrainEntry>();
@@ -613,12 +612,12 @@ async function renderInner(
   };
 
   const terrainPlans: TerrainPlan[] = [];
-  if (drawn.hillshade && statewide.heights !== undefined) {
+  if (heights && statewide.heights !== undefined) {
     // A statewide archive that failed to open leaves `null`: areas still draw.
-    terrainPlans.push(planTerrain("hillshade", "heights", true));
+    terrainPlans.push(planTerrain("hillshade", "heights", heights, true));
   }
-  if (wantSlope && statewide.slope !== undefined) {
-    terrainPlans.push(planTerrain("slope", "slope", false));
+  if (slope && statewide.slope !== undefined) {
+    terrainPlans.push(planTerrain("slope", "slope", slope, false));
   }
   // Started now, so the helpers load while the tiles arrive; a print with no
   // terrain starts none.
@@ -677,7 +676,7 @@ async function renderInner(
 
   // Land, like the contours, is read whole before the first strip.
   const landTransform =
-    statewide.land && landZoom !== null
+    statewide.land && landZoom !== null && landArchive
       ? computeTileToMapTransform(
           landZoom,
           north,
@@ -760,11 +759,13 @@ async function renderInner(
   }
   check();
   const land =
-    landTransform && landInputs.length > 0
-      ? buildLand(landInputs, landTransform)
+    landTransform && landArchive && landInputs.length > 0
+      ? buildLand(landInputs, landTransform, landArchive)
       : [];
   landInputs.length = 0;
-  const landLegend = landClassesDrawn(land, nativeW, nativeH);
+  const landLegend = landArchive
+    ? landClassesDrawn(land, nativeW, nativeH, landArchive)
+    : [];
 
   // The credits' upper bound, to find the strips that wait for every read.
   const measure = new OffscreenCanvas(1, 1).getContext("2d")!;
@@ -793,20 +794,23 @@ async function renderInner(
   const credit = (
     terrainLines: readonly string[],
     renderedOverlays: readonly string[],
+    landCredit: string | null,
   ): AttributionInput => ({
     baseLayer: config.baseLayer,
     renderedOverlays,
     terrainLines,
+    landCredit,
     extractedAt: baseExtractedAt,
   });
   const upperLines = attributionLines(
     measure,
     nativeW,
     elementDpi,
-    credit(upperBoundTerrainLines(upperTerrain, areas), [
-      ...(wantVegetation ? ["vegetation"] : []),
-      ...(landReads.length > 0 ? ["land"] : []),
-    ]),
+    credit(
+      upperBoundTerrainLines(upperTerrain, areas, sheet.credit),
+      wantVegetation ? ["vegetation"] : [],
+      landReads.length > 0 ? (landArchive?.credit ?? null) : null,
+    ),
   );
   const upperBlock = attributionRows(
     upperLines.length,
@@ -1178,7 +1182,6 @@ async function renderInner(
         const renderedOverlays: string[] = [];
         if (vegetation.some((v) => v.drew.any))
           renderedOverlays.push("vegetation");
-        if (land.length > 0) renderedOverlays.push("land");
         const terrain = new Set<TerrainLayerKey>(drawnTerrain);
         for (const p of terrainPlans) {
           if (p.credited.size > 0) terrain.add(p.key);
@@ -1190,7 +1193,11 @@ async function renderInner(
           nativeH,
           margin,
           elementDpi,
-          credit(terrainCreditLines(terrain, drawnAreas), renderedOverlays),
+          credit(
+            terrainCreditLines(terrain, drawnAreas, sheet.credit),
+            renderedOverlays,
+            land.length > 0 ? (landArchive?.credit ?? null) : null,
+          ),
         );
       }
       bump("elements", mark);

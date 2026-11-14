@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {
   NSW_REGION,
+  SIM_NZ,
   type SharpenedArea,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -13,6 +14,7 @@ import {
 } from "./draw/elements";
 import { terrainCreditLines } from "./terrain";
 
+const HEIGHTS = NSW_REGION.terrain.heights.credit;
 const LAYERS: TerrainLayerKey[] = ["hillshade", "slope", "contours"];
 const area = (id: string, credit: string): SharpenedArea => ({
   id,
@@ -52,6 +54,7 @@ const input = (
   baseLayer: "six-base",
   renderedOverlays: overlays,
   terrainLines,
+  landCredit: null,
   extractedAt: new Date("2026-10-24T00:00:00Z"),
 });
 const WIDTH = 1500;
@@ -83,7 +86,7 @@ describe("the credit block's upper bound", () => {
         ctx,
         WIDTH,
         DPI,
-        input(upperBoundTerrainLines(new Set(requested), AREAS), [
+        input(upperBoundTerrainLines(new Set(requested), AREAS, HEIGHTS), [
           "vegetation",
         ]),
       );
@@ -99,7 +102,10 @@ describe("the credit block's upper bound", () => {
                 ctx,
                 WIDTH,
                 DPI,
-                input(terrainCreditLines(new Set(drawn), areas), overlays),
+                input(
+                  terrainCreditLines(new Set(drawn), areas, HEIGHTS),
+                  overlays,
+                ),
               );
               expect(real.length).toBeLessThanOrEqual(upper.length);
               // A smaller block starts lower on the map (a larger y).
@@ -115,13 +121,33 @@ describe("the credit block's upper bound", () => {
 
   it("counts the areas: a page with them prints more lines than one without", () => {
     const requested = new Set(LAYERS);
-    expect(upperBoundTerrainLines(requested, AREAS).length).toBeGreaterThan(
-      upperBoundTerrainLines(requested, []).length,
-    );
-    expect(upperBoundTerrainLines(new Set(["slope"]), [])[0]).toContain(
+    expect(
+      upperBoundTerrainLines(requested, AREAS, HEIGHTS).length,
+    ).toBeGreaterThan(upperBoundTerrainLines(requested, [], HEIGHTS).length);
+    expect(
+      upperBoundTerrainLines(new Set(["slope"]), [], HEIGHTS)[0],
+    ).toContain(
       NSW_REGION.terrain.heights.credit.slice(
         NSW_REGION.terrain.heights.credit.indexOf(" "),
       ),
     );
+  });
+});
+
+describe("Land's credit", () => {
+  // Mutation: drop `input.landCredit` from the lines in attributionLines, and
+  // a print of Land carries no credit for its CC BY data; print
+  // overlayAttributionLines(["land"]) in its place and a print in another
+  // region credits NSW's tenure data.
+  it("is the credit of the archive that drew, and prints only then", () => {
+    const text = (landCredit: string | null) =>
+      attributionLines(ctx, WIDTH, DPI, {
+        ...input([], []),
+        landCredit,
+      }).join(" ");
+    const nz = SIM_NZ.terrain.land!.credit;
+    expect(text(nz)).toContain(nz);
+    expect(text(nz)).not.toContain(NSW_REGION.terrain.land.credit);
+    expect(text(null)).not.toContain(nz);
   });
 });

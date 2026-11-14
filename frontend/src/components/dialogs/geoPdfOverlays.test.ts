@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
+import { sheetTerrain } from "../../geoPdf/sheetTerrain";
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
+  layerMissingHere,
   LIDAR_ONLY_OVERLAYS,
   ownJobInArea,
   seedOverlays,
@@ -122,5 +124,42 @@ describe("hillshadeShadowedHere", () => {
     expect(hillshadeShadowedHere("six-imagery")).toBe(true);
     expect(hillshadeShadowedHere("six-topo")).toBe(false);
     expect(hillshadeShadowedHere("protomaps")).toBe(false);
+  });
+});
+
+describe("layerMissingHere", () => {
+  const all = sheetTerrain(area);
+
+  // Mutation: map `hillshade` to `slope` in ARCHIVE_OF in place of `heights`,
+  // or drop its `land` key, and that layer is judged by the wrong archive or
+  // never judged missing.
+  it("is true for each layer whose archive the sheet's region lacks", () => {
+    const keys = ["contours", "slope", "hillshade", "land"];
+    for (const key of keys) expect(layerMissingHere(all, key), key).toBe(false);
+    const bare = {
+      ...all,
+      contours: null,
+      slope: null,
+      heights: null,
+      land: null,
+    };
+    for (const key of keys) expect(layerMissingHere(bare, key), key).toBe(true);
+    expect(layerMissingHere({ ...all, heights: null }, "slope")).toBe(false);
+    expect(layerMissingHere({ ...all, heights: null }, "hillshade")).toBe(true);
+  });
+
+  // Mutation: return true for a null `terrain`, and the form says nothing is
+  // available before an area is set, which a prod with one region must not show.
+  it("judges nothing before an area is set, and never a job's own layer", () => {
+    expect(layerMissingHere(null, "slope")).toBe(false);
+    const bare = {
+      ...all,
+      contours: null,
+      slope: null,
+      heights: null,
+      land: null,
+    };
+    expect(layerMissingHere(bare, "vegetation")).toBe(false);
+    expect(layerMissingHere(bare, "my-places")).toBe(false);
   });
 });

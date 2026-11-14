@@ -19,6 +19,7 @@ import {
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
+  layerMissingHere,
   LIDAR_ONLY_OVERLAYS,
   ownJobInArea,
   seedOverlays,
@@ -79,6 +80,7 @@ import {
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
+  t,
   type AreaExportFormat,
   type AreaExportLayer,
   type SharpenedArea,
@@ -115,6 +117,7 @@ import {
   ProgressBar,
 } from "../../ui";
 import type { GeoPdfProgress } from "../../geoPdf/client";
+import { sheetTerrain } from "../../geoPdf/sheetTerrain";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -524,14 +527,6 @@ function GeoPdfDialog({
     () => ownJobInArea(completedTopoJobs, extentState),
     [completedTopoJobs, extentState],
   );
-  // Why a Terrain chip is off on this sheet, as the sentence the group's hint
-  // says, or null when it is on offer.
-  const offReason = (key: TerrainLayerKey): string | null =>
-    key === "contours" && contoursPrintedHere(selectedBaseLayer, lidarOverlap)
-      ? "This map prints its own contours."
-      : key === "hillshade" && hillshadeShadowedHere(selectedBaseLayer)
-        ? `${MAP_TERRAIN.copy.hillshadeImagery}.`
-        : null;
   const overlays = useMemo(
     () =>
       shownOverlays(
@@ -593,6 +588,25 @@ function GeoPdfDialog({
     extentState.north > extentState.south &&
     extentState.east > extentState.west &&
     extentState.scale > 0;
+
+  // The archives of the region the sheet is in; null until the area is set.
+  const sheet = useMemo(
+    () => (extentValid ? sheetTerrain(extentState) : null),
+    [extentValid, extentState],
+  );
+  // Why a Terrain chip is off on this sheet, as the sentence the group's hint
+  // says, or null when it is on offer. A region without the layer outranks the
+  // base sheet's reasons. Guard: GeoPdfDialog.render.test.tsx ("says no layer
+  // is available where no region holds the sheet").
+  const offReason = (key: TerrainLayerKey): string | null =>
+    layerMissingHere(sheet, key)
+      ? t`Not available here.`
+      : key === "contours" &&
+          contoursPrintedHere(selectedBaseLayer, lidarOverlap)
+        ? "This map prints its own contours."
+        : key === "hillshade" && hillshadeShadowedHere(selectedBaseLayer)
+          ? `${MAP_TERRAIN.copy.hillshadeImagery}.`
+          : null;
 
   // Inline validation of the raw extent/scale inputs. A field left
   // in an invalid state (non-numeric, out of range, North not above South,
@@ -707,12 +721,13 @@ function GeoPdfDialog({
       [...overlays]
         .filter(
           (id) =>
-            id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer),
+            (id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer)) &&
+            !layerMissingHere(sheet, id),
         )
         .map((id) =>
           id.startsWith("master-") ? id.slice("master-".length) : id,
         ),
-    [overlays, selectedBaseLayer],
+    [overlays, selectedBaseLayer, sheet],
   );
 
   // Warm the persistent tile cache while the dialog is open: once the area,
@@ -1351,8 +1366,9 @@ function GeoPdfDialog({
                   )}
                   onToggle={toggleOverlay}
                   hint={
-                    SHAPE_KEYS.map(offReason).filter(Boolean).join(" ") ||
-                    undefined
+                    [
+                      ...new Set(SHAPE_KEYS.map(offReason).filter(Boolean)),
+                    ].join(" ") || undefined
                   }
                 />
                 <ChipPicker
@@ -1366,7 +1382,11 @@ function GeoPdfDialog({
                     ),
                     { value: MY_PLACES, label: "My places" },
                     { value: SHARED_PLACES, label: "Shared places" },
-                    { value: "land", label: MAP_TERRAIN.copy.land },
+                    {
+                      value: "land",
+                      label: MAP_TERRAIN.copy.land,
+                      disabled: layerMissingHere(sheet, "land"),
+                    },
                   ]}
                   selected={[
                     ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : [])
@@ -1374,8 +1394,15 @@ function GeoPdfDialog({
                       .filter((name) => overlays.has(name)),
                     ...(showOwnedPlacesOnPdf ? [MY_PLACES] : []),
                     ...(showSharedPlacesOnPdf ? [SHARED_PLACES] : []),
-                    ...(overlays.has("land") ? ["land"] : []),
+                    ...(overlays.has("land") && !layerMissingHere(sheet, "land")
+                      ? ["land"]
+                      : []),
                   ]}
+                  hint={
+                    layerMissingHere(sheet, "land")
+                      ? t`Not available here.`
+                      : undefined
+                  }
                   onToggle={(value) => {
                     if (value === MY_PLACES)
                       setShowOwnedPlacesOnPdf(!showOwnedPlacesOnPdf);
