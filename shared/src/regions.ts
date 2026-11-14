@@ -683,6 +683,21 @@ export function regionTouchesBox(region: Region, box: LonLatBox): boolean {
 }
 
 /**
+ * The areas of `areas` whose survey box shares ground with `region`'s border:
+ * the ones a map or a save of that region draws from, the same test the
+ * area-export check applies (`areaInTerrainRegion`). A box centred just
+ * outside the border still counts. Guard: `regions.test.ts` ("areasInRegion").
+ */
+export function areasInRegion<
+  A extends { coverage: readonly [number, number, number, number] },
+>(region: Region | null, areas: readonly A[]): A[] {
+  if (!region) return [];
+  return areas.filter(({ coverage: [west, south, east, north] }) =>
+    regionTouchesBox(region, { west, south, east, north }),
+  );
+}
+
+/**
  * The region whose border holds a point, in `REGIONS` order, or null. Never
  * `WORLD`, which has no border. Guard: `regions.test.ts` ("never returns the
  * world").

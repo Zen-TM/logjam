@@ -1283,8 +1283,9 @@ describe("draws the region the map shows", () => {
     ).toBe(false);
   });
 
-  // Mutation: drop the `.filter(inRegion)` in routeTerrain, and an area in
-  // New South Wales is routed over the source of a map showing New Zealand.
+  // Mutation: in the online branch of `routeTerrain`, pass `ctx.sharpenedAreas`
+  // on without `areasInRegion(region, …)`, and an area in New South Wales is
+  // routed over the source of a map showing New Zealand.
   it("routes a sharpened area only inside its region", () => {
     const area: SharpenedOverlay = {
       id: "area-1",

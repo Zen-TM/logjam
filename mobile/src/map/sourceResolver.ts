@@ -15,10 +15,10 @@
 // a MapArtifact path or bbox; resolver results carry no bbox provenance
 // beyond the bounds MapLibre needs.
 import {
+  areasInRegion,
   BASEMAP_CATALOG,
   layerIn,
   REGIONS,
-  regionTouchesBox,
   type BasemapCatalogEntry,
   type Region,
   SHARPENED_SOURCE_PREFIX,
@@ -452,8 +452,6 @@ function routeTerrain(
   holds: ((clip: MapArtifact) => boolean) | undefined,
   region: Region,
 ): ResolvedTileSource[] {
-  const inRegion = ({ coverage: [west, south, east, north] }: RoutedArea) =>
-    regionTouchesBox(region, { west, south, east, north });
   const drawn = statewide.flatMap((s) =>
     s.status === "ok" && s.url ? [s] : [],
   );
@@ -462,14 +460,15 @@ function routeTerrain(
   const clips =
     !online && holds ? savedStatewideClips(ctx, holds, archive.credit) : [];
   const areas: RoutedArea[] = online
-    ? (ctx.sharpenedAreas ?? [])
-        .map((area) => ({
+    ? areasInRegion(
+        region,
+        (ctx.sharpenedAreas ?? []).map((area) => ({
           ...area,
           tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
-        }))
-        .filter(inRegion)
+        })),
+      )
     : [
-        ...savedAreaClips(ctx, layer).filter(inRegion),
+        ...areasInRegion(region, savedAreaClips(ctx, layer)),
         ...(clips.length > 1 ? clips : []),
       ];
   if (areas.length === 0) return statewide;
