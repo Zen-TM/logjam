@@ -1,3 +1,4 @@
+import { setDisplayUnits } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { parkedError } from "../sync/parkedError";
@@ -402,6 +403,22 @@ describe("opChanges", () => {
       }),
     );
     expect(changes.every((change) => !change.rejected)).toBe(true);
+  });
+
+  // Mutation: write `${value} m` for `longestAbseil` in syncIssueDisplay.ts
+  // again, or drop `trimNumber` there (metric 12.345 reads "12.345 m").
+  it("writes a length in the display units, rounded as the place summary rounds it", () => {
+    expect(
+      opChanges(parked({ fields: { longestAbseil: 12.345 } }))[0].value,
+    ).toBe("12.3 m");
+    setDisplayUnits("imperial");
+    try {
+      expect(
+        opChanges(parked({ fields: { longestAbseil: 35 } }))[0].value,
+      ).toBe("114.8 ft");
+    } finally {
+      setDisplayUnits("metric");
+    }
   });
 
   it("carries the unit where the bare number would be a riddle", () => {

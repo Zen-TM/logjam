@@ -1,6 +1,7 @@
 import {
   formatDistanceM,
   formatDurationMs,
+  formatHeight,
   PAIRED_STAT_LABELS as L,
 } from "@logjam/shared";
 
@@ -17,7 +18,7 @@ export function onFootStats(t: {
   return [
     { label: L.time, value: formatDurationMs(t.durationMs) },
     { label: L.distance, value: formatDistanceM(t.distanceM) },
-    { label: L.ascent, value: `${Math.round(t.ascentM)} m` },
+    { label: L.ascent, value: formatHeight(t.ascentM) },
     { label: "Longest", value: formatDistanceM(t.longestM) },
   ];
 }

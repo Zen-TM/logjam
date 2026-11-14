@@ -122,7 +122,7 @@ export function qualityLabel(
 }
 
 /** 4 not "4.0", but 3.5 stays 3.5 — grades and hours are stored as floats. */
-function trimNumber(value: number): string {
+export function trimNumber(value: number): string {
   return Number.isInteger(value)
     ? String(value)
     : String(Math.round(value * 10) / 10);
