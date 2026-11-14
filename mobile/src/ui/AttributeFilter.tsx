@@ -5,6 +5,9 @@ import {
   formatRange,
   formatThreshold,
   isFullRange,
+  isLengthField,
+  lengthFromInput,
+  lengthInputText,
   stopLabel,
   THRESHOLD_OPERATOR_LABELS as OPERATOR_LABEL,
   THRESHOLD_OPERATORS as OPERATORS,
@@ -62,6 +65,7 @@ const SHAPES: Record<AttributeFilterShape, (props: Props) => ReactNode> = {
   threshold: ({ def, value, onChange }) => (
     <ThresholdFilter
       label={def.label}
+      length={isLengthField(def.key)}
       value={value?.kind === "number" ? [value.op, value.value] : null}
       onChange={(next) =>
         onChange(
@@ -217,10 +221,13 @@ function MinMaxFilter({
  */
 function ThresholdFilter({
   label,
+  length,
   value,
   onChange,
 }: {
   label: string;
+  /** A length: the filter holds metres, the field is typed in the display units. */
+  length: boolean;
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
@@ -229,7 +236,9 @@ function ThresholdFilter({
   const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
     value?.[0] ?? "Less than",
   );
-  const [text, setText] = useState(value ? String(value[1]) : "");
+  const [text, setText] = useState(
+    value ? (length ? lengthInputText(value[1]) : String(value[1])) : "",
+  );
   const [shownValue, setShownValue] = useState(value);
   if (value !== shownValue) {
     setShownValue(value);
@@ -241,7 +250,7 @@ function ThresholdFilter({
     onChange(
       nextText.trim() === "" || !Number.isFinite(parsed)
         ? null
-        : [nextOperator, parsed],
+        : [nextOperator, length ? lengthFromInput(parsed) : parsed],
     );
   };
 
@@ -249,7 +258,7 @@ function ThresholdFilter({
     <View style={styles.block}>
       <Header
         label={label}
-        summary={value == null ? "Any" : formatThreshold(value, "")}
+        summary={value == null ? "Any" : formatThreshold(value, length)}
         active={value != null}
       />
       <View style={styles.chipRow}>

@@ -1,6 +1,12 @@
 // `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
 // which is erased, so this edge does not close a runtime cycle.
-import { isReservedFieldKey, nameKey, stopLabel } from "./placeTypes.js";
+import {
+  isLengthField,
+  isReservedFieldKey,
+  nameKey,
+  stopLabel,
+} from "./placeTypes.js";
+import { lengthFromInput, lengthInputText } from "./units.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
@@ -310,6 +316,38 @@ export function coerceFieldValue(
   if (type === "float") return parseFloat(value);
   if (type === "boolean") return value === "true";
   return value;
+}
+
+/**
+ * A stored value as its form field holds it: "" for none, a length in the
+ * display units, else the value as text. The form's one way in; a length
+ * reads the same unit it is typed in (`coerceFieldInput`).
+ */
+export function fieldInputText(key: string, stored: unknown): string {
+  if (stored == null) return "";
+  return isLengthField(key) && typeof stored === "number"
+    ? lengthInputText(stored)
+    : String(stored);
+}
+
+/**
+ * A form field's text as the value to store: `coerceFieldValue`, with a length
+ * typed in the display units stored in metres. Text that still reads as the
+ * stored value (`stored`, shown by `fieldInputText`) keeps it exactly, so
+ * saving a place whose feet were not edited does not nudge its metres. The
+ * form's one way out. Guard: `units.test.ts` ("a length field").
+ */
+export function coerceFieldInput(
+  key: string,
+  text: string,
+  type: TripLogCustomFieldType,
+  stored?: unknown,
+): unknown {
+  const value = coerceFieldValue(text, type);
+  if (!isLengthField(key) || typeof value !== "number") return value;
+  return stored !== undefined && fieldInputText(key, stored) === text
+    ? stored
+    : lengthFromInput(value);
 }
 
 /**

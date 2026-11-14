@@ -351,10 +351,12 @@ export type SystemFieldDef = {
    */
   hint?: string;
   /**
-   * The unit a VALUE is in, appended where one is displayed ("30 m"). Only
-   * where the label does not already carry it: "Hours" says hours.
+   * The unit a VALUE is stored in, written where one is displayed ("30 m").
+   * Only where the label does not already carry it: "Hours" says hours. A
+   * length is stored in metres and read and typed in the display units
+   * (`isLengthField`).
    */
-  unit?: string;
+  unit?: "m";
   /**
    * The words a stored whole number reads as: the value `min + i` is
    * `labels[i]`, so "C2" is stored as 5 and filters and sorting keep working on
@@ -529,6 +531,12 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
  *  one lookup for the bounds, the hint and the unit a built-in carries. */
 export function systemFieldDef(key: string): SystemFieldDef | undefined {
   return SYSTEM_FIELD_DEFS.find((def) => def.key === key);
+}
+
+/** Whether a built-in field holds a length in metres, which a form types and a
+ *  page reads in the display units. */
+export function isLengthField(key: string): boolean {
+  return systemFieldDef(key)?.unit === "m";
 }
 
 /**

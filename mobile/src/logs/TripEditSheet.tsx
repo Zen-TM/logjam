@@ -455,7 +455,7 @@ export function TripEditSheet({
     // cleared field is absent here rather than null — there is nothing on the
     // other side to clear.
     const effectiveCustomFields = withoutClearedFields(
-      coerceCustomFields(fieldValues, visibleFieldDefs),
+      coerceCustomFields(fieldValues, visibleFieldDefs, trip?.customFields),
     );
     const base = openedWith ?? trip;
     try {

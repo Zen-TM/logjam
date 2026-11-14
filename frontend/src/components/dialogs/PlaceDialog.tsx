@@ -13,7 +13,8 @@ import type {
 } from "@logjam/shared";
 import {
   abandonConfirm,
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   contractSectionKeys,
   placeAttributesTitle,
   PLACE_FORM,
@@ -263,7 +264,7 @@ function PlaceDialog({
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = fieldValue(place.fieldValues, def.key);
-        vals[def.key] = raw != null ? String(raw) : "";
+        vals[def.key] = fieldInputText(def.key, raw);
       }
       initialFieldValues = vals;
     } else {
@@ -512,9 +513,11 @@ function PlaceDialog({
       // "has a value" filter.
       const attributes: Record<string, unknown> = {};
       for (const def of typeFieldDefs) {
-        attributes[def.key] = coerceFieldValue(
+        attributes[def.key] = coerceFieldInput(
+          def.key,
           getFieldValue(def.key),
           def.type,
+          fieldValue(place?.fieldValues, def.key),
         );
       }
 

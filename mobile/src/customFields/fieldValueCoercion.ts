@@ -8,24 +8,31 @@
 // (`fieldValueCoercion.test.ts`). The inputs that render these live beside it in
 // `CustomFieldValues.tsx`; splitting them is the repo's standing rule for logic
 // tangled with a native component.
-import { coerceFieldValue, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  coerceFieldInput,
+  fieldInputText,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
 /** Seed the editing state from stored values: everything as a string, and a
- *  missing value as "" — a yes/no included, which has "—" for unset. */
+ *  missing value as "" — a yes/no included, which has "—" for unset. A length
+ *  is in the display units (`fieldInputText`). */
 export function fieldValueStrings(
   stored: Record<string, unknown> | undefined,
 ): Record<string, string> {
   return Object.fromEntries(
     Object.entries(stored ?? {}).map(([key, value]) => [
       key,
-      value == null ? "" : String(value),
+      fieldInputText(key, value),
     ]),
   );
 }
 
 /**
  * String form → stored value, using the shared coercion so a number typed here
- * lands as a number, not a string.
+ * lands as a number, not a string, and a length typed in feet lands in metres.
+ * `stored` is what the form opened with: a length whose text was not edited
+ * keeps its stored metres (`coerceFieldInput`).
  *
  * AN EMPTIED FIELD IS `null`, NOT ABSENT, and that distinction is the whole
  * point. The place form merges this over the stored object, where `null` means
@@ -46,12 +53,15 @@ export function fieldValueStrings(
 export function coerceCustomFields(
   values: Record<string, string>,
   defs: TripLogCustomFieldDef[],
+  stored?: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const def of defs) {
     const raw = values[def.key];
     result[def.key] =
-      raw == null || raw.trim() === "" ? null : coerceFieldValue(raw, def.type);
+      raw == null || raw.trim() === ""
+        ? null
+        : coerceFieldInput(def.key, raw, def.type, stored?.[def.key]);
   }
   return result;
 }

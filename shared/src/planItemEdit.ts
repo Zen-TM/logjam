@@ -9,7 +9,8 @@ import { fieldValue } from "./fieldValues.js";
 import { SYSTEM_FIELD_DEFS, SYSTEM_PLACE_TYPES } from "./placeTypes.js";
 import { REGIONS, type Region } from "./regions.js";
 import {
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
 import type {
@@ -96,7 +97,7 @@ export function itemWords(item: TripPlanItem): ItemWords {
       };
       for (const def of itemFieldDefs(item)) {
         const raw = fieldValue(item.fieldValues, def.key);
-        words[ITEM_ATTR + def.key] = raw == null ? "" : String(raw);
+        words[ITEM_ATTR + def.key] = fieldInputText(def.key, raw);
       }
       return words;
     }
@@ -150,8 +151,13 @@ export function itemPatch(
     if (elevation !== seen.elevation)
       patch.elevation = { from: seen.elevation, to: elevation };
     for (const def of defs) {
-      const to = coerceFieldValue(now[ITEM_ATTR + def.key], def.type);
       const from = fieldValue(seen.fieldValues, def.key) ?? null;
+      const to = coerceFieldInput(
+        def.key,
+        now[ITEM_ATTR + def.key],
+        def.type,
+        from,
+      );
       if (!sameValue(to, from))
         (patch.fieldValues ??= {})[def.key] = { from, to };
     }

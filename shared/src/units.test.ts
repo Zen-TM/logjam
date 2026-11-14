@@ -28,6 +28,9 @@ import {
   setDisplayUnits,
   unitsOf,
 } from "./units.js";
+import { withFieldUnit, withRowUnit } from "./contracts/placePage.js";
+import { formatThreshold } from "./placeFilterOptions.js";
+import { coerceFieldInput, fieldInputText } from "./tripLogFields.js";
 import { NSW_REGION, simRegionsOn } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
@@ -264,6 +267,64 @@ describe("scale bars", () => {
     ]);
     // A clamped bar: 2500 m is 1.55 mi.
     expect(formatScaleStep(2500)).toBe("1.6 mi");
+  });
+});
+
+describe("a length field", () => {
+  const longest = "longest_abseil";
+
+  // Mutation: `withFieldUnit` writes `${text} m` whatever the units, or
+  // `isLengthField` is true for `num_abseils` too ("6 m").
+  it("is read in the display units, and in metric as it always was", () => {
+    expect(withFieldUnit(longest, "15")).toBe("15 m");
+    expect(withFieldUnit(longest, "12.345")).toBe("12.345 m");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withRowUnit([longest, "Longest pitch", 15, "float"])[2]).toBe(
+      "15 m",
+    );
+    setDisplayUnits("imperial");
+    expect(withFieldUnit(longest, "15")).toBe("49.2 ft");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withRowUnit([longest, "Longest pitch", 30.48, "float"])[2]).toBe(
+      "100 ft",
+    );
+    // Text that is not a number keeps its words, with the unit it is read in.
+    expect(withFieldUnit(longest, "about 15")).toBe("about 15 ft");
+  });
+
+  // Mutation: `fieldInputText` returns `String(stored)` for a length, or
+  // `coerceFieldInput` skips `lengthFromInput`.
+  it("is typed in the display units and stored in metres", () => {
+    expect(fieldInputText(longest, 15)).toBe("15");
+    expect(coerceFieldInput(longest, "15", "float")).toBe(15);
+    setDisplayUnits("imperial");
+    expect(fieldInputText(longest, 30.48)).toBe("100");
+    expect(fieldInputText(longest, null)).toBe("");
+    expect(coerceFieldInput(longest, "100", "float")).toBeCloseTo(30.48, 10);
+    expect(coerceFieldInput(longest, "", "float")).toBeNull();
+    // Another field is untouched by the unit.
+    expect(fieldInputText("num_abseils", 6)).toBe("6");
+    expect(coerceFieldInput("num_abseils", "6", "integer")).toBe(6);
+  });
+
+  // Mutation: drop the `stored` comparison from `coerceFieldInput`, and a
+  // save with nothing edited turns 15 m into 14.9961 m.
+  it("keeps its stored metres while the text is as it was shown", () => {
+    setDisplayUnits("imperial");
+    const shown = fieldInputText(longest, 15);
+    expect(shown).toBe("49.2");
+    expect(coerceFieldInput(longest, shown, "float", 15)).toBe(15);
+    // Edited: the new text wins.
+    expect(coerceFieldInput(longest, "50", "float", 15)).toBeCloseTo(15.24, 10);
+  });
+
+  // Mutation: `formatThreshold` writes `filter[1]` for a length in imperial.
+  it("writes a filter's threshold in the display units, with no unit, as before", () => {
+    expect(formatThreshold(["More than", 30], true)).toBe("Over 30");
+    expect(formatThreshold(["More than", 30])).toBe("Over 30");
+    setDisplayUnits("imperial");
+    expect(formatThreshold(["More than", 30.48], true)).toBe("Over 100");
+    expect(formatThreshold(["Less than", 6])).toBe("Under 6");
   });
 });
 

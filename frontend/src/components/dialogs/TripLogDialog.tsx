@@ -19,7 +19,9 @@ import {
   tripTitleHint,
   type SectionKeysOn,
   CANYONING_TRIP_TYPE,
+  coerceFieldInput,
   coerceFieldValue,
+  fieldInputText,
   formatFieldValue,
   enforceCanyoningTag,
   linksCanyon,
@@ -429,7 +431,7 @@ function TripLogDialog({
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = tripLog.customFields[def.key];
-        vals[def.key] = raw != null ? String(raw) : "";
+        vals[def.key] = fieldInputText(def.key, raw);
       }
       initialFieldValues = vals;
     } else {
@@ -707,7 +709,8 @@ function TripLogDialog({
 
     const customFields: Record<string, unknown> = {};
     for (const def of visibleFieldDefs) {
-      customFields[def.key] = coerceFieldValue(
+      customFields[def.key] = coerceFieldInput(
+        def.key,
         getFieldValue(def.key),
         def.type,
       );
@@ -1067,7 +1070,12 @@ function TripLogDialog({
       const customFields: Record<string, unknown> = {};
       for (const def of visibleFieldDefs) {
         const raw = getFieldValue(def.key);
-        customFields[def.key] = coerceFieldValue(raw, def.type);
+        customFields[def.key] = coerceFieldInput(
+          def.key,
+          raw,
+          def.type,
+          tripLog?.customFields[def.key],
+        );
       }
 
       if (tripLog) {

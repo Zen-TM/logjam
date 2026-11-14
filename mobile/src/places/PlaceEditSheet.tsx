@@ -399,6 +399,7 @@ export function PlaceEditSheet({
     const effectiveCustomFields = coerceCustomFields(
       fieldValues,
       typeFieldDefs,
+      place?.fieldValues,
     );
     // Every check runs, so one press lights every bad field. The coordinates
     // are required on an edit too, as on Logjam Web.
