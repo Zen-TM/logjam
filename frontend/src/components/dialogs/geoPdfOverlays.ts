@@ -7,10 +7,11 @@ import {
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
+import type { SheetTerrain } from "../../geoPdf/sheetTerrain";
 
 // What a GeoPDF draws over its base layer. Contours, slope and hillshade name
-// the Terrain group: the statewide layers anywhere in NSW, and a LiDAR job's
-// own layer of that name over its area. The rest come only from a job.
+// the Terrain group: the layers of the region the sheet is in, and a LiDAR
+// job's own layer of that name over its area. The rest come only from a job.
 
 const TERRAIN: readonly string[] = TERRAIN_LAYER_KEYS;
 
@@ -113,4 +114,29 @@ export function contoursPrintedHere(
 /** Whether ticking Hillshade could draw nothing useful: imagery has its own shadows. */
 export function hillshadeShadowedHere(baseLayer: string): boolean {
   return !takesNswHillshade(baseLayer);
+}
+
+/** The archive of `SheetTerrain` each layer a print draws from the region is read from. */
+const ARCHIVE_OF = {
+  contours: "contours",
+  slope: "slope",
+  hillshade: "heights",
+  land: "land",
+} as const;
+
+/**
+ * Whether the region the sheet is in has no archive for a layer, so ticking it
+ * could draw nothing. `terrain` is null while the area is not set, which
+ * judges nothing, and a job's own layer is never missing. The planner reads
+ * nothing for a layer this calls missing: `overlaysDrawn` gates hillshade and
+ * contours, and slope and land are gated where `statewideReads` plans them.
+ * Guard: geoPdfOverlays.test.ts ("offers a layer only where the planner reads
+ * its archive").
+ */
+export function layerMissingHere(
+  terrain: SheetTerrain | null,
+  key: string,
+): boolean {
+  const archive = ARCHIVE_OF[key as keyof typeof ARCHIVE_OF];
+  return terrain !== null && archive !== undefined && terrain[archive] === null;
 }

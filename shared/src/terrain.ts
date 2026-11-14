@@ -2,14 +2,13 @@
 // from the 5 m DEM, with no LiDAR job, and three overlays from statewide
 // archives of their own: Coverage (coverage.ts), Fire history (fireHistory.ts)
 // and Land (land.ts). The height-derived archives and Land are the region's
-// (`NSW_REGION.terrain`, regions.ts); each client only draws these.
+// (`Region.terrain`, regions.ts); each client only draws these.
 //
 // Slope is baked once as a fake DEM, a terrarium archive whose "height" is the
 // slope in degrees. A client loads it as a `raster-dem` source and colours it with a
 // `color-relief` layer, so the bands are a paint expression: the user's own,
 // with no rebuild. Hillshade is MapLibre's own `hillshade` layer on the height
 // archive, so it needs no pipeline at all.
-import { NSW_REGION } from "./regions.js";
 import { rgbaCssFromHex, type SlopeBand } from "./topoSettings.js";
 
 /**
@@ -227,11 +226,12 @@ export function slopeLegendRows(
  * One credit for the statewide layers a printed map drew, top of the map
  * first ("Contours, slope and hillshade: derived from the NSW 5 m …"): each
  * layer's own credit has the same body, and a sheet has room for one line.
- * A sharpened area's `credit` reads the same way, in place of the 5 m one.
+ * `credit` is the heights credit of the region the sheet is in, or a sharpened
+ * area's own, which reads the same way.
  */
 export function terrainCredit(
   drawn: Iterable<TerrainLayerKey>,
-  credit: string = NSW_REGION.terrain.heights.credit,
+  credit: string,
 ): string | null {
   const keys = new Set(drawn);
   const names = TERRAIN_LAYER_KEYS.filter(

@@ -66,8 +66,10 @@ found three problems:
   names no job.
 - **The credit is declared once, by the worker.** `credit` in
   `topo/sharpen.py` writes it into the job's result, and the API passes it
-  on. Every result read from an area also carries the NSW 5 m credit
-  (`demCredits`), because the area's edge tiles hold 5 m heights.
+  on. Every result read from an area also carries the heights credit of
+  the region the area lies in (`demCredits`; the NSW 5 m credit in NSW),
+  because the area's edge tiles hold that region's heights (updated
+  2026-11-14).
 - **Update 2026-10-24: a file made from an area can leave that circle.** An
   export of an area (GeoTIFF, GeoPackage, MBTiles) or a GeoPDF made by
   someone who may read a sharpened area carries the area's terrain. Which

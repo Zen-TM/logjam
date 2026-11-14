@@ -22,7 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
-import { NSW_REGION, REGIONS } from "./regions.js";
+import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -160,20 +160,27 @@ export function demTileUrl(
 
 /**
  * The credit lines for the sources a result was read from, each once. A
- * sharpened area's carries the NSW 5 m credit too: where its survey has no
- * ground, its archive holds the 5 m heights.
+ * sharpened area's carries the heights credit of the region it lies in too:
+ * where its survey has no ground, its archive holds that region's heights.
  */
 export function demCredits(
   sourceIds: readonly string[] = DEM_SOURCES.map((source) => source.id),
   sources: readonly DemSource[] = DEM_SOURCES,
+  regions: readonly Region[] = REGIONS,
 ): string[] {
   const lines = sources
     .filter((source) => sourceIds.includes(source.id))
-    .flatMap((source) =>
-      source.areaId
-        ? [source.credit, NSW_REGION.terrain.heights.credit]
-        : [source.credit],
-    );
+    .flatMap((source) => {
+      const { areaId, coverage } = source;
+      if (!areaId || !coverage) return [source.credit];
+      // The first region the area's box shares ground with: the same test a
+      // map and a save use to say which areas belong to a region.
+      const region =
+        regions.find((r) => areasInRegion(r, [{ coverage }]).length > 0) ??
+        null;
+      return [source.credit, layerIn(region, "heights")?.credit ?? null];
+    })
+    .filter((line): line is string => line !== null);
   return [...new Set(lines)];
 }
 
