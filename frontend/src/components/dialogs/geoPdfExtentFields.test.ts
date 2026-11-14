@@ -79,7 +79,7 @@ describe("extentFieldErrors", () => {
   });
 
   it("enforces latitude and longitude ranges", () => {
-    const errors = extentFieldErrors(values({ n: "95", e: "200" }), baseState);
+    const errors = extentFieldErrors(values({ n: "95", e: "400" }), baseState);
     expect(errors.n).toMatch(/-90 and 90/);
     expect(errors.e).toMatch(/-180 and 180/);
   });
@@ -266,11 +266,13 @@ describe("a typed easting no grid can place", () => {
 
 // The E/N chip's tooltip names the grid the Layers popover names for the same
 // ground; NSW's, and Melbourne's with only NSW declared, read as they always
-// have. Mutation: return NSW's sentence whatever the grid.
+// have.
 describe("the E/N chip's tooltip", () => {
   const NSW_TIP =
     "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 
+  // Mutation: have `gridOf` answer UTM for any extent outside NSW's border,
+  // and Melbourne reads the UTM sentence.
   it.each([
     ["Sydney", { north: -33.6, south: -33.7, east: 150.4, west: 150.3 }],
     ["Melbourne", { north: -37.7, south: -37.9, east: 145.0, west: 144.8 }],
@@ -278,6 +280,7 @@ describe("the E/N chip's tooltip", () => {
     expect(coordTooltip(box)).toBe(NSW_TIP);
   });
 
+  // Mutation: return NSW's sentence whatever the grid.
   it("names UTM in Utah and NZTM2000 in New Zealand when regions are declared", async () => {
     const { coordTooltip: tip } = await withSimRegions();
     expect(
@@ -290,3 +293,33 @@ describe("the E/N chip's tooltip", () => {
     );
   });
 });
+
+// The extent follows the map into another world copy, so a sheet across the
+// date line has an east edge past 180 and the dialog must take it in both
+// modes. Mutation: test the longitude against a fixed -180 to 180 in
+// `rangeError`, and Make is blocked for a sheet east of 180.
+it.each(["latlon", "enNorthing"] as const)(
+  "takes a sheet across the date line in %s",
+  (coordMode) => {
+    const state: ExtentState = {
+      ...baseState,
+      north: -15.95,
+      south: -16.05,
+      east: 180.05,
+      west: 179.95,
+      coordMode,
+    };
+    const typed = {
+      n: extentFieldText("n", state),
+      s: extentFieldText("s", state),
+      e: extentFieldText("e", state),
+      w: extentFieldText("w", state),
+    };
+    expect(extentFieldErrors(typed, state)).toEqual({
+      n: null,
+      s: null,
+      e: null,
+      w: null,
+    });
+  },
+);

@@ -111,10 +111,16 @@ export function coordTooltip(
 
 const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
 
+/**
+ * A latitude must be within ±90. A longitude must be within 180° of the
+ * extent's centre, not within ±180: the extent follows the map into another
+ * world copy, and its edges there read past 180.
+ */
 function rangeError(
   field: ExtentFieldKey,
   deg: number,
   grid: string | null,
+  centreLon: number,
 ): string | null {
   if (LAT_FIELDS.includes(field)) {
     if (deg < -90 || deg > 90) {
@@ -122,7 +128,7 @@ function rangeError(
         ? "Must be between -90 and 90"
         : t`Not a valid ${grid} northing`;
     }
-  } else if (deg < -180 || deg > 180) {
+  } else if (!(Math.abs(deg - centreLon) <= 180)) {
     return grid === null
       ? "Must be between -180 and 180"
       : t`Not a valid ${grid} easting`;
@@ -140,6 +146,7 @@ export function extentFieldErrors(
   state: Edges,
 ): ExtentFieldErrors {
   const grid = state.coordMode === "latlon" ? null : GRID_NAMES[gridOf(state)];
+  const centreLon = boxCentre(state).lon;
   const errors: ExtentFieldErrors = { n: null, s: null, e: null, w: null };
   const degrees: Record<ExtentFieldKey, number | null> = {
     n: null,
@@ -154,7 +161,7 @@ export function extentFieldErrors(
       errors[field] = "Enter a number";
       continue;
     }
-    errors[field] = rangeError(field, deg, grid);
+    errors[field] = rangeError(field, deg, grid, centreLon);
     if (errors[field] === null) degrees[field] = deg;
   }
 

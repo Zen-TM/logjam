@@ -239,6 +239,8 @@ describe("a sheet's grid follows the ground it covers", () => {
     ]);
   });
 
+  // Mutation: hard-wire the zone in `sheetGrid` to `mgaZone(56)`, and Utah
+  // prints MGA 56's numbers.
   it("prints UTM's over the northern hemisphere outside every region", () => {
     // Utah, UTM 13 north: E 230 197 to 239 393 and N 4 149 163 to 4 159 980.
     const box = { north: 37.55, south: 37.45, east: -107.95, west: -108.05 };
