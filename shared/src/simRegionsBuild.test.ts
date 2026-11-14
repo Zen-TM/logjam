@@ -30,17 +30,17 @@ const DECLARED: Record<string, Record<string, string | undefined>> = {
     heights: SIM_NZ.terrain.heights?.archivePath,
     slope: SIM_NZ.terrain.slope?.archivePath,
     contours: SIM_NZ.terrain.contours?.archivePath,
-    vector: SIM_NZ.vector.archivePath,
+    vector: SIM_NZ.vector?.archivePath,
   },
   simutah: {
     heights: SIM_UTAH.terrain.heights?.archivePath,
     slope: SIM_UTAH.terrain.slope?.archivePath,
     contours: SIM_UTAH.terrain.contours?.archivePath,
-    vector: SIM_UTAH.vector.archivePath,
+    vector: SIM_UTAH.vector?.archivePath,
   },
   world: {
     heights: SIM_WORLD.terrain.heights?.archivePath,
-    vector: SIM_WORLD.vector.archivePath,
+    vector: SIM_WORLD.vector?.archivePath,
   },
 };
 
