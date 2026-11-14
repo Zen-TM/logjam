@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Starting in the right language and choosing another (languageSetting.ts).
@@ -180,6 +182,16 @@ describe("chooseLanguage", () => {
     expect(restart).toHaveBeenCalledTimes(1);
   }, 30_000);
 
+  // Mutation: delete the `changesLanguage` line in chooseLanguage (a re-tap of
+  // the language already running would store it and restart for no change).
+  it("does nothing for the language already running", async () => {
+    const { chooseLanguage } = await load({ sim: true, running: "en-US" });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
+    expect(prefs.get("language")).toBeUndefined();
+    expect(restart).not.toHaveBeenCalled();
+  }, 30_000);
+
   // Mutation: delete `!offeredHere().includes(next) ||` in chooseLanguage.
   it("refuses a language this phone does not offer", async () => {
     const { chooseLanguage } = await load({ sim: false });
@@ -254,27 +266,93 @@ describe("languageRow", () => {
 });
 
 describe("languageToSend", () => {
-  // Mutation: return `languageToRecord(running, recorded)` whatever the
-  // `serverPrefs` status in languageToSend (a guest would send to an account
-  // it does not have: ADR 0007).
+  const CURRENT = "2026-11-02";
+  const settled = (language?: string) => ({
+    id: "u",
+    consentVersion: CURRENT,
+    uiPreferences: language ? { language } : null,
+  });
+  const ask = (over: Record<string, unknown> = {}) => ({
+    accountState: "linked" as const,
+    user: settled() as never,
+    consented: false,
+    newAccount: false,
+    running: "en-US" as const,
+    ...over,
+  });
+
+  // Mutation: delete the `capabilityStatus("serverPrefs", …)` test in
+  // languageToSend (a guest would send to an account it does not have: ADR 0007).
   it("sends nothing for a guest, whatever the phone runs", async () => {
     const { languageToSend } = await load();
-    expect(languageToSend("guest", "en-US", undefined)).toBeNull();
-    expect(languageToSend("guest", "en-XA", "en-AU")).toBeNull();
+    expect(languageToSend(ask({ accountState: "guest" }))).toBeNull();
+    expect(
+      languageToSend(ask({ accountState: "guest", running: "en-XA" })),
+    ).toBeNull();
   }, 30_000);
 
-  // Mutation: return null in place of `languageToRecord(running, recorded)` in languageToSend.
-  it("sends the running language to a linked account whose record differs", async () => {
+  // Mutation: delete `if (!user) return null;` in languageToSend.
+  it("sends nothing before the account has loaded", async () => {
     const { languageToSend } = await load();
-    expect(languageToSend("linked", "en-US", undefined)).toBe("en-US");
-    expect(languageToSend("linked", "en-AU", "en-US")).toBe("en-AU");
+    expect(languageToSend(ask({ user: undefined }))).toBeNull();
+    expect(languageToSend(ask({ user: null }))).toBeNull();
   }, 30_000);
 
-  // Mutation: return `running` in place of `languageToRecord(running, recorded)`
-  // in languageToSend (a phone in the source language would write to an
-  // account with none).
+  // Mutation: delete `if (!consented && needsReconsent(user)) return null;` in languageToSend
+  // (the PATCH would fire behind the consent gate).
+  it("sends nothing while consent is missing or stale", async () => {
+    const { languageToSend } = await load();
+    const missing = { ...settled(), consentVersion: null } as never;
+    const stale = { ...settled(), consentVersion: "2000-01-01" } as never;
+    expect(languageToSend(ask({ user: missing }))).toBeNull();
+    expect(languageToSend(ask({ user: stale }))).toBeNull();
+  }, 30_000);
+
+  // Mutation: test `needsReconsent(user)` alone, dropping `!consented &&`, in
+  // languageToSend (a stale account that has just agreed would send nothing).
+  it("sends once the gate has been passed in this session, though the record is still stale", async () => {
+    const { languageToSend } = await load();
+    const stale = { ...settled(), consentVersion: "2000-01-01" } as never;
+    expect(languageToSend(ask({ user: stale, consented: true }))).toBe("en-US");
+  }, 30_000);
+
+  // Mutation: delete `if (showsRegionStep(newAccount)) return null;` in
+  // languageToSend (the PATCH could race the region step's own).
+  it("sends nothing while the new-account region step shows, and sends after", async () => {
+    const { languageToSend } = await load({ sim: true });
+    expect(languageToSend(ask({ newAccount: true }))).toBeNull();
+    expect(languageToSend(ask({ newAccount: false }))).toBe("en-US");
+  }, 30_000);
+
+  // Mutation: return null in place of `languageToRecord(…)` in languageToSend.
+  it("sends the running language to a settled account whose record differs", async () => {
+    const { languageToSend } = await load();
+    expect(languageToSend(ask())).toBe("en-US");
+    expect(
+      languageToSend(ask({ user: settled("en-US"), running: "en-AU" })),
+    ).toBe("en-AU");
+  }, 30_000);
+
+  // Mutation: return `running` in place of `languageToRecord(…)` in languageToSend
+  // (a phone in the source language would write to an account with none).
   it("sends nothing from the source language to an account with none", async () => {
     const { languageToSend } = await load();
-    expect(languageToSend("linked", "en-AU", undefined)).toBeNull();
+    expect(languageToSend(ask({ running: "en-AU" }))).toBeNull();
   }, 30_000);
+});
+
+describe("the Display screen", () => {
+  // Mutation: call `useTracks()` in DisplaySettingsScreen itself, outside
+  // `LanguageRow` (prod would read the track table for a row it never draws).
+  it("reads no tracks itself: only the language row does", () => {
+    const source = readFileSync(
+      join(__dirname, "screens/settings/DisplaySettingsScreen.tsx"),
+      "utf8",
+    );
+    const [screen, row] = source.split("function LanguageRow(");
+    // The floor: the child exists and is where the read is.
+    expect(row).toMatch(/useTracks\(\)/);
+    expect(screen.match(/useTracks\(\)/g) ?? []).toHaveLength(0);
+    expect(screen).toContain("showsLanguageChoice(offered)");
+  });
 });

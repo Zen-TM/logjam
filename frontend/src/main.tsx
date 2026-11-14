@@ -1,6 +1,7 @@
 // First: shared reads this switch when it loads (src/mainSimRegions.test.ts).
 import "./simRegions";
-// Second, and loading nothing from shared: see language.ts.
+// Second, and loading nothing from shared: shared reads the language when it
+// loads (src/mainLanguage.test.ts, src/language.test.ts).
 import "./language";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

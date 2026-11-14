@@ -4,6 +4,7 @@
 // so a change is stored and the page reloads. Guard: languageSetting.test.ts.
 import { useEffect } from "react";
 import {
+  changesLanguage,
   isLanguage,
   language,
   languageToRecord,
@@ -47,11 +48,13 @@ export function reconcileLanguage(
   return true;
 }
 
-/** The language row: store the choice and reload. False when it could not be stored. */
+/** The language row: store the choice and reload. False when it could not be stored; true, doing nothing, for the language already running. */
 export function chooseLanguage(
   next: Language,
   reload: () => void = () => location.reload(),
 ): boolean {
+  // The language already running: nothing to store or reload, and not a failure.
+  if (!changesLanguage(language(), next)) return true;
   if (!isLanguage(next) || !offeredHere().includes(next) || !store(next)) {
     return false;
   }

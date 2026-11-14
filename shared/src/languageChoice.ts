@@ -79,6 +79,14 @@ export function languageToStart(
 }
 
 /**
+ * Whether choosing `next` in the language row changes anything: choosing the
+ * language already running stores nothing and restarts nothing. Guard:
+ * languageChoice.test.ts.
+ */
+export const changesLanguage = (running: Language, next: Language): boolean =>
+  running !== next;
+
+/**
  * The language to write to the account (`uiPreferences.language`), or null when
  * it holds `running` already. An account that never recorded one reads as the
  * source, so a client in the source language writes nothing. Guard:

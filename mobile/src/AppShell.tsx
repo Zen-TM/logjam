@@ -1103,14 +1103,20 @@ export function AppShell({
 
   // Tell the account which language this phone runs in when it differs from
   // the one recorded, for the messages sent with nobody asking. Nothing in
-  // prod (the source language is all there is), nothing for a guest
-  // (`languageToSend`, behind the `serverPrefs` capability).
-  const accountLanguage = userQuery.data?.uiPreferences?.language;
+  // prod (the source language is all there is), nothing for a guest, and
+  // nothing behind the consent gate or the new-account region step
+  // (`languageToSend`).
+  const accountUser = userQuery.data;
   useEffect(() => {
-    if (!accountLoaded) return;
-    const next = languageToSend(accountState, language(), accountLanguage);
+    const next = languageToSend({
+      accountState,
+      user: accountUser,
+      consented,
+      newAccount,
+      running: language(),
+    });
     if (next) recordLanguage(next).catch(console.error);
-  }, [accountLanguage, accountLoaded, accountState]);
+  }, [accountUser, accountState, consented, newAccount]);
 
   useEffect(() => {
     // A guest registers no token (it checks). The tap listener still mounts —

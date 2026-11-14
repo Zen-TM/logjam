@@ -132,6 +132,16 @@ describe("chooseLanguage", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   }, 30_000);
 
+  // Mutation: delete the `changesLanguage` line in chooseLanguage (a re-tap of
+  // the language already running would store it and reload for no change).
+  it("does nothing, and does not fail, for the language already running", async () => {
+    const { chooseLanguage } = await load({ sim: true, running: "en-US" });
+    const reload = vi.fn();
+    expect(chooseLanguage("en-US", reload)).toBe(true);
+    expect(localStorage.getItem("logjam.language")).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  }, 30_000);
+
   // Mutation: delete `!offeredHere().includes(next) ||` in chooseLanguage.
   it("refuses a language this browser does not offer", async () => {
     const { chooseLanguage } = await load({ sim: false });

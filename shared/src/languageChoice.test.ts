@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Language } from "./i18n";
 import {
+  changesLanguage,
   languageToRecord,
   languageToStart,
   offeredHere,
@@ -155,6 +156,19 @@ describe("languageToStart", () => {
     expect(languageToStart("en-AU", null, ["en-US"], ALL)).toBe("en-US");
     // en-XA stored on a build that no longer offers it
     expect(languageToStart("en-XA", "en-XA", [], ["en-AU"])).toBe("en-AU");
+  });
+});
+
+describe("changesLanguage", () => {
+  // Mutation: return `true` always in changesLanguage (a re-tap of the current
+  // language would store and restart for no change).
+  it("is false for the language already running", () => {
+    expect(changesLanguage("en-US", "en-US")).toBe(false);
+  });
+
+  // Mutation: return `false` always in changesLanguage.
+  it("is true for another language", () => {
+    expect(changesLanguage("en-AU", "en-US")).toBe(true);
   });
 });
 
