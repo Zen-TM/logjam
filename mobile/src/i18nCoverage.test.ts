@@ -70,9 +70,9 @@ describe("Logjam GPS i18n coverage", () => {
   // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(300);
-    // Nothing in Logjam GPS is written through the catalogue yet, so the
-    // floor on what the scan reads is its bare literals.
-    expect(scan.bare.length).toBeGreaterThan(1000);
+    // The floor is on the total found: bare literals fall as text moves into
+    // messages, so their sum stays put while the scan keeps working.
+    expect(scan.bare.length + scan.messages.length).toBeGreaterThan(1000);
   });
 
   // Mutation: add ``export const zz = t` leading`;`` to any source file.
