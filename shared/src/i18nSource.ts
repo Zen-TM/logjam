@@ -186,6 +186,7 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
   "shared/src/copyRules.ts":
     "what a failing copy test tells the developer to write instead",
   "shared/src/i18nSource.ts": "what a failing i18n test tells the developer",
+  "shared/src/i18nCodemod.ts": "what the codemod tells the developer it left",
   "shared/src/kit.ts":
     "notes on each kit component, read by the people who build it",
   "shared/src/webTokens.ts": "the CSS generated from the design tokens",
@@ -197,10 +198,15 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
 
 export type BareLiteral = {
   line: number;
+  /** Where the literal starts in the file (its node's `getStart()`): how a rewrite finds it again. */
+  start: number;
   text: string;
-  /** `copy` stood where today's copy rules read (JSX text, a prop such as `label`, a toast's argument); `prose` is any other literal that reads as a sentence. */
-  why: "copy" | "prose";
+  /** `copy` stood where today's copy rules read (JSX text, a prop such as `label`, a toast's argument); `prose` is any other literal that reads as a sentence; `word` is a one-word label outside both, found only when asked for. */
+  why: "copy" | "prose" | "word";
 };
+
+/** A capitalised single word ("Friends", "Delete"): a label, or an id; the scanner cannot tell outside a copy position. */
+const LABEL = /^\p{Lu}\p{Ll}+$/u;
 
 /**
  * The literals a user may read that were not written through `t`, `plural`,
@@ -209,11 +215,16 @@ export type BareLiteral = {
  * that reads as prose (`PROSE`) unless it stands in a position that is code:
  * an import, a type, a comparison, a log, `console`, an error's message, SQL,
  * a property's name, a styling or wiring attribute.
+ *
+ * `words` also reports a capitalised single word in those other positions
+ * (`why: "word"`). The ratchet does not count them (a word there is as often an
+ * id as a label), so only the codemod asks.
  */
 export function bareCopyIn(
   tsModule: unknown,
   fileName: string,
   source: string,
+  options: { words?: boolean } = {},
 ): BareLiteral[] {
   const ts = tsModule as typeof TypeScript;
   const sf = loadFile(ts, fileName, source);
@@ -221,11 +232,14 @@ export function bareCopyIn(
   const plurals = pluralNames(ts, sf);
   const add = (node: TypeScript.Node, text: string, copy: boolean) => {
     if (!/\p{L}/u.test(text) || SQL.test(text) || HEX.test(text)) return;
-    if (!copy && (!PROSE.test(text) || CODE.test(text))) return;
+    const prose = PROSE.test(text) && !CODE.test(text);
+    const word = !!options.words && LABEL.test(text);
+    if (!copy && !prose && !word) return;
     found.push({
       line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      start: node.getStart(),
       text,
-      why: copy ? "copy" : "prose",
+      why: copy ? "copy" : prose ? "prose" : "word",
     });
   };
   // Outside a copy position, text built from pieces is one sentence: its static
@@ -245,6 +259,7 @@ export function bareCopyIn(
       return;
     found.push({
       line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      start: node.getStart(),
       text: written,
       why: "prose",
     });

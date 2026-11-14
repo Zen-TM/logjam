@@ -57,6 +57,10 @@ platform: privacy constrains every feature. Each package has its own
   package's count of bare literals per directory may only fall
   (`shared/src/i18nCoverage.test.ts`, `frontend/src/i18nCoverage.test.ts`,
   `mobile/src/i18nCoverage.test.ts`, `api/src/i18nCoverage.unit.test.ts`).
+  A directory's text moves with `node scripts/i18n-extract.mjs <directory>`
+  (after `make shared`), which lists what a person must write, then `make
+  format` and `node scripts/i18n-identity-check.mjs origin/main`, which prints
+  any text the change altered. Guard: `shared/src/i18nCodemod.test.ts`.
   [0050](docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
   or `.github/pull_request_template.md` and use its headings and labels: `gh`

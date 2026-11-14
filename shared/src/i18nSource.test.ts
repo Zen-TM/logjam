@@ -144,6 +144,28 @@ describe("bareCopyIn", () => {
     ]);
   });
 
+  // Mutation: in `bareCopyIn`, change `!!options.words && LABEL.test(text)` to `LABEL.test(text)`.
+  it("reports a capitalised word outside the net only when asked, and a lowercase one never", () => {
+    const source =
+      'const a = "Friends"; const b = "button"; const c = <p>Delete</p>; const d = "Open the file";';
+    expect(bare(source)).toEqual(["Delete", "Open the file"]);
+    expect(
+      bareCopyIn(ts, "x.tsx", source, { words: true }).map(
+        ({ text, why }) => `${why}:${text}`,
+      ),
+    ).toEqual(["word:Friends", "copy:Delete", "prose:Open the file"]);
+  });
+
+  // Mutation: in `bareCopyIn`'s `add`, report `start: 0`.
+  it("says where each literal starts, which a rewrite finds it by", () => {
+    const source = 'const a = "x"; const b = <p>\n  Hello there\n</p>;';
+    expect(
+      bareCopyIn(ts, "x.tsx", source).map(({ start }) =>
+        source.slice(start, start + 5),
+      ),
+    ).toEqual(["Hello"]);
+  });
+
   // Mutation: take the apostrophe form out of the word pattern (`WORD`).
   it("flags prose whose first word is a contraction, and not a lone one", () => {
     expect(
