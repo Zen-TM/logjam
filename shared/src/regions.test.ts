@@ -15,6 +15,7 @@ import {
 } from "./geoPdfBaseLayers.js";
 import {
   accountRegion,
+  areasInRegion,
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
@@ -660,6 +661,34 @@ describe("layerIn", () => {
 
   it("is null for no region", () => {
     expect(layerIn(null, "heights")).toBeNull();
+  });
+});
+
+describe("areasInRegion", () => {
+  const area = (id: string, coverage: [number, number, number, number]) => ({
+    id,
+    coverage,
+  });
+  const inside = area("inside", [150.3, -33.7, 150.32, -33.68]);
+  // Its centre (154.5) is in the sea, east of NSW's border, but its west edge
+  // is inside.
+  const coastal = area("coastal", [154.0, -33.9, 155.0, -33.5]);
+  const abroad = area("abroad", [169.05, -44.65, 169.07, -44.63]);
+
+  // Mutation: test the box's centre in `areasInRegion` in place of its
+  // overlap with the border, and the coastal area drops out of NSW.
+  it("keeps an area whose box touches the border, though its centre is outside", () => {
+    expect(areasInRegion(NSW_REGION, [inside, coastal, abroad])).toEqual([
+      inside,
+      coastal,
+    ]);
+  });
+
+  // Mutation: keep every area whatever the region, and an NSW area is routed
+  // in another region.
+  it("holds none of another region's, and none for no region", () => {
+    expect(areasInRegion(SIM_NZ, [inside, coastal, abroad])).toEqual([abroad]);
+    expect(areasInRegion(null, [inside])).toEqual([]);
   });
 });
 

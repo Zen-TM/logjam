@@ -30,13 +30,19 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
+import { terrainKeyOf } from "./map/layerOrder";
+import { terrainEntries } from "./map/terrainEntries";
+import { nextViewRegion } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
-import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
+import type {
+  Region,
+  ScopedCustomFieldDef,
+  StandaloneFile,
+} from "@logjam/shared";
 import { PANEL_TITLES, type LogsView, type PanelId } from "./sidebar/panels";
 import {
   usePlaces,
@@ -549,11 +555,16 @@ function App() {
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
   );
+  // The one region the map draws its Terrain group from: the one in view,
+  // changed only when the map moves into another (ADR 0049; `viewRegion.test.ts`
+  // holds that a pan inside one keeps the same object). Unknown until the map
+  // reports its first view.
+  const [viewRegion, setViewRegion] = useState<Region | null>(null);
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
     setRoutedAreas(sharpenedAreas);
-    const entries = terrainEntries(sharpenedAreas);
+    const entries = terrainEntries(viewRegion, sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       coverage: drawsCoverage(coverage, coverageCarrier),
@@ -566,7 +577,7 @@ function App() {
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
         .filter((key) => shown[key])
-        .map((key) => entries[key]),
+        .flatMap((key) => entries[key] ?? []),
       ...vegetationLayers,
     ];
   }, [
@@ -580,6 +591,7 @@ function App() {
     hillshade,
     vegetationLayers,
     sharpenedAreas,
+    viewRegion,
   ]);
 
   // A PMTiles source failed to load (Map already tore it down to stop the
@@ -589,9 +601,7 @@ function App() {
       // A Terrain layer's switch is on, so say which one draws nothing. Only
       // a reload retries it: the pmtiles protocol keeps the failed header for
       // the page's life.
-      const terrainKey = TERRAIN_LAYER_KEYS.find(
-        (key) => TERRAIN_ENTRIES[key].id === entryId,
-      );
+      const terrainKey = terrainKeyOf(entryId);
       if (terrainKey) {
         toast.error(
           `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
@@ -2157,6 +2167,7 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setViewRegion((previous) => nextViewRegion(previous, bounds));
             }}
             selectingBbox={boxFor(boxPick) !== null}
             onBboxSelected={(bbox) => {
@@ -2180,6 +2191,7 @@ function App() {
             }
             onBasemapHealth={setBasemapHealth}
             topoLayers={mapTopoLayers}
+            region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
             coverageCarrier={coverageCarrier}
