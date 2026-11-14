@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AREA_EXPORT_MAX_SIDE_KM,
+  areaExportEpsg,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
@@ -12,6 +13,7 @@ import {
 } from "./areaExport.js";
 import { nswContourStyle } from "./nswContours.js";
 import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
+import { SIM_REGIONS } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 // A square of `sideKm` centred near Katoomba.
@@ -31,6 +33,47 @@ describe("areaSizeKm", () => {
     const { widthKm, heightKm } = areaSizeKm(square(20));
     expect(widthKm).toBeCloseTo(20, 1);
     expect(heightKm).toBeCloseTo(20, 1);
+  });
+});
+
+describe("areaExportEpsg", () => {
+  // Mutation: return 7800 + the UTM zone of the centre for every region (the
+  // old worker's rule), and a New Zealand box is warped to a code that is not
+  // a grid there.
+  it("is the grid of the region at the box's centre", () => {
+    expect(areaExportEpsg(square(10), REGIONS)).toBe(7856); // Katoomba
+    expect(areaExportEpsg(square(10, -33.7, 147), REGIONS)).toBe(7855);
+    expect(areaExportEpsg(square(10, -31.95, 141.45), REGIONS)).toBe(7854);
+    expect(areaExportEpsg(square(10, -44.62, 169.1), SIM_REGIONS)).toBe(2193);
+    // Utah: UTM north, zone 12.
+    expect(areaExportEpsg(square(10, 38.27, -110.8), SIM_REGIONS)).toBe(32612);
+  });
+
+  // Mutation: pick the zone by a box's west edge instead of its centre, and
+  // a box over the 150 line is warped to zone 55 instead of the 56 its
+  // middle is in.
+  it("reads the zone at the centre of a box over two zones", () => {
+    const box = { west: 149.9, south: -33.8, east: 150.5, north: -33.6 };
+    expect(areaExportEpsg(box)).toBe(7856);
+  });
+
+  // Mutation: answer 32600 + zone for the southern hemisphere too, and a
+  // box in Chile is warped to the northern grid, 10,000 km off.
+  it("is UTM outside every region, north or south of the equator", () => {
+    expect(areaExportEpsg(square(10, 10, 0.5), SIM_REGIONS)).toBe(32631);
+    expect(areaExportEpsg(square(10, -33.4, -70.6), SIM_REGIONS)).toBe(32719);
+  });
+
+  // The worker falls back to `7800 + zone` for a job an older API queued
+  // (topo/tests/test_area_export.py, `MgaZone`): the two agree across NSW,
+  // from the South Australian border to the coast.
+  // Mutation: shift the zone boundary in `MGA_ZONES` by a degree, and the
+  // box either side of it is warped to the neighbour's zone.
+  it("agrees with the old rule across NSW", () => {
+    for (let lon = 141; lon <= 153.5; lon += 0.5) {
+      const old = 7800 + Math.floor((lon + 180) / 6) + 1;
+      expect(areaExportEpsg(square(1, -33, lon)), `${lon}`).toBe(old);
+    }
   });
 });
 

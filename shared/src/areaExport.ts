@@ -2,6 +2,7 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
+import { boxCentre, gridZoneAt } from "./grids.js";
 import { nswContourStyle } from "./nswContours.js";
 import { layerIn, REGIONS, regionTouchesBox, type Region } from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
@@ -37,6 +38,20 @@ export type AreaBbox = {
   east: number;
   north: number;
 };
+
+/**
+ * The EPSG code of the grid the worker warps an export of this box to: the
+ * grid of the ground at the box's centre, MGA in NSW, NZTM in New Zealand,
+ * UTM anywhere else. The API stores it on the job beside the box, so the
+ * worker needs no regions of its own. Guard: `areaExport.test.ts`.
+ */
+export function areaExportEpsg(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): number {
+  const { lon, lat } = boxCentre(bbox);
+  return gridZoneAt(lon, lat, regions).epsg;
+}
 
 /**
  * The longest side a box may have. On the export task's size (4 vCPU, 8 GiB,
