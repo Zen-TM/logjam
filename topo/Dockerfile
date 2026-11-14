@@ -158,6 +158,8 @@ COPY area_export.py /app/area_export.py
 COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py
+COPY regions.py /app/regions.py
+COPY regions.json /app/regions.json
 COPY build_nsw_dem.py /app/build_nsw_dem.py
 COPY build_region_dem.py /app/build_region_dem.py
 COPY build_land_tenure.py /app/build_land_tenure.py
