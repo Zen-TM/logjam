@@ -48,7 +48,11 @@ import {
   type ToastMessage,
   Icon,
 } from "../../ui";
-import { chooseUnits, useDisplayUnits } from "../../unitsPreference";
+import {
+  chooseUnits,
+  useDisplayUnits,
+  useUnitsSending,
+} from "../../unitsPreference";
 import { sendsRegionChoice } from "../regionChoice";
 import { unitsSettingRow } from "../unitsChoice";
 import { ChoiceGroup } from "./settingsKit";
@@ -121,20 +125,17 @@ export function DisplaySettingsScreen() {
   );
 
   // Where the units row is drawn, when it is (`unitsSettingRow`): a guest's
-  // choice stays on the phone (ADR 0007). One send at a time, since a failed
-  // send puts the choice before it back.
+  // choice stays on the phone (ADR 0007), and the row holds while a send is out
+  // (`useUnitsSending`).
   const unitsRow = unitsSettingRow();
   const units = useDisplayUnits();
-  const [unitsSaving, setUnitsSaving] = useState(false);
+  const unitsSaving = useUnitsSending();
   const chooseUnitsFor = useCallback(
     async (next: Units) => {
-      if (next === units) return;
-      setUnitsSaving(true);
       const reached = await chooseUnits(next, sendsRegionChoice(accountState));
-      setUnitsSaving(false);
       if (!reached) notify(UNITS_CHOICE.saveFailed, "error");
     },
-    [accountState, notify, units],
+    [accountState, notify],
   );
 
   return (

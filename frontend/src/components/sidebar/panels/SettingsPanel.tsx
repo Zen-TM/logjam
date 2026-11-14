@@ -1,5 +1,6 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import {
+  choosesUnits,
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
   COPY_MEDIA_SETTING,
@@ -227,9 +228,7 @@ function SettingsPanel({
 
   async function handleChooseUnits(next: Units) {
     if (!currentUser || pendingUnits !== null) return;
-    // Only a stored choice makes this a no-op: tapping the units the home
-    // region already gives is how a user overrides a later change of region.
-    if (currentUser.uiPreferences?.units === next) return;
+    if (!choosesUnits(currentUser.uiPreferences?.units, next)) return;
     setPendingUnits(next);
     try {
       onCurrentUserChange(await updateUserPreferences({ units: next }));

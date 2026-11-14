@@ -54,7 +54,8 @@ what is offered at a location.**
   account that never chose its units reads those of its home region, the first
   of its chosen regions in `REGIONS` order (`unitsOf`,
   `shared/src/units.ts`); its own choice in Settings, offered only once a
-  region uses feet (`offersUnitsChoice`), replaces them. What a map offers at
+  region uses feet (`offersUnitsChoice`), replaces them while that choice is
+  offered. What a map offers at
   a place still never reads the choice. Guard: `shared/src/units.test.ts`
   ("unitsOf", "offersUnitsChoice"). Everything else above stands.
 

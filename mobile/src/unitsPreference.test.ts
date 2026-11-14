@@ -71,6 +71,44 @@ describe("the units chosen on Logjam GPS", () => {
     expect(store.readChosenUnits()).toBe("imperial");
   });
 
+  // Mutation: drop `|| !choosesUnits(before, units)` from `chooseUnits`, and a
+  // choice already stored is sent again; tapping the region's own units with
+  // nothing stored is held to `choosesUnits` in shared/src/units.test.ts.
+  it("stores a tap on the region's own units, and does nothing for a choice already stored", async () => {
+    const store = await load();
+    expect(await store.chooseUnits("metric", true)).toBe(true);
+    expect(store.readChosenUnits()).toBe("metric");
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(await store.chooseUnits("metric", true)).toBe(true);
+    expect(patch).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: drop the `sending ||` in `chooseUnits`, and a second choice
+  // while one is out is sent too and the first's late failure restores a
+  // stale value; drop `setSending(false)` from the `finally`, and the row
+  // stays held for good.
+  it("refuses a choice while another is out, and a late failure restores only its own before", async () => {
+    const store = await load();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let fail!: () => void;
+    patch.mockImplementationOnce(
+      () => new Promise((_, reject) => (fail = () => reject(new Error("x")))),
+    );
+    const first = store.chooseUnits("imperial", true);
+    expect(store.isSendingUnits()).toBe(true);
+    expect(store.readChosenUnits()).toBe("imperial");
+    expect(await store.chooseUnits("metric", true)).toBe(true);
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(store.readChosenUnits()).toBe("imperial");
+    fail();
+    expect(await first).toBe(false);
+    expect(store.readChosenUnits()).toBeNull();
+    expect(store.isSendingUnits()).toBe(false);
+    expect(await store.chooseUnits("metric", true)).toBe(true);
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(store.isSendingUnits()).toBe(false);
+  });
+
   // Mutation: drop the `keep(before)` in the catch, and the phone writes in
   // units the account does not hold.
   it("puts the previous choice back when the send fails", async () => {

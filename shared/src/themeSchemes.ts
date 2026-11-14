@@ -134,8 +134,9 @@ export type UserUiPreferences = {
   regions: string[];
   /**
    * How distances and heights are written, when the user chose: absent until
-   * then, when the home region's units apply (`unitsOf`, units.ts). Chosen in
-   * Settings once a region uses feet.
+   * then, when the home region's units apply (`unitsOf`, units.ts, which reads
+   * it only while a choice is offered). Chosen in Settings once a region uses
+   * feet.
    */
   units?: Units;
 };

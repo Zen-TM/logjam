@@ -190,8 +190,10 @@ export function offersUnitsChoice(
 }
 
 /**
- * The units an account reads: its own choice (`uiPreferences.units`), else
- * its home region's. Guard: `units.test.ts` ("unitsOf").
+ * The units an account reads: its own choice (`uiPreferences.units`) while a
+ * choice is offered, else its home region's. Where none is offered (prod's NSW
+ * alone) a stored choice is not read, since nothing there could undo it; it
+ * counts again once a region uses feet. Guard: `units.test.ts` ("unitsOf").
  */
 export function unitsOf(
   uiPreferences: unknown,
@@ -201,7 +203,20 @@ export function unitsOf(
     typeof uiPreferences === "object" && uiPreferences !== null
       ? (uiPreferences as { units?: unknown }).units
       : undefined;
-  return isUnits(chosen) ? chosen : accountRegion(uiPreferences, regions).units;
+  return isUnits(chosen) && offersUnitsChoice(regions)
+    ? chosen
+    : accountRegion(uiPreferences, regions).units;
+}
+
+/**
+ * Whether choosing `next` stores something: yes unless that very choice is
+ * already stored. Tapping the units the home region gives, with nothing
+ * stored, still stores them, so the choice survives a later change of home
+ * region. Both clients decide a tap here. Guard: `units.test.ts`
+ * ("choosesUnits").
+ */
+export function choosesUnits(stored: unknown, next: Units): boolean {
+  return stored !== next;
 }
 
 /** A stored or sent value that names a units choice. */

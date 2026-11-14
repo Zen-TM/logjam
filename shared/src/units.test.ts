@@ -20,6 +20,7 @@ import {
   lengthFromInput,
   lengthToInput,
   lengthUnitLabel,
+  choosesUnits,
   offersUnitsChoice,
   setDisplayUnits,
   unitsOf,
@@ -323,5 +324,31 @@ describe("unitsOf", () => {
     for (const prefs of [undefined, null, {}, { units: "furlongs" }, 7]) {
       expect(unitsOf(prefs, REGIONS_THREE)).toBe("metric");
     }
+  });
+});
+
+describe("unitsOf where no choice is offered", () => {
+  // Mutation: read the stored choice without `offersUnitsChoice(regions)`, and a
+  // crafted PATCH leaves a prod account in feet with no row to undo it.
+  it("reads the region's units over a stored choice, and the choice again once one is offered", () => {
+    const stored = { units: "imperial", regions: ["nsw"] };
+    expect(unitsOf(stored, [NSW_REGION])).toBe("metric");
+    expect(unitsOf(stored, [NSW_REGION, SIM_UTAH])).toBe("imperial");
+  });
+});
+
+describe("choosesUnits", () => {
+  // Mutation: compare with the units in force (what the home region gives)
+  // instead of the stored choice, and tapping the default with nothing stored
+  // stores nothing, so a later change of home region moves the figures.
+  it("stores a tap unless that choice is already stored, the region's default included", () => {
+    // Nothing stored: even the tap that matches the home region's units stores.
+    expect(unitsOf({}, [NSW_REGION, SIM_UTAH])).toBe("metric");
+    expect(choosesUnits(undefined, "metric")).toBe(true);
+    expect(choosesUnits(undefined, "imperial")).toBe(true);
+    expect(choosesUnits("metric", "imperial")).toBe(true);
+    expect(choosesUnits("imperial", "imperial")).toBe(false);
+    // A damaged stored value is no choice.
+    expect(choosesUnits("furlongs", "metric")).toBe(true);
   });
 });

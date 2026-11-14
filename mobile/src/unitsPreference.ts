@@ -4,7 +4,13 @@
 // (`unitsOf`, shared/src/units.ts). `useDisplayUnits` is where a formatter's
 // module state is set from it.
 import { useSyncExternalStore } from "react";
-import { isUnits, setDisplayUnits, unitsOf, type Units } from "@logjam/shared";
+import {
+  choosesUnits,
+  isUnits,
+  setDisplayUnits,
+  unitsOf,
+  type Units,
+} from "@logjam/shared";
 
 import { apiFetch } from "./api/apiFetch";
 import { readPref, writePref } from "./prefsDb";
@@ -13,6 +19,7 @@ import { useRegions } from "./regionsPreference";
 const UNITS_PREF_KEY = "units";
 
 let current: Units | null | undefined;
+let sending = false;
 const listeners = new Set<() => void>();
 
 function stored(): Units | null {
@@ -45,6 +52,23 @@ function keep(units: Units | null): void {
 }
 
 /**
+ * Whether a choice is on its way to the account. The row holds while it is,
+ * and `chooseUnits` refuses a second choice: a late failure would put back a
+ * value the account no longer holds, and two sends can land out of order. It
+ * lives here, not in the screen, so leaving Settings does not forget it.
+ */
+export const isSendingUnits = (): boolean => sending;
+
+export function useUnitsSending(): boolean {
+  return useSyncExternalStore(subscribe, isSendingUnits);
+}
+
+function setSending(value: boolean): void {
+  sending = value;
+  for (const listener of listeners) listener();
+}
+
+/**
  * The units figures are written in now. Called while rendering the root, so
  * every formatter below reads them on this render, and the root renders again
  * when the choice or the chosen regions change.
@@ -69,16 +93,19 @@ export function forgetUnits(): void {
 
 /**
  * Keep a choice made on this phone and, signed in, send it to the account.
- * Returns whether it reached the account (true for a guest, who sends
- * nothing: ADR 0007). A failed send puts the previous choice back.
+ * Returns false only when the send failed, and then the previous choice is
+ * back. A guest sends nothing (ADR 0007). A choice already stored, or one made
+ * while another is being sent, does nothing and returns true.
  */
 export async function chooseUnits(
   units: Units,
   signedIn: boolean,
 ): Promise<boolean> {
   const before = readChosenUnits();
+  if (sending || !choosesUnits(before, units)) return true;
   keep(units);
   if (!signedIn) return true;
+  setSending(true);
   try {
     await apiFetch("/users/me", { method: "PATCH", body: { units } });
     return true;
@@ -86,5 +113,7 @@ export async function chooseUnits(
     console.error(err);
     keep(before);
     return false;
+  } finally {
+    setSending(false);
   }
 }
