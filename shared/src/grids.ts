@@ -30,6 +30,13 @@ export type GridZone = {
 
 const WGS84 = "EPSG:4326";
 
+/** What a grid is called in a title or a message: "MGA grid", "Not a valid NZTM easting". */
+export const GRID_NAMES: Record<GridId, string> = {
+  mga2020: "MGA",
+  nztm2000: "NZTM",
+  utm: "UTM",
+};
+
 /** NSW's three zones; the outer two run on past the state. */
 const MGA_ZONES: readonly GridZone[] = (
   [
@@ -100,6 +107,14 @@ const shifted = (zone: GridZone, shift: number): GridZone =>
         centralMeridian: zone.centralMeridian + shift,
       };
 
+/** The middle of a box, which is where the grid of the ground it shows is read. */
+export function boxCentre(box: LonLatBox): { lon: number; lat: number } {
+  return {
+    lon: (box.west + box.east) / 2,
+    lat: (box.south + box.north) / 2,
+  };
+}
+
 /** The grid used at a place: the region's there, UTM anywhere else. */
 export function gridIdAt(
   lon: number,
@@ -139,8 +154,7 @@ export function gridZonesFor(
   box: LonLatBox,
   regions: readonly Region[] = REGIONS,
 ): GridZone[] {
-  const lon = (box.west + box.east) / 2;
-  const lat = (box.south + box.north) / 2;
+  const { lon, lat } = boxCentre(box);
   if (box.west === box.east) return [gridZoneAt(lon, lat, regions)];
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return [NZTM_ZONE];

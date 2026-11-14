@@ -155,6 +155,7 @@ import {
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { applyDisplayUnits } from "../displayUnits";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
@@ -397,6 +398,9 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Set while rendering, so every formatter below reads the account's units on
+  // this render; a choice in Settings replaces `currentUser` and re-renders from here.
+  applyDisplayUnits(currentUser?.uiPreferences);
   // Keyed by string: the fallback toast's effect depends on this list.
   const regionKey = normalizeUserUiPreferences(
     currentUser?.uiPreferences,
@@ -628,12 +632,15 @@ function App() {
   }, []);
 
   /**
-   * The map's visible bounds, kept in a ref rather than in state: "Filter to
-   * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render App on every pan for a value nothing
-   * renders.
+   * The map's visible bounds, in a ref as well as in state: "Filter to the
+   * current view" reads them once, when the button is pressed, from a callback
+   * that must not see a stale render.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
+  // The Layers popover names the grid row for these bounds, which the grid
+  // lines are drawn from. `mapCenter` already re-renders App after every pan,
+  // so this costs no extra render.
+  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -2158,6 +2165,7 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setMapBounds(bounds);
             }}
             selectingBbox={boxFor(boxPick) !== null}
             onBboxSelected={(bbox) => {
@@ -2270,6 +2278,7 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          mapBounds={mapBounds}
         />
 
         <PlanInviteLinkDialog

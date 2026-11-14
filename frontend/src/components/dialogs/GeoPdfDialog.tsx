@@ -34,6 +34,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
+  coordTooltip,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -175,8 +176,6 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
 
-const COORD_TOOLTIP =
-  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -1203,7 +1202,10 @@ function GeoPdfDialog({
                 />
                 {coordsOpen && (
                   <div className={classes.group}>
-                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                    <SettingsRow
+                      label="Coordinates"
+                      tooltip={coordTooltip(extentState)}
+                    >
                       <ChipRail
                         label="Coordinates"
                         className={classes.railCell}
@@ -1725,7 +1727,7 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+            <SettingsRow label="Coordinates" tooltip={coordTooltip(edges)}>
               <ChipRail
                 label="Coordinates"
                 className={classes.railCell}

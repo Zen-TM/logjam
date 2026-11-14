@@ -4,7 +4,7 @@
 // What a map offers follows the ground it shows: a layer, a basemap or a grid
 // is offered where its data covers the view, and the regions an account chose
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
-// first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
+// first-run basemap, the first-run units, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
 // saved, printed or exported; nothing draws from either yet, and
 // `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by the chosen regions. Heights, gauges and the area-export check never took a
@@ -22,6 +22,7 @@
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
 import type { GridId } from "./grids.js";
+import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
@@ -156,6 +157,8 @@ export type Region = {
    * system's fields (`gradeFieldsAt`). Outside every region it is French.
    */
   canyonGrades: CanyonGradeSystem;
+  /** How distances and heights are written for an account whose home this is, until it chooses (`unitsOf`). */
+  units: Units;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
@@ -470,6 +473,7 @@ export const NSW_REGION = {
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
   canyonGrades: "french",
+  units: "metric",
   canyons: {
     kind: "ropewiki",
     ropewikiRegion: "New South Wales",
@@ -521,8 +525,9 @@ const EMPTY_WORLD: Region = {
   terrain: {},
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
   canyonGrades: "french",
+  units: "metric",
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;
