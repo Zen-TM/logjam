@@ -337,6 +337,19 @@ export function basemapHere(
 }
 
 /**
+ * The vector basemap's id when it is among `offeredIds`, else undefined: it is
+ * the one basemap read from our own archive, so a client falls to it when a
+ * pick's server is down or the pick is not offered, and only where it is
+ * offered. Guard: `regions.test.ts`.
+ */
+export function vectorBasemapIn(
+  offeredIds: readonly string[],
+): string | undefined {
+  const vector = BASEMAP_CATALOG.find((entry) => entry.kind === "vector");
+  return vector && offeredIds.includes(vector.id) ? vector.id : undefined;
+}
+
+/**
  * The basemap Logjam GPS opens on before the user picks: the first chosen
  * region's, or the first worldwide one when no chosen region has one.
  */

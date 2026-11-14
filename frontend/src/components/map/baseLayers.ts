@@ -2,6 +2,7 @@ import {
   BASEMAP_CATALOG,
   basemapHere,
   offeredBasemaps,
+  vectorBasemapIn,
   type BasemapCatalogEntry,
   type LonLatBox,
 } from "@logjam/shared";
@@ -38,9 +39,7 @@ export function basemapPicked(stored: string, view: LonLatBox): string {
   const offered = offeredBasemaps(view).map((entry) => entry.id);
   return offered.includes(stored)
     ? stored
-    : offered.includes("protomaps")
-      ? "protomaps"
-      : basemapHere(stored, view);
+    : (vectorBasemapIn(offered) ?? basemapHere(stored, view));
 }
 
 const offerOf = (view: LonLatBox) =>
@@ -59,8 +58,8 @@ export const viewForBasemaps = (prev: LonLatBox, next: LonLatBox): LonLatBox =>
 
 /**
  * The full offered catalogue, wherever the map is, so every basemap source
- * stays mounted and the GeoPDF dialog lists them all. A stored pick not in
- * `baseLayersFor` shows `basemapHere`'s (App.tsx).
+ * stays mounted and the GeoPDF dialog lists them all. A stored pick that
+ * `baseLayersFor` does not list shows `basemapPicked`'s (App.tsx).
  */
 export const BASE_LAYERS = BASEMAP_CATALOG.filter(
   (entry) => entry.offered !== false,

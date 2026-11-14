@@ -13,6 +13,7 @@ import {
   basemapHere,
   defaultBasemapFor,
   offeredBasemaps,
+  vectorBasemapIn,
 } from "./geoPdfBaseLayers.js";
 import {
   accountRegion,
@@ -426,6 +427,17 @@ describe("offeredBasemaps", () => {
   // sea draws a sheet that covers none of it.
   it("shows the first offered where no region is in view", () => {
     expect(basemapHere("six-base", atSea, two)).toBe("osm-topo");
+  });
+});
+
+describe("vectorBasemapIn", () => {
+  // Mutation: return the vector id without the `includes` test, and a client
+  // falls to a vector map over ground its archive does not cover; return the
+  // first id offered, and it falls to a map that is not the vector one.
+  it("names the vector basemap only where it is offered", () => {
+    expect(vectorBasemapIn(["osm-topo", "protomaps"])).toBe("protomaps");
+    expect(vectorBasemapIn(["six-topo", "protomaps"])).toBe("protomaps");
+    expect(vectorBasemapIn(["osm-topo", "osm-cycle"])).toBeUndefined();
   });
 });
 

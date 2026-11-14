@@ -8,6 +8,7 @@ import {
   basemapHere,
   BASEMAP_CATALOG,
   serverAnswers,
+  vectorBasemapIn,
   withBasemapDown,
   type LonLatBox,
 } from "@logjam/shared";
@@ -45,9 +46,7 @@ export function basemapFallbackFor(
   view: LonLatBox,
 ): BasemapId {
   const fallback = basemapHere("", view);
-  const drawn = mobileBasemaps(view).includes("protomaps")
-    ? "protomaps"
-    : picked;
+  const drawn = vectorBasemapIn(mobileBasemaps(view)) ?? picked;
   return picked === fallback || down.has(fallback) ? drawn : fallback;
 }
 

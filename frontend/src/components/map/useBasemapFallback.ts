@@ -1,12 +1,11 @@
 import {
   basemapFallbackNotice,
   basemapToShow,
+  vectorBasemapIn,
   withBasemapDown,
 } from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../feedback/ToastProvider";
-
-const VECTOR = "protomaps";
 
 /**
  * The basemap to draw for `pickedId`: the vector map while the pick's tile
@@ -23,7 +22,7 @@ export function useBasemapFallback(
   const setHealth = useCallback((id: string, isDown: boolean) => {
     setDown((prev) => withBasemapDown(prev, id, isDown));
   }, []);
-  const fallback = layers.some((l) => l.id === VECTOR) ? VECTOR : pickedId;
+  const fallback = vectorBasemapIn(layers.map((layer) => layer.id)) ?? pickedId;
   const shownLayerId = basemapToShow(pickedId, down, fallback);
   const fellBack = shownLayerId !== pickedId;
   useEffect(() => {
