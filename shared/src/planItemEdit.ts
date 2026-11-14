@@ -46,9 +46,10 @@ export const sameValue = (a: unknown, b: unknown) =>
 /**
  * The attributes a plan place records: its system type's definitions, with the
  * grade fields cut to those of the system used where the place stands, plus any
- * that already hold a value (`gradeFieldsAt`). The one list the form, its
- * check, `itemWords` and `itemPatch` all use; it follows the place as stored,
- * so the form's fields do not change as its position is typed. Guard:
+ * that already hold a value (`gradeFieldsAt`). The list follows the place as
+ * given, so it can differ between the place as a form opened on it and the
+ * place as the plan now has it: a form draws and checks the list of the place
+ * it holds, and hands that same list to `itemPatch`. Guard:
  * `planItemEdit.test.ts`.
  */
 export function itemFieldDefs(
@@ -107,11 +108,14 @@ export function itemWords(item: TripPlanItem): ItemWords {
  * An item edit's compare-and-set body, or null when nothing changed. Each
  * `from` is the stored value of `seen`, never the form's blanked words: the
  * API compares it exactly, and a stored "" is not null. A place's fields are
- * assumed valid (the form checks them first).
+ * assumed valid (the form checks them first). `defs` is the list the form
+ * drew and checked, not one worked out again from `seen`: the plan may have
+ * moved the place since, and a field the user typed into must still be sent.
  */
 export function itemPatch(
   seen: TripPlanItem,
   now: ItemWords,
+  defs: readonly TripLogCustomFieldDef[],
 ): TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch | null {
   const was = itemWords(seen);
   const name = now.name.trim();
@@ -141,7 +145,7 @@ export function itemPatch(
       now.elevation.trim() === "" ? null : Number(now.elevation);
     if (elevation !== seen.elevation)
       patch.elevation = { from: seen.elevation, to: elevation };
-    for (const def of itemFieldDefs(seen)) {
+    for (const def of defs) {
       const to = coerceFieldValue(now[ITEM_ATTR + def.key], def.type);
       const from = fieldValue(seen.fieldValues, def.key) ?? null;
       if (!sameValue(to, from))

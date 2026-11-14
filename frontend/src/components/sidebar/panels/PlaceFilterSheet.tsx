@@ -54,7 +54,8 @@ type Props = {
   onChangeSort: (next: PlaceSortKey) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
   /** The system the map in view grades in, and every place listed (the
-   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`). */
+   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`).
+   *  Guard: `contracts/placePageClients.test.ts` in shared. */
   gradeSystem: CanyonGradeSystem;
   listedPlaces: readonly { fieldValues?: unknown }[];
   /** Close the panel and draw the area box on the map. */

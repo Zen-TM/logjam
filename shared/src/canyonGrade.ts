@@ -10,7 +10,7 @@
 // so a renamed system field breaks this at the type level rather than silently
 // rendering nothing.
 
-import { numericFieldValue } from "./fieldValues.js";
+import { asFieldValues, fieldValue, numericFieldValue } from "./fieldValues.js";
 import { t } from "./i18n.js";
 import type { AttributeRow } from "./logbook.js";
 import { fieldValueLabel } from "./placeTypes.js";
@@ -115,16 +115,21 @@ export function canyonGradeRow(fieldValues: unknown): AttributeRow | null {
     : null;
 }
 
-/** The rows with the grade inputs collapsed into one "Grade" row, first, and
- *  the ACA grade of a canyon that holds both systems after it. */
+/** Just the grade rows of these field values: the Grade row, then the ACA
+ *  grade of a canyon that holds both systems (`acaGradeRow`). Empty when none
+ *  is set. */
+export function gradeRowsOf(fieldValues: unknown): AttributeRow[] {
+  return [canyonGradeRow(fieldValues), acaGradeRow(fieldValues)].filter(
+    (row) => row !== null,
+  );
+}
+
+/** The rows with the grade inputs collapsed into the grade rows, first. */
 export function canyonGradeRows(
   rows: AttributeRow[],
   fieldValues: unknown,
 ): AttributeRow[] {
-  const grades = [canyonGradeRow(fieldValues), acaGradeRow(fieldValues)].filter(
-    (row) => row !== null,
-  );
-  return [...grades, ...withoutCanyonGradeRows(rows)];
+  return [...gradeRowsOf(fieldValues), ...withoutCanyonGradeRows(rows)];
 }
 
 /** The ACA grade as a row of its own, for a canyon that holds a French grade
@@ -176,25 +181,37 @@ export function gradeFieldsAt(
 /** Whether a values object holds a value for a key: not absent, null or an
  *  empty string, so a form's own text and stored values both count. */
 function holdsValue(fieldValues: unknown, key: string): boolean {
-  if (typeof fieldValues !== "object" || fieldValues === null) return false;
-  const value = (fieldValues as Record<string, unknown>)[key];
-  return value !== undefined && value !== null && value !== "";
+  const value = fieldValue(fieldValues, key);
+  return value !== undefined && value !== "";
 }
 
 /**
  * The definitions a place's form shows: `defsForType`, with the grade fields
- * cut to `gradeFieldsAt`. The one rule both clients apply, so a canyon in
- * Utah offers the same fields on a phone and in a browser.
+ * cut to `gradeFieldsAt` over the values stored on the place and the form's
+ * typed ones (an empty text is not a value). The one rule both clients apply,
+ * so a canyon in Utah offers the same fields on a phone and in a browser.
+ * Guard: `canyonGrade.test.ts`.
  */
 export function placeFormDefs(
   defs: readonly ScopedCustomFieldDef[],
   placeTypeId: string,
   lon: number | null,
   lat: number | null,
-  fieldValues: unknown,
+  stored: unknown,
+  typed: Readonly<Record<string, string>>,
   regions: readonly Region[] = REGIONS,
 ): ScopedCustomFieldDef[] {
-  const grades = gradeFieldsAt(lon, lat, fieldValues, regions);
+  const grades = gradeFieldsAt(
+    lon,
+    lat,
+    {
+      ...asFieldValues(stored),
+      ...Object.fromEntries(
+        Object.entries(typed).filter(([, value]) => value !== ""),
+      ),
+    },
+    regions,
+  );
   return defsForType(defs, placeTypeId).filter(
     (def) => !isCanyonGradeKey(def.key) || grades.includes(def.key),
   );
@@ -237,7 +254,8 @@ export function gradeSystemOfView(
  * entry for. The last two keep a row from vanishing: a filter set on an axis
  * stays on screen when the map pans to ground that grades otherwise. `places`
  * is the whole unfiltered list, never the filtered one, or a row would
- * disappear as its own filter narrowed the list. Guard: `canyonGrade.test.ts`.
+ * disappear as its own filter narrowed the list. Guards: `canyonGrade.test.ts`, and
+ * for the clients' calls `contracts/placePageClients.test.ts`.
  */
 export function placeFilterDefs(
   defs: readonly ScopedCustomFieldDef[],

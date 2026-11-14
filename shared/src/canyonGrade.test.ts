@@ -4,6 +4,7 @@ import {
   acaGradeRow,
   CANYON_GRADE_ROW_KEY,
   gradeFieldsAt,
+  gradeRowsOf,
   gradeSortKeys,
   gradeSystemAt,
   gradeSystemOfView,
@@ -233,12 +234,15 @@ describe("the definitions a place form shows", () => {
           "canyon",
           ...at(BLUE_MOUNTAINS),
           {},
+          {},
           REGIONS_WITH_UTAH,
         ),
       ),
     ).toEqual([...FRENCH_KEYS, "quality", "permit"]);
     expect(
-      keys(placeFormDefs(defs, "canyon", ...at(UTAH), {}, REGIONS_WITH_UTAH)),
+      keys(
+        placeFormDefs(defs, "canyon", ...at(UTAH), {}, {}, REGIONS_WITH_UTAH),
+      ),
     ).toEqual([...ACA_KEYS, "quality", "permit"]);
   });
 
@@ -246,8 +250,52 @@ describe("the definitions a place form shows", () => {
   // `placeFormDefs` with `defs`: a campsite is offered the canyon's fields.
   it("still follows the place type, and never hides a field that is not a grade", () => {
     expect(
-      keys(placeFormDefs(defs, "campsite", ...at(UTAH), {}, REGIONS_WITH_UTAH)),
+      keys(
+        placeFormDefs(defs, "campsite", ...at(UTAH), {}, {}, REGIONS_WITH_UTAH),
+      ),
     ).toEqual(["capacity", "permit"]);
+  });
+});
+
+describe("the values a place form holds", () => {
+  const defs = [...FRENCH_KEYS, ...ACA_KEYS].map(
+    (key) =>
+      ({
+        key,
+        label: key,
+        type: "integer",
+        appliesToAllTypes: false,
+        placeTypeIds: ["canyon"],
+      }) as unknown as ScopedCustomFieldDef,
+  );
+  const shown = (stored: unknown, typed: Record<string, string>) =>
+    placeFormDefs(
+      defs,
+      "canyon",
+      ...at(BLUE_MOUNTAINS),
+      stored,
+      typed,
+      REGIONS_WITH_UTAH,
+    )
+      .map((d) => d.key)
+      .filter((key) => ACA_KEYS.includes(key));
+
+  // Mutation: read only the stored values in `placeFormDefs`.
+  it("count what is typed", () => {
+    expect(shown({}, { aca_water: "5" })).toEqual(["aca_water"]);
+  });
+
+  // Mutation: let a typed "" replace the stored value in `placeFormDefs`,
+  // so a field the user cleared vanishes under the cursor.
+  it("keep a stored value on screen after it is cleared in the form", () => {
+    expect(shown({ aca_water: 5 }, { aca_water: "" })).toEqual(["aca_water"]);
+  });
+
+  // Mutation: read only the typed values in `placeFormDefs`.
+  it("count what is stored, whatever shape it arrived in", () => {
+    expect(shown({ aca_risk: 3 }, {})).toEqual(["aca_risk"]);
+    expect(shown(null, {})).toEqual([]);
+    expect(shown([1, 2], {})).toEqual([]);
   });
 });
 
@@ -267,7 +315,7 @@ describe("the ACA grade beside a French one", () => {
     expect(acaGradeRow({ v_grade: 3 })).toBeNull();
   });
 
-  // Mutation: drop `acaGradeRow` from `canyonGradeRows`.
+  // Mutation: drop `acaGradeRow` from `gradeRowsOf`.
   it("follows the Grade row, before the other attributes", () => {
     const rows: AttributeRow[] = [["quality", "Quality", 4, "float"]];
     expect(canyonGradeRows(rows, { ...both, quality: 4 })).toEqual([
@@ -275,6 +323,19 @@ describe("the ACA grade beside a French one", () => {
       ["aca-grade", "ACA grade", "3B", "string"],
       ["quality", "Quality", 4, "float"],
     ]);
+  });
+
+  // Mutation: drop `acaGradeRow` from `gradeRowsOf`, or return the rows in the
+  // other order.
+  it("are the Grade row then the ACA row, and none when nothing is graded", () => {
+    expect(gradeRowsOf(both).map(([key]) => key)).toEqual([
+      "canyon-grade",
+      "aca-grade",
+    ]);
+    expect(gradeRowsOf({ aca_water: 2 }).map(([key]) => key)).toEqual([
+      "canyon-grade",
+    ]);
+    expect(gradeRowsOf({ quality: 4 })).toEqual([]);
   });
 
   // Mutation: key the row `aca_grade`, which a user's attribute labelled

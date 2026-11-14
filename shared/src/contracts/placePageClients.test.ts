@@ -11,7 +11,7 @@
 // and return no grade).
 //
 //
-// Delete the `isCanyonGradeKey` filter or the `canyonGradeRow` call from the
+// Delete the `isCanyonGradeKey` filter or the `gradeRowsOf` call from the
 // Web place page, or the `canyonGradeRows` call from either GPS screen, and the
 // "one Grade row, not three" tests below turn red. Web's place page is also
 // rendered in PlaceDetailPanel.render.test.tsx. Neither GPS screen has a render harness, so they read the
@@ -63,7 +63,7 @@ describe("Logjam Web's place page", () => {
 
   it("shows one Grade row in its attribute table, not the grade inputs", () => {
     expect(WEB).toContain(".filter((def) => !isCanyonGradeKey(def.key))");
-    expect(WEB).toContain("canyonGradeRow(place.fieldValues)");
+    expect(WEB).toContain("gradeRowsOf(place.fieldValues)");
   });
 });
 
@@ -104,6 +104,16 @@ describe("the places lists", () => {
     expect(GPS_LIST).toContain("comparePlaces(a, b, sort, gradeSystem)");
     expect(WEB_SIDEBAR).toContain("gradeSystem={placesGradeSystem}");
   });
+
+  // Mutation: hand `PlaceFilterSheet` the filtered list (`visible`) in
+  // PlacesPanel: an axis a filter has hidden every holder of would vanish
+  // from the sheet as the user narrows the list. The doc of `placeFilterDefs`
+  // names this test.
+  it("hand the filter sheet every place listed, not the filtered ones", () => {
+    expect(WEB_LIST).toContain(
+      "listedPlaces={collection.map(({ place }) => place)}",
+    );
+  });
 });
 
 // Logjam GPS's place form has no render harness, so it is read like the
@@ -114,7 +124,7 @@ describe("Logjam GPS's place form", () => {
   // fields.
   it("offers the grade fields of the system where the place stands", () => {
     expect(GPS_FORM).toContain(
-      "placeFormDefs( customFieldDefs, placeTypeId, draft.longitude, draft.latitude, { ...place?.fieldValues,",
+      "placeFormDefs( customFieldDefs, placeTypeId, draft.longitude, draft.latitude, place?.fieldValues, fieldValues, )",
     );
     expect(GPS_FORM).not.toContain("defsForType(");
   });

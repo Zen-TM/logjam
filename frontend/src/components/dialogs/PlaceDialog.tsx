@@ -152,12 +152,8 @@ function PlaceDialog({
     placeTypeId,
     finiteOrNull(coordinateNumber(longitude)),
     finiteOrNull(coordinateNumber(latitude)),
-    {
-      ...place?.fieldValues,
-      ...Object.fromEntries(
-        Object.entries(fieldValues).filter(([, value]) => value !== ""),
-      ),
-    },
+    place?.fieldValues,
+    fieldValues,
   );
 
   const [saving, setSaving] = useState(false);

@@ -377,12 +377,8 @@ export function PlaceEditSheet({
         placeTypeId,
         draft.longitude,
         draft.latitude,
-        {
-          ...place?.fieldValues,
-          ...Object.fromEntries(
-            Object.entries(fieldValues).filter(([, value]) => value !== ""),
-          ),
-        },
+        place?.fieldValues,
+        fieldValues,
       ),
     [
       customFieldDefs,

@@ -106,7 +106,7 @@ function renderPlace(place: TPlace, defs: ScopedCustomFieldDef[] = []) {
 }
 
 describe("the place page's attribute table", () => {
-  // Mutation: drop the `canyonGradeRow` prefix from `attributes`, and a canyon
+  // Mutation: drop the `gradeRowsOf` rows from `attributes`, and a canyon
   // with grades has no Grade row beside its pill.
   it("has one Grade row with the whole grade, not three rows", async () => {
     renderPlace(placeWith({ v_grade: 3, a_grade: 4, commitment: 3 }));
@@ -116,7 +116,7 @@ describe("the place page's attribute table", () => {
     expect(screen.queryByText("Commitment")).toBeNull();
   });
 
-  // Mutation: drop `acaGradeRow` from `attributes`, and the ACA values of a
+  // Mutation: drop `acaGradeRow` from `gradeRowsOf`, and the ACA values of a
   // canyon that also holds a French grade are readable only in its edit form.
   it("gives a canyon holding both systems a second row for the ACA grade", async () => {
     renderPlace(placeWith({ v_grade: 3, aca_technical: 3, aca_water: 2 }));

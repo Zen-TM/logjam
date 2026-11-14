@@ -89,7 +89,8 @@ type Props = {
   filteredCount: number;
   totalCount: number;
   /** The system the map in view grades in, and every place listed (the
-   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`). */
+   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`).
+   *  Guard: `contracts/placePageClients.test.ts` in shared. */
   gradeSystem: CanyonGradeSystem;
   listedPlaces: readonly { fieldValues?: unknown }[];
 };

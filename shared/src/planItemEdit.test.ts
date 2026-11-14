@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { itemFieldDefs, itemPatch, itemWords } from "./planItemEdit.js";
+import {
+  itemFieldDefs,
+  itemPatch,
+  itemWords,
+  type ItemWords,
+} from "./planItemEdit.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 import { NSW_REGION } from "./regions.js";
 import { SIM_REGIONS } from "./simRegions.js";
@@ -23,6 +28,10 @@ const file = {
   item: { displayName: null, filename: "day1.gpx" },
 } as TripPlanItem;
 
+/** `itemPatch` with the list a form on this item would hand it. */
+const patchOf = (seen: TripPlanItem, now: ItemWords) =>
+  itemPatch(seen, now, seen.kind === "place" ? itemFieldDefs(seen) : []);
+
 describe("itemPatch", () => {
   // Mutation: send every attribute, or write the form's "" as the stored
   // value, and an untouched field 409s on another member's edit of it.
@@ -34,9 +43,9 @@ describe("itemPatch", () => {
       fieldValues: { v_grade: 3 },
     } as unknown as TripPlanItem;
     const words = itemWords(full);
-    expect(itemPatch(full, words)).toBeNull();
+    expect(patchOf(full, words)).toBeNull();
     expect(
-      itemPatch(full, {
+      patchOf(full, {
         ...words,
         altNames: "The Wolly, Wolly",
         latitude: "-33.6",
@@ -56,18 +65,18 @@ describe("itemPatch", () => {
         a_grade: { from: null, to: 2 },
       },
     });
-    expect(itemPatch(full, { ...words, "attr:v_grade": "" })).toEqual({
+    expect(patchOf(full, { ...words, "attr:v_grade": "" })).toEqual({
       fieldValues: { v_grade: { from: 3, to: null } },
     });
   });
 
   // Mutation: drop the `!== was` checks, and an unchanged note is sent.
   it("sends only the changed words, a file's blank name as none", () => {
-    expect(itemPatch(place, itemWords(place))).toBeNull();
+    expect(patchOf(place, itemWords(place))).toBeNull();
     expect(
-      itemPatch(place, { ...itemWords(place), notes: "Exit left." }),
+      patchOf(place, { ...itemWords(place), notes: "Exit left." }),
     ).toEqual({ notes: { from: null, to: "Exit left." } });
-    expect(itemPatch(file, { name: "Day 1", notes: "" })).toEqual({
+    expect(patchOf(file, { name: "Day 1", notes: "" })).toEqual({
       displayName: { from: null, to: "Day 1" },
     });
   });
@@ -75,7 +84,7 @@ describe("itemPatch", () => {
   // Mutation: send the form's blanked words as `from`.
   it("compares against what is stored, a blank included", () => {
     expect(
-      itemPatch({ ...place, notes: "" } as TripPlanItem, {
+      patchOf({ ...place, notes: "" } as TripPlanItem, {
         ...itemWords(place),
         notes: "Exit left.",
       }),
@@ -118,18 +127,27 @@ describe("the attributes a plan place's edit form offers", () => {
     ]);
   });
 
-  // Mutation: loop over every canyon definition in `itemWords` or in
-  // `itemPatch`, instead of `itemFieldDefs`.
+  // Mutation: loop over every canyon definition in `itemWords`, instead of
+  // `itemFieldDefs`.
   it("are the words the form opens on, and what a patch compares", () => {
     const item = canyonAt(-33.5, 150.25, { v_grade: 3 });
     const words = itemWords(item as TripPlanItem);
     expect(Object.keys(words).filter((key) => key.startsWith("attr:"))).toEqual(
       [...FRENCH, ...NON_GRADE].map((key) => `attr:${key}`),
     );
-    expect(itemPatch(item as TripPlanItem, words)).toBeNull();
-    // A word for a field the form did not offer is not a change.
-    expect(
-      itemPatch(item as TripPlanItem, { ...words, "attr:aca_water": "5" }),
-    ).toBeNull();
+    expect(patchOf(item as TripPlanItem, words)).toBeNull();
+  });
+
+  // Mutation: loop `itemFieldDefs(seen)` in `itemPatch` instead of `defs`.
+  it("are the list the form drew when the plan has moved the place since", () => {
+    const opened = canyonAt(38.27, -110.8);
+    const drawn = itemFieldDefs(opened, regions);
+    expect(drawn.map((def) => def.key)).toContain("aca_water");
+    // Another member moved it over NSW, where it has no ACA field.
+    const seen = canyonAt(-33.5, 150.25);
+    const typed = { ...itemWords(seen as TripPlanItem), "attr:aca_water": "5" };
+    expect(itemPatch(seen as TripPlanItem, typed, drawn)).toEqual({
+      fieldValues: { aca_water: { from: null, to: 5 } },
+    });
   });
 });
