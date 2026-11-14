@@ -496,6 +496,19 @@ export function importProblems(
   return problems;
 }
 
+/**
+ * Whether the ratchet reads a directory entry: it walks into every folder but
+ * `__tests__` and `__fixtures__`, and reads a `.ts` or `.tsx` file that is not
+ * a test or a declaration. The four `i18nCoverage` tests and
+ * `scripts/i18n-extract.mjs` pick files with this, so the codemod rewrites
+ * what the ratchet counts.
+ */
+export function ratchetReads(name: string, isDirectory: boolean): boolean {
+  return isDirectory
+    ? !/^__(?:tests|fixtures)__$/.test(name)
+    : /\.tsx?$/.test(name) && !/\.(test|d)\./.test(name);
+}
+
 /** The folder a source file sits in, relative to the package's `src`: the key of a ceiling. `.` for a file at the root. */
 export function directoryOf(relativePath: string): string {
   const slash = relativePath.lastIndexOf("/");
@@ -529,7 +542,7 @@ export function ceilingFailures(
           lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
       failures.push(
         [
-          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). Where they are:`,
+          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). \`node scripts/i18n-extract.mjs <the directory>\` writes most of it (after \`make shared\`), and \`node scripts/i18n-identity-check.mjs origin/main\` shows any text a change altered. Where they are:`,
           ...[...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`),
         ].join("\n"),
       );

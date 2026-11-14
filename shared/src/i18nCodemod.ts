@@ -186,6 +186,31 @@ export function extractMessages(
     ts.forEachChild(node, findT);
   };
   findT(sf);
+  // An import is a binding for the whole file. The one that is not another
+  // `t` is the shared package's own, unaliased and not type-only.
+  for (const statement of sf.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
+    const { importClause } = statement;
+    const bound = [
+      importClause.name,
+      ...(importClause.namedBindings
+        ? ts.isNamespaceImport(importClause.namedBindings)
+          ? [importClause.namedBindings.name]
+          : importClause.namedBindings.elements.map((e) => e.name)
+        : []),
+    ].filter((name) => name?.text === "t");
+    const ours =
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === importFrom &&
+      !importClause.isTypeOnly &&
+      !importClause.name &&
+      !!importClause.namedBindings &&
+      ts.isNamedImports(importClause.namedBindings) &&
+      importClause.namedBindings.elements.every(
+        (e) => e.name.text !== "t" || (!e.propertyName && !e.isTypeOnly),
+      );
+    if (bound.length && !ours) ownT.push(sf);
+  }
   const hidden = (at: number) =>
     ownT.some((scope) => at >= scope.getStart() && at < scope.end);
 
@@ -203,6 +228,11 @@ export function extractMessages(
   };
   /** Why a literal or template cannot be a message on its own, from where it stands. */
   const placement = (node: TypeScript.Node): string | undefined => {
+    if (
+      ts.isTaggedTemplateExpression(node.parent) &&
+      node.parent.template === node
+    )
+      return `the text of a ${node.parent.tag.getText()} tag, which is not a sentence for t`;
     let at = outer(node);
     const parent = at.parent;
     if (
@@ -276,7 +306,6 @@ export function extractMessages(
   };
 
   const template = (node: TypeScript.TemplateExpression): void => {
-    if (ts.isTaggedTemplateExpression(node.parent)) return;
     const parts = [
       node.head.text,
       ...node.templateSpans.map((span) => span.literal.text),
@@ -431,7 +460,8 @@ function importEdit(
  * (so TypeScript's own whitespace and entity rules say what a JSX text is, not
  * this file's). A `t` message's pieces are the pieces of the literal it came
  * from, so a run that only moves copy into the catalogue leaves them as they
- * were.
+ * were. Pieces are compared as a multiset (`pieceChanges`, each piece with its count): neither their
+ * order nor the expressions between them is looked at.
  */
 export function textPieces(
   tsModule: unknown,
@@ -469,6 +499,24 @@ export function textPieces(
   };
   visit(sf);
   return pieces.filter((piece) => piece !== "");
+}
+
+/**
+ * The source files a text check reads from `git diff --name-status -M` output:
+ * those added, modified or renamed, each with the path it had at the base (a
+ * rename's old path; a new file's own, which the base does not have).
+ */
+export function changedFiles(
+  nameStatus: string,
+): { path: string; from: string }[] {
+  return nameStatus.split("\n").flatMap((line) => {
+    const [status, first, second] = line.split("\t");
+    if (!/^[AMR]/.test(status ?? "")) return [];
+    const path = second ?? first;
+    return /\.tsx?$/.test(path) && !/\.d\.ts$/.test(path)
+      ? [{ path, from: first }]
+      : [];
+  });
 }
 
 /** The pieces `before` has that `after` lacks, and the pieces `after` has that `before` lacks, each as many times as they differ. A reworded piece is one of each. */

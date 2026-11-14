@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
+  changedFiles,
   extractMessages,
   importFor,
   pieceChanges,
@@ -313,6 +317,53 @@ describe("extractMessages: what it leaves to a person, and says why", () => {
   });
 });
 
+describe("extractMessages: what is not text for t", () => {
+  // Mutation: delete the tagged-template test from `placement`.
+  it.each([
+    ["no substitutions", "const a = <B label={dedent`Hello world`} />;"],
+    ["a hole", "const a = <B label={dedent`Hello ${who} there`} />;"],
+  ])("leaves the text of another tag, and says so: %s", (_name, source) => {
+    const out = run(source);
+    expect(out.source).toBe(source);
+    expect(out.skipped).toEqual([
+      expect.objectContaining({
+        reason: expect.stringContaining("dedent tag"),
+      }),
+    ]);
+  });
+
+  // Mutation: delete `!e.propertyName` from the `ours` test in `extractMessages`.
+  it.each([
+    ["from another module", 'import { t } from "other";'],
+    ["under another name", 'import { x as t } from "@logjam/shared";'],
+    ["by default", 'import t from "@logjam/shared";'],
+    ["as a namespace", 'import * as t from "@logjam/shared";'],
+    ["as a type", 'import type { t } from "@logjam/shared";'],
+  ])(
+    "lists, and does not write, in a file that imports its own t %s",
+    (_n, line) => {
+      const source = `${line}\nconst a = <p>Hello world</p>;`;
+      const out = run(source);
+      expect(out.source).toBe(source);
+      expect(out.skipped).toEqual([
+        expect.objectContaining({
+          reason: expect.stringContaining("`t` of its own"),
+        }),
+      ]);
+    },
+  );
+
+  // Mutation: change `statement.moduleSpecifier.text === importFrom` to `true`.
+  it("takes a t from another module as its own even when it is unaliased", () => {
+    const source =
+      'import { t } from "./elsewhere.js";\nconst a = <p>Hello world</p>;';
+    expect(
+      extractMessages(ts, "x.tsx", source, { importFrom: "./i18n.js" })
+        .converted,
+    ).toBe(0);
+  });
+});
+
 describe("extractMessages: one-word labels", () => {
   // Mutation: set `words: true` where `extractMessages` calls `bareCopyIn`.
   it("converts a capitalised word outside a copy position only when asked", () => {
@@ -371,5 +422,60 @@ describe("the identity check", () => {
       removed: ["Hello"],
       added: ["Helo"],
     });
+  });
+});
+
+describe("changedFiles", () => {
+  // Mutation: in `changedFiles`, give `from: path`, so a rename is read at its new path.
+  it("lists what was added, modified or renamed, with the path it had at the base", () => {
+    expect(
+      changedFiles(
+        [
+          "M\tsrc/a.tsx",
+          "A\tsrc/b.ts",
+          "R087\tsrc/old.ts\tsrc/new.ts",
+          "D\tsrc/gone.ts",
+          "M\tsrc/c.d.ts",
+          "M\tREADME.md",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { path: "src/a.tsx", from: "src/a.tsx" },
+      { path: "src/b.ts", from: "src/b.ts" },
+      { path: "src/new.ts", from: "src/old.ts" },
+    ]);
+  });
+});
+
+describe("the scripts", () => {
+  const scripts = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../scripts",
+  );
+
+  // Mutation: rename `ratchetReads` in i18nSource.ts to `ratchetRead`.
+  it("import only names the shared build exports", async () => {
+    const imports = ["i18n-extract.mjs", "i18n-identity-check.mjs"].flatMap(
+      (script) =>
+        [
+          ...readFileSync(join(scripts, script), "utf8").matchAll(
+            /const \{([^}]+)\} = await import\(`\$\{dist\}\/(\w+)\.js`\)/g,
+          ),
+        ].map(([, names, module]) => ({
+          script,
+          module,
+          names: names.split(",").map((name) => name.trim()),
+        })),
+    );
+    expect(imports.flatMap((i) => i.names).length).toBeGreaterThanOrEqual(6);
+    for (const { script, module, names } of imports) {
+      const exported = await import(`./${module}.js`);
+      for (const name of names)
+        expect(
+          exported,
+          `${script} imports ${name} from ${module}`,
+        ).toHaveProperty(name);
+    }
   });
 });

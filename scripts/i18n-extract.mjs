@@ -27,7 +27,7 @@ if (!existsSync(join(dist, "i18nCodemod.js"))) {
 }
 const ts = createRequire(join(root, "shared/package.json"))("typescript");
 const { extractMessages, importFor } = await import(`${dist}/i18nCodemod.js`);
-const { EXEMPT_FILES } = await import(`${dist}/i18nSource.js`);
+const { EXEMPT_FILES, ratchetReads } = await import(`${dist}/i18nSource.js`);
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -37,18 +37,17 @@ if (!paths.length || args.some((a) => a.startsWith("--") && !["--words", "--dry-
   process.exit(2);
 }
 
-/** Source files under `path`: not tests, fixtures, declarations or the catalogue's own files. */
+/** Source files under `path`: what the ratchet reads (`ratchetReads`), less the catalogue's own folder and the installed or built copies, which the ratchet is never pointed at. A file named outright is taken as it is. */
 function sources(path) {
   if (!readdirSafe(path)) return [path];
   return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
     const child = join(path, entry.name);
     if (entry.isDirectory())
-      return /^(?:__tests__|__fixtures__|i18nCatalogues|node_modules|dist)$/.test(entry.name)
-        ? []
-        : sources(child);
-    return /\.tsx?$/.test(entry.name) && !/\.(?:test|unit\.test|d)\.tsx?$/.test(entry.name)
-      ? [child]
-      : [];
+      return ratchetReads(entry.name, true) &&
+        !/^(?:i18nCatalogues|node_modules|dist)$/.test(entry.name)
+        ? sources(child)
+        : [];
+    return ratchetReads(entry.name, false) ? [child] : [];
   });
 }
 function readdirSafe(path) {
