@@ -124,8 +124,8 @@ describe("terrainEntries", () => {
       expect(entries[key]).toEqual(terrainEntries(NSW_REGION, [])[key]);
   });
 
-  // Mutation: pass every area on to `routed` (drop the `areasInRegion`
-  // filter), and an area in NSW turns another region's terrain into routed sources whose
+  // Mutation: take every area as `held` (drop the `areasInRegion` call), and
+  // an area in NSW turns another region's terrain into routed sources whose
   // zooms reach past its archives.
   it("ignores an area another region holds", () => {
     expect(terrainEntries(SIM_NZ, [area])).toEqual(terrainEntries(SIM_NZ, []));
