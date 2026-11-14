@@ -90,8 +90,9 @@ export const mayChooseLanguage = (
 ): next is Language => isLanguage(next) && offered.includes(next);
 
 /**
- * Whether choosing `next` in the language row changes anything: choosing the
- * language already running stores nothing and restarts nothing. Guard:
+ * Whether choosing `next` in the language row needs a reload or restart:
+ * choosing the language already running needs neither. (Logjam GPS still keeps
+ * that pick, `chooseLanguage` in mobile/src/languageSetting.ts.) Guard:
  * languageChoice.test.ts.
  */
 export const changesLanguage = (running: Language, next: Language): boolean =>

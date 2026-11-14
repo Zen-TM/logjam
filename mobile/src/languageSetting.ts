@@ -126,17 +126,17 @@ export function languageToSend({
  * The language row: store the choice and restart. `refused` when it is not
  * offered or the phone would not store it; `stored` when it is kept but the
  * restart failed (a dev build), so it applies at the next launch; `unchanged`
- * for the language already running, which restarts nothing. A kept language
- * that differs from the running one (a restart that failed) is put back to the
- * running one, so choosing the running language takes the earlier choice back.
+ * for the language already running, which restarts nothing. Every explicit
+ * pick is kept: choosing the running language stores it unless it is already
+ * what is kept, so it takes back an earlier choice whose restart never came, and
+ * the next start does not move to the phone's own language instead.
  */
 export async function chooseLanguage(
   next: Language,
   restart: () => Promise<void> = restartClient,
 ): Promise<"restarting" | "stored" | "refused" | "unchanged"> {
   if (!changesLanguage(language(), next)) {
-    const kept = readPref(LANGUAGE_PREF_KEY);
-    if (kept === null || kept === next) return "unchanged";
+    if (readPref(LANGUAGE_PREF_KEY) === next) return "unchanged";
     return writePref(LANGUAGE_PREF_KEY, next) ? "unchanged" : "refused";
   }
   if (

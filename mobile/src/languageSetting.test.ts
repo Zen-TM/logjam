@@ -184,28 +184,42 @@ describe("chooseLanguage", () => {
   }, 30_000);
 
   // Mutation: delete the `changesLanguage` test in chooseLanguage (a re-tap of
-  // the language already running would store it and restart for no change).
-  it("does nothing for the language already running", async () => {
+  // the language already running would restart for no change).
+  it("restarts nothing for the language already running, and keeps it as the pick", async () => {
     const { chooseLanguage } = await load({ sim: true, running: "en-US" });
     const restart = vi.fn().mockResolvedValue(undefined);
     expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
-    expect(prefs.get("language")).toBeUndefined();
+    expect(prefs.get("language")).toBe("en-US");
     expect(restart).not.toHaveBeenCalled();
   }, 30_000);
 
-  // Mutation: delete `kept === null || kept === next` from chooseLanguage (a
-  // re-tap with nothing to take back would write again, and fail on a phone
-  // that will not store).
-  it("writes nothing for the running language when nothing else is kept", async () => {
-    writeOk.value = false;
+  // Mutation: delete the `readPref(…) === next` test in chooseLanguage (a
+  // re-tap of what is already kept would write again, and fail on a phone that
+  // will not store).
+  it("writes nothing when the running language is already what is kept", async () => {
     const { chooseLanguage } = await load({ sim: true, running: "en-US" });
-    const restart = vi.fn().mockResolvedValue(undefined);
-    expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
     prefs.set("language", "en-US");
+    writeOk.value = false;
+    const restart = vi.fn().mockResolvedValue(undefined);
     expect(await chooseLanguage("en-US", restart)).toBe("unchanged");
   }, 30_000);
 
-  // Mutation: return "unchanged" before the `readPref` test in chooseLanguage
+  // Mutation: return "unchanged" when nothing is kept, before the `writePref`
+  // in chooseLanguage's running-language branch (the pick is dropped, and the
+  // next start restarts into the phone's own language).
+  it("keeps the running language as the pick when nothing is kept, so the next start does not move", async () => {
+    const { chooseLanguage, reconcileLanguage } = await load({
+      sim: true,
+      running: "en-AU",
+    });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await chooseLanguage("en-AU", restart)).toBe("unchanged");
+    expect(prefs.get("language")).toBe("en-AU");
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(false);
+    expect(restart).not.toHaveBeenCalled();
+  }, 30_000);
+
+  // Mutation: return "unchanged" at the top of chooseLanguage's running-language branch, before the `readPref(…) === next` test
   // (after a restart that failed, choosing the running language would leave the
   // phone to start in the language just un-chosen).
   it("takes back a kept language the restart never applied, when the running one is chosen", async () => {

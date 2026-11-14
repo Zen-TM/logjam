@@ -44,7 +44,8 @@ LogBox.ignoreAllLogs();
 // because the boundary's own fallback is painted in the scheme.
 // The language restart is asked from here, in a mounted component, never at
 // module scope: Android evaluates this file for a headless relaunch of the track
-// recorder too (languageSetting.ts `useStartInLanguage`).
+// recorder too (languageSetting.ts `useStartInLanguage`; guard:
+// src/language.test.ts, "index.ts asks for no restart at module scope").
 function Root() {
   useStartInLanguage();
   return createElement(
