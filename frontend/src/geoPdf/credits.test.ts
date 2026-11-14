@@ -4,6 +4,7 @@ import {
   SIM_NZ,
   type SharpenedArea,
   type TerrainLayerKey,
+  type TopoLayerName,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import { upperBoundTerrainLines } from "./credits";
@@ -49,7 +50,7 @@ const subsets = <T>(items: readonly T[]): T[][] =>
 
 const input = (
   terrainLines: string[],
-  overlays: string[],
+  overlays: TopoLayerName[],
 ): AttributionInput => ({
   baseLayer: "six-base",
   renderedOverlays: overlays,
@@ -97,7 +98,7 @@ describe("the credit block's upper bound", () => {
             const areas = new Map(
               onPage.map((a) => [a, new Set(supplied)] as const),
             );
-            for (const overlays of [[], ["vegetation"]]) {
+            for (const overlays of [[], ["vegetation"]] as TopoLayerName[][]) {
               const real = attributionLines(
                 ctx,
                 WIDTH,

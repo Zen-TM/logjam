@@ -31,6 +31,7 @@ import {
   type TerrainLayerKey,
   type TileCoord,
   type TileToMapTransform,
+  type TopoLayerName,
 } from "@logjam/shared";
 import type { PMTiles } from "pmtiles";
 import { buildGeoPdf, type GeoPdfPageInput } from "./pdf";
@@ -793,7 +794,7 @@ async function renderInner(
   if (contourReads.length > 0) upperTerrain.add("contours");
   const credit = (
     terrainLines: readonly string[],
-    renderedOverlays: readonly string[],
+    renderedOverlays: readonly TopoLayerName[],
     landCredit: string | null,
   ): AttributionInput => ({
     baseLayer: config.baseLayer,
@@ -1179,7 +1180,7 @@ async function renderInner(
         drawTitle(ctx, config.elements.title, margin, padH, padV, elementDpi);
       if (reachesCredits) {
         // Credit only what painted data.
-        const renderedOverlays: string[] = [];
+        const renderedOverlays: TopoLayerName[] = [];
         if (vegetation.some((v) => v.drew.any))
           renderedOverlays.push("vegetation");
         const terrain = new Set<TerrainLayerKey>(drawnTerrain);
