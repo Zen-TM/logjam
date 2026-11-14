@@ -6,7 +6,9 @@ import {
   apiFetchWithTotal,
 } from "./placeUtils";
 
-vi.mock("./auth/oidc", () => ({ loadSession: vi.fn() }));
+vi.mock("./auth/oidc", () => ({
+  loadSession: vi.fn(async () => ({ id_token: "t" })),
+}));
 
 const languageOf = globalThis as { LOGJAM_LANGUAGE?: string };
 
