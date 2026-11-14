@@ -60,11 +60,11 @@ def decode(rgb: np.ndarray) -> np.ndarray:
 
 
 class TestCoarseTiles(unittest.TestCase):
-    """The NSW build's z9 and z8 are the pixels they were before `coarse_levels`
-    was shared with build_region_dem.py (the digests were taken from the loop
-    it replaced, as it stood on `regions/terrain` before this change). Mutations that turn it red: a child placed in the wrong
-    quarter, a zoom skipped, a coarser zoom taken from every other pixel instead
-    of the layer's reduce."""
+    """The digests pin the decoded pixels of the z9 and z8 tiles `coarse_tiles`
+    makes from made-up grids, for the heights layer and the slope layer.
+    Mutations that turn it red: a child placed in the wrong quarter, a zoom
+    skipped, a coarser zoom taken from every other pixel instead of the layer's
+    reduce."""
 
     DIGESTS = {
         "heights": (

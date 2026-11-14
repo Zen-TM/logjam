@@ -16,7 +16,11 @@ import signal
 import sys
 import tempfile
 import unittest
+import time
 import urllib.error
+import weakref
+import gc
+from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from unittest import mock
 from pathlib import Path
@@ -62,7 +66,9 @@ class TestDecodeSource(unittest.TestCase):
     """Mutations that turn it red: the alpha channel ignored (a transparent
     pixel becomes a height); the no-data test dropped (a -32768 m pixel is
     drawn); no-data widened to 0 m (sea, which Mapterhorn writes as exactly
-    0 m, is lost)."""
+    0 m, is lost); the red and blue channels swapped on decode (every height
+    wrong); the size check removed (a 256 px tile is read as if it were one
+    of Mapterhorn's)."""
 
     def test_a_webp_decodes_to_the_heights_it_encoded(self):
         heights = ramp(512)
@@ -133,9 +139,11 @@ class TestRounding(unittest.TestCase):
 
 
 class TestTiles(unittest.TestCase):
-    """Mutations that turn it red: a box edge not reaching its tile; the
-    block of a source tile computed from the wrong zoom (a tile lands in a
-    block it is not in)."""
+    """Mutations that turn it red: a box edge not reaching its tile (the south
+    edge read as the north); a box edge reaching one tile too far (the tile
+    range one past the east edge); the block of a source tile computed from the
+    wrong zoom (a tile lands in a block it is not in); a file of Mapterhorn's
+    list chosen for a zoom it does not hold, or for a box it does not touch."""
 
     def test_the_source_tiles_of_a_box(self):
         # z2 is four by four tiles of 90 degrees of longitude.
@@ -287,9 +295,12 @@ def http_error(code: int, retry_after: str = ""):
 class TestFetchRange(unittest.TestCase):
     """Mutations that turn it red: `HTTPException` dropped from the retried
     errors (a short read with a Content-Length kills the worker); a 429 waited
-    out for a fixed second instead of Retry-After; a 404 retried; a 200 (a
-    whole file) accepted; a short body returned; the retries never giving up;
-    the cache raised above 128 ranges; a final failure raised as the
+    out for a fixed second instead of Retry-After; a Retry-After with no cap; a
+    Retry-After that is not a number waited out for nothing; the wait between
+    retries growing past a minute (the cap raised to 600 s); a 404 retried; a
+    200 (a whole file) accepted; a short body returned; the retries never
+    giving up; the range asked for ending one byte past the length; the cache
+    raised above 128 ranges; a final failure raised as the
     `urllib.error.HTTPError` itself, or as any exception that cannot be
     pickled, so a pool worker's failure hangs the run."""
 
@@ -385,15 +396,6 @@ class TestFetchRange(unittest.TestCase):
             again = pickle.loads(pickle.dumps(exc))
             self.assertEqual((type(again), str(again)), (type(exc), str(exc)))
 
-    def test_a_block_that_fails_raises_what_can_be_pickled(self):
-        region._readers[:] = [BrokenSource()]
-        self.addCleanup(region._readers.clear)
-        with self.assertRaises(RuntimeError) as caught:
-            region.build_block((17, 14, 2, 3, [(8, 8)]))
-        again = pickle.loads(pickle.dumps(caught.exception))
-        self.assertIn("block 2, 3", str(again))
-        self.assertIn("HTTPError", str(again))
-
     def test_the_reader_keeps_few_bodies(self):
         # The reader's cache is the lru_cache on get_bytes: small, because it
         # also holds each tile body, which is read once.
@@ -423,7 +425,9 @@ class FakeSource:
 class TestBlock(unittest.TestCase):
     """Mutations that turn it red: a quarter in the wrong place in the block;
     a block's zooms taken from every other pixel instead of the mean, in its
-    tiles (`block_tiles`) or in the grid handed back for the coarser zooms."""
+    tiles (`block_tiles`) or in the grid handed back for the coarser zooms; a
+    source tile that is missing not skipped; only the first of several sources
+    tried."""
 
     def setUp(self):
         self.addCleanup(region._readers.clear)
@@ -485,7 +489,9 @@ class TestInitFailure(unittest.TestCase):
     removed (a mistyped `--source` is then read in the workers); the worker
     initializer left to raise (the pool breaks with no reason given, and the
     real-pool test, which wants the reason, fails); `build_block`
-    not raising the failure the initializer kept."""
+    not raising the failure the initializer kept; the wrapper in `build_block`
+    removed (a worker's `HTTPError` then escapes as itself, which cannot be
+    unpickled in the parent and hangs a process pool)."""
 
     def args(self, tmp, sources, **extra):
         values = dict(
@@ -525,6 +531,15 @@ class TestInitFailure(unittest.TestCase):
             region.build_block((17, 14, 2, 3, [(8, 8)]))
         self.assertIn("no file", str(caught.exception))
 
+    def test_a_block_that_fails_raises_what_can_be_pickled(self):
+        region._readers[:] = [BrokenSource()]
+        self.addCleanup(region._readers.clear)
+        with self.assertRaises(RuntimeError) as caught:
+            region.build_block((17, 14, 2, 3, [(8, 8)]))
+        again = pickle.loads(pickle.dumps(caught.exception))
+        self.assertIn("block 2, 3", str(again))
+        self.assertIn("HTTPError", str(again))
+
     def test_a_pool_whose_workers_cannot_open_a_source_ends_with_the_reason(self):
         # The parent can open the source and the workers cannot: the second
         # call, in each (forked) worker, fails.
@@ -555,6 +570,108 @@ class TestInitFailure(unittest.TestCase):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, old)
         self.assertIn("worker cannot open it", str(caught.exception))
+
+
+class ManyBlocks(unittest.TestCase):
+    """Helpers for a run over a box of several blocks, on threads (a process
+    pool pickles results, so a reference to one could not be watched)."""
+
+    def run_heights(self, tmp, build_block, write_pmtiles, jobs=1):
+        src = Path(tmp) / "made-up.pmtiles"
+        sharpen.write_pmtiles([(6, 32, 23, webp(ramp(512)))], src, MADE_UP_SOURCE)
+        # A box of 5 blocks at z7 (about 2.8 degrees wide each).
+        args = argparse.Namespace(
+            bbox="0.5,42,12,43",
+            zmax=10,
+            zmin=6,
+            credit="c",
+            name="n",
+            jobs=jobs,
+            source=[str(src)],
+            out=str(Path(tmp) / "out.pmtiles"),
+        )
+
+        def threads(jobs, mp_context, initializer, initargs):
+            return ThreadPoolExecutor(jobs, initializer=initializer, initargs=initargs)
+
+        with (
+            mock.patch.object(region, "build_block", build_block),
+            mock.patch.object(region, "ProcessPoolExecutor", threads),
+            mock.patch.object(sharpen, "write_pmtiles", write_pmtiles),
+        ):
+            region.heights(args)
+
+
+class Rows(list):
+    """A block's rows: a list that can be watched with a weak reference."""
+
+
+class TestMemory(ManyBlocks):
+    """A finished block's rows must be let go once they are written, so a run
+    holds a few blocks and not the whole archive. Mutation that turns it red:
+    the list of futures in `heights` kept under a name (each future holds its
+    block's rows until the run ends)."""
+
+    def test_a_written_block_is_released_before_the_next_is_written(self):
+        refs = {}
+
+        def build_block(job):
+            rows = Rows([(job[2], 0, 0, b"png")])
+            refs[job[2]] = weakref.ref(rows)
+            return rows, (job[2], job[3], np.full((256, 256), np.nan, np.float32))
+
+        seen = {}
+
+        def write_pmtiles(stream, out, meta):
+            first = None
+            for z, *_ in stream:
+                if first is None:
+                    first = z
+                elif z != first and first not in seen:
+                    gc.collect()
+                    seen[first] = refs[first]() is None
+            Path(out).write_bytes(b"")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.run_heights(tmp, build_block, write_pmtiles)
+        self.assertGreaterEqual(len(refs), 3)
+        self.assertTrue(seen, "no second block was written")
+        self.assertTrue(all(seen.values()), seen)
+
+
+class TestWriterFails(ManyBlocks):
+    """A writer that fails (a full disk) must stop the queued blocks, not leave
+    them to run, network reads and all, after the failure. Mutation that turns
+    it red: `contextlib.closing` removed from `heights` (the failed run's
+    generator stays open, and its queue is run to the end)."""
+
+    def test_blocks_not_yet_started_never_start(self):
+        started = []
+
+        def build_block(job):
+            started.append(job[2])
+            time.sleep(0.05)
+            return Rows([(job[2], 0, 0, b"png")]), (
+                job[2],
+                job[3],
+                np.full((256, 256), np.nan, np.float32),
+            )
+
+        def write_pmtiles(stream, out, meta):
+            next(iter(stream))
+            raise OSError("no space left on device")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                self.run_heights(tmp, build_block, write_pmtiles)
+            except OSError as error:
+                # Kept, with its traceback: that is what keeps a generator
+                # left open alive after the failure.
+                failure = error
+            time.sleep(0.8)  # long enough for the whole queue to have run
+        self.assertIn("no space", str(failure))
+        # Blocks already running when it failed still finish.
+        self.assertLessEqual(len(started), 3, started)
 
 
 class TestWorkerKilled(unittest.TestCase):
@@ -632,7 +749,8 @@ class TestBuild(unittest.TestCase):
     Mapterhorn's files are), written to a real PMTiles and read back.
     Mutations that turn it red: `--zmin` ignored; bounds left out (a reader
     then takes the archive for the world); the credit not the archive's
-    attribution; the output's zoom not one deeper than the source's."""
+    attribution; the check that a box has no tiles removed (the run then
+    fails with something else than a sentence)."""
 
     def test_an_archive_comes_out_in_adr_0030_form(self):
         from pmtiles.reader import MmapSource, Reader

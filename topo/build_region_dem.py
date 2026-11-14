@@ -30,6 +30,7 @@ ADR 0030's no-data. Sea in the tiles read was exactly 0 m, and stays a height.
 """
 
 import argparse
+import contextlib
 import dataclasses
 import functools
 import http.client
@@ -329,16 +330,20 @@ def heights(args: argparse.Namespace) -> None:
         # Not multiprocessing.Pool: a worker killed part-way (out of memory)
         # leaves that waiting for ever; this raises BrokenProcessPool, as
         # build_slope in build_nsw_dem.py does
-        # (tests/test_region_dem.py `TestInitFailure`).
+        # (tests/test_region_dem.py `TestWorkerKilled`).
         with ProcessPoolExecutor(
             args.jobs,
             mp_context=POOL_CONTEXT,
             initializer=init_worker,
             initargs=(sources,),
         ) as pool:
-            futures = [pool.submit(build_block, job) for job in blocks_jobs]
             try:
-                for done in as_completed(futures):
+                # No name for the list of futures: each one holds its block's
+                # rows until it is dropped, and `as_completed` drops each as it
+                # yields it (tests/test_region_dem.py `TestMemory`).
+                for done in as_completed(
+                    [pool.submit(build_block, job) for job in blocks_jobs]
+                ):
                     block_rows, (bx, by, grid) = done.result()
                     level[(bx, by)] = grid
                     count += len(block_rows)
@@ -371,7 +376,10 @@ def heights(args: argparse.Namespace) -> None:
         "attribution": args.credit,
     }
     try:
-        sharpen.write_pmtiles(rows(), out, meta)
+        # Closed on a failure of the writer (a full disk), so the queued blocks
+        # are cancelled then and not run after it (`TestWriterFails`).
+        with contextlib.closing(rows()) as stream:
+            sharpen.write_pmtiles(stream, out, meta)
     finally:
         out.with_suffix(".mbtiles").unlink(missing_ok=True)
     print(f"{count} tiles, {out.stat().st_size} bytes", file=sys.stderr)
