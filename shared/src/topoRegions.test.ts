@@ -19,7 +19,7 @@ describe("topo/regions.json", () => {
   it("is what the script writes", () => {
     expect(
       readFileSync(FILE, "utf8"),
-      "topo/regions.json is stale: run `npm run build && npm run topo-regions` in shared/",
+      "topo/regions.json is written from the regions declared in shared/src/regions.ts and simRegions.ts, never edited: run `npm run build && npm run topo-regions` in shared/",
     ).toBe(topoRegionsFile());
   });
 

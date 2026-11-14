@@ -102,7 +102,7 @@ class TestRuntimeParity(unittest.TestCase):
         with open(RUNTIME_TS, encoding="utf-8") as f:
             self.ts = f.read()
 
-    # Mutation: add a host to `_LOCAL_DB_HOSTS` here, or to the host pattern in
+    # Mutation: add a host to `LOCAL_DB_HOSTS` here, or to the host pattern in
     # runtime.ts, alone.
     def test_the_local_database_hosts_are_the_apis(self):
         pattern = re.search(r"/\^\(([^)]*)\)\$/", self.ts)
@@ -111,9 +111,19 @@ class TestRuntimeParity(unittest.TestCase):
         self.assertGreaterEqual(len(hosts), 4)
         self.assertEqual(hosts, set(regions.LOCAL_DB_HOSTS))
 
-    # Mutation: add an env signal to `nonDevRuntime` in runtime.ts, or to
-    # `RUNTIME_SIGNALS` here, alone.
+    # Mutations: add an env signal to `nonDevRuntime` in runtime.ts, or to
+    # `RUNTIME_SIGNALS` here, alone; or read one in runtime.ts as
+    # `env["AWS_EXECUTION_ENV"]`, which the pattern would not see.
     def test_the_environment_signals_are_the_apis(self):
+        code = "\n".join(
+            line for line in self.ts.splitlines() if not line.lstrip().startswith("//")
+        ).replace("(env: NodeJS.ProcessEnv)", "")
+        self.assertEqual(
+            re.findall(r"\benv\b(?!\.[A-Z])", code),
+            [],
+            "runtime.ts reads `env` in a form this test cannot see "
+            "(env[...], a destructure): read each signal as env.NAME",
+        )
         names = set(re.findall(r"\benv\.([A-Z][A-Z0-9_]+)", self.ts))
         signals = names - {"NODE_ENV", "DB_HOST"}
         self.assertGreaterEqual(len(signals), 4)

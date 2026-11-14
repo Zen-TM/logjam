@@ -779,7 +779,8 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     pack(work, out, attribution, layer, zmax, zmin)
 
 
-# NSW's archives, as regions.json names them (test_regions.py holds these
+# NSW's archives, as regions.json names them (test_nsw_dem.py
+# `test_the_keys_are_the_archives_regions_json_declares_for_nsw` holds these
 # reading it, not a path written here).
 _NSW_TERRAIN = region("nsw")["terrain"]
 HEIGHT_KEY = _NSW_TERRAIN["heights"]["archivePath"]
