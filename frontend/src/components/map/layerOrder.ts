@@ -6,12 +6,12 @@
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
 import {
   type CarrierId,
-  type CoverageArchive,
-  type FireArchive,
-  type LandArchive,
   coverageNameOf,
   fireNameOf,
   landNameOf,
+  layerIn,
+  type Region,
+  TERRAIN_LAYER_KEYS,
   terrainBeforeIds,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -49,14 +49,40 @@ export const PRESSABLE_LAYERS = [
   "standalone-tracks-hit",
 ];
 
-/** The Land overlay's fill, by the id `topo-<entry id>-<suffix>` every topo layer has. */
-export const LAND_FILL_LAYER = "topo-nswland-fill";
-export const LAND_EDGE_LAYER = "topo-nswland-edge";
+/**
+ * The topo entry id of a region's Terrain layer: the region's id, then the
+ * layer's key, with no dash, because `Map.tsx` splits a topo layer's id
+ * `topo-<entry id>-<suffix>` at its first dash. Guard: `terrainEntries.test.ts`
+ * ("names each entry so its layer is read back from the id").
+ */
+export function terrainEntryId(region: Region, key: TerrainLayerKey): string {
+  return `${region.id}${key}`;
+}
+
+const ENTRY_ID = new RegExp(`^[a-z0-9]+(${TERRAIN_LAYER_KEYS.join("|")})$`);
+
+/** The layer a topo entry id is a region's Terrain layer for, or null: any other entry. */
+export function terrainKeyOf(entryId: string): TerrainLayerKey | null {
+  return (ENTRY_ID.exec(entryId)?.[1] as TerrainLayerKey | undefined) ?? null;
+}
+
+/**
+ * The Land overlay's fill and edge lines of `region`, by the id
+ * `topo-<entry id>-<suffix>` every topo layer has. The edge lines add
+ * `-<index>`.
+ */
+export const landFillLayer = (region: Region): string =>
+  `topo-${terrainEntryId(region, "land")}-fill`;
+export const landEdgeLayer = (region: Region): string =>
+  `topo-${terrainEntryId(region, "land")}-edge`;
 /** The Fire history overlay's tint and its edge, named the same way. */
-export const FIRE_FILL_LAYER = "topo-nswfire-fill";
-export const FIRE_EDGE_LAYER = "topo-nswfire-edge";
+export const fireFillLayer = (region: Region): string =>
+  `topo-${terrainEntryId(region, "fire")}-fill`;
+export const fireEdgeLayer = (region: Region): string =>
+  `topo-${terrainEntryId(region, "fire")}-edge`;
 /** The Coverage overlay's hatch, the same way. */
-export const COVERAGE_FILL_LAYER = "topo-nswcoverage-fill";
+export const coverageFillLayer = (region: Region): string =>
+  `topo-${terrainEntryId(region, "coverage")}-fill`;
 
 type RenderedQuery = {
   getLayer(id: string): unknown;
@@ -77,12 +103,13 @@ type RenderedQuery = {
 export function landClassAt(
   map: RenderedQuery,
   point: [number, number],
-  land: LandArchive,
+  region: Region | null,
 ): string | null {
-  if (!map.getLayer(LAND_FILL_LAYER)) return null;
+  const land = layerIn(region, "land");
+  if (!region || !land || !map.getLayer(landFillLayer(region))) return null;
   return landNameOf(
     land,
-    map.queryRenderedFeatures(point, { layers: [LAND_FILL_LAYER] }),
+    map.queryRenderedFeatures(point, { layers: [landFillLayer(region)] }),
   );
 }
 
@@ -94,12 +121,13 @@ export function landClassAt(
 export function fireAt(
   map: RenderedQuery,
   point: [number, number],
-  fire: FireArchive,
+  region: Region | null,
 ): string | null {
-  if (!map.getLayer(FIRE_FILL_LAYER)) return null;
+  const fire = layerIn(region, "fire");
+  if (!region || !fire || !map.getLayer(fireFillLayer(region))) return null;
   return fireNameOf(
     fire,
-    map.queryRenderedFeatures(point, { layers: [FIRE_FILL_LAYER] }),
+    map.queryRenderedFeatures(point, { layers: [fireFillLayer(region)] }),
   );
 }
 
@@ -114,12 +142,14 @@ export function coverageAt(
   point: [number, number],
   at: readonly [number, number],
   carrier: CarrierId,
-  coverage: CoverageArchive,
+  region: Region | null,
 ): string | null {
-  if (!map.getLayer(COVERAGE_FILL_LAYER)) return null;
+  const coverage = layerIn(region, "coverage");
+  if (!region || !coverage || !map.getLayer(coverageFillLayer(region)))
+    return null;
   return coverageNameOf(
     coverage,
-    map.queryRenderedFeatures(point, { layers: [COVERAGE_FILL_LAYER] }),
+    map.queryRenderedFeatures(point, { layers: [coverageFillLayer(region)] }),
     carrier,
     at,
   );

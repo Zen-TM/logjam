@@ -94,6 +94,19 @@ found three problems:
   maker's alone and reaches anyone else only if the maker hands it on. The
   server render's guard went with it; `sharpenedAreas.test.ts` holds the
   route. Everything else above stands.
+- **Update 2026-11-14: a map routes an area only inside the region that holds
+  it.** Both clients draw the region the map shows
+  ([0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)),
+  so each client routes only the areas whose survey box shares ground with
+  that region's border (`areasInRegion`, the test the area-export check
+  uses): Logjam Web's `terrainTile` hands them to `terrainTileArchive`, and
+  Logjam GPS's `resolveTerrain` cuts its rectangles from them. An area
+  centred just outside the border is still routed inside it. A region with none reads its own archives directly. The height
+  sampler (`demSourcesFor`, the API) still reads every area, so the router and
+  the sampler differ on which areas count, by design. Guards:
+  `shared/src/regions.test.ts` ("areasInRegion") and
+  `frontend/src/components/map/terrainRouter.test.ts` ("routes an area only
+  inside the region that holds it"). Everything else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of

@@ -13,7 +13,10 @@
 // credential. Nothing here logs either (`terrainRouter.test.ts`, "logs
 // nothing").
 import {
-  NSW_REGION,
+  areasInRegion,
+  layerIn,
+  REGIONS,
+  type Region,
   SHARPENED_ARCHIVE_URL,
   sharpenedDemSource,
   terrainTileArchive,
@@ -21,6 +24,7 @@ import {
   type TerrainArchiveLayer,
   type OverlayTerrainKey,
   type TerrainLayerKey,
+  WORLD,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 
@@ -29,20 +33,6 @@ export const TERRAIN_PROTOCOL = "logjam-terrain";
 /** An overlay is no surface a sharpened area replaces: its archive is read as it is. */
 export type RoutedTerrainKey = Exclude<TerrainLayerKey, OverlayTerrainKey>;
 
-/**
- * Each Terrain layer's statewide archive, declared once: the unrouted
- * entries (terrainEntries.ts) and the router both read it
- * (`terrainRouter.test.ts`, "reads the statewide archive the entries do").
- */
-export const TERRAIN_STATEWIDE = {
-  contours: NSW_REGION.terrain.contours,
-  slope: NSW_REGION.terrain.slope,
-  hillshade: NSW_REGION.terrain.hillshade,
-} as const satisfies Record<
-  RoutedTerrainKey,
-  { archivePath: string; minzoom: number; maxzoom: number; creditHtml: string }
->;
-
 /** Which of an area's archives a layer reads: the hillshade shades heights. */
 const ARCHIVE_LAYER: Record<RoutedTerrainKey, TerrainArchiveLayer> = {
   contours: "contours",
@@ -50,11 +40,25 @@ const ARCHIVE_LAYER: Record<RoutedTerrainKey, TerrainArchiveLayer> = {
   hillshade: "heights",
 };
 
-let routedAreas: readonly SharpenedOverlay[] = [];
+/** Whether a sharpened area replaces a layer's surface: the others are read as they are. */
+export const isRouted = (key: TerrainLayerKey): key is RoutedTerrainKey =>
+  key in ARCHIVE_LAYER;
 
-/** The areas the router reads: the ones the user can see, with fresh URLs. */
-export function setRoutedAreas(areas: readonly SharpenedOverlay[]): void {
+let routedAreas: readonly SharpenedOverlay[] = [];
+let routedRegions: readonly Region[] = [];
+
+/**
+ * The areas the router reads: the ones the user can see, with fresh URLs. A
+ * tile is answered for the `regions` it knows (every declared region by
+ * default), and from the areas each holds; one asked for under any other id is
+ * absent.
+ */
+export function setRoutedAreas(
+  areas: readonly SharpenedOverlay[],
+  regions: readonly Region[] = [...REGIONS, WORLD],
+): void {
   routedAreas = areas;
+  routedRegions = regions;
 }
 
 const ABSENT = "absent terrain tile";
@@ -95,17 +99,18 @@ export function areasKey(areas: readonly SharpenedOverlay[]): string {
   return hash.toString(36);
 }
 
-/** The routed URL template for one Terrain layer. */
+/** The routed URL template for one Terrain layer of `region`. */
 export function terrainTileTemplate(
+  region: Region,
   key: RoutedTerrainKey,
   areas: readonly SharpenedOverlay[],
 ): string {
-  return `${TERRAIN_PROTOCOL}://${key}/${areasKey(areas)}/{z}/{x}/{y}`;
+  return `${TERRAIN_PROTOCOL}://${region.id}/${key}/${areasKey(areas)}/{z}/{x}/{y}`;
 }
 
 /**
- * The credit for a routed layer: the statewide one, then every visible
- * area's, each line once (areas from the same month credit alike).
+ * The credit for a routed layer: the region's own, then every visible area's,
+ * each line once (areas from the same month credit alike).
  */
 export function routedAttribution(
   statewide: string,
@@ -116,7 +121,7 @@ export function routedAttribution(
 }
 
 const URL_PATTERN = new RegExp(
-  `^${TERRAIN_PROTOCOL}://(contours|slope|hillshade)/[^/]*/(\\d+)/(\\d+)/(\\d+)$`,
+  `^${TERRAIN_PROTOCOL}://([a-z0-9]+)/(contours|slope|hillshade)/[^/]*/(\\d+)/(\\d+)/(\\d+)$`,
 );
 
 /** MapLibre's protocol handler for `logjam-terrain://`. */
@@ -126,18 +131,27 @@ export async function terrainTile(
 ): Promise<{ data: Uint8Array }> {
   const match = URL_PATTERN.exec(params.url);
   if (!match) throw new Error("Not a terrain tile URL");
-  const key = match[1] as RoutedTerrainKey;
+  const key = match[2] as RoutedTerrainKey;
   const layer = ARCHIVE_LAYER[key];
-  const [z, x, y] = [match[2], match[3], match[4]].map(Number) as [
+  const [z, x, y] = [match[3], match[4], match[5]].map(Number) as [
     number,
     number,
     number,
   ];
-  const answer = terrainTileArchive(routedAreas, layer, z, x, y);
+  const region = routedRegions.find(({ id }) => id === match[1]) ?? null;
+  const archive = layerIn(region, key);
+  if (!archive) throw new AbsentTerrainTile();
+  const answer = terrainTileArchive(
+    areasInRegion(region, routedAreas),
+    layer,
+    z,
+    x,
+    y,
+  );
   if (answer === "absent") throw new AbsentTerrainTile();
   const statewide = answer === "statewide";
   const url = statewide
-    ? `${window.location.origin}/${TERRAIN_STATEWIDE[key].archivePath}`
+    ? `${window.location.origin}/${archive.archivePath}`
     : answer[SHARPENED_ARCHIVE_URL[layer]];
   // The router hands contours only to an area that has them.
   if (!url) throw new AbsentTerrainTile();
