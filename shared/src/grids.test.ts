@@ -8,6 +8,7 @@ import {
   gridZoneAt,
   gridZonesFor,
   mgaZone,
+  parseGridReference,
   toGrid,
   toGridAt,
   type GridId,
@@ -409,3 +410,44 @@ it.each([
     expect(world.grid).toBe(gridIdAt(0, 0, []));
   },
 );
+
+describe("typed grid references", () => {
+  const overNz = { lat: -41.3, lon: 174.8 };
+  const overUtah = { lat: 40.7, lon: -111.9 };
+
+  // Mutation: read a bare pair as NZTM whatever grid the map is over, or never.
+  it("reads a bare NZTM pair over an NZTM region", () => {
+    const p = parseGridReference("1749046 5427521", overNz, MADE_UP)!;
+    expect(p.label).toBe("NZTM 1749046 5427521");
+    expect(p.lat).toBeCloseTo(-41.29, 3);
+    expect(p.lon).toBeCloseTo(174.78, 3);
+    expect(parseGridReference("1749046 5427521", overUtah, MADE_UP)).toBeNull();
+  });
+
+  // Mutation: choose MGA for an unprefixed zone from the first region's grid
+  // instead of the grid at `near`.
+  it("reads an unprefixed zone in the grid at the map's centre", () => {
+    const utm = parseGridReference("12 423966 4505845", overUtah, MADE_UP)!;
+    expect(utm.label).toBe("UTM 12 423966 4505845");
+    const mga = parseGridReference(
+      "56 245000 6264000",
+      { lat: -33.8, lon: 151.2 },
+      MADE_UP,
+    )!;
+    expect(mga.label).toBe("MGA 56 245000 6264000");
+  });
+
+  // What the region at the map's centre says decides, even in the north: a
+  // UTM region reads the zone as UTM where no region would read it as MGA.
+  // Mutation: read an unprefixed zone 54 to 56 as MGA whatever region the map
+  // is over (drop `nearGrid` from the third branch's condition in
+  // `parseGridReference`).
+  it("lets a UTM region's grid decide an unprefixed zone 56", () => {
+    const text = "56 245000 6264000";
+    const utm = parseGridReference(text, overUtah, MADE_UP)!;
+    expect(utm.label).toBe("UTM 56 245000 6264000");
+    expect(utm.lat).toBeGreaterThan(50);
+    const none = parseGridReference(text, { lat: 40, lon: -100 }, MADE_UP)!;
+    expect(none.label).toBe("MGA 56 245000 6264000");
+  });
+});
