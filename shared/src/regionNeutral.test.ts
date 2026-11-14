@@ -27,9 +27,7 @@ const STILL_NAMING = [
   "frontend/src/components/map/terrainEntries.ts",
   "frontend/src/components/map/terrainRouter.ts",
   "frontend/src/components/map/terrainSource.ts",
-  "mobile/src/map/MapScreen.tsx",
   "mobile/src/map/RegionDownloadScreen.tsx",
-  "mobile/src/map/sourceResolver.ts",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",
   "mobile/src/offline/regionUpdate.ts",
@@ -59,7 +57,7 @@ const naming = PACKAGES.flatMap(sources)
 describe("files that name NSW's region constants", () => {
   it("finds the declaration, so a pattern that stops matching fails", () => {
     expect(naming).toEqual(expect.arrayContaining(DECLARES));
-    expect(naming.length).toBeGreaterThanOrEqual(20);
+    expect(naming.length).toBeGreaterThanOrEqual(18);
   });
 
   // Mutation: a new file reads NSW_REGION.view.

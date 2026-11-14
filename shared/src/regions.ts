@@ -6,8 +6,8 @@
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
 // first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
-// saved, printed or exported; nothing draws from either yet, and
-// `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by the chosen regions. Heights, gauges and the area-export check never took a
+// saved, printed or exported; `offeredBasemaps` (geoPdfBaseLayers.ts) still
+// lists by the chosen regions. Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
 // (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
@@ -734,6 +734,20 @@ export function regionInView(
     regionsTouching(view, regions)[0] ??
     (declaresAnything(world) ? world : null)
   );
+}
+
+/**
+ * `regionInView` for a view as a map reports it: its longitudes wrapped first
+ * (`wrapView`), since a map panned round the world reports them past ±180 and
+ * a region's borders are read in [-180, 180). What a map asks of the region it
+ * shows. Guard: `regions.test.ts` ("reads a view panned past the antimeridian").
+ */
+export function regionInWrappedView(
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): Region | null {
+  return regionInView(wrapView(view), regions, world);
 }
 
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */
