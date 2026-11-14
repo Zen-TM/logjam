@@ -115,7 +115,14 @@ def download(url: str, dest: Path) -> None:
     def fetch(part: Path) -> None:
         request = urllib.request.Request(url, headers={"User-Agent": BROWSER_AGENT})
         with urllib.request.urlopen(request, timeout=300) as r, open(part, "wb") as f:
-            shutil.copyfileobj(r, f)
+            expected = r.headers.get("Content-Length")
+            got = 0
+            while chunk := r.read(1 << 20):
+                got += f.write(chunk)
+            # A connection dropped part-way ends a read short without an error
+            # (guard: topo/tests/test_sim_regions_build.py `TestDownload`).
+            if expected is not None and got != int(expected):
+                raise http.client.IncompleteRead(b"", int(expected) - got)
 
     retrying(url, lambda: written(dest, fetch))
 

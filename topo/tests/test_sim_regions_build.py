@@ -4,7 +4,9 @@ with docker and the network (scripts/sim-regions/README.md).
 """
 
 import http.client
+import http.server
 import importlib.util
+import threading
 import subprocess
 import tempfile
 import unittest
@@ -139,6 +141,70 @@ class TestWritten(unittest.TestCase):
                 target, lambda part: (starts.append(part.exists()), part.touch())
             )
             self.assertEqual(starts, [False])
+
+
+BODY = bytes(range(256)) * 4  # 1,024 bytes
+
+
+class TestDownload(unittest.TestCase):
+    """A file at its final name is a whole one, for a download too: a server
+    that drops the connection short of its Content-Length is a failure."""
+
+    def serve(self, short_first: int):
+        """A local server: its first `short_first` replies stop at 300 bytes."""
+        asked = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                asked.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(BODY)))
+                self.end_headers()
+                cut = len(asked) <= short_first
+                self.wfile.write(BODY[:300] if cut else BODY)
+                self.close_connection = True
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_port}/f.laz", asked
+
+    def test_a_whole_body_lands(self):
+        url, asked = self.serve(short_first=0)
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "f.laz"
+            build.download(url, dest)
+            self.assertEqual(dest.read_bytes(), BODY)
+            self.assertEqual(len(asked), 1)
+
+    def test_a_short_body_is_retried_until_whole(self):
+        # Mutation: drop the comparison with Content-Length in download().
+        url, asked = self.serve(short_first=2)
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(build.time, "sleep"),
+        ):
+            dest = Path(tmp) / "f.laz"
+            build.download(url, dest)
+            self.assertEqual(dest.read_bytes(), BODY)
+            self.assertEqual(len(asked), 3)
+
+    def test_a_body_that_stays_short_leaves_no_file_at_the_final_name(self):
+        # Mutation: drop the comparison with Content-Length in download().
+        url, asked = self.serve(short_first=99)
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(build.time, "sleep"),
+        ):
+            dest = Path(tmp) / "f.laz"
+            with self.assertRaises(http.client.IncompleteRead):
+                build.download(url, dest)
+            self.assertFalse(dest.exists())
+            self.assertEqual(len(asked), 5)
 
 
 if __name__ == "__main__":
