@@ -10,8 +10,8 @@ import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
 import type { SheetTerrain } from "../../geoPdf/sheetTerrain";
 
 // What a GeoPDF draws over its base layer. Contours, slope and hillshade name
-// the Terrain group: the statewide layers anywhere in NSW, and a LiDAR job's
-// own layer of that name over its area. The rest come only from a job.
+// the Terrain group: the layers of the region the sheet is in, and a LiDAR
+// job's own layer of that name over its area. The rest come only from a job.
 
 const TERRAIN: readonly string[] = TERRAIN_LAYER_KEYS;
 

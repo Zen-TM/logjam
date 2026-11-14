@@ -285,7 +285,7 @@ export function areasOnPage<A extends SharpenedArea>(
 
 /**
  * The zoom a print reads heights or slope at: its own, but no deeper than
- * the statewide archive's `statewideMax` (z15) unless an area on the page
+ * the region's archive's `statewideMax` (z15 for NSW's) unless an area on the page
  * holds more, then that area's zmax. At 300 dpi and NSW's latitude a print
  * at 1:50 000 wants z15, 1:25 000 z16, 1:15 000 z17, 1:10 000 z18; the base
  * layer's own cap comes first (`computeZoom`).
