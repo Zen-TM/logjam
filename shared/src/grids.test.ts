@@ -436,4 +436,18 @@ describe("typed grid references", () => {
     )!;
     expect(mga.label).toBe("MGA 56 245000 6264000");
   });
+
+  // What the region at the map's centre says decides, even in the north: a
+  // UTM region reads the zone as UTM where no region would read it as MGA.
+  // Mutation: read an unprefixed zone 54 to 56 as MGA whatever region the map
+  // is over (drop `nearGrid` from the third branch's condition in
+  // `parseGridReference`).
+  it("lets a UTM region's grid decide an unprefixed zone 56", () => {
+    const text = "56 245000 6264000";
+    const utm = parseGridReference(text, overUtah, MADE_UP)!;
+    expect(utm.label).toBe("UTM 56 245000 6264000");
+    expect(utm.lat).toBeGreaterThan(50);
+    const none = parseGridReference(text, { lat: 40, lon: -100 }, MADE_UP)!;
+    expect(none.label).toBe("MGA 56 245000 6264000");
+  });
 });
