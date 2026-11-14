@@ -1,10 +1,11 @@
-// One-off calibration for the per-source tile-size constants in
-// `src/mapRegionEstimate.ts`. Samples real tiles from each offline-capable
-// raster basemap over a bush bbox and prints mean/p90 bytes per zoom.
+// One-off calibration for the `tileBytes` of the SIX entries in
+// `src/geoPdfBaseLayers.ts` and the worldwide DEM's in `src/mapRegionEstimate.ts`.
+// Samples real tiles from each offline-capable raster basemap over a bush bbox
+// and prints mean/p90 bytes per zoom.
 //
 // Run: node shared/scripts/calibrate-basemap-tile-sizes.mjs
 //
-// Re-run this (and update the constants + their provenance comment) if a
+// Re-run this (and update the entries + their provenance comment) if a
 // provider re-renders its cache or a new offline-capable source is added.
 // The estimate is what the user sees before committing to a download, so a
 // guessed constant is a lie with a progress bar attached.

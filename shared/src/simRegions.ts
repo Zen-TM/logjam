@@ -15,6 +15,7 @@ import type {
   Region,
   RegionTerrain,
   Ring,
+  TileBytes,
 } from "./regions.js";
 
 type Box = readonly [number, number, number, number];
@@ -29,6 +30,19 @@ function ringAround([west, south, east, north]: Box, margin = 0.02): Ring {
   ];
 }
 
+/**
+ * Placeholder figures, not measurements: one size for every zoom of an archive,
+ * until the simulated archives are built and their tiles measured.
+ */
+function placeholderTileBytes(minzoom: number, maxzoom: number): TileBytes {
+  return Object.fromEntries(
+    Array.from({ length: maxzoom - minzoom + 1 }, (_, i) => [
+      minzoom + i,
+      { meanBytes: 30_000, p90Bytes: 45_000 },
+    ]),
+  );
+}
+
 /** The heights, slope, hillshade and contours of a simulated region. */
 function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
   const credit = (layer: string) => ({
@@ -41,8 +55,9 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
     sampleZoom: 15,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
+    tileBytes: placeholderTileBytes(8, 15),
     ...credit("Elevation"),
-  } as const satisfies DemSource;
+  } as const satisfies DemSource & { tileBytes: TileBytes };
   return {
     heights,
     slope: {
@@ -50,6 +65,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: `master/dem/${id}-slope.pmtiles`,
       minzoom: 8,
       maxzoom: 15,
+      tileBytes: placeholderTileBytes(8, 15),
       ...credit("Slope"),
     },
     hillshade: {
@@ -57,6 +73,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: heights.archivePath,
       minzoom: 8,
       maxzoom: heights.sampleZoom,
+      tileBytes: heights.tileBytes,
       ...credit("Hillshade"),
     },
     contours: {
@@ -64,6 +81,7 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       archivePath: `master/contours/${id}-10m.pmtiles`,
       minzoom: 11,
       maxzoom: 14,
+      tileBytes: placeholderTileBytes(11, 14),
       ...credit("Contours"),
     },
   };
@@ -94,6 +112,7 @@ function simOverlays(
       classProperty: "Holder",
       minzoom: 8,
       maxzoom: 13,
+      tileBytes: placeholderTileBytes(8, 13),
       classes: [
         { source: "Public", name: t`Simulated public land`, colour: "#2a9d8f" },
         { source: "Leased", name: t`Simulated leased land`, colour: "#e9c46a" },
@@ -111,6 +130,7 @@ function simOverlays(
       typeProperty: "burntType",
       minzoom: 8,
       maxzoom: 12,
+      tileBytes: placeholderTileBytes(8, 12),
       types: { 1: t`Simulated wildfire`, 3: t`Simulated clearing burn` },
       caveat,
       ...credit("Fire history"),
@@ -124,6 +144,7 @@ function simOverlays(
         levelProperty: "reception",
         minzoom: 12,
         maxzoom: 12,
+        tileBytes: placeholderTileBytes(12, 12),
         carriers,
         caveat,
         ...credit("Mobile coverage"),
