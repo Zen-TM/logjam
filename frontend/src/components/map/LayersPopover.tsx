@@ -5,13 +5,14 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  OVERLAY_LEGENDS,
   overlayAwaitsChoice,
   drawsCoverage,
   overlayChoiceLabel,
   normalizeCarrier,
-  carriersOf,
+  layerIn,
+  overlayLegends,
   type CarrierId,
+  type Region,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
   takesNswContours,
@@ -90,6 +91,7 @@ export default function LayersPopover({
   slopeBands,
   onSlopeBandsChange,
   mapView,
+  region,
   onImportFile,
   startView,
   sharpenedLoaded,
@@ -131,6 +133,8 @@ export default function LayersPopover({
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  /** The region the map shows: a layer it has no data for reads "Not available here" and is off. */
+  region: Region | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
   /**
@@ -171,13 +175,21 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
+  const legends = overlayLegends(region);
+  const gaugesHere = region?.gauges != null;
+  // A stored pick is one carrier for every region; where the region in view
+  // does not list it the row asks again, as if none were picked.
+  const carrierHere = normalizeCarrier(
+    coverageCarrier,
+    region?.terrain.coverage?.carriers ?? [],
+  );
   const overlaysOn = [
     showPlaces,
     showWays,
-    terrainLayers.land,
-    terrainLayers.fire,
-    drawsCoverage(terrainLayers.coverage, coverageCarrier),
-    showGauges,
+    terrainLayers.land && legends.land,
+    terrainLayers.fire && legends.fire,
+    legends.coverage && drawsCoverage(terrainLayers.coverage, carrierHere),
+    showGauges && gaugesHere,
     showMgaGrid,
   ].filter(Boolean).length;
 
@@ -277,6 +289,7 @@ export default function LayersPopover({
               terrain: () => (
                 <TerrainPane
                   layers={terrainLayers}
+                  region={region}
                   onChange={onTerrainLayerChange}
                   activeLayerId={activeLayerId}
                   onOpenSlopeBands={() => setView("slopeBands")}
@@ -332,33 +345,49 @@ export default function LayersPopover({
                   />
                   {contractSectionKeys(MAP_OVERLAYS, "web")
                     .filter(isOverlayTerrainKey)
-                    .map((key) => (
-                      <OverlayLegendRow
-                        key={key}
-                        legend={OVERLAY_LEGENDS[key]}
-                        checked={terrainLayers[key]}
-                        onToggle={(on) => onTerrainLayerChange(key, on)}
-                        {...(key === "coverage"
-                          ? {
-                              choice: {
-                                value: coverageCarrier,
-                                onChange: (value: string) => {
-                                  const next = normalizeCarrier(
-                                    value,
-                                    carriersOf(),
-                                  );
-                                  if (next) onCoverageCarrierChange(next);
+                    .map((key) => {
+                      const legend = legends[key];
+                      return legend ? (
+                        <OverlayLegendRow
+                          key={key}
+                          legend={legend}
+                          checked={terrainLayers[key]}
+                          onToggle={(on) => onTerrainLayerChange(key, on)}
+                          {...(key === "coverage"
+                            ? {
+                                choice: {
+                                  value: carrierHere,
+                                  onChange: (value: string) => {
+                                    const next = normalizeCarrier(
+                                      value,
+                                      region?.terrain.coverage?.carriers ?? [],
+                                    );
+                                    if (next) onCoverageCarrierChange(next);
+                                  },
                                 },
-                              },
-                            }
-                          : {})}
-                      />
-                    ))}
+                              }
+                            : {})}
+                        />
+                      ) : (
+                        <OverlayRow
+                          key={key}
+                          icon="layers"
+                          hue="var(--color-neutral)"
+                          title={terrainCopy[key]}
+                          subtitle={terrainCopy.notHere}
+                          checked={false}
+                          disabled
+                          onToggle={() => {}}
+                        />
+                      );
+                    })}
                   <OverlayRow
                     icon="gauge"
                     hue="var(--color-accent)"
                     title={MAP_OVERLAYS.copy.gauges}
-                    checked={showGauges}
+                    subtitle={gaugesHere ? undefined : terrainCopy.notHere}
+                    checked={showGauges && gaugesHere}
+                    disabled={!gaugesHere}
                     onToggle={setShowGauges}
                   />
                   <OverlayRow
@@ -394,6 +423,7 @@ export default function LayersPopover({
 /** The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. */
 export function TerrainPane({
   layers,
+  region,
   onChange,
   activeLayerId,
   onOpenSlopeBands,
@@ -403,6 +433,8 @@ export function TerrainPane({
   onOpenSharpened,
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
+  /** The region the map shows: a layer it has no archive for is off. */
+  region: Region | null;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
   activeLayerId: string;
   onOpenSlopeBands: () => void;
@@ -420,31 +452,35 @@ export function TerrainPane({
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
+    // The region's missing archive outranks the basemap's reasons.
+    const absent =
+      layerIn(region, key as "contours" | "slope" | "hillshade") === null;
     const printed = key === "contours" && !takesNswContours(activeLayerId);
     const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
-    const reason = printed
-      ? terrainCopy.contoursPrinted
-      : shadowed
-        ? terrainCopy.hillshadeImagery
-        : terrainCopy[`${key as "contours" | "slope" | "hillshade"}Hint`];
+    const off = absent || printed || shadowed;
+    const reason = absent
+      ? terrainCopy.notHere
+      : printed
+        ? terrainCopy.contoursPrinted
+        : shadowed
+          ? terrainCopy.hillshadeImagery
+          : terrainCopy[`${key as "contours" | "slope" | "hillshade"}Hint`];
     return (
       <Row
         key={key}
         title={title}
         subtitle={reason}
-        onPress={
-          printed || shadowed ? undefined : () => onChange(key, !layers[key])
-        }
+        onPress={off ? undefined : () => onChange(key, !layers[key])}
         trailing={
           <>
             {extra}
             <Toggle
               // Off while nothing can draw it; the stored choice returns with
-              // the basemap that can.
-              checked={layers[key] && !printed && !shadowed}
+              // the basemap or region that can.
+              checked={layers[key] && !off}
               onChange={(on) => onChange(key, on)}
               label={showLabel(title)}
-              disabled={printed || shadowed}
+              disabled={off}
             />
           </>
         }
@@ -590,7 +626,7 @@ function SlopeBandsView({
 /**
  * A statewide overlay's row, with the legend its help button opens: what the
  * colours mean, the key, the source's caveat and its credit
- * (`OVERLAY_LEGENDS`).
+ * (`overlayLegends`).
  */
 export function OverlayLegendRow({
   legend,
@@ -688,6 +724,7 @@ function OverlayRow({
   openLabel,
   help,
   helpRef,
+  disabled,
 }: {
   icon: Glyph;
   hue: string;
@@ -699,13 +736,15 @@ function OverlayRow({
   openLabel?: string;
   help?: { label: string; onClick: () => void };
   helpRef?: RefObject<HTMLButtonElement | null>;
+  /** The switch is off and does nothing; `subtitle` says why. */
+  disabled?: boolean;
 }) {
   return (
     <Row
       leading={<IconTile icon={icon} hue={hue} />}
       title={title}
       subtitle={subtitle}
-      onPress={() => onToggle(!checked)}
+      onPress={disabled ? undefined : () => onToggle(!checked)}
       trailing={
         <>
           {help && (
@@ -727,6 +766,7 @@ function OverlayRow({
             checked={checked}
             onChange={onToggle}
             label={showLabel(title)}
+            disabled={disabled}
           />
         </>
       }

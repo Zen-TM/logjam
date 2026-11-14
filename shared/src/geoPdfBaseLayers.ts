@@ -353,9 +353,10 @@ export function extractionCreditLine(
 //                                     baked into the same layer — see apply_fire_history
 //                                     in topo/pipeline.py), CC BY 4.0
 //   - features                     → OpenStreetMap, ODbL
+// Land tenure is not here: its credit is the region's own (`LandArchive.credit`).
 // Single source of truth so the frontend AttributionControl and the PDF agree.
 
-export type OverlaySource = "elevation" | "vegetation" | "features" | "land";
+export type OverlaySource = "elevation" | "vegetation" | "features";
 
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
@@ -364,7 +365,6 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
     "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
     NSW_REGION.terrain.fire.credit,
   features: "Features © OpenStreetMap contributors",
-  land: NSW_REGION.terrain.land.credit,
 };
 
 // Maps each selectable overlay layer name to its underlying data source(s).
@@ -374,16 +374,12 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
 // Keyed by the canonical TopoLayerName (topoSettings.ts TOPO_LAYERS): the
 // values are per-layer data and stay hand-maintained, but a missing or extra
 // key is a compile error.
-export const TOPO_OVERLAY_SOURCE: Record<
-  TopoLayerName | "land",
-  OverlaySource[]
-> = {
+export const TOPO_OVERLAY_SOURCE: Record<TopoLayerName, OverlaySource[]> = {
   hillshade: ["elevation"],
   slope: ["elevation"],
   contours: ["elevation"],
   vegetation: ["elevation", "vegetation"],
   features: ["features"],
-  land: ["land"],
 };
 
 // Stable display order for credit lines.
@@ -391,7 +387,6 @@ const OVERLAY_SOURCE_ORDER: OverlaySource[] = [
   "elevation",
   "vegetation",
   "features",
-  "land",
 ];
 
 /**

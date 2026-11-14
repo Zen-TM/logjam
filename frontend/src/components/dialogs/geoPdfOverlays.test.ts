@@ -157,7 +157,7 @@ describe("layerMissingHere", () => {
 
   // Mutation: return true for a null `terrain`, and the form says nothing is
   // available before an area is set, which a prod with one region must not show.
-  it("judges nothing before an area is set, and never a job's own layer", () => {
+  it("judges nothing before an area is set, and never a layer only a job draws", () => {
     expect(layerMissingHere(null, "slope")).toBe(false);
     const bare = {
       ...all,

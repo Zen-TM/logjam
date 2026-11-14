@@ -80,5 +80,8 @@ export const MAP_TERRAIN = {
     contoursPrinted: "This map prints its own",
     // The Hillshade switch over imagery.
     hillshadeImagery: "The photos have their own shadows",
+    // The row of a layer the region in view has no data for, in place of its
+    // hint, with the switch off.
+    notHere: "Not available here.",
   },
 } as const satisfies ScreenContract;

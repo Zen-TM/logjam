@@ -560,6 +560,8 @@ function App() {
   // holds that a pan inside one keeps the same object). Unknown until the map
   // reports its first view.
   const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // Only a region with a gauge feed has river gauges to draw.
+  const gaugesHere = viewRegion?.gauges != null;
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
@@ -2092,7 +2094,7 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays || !!planOnMap}
-            showGauges={showGauges}
+            showGauges={showGauges && gaugesHere}
             onShowGauges={() => setShowGauges(true)}
             showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
@@ -2281,6 +2283,7 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          region={viewRegion}
         />
 
         <PlanInviteLinkDialog
