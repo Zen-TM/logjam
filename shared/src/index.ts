@@ -26,6 +26,7 @@ export * from "./placeTypes.js";
 export * from "./planItemEdit.js";
 export * from "./placeStatus.js";
 export * from "./copyRules.js";
+export * from "./i18nSource.js";
 export * from "./switchCopy.js";
 export * from "./designTokens.js";
 export * from "./webTokens.js";
