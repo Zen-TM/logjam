@@ -35,11 +35,14 @@ what is offered at a location.**
   `shared/src/regions.ts` returns the region holding the view's centre, else
   the first touching the view, else `WORLD` when it declares anything, else
   null. A layer switch reads `layerIn(regionInView(view), key) === null` as
-  "not available here". `regionAt` answers for a point.
+  "not available here". `regionAt` answers for a point. (updated 2026-11-15:
+  the basemap gallery also asks `regionsTouching`; see the second Update
+  below.)
 - **A box that is saved, printed or exported** uses every region in
   `regionsTouching(box)`, not one, except a printed sheet's Terrain layers,
-  which come from the one region at the sheet's centre (updated 2026-11-15;
-  see the Update below).
+  which come from the one region at the sheet's centre, and the basemap
+  gallery, which lists every region the view touches (updated 2026-11-15; see
+  the Updates below).
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.
 - **The declaration's shape.** A region's border is a list of rings; the
@@ -56,6 +59,15 @@ what is offered at a location.**
   another. A saved or exported box still uses every region touching it. Guard:
   `frontend/src/geoPdf/sheetTerrain.test.ts` ("takes all its Terrain from
   the one region at its centre, though another touches the sheet"). Everything
+  else above stands.
+- **Update 2026-11-15: the basemap gallery lists every region the view
+  touches.** `offeredBasemaps` (`shared/src/geoPdfBaseLayers.ts`) lists the
+  worldwide basemaps and those of every region in `regionsTouching(view)`, not
+  of the one `regionInView` names. A basemap is offered where its data covers
+  what the map shows, so a view across a border offers both sides'; the one
+  region still decides the default shown for a pick that is not offered
+  (`basemapHere`). Guard: `shared/src/regions.test.ts` ("offeredBasemaps" block,
+  "lists every region the view touches, in the catalogue's order"). Everything
   else above stands.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`

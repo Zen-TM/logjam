@@ -44,6 +44,9 @@ describe("the readers of the stored basemap pick", () => {
     }
   });
 
+  // Mutation: add a `DEFERS_TO` entry for a file that never reads the stored
+  // pick, such as "map/MapLayersSheet.tsx", and a stale deferral stays on the
+  // list.
   it("lists a deferral only for a file that reads the pick", () => {
     for (const path of Object.keys(DEFERS_TO))
       expect(readers, `DEFERS_TO names ${path}`).toContain(path);
