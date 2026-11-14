@@ -23,22 +23,16 @@ const STILL_NAMING = [
   "api/src/routes/ropewiki.ts",
   "frontend/src/components/SignIn.tsx",
   "frontend/src/components/SignInTerrain.tsx",
-  "frontend/src/geoPdf/bench.ts",
-  "frontend/src/geoPdf/draw/land.ts",
-  "frontend/src/geoPdf/plan.ts",
-  "frontend/src/geoPdf/render.ts",
   "mobile/src/map/RegionDownloadScreen.tsx",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",
   "mobile/src/offline/regionUpdate.ts",
   "mobile/src/saved/SavedScreen.tsx",
-  "shared/src/demSources.ts",
   "shared/src/geoPdfBaseLayers.ts",
   "shared/src/nswContours.ts",
   "shared/src/overlayLegends.ts",
   "shared/src/overlayZoom.ts",
   "shared/src/profileSeries.ts",
-  "shared/src/terrain.ts",
 ];
 
 function sources(dir: string): string[] {
