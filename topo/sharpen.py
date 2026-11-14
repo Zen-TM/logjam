@@ -22,7 +22,8 @@ OUT receives:
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
-DEMs, too big for memory or disk) and exits 2.
+DEMs, a measuring unit Logjam can't read, too big for memory or disk) and
+exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -31,9 +32,10 @@ statewide 5 m data instead, so a client can take each tile from exactly one
 archive and draw no seam.
 
 Ground is the ZIP's ELVIS DEM when it has one finer than 5 m; otherwise the
-survey's own class 2, as a TIN. The points are re-classified (SMRF) only
-when no tile has any class 2: on a classified survey that puts ground on
-the canopy.
+survey's own class 2, as a TIN. Either is made metric first when the survey is
+in feet or degrees (`metric_dem`, `metre_filters`). The points are
+re-classified (SMRF) only when no tile has any class 2: on a classified survey
+that puts ground on the canopy.
 
 PRIVACY: the footprint, the tile range, a tile index and a survey's name say
 where the user surveyed. No log call names them (tests/test_log_privacy.py).
@@ -53,6 +55,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -107,6 +110,10 @@ SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
     "from ELVIS with its DEM, and make it again."
+)
+UNKNOWN_UNIT = (
+    "This survey's measuring unit isn't one Logjam can read. "
+    "Download it again in metres or feet, and make it again."
 )
 ONLY_5M = (
     "This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. "
@@ -284,22 +291,265 @@ def las_summary(path: str) -> dict:
     return json.loads(run("pdal", "info", "--summary", path))["summary"]
 
 
+# Everything after the Ground step is in metres: the zoom a cell supports,
+# TIN_BUFFER_M, the TIN's resolution and longest edge, and the footprint's
+# simplification. A survey in feet or degrees is made metric here, once, as a
+# grid in one UTM zone, chosen from the survey's tiles together, with its
+# heights in metres; a metric one is left as it is
+# (tests/test_sharpen_units.py). A file with no CRS is read as metres: a survey
+# in feet that carries no CRS cannot be told from one in metres.
+FOOT_M = 0.3048
+US_FOOT_M = 1200 / 3937
+METRES_PER_DEGREE = 111_320
+LINEAR_UNITS = {
+    "m": 1.0,
+    "metre": 1.0,
+    "metres": 1.0,
+    "meter": 1.0,
+    "meters": 1.0,
+    "ft": FOOT_M,
+    "foot": FOOT_M,
+    "feet": FOOT_M,
+    "international foot": FOOT_M,
+    "us survey foot": US_FOOT_M,
+    "us-ft": US_FOOT_M,
+    "ftus": US_FOOT_M,
+}
+
+
+def linear_unit_m(name: str) -> float:
+    """Metres in a unit as PDAL or GDAL names it; a unit not known is refused,
+    never taken as metres, and never quoted: its name is the upload's text,
+    which the log must not carry (tests/test_sharpen_units.py `TestUnitNames`)."""
+    try:
+        return LINEAR_UNITS[name.strip().lower()]
+    except KeyError:
+        raise CannotSharpen(UNKNOWN_UNIT) from None
+
+
+def cell_metres(px: float, py: float, linear_m: Optional[float], lat: float = 0.0):
+    """A cell's ground size in metres. `linear_m` is the metres in the grid's
+    unit, or None for a grid in degrees, whose east-west size shrinks with
+    the latitude: the coarser of the two sizes is the cell."""
+    px, py = abs(px), abs(py)
+    if linear_m is not None:
+        return px * linear_m
+    return max(px * math.cos(math.radians(lat)), py) * METRES_PER_DEGREE
+
+
+def utm_epsg(lon: float, lat: float) -> int:
+    """WGS 84 / UTM of the zone holding a point."""
+    zone = min(int((lon + 180) // 6) + 1, 60)
+    return (32600 if lat >= 0 else 32700) + zone
+
+
+def _band_unit_m(ds, horizontal_m: Optional[float]) -> float:
+    """Metres in a DEM's heights: the band's unit, else the CRS's vertical
+    one when it has one, else the grid's own (a DEM in metres, or in degrees,
+    has heights in metres). A band unit not known on a grid in metres is read
+    as metres (an ELVIS DEM names none); on any other grid it is refused
+    (tests/test_sharpen_units.py `TestRealDem`, the two unknown-band-unit tests)."""
+    flat = horizontal_m or 1.0
+    name = ds.GetRasterBand(1).GetUnitType()
+    if name:
+        try:
+            return linear_unit_m(name)
+        except CannotSharpen:
+            if horizontal_m == 1.0:
+                return 1.0
+            raise
+    srs = pipeline.osr.SpatialReference(wkt=ds.GetProjection() or "")
+    if srs.IsCompound():
+        return float(srs.GetTargetLinearUnits("COMPD_CS|VERT_CS") or flat)
+    return flat
+
+
+def _grid_unit(ds) -> Tuple[Optional[float], float]:
+    """(metres in the grid's unit, or None in degrees; the grid's centre
+    latitude). A grid with no CRS is in metres."""
+    if not ds.GetProjection():
+        return 1.0, 0.0
+    srs = pipeline.osr.SpatialReference(wkt=ds.GetProjection())
+    gt = ds.GetGeoTransform()
+    if srs.IsGeographic():
+        return None, gt[3] + gt[5] * ds.RasterYSize / 2
+    return srs.GetLinearUnits(), 0.0
+
+
 def dem_cell(path: Path) -> Optional[float]:
     """A DEM's cell in metres, or None when it holds no height."""
     if not pipeline.raster_has_valid_pixels(str(path)):
         return None
     ds = pipeline.gdal.Open(str(path))
-    cell = abs(ds.GetGeoTransform()[1])
+    gt = ds.GetGeoTransform()
+    unit, lat = _grid_unit(ds)
     ds = None
-    return cell
+    return cell_metres(gt[1], gt[5], unit, lat)
+
+
+def _dem_lonlat(ds) -> Tuple[float, float]:
+    """The longitude and latitude of a DEM's centre."""
+    gt = ds.GetGeoTransform()
+    cx = gt[0] + gt[1] * ds.RasterXSize / 2
+    cy = gt[3] + gt[5] * ds.RasterYSize / 2
+    return _lonlat(pipeline.osr.SpatialReference(wkt=ds.GetProjection()), cx, cy)
+
+
+def metric_dem(path: Path, out: Path, epsg: Optional[int] = None) -> Path:
+    """The DEM itself when it is a grid in metres with its heights in metres,
+    else a copy in `out`: in UTM zone `epsg` (the zone of its own centre when
+    not given), heights in metres, the hole kept a hole."""
+    gdal = pipeline.gdal
+    ds = gdal.Open(str(path))
+    unit, _ = _grid_unit(ds)
+    z = _band_unit_m(ds, unit)
+    if unit == 1.0 and z == 1.0:
+        return path
+    # GDAL's warp converts a raster's heights by its CRS's vertical unit: the
+    # source is warped without its vertical part, so the scale below is the only
+    # one, and what it writes has none, so no later warp (`_warp`) scales again
+    # (tests/test_sharpen_units.py `TestRealDem`).
+    # A DEM with no CRS keeps its grid: both are None, and only its heights are
+    # scaled.
+    flat = None
+    if ds.GetProjection():
+        ref = pipeline.osr.SpatialReference(wkt=ds.GetProjection())
+        ref.StripVertical()
+        flat = ref.ExportToWkt()
+    dst = flat
+    if unit != 1.0:
+        dst = f"EPSG:{epsg or utm_epsg(*_dem_lonlat(ds))}"
+    source_nodata = ds.GetRasterBand(1).GetNoDataValue()
+    warped = gdal.Warp(
+        str(out),
+        ds,
+        srcSRS=flat,
+        dstSRS=dst,
+        resampleAlg="bilinear",
+        outputType=gdal.GDT_Float32,
+        srcNodata=NODATA if source_nodata is None else source_nodata,
+        dstNodata=NODATA,
+        creationOptions=["COMPRESS=DEFLATE"],
+    )
+    if z != 1.0:
+        band = warped.GetRasterBand(1)
+        grid = band.ReadAsArray()
+        band.WriteArray(np.where(grid == NODATA, NODATA, grid * z).astype(np.float32))
+    warped = ds = None
+    return out
+
+
+def _lonlat(srs, x: float, y: float) -> Tuple[float, float]:
+    """The longitude and latitude of a point of a CRS."""
+    osr = pipeline.osr
+    wgs84 = osr.SpatialReference()
+    wgs84.ImportFromEPSG(4326)
+    srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    lon, lat, _ = osr.CoordinateTransformation(srs, wgs84).TransformPoint(x, y)
+    return lon, lat
+
+
+def mean_zone(lonlats: List[Tuple[float, float]]) -> Optional[int]:
+    """The one UTM zone for a survey: that of the mean of its tiles' centres,
+    so a survey across a zone edge is not cut into two grids (tests/
+    test_sharpen_units.py `TestSurveyZone`). None when there are none."""
+    if not lonlats:
+        return None
+    n = len(lonlats)
+    return utm_epsg(sum(p[0] for p in lonlats) / n, sum(p[1] for p in lonlats) / n)
+
+
+def dem_zone(files: List[Path]) -> Optional[int]:
+    """The UTM zone the DEMs not in metres are warped to, together."""
+    lonlats = []
+    for f in files:
+        ds = pipeline.gdal.Open(str(f))
+        if _grid_unit(ds)[0] != 1.0:
+            lonlats.append(_dem_lonlat(ds))
+        ds = None
+    return mean_zone(lonlats)
 
 
 def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
     """Mosaic the chosen DEMs at the finest one's cell, finest drawn last, a
-    coarser one upsampled bilinear (tests/test_sharpen.py `TestGroundSteps`)."""
-    pipeline.merge_dem_tiles(
-        [dem_files[i] for i in order], out, resolution="highest", resample="bilinear"
+    coarser one upsampled bilinear (tests/test_sharpen.py `TestGroundSteps`).
+    Each is metric first (`metric_dem`), all in one zone."""
+    work = Path(out).parent
+    files = [dem_files[i] for i in order]
+    zone = dem_zone(files)
+    chosen = [
+        metric_dem(f, work / f"metric-{n}.tif", zone) for n, f in enumerate(files)
+    ]
+    pipeline.merge_dem_tiles(chosen, out, resolution="highest", resample="bilinear")
+
+
+def cloud_units(srs: Optional[dict]) -> Tuple[Optional[float], float]:
+    """(metres in the horizontal unit, or None for degrees; metres in the
+    height unit) of a point cloud, from `srs` in `pdal info --summary`; a
+    file with no CRS has no `srs` and is in metres.
+
+    The height unit is the factor of the UNIT in the `vertical` WKT, not
+    `units.vertical`: PDAL 2.6.2 reported "metre" there for a file whose
+    vertical CRS is in US survey feet (tests/test_sharpen_units.py
+    `METRES_OVER_FEET`).
+    A file with no vertical CRS has its Z in the horizontal unit.
+
+    Untested: a survey in feet as its agency wrote it, whose header differs in
+    shape from the files the tests were made from (GeoTIFF keys in place of
+    WKT, a vertical datum in another unit)."""
+    srs = srs or {}
+    horizontal = (srs.get("units") or {}).get("horizontal") or ""
+    if not horizontal:
+        return 1.0, 1.0
+    geographic = bool(srs.get("isgeographic"))
+    flat = None if geographic else linear_unit_m(horizontal)
+    factor = re.findall(r'UNIT\["[^"]*",\s*([0-9.eE+-]+)', srs.get("vertical") or "")
+    return flat, float(factor[-1]) if factor else (1.0 if geographic else flat)
+
+
+def metre_filters(srs: dict, epsg: Optional[int]):
+    """The `pdal translate` filters (names, options) that make a point cloud
+    metric: reproject to UTM zone `epsg` and scale Z. None for a cloud that is
+    metric already.
+
+    A cloud whose Z alone is in feet is reprojected too, though its horizontal
+    unit is the metre: the reprojection rewrites the header as a CRS with no
+    vertical part, where the Z-only scale would leave the feet in it, and GDAL's
+    warp converts a raster's heights by its CRS's vertical unit, so the heights
+    would be scaled twice (tests/test_sharpen_units.py `METRES_OVER_FEET`)."""
+    flat, z = cloud_units(srs)
+    if flat == 1.0 and z == 1.0:
+        return None
+    names = ["reprojection"]
+    options = [f"--filters.reprojection.out_srs=EPSG:{epsg}"]
+    if z != 1.0:
+        names.append("transformation")
+        matrix = f"1 0 0 0 0 1 0 0 0 0 {z!r} 0 0 0 0 1"
+        options.append(f"--filters.transformation.matrix={matrix}")
+    return names, options
+
+
+def lonlat_of(summary: dict) -> Tuple[float, float]:
+    """The longitude and latitude of the centre of a point cloud's bounds."""
+    b, srs = summary["bounds"], summary["srs"]
+    x, y = (b["minx"] + b["maxx"]) / 2, (b["miny"] + b["maxy"]) / 2
+    if srs.get("isgeographic"):
+        return x, y
+    ref = pipeline.osr.SpatialReference(wkt=srs.get("compoundwkt") or srs["wkt"])
+    return _lonlat(ref, x, y)
+
+
+def survey_zone(summaries: List[dict]) -> Optional[int]:
+    """The UTM zone a survey is reprojected to, when any tile is not metric."""
+    return mean_zone(
+        [lonlat_of(s) for s in summaries if cloud_units(s.get("srs")) != (1.0, 1.0)]
     )
+
+
+def tile_filters(summary: dict, epsg: Optional[int]):
+    """`metre_filters` of a tile from its summary, or None when metric."""
+    return metre_filters(summary.get("srs") or {}, epsg)
 
 
 # A TIN, not the mean Z per cell the vegetation pass grids. That grid looks
@@ -393,11 +643,13 @@ def read_parts(points: int) -> List[Tuple[int, int]]:
     return [(s, min(PART_POINTS, points - s)) for s in range(0, points, PART_POINTS)]
 
 
-def _class2_part(job: Tuple[int, str, str, int, int]) -> Tuple[int, str, int]:
-    """One part of a tile's class 2 into its own file: (tile, file, points)."""
-    i, path, ground, start, count = job
+def _class2_part(job: tuple) -> Tuple[int, str, int]:
+    """One part of a tile's class 2 into its own file, in metres: (tile, file,
+    points)."""
+    i, path, ground, start, count, filters = job
     run(
-        *["pdal", "translate", path, ground, "range"],
+        *["pdal", "translate", path, ground, *(filters or ([], []))[0], "range"],
+        *(filters or ([], []))[1],
         "--filters.range.limits=Classification[2:2]",
         f"--readers.las.start={start}",
         f"--readers.las.count={count}",
@@ -405,12 +657,25 @@ def _class2_part(job: Tuple[int, str, str, int, int]) -> Tuple[int, str, int]:
     return i, ground, int(las_summary(ground)["num_points"])
 
 
-def class2_tiles(paths: List[str], work: Path, name: str, workers: int) -> list:
-    """(ground files, bounds, ground points) of each tile with any class 2.
-    A file with no class 2 in it is left out: nothing reads an empty one."""
-    summaries = [las_summary(path) for path in paths]
+def class2_tiles(
+    paths: List[str],
+    work: Path,
+    name: str,
+    workers: int,
+    summaries: Optional[List[dict]] = None,
+    zone: Optional[int] = None,
+    metric: bool = False,
+) -> list:
+    """(ground files, bounds, ground points) of each tile with any class 2, in
+    metres: a tile in feet or degrees is converted to UTM `zone` as it is cut.
+    `metric` says the files are metric already, whatever their header reads
+    (SMRF's, which `smrf_classify` converted): they are not converted again
+    (tests/test_sharpen_units.py `test_smrf_output_is_not_scaled_twice`). A
+    file with no class 2 in it is left out: nothing reads an empty one."""
+    summaries = summaries or [las_summary(path) for path in paths]
+    converting = [None if metric else tile_filters(s, zone) for s in summaries]
     jobs = [
-        (i, path, str(work / f"ground-{name}{i}-{k}.las"), start, count)
+        (i, path, str(work / f"ground-{name}{i}-{k}.las"), start, count, converting[i])
         for i, (path, summary) in enumerate(zip(paths, summaries))
         for k, (start, count) in enumerate(read_parts(int(summary["num_points"])))
     ]
@@ -424,22 +689,46 @@ def class2_tiles(paths: List[str], work: Path, name: str, workers: int) -> list:
                 counts[i] += count
             pipeline._write_progress(n, len(jobs), "ground")
     return [
-        (grounds[i], summary["bounds"], counts[i])
+        (grounds[i], bounds_in_metres(summary, converting[i], grounds[i]), counts[i])
         for i, summary in enumerate(summaries)
         if counts[i]
     ]
 
 
-def smrf_classify(paths: List[str], work: Path) -> List[str]:
+def bounds_in_metres(summary: dict, converted, grounds: List[str]) -> dict:
+    """A tile's bounds as its ground files hold them: its own when it was
+    metric, else the extent of the converted files (its own are in feet or
+    degrees)."""
+    if not converted:
+        return summary["bounds"]
+    parts = [las_summary(g)["bounds"] for g in grounds]
+    return {
+        "minx": min(b["minx"] for b in parts),
+        "maxx": max(b["maxx"] for b in parts),
+        "miny": min(b["miny"] for b in parts),
+        "maxy": max(b["maxy"] for b in parts),
+    }
+
+
+def smrf_classify(
+    paths: List[str],
+    work: Path,
+    summaries: Optional[List[dict]] = None,
+    zone: Optional[int] = None,
+) -> List[str]:
     """Each tile with its ground found by SMRF, for a survey with no class 2
     at all (the lab's fallback; on a classified tile SMRF reads canopy as
-    ground). Noise and overlap are dropped first, and every class is wiped,
-    as the vegetation pass does (pipeline.py `build_pipeline_full`)."""
+    ground), in metres: SMRF's window and slope are metres. Noise and overlap
+    are dropped first, and every class is wiped, as the vegetation pass does
+    (pipeline.py `build_pipeline_full`)."""
+    summaries = summaries or [las_summary(path) for path in paths]
     out = []
     for i, path in enumerate(paths):
         out.append(str(work / f"smrf-{i}.las"))
+        names, options = tile_filters(summaries[i], zone) or ([], [])
         run(
-            *["pdal", "translate", path, out[-1], "range", "assign", "smrf"],
+            *["pdal", "translate", path, out[-1], *names, "range", "assign", "smrf"],
+            *options,
             "--filters.range.limits=Classification![7:7],Classification![12:12],"
             "Classification![18:18]",
             "--filters.assign.assignment=Classification[:]=0",
@@ -457,11 +746,14 @@ def laz_ground(
     terrain = pipeline.select_surveys_by_layer([str(f) for f in las_files])
     paths = terrain.terrain_tiles
     kind = "class-2"
-    tiles = class2_tiles(paths, work, "", workers)
+    summaries = [las_summary(path) for path in paths]
+    zone = survey_zone(summaries)
+    tiles = class2_tiles(paths, work, "", workers, summaries, zone)
     if not tiles:
         kind = "smrf"
         log.info("No class 2 in the point clouds: ground found by SMRF")
-        tiles = class2_tiles(smrf_classify(paths, work), work, "smrf-", workers)
+        smrf = smrf_classify(paths, work, summaries, zone)
+        tiles = class2_tiles(smrf, work, "smrf-", workers, metric=True)
     total = sum(count for *_, count in tiles)
     area = sum((b["maxx"] - b["minx"]) * (b["maxy"] - b["miny"]) for _, b, _ in tiles)
     cell = class2_cell(total, area)

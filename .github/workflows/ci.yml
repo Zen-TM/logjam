@@ -811,7 +811,7 @@ jobs:
             -w /app --entrypoint python3 "$IMAGE" -m unittest \
             tests/test_area_export.py tests/test_coverage.py \
             tests/test_footprint_coverage.py tests/test_reprojection.py \
-            tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
+            tests/test_sharpen_units.py tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
           if grep -q 'skipped=' "$RUNNER_TEMP/gdal-tests.log"; then
             echo "::error::a test that needs GDAL skipped inside the worker image: it has nothing to skip for here"
             exit 1

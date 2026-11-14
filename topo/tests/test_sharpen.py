@@ -271,7 +271,10 @@ class TestGround(unittest.TestCase):
 
         import sharpen
 
-        with mock.patch.object(sharpen.pipeline, "gdal") as gdal:
+        with (
+            mock.patch.object(sharpen.pipeline, "gdal") as gdal,
+            mock.patch.object(sharpen, "_grid_unit", return_value=(1.0, 0.0)),
+        ):
             gdal.Open.return_value.GetGeoTransform.return_value = (
                 0,
                 2.0,
@@ -280,12 +283,16 @@ class TestGround(unittest.TestCase):
                 0,
                 -2.0,
             )
+            # A grid in metres: a cell is the geotransform's own.
             with mock.patch.object(
                 sharpen.pipeline, "raster_has_valid_pixels", return_value=False
             ):
                 self.assertIsNone(sharpen.dem_cell(Path("empty.tif")))
-            with mock.patch.object(
-                sharpen.pipeline, "raster_has_valid_pixels", return_value=True
+            with (
+                mock.patch.object(sharpen, "_grid_unit", return_value=(1.0, 0.0)),
+                mock.patch.object(
+                    sharpen.pipeline, "raster_has_valid_pixels", return_value=True
+                ),
             ):
                 self.assertEqual(sharpen.dem_cell(Path("full.tif")), 2.0)
 
@@ -367,6 +374,7 @@ class TestGroundSteps(unittest.TestCase):
             return {
                 "bounds": bounds,
                 "num_points": points(name) if made else 6_000_000,
+                "srs": {"units": {"horizontal": "metre", "vertical": ""}},
             }
 
         def tin(job):
@@ -490,7 +498,13 @@ class TestGroundSteps(unittest.TestCase):
         import sharpen
 
         files = [Path("a.tif"), Path("b.tif"), Path("c.tif")]
-        with mock.patch.object(sharpen.pipeline, "merge_dem_tiles") as merge:
+        with (
+            mock.patch.object(sharpen.pipeline, "merge_dem_tiles") as merge,
+            mock.patch.object(sharpen, "dem_zone", return_value=None),
+            mock.patch.object(
+                sharpen, "metric_dem", side_effect=lambda path, out, zone: path
+            ),
+        ):
             sharpen.dem_ground(files, [2, 0], "g.tif")
         merge.assert_called_once_with(
             [files[2], files[0]], "g.tif", resolution="highest", resample="bilinear"
@@ -553,6 +567,7 @@ class TestGroundSteps(unittest.TestCase):
         summary = {
             "bounds": {"minx": 0, "maxx": 2000, "miny": 0, "maxy": 2000},
             "num_points": 500_000,
+            "srs": {"units": {"horizontal": "metre", "vertical": ""}},
         }
         with (
             tempfile.TemporaryDirectory() as tmp,
