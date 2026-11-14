@@ -3,12 +3,13 @@ import { StyleSheet, View } from "react-native";
 import {
   areaSizeLabel,
   contractSectionKeys,
-  defsForType,
+  placeFilterDefs,
   PLACE_ROPEWIKI_OPTIONS as ROPEWIKI,
   PLACE_SORT_OPTIONS as SORTS,
   PLACE_STATUS_FILTER_OPTIONS,
   PLACES_FILTER_SHEET,
   placesOnMapSummary,
+  type CanyonGradeSystem,
   type CustomFieldFilter,
   type FieldDateRange,
   type PlaceFilters,
@@ -87,6 +88,11 @@ type Props = {
   onChangeShowFilteredOnMap: (next: boolean) => void;
   filteredCount: number;
   totalCount: number;
+  /** The system the map in view grades in, and every place listed (the
+   *  unfiltered list): which grade axes the sheet offers (`placeFilterDefs`).
+   *  Guard: `contracts/placePageClients.test.ts` in shared. */
+  gradeSystem: CanyonGradeSystem;
+  listedPlaces: readonly { fieldValues?: unknown }[];
 };
 
 type SectionContext = Props & {
@@ -287,8 +293,13 @@ export function PlaceFilterSheet(props: Props) {
   // "Any type" every place attribute is offered; on a type, only that type's —
   // which is what stops a campsite filter asking for a vertical grade.
   const { defs } = useFieldDefs("place");
-  const typeDefs =
-    filters.placeTypeId == null ? defs : defsForType(defs, filters.placeTypeId);
+  const typeDefs = placeFilterDefs(
+    defs,
+    filters.placeTypeId,
+    props.gradeSystem,
+    props.listedPlaces,
+    filters.custom,
+  );
 
   const patch = useCallback(
     (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next }),

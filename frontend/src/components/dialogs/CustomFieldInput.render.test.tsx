@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { coerceFieldValue, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  coerceFieldValue,
+  SYSTEM_FIELD_DEFS,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
 import CustomFieldInput from "./CustomFieldInput";
 
@@ -39,5 +43,40 @@ describe("CustomFieldInput, a yes/no", () => {
     fireEvent.click(screen.getByRole("radio", { name: "No" }));
     fireEvent.click(screen.getByRole("radio", { name: "—" }));
     expect(onChange.mock.calls).toEqual([["false"], [""]]);
+  });
+});
+
+// A labelled field (the ACA grades) is stored as a rank and read as its word:
+// the pick-list shows the words and hands the form the rank.
+describe("CustomFieldInput, a labelled field", () => {
+  const acaWater = SYSTEM_FIELD_DEFS.find(
+    (def) => def.key === "aca_water",
+  ) as unknown as TripLogCustomFieldDef;
+
+  // Mutation: map the rail's options to `{ ...option, label: option.value
+  // || "—" }` in `CustomFieldInput`.
+  it("offers each stop as its word and hands the form its rank", () => {
+    const onChange = vi.fn();
+    render(<CustomFieldInput def={acaWater} value="" onChange={onChange} />);
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "—",
+      "A",
+      "B",
+      "C",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+    ]);
+    fireEvent.click(screen.getByRole("radio", { name: "C2" }));
+    expect(onChange).toHaveBeenCalledWith("5");
+  });
+
+  // Mutation: hand the rail `value=""`.
+  it("shows the stored rank as its word, picked", () => {
+    render(<CustomFieldInput def={acaWater} value="5" onChange={() => {}} />);
+    expect(
+      screen.getByRole("radio", { name: "C2" }).getAttribute("aria-checked"),
+    ).toBe("true");
   });
 });

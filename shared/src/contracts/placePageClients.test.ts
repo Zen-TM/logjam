@@ -11,12 +11,15 @@
 // and return no grade).
 //
 //
-// Delete the `isCanyonGradeKey` filter or the `canyonGradeRow` call from the
+// Delete the `isCanyonGradeKey` filter or the `gradeRowsOf` call from the
 // Web place page, or the `canyonGradeRows` call from either GPS screen, and the
 // "one Grade row, not three" tests below turn red. Web's place page is also
 // rendered in PlaceDetailPanel.render.test.tsx. Neither GPS screen has a render harness, so they read the
 // source like the walk tests above; Web's plan place page is rendered in
 // planPlace.render.test.tsx.
+//
+// Delete the grade system from the `comparePlaces` call of either places list,
+// or the `gradeSystem` prop Logjam Web's sidebar hands its list, and "Easiest first" sorts a canyon graded only in ACA among the ungraded.
 //
 // Not covered: the order inside a section, which key a section draws under
 // (`tsc` holds the keys of the `sections` map against the contract), and the
@@ -32,6 +35,11 @@ const read = (file: string) =>
 const WEB = read("frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx");
 const GPS = read("mobile/src/places/PlaceDetailScreen.tsx");
 const GPS_PLAN = read("mobile/src/plans/PlanPlaceSheet.tsx");
+const WEB_LIST = read("frontend/src/components/sidebar/panels/PlacesPanel.tsx");
+const GPS_LIST = read("mobile/src/places/PlacesScreen.tsx");
+const GPS_FORM = read("mobile/src/places/PlaceEditSheet.tsx");
+const GPS_FILTER = read("mobile/src/places/PlaceFilterSheet.tsx");
+const WEB_SIDEBAR = read("frontend/src/components/sidebar/SidebarPanel.tsx");
 
 /** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
 const uses = (source: string) =>
@@ -55,7 +63,7 @@ describe("Logjam Web's place page", () => {
 
   it("shows one Grade row in its attribute table, not the grade inputs", () => {
     expect(WEB).toContain(".filter((def) => !isCanyonGradeKey(def.key))");
-    expect(WEB).toContain("canyonGradeRow(place.fieldValues)");
+    expect(WEB).toContain("gradeRowsOf(place.fieldValues)");
   });
 });
 
@@ -82,6 +90,58 @@ describe("Logjam GPS's plan place sheet", () => {
   it("shows one Grade row in place of the grade inputs", () => {
     expect(GPS_PLAN).toContain(
       "canyonGradeRows( attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)), place.fieldValues, )",
+    );
+  });
+});
+
+describe("the places lists", () => {
+  // Mutation: drop `gradeSystem` from either `comparePlaces` call, or the prop
+  // the sidebar hands its list.
+  it("sort by the grade system of the ground in view", () => {
+    expect(WEB_LIST).toContain(
+      "comparePlaces(a.place, b.place, sort, gradeSystem)",
+    );
+    expect(GPS_LIST).toContain("comparePlaces(a, b, sort, gradeSystem)");
+    expect(WEB_SIDEBAR).toContain("gradeSystem={placesGradeSystem}");
+  });
+
+  // Mutation: hand `PlaceFilterSheet` the filtered list (`visible`) in
+  // PlacesPanel: an axis a filter has hidden every holder of would vanish
+  // from the sheet as the user narrows the list. The doc of `placeFilterDefs`
+  // names this test.
+  it("hand the filter sheet every place listed, not the filtered ones", () => {
+    expect(WEB_LIST).toContain(
+      "listedPlaces={collection.map(({ place }) => place)}",
+    );
+  });
+});
+
+// Logjam GPS's place form has no render harness, so it is read like the
+// screens above; Logjam Web's is rendered in PlaceDialog.grades.render.test.tsx.
+describe("Logjam GPS's place form", () => {
+  // Mutation: build `typeFieldDefs` with `defsForType` in PlaceEditSheet, or
+  // pass `placeFormDefs` no position, and an NSW canyon is offered the ACA
+  // fields.
+  it("offers the grade fields of the system where the place stands", () => {
+    expect(GPS_FORM).toContain(
+      "placeFormDefs( customFieldDefs, placeTypeId, draft.longitude, draft.latitude, place?.fieldValues, fieldValues, )",
+    );
+    expect(GPS_FORM).not.toContain("defsForType(");
+  });
+});
+
+// Logjam GPS's filter sheet has no render harness either; Logjam Web's is
+// rendered in PlaceFilterSheet.grades.render.test.tsx.
+describe("Logjam GPS's place filter sheet", () => {
+  // Mutation: build `typeDefs` in PlaceFilterSheet with `defsForType`, or drop
+  // `listedPlaces` or `gradeSystem` from the `PlaceFilterSheet` call in
+  // PlacesScreen: the ACA axes show over NSW.
+  it("offers the grade axes of the system in view, and of the places listed", () => {
+    expect(GPS_FILTER).toContain(
+      "placeFilterDefs( defs, filters.placeTypeId, props.gradeSystem, props.listedPlaces, filters.custom, )",
+    );
+    expect(GPS_LIST).toContain(
+      "gradeSystem={gradeSystem} listedPlaces={places}",
     );
   });
 });

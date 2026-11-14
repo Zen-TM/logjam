@@ -1,7 +1,7 @@
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import {
   customFieldDisplayLabel,
-  railStops,
+  railChoices,
   systemFieldDef,
 } from "@logjam/shared";
 import {
@@ -56,10 +56,11 @@ export function customFieldValueError(
  * never by its key — the same rule the filter sheet follows (`filterPillStops`,
  * DESIGN.md) and the same one Logjam GPS's `CustomFieldValueInput` follows.
  *
- * A BOUNDED INTEGER IS A RAIL (`railStops`, shared). That is how the seven
- * canyon grades are drawn now: they are ordinary bounded integers, so a user's
- * own "Difficulty, 1-5" is drawn exactly like the V grade without anything
- * here knowing that canyons exist.
+ * A BOUNDED INTEGER IS A RAIL (`railChoices`, shared). That is how the canyon
+ * grades are drawn: they are ordinary bounded integers, so a user's own
+ * "Difficulty, 1-5" is drawn exactly like the V grade without anything here
+ * knowing that canyons exist. A field with labels (the ACA grades) draws each
+ * stop as its word while the form holds the stop's number.
  *
  * `value` is the raw form string; "" is unset for every type, a yes/no
  * included (`BOOLEAN_OPTIONS`).
@@ -82,20 +83,14 @@ function CustomFieldInput({
   // is visible and read with the control, where a tooltip is neither).
   const hint = systemFieldDef(def.key)?.hint;
 
-  const stops = railStops(def);
-  if (stops) {
+  const choices = railChoices(def);
+  if (choices) {
     return (
       <div className={classes.rail}>
         <span className={classes.railLabel}>{def.label}</span>
         <ChipRail
           label={def.label}
-          options={[
-            { value: UNSET, label: "—" },
-            ...stops.map((stop) => ({
-              value: String(stop),
-              label: String(stop),
-            })),
-          ]}
+          options={choices}
           value={value}
           onChange={onChange}
         />

@@ -169,8 +169,10 @@ export function PlanItemSheet({
   };
 
   async function submit(target: TripPlanItem) {
+    // The list the form draws (`attrDefs`), checked here and handed to the
+    // patch: the plan may have moved the place since `seen` was fetched.
+    const defs = target.kind === "place" ? itemFieldDefs(target) : [];
     if (target.kind === "place") {
-      const defs = itemFieldDefs(target);
       const attrs = Object.fromEntries(
         defs.map((def) => [def.key, values[ITEM_ATTR + def.key] ?? ""]),
       );
@@ -195,7 +197,7 @@ export function PlanItemSheet({
       if (problem) return setError(problem);
     }
     const base = seen ?? target;
-    const patch = itemPatch(base, values);
+    const patch = itemPatch(base, values, defs);
     if (!patch) return onClose();
     setBusy(true);
     try {

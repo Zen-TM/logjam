@@ -35,7 +35,7 @@ import {
   placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
-  canyonGradeRow,
+  gradeRowsOf,
   isCanyonGradeKey,
   ADD_WAY,
   PLACE_PAGE,
@@ -314,7 +314,8 @@ function PlaceDetailPanel({
 
   /** What this KIND of place records, and what this one answered. Only the
    *  answered ones: a form asks every question, a page reports the answers.
-   *  The grade inputs read as the one Grade row, first, as on the hero. */
+   *  The grade inputs read as the one Grade row, first, as on the hero, and a
+   *  canyon holding both systems has its ACA grade as a row after it. */
   const attributes = useMemo(() => {
     if (!place) return [];
     const answered = defsForType(placeCustomFieldDefs, place.placeTypeId)
@@ -328,13 +329,12 @@ function PlaceDetailPanel({
         (row): row is { key: string; label: string; text: string } =>
           row.text != null,
       );
-    const grade = canyonGradeRow(place.fieldValues);
-    return grade
-      ? [
-          { key: grade[0], label: grade[1], text: String(grade[2]) },
-          ...answered,
-        ]
-      : answered;
+    const grades = gradeRowsOf(place.fieldValues).map(([key, label, text]) => ({
+      key,
+      label,
+      text: String(text),
+    }));
+    return [...grades, ...answered];
   }, [place, placeCustomFieldDefs]);
 
   /**

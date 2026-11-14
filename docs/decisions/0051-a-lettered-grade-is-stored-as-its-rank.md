@@ -37,14 +37,31 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   when any French field is set and the ACA one otherwise (`shared/src/canyonGrade.test.ts`).
 - **No value in `aca_risk` means no stated extra risk,** so a source's lowest level
   is stored as unset, never as `PG`. No test holds this: nothing imports an ACA rating yet.
+- **Update 2026-11-14: where a canyon stands decides which grade fields its form
+  offers.** A region declares `canyonGrades`, `"french"` or `"aca"` (`shared/src/regions.ts`),
+  and a Canyon form offers that system's fields at the place's position, the French
+  ones outside every region, plus any grade field that already holds a value, stored
+  or typed, so a save never drops one (`gradeFieldsAt`, `placeFormDefs` in
+  `shared/src/canyonGrade.ts`), and a plan place's edit form does the same
+  (`itemFieldDefs`). An NSW canyon is offered no ACA field. A place filter offers
+  the axes of the system in view, plus any a listed place holds a value for or
+  the filter is set on (`placeFilterDefs`). A canyon
+  holding both systems shows the French grade as its Grade row and the ACA one as a
+  second row, "ACA grade". Guards: `shared/src/canyonGrade.test.ts` ("keeps a field
+  that already holds a value, whatever the system", "keeps the axis an active filter
+  is set on") and `shared/src/planItemEdit.test.ts` ("keep a grade field the place
+  already holds, in either system"). Everything else above stands.
 
 ## Consequences
 
 - **Positive:** the field type, the database, sync, the bounds check and the
   filter need no change, and ranks order correctly with no mapping, so "C2" sorts
   after "C1" where letters would sort as text. The places list's Grade sort
-  (`comparePlaces` in `shared/src/placeFilter.ts`) reads the French fields only, so
-  a canyon graded only in ACA sorts as ungraded there.
+  (`comparePlaces` in `shared/src/placeFilter.ts`) reads the two difficulty fields of
+  the system the map in view uses, then the other system's, so a canyon graded in
+  either sorts among the graded ones (updated 2026-11-14). Guard:
+  `shared/src/placeFilter.test.ts` ("sorts a canyon graded only in ACA among the
+  graded ones").
 - **Negative:** a stored 5 means nothing without the declaration. Whatever prints
   a value outside the clients (an export, a raw database read) shows the rank
   unless it calls `fieldValueLabel`. A level added before the first one

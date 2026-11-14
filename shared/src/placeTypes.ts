@@ -548,6 +548,15 @@ export function fieldValueLabel(
 }
 
 /**
+ * How a number on a field's scale reads: its word where the field has labels
+ * ("C2"), else the number. What a rail, a filter pill or a summary prints for a
+ * stop on the scale.
+ */
+export function stopLabel(key: string, stop: number): string {
+  return fieldValueLabel(key, stop) ?? String(stop);
+}
+
+/**
  * Keys a user may not take, DERIVED from the system defs rather than restated.
  *
  * A hardcoded copy is exactly the "two lists that must agree" failure the root
