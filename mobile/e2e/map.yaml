@@ -4,7 +4,7 @@
 # vector basemap updates the attribution line, and the picker lists topo
 # overlays when the seeded API has completed jobs.
 # Run: maestro test e2e/map.yaml (emulator + Metro + local API running).
-appId: com.logjamnsw.mobile
+appId: earth.logjam.gps
 ---
 - openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 - extendedWaitUntil:

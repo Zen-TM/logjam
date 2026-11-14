@@ -28,7 +28,7 @@ describe("oidcScopes", () => {
 describe("endSessionUrl", () => {
   const base = {
     clientId: "cid",
-    postLogoutRedirect: "https://logjamnsw.com/",
+    postLogoutRedirect: "https://logjam.earth/",
     idToken: "tok",
   };
 
@@ -42,7 +42,7 @@ describe("endSessionUrl", () => {
       }),
     );
     expect(u.searchParams.get("client_id")).toBe("cid");
-    expect(u.searchParams.get("logout_uri")).toBe("https://logjamnsw.com/");
+    expect(u.searchParams.get("logout_uri")).toBe("https://logjam.earth/");
     expect(u.searchParams.has("id_token_hint")).toBe(false);
     expect(u.searchParams.has("post_logout_redirect_uri")).toBe(false);
   });
@@ -57,7 +57,7 @@ describe("endSessionUrl", () => {
     );
     expect(u.searchParams.get("id_token_hint")).toBe("tok");
     expect(u.searchParams.get("post_logout_redirect_uri")).toBe(
-      "https://logjamnsw.com/",
+      "https://logjam.earth/",
     );
     expect(u.searchParams.has("logout_uri")).toBe(false);
   });

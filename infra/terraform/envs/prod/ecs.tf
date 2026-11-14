@@ -62,7 +62,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "ap-southeast-2"
       }, {
       name  = "CORS_ORIGIN"
-      value = "https://logjamnsw.com,https://www.logjamnsw.com"
+      value = "https://logjam.earth,https://www.logjam.earth"
       }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
@@ -84,7 +84,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "NODE_ENV"
       value = "production"
@@ -111,7 +111,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "logjam-topo-jobs"
       }, {
       name  = "TOPO_CDN_BASE_URL"
-      value = "https://logjamnsw.com"
+      value = "https://logjam.earth"
     }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
@@ -164,7 +164,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "5432"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "GDAL_DISABLE_READDIR_ON_OPEN"
       value = "EMPTY_DIR"
@@ -320,7 +320,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "noreply@notifications.logjamnsw.com"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "SMTP_HOST"
       value = "smtp.resend.com"

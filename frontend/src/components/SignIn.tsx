@@ -78,11 +78,7 @@ function Frame({ children }: { children: ReactNode }) {
 }
 
 function Intro() {
-  return (
-    <p className={classes.intro}>
-      Your private map and trips for canyoning in New South Wales.
-    </p>
-  );
+  return <p className={classes.intro}>{SIGN_IN_COPY.intro}</p>;
 }
 
 function InviteNote() {

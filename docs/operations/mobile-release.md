@@ -36,7 +36,7 @@ Needed before the first release tag.
 2. **`EXPO_TOKEN`**, the Environment's one secret, set by hand (Settings →
    Environments → `mobile-release`): a robot-user access token from expo.dev
    for the `logjamnsw` account, with access to the `logjam-mobile` project.
-3. **Play Console app** for `com.logjamnsw.mobile`. Google accepts the first
+3. **Play Console app** for `earth.logjam.gps`. Google accepts the first
    bundle of a new app only by hand upload, so the first release tag's
    automatic submission fails. Download that build's `.aab` from its EAS build
    page and upload it to the internal testing track yourself. Later releases
@@ -51,7 +51,10 @@ Needed before the first release tag.
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
    (`mobile/eas.json`). `mobile/scripts/check-eas-env.sh` refuses a store build
-   or an update when either OIDC variable is missing.
+   or an update when either OIDC variable is missing. The
+   `GOOGLE_SERVICES_JSON` file comes from a Firebase Android app registered
+   for `earth.logjam.gps`: the Gradle plugin fails a build whose file has no
+   client for the application id.
 6. **Production access.** The Play developer account is a personal one, so
    Google allows production releases only after a closed test with at least
    12 testers opted in for 14 continuous days, followed by an application in
@@ -70,6 +73,28 @@ Needed before the first release tag.
      `mobile-release-branches` ruleset lets deploy keys push
      `release/mobile-v*`, so this must stay the repository's only deploy key
      with write access. Delete the local files once both are set.
+8. **Account deletion URL:** in the Play Console Data safety form, enter
+   `https://logjam.earth/delete-account.html` (`frontend/public/delete-account.html`).
+9. **`SENTRY_AUTH_TOKEN`, so a crash report from a release is readable.** Every
+   `preview` and `production` build uploads its JavaScript sourcemaps and
+   native debug symbols to Sentry (organisation `logjam-qb`, project
+   `react-native`, set in `mobile/app.json`), and an OTA hotfix uploads its
+   sourcemaps. Both need one token; without it the EAS build fails and the
+   hotfix stops before it is promoted. In Sentry, Settings → Developer
+   Settings → Organization Tokens → create one. Its permissions aren't
+   customizable and cover uploads from CI, so there is no scope to pick. Set
+   it in two places:
+   - EAS, in the `preview` and `production` environments, as a secret:
+     `eas env:set --name SENTRY_AUTH_TOKEN --value <token> --environment preview --environment production --visibility secret`;
+   - GitHub, as the `SENTRY_AUTH_TOKEN` secret of the `mobile-ota`
+     Environment (step 7).
+
+   To check a release's symbols arrived, open Sentry → project `react-native`
+   → Settings → Debug Files (native symbols) and → Source Maps (JavaScript):
+   the build's entries are there, and its first crash shows source file names
+   and line numbers, not `anonymous@1:482913`. A local build
+   (`mobile/scripts/build-local-apk.sh`) and the dev builds upload nothing:
+   they set `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 
 Submissions go to the internal track as a **draft**
 (`submit.production.android` in `mobile/eas.json`): a draft is accepted even
@@ -125,7 +150,7 @@ needs: [`mobile/e2e/README.md`](../../mobile/e2e/README.md).
 |---|---|---|
 | `browse.yaml` | `fake` | the signed-in shell: tabs, place list from the API, place detail, inbox, account |
 | `map.yaml` | `fake` | map tab, layers picker, the vector basemap and its attribution, locate-me |
-| `guest.yaml` | `oidc`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
+| `guest.yaml` | `oidc`, after `adb shell pm clear earth.logjam.gps` | the entry chooser, a guest's local place, account features shown disabled |
 | `signin.yaml` | `oidc`, with the test Cognito user | real password sign-in on the landing screen to the shell |
 
 A flow that fails is not retried until it passes: find out why. A flow broken
@@ -175,10 +200,11 @@ stays X.Y.Z: the update must match the build.
    when the repository owner merged (and started the run) and `ota-plan`
    passed on the PR's head. It
    cherry-picks the squash commit onto `release/mobile-vX.Y.Z`, publishes it
-   to `preview`, promotes that group to `production` (through the same
-   `check-production-update.js` checks as by hand), then pushes the branch.
+   to `preview`, uploads its sourcemaps to Sentry, promotes that group to
+   `production` (through the same `check-production-update.js` checks as by
+   hand), then pushes the branch.
    It comments on the PR with both group ids, or with what failed: if the
-   promotion fails, the update is on `preview` only. If the comment says the
+   upload or the promotion fails, the update is on `preview` only. If the comment says the
    branch was not pushed, push it by hand (By hand, step 1, with the
    cherry-pick) before anything else merges with the label: the next hotfix
    is planned on the branch as it is on GitHub, so it would lack this fix and
@@ -243,11 +269,14 @@ maintainer's machine, after the fix has merged to `main`:
    `npm run update:preview -- --message "<what it fixes>"`.
    The script passes `--environment`, so the bundle uses the EAS
    environment's variables, not `mobile/.env`, which points at the local
-   stack.
+   stack. Then upload its sourcemaps from the same checkout, which `eas
+   update` left in `dist/`:
+   `SENTRY_AUTH_TOKEN=<token> npx sentry-expo-upload-sourcemaps dist`.
 5. **Promote the same update to `production`:**
    `npm run promote:production -- --group <update group id>`.
    With no candidate to check it on, publish directly instead:
-   `npm run update:production -- --message "<what it fixes>"`.
+   `npm run update:production -- --message "<what it fixes>"`, then upload its
+   sourcemaps: `SENTRY_AUTH_TOKEN=<token> npx sentry-expo-upload-sourcemaps dist`.
 6. **Undo** with `eas update:rollback <group id> --private-key-path keys/private-key.pem`.
 
 ## Backports

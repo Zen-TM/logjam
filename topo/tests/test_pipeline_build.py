@@ -8,25 +8,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    from pipeline import (  # noqa: E402
-        PDAL_SCAN_ANGLE_MAX,
-        SCRUB_BAND_MAX_M,
-        SCRUB_STRATUM_LOW_MAX_M,
-        build_pipeline_full,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+from pipeline import (  # noqa: E402
+    PDAL_SCAN_ANGLE_MAX,
+    SCRUB_BAND_MAX_M,
+    SCRUB_STRATUM_LOW_MAX_M,
+    build_pipeline_full,
+)
 
 
 def _stages_of_type(pipeline, type_name):
     return [s for s in pipeline if isinstance(s, dict) and s.get("type") == type_name]
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestBuildPipelineFull(unittest.TestCase):
     def setUp(self):
         self.p = build_pipeline_full(
@@ -129,7 +122,6 @@ class TestBuildPipelineFull(unittest.TestCase):
             self.assertIn(gate, w["where"])
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestGroundPerTile(unittest.TestCase):
     """Each point cloud is grounded on its own: class 2 where it has it, SMRF
     where it has none. Made-up tiles, no PDAL run.
@@ -260,7 +252,6 @@ class TestGroundPerTile(unittest.TestCase):
         self.assertEqual(self.grid(small, 2**36)[1], 8)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestHasClass2(unittest.TestCase):
     """Red if a cloud is read whole when its first part already has ground,
     if the search stops at a part with none (an unclassified start, ground
@@ -315,6 +306,21 @@ class TestHasClass2(unittest.TestCase):
         self.assertFalse(found)
         self.assertEqual(len(read), 3)
         self.assertEqual(self.probe(0, {}), (False, []))
+
+
+class TestOutOfMemoryExit(unittest.TestCase):
+    # Mutation: drop `except MemoryError` from `main`, and a pass that runs out
+    # of memory fails the job instead of leaving the layer out.
+    def test_running_out_of_memory_exits_with_the_left_out_code(self):
+        from unittest import mock
+
+        from pipeline import main
+        from worker_common import VEGETATION_LEFT_OUT_EXIT
+
+        with mock.patch("pipeline.run", side_effect=MemoryError):
+            with self.assertRaises(SystemExit) as caught:
+                main()
+        self.assertEqual(caught.exception.code, VEGETATION_LEFT_OUT_EXIT)
 
 
 if __name__ == "__main__":

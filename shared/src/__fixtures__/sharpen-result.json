@@ -14,6 +14,7 @@
       "slope": "outputs/job-1/slope.pmtiles",
       "contours": "outputs/job-1/contours.pmtiles"
     },
-    "vegetation": false
+    "vegetation": false,
+    "vegetationLeftOut": false
   }
 }

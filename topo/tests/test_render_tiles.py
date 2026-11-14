@@ -8,26 +8,20 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
-try:
-    import numpy as np  # noqa: E402
-    from pipeline import (  # noqa: E402
-        TILE_SIZE,
-        render_vegetation_tile,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+import numpy as np  # noqa: E402
+from pipeline import (  # noqa: E402
+    TILE_SIZE,
+    render_vegetation_tile,
+)
 
 # These tests do real array maths — a MagicMock numpy (lean host) would only
 # produce nonsense. Same convention as the is_stubbed("osgeo") GDAL skips.
-if _IMPORT_OK and _native_stub.is_stubbed("numpy"):
-    _IMPORT_OK = False
-    _IMPORT_ERR = "numpy is stubbed on this host (real array maths required)"
+_REAL_ARRAYS = not _native_stub.is_stubbed("numpy")
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy is stubbed on this host (real array maths required)"
+)
 class TestRenderVegetation(unittest.TestCase):
     SETTINGS = {
         "vegetation": {
@@ -66,7 +60,9 @@ class TestRenderVegetation(unittest.TestCase):
         self.assertEqual(int(out[0, 0, 3]), 200)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _REAL_ARRAYS, "numpy is stubbed on this host (real array maths required)"
+)
 class TestRenderTileJob(unittest.TestCase):
     """Red if the tile goes back to Pillow's `optimize` (level 9), which was
     most of the time a tile took to write."""

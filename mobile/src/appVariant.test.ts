@@ -64,8 +64,8 @@ describe("app variant", () => {
     const real = resolve({});
     const dev = resolve({ LOGJAM_APP_VARIANT: "dev" });
 
-    expect(dev.android?.package).toBe("com.logjamnsw.mobile.dev");
-    expect(dev.ios?.bundleIdentifier).toBe("com.logjamnsw.mobile.dev");
+    expect(dev.android?.package).toBe("earth.logjam.gps.dev");
+    expect(dev.ios?.bundleIdentifier).toBe("earth.logjam.gps.dev");
     expect(dev.name).toBe("Logjam Dev");
     expect(dev.scheme).toBe("logjamdev");
     expect(dev.plugins).toContainEqual([

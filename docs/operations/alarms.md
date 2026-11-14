@@ -450,7 +450,7 @@ The shell steps need a Session Manager shell on the brain
 | `drill_missing` | The restore drill has never written `drill.json`. **Expected for up to a day after the brain first comes up**: the drill runs once a day at 04:30 Sydney | If it is still missing after the first 04:30, look in ECS (`logjam-cluster`) for a `logjam-brain-drill` task and read `/logjam/brain/drill` |
 | `drill_stale` | `drill.json` is more than 50 hours old: the drill stopped running | Is the schedule `logjam-brain-drill` enabled? Did its tasks start (ECS, `logjam-cluster`)? Read `/logjam/brain/drill` |
 | `drill_failed` | The latest drill ran and said it failed: a backup that does not restore. Treat as urgent | Read `drill.json` (`aws s3 cp s3://<signals bucket>/drill.json -`): `error` names the step (`no_backup`, `restore_failed`, `timed_out`, ...), no data. Then `/logjam/brain/drill`. If the disk was too small, raise `brain_drill_storage_gb` (its default in `brain_variables.tf`). `replay_short` means the restore replayed none of the recent WAL: if the brain was down or restoring around the drill's time, that outage is the cause and the next drill (or one run by hand) clears it; otherwise the archive has a hole after the last full backup, or the drill cannot read it, so read `/logjam/brain/drill` and take a full backup now, so a restore no longer depends on the missing WAL |
-| `api_unready` | The brain says it is serving, but `https://api.logjamnsw.com/ready` did not answer 200 twice in a row | `curl -i https://api.logjamnsw.com/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
+| `api_unready` | The brain says it is serving, but `https://api.logjam.earth/ready` did not answer 200 twice in a row | `curl -i https://api.logjam.earth/ready` yourself. If it fails, `docker ps` and `docker logs --tail 50 brain-api-1` on the brain; a bad release is rolled back as in [rollback.md](rollback.md) |
 
 `wal_stale`, `status_*` and `postgres_down` can all fire together when the
 host goes down: start with the status-check alarms.
@@ -487,6 +487,20 @@ with no approval step and no code of ours running. It is the backstop under the
 compute pool's polite refusals and should never fire in a normal month. The
 earlier warning is `logjam-monthly` in `budgets.tf`, which includes tax and is
 US$50.
+
+Two more polite refusals sit beside the compute pool, each a site-wide sum over
+every account. `SITE_STORAGE_BYTES` (default 500 GiB, in `lib/storageQuota.ts`)
+refuses an upload that would take all stored bytes past it, and
+`SITE_MONTHLY_EGRESS_BYTES` (default 300 GiB, in `lib/egressQuota.ts`) refuses
+an export or file download once everyone's downloads this month have passed it,
+and the bulk photo and file pull (`POST /media/download-urls`) leaves every row out.
+The inline photo links on place, trip, sync and plan reads are not gated.
+Each refusal is a 429 with a sentence that does not blame the user, `0` turns one off,
+and either is changed in `infra/brain/api.env` (not set there today). The
+download total comes from the egress meter, which reads S3 access logs hours
+late, so it overshoots by that much. No alarm watches them: a refusal logs the
+warn line `site_storage_cap_reached` or `site_egress_cap_reached`, and a metric
+filter on it is the way to add one.
 
 The policy denies `ecs:RunTask` on every task definition and `s3:PutObject` on
 `logjam-media` and `logjam-topo-jobs`, nothing else. So:

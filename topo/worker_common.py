@@ -25,6 +25,20 @@ from urllib.parse import quote
 # pool worker) still reads as the generic failure.
 TOO_BIG = "This area was too big to process. Try a smaller one."
 
+# How `pipeline.py` says it ran out of memory, and the worker then finishes
+# the job without the vegetation layer. Guards: tests/test_worker_helpers.py
+# `TestVegetationExit` (the worker reads it) and tests/test_pipeline_build.py
+# `TestOutOfMemoryExit` (the pass exits with it).
+VEGETATION_LEFT_OUT_EXIT = 3
+
+# What the owner reads when the layer was left out, in the completion
+# notification and email. shared/src/notificationLabel.ts words it the same
+# (notificationLabel.test.ts holds them equal).
+VEGETATION_LEFT_OUT = (
+    "The area is too large for the vegetation layer, so it was left out."
+)
+
+
 # The brain's Postgres certificate, which the worker image carries (Dockerfile).
 BRAIN_CA_PATH = "/app/brain-ca.pem"
 

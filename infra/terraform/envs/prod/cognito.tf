@@ -121,12 +121,12 @@ resource "aws_cognito_user_pool_client" "main" {
   auth_session_validity = 3
   # Logjam Web redirects to location.origin + "/" and the site answers on both
   # hosts; logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
-  callback_urls                                 = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  callback_urls                                 = ["https://logjam.earth/", "https://www.logjam.earth/", "logjam://auth"]
   enable_propagate_additional_user_context_data = false
   enable_token_revocation                       = true
   explicit_auth_flows                           = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH"]
   id_token_validity                             = 60
-  logout_urls                                   = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  logout_urls                                   = ["https://logjam.earth/", "https://www.logjam.earth/", "logjam://auth"]
   name                                          = "logjam"
   prevent_user_existence_errors                 = "ENABLED"
   read_attributes                               = []

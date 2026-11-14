@@ -21,7 +21,7 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   the bundle).
 - **A phone that holds a real Logjam GPS gets the dev variant:**
   `LOGJAM_APP_VARIANT=dev` at prebuild, for Metro and for `dev:android` builds
-  `com.logjamnsw.mobile.dev` ("Logjam Dev", scheme `logjamdev`), which installs
+  `earth.logjam.gps.dev` ("Logjam Dev", scheme `logjamdev`), which installs
   beside it. A dev build under the real id replaces that app, and signing in
   as another user wipes its local data. Guard: `src/appVariant.test.ts`.
 

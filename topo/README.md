@@ -76,6 +76,20 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 
 A ZIP with no point clouds writes nothing.
 
+### Memory
+
+The density and fire steps work a strip of rows at a time (`STRIP_CELLS` and
+`FIRE_BLOCK_CELLS` in `pipeline.py`), so their arrays follow the width of the
+area and not its extent: tiles that do not form a rectangle cost them no more
+memory than a block of them. What else the pass holds (GDAL's block cache,
+which GDAL caps at a share of the machine's memory) is not sized by the
+strips. If the pass still runs out of memory it exits with a declared code
+(`worker_common.py`). `worker.py` reads that code, or a kill (-9), as "leave
+the layer out": the job still completes with its height, slope and contour
+archives, records `vegetationLeftOut` in its `sharpen` result, and its
+completion notification and email say the area was too large. Any other
+failure of the pass fails the job.
+
 ---
 
 ## Building the Land overlay's archive
@@ -110,7 +124,7 @@ the topo bucket at the path `NSW_REGION.terrain.land.archivePath` names, and nee
 ```bash
 aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/land/nsw-tenure.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/land/nsw-tenure.pmtiles   # 206
 ```
 
 ---
@@ -189,7 +203,7 @@ the topo bucket at the path `NSW_REGION.terrain.heights.archivePath` names in
 ```bash
 aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m.pmtiles   # 206
 ```
 
 No deploy is needed. The API looks for the archive every five minutes and
@@ -341,7 +355,7 @@ there is no resuming across tasks. Check the result as for the height archive;
 it should print `206`:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m-slope.pmtiles
 ```
 
 ---
@@ -400,7 +414,7 @@ the one it replaces. Publishing is a prod change and the maintainer's to make:
 
 ```bash
 python3 build_place_registry.py publish --bucket logjam-topo-jobs
-curl -s https://logjamnsw.com/master/places/v1/latest.json
+curl -s https://logjam.earth/master/places/v1/latest.json
 ```
 
 After changing the file's shape, regenerate the fixture both sides test
@@ -608,3 +622,7 @@ Install PDAL: `sudo apt-get install pdal`
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
 limit in `docker-compose.yml`.
+
+**`pipeline.py` exits with its left-out code (`worker_common.py`)**
+The pass ran out of memory, so the vegetation layer was left out
+([Memory](#memory)). Give the container more memory, or use a narrower area.

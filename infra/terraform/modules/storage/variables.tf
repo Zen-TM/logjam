@@ -6,7 +6,7 @@ variable "bucket_name" {
 variable "versioning_enabled" {
   type        = bool
   default     = false
-  description = "Enable bucket versioning. Prod app buckets are unversioned; only the tfstate bucket versions (managed in bootstrap, not this module)."
+  description = "Enable bucket versioning. Prod's media bucket versions (a delete is undoable for a short window, see s3.tf); the other app buckets do not."
 }
 
 variable "sse_algorithm" {
@@ -49,10 +49,12 @@ variable "lifecycle_rules" {
     id                              = string
     prefix                          = string
     expiration_days                 = optional(number)
+    noncurrent_expiration_days      = optional(number)
+    expire_delete_markers           = optional(bool, false)
     abort_incomplete_multipart_days = optional(number)
   }))
   default     = []
-  description = "Lifecycle rules: expire objects, abort multipart uploads left incomplete, or both. Empty = no lifecycle config managed."
+  description = "Lifecycle rules: expire objects, expire noncurrent versions (versioned buckets), remove delete markers left with no versions behind them, or abort multipart uploads left incomplete. Empty = no lifecycle config managed."
 }
 
 variable "log_target" {
