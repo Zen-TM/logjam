@@ -140,7 +140,7 @@ export function LeaderboardScreen({
   onBack: () => void;
   backLabel: string;
 }) {
-  const region = accountRegion({ regions: useRegions() });
+  const regionIds = useRegions();
   const theme = useTheme();
   const pull = useRefreshFromTop();
   const styles = useStyles();
@@ -273,7 +273,7 @@ export function LeaderboardScreen({
         title={copy.rulesTitle}
       >
         <View style={styles.rules}>
-          {leaderboardRules(region)
+          {leaderboardRules(accountRegion({ regions: regionIds }))
             .split("\n")
             .map((rule) => (
               <Text key={rule} style={styles.rule}>
