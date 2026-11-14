@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  AREA_EXPORT_FAILED,
+  areaExportFailed,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -751,7 +751,7 @@ function NotificationsPanel({
     // NSW and the rest say their own next step.
     if (
       n.type === "topo_export_complete" &&
-      n.payload.errorMessage === AREA_EXPORT_FAILED
+      n.payload.errorMessage === areaExportFailed()
     ) {
       return (
         <Button

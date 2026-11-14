@@ -14,7 +14,7 @@ import { Prisma } from "@prisma/client";
 import {
   isTripPlanRole,
   say,
-  TRIP_PLAN_CHANGED_SENTENCE,
+  tripPlanChangedSentence,
   type TripPlanRole,
   type UserSentence,
 } from "@logjam/shared";
@@ -151,7 +151,7 @@ export async function casMissed(
   planId: string,
 ): Promise<AppError> {
   return (await db.tripPlan.count({ where: { id: planId } }))
-    ? new AppError(409, TRIP_PLAN_CHANGED_SENTENCE)
+    ? new AppError(409, tripPlanChangedSentence())
     : planNotFound();
 }
 

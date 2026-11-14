@@ -1,5 +1,10 @@
 import prisma from "../services/prisma";
-import { say, currentMonthStart, nextMonthReset } from "@logjam/shared";
+import {
+  say,
+  currentMonthStart,
+  nextMonthReset,
+  type UserSentence,
+} from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { logger } from "./logger";
@@ -22,7 +27,9 @@ import type { DbClient } from "./storageQuota";
  */
 
 /** What a refusal for the site-wide download cap says. */
-const SITE_EGRESS_SPENT_SENTENCE = say`The downloads everyone on Logjam shares are used up for this month. Try again next month.`;
+function siteEgressSpentSentence(): UserSentence {
+  return say`The downloads everyone on Logjam shares are used up for this month. Try again next month.`;
+}
 
 /** The stored period start belongs to a month that has already ended. */
 function periodHasRolledOver(periodStart: Date, now = new Date()): boolean {
@@ -157,6 +164,6 @@ export async function assertHasEgressQuota(
   // Only the reset date goes back: the pool's size and use are not the user's
   // to see.
   if (await siteEgressSpent(db)) {
-    throw new AppError(429, SITE_EGRESS_SPENT_SENTENCE, { resetAt });
+    throw new AppError(429, siteEgressSpentSentence(), { resetAt });
   }
 }

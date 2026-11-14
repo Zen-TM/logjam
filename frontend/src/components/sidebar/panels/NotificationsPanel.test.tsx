@@ -8,8 +8,8 @@ import {
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  AREA_EXPORT_FAILED,
-  AREA_EXPORT_TOO_LARGE,
+  areaExportFailed,
+  areaExportTooLargeSentence,
   INBOX,
 } from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
@@ -309,7 +309,7 @@ describe("NotificationsPanel: a failed export", () => {
     payload: {
       format: "gpkg",
       status: "failed",
-      errorMessage: AREA_EXPORT_FAILED,
+      errorMessage: areaExportFailed(),
     },
     read: false,
     createdAt: new Date().toISOString(),
@@ -335,7 +335,10 @@ describe("NotificationsPanel: a failed export", () => {
     renderPanel([
       {
         ...failed,
-        payload: { ...failed.payload, errorMessage: AREA_EXPORT_TOO_LARGE },
+        payload: {
+          ...failed.payload,
+          errorMessage: areaExportTooLargeSentence(),
+        },
       },
     ]);
     expect(screen.queryByRole("button", { name: "Report a bug" })).toBeNull();

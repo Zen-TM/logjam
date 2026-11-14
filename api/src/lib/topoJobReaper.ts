@@ -10,11 +10,15 @@ import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
 import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
-import { normalizeUserUiPreferences, say } from "@logjam/shared";
+import {
+  normalizeUserUiPreferences,
+  say,
+  type UserSentence,
+} from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { createSweepLeader } from "./sweepLeader";
-import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
+import { topoExportStoppedMessage } from "./failureCopy";
 
 // Stuck-job reaper for both topo pipelines.
 //
@@ -56,8 +60,9 @@ import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
 
 // Retry means submitting a new job/export — the reaper never re-launches
 // anything (see the attempt_count comment in schema.prisma).
-const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
-const REAPER_EXPORT_MESSAGE = TOPO_EXPORT_STOPPED_MESSAGE;
+function reaperJobMessage(): UserSentence {
+  return say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
+}
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -301,7 +306,7 @@ async function failReapedTopoJob(
 ): Promise<{ count: number }> {
   const claim = await prisma.topoJob.updateMany({
     where: { id, status: from },
-    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+    data: { status: "failed", errorMessage: reaperJobMessage() },
   });
   if (claim.count === 1) {
     try {
@@ -378,7 +383,7 @@ function topoJobEntry(row: {
       // Mirrors worker.py's "Topo map ready — Logjam".
       subject: "Topo map failed — Logjam",
       headline: "Your topo map job failed.",
-      reason: REAPER_JOB_MESSAGE,
+      reason: reaperJobMessage(),
       deepLink: `topoJob=${row.id}`,
     },
   };
@@ -397,7 +402,7 @@ function exportJobEntry(row: {
       exportJobId: row.id,
       format: row.format,
       status: "failed",
-      errorMessage: REAPER_EXPORT_MESSAGE,
+      errorMessage: topoExportStoppedMessage(),
     },
     push: { type: "topo_export_complete", exportId: row.id },
     email: {
@@ -405,7 +410,7 @@ function exportJobEntry(row: {
       // Same subject export_worker.py's failure mail uses.
       subject: `Map failed — ${row.format.toUpperCase()}`,
       headline: "Your map couldn't be made.",
-      reason: REAPER_EXPORT_MESSAGE,
+      reason: topoExportStoppedMessage(),
       deepLink: `export=${row.id}`,
     },
   };
@@ -489,7 +494,7 @@ export async function reapStuckTopoJobs(
     (id) =>
       prisma.topoExportJob.updateMany({
         where: { id, status: "queued" },
-        data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+        data: { status: "failed", errorMessage: topoExportStoppedMessage() },
       }),
     exportJobEntry,
   );
@@ -517,7 +522,7 @@ export async function reapStuckTopoJobs(
           // completedAt ends the export's credits (topo_export_job_credits).
           data: {
             status: "failed",
-            errorMessage: REAPER_EXPORT_MESSAGE,
+            errorMessage: topoExportStoppedMessage(),
             completedAt: new Date(),
           },
         }),

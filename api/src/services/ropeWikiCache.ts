@@ -6,7 +6,7 @@ import { AppError } from "../middleware/errorHandler";
 import {
   fetchAndParseRopeWiki,
   parseRopeWikiCsv,
-  ROPEWIKI_UNAVAILABLE,
+  ropeWikiUnavailable,
   type RopeWikiCanyon,
   type RopeWikiSource,
 } from "./ropewiki";
@@ -59,7 +59,7 @@ async function loadSnapshotFromS3(key: string): Promise<RopeWikiData> {
   if (!bucket) {
     throw new AppError(
       503,
-      ROPEWIKI_UNAVAILABLE,
+      ropeWikiUnavailable(),
       undefined,
       "RopeWiki snapshot unavailable: no bucket configured",
     );
@@ -85,7 +85,7 @@ async function loadSnapshotFromS3(key: string): Promise<RopeWikiData> {
     );
     throw new AppError(
       503,
-      ROPEWIKI_UNAVAILABLE,
+      ropeWikiUnavailable(),
       undefined,
       `RopeWiki snapshot unavailable — upload one to ${key}`,
     );

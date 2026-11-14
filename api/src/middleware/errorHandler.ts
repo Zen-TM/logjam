@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { SERVER_FAULT_SENTENCE, withoutQuoted } from "@logjam/shared";
+import { serverFaultSentence, withoutQuoted } from "@logjam/shared";
 import { AppError, malformed } from "../lib/appError";
 import { logger, redactTilePathPatterns, safeErrorForLog } from "../lib/logger";
 
@@ -67,5 +67,5 @@ export function errorHandler(
   }
 
   reqLog.error({ err: safeErrorForLog(err), reqId }, "unhandled_error");
-  res.status(500).json({ error: SERVER_FAULT_SENTENCE, requestId: reqId });
+  res.status(500).json({ error: serverFaultSentence(), requestId: reqId });
 }

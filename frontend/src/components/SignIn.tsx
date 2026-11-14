@@ -36,7 +36,7 @@ import {
   TRIP_PLAN_JOIN,
   signUpFormProblem,
   USERNAME_HINT,
-  USERNAME_TAKEN,
+  usernameTaken,
   verifyIntro,
 } from "@logjam/shared";
 import { usernameAvailable } from "../placeUtils";
@@ -213,7 +213,7 @@ function CognitoForms({
     const free = await usernameAvailable(asked.trim());
     // The field may have moved on while this was out.
     if (!free && asked === usernameNow.current) {
-      setUsernameError(USERNAME_TAKEN);
+      setUsernameError(usernameTaken());
     }
     return free;
   }

@@ -11,8 +11,8 @@ import {
   lat2tileY,
   lon2tileX,
   type SharpenedArea,
-  AREA_EXPORT_TOO_LARGE,
-  GEOPDF_TOO_LARGE,
+  areaExportTooLargeSentence,
+  geoPdfTooLargeSentence,
   MAP_TERRAIN,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
@@ -739,7 +739,7 @@ describe("GeoPdfDialog, a map too large to draw", () => {
 
   it("says so under the area, and Make it points there", () => {
     render(dialog({ open: true, pendingExtent: box(1), pendingScale: 25000 }));
-    expect(screen.getByText(GEOPDF_TOO_LARGE)).toBeTruthy();
+    expect(screen.getByText(geoPdfTooLargeSentence())).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
@@ -749,7 +749,7 @@ describe("GeoPdfDialog, a map too large to draw", () => {
     render(
       dialog({ open: true, pendingExtent: box(0.05), pendingScale: 25000 }),
     );
-    expect(screen.queryByText(GEOPDF_TOO_LARGE)).toBeNull();
+    expect(screen.queryByText(geoPdfTooLargeSentence())).toBeNull();
   });
 });
 
@@ -958,7 +958,7 @@ describe("Make a map, for GIS", () => {
       }),
     );
     chooseGis("GeoTIFF");
-    expect(screen.getByText(AREA_EXPORT_TOO_LARGE)).toBeTruthy();
+    expect(screen.getByText(areaExportTooLargeSentence())).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
@@ -1278,7 +1278,7 @@ describe("GeoPdfDialog, rendering in this tab", () => {
       reason: "too-large",
     });
     make();
-    expect(await screen.findByText(GEOPDF_TOO_LARGE)).toBeTruthy();
+    expect(await screen.findByText(geoPdfTooLargeSentence())).toBeTruthy();
     expect(downloadBlob).not.toHaveBeenCalled();
     expect(localStorage.getItem(GEOPDF_SETTINGS_KEY) ?? "null").toBe("null");
 

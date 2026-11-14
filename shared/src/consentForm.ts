@@ -2,7 +2,7 @@
 // questions to ask, where a refusal shows, and whether "Try again" can help.
 // Each client draws the result itself (ADR 0020).
 import { ApiError, messageFromError } from "./apiErrors.js";
-import { isValidUsername, USERNAME_RULE } from "./username.js";
+import { isValidUsername, usernameRule } from "./username.js";
 
 /** `retry`: whether sending again can help. A form problem never can. */
 export type ConsentFormProblem =
@@ -22,7 +22,7 @@ export function consentFormProblem(form: {
   ageConfirmed: boolean;
 }): ConsentFormProblem | null {
   if (form.newAccount && !isValidUsername(form.username)) {
-    return { field: "username", message: USERNAME_RULE, retry: false };
+    return { field: "username", message: usernameRule(), retry: false };
   }
   if (!form.agreed) {
     return {

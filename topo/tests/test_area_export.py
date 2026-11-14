@@ -1017,9 +1017,12 @@ class SyncWithShared(unittest.TestCase):
     # Mutation: reword one copy of the sentence, and a box past NSW reads
     # differently refused at submit and failed by the worker.
     def test_outside_nsw_sentence_matches(self):
-        match = re.search(r"AREA_EXPORT_OUTSIDE_TERRAIN = say`([^`]*)`", self.src)
+        match = re.search(
+            r"function areaExportOutsideTerrain\(\): UserSentence \{\s*return say`([^`]*)`",
+            self.src,
+        )
         self.assertIsNotNone(
-            match, "AREA_EXPORT_OUTSIDE_TERRAIN not found in areaExport.ts"
+            match, "areaExportOutsideTerrain() not found in areaExport.ts"
         )
         self.assertEqual(match.group(1), AreaOutsideNsw.SENTENCE)
 
