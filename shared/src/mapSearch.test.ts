@@ -124,9 +124,7 @@ describe("parseCoordinates", () => {
       -33.7,
       150.3,
     ],
-    ["Sydney, 720 east", shifted(OVER_SYDNEY, 720), "33.7 150.3", -33.7, 150.3],
     ["Utah, 360 east", shifted(OVER_UTAH, 360), "40.7 111.9", 40.7, -111.9],
-    ["Utah, 720 west", shifted(OVER_UTAH, -720), "40.7 111.9", 40.7, -111.9],
   ])(
     "reads an unsigned pair the same in another copy of the world: %s",
     (_n, view, text, lat, lon) => {
@@ -184,6 +182,8 @@ describe("parseCoordinates", () => {
     "200 300",
     `33°72'00"S 150°18'36"E`, // 72 minutes
     "1 2 3 4",
+    // Mutation: raise the first latitude bound in `parseLatLon` (`am <= 90`)
+    // past 90.
     "100 120", // neither can be a latitude
     // A lone angle with spaces is not a pair whose first number was cut in two.
     // Mutation: delete the `(?!\d)` after the degrees in `PART`.

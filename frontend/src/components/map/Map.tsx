@@ -115,6 +115,16 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 // The Terrain group's tiles once the user can see a sharpened area.
 maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
 
+/** MapLibre's bounds as the shared box. Longitudes are raw: past ±180 after a pan round the world. */
+function boxOf(bounds: maplibregl.LngLatBounds): LonLatBox {
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
+}
+
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
 // blip we should let MapLibre retry. MapLibre fires "error" for ANY
@@ -130,16 +140,6 @@ maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
 //     archive's response code, e.g. "Bad response code: 404".
 // A per-tile "Tile not found." (sparse coverage inside a healthy archive) is
 // NOT terminal and is intentionally excluded.
-/** MapLibre's bounds as the shared box. Longitudes are raw: past ±180 after a pan round the world. */
-function boxOf(bounds: maplibregl.LngLatBounds): LonLatBox {
-  return {
-    west: bounds.getWest(),
-    south: bounds.getSouth(),
-    east: bounds.getEast(),
-    north: bounds.getNorth(),
-  };
-}
-
 function isTerminalTopoSourceError(error: unknown): boolean {
   const status = (error as { status?: unknown } | null | undefined)?.status;
   if (typeof status === "number") {
