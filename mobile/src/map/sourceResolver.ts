@@ -16,14 +16,18 @@
 // beyond the bounds MapLibre needs.
 import {
   BASEMAP_CATALOG,
-  NSW_REGION,
+  layerIn,
+  REGIONS,
+  regionTouchesBox,
   type BasemapCatalogEntry,
+  type Region,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   type RoutedTerrain,
   type SharpenedArea,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
+  type TerrainLayerKey,
   type TopoLayerFormat,
   type TopoLayerKey,
 } from "@logjam/shared";
@@ -56,18 +60,18 @@ export type LogicalLayerRef =
       remoteUrl: string | null;
       attribution?: string;
     }
-  /** The statewide contour lines (`shared/src/nswContours.ts`). */
-  | { kind: "nsw-contours" }
-  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
-   * `viewport` picks the one clip drawn offline. */
-  | { kind: "nsw-slope"; viewport?: Viewport | null }
-  | { kind: "nsw-hillshade"; viewport?: Viewport | null }
-  /** The Land overlay (`shared/src/land.ts`); `viewport` as for the slope. */
-  | { kind: "nsw-land"; viewport?: Viewport | null }
-  /** The Fire history overlay (`shared/src/fireHistory.ts`), the same way. */
-  | { kind: "nsw-fire"; viewport?: Viewport | null }
-  /** The Coverage overlay (`shared/src/coverage.ts`), the same way. */
-  | { kind: "nsw-coverage"; viewport?: Viewport | null }
+  /**
+   * One Terrain group layer of `region`, the one the map shows
+   * (`regionShown`): the layer is not drawn where `region` has none. `viewport`
+   * picks the one saved clip drawn offline below the zoom routing starts at.
+   * `shared/src/terrain.ts` holds the layers.
+   */
+  | {
+      kind: "terrain";
+      layer: TerrainLayerKey;
+      region: Region | null;
+      viewport?: Viewport | null;
+    }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -170,6 +174,12 @@ export interface ResolveContext {
    * Terrain group reads the clips saved of them.
    */
   keptSharpenedAreas?: readonly SharpenedArea[];
+  /**
+   * The regions whose clips a saved file may belong to: a clip saved in one
+   * region still draws offline when the map shows the next. `REGIONS` unless a
+   * test passes its own.
+   */
+  regions?: readonly Region[];
 }
 
 const RASTER_TILE_SIZE = 256;
@@ -434,18 +444,23 @@ function savedStatewideClips(
  * its fixed address (sharpenedArchives.ts). Offline, they are the area clips
  * saved on this phone and, for a layer that draws one statewide clip when
  * two or more are saved, those clips too. Otherwise each statewide rectangle
- * reads every saved statewide clip that reaches it. With no area, the
- * statewide source alone as before.
+ * reads every saved statewide clip that reaches it. A sharpened area routes
+ * only inside the `region` it lies in: the source of another region has
+ * nothing to put it over. With no area, the statewide source alone as before.
  * Guard: `sourceResolver.test.ts` ("routes the Terrain group", "routes saved
- * areas offline", "routes two saved clips offline").
+ * areas offline", "routes two saved clips offline", "routes a sharpened area
+ * only inside its region").
  */
 function routeTerrain(
   statewide: ResolvedTileSource[],
   archive: { id: string; minzoom: number; maxzoom: number; credit: string },
   layer: TerrainArchiveLayer,
   ctx: ResolveContext,
-  holds?: (clip: MapArtifact) => boolean,
+  holds: ((clip: MapArtifact) => boolean) | undefined,
+  region: Region,
 ): ResolvedTileSource[] {
+  const inRegion = ({ coverage: [west, south, east, north] }: RoutedArea) =>
+    regionTouchesBox(region, { west, south, east, north });
   const drawn = statewide.flatMap((s) =>
     s.status === "ok" && s.url ? [s] : [],
   );
@@ -454,11 +469,16 @@ function routeTerrain(
   const clips =
     !online && holds ? savedStatewideClips(ctx, holds, archive.credit) : [];
   const areas: RoutedArea[] = online
-    ? (ctx.sharpenedAreas ?? []).map((area) => ({
-        ...area,
-        tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
-      }))
-    : [...savedAreaClips(ctx, layer), ...(clips.length > 1 ? clips : [])];
+    ? (ctx.sharpenedAreas ?? [])
+        .map((area) => ({
+          ...area,
+          tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
+        }))
+        .filter(inRegion)
+    : [
+        ...savedAreaClips(ctx, layer).filter(inRegion),
+        ...(clips.length > 1 ? clips : []),
+      ];
   if (areas.length === 0) return statewide;
   const z = TERRAIN_ROUTED_FROM[layer];
   const sourceType = layer === "contours" ? "vector" : "raster-dem";
@@ -564,42 +584,51 @@ function resolveStatewide(
 }
 
 /**
- * Whether a saved file can shade the Terrain group's hillshade offline: the
- * `nsw-5m` height clip, and only one that holds the shallow zooms. A clip saved
+ * Whether a saved file can shade the Terrain group's hillshade offline: a
+ * region's height clip, and only one that holds the shallow zooms. A clip saved
  * before `demClipMinZoom` is z15 alone, and draws nothing where the map is
  * zoomed out, so it is no clip for this: an area saved that way says "Needs a
  * connection" until it is saved again. Used by the layers sheet's switch and
  * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
- * Guard: `sourceResolver.test.ts` ("holdsHillshade").
+ * Any of `regions` may hold it, so a clip saved in one region still draws when
+ * the map shows the next. Guard: `sourceResolver.test.ts` ("holdsHillshade").
  */
 export function holdsHillshade(
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+  regions: readonly Region[] = REGIONS,
 ): boolean {
   return (
     artifact.kind === "dem-region" &&
-    artifact.logicalKey === NSW_REGION.terrain.heights.id &&
     artifact.minzoom != null &&
-    artifact.minzoom <= NSW_REGION.terrain.hillshade.minzoom
+    regions.some(
+      ({ terrain: { heights, hillshade } }) =>
+        heights !== undefined &&
+        hillshade !== undefined &&
+        artifact.logicalKey === heights.id &&
+        artifact.minzoom! <= hillshade.minzoom,
+    )
   );
 }
 
 /**
- * Whether a saved file is a clip of the statewide contours or slope, not an
+ * Whether a saved file is a clip of a region's contours or slope, not an
  * area's own (a sharpened area's clip is filed as this kind too, under its
  * id). The layers sheet's switches and the resolver read the same test.
  * Guard: `sourceResolver.test.ts` ("holdsContours and holdsSlope").
  */
 export const holdsContours = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
   artifact.kind === "contours-region" &&
-  artifact.logicalKey === NSW_REGION.terrain.contours.id;
+  regions.some((r) => r.terrain.contours?.id === artifact.logicalKey);
 
 export const holdsSlope = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
   artifact.kind === "slope-region" &&
-  artifact.logicalKey === NSW_REGION.terrain.slope.id;
+  regions.some((r) => r.terrain.slope?.id === artifact.logicalKey);
 
 export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
   artifact.kind === "land-region";
@@ -617,13 +646,14 @@ export const holdsCoverage = (artifact: Pick<MapArtifact, "kind">): boolean =>
  */
 export const drawsTerrain = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
-  holdsContours(artifact) ||
-  holdsSlope(artifact) ||
+  holdsContours(artifact, regions) ||
+  holdsSlope(artifact, regions) ||
   holdsLand(artifact) ||
   holdsFire(artifact) ||
   holdsCoverage(artifact) ||
-  holdsHillshade(artifact);
+  holdsHillshade(artifact, regions);
 
 /**
  * The one clip drawn offline below the zoom `routeTerrain` takes over: the one
@@ -740,6 +770,86 @@ export function bboxOnScreen(
   );
 }
 
+/**
+ * One Terrain group layer of the region the map shows, as a list of sources:
+ * none where that region has no such archive. Every source's key carries the
+ * archive's id, so the map crossing into another region swaps it.
+ * Guard: `sourceResolver.test.ts` ("draws the region the map shows").
+ */
+function resolveTerrain(
+  { layer, region, viewport }: Extract<LogicalLayerRef, { kind: "terrain" }>,
+  ctx: ResolveContext,
+): ResolvedTileSource[] {
+  const regions = ctx.regions ?? REGIONS;
+  const archive = region && layerIn(region, layer);
+  if (!region || !archive) return [];
+  const main = mainRegion(viewport);
+  const holdsClip = {
+    contours: (a: MapArtifact) => holdsContours(a, regions),
+    slope: (a: MapArtifact) => holdsSlope(a, regions),
+    hillshade: (a: MapArtifact) => holdsHillshade(a, regions),
+  };
+  switch (layer) {
+    case "contours":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "vector",
+          "contours-region",
+          ctx,
+          undefined,
+          holdsClip.contours,
+        ),
+        archive,
+        "contours",
+        ctx,
+        undefined,
+        region,
+      );
+    case "land":
+      return resolveStatewide(archive, "vector", "land-region", ctx, main);
+    case "fire":
+      return resolveStatewide(archive, "vector", "fire-region", ctx, main);
+    case "coverage":
+      return resolveStatewide(archive, "vector", "coverage-region", ctx, main);
+    case "slope":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "raster-dem",
+          "slope-region",
+          ctx,
+          main,
+          holdsClip.slope,
+        ),
+        archive,
+        "slope",
+        ctx,
+        holdsClip.slope,
+        region,
+      );
+    // The saved height clip is registered as a plain raster (the sampler
+    // reads its bytes); here it is drawn as the DEM it is.
+    case "hillshade":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "raster-dem",
+          "dem-region",
+          ctx,
+          (clips) =>
+            main(clips).map((r) => ({ ...r, sourceType: "raster-dem" })),
+          holdsClip.hillshade,
+        ),
+        archive,
+        "heights",
+        ctx,
+        holdsClip.hillshade,
+        region,
+      );
+  }
+}
+
 export function resolveMapSource(
   ref: LogicalLayerRef,
   ctx: ResolveContext,
@@ -749,80 +859,8 @@ export function resolveMapSource(
       return resolveBasemap(ref.basemapId, ctx);
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
-    case "nsw-contours":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.contours,
-          "vector",
-          "contours-region",
-          ctx,
-          undefined,
-          holdsContours,
-        ),
-        NSW_REGION.terrain.contours,
-        "contours",
-        ctx,
-      );
-    case "nsw-land":
-      return resolveStatewide(
-        NSW_REGION.terrain.land,
-        "vector",
-        "land-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-fire":
-      return resolveStatewide(
-        NSW_REGION.terrain.fire,
-        "vector",
-        "fire-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-coverage":
-      return resolveStatewide(
-        NSW_REGION.terrain.coverage,
-        "vector",
-        "coverage-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-slope":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.slope,
-          "raster-dem",
-          "slope-region",
-          ctx,
-          mainRegion(ref.viewport),
-          holdsSlope,
-        ),
-        NSW_REGION.terrain.slope,
-        "slope",
-        ctx,
-        holdsSlope,
-      );
-    // The saved height clip is registered as a plain raster (the sampler
-    // reads its bytes); here it is drawn as the DEM it is.
-    case "nsw-hillshade":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.hillshade,
-          "raster-dem",
-          "dem-region",
-          ctx,
-          (regions) =>
-            mainRegion(ref.viewport)(regions).map((r) => ({
-              ...r,
-              sourceType: "raster-dem",
-            })),
-          holdsHillshade,
-        ),
-        NSW_REGION.terrain.hillshade,
-        "heights",
-        ctx,
-        holdsHillshade,
-      );
+    case "terrain":
+      return resolveTerrain(ref, ctx);
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

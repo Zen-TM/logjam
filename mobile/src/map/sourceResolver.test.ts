@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { NSW_REGION, type SharpenedOverlay } from "@logjam/shared";
+import {
+  NSW_REGION,
+  SIM_NZ,
+  SIM_REGIONS,
+  SIM_UTAH,
+  type SharpenedOverlay,
+} from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
@@ -365,7 +371,10 @@ describe("basemapsCoveringViewport", () => {
 
 describe("statewide contours", () => {
   it("online: the CDN's archive", () => {
-    const [r] = resolveMapSource({ kind: "nsw-contours" }, ctx());
+    const [r] = resolveMapSource(
+      { kind: "terrain", layer: "contours", region: NSW_REGION },
+      ctx(),
+    );
     expect(r).toMatchObject({
       status: "ok",
       sourceType: "vector",
@@ -386,14 +395,14 @@ describe("statewide contours", () => {
       artifact({ id: "b", kind: "basemap-region", logicalKey: "protomaps" }),
     ];
     const resolved = resolveMapSource(
-      { kind: "nsw-contours" },
+      { kind: "terrain", layer: "contours", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: saved }),
     );
     expect(resolved).toHaveLength(1);
     expect(resolved[0]).toMatchObject({ status: "ok", origin: "local" });
     expect(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ connectivity: "offline" }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -404,14 +413,20 @@ describe("statewide slope and hillshade", () => {
   // Mutation: resolve either as `raster`, and MapLibre draws the terrarium
   // PNGs as coloured noise instead of a slope or a shade.
   it("online: the CDN's DEM archives, as DEMs", () => {
-    const [slope] = resolveMapSource({ kind: "nsw-slope" }, ctx());
+    const [slope] = resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
+      ctx(),
+    );
     expect(slope).toMatchObject({
       status: "ok",
       sourceType: "raster-dem",
       url: `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
       attribution: expect.stringMatching(/^Slope: derived from the NSW 5 m/),
     });
-    const [shade] = resolveMapSource({ kind: "nsw-hillshade" }, ctx());
+    const [shade] = resolveMapSource(
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+      ctx(),
+    );
     expect(shade).toMatchObject({
       status: "ok",
       sourceType: "raster-dem",
@@ -447,7 +462,10 @@ describe("statewide slope and hillshade", () => {
       }),
     ];
     const offline = ctx({ connectivity: "offline", artifacts: saved });
-    const slope = resolveMapSource({ kind: "nsw-slope" }, offline);
+    const slope = resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
+      offline,
+    );
     expect(slope).toHaveLength(1);
     expect(slope[0]).toMatchObject({
       status: "ok",
@@ -456,7 +474,10 @@ describe("statewide slope and hillshade", () => {
     });
     // Mutation: drop the logicalKey and the worldwide tiles (an MBTiles) are
     // drawn too; keep the registered `raster` and MapLibre draws noise.
-    const shade = resolveMapSource({ kind: "nsw-hillshade" }, offline);
+    const shade = resolveMapSource(
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+      offline,
+    );
     expect(shade).toHaveLength(1);
     expect(shade[0]).toMatchObject({
       status: "ok",
@@ -497,8 +518,16 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    expect(resolveMapSource({ kind: "nsw-land" }, offline)).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-land" }, ctx({}));
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "land", region: NSW_REGION },
+        offline,
+      ),
+    ).toHaveLength(1);
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "land", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/land/nsw-tenure.pmtiles",
@@ -521,9 +550,15 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    const drawn = resolveMapSource({ kind: "nsw-fire" }, offline);
+    const drawn = resolveMapSource(
+      { kind: "terrain", layer: "fire", region: NSW_REGION },
+      offline,
+    );
     expect(drawn).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-fire" }, ctx({}));
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "fire", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     // Mutation: credit the source with anything but NSW_REGION.terrain.fire's own line, and
     // the map's credits drop a CC BY term of the data, online or off.
@@ -552,8 +587,16 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    expect(resolveMapSource({ kind: "nsw-coverage" }, offline)).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-coverage" }, ctx({}));
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "coverage", region: NSW_REGION },
+        offline,
+      ),
+    ).toHaveLength(1);
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "coverage", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/coverage/nsw-coverage.pmtiles",
@@ -590,7 +633,7 @@ describe("statewide slope and hillshade", () => {
     });
     expect(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ connectivity: "offline", artifacts: [old] }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -603,7 +646,7 @@ describe("statewide slope and hillshade", () => {
       maxzoom: 15,
     });
     const shade = resolveMapSource(
-      { kind: "nsw-hillshade" },
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: [old, fresh] }),
     );
     expect(shade).toHaveLength(1);
@@ -613,7 +656,7 @@ describe("statewide slope and hillshade", () => {
     const only = artifact({ kind: "dem-region", logicalKey: "terrarium" });
     expect(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ connectivity: "offline", artifacts: [only] }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -635,9 +678,10 @@ describe("statewide slope and hillshade", () => {
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
     const drawn = (viewport: Viewport | null) =>
-      resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap((r) =>
-        r.status === "ok" && r.url ? [r.url] : [],
-      );
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+        offline,
+      ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : []));
     const screen = (lng: number): Viewport => ({
       west: lng - 0.02,
       south: -33.77,
@@ -679,9 +723,10 @@ describe("statewide slope and hillshade", () => {
     };
     for (const viewport of [screen, null])
       expect(
-        resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap(
-          (r) => (r.status === "ok" && r.url ? [r.url] : []),
-        ),
+        resolveMapSource(
+          { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+          offline,
+        ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : [])),
       ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
   });
   // Mutation: drop `onScreen` from the sort, and the small clip nearer the
@@ -704,7 +749,7 @@ describe("statewide slope and hillshade", () => {
     };
     expect(
       resolveMapSource(
-        { kind: "nsw-slope", viewport },
+        { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
         ctx({
           connectivity: "offline",
           artifacts: [
@@ -723,7 +768,7 @@ describe("routes the Terrain group", () => {
     id: "area-1",
     zmax: 17,
     tiles15: [100, 200, 103, 203],
-    coverage: [0, 0, 0, 0],
+    coverage: [150.3, -33.8, 150.4, -33.7],
     contours,
     credit: "Made-up area credit",
     createdAt: "2026-10-01T00:00:00Z",
@@ -741,7 +786,7 @@ describe("routes the Terrain group", () => {
   it("stops statewide slope at z15 and reads each rectangle from one archive", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -772,7 +817,7 @@ describe("routes the Terrain group", () => {
   it("shades the hillshade from the area's heights", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -783,7 +828,7 @@ describe("routes the Terrain group", () => {
   it("routes contours from z14, to the area's z14 archive", () => {
     const [statewide, ...routed] = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -797,7 +842,7 @@ describe("routes the Terrain group", () => {
   it("leaves the statewide contours where an area has none", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a", false)] }),
       ),
     );
@@ -809,11 +854,11 @@ describe("routes the Terrain group", () => {
   // Red if a source reads the presigned URL instead of the fixed address.
   it("puts no presigned URL in a source, so new URLs remount nothing", () => {
     const before = resolveMapSource(
-      { kind: "nsw-slope" },
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
       ctx({ sharpenedAreas: [area("a")] }),
     );
     const after = resolveMapSource(
-      { kind: "nsw-slope" },
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
       ctx({ sharpenedAreas: [area("b")] }),
     );
     expect(JSON.stringify(before)).not.toContain("X-Amz");
@@ -822,10 +867,23 @@ describe("routes the Terrain group", () => {
 
   // Red if saved clips are routed offline.
   it("draws statewide alone with no area, and offline", () => {
-    expect(resolveMapSource({ kind: "nsw-slope" }, ctx())).toEqual(
-      resolveMapSource({ kind: "nsw-slope" }, ctx({ sharpenedAreas: [] })),
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx(),
+      ),
+    ).toEqual(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx({ sharpenedAreas: [] }),
+      ),
     );
-    const [only] = ok(resolveMapSource({ kind: "nsw-slope" }, ctx()));
+    const [only] = ok(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx(),
+      ),
+    );
     expect(only.layerMaxZoom).toBeUndefined();
     // Offline, a saved clip: the area's archive can't be reached.
     const saved = {
@@ -841,13 +899,18 @@ describe("routes the Terrain group", () => {
     };
     const offline = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         ctx({ ...saved, sharpenedAreas: [area("a")] }),
       ),
     );
     expect(offline).toHaveLength(1);
     expect(offline).toEqual(
-      ok(resolveMapSource({ kind: "nsw-slope" }, ctx(saved))),
+      ok(
+        resolveMapSource(
+          { kind: "terrain", layer: "slope", region: NSW_REGION },
+          ctx(saved),
+        ),
+      ),
     );
   });
 });
@@ -859,7 +922,7 @@ describe("routes saved areas offline", () => {
     id: "area-1",
     zmax: 17 as const,
     tiles15: [100, 200, 103, 203] as const,
-    coverage: [0, 0, 0, 0] as const,
+    coverage: [150.3, -33.8, 150.4, -33.7] as const,
     contours: true,
     credit: "Made-up area credit",
     createdAt: "2026-10-01T00:00:00Z",
@@ -895,7 +958,7 @@ describe("routes saved areas offline", () => {
   it("reads the area's saved clip inside it and the statewide clip around it", () => {
     const [statewide, ...routed] = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline([
           clip("s", "slope-region", "nsw-5m-slope"),
           clip("a", "slope-region", "lidar-area-1", areaBounds),
@@ -937,7 +1000,10 @@ describe("routes saved areas offline", () => {
       [-178.9, 84.8, -178.7, 84.9],
     );
     const [whole, ...routed] = ok(
-      resolveMapSource({ kind: "nsw-hillshade" }, offline([west, east], [])),
+      resolveMapSource(
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+        offline([west, east], []),
+      ),
     );
     expect(whole).toMatchObject({ layerMaxZoom: 15 });
     const readers = (x: number, y: number) =>
@@ -965,7 +1031,7 @@ describe("routes saved areas offline", () => {
   it("reads a sharpened area's clip over the statewide clips under it", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         offline([
           clip("s1", "dem-region", "nsw-5m", areaBounds),
           clip("s2", "dem-region", "nsw-5m", areaBounds),
@@ -983,7 +1049,7 @@ describe("routes saved areas offline", () => {
   it("never takes an area's clip for the statewide one", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline([clip("a", "slope-region", "lidar-area-1", areaBounds)], []),
       ),
     );
@@ -999,10 +1065,13 @@ describe("routes saved areas offline", () => {
     // Another area is still listed: only area-1 has gone.
     const listed = [{ ...kept, id: "area-2" }];
     expect(
-      resolveMapSource({ kind: "nsw-slope" }, offline(saved, listed)),
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        offline(saved, listed),
+      ),
     ).toEqual(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline(saved.slice(0, 1), listed),
       ),
     );
@@ -1014,7 +1083,7 @@ describe("routes saved areas offline", () => {
   it("reads every saved statewide contour clip around the area, and the area's z14 clip inside it", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         offline([
           clip("c1", "contours-region", "nsw-contours"),
           clip("c2", "contours-region", "nsw-contours"),
@@ -1043,7 +1112,7 @@ describe("routes saved areas offline", () => {
     const far: MapArtifact["bbox"] = [10, 10, 10.1, 10.1];
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         offline([
           clip("near", "contours-region", "nsw-contours"),
           // Saved far from the area: only a rectangle reaching it reads it.
@@ -1066,7 +1135,7 @@ describe("routes saved areas offline", () => {
   it("shades the area from its saved heights", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         offline([
           artifact({
             id: "h",
@@ -1083,5 +1152,161 @@ describe("routes saved areas offline", () => {
       ),
     );
     expect(JSON.stringify(sources)).toContain("/maps/ah.pmtiles");
+  });
+});
+
+describe("draws the region the map shows", () => {
+  const regions = [NSW_REGION, ...SIM_REGIONS];
+  const urls = (sources: ReturnType<typeof resolveMapSource>) =>
+    sources.flatMap((s) => (s.status === "ok" && s.url ? [s.url] : []));
+  const layers = [
+    "contours",
+    "slope",
+    "hillshade",
+    "land",
+    "fire",
+    "coverage",
+  ] as const;
+
+  // Mutation: read NSW_REGION in the resolver in place of ref.region, and a
+  // map over another region draws New South Wales's archives.
+  it.each(layers)("draws %s from the region's own archive", (layer) => {
+    const url = (region: typeof SIM_NZ) =>
+      urls(
+        resolveMapSource({ kind: "terrain", layer, region }, ctx({ regions })),
+      );
+    const archive = (r: typeof SIM_NZ) => r.terrain[layer]!.archivePath;
+    // Coverage is NZ's alone: Utah has none to draw.
+    expect(url(SIM_NZ)).toEqual([`pmtiles://${CDN}/${archive(SIM_NZ)}`]);
+    if (layer !== "coverage")
+      expect(url(SIM_UTAH)).toEqual([`pmtiles://${CDN}/${archive(SIM_UTAH)}`]);
+  });
+
+  // Mutation: key a source by the layer alone, and the map crossing into
+  // another region keeps the first one's source mounted.
+  it("keys a region's source by its archive, so crossing regions swaps it", () => {
+    const key = (region: typeof SIM_NZ) =>
+      resolveMapSource({ kind: "terrain", layer: "slope", region }, ctx())[0]!
+        .key;
+    expect(key(SIM_NZ)).toContain("simnz-slope");
+    expect(key(SIM_UTAH)).toContain("simutah-slope");
+    expect(key(SIM_NZ)).not.toBe(key(SIM_UTAH));
+    expect(key(NSW_REGION)).toContain("nsw-5m-slope");
+  });
+
+  // Mutation: fall back to NSW's archive when the region has none, and the
+  // map outside every region draws a layer with no data there.
+  it("draws nothing for a layer the region lacks, or with no region", () => {
+    for (const layer of layers)
+      expect(
+        resolveMapSource({ kind: "terrain", layer, region: null }, ctx()),
+      ).toEqual([]);
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "coverage", region: SIM_UTAH },
+        ctx(),
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: test a clip against the region in view alone (regions: [region]),
+  // and a clip saved in one region stops drawing where the map shows the next.
+  it("offline: a clip saved in one region still draws when the map shows another", () => {
+    const clip = (kind: MapArtifact["kind"], logicalKey: string) =>
+      artifact({
+        id: logicalKey,
+        kind,
+        logicalKey,
+        path: `/maps/${logicalKey}.pmtiles`,
+        bbox: [169, -44.7, 169.2, -44.55],
+        minzoom: 8,
+        maxzoom: 15,
+      });
+    const saved = [
+      clip("contours-region", "simnz-contours"),
+      clip("slope-region", "simnz-slope"),
+      clip("dem-region", "simnz-heights"),
+    ];
+    const offline = ctx({ connectivity: "offline", artifacts: saved, regions });
+    for (const layer of ["contours", "slope", "hillshade"] as const)
+      expect(
+        urls(
+          resolveMapSource(
+            { kind: "terrain", layer, region: SIM_UTAH },
+            offline,
+          ),
+        ),
+      ).toHaveLength(1);
+    // The same clips are no clips of a region nobody lists.
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: SIM_UTAH },
+        { ...offline, regions: [SIM_UTAH] },
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+  });
+
+  // Mutation: test `holdsContours` against NSW's id alone (REGIONS, not the
+  // `regions` argument), and a simulated region's clip enables no switch.
+  it("holdsContours, holdsSlope and holdsHillshade: any listed region's clip", () => {
+    expect(
+      holdsContours(
+        { kind: "contours-region", logicalKey: "simutah-contours" },
+        regions,
+      ),
+    ).toBe(true);
+    expect(
+      holdsSlope({ kind: "slope-region", logicalKey: "simnz-slope" }, regions),
+    ).toBe(true);
+    expect(
+      holdsHillshade(
+        { kind: "dem-region", logicalKey: "simnz-heights", minzoom: 8 },
+        regions,
+      ),
+    ).toBe(true);
+    expect(
+      holdsHillshade(
+        { kind: "dem-region", logicalKey: "simnz-heights", minzoom: 15 },
+        regions,
+      ),
+    ).toBe(false);
+    // With the switch off, only NSW's are listed.
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "simnz-contours" }),
+    ).toBe(false);
+  });
+
+  // Mutation: drop the `.filter(inRegion)` in routeTerrain, and an area in
+  // New South Wales is routed over the source of a map showing New Zealand.
+  it("routes a sharpened area only inside its region", () => {
+    const area: SharpenedOverlay = {
+      id: "area-1",
+      zmax: 17,
+      tiles15: [100, 200, 103, 203],
+      coverage: [150.3, -33.8, 150.4, -33.7],
+      contours: false,
+      credit: "Made-up area credit",
+      createdAt: "2026-10-01T00:00:00Z",
+      heightsUrl: "https://bucket.example/h.pmtiles",
+      slopeUrl: "https://bucket.example/s.pmtiles",
+      contoursUrl: null,
+    };
+    const slope = (region: typeof SIM_NZ) =>
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region },
+        ctx({ sharpenedAreas: [area] }),
+      );
+    const routed = (region: typeof SIM_NZ) =>
+      slope(region).some(
+        (r) => r.status === "ok" && r.attribution === area.credit,
+      );
+    expect(routed(NSW_REGION)).toBe(true);
+    expect(routed(SIM_NZ)).toBe(false);
+    expect(slope(SIM_NZ)).toEqual(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: SIM_NZ },
+        ctx(),
+      ),
+    );
   });
 });
