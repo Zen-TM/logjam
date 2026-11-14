@@ -52,5 +52,11 @@ export {
   StatusPill,
   Toast,
 } from "./Feedback";
-export { MapButton, MapButtonGroup, MapPointDot, Notice } from "./MapControl";
+export {
+  MapButton,
+  MapButtonGroup,
+  MapPointDot,
+  MapTip,
+  Notice,
+} from "./MapControl";
 export { useEscape } from "./useEscape";

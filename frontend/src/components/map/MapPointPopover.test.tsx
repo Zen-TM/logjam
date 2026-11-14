@@ -11,6 +11,7 @@ import {
   NSW_FIRE,
   WEATHER,
   type ElevationPoint,
+  type FlowNetworkLookup,
 } from "@logjam/shared";
 import { takeDismissingPress } from "../../ui";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
@@ -18,9 +19,19 @@ import { COVERAGE_FILL_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
 import MapPointPopover from "./MapPointPopover";
 
 const placed = vi.hoisted(() => ({ order: [] as string[] }));
+// Every marker put on the map, with its options and where it went.
+const markers = vi.hoisted(
+  () => [] as { options: Record<string, unknown>; at?: [number, number] }[],
+);
 vi.mock("maplibre-gl", () => ({
   Marker: class {
-    setLngLat() {
+    entry: { options: Record<string, unknown>; at?: [number, number] };
+    constructor(options: Record<string, unknown> = {}) {
+      this.entry = { options };
+      markers.push(this.entry);
+    }
+    setLngLat(at: [number, number]) {
+      this.entry.at = at;
       return this;
     }
     addTo() {
@@ -38,11 +49,18 @@ const terrain = vi.hoisted(() => ({
     demSourceIds: [],
   } as ElevationPoint | null,
 }));
+// What `useFlowNetworkLookup` gives: a 503 or a failed request is a null
+// lookup once settled (placeUtils.flowNetwork.test.ts).
+const flow = vi.hoisted(() => ({
+  lookup: null as FlowNetworkLookup | null,
+  loading: true,
+}));
 vi.mock("../../placeUtils", () => ({
   useElevationPoint: () => ({
     reading: terrain.checking ? null : terrain.reading,
     loading: terrain.checking,
   }),
+  useFlowNetworkLookup: () => ({ ...flow }),
 }));
 vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
 const toast = vi.hoisted(() => ({ done: vi.fn(), error: vi.fn() }));
@@ -65,6 +83,7 @@ function mount(
     onAddPlace?: () => void;
     onClose?: () => void;
     onDrawRoute?: () => void;
+    onShowUpstream?: () => void;
     startAt?: "options";
   } = {},
 ) {
@@ -80,6 +99,7 @@ function mount(
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
       onMeasure={vi.fn()}
       onDrawRoute={handlers.onDrawRoute ?? vi.fn()}
+      onShowUpstream={handlers.onShowUpstream ?? vi.fn()}
     />,
   );
 }
@@ -119,6 +139,9 @@ afterEach(() => {
   terrain.checking = false;
   terrain.reading = { elevationM: 1013, slopeDegrees: null, demSourceIds: [] };
   cleanup();
+  flow.lookup = null;
+  flow.loading = true;
+  markers.length = 0;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -472,5 +495,92 @@ describe("MapPointPopover coverage", () => {
     mount();
     expect(screen.queryByText(MAP_POINT.copy.coverage)).toBeNull();
     delete layered.queryRenderedFeatures;
+  });
+});
+
+const snapped = { latitude: -33.7123, longitude: 150.3119 };
+const attribution = "credit";
+
+const catchmentRow = () => screen.queryByText(MAP_POINT.copy.catchment);
+const upstreamVerb = () =>
+  screen.queryByRole("button", {
+    name: /Show the creeks upstream/,
+    hidden: true,
+  });
+
+function found(over: Partial<FlowNetworkLookup & { status: "found" }> = {}) {
+  flow.loading = false;
+  flow.lookup = {
+    status: "found",
+    snapped,
+    distanceM: 21,
+    catchmentKm2: 4.23,
+    streamOrder: 3,
+    attribution,
+    ...over,
+  };
+}
+
+// Mutations that turn these red: leave the figure out of the panel, show a
+// row for any answer but a found creek, put the stream order or a creek point
+// back, or offer the creeks upstream of a point with no creek.
+describe("What is here?: the catchment", () => {
+  function expectNothing() {
+    expect(catchmentRow()).toBeNull();
+    expect(screen.queryByText(/is also nearby/)).toBeNull();
+    openOptions();
+    expect(upstreamVerb()).toBeNull();
+  }
+
+  it("shows the catchment as one figure, and offers the creeks upstream", () => {
+    found();
+    const onShowUpstream = vi.fn();
+    const onClose = vi.fn();
+    mount({ onShowUpstream, onClose });
+    expect(catchmentRow()!.nextSibling?.textContent).toBe("4.2 km²");
+    expect(screen.queryByText(/order/i)).toBeNull();
+    // Nothing is drawn at the creek point: only the press's own dot.
+    expect(
+      markers.filter((marker) => marker.at?.[0] === snapped.longitude),
+    ).toEqual([]);
+    openOptions();
+    fireEvent.click(upstreamVerb()!);
+    expect(onShowUpstream).toHaveBeenCalledWith(point);
+    // The map moves to fit the creeks, so the panel goes first.
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("mentions a much bigger creek in range", () => {
+    found({ biggerNearby: { catchmentKm2: 14.2 } });
+    mount();
+    expect(
+      screen.getByText("A creek draining 14 km² is also nearby."),
+    ).toBeTruthy();
+  });
+
+  it("shows nothing while the lookup is running", () => {
+    mount();
+    expectNothing();
+  });
+
+  it("shows nothing when no creek is near", () => {
+    flow.loading = false;
+    flow.lookup = { status: "no-creek", attribution };
+    mount();
+    expectNothing();
+  });
+
+  it("shows nothing outside the basins built so far", () => {
+    flow.loading = false;
+    flow.lookup = { status: "not-covered", attribution };
+    mount();
+    expectNothing();
+  });
+
+  it("shows nothing when the lookup failed (a 503, or no connection)", () => {
+    flow.loading = false;
+    flow.lookup = null;
+    mount();
+    expectNothing();
   });
 });

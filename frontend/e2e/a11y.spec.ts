@@ -1500,6 +1500,197 @@ test.describe("desktop", () => {
     await expect(panel).toBeVisible();
   });
 
+  test("What is here?: the catchment, and the creeks upstream on the map", async ({
+    page,
+  }) => {
+    // The local stack's flow network covers only one small basin (the Govetts
+    // Creek fixture), not wherever the press lands, so the lookup is answered
+    // here in full rather than rewritten: a read, with a synthetic creek a
+    // few metres from the press. Nothing touches the account.
+    await page.route("**/flow-network/lookup", async (route) => {
+      const { longitude, latitude, upstream } = route.request().postDataJSON();
+      const snapped = { longitude: longitude + 0.0002, latitude };
+      const line = (
+        from: [number, number],
+        to: [number, number],
+        catchmentKm2: number,
+      ) => ({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: [from, to] },
+        properties: { catchmentKm2, streamOrder: 1 },
+      });
+      const creek: [number, number] = [snapped.longitude, snapped.latitude];
+      await route.fulfill({
+        json: {
+          status: "found",
+          snapped,
+          distanceM: 18,
+          catchmentKm2: 4.23,
+          streamOrder: 3,
+          biggerNearby: { catchmentKm2: 14.2 },
+          attribution: "NSW 5 m DEM",
+          ...(upstream && {
+            upstream: {
+              lines: {
+                type: "FeatureCollection",
+                features: [
+                  line([creek[0] - 0.01, creek[1] + 0.01], creek, 1.2),
+                  line([creek[0] + 0.01, creek[1] + 0.01], creek, 3),
+                ],
+              },
+              bbox: [
+                creek[0] - 0.01,
+                creek[1],
+                creek[0] + 0.01,
+                creek[1] + 0.01,
+              ],
+              trimmedBelowOrder: 2,
+            },
+          }),
+        },
+      });
+    });
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    // Enter on the map asks about its centre, and opens on the facts (a
+    // right-click opens on Options, with no figures).
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel.getByText("4.2 km²")).toBeVisible();
+    await expect(
+      panel.getByText("A creek draining 14 km² is also nearby."),
+    ).toBeVisible();
+    await panel.getByRole("button", { name: "Options" }).click();
+    const verb = panel.getByRole("button", {
+      name: "Show the creeks upstream",
+    });
+    await expect(verb).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+
+    // The creeks outlive the panel, which closes as the map fits them.
+    await verb.click();
+    await expect(panel).toHaveCount(0);
+    const notice = page.getByText(
+      "Creeks upstream · 4.2 km² · smaller ones left out",
+    );
+    await expect(notice).toBeVisible();
+    // Nothing is drawn at the creek point: the creeks say where it is.
+    await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
+    // Focus is back on the map, so the notice must be read out on its own.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Creeks upstream" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "#map");
+
+    // Fitted again from its notice, after the user has looked elsewhere.
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page
+      .getByRole("button", { name: "Fit the map to the creeks upstream" })
+      .click();
+    await expect(notice).toBeVisible();
+
+    // Cleared from its notice.
+    await page
+      .getByRole("button", { name: "Clear the creeks upstream" })
+      .click();
+    await expect(notice).toHaveCount(0);
+  });
+
+  test("Show catchment: a canyon's page draws the creeks upstream of its pin", async ({
+    page,
+  }) => {
+    // Answered here, as above: the seeded canyon is outside the committed
+    // Govetts Creek layer. A creek on the pin, then none, on the second press.
+    let pressed = 0;
+    await page.route("**/flow-network/lookup", async (route) => {
+      const { longitude, latitude } = route.request().postDataJSON();
+      pressed += 1;
+      if (pressed > 1) {
+        await route.fulfill({
+          json: { status: "no-creek", attribution: "NSW 5 m DEM" },
+        });
+        return;
+      }
+      const creek: [number, number] = [longitude, latitude];
+      await route.fulfill({
+        json: {
+          status: "found",
+          snapped: { longitude, latitude },
+          distanceM: 3,
+          catchmentKm2: 12.4,
+          streamOrder: 4,
+          attribution: "NSW 5 m DEM",
+          upstream: {
+            lines: {
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: [[creek[0] - 0.01, creek[1] + 0.01], creek],
+                  },
+                  properties: { catchmentKm2: 12.4, streamOrder: 4 },
+                },
+              ],
+            },
+            bbox: [creek[0] - 0.01, creek[1], creek[0], creek[1] + 0.01],
+          },
+        },
+      });
+    });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await aside
+      .getByRole("button", { name: SEED_NAMES.claustral, exact: true })
+      .click();
+    const show = aside.getByRole("button", { name: "Show catchment" });
+    await expect(show).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await show.click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Creeks upstream · 12 km²" }),
+    ).toBeVisible();
+
+    // Off a creek: a sentence saying so, and nothing drawn.
+    await page
+      .getByRole("button", { name: "Clear the creeks upstream" })
+      .click();
+    await show.click();
+    await expect(
+      page.getByText("No creek within 50 m to show the catchment of."),
+    ).toBeVisible();
+    await expect(page.getByText(/^Creeks upstream ·/)).toHaveCount(0);
+  });
+
+  test("What is here?: no Catchment row where no creek is found", async ({
+    page,
+  }) => {
+    // Answered here, as above: outside the basins built so far.
+    await page.route("**/flow-network/lookup", (route) =>
+      route.fulfill({
+        json: { status: "not-covered", attribution: "NSW 5 m DEM" },
+      }),
+    );
+    const answered = page.waitForResponse("**/flow-network/lookup");
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    // Enter on the map asks about its centre, and opens on the facts.
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    const panel = page.getByRole("dialog", { name: "This point" });
+    await expect(panel.getByText("Elevation")).toBeVisible();
+    await answered;
+    await expect(panel.getByText("Catchment")).toHaveCount(0);
+    await panel.getByRole("button", { name: "Options" }).click();
+    await expect(
+      panel.getByRole("button", { name: "Show the creeks upstream" }),
+    ).toHaveCount(0);
+  });
+
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({
     page,
   }) => {

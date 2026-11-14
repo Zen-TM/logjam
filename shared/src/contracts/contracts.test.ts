@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
-import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { SYSTEM_FIELD_DEFS, SYSTEM_PLACE_TYPE_IDS } from "../placeTypes.js";
 import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
@@ -46,10 +46,15 @@ import {
   MAP_MEASURE_START_NOTE,
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
+  formatCatchmentKm2,
+  mapPointCatchment,
+  mapPointCatchmentNote,
   mapPointFacts,
+  mapPointUpstreamNotice,
+  mapPointVerbs,
+  type MapPointCatchment,
   mapHoldVerbs,
   mapPointStepBack,
-  mapPointVerbs,
   fixAgeLabel,
   MAP_SEARCH_PLACEHOLDER,
   MAP_POINT,
@@ -480,17 +485,20 @@ describe("a place's page", () => {
       "route",
       "weather",
       "gauge",
+      "catchment",
       "linkedPlaces",
       "trips",
       "sharedWith",
     ];
     const ownerOnly = ["doesntFit", "linkedPlaces", "sharedWith"];
-    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(order);
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(
+      order.filter((key) => key !== "catchment"),
+    );
     expect(contractSectionsFor(PLACE_PAGE, "web", true)).toEqual(
       order.filter((key) => key !== "navigate"),
     );
     expect(contractSectionsFor(PLACE_PAGE, "gps", false)).toEqual(
-      order.filter((key) => !ownerOnly.includes(key)),
+      order.filter((key) => !ownerOnly.includes(key) && key !== "catchment"),
     );
   });
 
@@ -1268,8 +1276,14 @@ describe("the map point panel", () => {
     expect(contractSectionsFor(MAP_POINT, "web", false)).not.toContain(
       "accuracy",
     );
+    // A one-client section says why: a `reason` for a choice, a `gap` for
+    // what the other client has not built yet (the catchment).
     for (const section of MAP_POINT.sections)
-      if ("on" in section) expect(section.reason ?? "").not.toBe("");
+      if ("on" in section)
+        expect(
+          ("reason" in section ? section.reason : "") ||
+            ("gap" in section ? section.gap : ""),
+        ).not.toBe("");
   });
 
   // Mutation: change either client's placeholder away from this one.
@@ -1298,6 +1312,7 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
+      catchment: { catchmentKm2: 4.2, biggerNearbyKm2: null },
       land: "Private land",
       fire: "Wildfire, Dec 2019",
       coverage: "Telstra: no mobile reception",
@@ -1306,6 +1321,100 @@ describe("the map point panel", () => {
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
     expect(MAP_POINT_NO_FIX_NOTE.gps).toContain("locate button");
+  });
+
+  // Mutation: offer "Show the creeks upstream" before a creek is found, or
+  // after the lookup found none, and the API is asked for nothing.
+  it("offers the creeks upstream only once a creek is found", () => {
+    expect(
+      mapPointVerbs("web", false, { creekFound: true }).map((verb) => verb.id),
+    ).toEqual(["drawRoute", "addPlace", "measure", "upstream", "weather"]);
+    expect(mapPointVerbs("web", false, { creekFound: false })).toEqual(
+      mapPointVerbs("web"),
+    );
+    expect(
+      mapPointVerbs("gps", false, { creekFound: true }).map((verb) => verb.id),
+    ).not.toContain("upstream");
+  });
+
+  // Mutation: push a row for a lookup that found no creek (or put the stream
+  // order back beside the figure), and the panel says more than the figure.
+  it("shows the catchment as one figure, last among the facts, only for a found creek", () => {
+    const facts = (catchment: MapPointCatchment | null) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "known", metres: 412 },
+        from: null,
+        catchment,
+      });
+    expect(facts({ catchmentKm2: 4.23, biggerNearbyKm2: null }).at(-1)).toEqual(
+      { key: "catchment", label: "Catchment", value: "4.2 km²" },
+    );
+    expect(facts(null).map((fact) => fact.key)).not.toContain("catchment");
+    expect(
+      mapPointFacts({
+        point,
+        elevation: { state: "checking" },
+        from: null,
+      }).map((fact) => fact.key),
+    ).not.toContain("catchment");
+  });
+
+  // Mutation: map "no-creek" or "not-covered" to a catchment, and a row
+  // appears across every basin not built yet.
+  it("reads only a found creek as a catchment", () => {
+    const attribution = "credit";
+    expect(
+      mapPointCatchment({
+        status: "found",
+        snapped: point,
+        distanceM: 12,
+        catchmentKm2: 4.2,
+        streamOrder: 3,
+        biggerNearby: { catchmentKm2: 14 },
+        attribution,
+      }),
+    ).toEqual({ catchmentKm2: 4.2, biggerNearbyKm2: 14 });
+    expect(mapPointCatchment({ status: "no-creek", attribution })).toBeNull();
+    expect(
+      mapPointCatchment({ status: "not-covered", attribution }),
+    ).toBeNull();
+    expect(mapPointCatchment(null)).toBeNull();
+  });
+
+  // Mutation: round every catchment to whole km², and a 0.03 km² gully
+  // reads "0 km²".
+  it("shows a gully's catchment and a river's at a precision each can use", () => {
+    expect(formatCatchmentKm2(0.001)).toBe("<0.01 km²");
+    expect(formatCatchmentKm2(0.034)).toBe("0.03 km²");
+    expect(formatCatchmentKm2(0.996)).toBe("1.0 km²");
+    expect(formatCatchmentKm2(4.23)).toBe("4.2 km²");
+    expect(formatCatchmentKm2(9.96)).toBe("10 km²");
+    expect(formatCatchmentKm2(663.4)).toBe("663 km²");
+    expect(formatCatchmentKm2(1234.5)).toBe("1,235 km²");
+    expect(formatCatchmentKm2(Number.NaN)).toBe("—");
+  });
+
+  it("mentions a much bigger creek in range, in the same unit", () => {
+    expect(
+      mapPointCatchmentNote({ catchmentKm2: 0.4, biggerNearbyKm2: 14.2 }),
+    ).toBe("A creek draining 14 km² is also nearby.");
+    expect(
+      mapPointCatchmentNote({ catchmentKm2: 0.4, biggerNearbyKm2: null }),
+    ).toBeNull();
+    expect(mapPointCatchmentNote(null)).toBeNull();
+    expect(mapPointCatchmentNote(undefined)).toBeNull();
+  });
+
+  // Mutation: put the segment count back in the notice, and a river reads
+  // "3,689 creeks" for what are pieces of creek between junctions.
+  it("says on the map what is drawn, and when smaller creeks were left out", () => {
+    expect(mapPointUpstreamNotice({ catchmentKm2: 4.23, trimmed: false })).toBe(
+      "Creeks upstream · 4.2 km²",
+    );
+    expect(mapPointUpstreamNotice({ catchmentKm2: 663, trimmed: true })).toBe(
+      "Creeks upstream · 663 km² · smaller ones left out",
+    );
   });
 
   // Mutation: give the point panel's verb words of its own.
@@ -1707,5 +1816,28 @@ describe("delete done-toasts", () => {
     expect(placeDeleteDone(3)).toBe("3 places deleted.");
     expect(tripDeleteDone(1)).toBe("Trip deleted.");
     expect(tripDeleteDone(3)).toBe("3 trips deleted.");
+  });
+});
+
+describe("Show catchment on a place's page", () => {
+  // Mutation: test the type by name, or offer it on every type, and a
+  // campsite or a renamed copy of Canyon gets it wrong.
+  it("is offered on the built-in Canyon type, by its pinned id", () => {
+    expect(contracts.placeOffersCatchment(SYSTEM_PLACE_TYPE_IDS.canyon)).toBe(
+      true,
+    );
+    expect(contracts.placeOffersCatchment(SYSTEM_PLACE_TYPE_IDS.campsite)).toBe(
+      false,
+    );
+    expect(contracts.placeOffersCatchment(null)).toBe(false);
+  });
+
+  it("says why nothing is drawn when the pin is off a creek or unmapped", () => {
+    expect(contracts.MAP_POINT.copy.upstreamNoCreek).toBe(
+      "No creek within 50 m to show the catchment of.",
+    );
+    expect(contracts.MAP_POINT.copy.upstreamNotCovered).toBe(
+      "Catchments aren't mapped here yet.",
+    );
   });
 });

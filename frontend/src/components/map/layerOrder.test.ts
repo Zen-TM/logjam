@@ -26,6 +26,7 @@ import {
   pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
+  FLOW_NETWORK_FLOOR,
   stackTopoLayers,
   TOPO_CEILING,
 } from "./layerOrder";
@@ -188,6 +189,37 @@ describe("the Fire history layer ids", () => {
 });
 
 describe("stackTopoLayers", () => {
+  // Mutation: stack under `TOPO_CEILING` alone, and a topo layer turned on
+  // while the creeks upstream are drawn lands over them, between the creeks
+  // and the tracks: the contours cross the creeks again.
+  it.each(FLOW_NETWORK_FLOOR.map((floor) => [floor]))(
+    "keeps the topo band under the creeks upstream (lowest: %s)",
+    (floor) => {
+      const map = fakeMap([
+        "basemap",
+        "topo-nswcontours-minor",
+        floor,
+        "flow-upstream-line-0",
+        TOPO_CEILING,
+        "routes-lines",
+        "topo-nswslope-fill",
+      ]);
+      stackTopoLayers(map, [
+        ["topo-nswslope-fill"],
+        ["topo-nswcontours-minor"],
+      ]);
+      expect(map.ids).toEqual([
+        "basemap",
+        "topo-nswslope-fill",
+        "topo-nswcontours-minor",
+        floor,
+        "flow-upstream-line-0",
+        TOPO_CEILING,
+        "routes-lines",
+      ]);
+    },
+  );
+
   // Mutation: start from the top of the style instead of `TOPO_CEILING`, and
   // the slope bands tint every route and track drawn under them.
   it("puts the topo band over the basemap and under the tracks and routes", () => {

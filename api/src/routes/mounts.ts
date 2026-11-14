@@ -33,6 +33,7 @@ import metaRouter from "./meta";
 import devicesRouter from "./devices";
 import routesRouter from "./routes";
 import elevationRouter from "./elevation";
+import flowNetworkRouter from "./flowNetwork";
 import placeSearchRouter from "./placeSearch";
 import syncRouter from "./sync";
 
@@ -82,5 +83,6 @@ export const ROUTER_MOUNTS: [string, Router][] = [
   ["/custom-fields", customFieldsRouter],
   ["/routes", routesRouter],
   ["/elevation", elevationRouter],
+  ["/flow-network", flowNetworkRouter],
   ["/sync", syncRouter],
 ];

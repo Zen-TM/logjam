@@ -74,9 +74,15 @@ export function Notice({
   tone = "info",
   controls,
   twoLines = false,
+  announce = false,
 }: {
   children: ReactNode;
   action?: ReactNode;
+  /**
+   * Read out as it changes: for a notice that is the only answer to
+   * something the user just did, after focus has gone back to the map.
+   */
+  announce?: boolean;
   /** Controls in a row under the words, for a notice that is a mode with
    *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
   controls?: ReactNode;
@@ -108,7 +114,7 @@ export function Notice({
         controls ? classes.stacked : "",
       ].join(" ")}
       data-tone={tone}
-      role={tone === "info" ? undefined : "alert"}
+      role={tone !== "info" ? "alert" : announce ? "status" : undefined}
     >
       {controls ? (
         <>
@@ -129,4 +135,13 @@ export function Notice({
  */
 export function MapPointDot() {
   return <span className={classes.pointDot} aria-hidden />;
+}
+
+/**
+ * A figure that follows the mouse over something drawn on the map (a creek's
+ * own catchment). Hover only, so it repeats what a press can find out, and the
+ * pointer passes through it.
+ */
+export function MapTip({ children }: { children: ReactNode }) {
+  return <span className={classes.tip}>{children}</span>;
 }

@@ -1,4 +1,10 @@
-import { Button, Checkbox, Notice, takeDismissingPress } from "../../ui";
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  Notice,
+  takeDismissingPress,
+} from "../../ui";
 import {
   useEffect,
   useEffectEvent,
@@ -33,6 +39,8 @@ import {
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
   PLACE_TYPE_COLORS,
+  MAP_POINT,
+  mapPointUpstreamNotice,
   PLACE_BADGE_OFFSET,
   PLACE_BADGE_PIN_RADIUS,
   PLACE_BADGE_SHARED_IMAGE,
@@ -62,6 +70,13 @@ import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
+import { readCssVar } from "./cssVar";
+import {
+  clearUpstream,
+  revealUpstream,
+  showUpstream,
+} from "./flowNetworkLayers";
+import { UpstreamHover } from "./UpstreamHover";
 import GaugePopover from "../gauges/GaugePopover";
 import { sheetCoverPx } from "../sidebar/sheetSnap";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
@@ -169,6 +184,7 @@ import type {
 } from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import {
+  getFlowNetworkLookup,
   passesFilters,
   isPlaceDoneByViewer,
   type TPlaceType,
@@ -219,6 +235,12 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // documented there.
 
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
+
+/**
+ * Everything on the map that has a press of its own: a press there is not a
+ * "What is here?", and the creeks-upstream hover gives way to it.
+ */
+const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
 const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
@@ -238,11 +260,28 @@ function dimmed(opacity: number): maplibregl.ExpressionSpecification {
   return ["case", ["boolean", ["get", "muted"], false], 0.4, opacity];
 }
 
-function readCssVar(name: string, fallback: string): string {
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return value || fallback;
+/**
+ * Fits the map to a [west, south, east, north] box: a way's extent or the
+ * creeks upstream of a point. Fitted rather than centred: a line has a length,
+ * and dropping the camera on its midpoint at a fixed zoom shows either a
+ * fraction of it or a great deal of nothing. Same padding as the topo
+ * footprint fly.
+ */
+function fitToBox(
+  map: maplibregl.Map,
+  [west, south, east, north]: readonly [number, number, number, number],
+  padding: number | maplibregl.PaddingOptions = 80,
+) {
+  if ([west, south, east, north].every((value) => Number.isFinite(value))) {
+    map.fitBounds([west, south, east, north], {
+      padding,
+      duration: 1200,
+      maxZoom: 16,
+    });
+  } else {
+    // Never the coordinates themselves (privacy rule) — just that it was skipped.
+    console.warn("Skipping fit: bounds out of range");
+  }
 }
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
@@ -621,6 +660,8 @@ function Map({
   onFlyToPlaceConsumed,
   flyToBounds,
   onFlyToBoundsConsumed,
+  showUpstreamAt,
+  onShowUpstreamAtConsumed,
   panelOpen,
   sheetOpen = false,
   placeHighlight,
@@ -778,6 +819,10 @@ function Map({
    */
   flyToBounds?: [number, number, number, number] | null;
   onFlyToBoundsConsumed?: () => void;
+  /** Draw the creeks upstream of a point, asked for off the map (a canyon's
+   *  page): as "What is here?"'s verb does, then consumed. */
+  showUpstreamAt?: { point: MapPointCoord } | null;
+  onShowUpstreamAtConsumed?: () => void;
   /** A page is open over the map's left edge; the chrome moves clear of it. */
   panelOpen: boolean;
   /** A sheet is open beside that page (the Places filters). */
@@ -853,6 +898,11 @@ function Map({
   useEffect(() => {
     drawingRouteRef.current = drawingRoute;
   }, [drawingRoute]);
+  // A pick or a drawing tool owns the pointer: no creek figure under it.
+  const armedForHover = useCallback(
+    () => pickModeRef.current || drawingRouteRef.current,
+    [],
+  );
   const selectTrackRef = useRef(selectTrack);
   useEffect(() => {
     selectTrackRef.current = selectTrack;
@@ -889,6 +939,86 @@ function Map({
     closedGaugeRef.current = { id, at: performance.now() };
     setGaugeId(null);
   }, []);
+  // The creeks upstream of a point, asked for from that point's panel. They
+  // outlive the panel, which closes as soon as the map moves to fit them, and
+  // stay until cleared from their notice or a new point is asked about.
+  const [upstream, setUpstream] = useState<
+    | { state: "finding" }
+    | {
+        state: "shown";
+        catchmentKm2: number;
+        trimmed: boolean;
+        bbox: [number, number, number, number];
+      }
+    | null
+  >(null);
+  // Bumped by every show and clear, so a late answer to an earlier request
+  // never draws over what the user did since.
+  const upstreamRequest = useRef(0);
+  // Stops the draw-in, if it is still running.
+  const stopReveal = useRef<() => void>(() => {});
+  // A draw-in still running when Logjam Web leaves the map stops with it.
+  useEffect(() => () => stopReveal.current(), []);
+  const clearUpstreamOverlay = useCallback(() => {
+    upstreamRequest.current += 1;
+    stopReveal.current();
+    stopReveal.current = () => {};
+    setUpstream(null);
+    if (mapRef.current) clearUpstream(mapRef.current);
+  }, []);
+  const showUpstreamFrom = useCallback(
+    (point: MapPointCoord) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const request = ++upstreamRequest.current;
+      stopReveal.current();
+      clearUpstream(map);
+      setUpstream({ state: "finding" });
+      const failed = (message: string) => {
+        setUpstream(null);
+        toast.error(message);
+      };
+      // The press, not the creek point it snapped to: the API snaps it the
+      // same way, so the lines start at the creek the panel measured.
+      getFlowNetworkLookup({ ...point, upstream: true })
+        .then((lookup) => {
+          if (request !== upstreamRequest.current || mapRef.current !== map)
+            return;
+          // Only a page's press gets here without a creek: "What is here?"
+          // offers the verb once its lookup has found one.
+          if (lookup.status === "no-creek") {
+            failed(MAP_POINT.copy.upstreamNoCreek);
+            return;
+          }
+          if (lookup.status === "not-covered") {
+            failed(MAP_POINT.copy.upstreamNotCovered);
+            return;
+          }
+          if (!lookup.upstream) {
+            failed(MAP_POINT.copy.upstreamFailed);
+            return;
+          }
+          showUpstream(map, lookup.upstream, lookup.catchmentKm2);
+          stopReveal.current = revealUpstream(map, {
+            reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
+              .matches,
+          });
+          setUpstream({
+            state: "shown",
+            catchmentKm2: lookup.catchmentKm2,
+            trimmed: lookup.upstream.trimmedBelowOrder != null,
+            bbox: lookup.upstream.bbox,
+          });
+          fitToBox(map, lookup.upstream.bbox);
+        })
+        .catch((err) => {
+          if (request !== upstreamRequest.current) return;
+          console.error(err);
+          failed(messageFromError(err, MAP_POINT.copy.upstreamFailed));
+        });
+    },
+    [toast],
+  );
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -2071,8 +2201,6 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    // Everything on the map that has a press of its own.
-    const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
     let pending: ReturnType<typeof setTimeout> | null = null;
@@ -2081,12 +2209,15 @@ function Map({
       pending = null;
     };
     const armed = () => pickModeRef.current || drawingRouteRef.current;
-    const ask = (latitude: number, longitude: number, startAt?: "options") =>
+    const ask = (latitude: number, longitude: number, startAt?: "options") => {
+      // A new question puts away the creeks drawn for the last one.
+      clearUpstreamOverlay();
       setAsked({
         point: { latitude, longitude },
         from: userFixRef.current,
         ...(startAt ? { startAt } : {}),
       });
+    };
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       // Taken first: it is spent by the click it belongs to, armed or not.
@@ -2144,7 +2275,7 @@ function Map({
       map.off("contextmenu", onContextMenu);
       canvas.removeEventListener("keydown", onKeyDown);
     };
-  }, [mapLoaded]);
+  }, [mapLoaded, clearUpstreamOverlay]);
 
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);
@@ -3240,29 +3371,28 @@ function Map({
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
   }, [onFlyToBoundsConsumed]);
 
-  // A way's extent, fitted rather than centred: a line has a length, and
-  // dropping the camera on its midpoint at a fixed zoom shows either a fraction
-  // of it or a great deal of nothing. Same padding as the topo footprint fly.
+  // A way's extent (`fitToBox`).
   useEffect(() => {
     if (!flyToBounds || !mapLoaded || !mapRef.current) return;
-    const [west, south, east, north] = flyToBounds;
-    if ([west, south, east, north].every((value) => Number.isFinite(value))) {
-      mapRef.current.fitBounds([west, south, east, north], {
-        padding: {
-          top: 80,
-          left: 80,
-          right: 80,
-          bottom: fitBottom(),
-        },
-        duration: 1200,
-        maxZoom: 16,
-      });
-    } else {
-      // Never the coordinates themselves (privacy rule) — just that it was skipped.
-      console.warn("Skipping fit-to-way: bounds out of range");
-    }
+    fitToBox(mapRef.current, flyToBounds, {
+      top: 80,
+      left: 80,
+      right: 80,
+      bottom: fitBottom(),
+    });
     onFlyToBoundsConsumedRef.current?.();
   }, [flyToBounds, mapLoaded]);
+
+  // The creeks upstream of a point asked for off the map: a canyon's page.
+  const onShowUpstreamAtConsumedRef = useRef(onShowUpstreamAtConsumed);
+  useEffect(() => {
+    onShowUpstreamAtConsumedRef.current = onShowUpstreamAtConsumed;
+  }, [onShowUpstreamAtConsumed]);
+  useEffect(() => {
+    if (!showUpstreamAt || !mapLoaded) return;
+    showUpstreamFrom(showUpstreamAt.point);
+    onShowUpstreamAtConsumedRef.current?.();
+  }, [showUpstreamAt, mapLoaded, showUpstreamFrom]);
 
   const onFlyToPlaceConsumedRef = useRef(onFlyToPlaceConsumed);
   useEffect(() => {
@@ -3655,6 +3785,38 @@ function Map({
     setIs3D(on);
   };
 
+  const upstreamNotice = upstream && (
+    <Notice
+      icon="catchment"
+      announce
+      action={
+        <>
+          {upstream.state === "shown" && (
+            <IconButton
+              icon="fitTo"
+              label={MAP_POINT.copy.upstreamFit}
+              size={14}
+              round
+              onClick={() => {
+                if (mapRef.current) fitToBox(mapRef.current, upstream.bbox);
+              }}
+            />
+          )}
+          <IconButton
+            icon="close"
+            label={MAP_POINT.copy.upstreamClear}
+            size={14}
+            round
+            onClick={clearUpstreamOverlay}
+          />
+        </>
+      }
+    >
+      {upstream.state === "finding"
+        ? MAP_POINT.copy.upstreamFinding
+        : mapPointUpstreamNotice(upstream)}
+    </Notice>
+  );
   // Picking an area turns the map north-up and flat: its extent is north, south, east and
   // west (geoPdfExtent.ts, useBoxDraw) and the GeoPDF prints a north-up page,
   // so a turned or tilted frame would get something other than what it framed.
@@ -3699,7 +3861,14 @@ function Map({
         layersButton={layersButton}
         tools={webMapTools(mapToolActions)}
         selectingArea={selectingArea}
-        notices={notices}
+        notices={
+          notices || upstreamNotice ? (
+            <>
+              {notices}
+              {upstreamNotice}
+            </>
+          ) : undefined
+        }
         search={
           // Live during a point pick or a route draw (a quick fly-to), off
           // while an area is selected: the frame holds the view the user set.
@@ -3737,6 +3906,13 @@ function Map({
           />
         }
       />
+      {upstream?.state === "shown" && drawableMap && (
+        <UpstreamHover
+          map={drawableMap}
+          pressable={PRESSABLE}
+          armed={armedForHover}
+        />
+      )}
       {asked && drawableMap && (
         <MapPointPopover
           key={`${asked.point.latitude},${asked.point.longitude},${asked.startAt ?? ""}`}
@@ -3749,6 +3925,7 @@ function Map({
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
           onDrawRoute={onDrawRouteFrom}
+          onShowUpstream={showUpstreamFrom}
         />
       )}
       {openGauge && gaugeFile && drawableMap && showGauges && (

@@ -81,6 +81,8 @@ export * from "./planExtent.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./demSources.js";
+export * from "./flowNetwork.js";
+export * from "./catchmentOutline.js";
 export * from "./nswContours.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";

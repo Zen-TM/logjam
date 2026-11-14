@@ -330,6 +330,12 @@ function App() {
   const [flyToBounds, setFlyToBounds] = useState<
     [number, number, number, number] | null
   >(null);
+  // The creeks upstream of a point, asked for from a canyon's page. Consumed
+  // like `flyToBounds`; a fresh object each press, so the same canyon twice
+  // draws twice.
+  const [showUpstreamAt, setShowUpstreamAt] = useState<{
+    point: MapPointCoord;
+  } | null>(null);
   // Where along a line the elevation-profile cursor sits, so the chart and the
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
@@ -1816,6 +1822,7 @@ function App() {
             onRetryStandaloneFiles={refetchStandaloneFiles}
             onOpenWay={openWay}
             onFocusBounds={setFlyToBounds}
+            onShowCatchment={(point) => setShowUpstreamAt({ point })}
             onOpenRoute={(route) =>
               openWay(
                 wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
@@ -2220,6 +2227,8 @@ function App() {
             notices={notices}
             flyToBounds={flyToBounds}
             onFlyToBoundsConsumed={() => setFlyToBounds(null)}
+            showUpstreamAt={showUpstreamAt}
+            onShowUpstreamAtConsumed={() => setShowUpstreamAt(null)}
             onTopoSourceUnavailable={handleTopoSourceUnavailable}
           />
         </main>
