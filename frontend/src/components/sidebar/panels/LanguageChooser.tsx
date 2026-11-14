@@ -5,9 +5,11 @@ import { ChipRail, SectionHeader } from "../../../ui";
 import { useToast } from "../../feedback/ToastProvider";
 
 /**
- * The languages Logjam Web offers, as one choice. Drawn only when there is more
- * than one (SettingsPanel.tsx), so prod, which offers the source alone, shows
- * nothing. Choosing stores it and reloads the page (languageSetting.ts).
+ * The languages Logjam Web offers, as one choice. SettingsPanel.tsx draws it
+ * only when `showsLanguageChoice` says there is a choice, so prod, which offers
+ * the source alone, shows nothing (`SettingsPanel.render.test.tsx`: "is not
+ * drawn in prod: one region declaring no language, nothing for development").
+ * Choosing stores it and reloads the page (languageSetting.ts).
  */
 function LanguageChooser({ offered }: { offered: readonly Language[] }) {
   const toast = useToast();

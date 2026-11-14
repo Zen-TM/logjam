@@ -45,7 +45,7 @@ const API_CLIENT_USERS: Entry[] = [
   {
     file: "api/queries.ts",
     gate: "wrapper",
-    why: "the account query is enabled only when not a guest (AppShell `useApiQuery(…, !isGuest)`); notification calls sit behind the `inbox` capability",
+    why: "the account query is enabled only when not a guest (AppShell `useApiQuery(…, !isGuest)`); notification calls sit behind the `inbox` capability; `recordLanguage` is sent from AppShell only where `languageToSend` (capability `serverPrefs`) says so, which a guest never does",
   },
   {
     file: "api/shares.ts",

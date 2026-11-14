@@ -22,15 +22,12 @@ import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
 import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { assertOidcConfigured } from "./src/auth/oidcSession";
-import { reconcileLanguage } from "./src/languageSetting";
+import { useStartInLanguage } from "./src/languageSetting";
 // Side-effect import: registers the background track-recording task at module
 // scope so it exists when Android relaunches the app headless.
 import "./src/tracks/trackRecorder";
 import App from "./App";
 
-// Before the first render: a phone whose language should differ restarts in it,
-// once (languageSetting.ts).
-reconcileLanguage();
 initSentry();
 assertOidcConfigured();
 // A dev build's error toast covers the tab bar and takes its taps. It hides
@@ -45,10 +42,15 @@ LogBox.ignoreAllLogs();
 // catch the render that mounts it. createElement rather than JSX because this
 // entry stays a .ts (package.json "main"). The theme provider is outermost
 // because the boundary's own fallback is painted in the scheme.
-registerRootComponent(() =>
-  createElement(
+// The language restart is asked from here, in a mounted component, never at
+// module scope: Android evaluates this file for a headless relaunch of the track
+// recorder too (languageSetting.ts `useStartInLanguage`).
+function Root() {
+  useStartInLanguage();
+  return createElement(
     ThemeProvider,
     null,
     createElement(RootErrorBoundary, null, createElement(App)),
-  ),
-);
+  );
+}
+registerRootComponent(Root);

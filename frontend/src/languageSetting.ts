@@ -8,28 +8,22 @@ import {
   language,
   languageToRecord,
   languageToStart,
-  offeredLanguages,
-  offersPseudoLanguage,
+  offeredHere,
   type Language,
-  type Region,
   type TUser,
 } from "@logjam/shared";
 
 import { updateUserPreferences } from "./placeUtils";
-import { LANGUAGE_KEY } from "./language";
+import { LANGUAGE_KEY, readStoredLanguage } from "./language";
 
-/** What this browser offers: the source alone in prod, so no row. Only a test passes other `regions`. */
-export const offeredHere = (regions?: readonly Region[]): Language[] =>
-  offeredLanguages(offersPseudoLanguage(), regions);
-
-/** Whether the choice was stored; a refused write must not lead to a reload that finds nothing changed. */
+/** Whether the choice was stored and reads back; a browser that cannot keep it must not reload into a start that finds nothing changed. */
 function store(lang: Language): boolean {
   try {
     localStorage.setItem(LANGUAGE_KEY, lang);
-    return true;
   } catch {
     return false;
   }
+  return readStoredLanguage() === lang;
 }
 
 /**
@@ -44,7 +38,7 @@ export function reconcileLanguage(
   document.documentElement.lang = language();
   const next = languageToStart(
     language(),
-    localStorage.getItem(LANGUAGE_KEY),
+    readStoredLanguage(),
     navigator.languages ?? [],
     offeredHere(),
   );
@@ -68,20 +62,23 @@ export function chooseLanguage(
 /**
  * Tell the account which language this browser runs in when it differs from
  * the one recorded, for the messages sent with nobody asking (a push title, a
- * mail). Writes nothing in prod, where the source language is all there is.
+ * mail). Writes nothing in prod, where the source language is all there is,
+ * and nothing before consent settles: `enabled` is the consent gate's `settled`
+ * (frontend/AGENTS.md, Data).
  */
 export function useRecordLanguage(
   currentUser: TUser | null,
   applyCurrentUser: (user: TUser) => void,
+  enabled: boolean,
 ): void {
   const recorded = currentUser?.uiPreferences?.language;
   const signedIn = currentUser !== null;
   useEffect(() => {
-    if (!signedIn) return;
+    if (!enabled || !signedIn) return;
     const next = languageToRecord(language(), recorded);
     if (next === null) return;
     updateUserPreferences({ language: next })
       .then(applyCurrentUser)
       .catch(console.error);
-  }, [signedIn, recorded, applyCurrentUser]);
+  }, [enabled, signedIn, recorded, applyCurrentUser]);
 }

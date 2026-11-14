@@ -144,8 +144,10 @@ export type Region = {
   gauges: string | null;
   /**
    * BCP 47 tags of the languages, beyond the source, that this region's users
-   * can read; absent where it declares none (NSW). Each tag a client offers must
-   * be one of `LANGUAGES` (`languageChoice.ts`, `offeredLanguages`).
+   * can read; absent where it declares none (NSW). A tag that is not one of
+   * `LANGUAGES` is never offered (`offeredLanguages`, `languageChoice.ts`); a
+   * declared region carries only known tags: `languageChoice.test.ts` ("every
+   * tag a declared region carries is a language the catalogue knows").
    */
   languages?: readonly string[];
   /** The map grid coordinates are given in. */

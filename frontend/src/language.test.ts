@@ -49,8 +49,13 @@ describe("language.ts", () => {
     expect(globals.LOGJAM_LANGUAGE).toBeUndefined();
   });
 
-  // Mutation: import @logjam/shared (or a file that does) from language.ts.
+  // Mutation: import @logjam/shared (or a file that does) from language.ts, or
+  // change the scan's pattern so it finds no import (the floor catches that).
   it("loads nothing that reaches @logjam/shared", () => {
+    expect(imports("main.tsx").slice(0, 2)).toEqual([
+      "./simRegions",
+      "./language",
+    ]);
     expect(imports("language.ts")).toEqual([]);
   });
 });

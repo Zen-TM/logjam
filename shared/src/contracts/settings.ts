@@ -104,10 +104,14 @@ export const COPY_MEDIA_SETTING = {
 
 /**
  * The language row in Display, drawn by both clients only while
- * `offeredLanguages()` has more than one entry (`languageChoice.ts`), so prod
- * shows none. Choosing one stores it on the device and restarts the client: the
- * text is read when the client starts, since contract text is evaluated at
- * import (ADR 0050).
+ * `showsLanguageChoice(offeredHere())` (`languageChoice.ts`), so prod shows
+ * none. Guards: `languageChoice.test.ts` ("offers the source alone where the
+ * simulated regions are off"), `SettingsPanel.render.test.tsx` ("is not drawn
+ * in prod: one region declaring no language, nothing for development") and
+ * `mobile/src/languageSetting.test.ts` ("is not drawn with one language
+ * offered, recording or not"). Choosing one stores it on the device and
+ * restarts the client: the text is read when the client starts, since contract
+ * text is evaluated at import (ADR 0050).
  */
 export const LANGUAGE_SETTING = {
   title: t`Language`,

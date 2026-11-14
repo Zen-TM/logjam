@@ -59,4 +59,14 @@ describe("language.ts", () => {
       "./src/language",
     ]);
   });
+
+  // Mutation: call `reconcileLanguage()` at module scope in index.ts (Android
+  // also evaluates index.ts for a headless relaunch of the track recorder,
+  // which must never be restarted).
+  it("index.ts asks for no restart at module scope", () => {
+    const entry = readFileSync(join(__dirname, "../index.ts"), "utf8");
+    // The floor: the call that is allowed is found, inside a component.
+    expect(entry).toMatch(/function Root\(\) \{\s*useStartInLanguage\(\);/);
+    expect(entry).not.toMatch(/\breconcileLanguage\b/);
+  });
 });

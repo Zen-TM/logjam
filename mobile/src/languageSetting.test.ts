@@ -21,6 +21,8 @@ vi.mock("react-native", () => ({
 }));
 const reloadAsync = vi.hoisted(() => vi.fn());
 vi.mock("expo-updates", () => ({ reloadAsync }));
+const findActiveTrack = vi.hoisted(() => vi.fn());
+vi.mock("./tracks/tracksDb", () => ({ findActiveTrack }));
 
 const globals = globalThis as {
   LOGJAM_LANGUAGE?: string;
@@ -31,6 +33,7 @@ beforeEach(() => {
   writeOk.value = true;
   constants.get = () => ({ localeIdentifier: "en_US" });
   reloadAsync.mockReset().mockResolvedValue(undefined);
+  findActiveTrack.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -61,7 +64,7 @@ describe("reconcileLanguage", () => {
   it("changes nothing in prod, whatever the phone speaks", async () => {
     const { reconcileLanguage } = await load({ sim: false });
     const restart = vi.fn().mockResolvedValue(undefined);
-    expect(reconcileLanguage(["en-US"], restart)).toBe(false);
+    expect(await reconcileLanguage({ device: ["en-US"], restart })).toBe(false);
     expect(restart).not.toHaveBeenCalled();
     expect(prefs.get("language")).toBeUndefined();
   }, 30_000);
@@ -70,7 +73,7 @@ describe("reconcileLanguage", () => {
   it("stores the language the phone speaks, once offered, and restarts", async () => {
     const { reconcileLanguage } = await load({ sim: true });
     const restart = vi.fn().mockResolvedValue(undefined);
-    expect(reconcileLanguage(["en_US"], restart)).toBe(true);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(true);
     expect(prefs.get("language")).toBe("en-US");
     expect(restart).toHaveBeenCalledTimes(1);
   }, 30_000);
@@ -81,17 +84,48 @@ describe("reconcileLanguage", () => {
     prefs.set("language", "en-US");
     const { reconcileLanguage } = await load({ sim: true, running: "en-US" });
     const restart = vi.fn().mockResolvedValue(undefined);
-    expect(reconcileLanguage(["en_US"], restart)).toBe(false);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(false);
     expect(restart).not.toHaveBeenCalled();
   }, 30_000);
 
-  // Mutation: delete the `|| !writePref(...)` test in reconcileLanguage (a phone
+  // Mutation: delete the `isRecording()` test in reconcileLanguage (a restart
+  // would interrupt a recording).
+  it("does not restart, or store, while a track records: it applies at the next start", async () => {
+    findActiveTrack.mockResolvedValue({ state: "recording" });
+    const { reconcileLanguage } = await load({ sim: true });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(false);
+    expect(restart).not.toHaveBeenCalled();
+    expect(prefs.get("language")).toBeUndefined();
+  }, 30_000);
+
+  // Mutation: test `!== null` in place of `=== "recording"` in `trackRecording`
+  // (a paused track would hold the restart for ever).
+  it("restarts with a paused track, which is not recording", async () => {
+    findActiveTrack.mockResolvedValue({ state: "paused" });
+    const { reconcileLanguage } = await load({ sim: true });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(true);
+  }, 30_000);
+
+  // Mutation: remove the try/catch round `isRecording()` in reconcileLanguage
+  // (a track list that cannot be read would restart over a recording, or reject).
+  it("does not restart when the track list cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    findActiveTrack.mockRejectedValue(new Error("db closed"));
+    const { reconcileLanguage } = await load({ sim: true });
+    const restart = vi.fn().mockResolvedValue(undefined);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(false);
+    expect(restart).not.toHaveBeenCalled();
+  }, 30_000);
+
+  // Mutation: delete the `!writePref(...)` test in reconcileLanguage (a phone
   // that will not store it would restart on every launch, forever).
   it("does not restart when the phone will not store it", async () => {
     writeOk.value = false;
     const { reconcileLanguage } = await load({ sim: true });
     const restart = vi.fn().mockResolvedValue(undefined);
-    expect(reconcileLanguage(["en_US"], restart)).toBe(false);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(false);
     expect(restart).not.toHaveBeenCalled();
   }, 30_000);
 
@@ -101,18 +135,18 @@ describe("reconcileLanguage", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { reconcileLanguage } = await load({ sim: true });
     const restart = vi.fn().mockRejectedValue(new Error("updates are off"));
-    expect(reconcileLanguage(["en_US"], restart)).toBe(true);
+    expect(await reconcileLanguage({ device: ["en_US"], restart })).toBe(true);
     await vi.waitFor(() => expect(error).toHaveBeenCalled());
   }, 30_000);
 
-  // Mutation: pass `true` in place of `offersPseudoLanguage()` in `offeredHere`
-  // (a pseudo-language kept from a development build would stay on where it
-  // is not offered).
+  // Mutation: pass every language in `LANGUAGES` in place of `offeredHere()` to
+  // `languageToStart` in reconcileLanguage (a pseudo-language kept from a
+  // development build would stay on where it is not offered).
   it("moves a kept pseudo-language back to the source where it is not offered", async () => {
     prefs.set("language", "en-XA");
     const { reconcileLanguage } = await load({ sim: false, running: "en-XA" });
     const restart = vi.fn().mockResolvedValue(undefined);
-    expect(reconcileLanguage([], restart)).toBe(true);
+    expect(await reconcileLanguage({ device: [], restart })).toBe(true);
     expect(prefs.get("language")).toBe("en-AU");
   }, 30_000);
 });
@@ -176,13 +210,16 @@ describe("chooseLanguage", () => {
 });
 
 describe("languageRow", () => {
-  // Mutation: change `offered.length < 2` to `offered.length < 1` in languageRow
+  const TWO = ["en-AU", "en-US"] as const;
+
+  // Mutation: replace `showsLanguageChoice(offered)` with `true` in languageRow
   // (prod would draw a choice of one).
   it("is not drawn with one language offered, recording or not", async () => {
-    const { languageRow, offeredHere } = await load({ sim: false });
+    const { languageRow } = await load({ sim: false });
+    const { offeredHere } = await import("@logjam/shared");
     expect(offeredHere()).toEqual(["en-AU"]);
-    expect(languageRow(offeredHere(), [])).toBeNull();
-    expect(languageRow(["en-AU"], [{ state: "recording" }])).toBeNull();
+    expect(languageRow(offeredHere(), [], true)).toBeNull();
+    expect(languageRow(["en-AU"], [{ state: "recording" }], true)).toBeNull();
   }, 30_000);
 
   // Mutation: return `heldReason: null` always in languageRow (a restart would
@@ -190,21 +227,54 @@ describe("languageRow", () => {
   it("is held while a track records, with the reason", async () => {
     const { languageRow } = await load({ sim: true });
     const { LANGUAGE_SETTING } = await import("@logjam/shared");
-    const offered = ["en-AU", "en-US"] as const;
-    expect(languageRow(offered, [{ state: "recording" }])?.heldReason).toBe(
+    expect(languageRow(TWO, [{ state: "recording" }], true)?.heldReason).toBe(
       LANGUAGE_SETTING.held,
     );
   }, 30_000);
 
+  // Mutation: delete `!tracksLoaded ||` in languageRow (the row would be
+  // tappable while a recording is still being looked for, or for good when the
+  // list cannot be read).
+  it("is held until the track list has been read", async () => {
+    const { languageRow } = await load({ sim: true });
+    const { LANGUAGE_SETTING } = await import("@logjam/shared");
+    expect(languageRow(TWO, [], false)?.heldReason).toBe(LANGUAGE_SETTING.held);
+  }, 30_000);
+
   // Mutation: test `track.state !== "done"` in place of `=== "recording"` in
   // languageRow (a paused or finished track would hold it).
-  it("is open when no track is recording", async () => {
+  it("is open when the list is read and no track is recording", async () => {
     const { languageRow } = await load({ sim: true });
-    const offered = ["en-AU", "en-US"] as const;
-    expect(languageRow(offered, [])?.heldReason).toBeNull();
+    expect(languageRow(TWO, [], true)?.heldReason).toBeNull();
     expect(
-      languageRow(offered, [{ state: "paused" }, { state: "done" }])
+      languageRow(TWO, [{ state: "paused" }, { state: "done" }], true)
         ?.heldReason,
     ).toBeNull();
+  }, 30_000);
+});
+
+describe("languageToSend", () => {
+  // Mutation: return `languageToRecord(running, recorded)` whatever the
+  // `serverPrefs` status in languageToSend (a guest would send to an account
+  // it does not have: ADR 0007).
+  it("sends nothing for a guest, whatever the phone runs", async () => {
+    const { languageToSend } = await load();
+    expect(languageToSend("guest", "en-US", undefined)).toBeNull();
+    expect(languageToSend("guest", "en-XA", "en-AU")).toBeNull();
+  }, 30_000);
+
+  // Mutation: return null in place of `languageToRecord(running, recorded)` in languageToSend.
+  it("sends the running language to a linked account whose record differs", async () => {
+    const { languageToSend } = await load();
+    expect(languageToSend("linked", "en-US", undefined)).toBe("en-US");
+    expect(languageToSend("linked", "en-AU", "en-US")).toBe("en-AU");
+  }, 30_000);
+
+  // Mutation: return `running` in place of `languageToRecord(running, recorded)`
+  // in languageToSend (a phone in the source language would write to an
+  // account with none).
+  it("sends nothing from the source language to an account with none", async () => {
+    const { languageToSend } = await load();
+    expect(languageToSend("linked", "en-AU", undefined)).toBeNull();
   }, 30_000);
 });

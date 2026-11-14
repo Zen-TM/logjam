@@ -93,6 +93,20 @@ describe("the region step after Logjam Web's own sign-up form", () => {
 // Mutation that turns it red: change `usePlaces(loadsUserData)` (or any hook
 // beside it) to take `authenticated`, or `loadsUserData = authenticated &&
 // consentSettled` to drop `consentSettled`.
+// A hook that takes `currentUser` and writes the account never names
+// `authenticated`, so the scan below cannot see it: this one names the call.
+// Mutation: drop `loadsUserData` from the `useRecordLanguage(…)` call in App.tsx.
+describe("App hands the account-writing language hook the gate's settled", () => {
+  it("calls useRecordLanguage with loadsUserData, once", () => {
+    const calls = readFileSync(join(__dirname, "components/App.tsx"), "utf8")
+      .split("\n")
+      .filter((line) => /\buseRecordLanguage\(/.test(line));
+    expect(calls.map((line) => line.trim())).toEqual([
+      "useRecordLanguage(currentUser, applyCurrentUser, loadsUserData);",
+    ]);
+  });
+});
+
 describe("App hands user-data hooks the gate's settled, not authenticated", () => {
   const code = readFileSync(join(__dirname, "components/App.tsx"), "utf8")
     .split("\n")

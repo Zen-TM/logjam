@@ -1,6 +1,6 @@
-// Which languages Logjam Web and Logjam GPS offer, and which one a client starts
-// in. The functions are pure so both clients share one decision (parity test:
-// each client's languageSetting.test.ts). Reasoning:
+// Which languages Logjam Web and Logjam GPS offer, whether they draw a language
+// row, and which language a client starts in. Both clients call these, so the
+// decision is made once (languageChoice.test.ts). Reasoning:
 // docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md.
 import {
   LANGUAGES,
@@ -10,13 +10,6 @@ import {
   type Language,
 } from "./i18n.js";
 import { REGIONS, simRegionsOn, type Region } from "./regions.js";
-
-/**
- * Whether a client offers the pseudo-language. Only where the simulated
- * regions are on, which a build against the prod API refuses
- * (`frontend/src/simRegions.test.ts`, `mobile/src/simRegions.test.ts`).
- */
-export const offersPseudoLanguage = (): boolean => simRegionsOn();
 
 /**
  * The source language, then each language a region in `regions` declares (one
@@ -40,6 +33,21 @@ export function offeredLanguages(
   if (dev) offered.push(PSEUDO_LANGUAGE);
   return offered;
 }
+
+/**
+ * What a client offers here: the pseudo-language only where the simulated
+ * regions are on, which a build against the prod API refuses
+ * (`frontend/src/simRegions.test.ts` "refuses a real-auth build that sets the
+ * flag, and leaves the switch off", `mobile/src/simRegions.test.ts` "refuses a
+ * build for the prod API that sets the flag, and leaves the switch off"). Only
+ * a test passes other `regions`.
+ */
+export const offeredHere = (regions?: readonly Region[]): Language[] =>
+  offeredLanguages(simRegionsOn(), regions);
+
+/** Whether to draw a language row: only with a choice to make, so never in prod. Guard: languageChoice.test.ts. */
+export const showsLanguageChoice = (offered: readonly Language[]): boolean =>
+  offered.length > 1;
 
 /**
  * The language a client should run in: the stored one if it is still offered,

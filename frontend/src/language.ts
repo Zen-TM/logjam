@@ -6,11 +6,22 @@
 /** The one localStorage key for it; kept across sign-out (storageKeys.test.ts). */
 export const LANGUAGE_KEY = "logjam.language";
 
-try {
-  const stored = localStorage.getItem(LANGUAGE_KEY);
-  if (stored) {
-    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = stored;
+/**
+ * The language this browser kept, or null: none kept, or no storage to read (a
+ * private window, blocked site data, where the access itself throws). Guards:
+ * language.test.ts ("starts in the source language when the browser refuses
+ * storage"), languageSetting.test.ts ("does not throw, or reload, when the
+ * browser refuses the read").
+ */
+export function readStoredLanguage(): string | null {
+  try {
+    return localStorage.getItem(LANGUAGE_KEY);
+  } catch {
+    return null;
   }
-} catch {
-  // No storage (a private window, blocked site data): the source language.
+}
+
+const stored = readStoredLanguage();
+if (stored) {
+  (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = stored;
 }

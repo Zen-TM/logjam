@@ -7,6 +7,7 @@ import {
   normalizeUserUiPreferences,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
+  offeredHere,
   offersRegionChoice,
   ownAttributeCountLabel,
   ownTypeCountLabel,
@@ -14,6 +15,7 @@ import {
   regionOffRefusal,
   REGIONS,
   SETTINGS,
+  showsLanguageChoice,
   toggleRegion,
   type Region,
   type SectionKeysOn,
@@ -29,7 +31,6 @@ import {
   type TUser,
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
-import { offeredHere } from "../../../languageSetting";
 import { useToast } from "../../feedback/ToastProvider";
 import {
   Hero,
@@ -270,7 +271,9 @@ function SettingsPanel({
       <>
         <SectionHeader title={copy.display} />
         <ThemeChooser />
-        {languages.length > 1 ? <LanguageChooser offered={languages} /> : null}
+        {showsLanguageChoice(languages) ? (
+          <LanguageChooser offered={languages} />
+        ) : null}
       </>
     ),
     regions: () =>

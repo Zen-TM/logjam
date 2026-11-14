@@ -79,6 +79,20 @@ describe("reconcileLanguage", () => {
     expect(document.documentElement.lang).toBe("en-US");
   }, 30_000);
 
+  // Mutation: remove the try/catch in `readStoredLanguage` (language.ts): a
+  // browser that blocks site data would throw at Logjam Web's start and paint
+  // nothing. Or replace `readStoredLanguage() === lang` with `true` in `store`:
+  // a browser that takes the write but not the read would reload on every start.
+  it("does not throw, or reload, when the browser refuses the read", async () => {
+    const { reconcileLanguage } = await load({ sim: true });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    const reload = vi.fn();
+    expect(() => reconcileLanguage(reload)).not.toThrow();
+    expect(reload).not.toHaveBeenCalled();
+  }, 30_000);
+
   // Mutation: delete the `|| !store(next)` test in reconcileLanguage (a browser
   // that refuses storage would reload on every start, forever).
   it("does not reload when the browser refuses the write", async () => {
@@ -91,9 +105,9 @@ describe("reconcileLanguage", () => {
     expect(reload).not.toHaveBeenCalled();
   }, 30_000);
 
-  // Mutation: pass `true` in place of `offersPseudoLanguage()` in `offeredHere`
-  // (a pseudo-language kept from a development stack would stay on in a build
-  // that does not offer it).
+  // Mutation: pass every language in `LANGUAGES` in place of `offeredHere()` to
+  // `languageToStart` in reconcileLanguage (a pseudo-language kept from a
+  // development stack would stay on in a build that does not offer it).
   it("moves a kept pseudo-language back to the source where it is not offered", async () => {
     localStorage.setItem("logjam.language", "en-XA");
     const { reconcileLanguage } = await load({
@@ -147,7 +161,7 @@ describe("useRecordLanguage", () => {
   // would write the source language to every account on every load).
   it("writes nothing from the source language to an account with none", async () => {
     const { useRecordLanguage } = await load();
-    renderHook(() => useRecordLanguage(user(), vi.fn()));
+    renderHook(() => useRecordLanguage(user(), vi.fn(), true));
     expect(updateUserPreferences).not.toHaveBeenCalled();
   }, 30_000);
 
@@ -157,15 +171,23 @@ describe("useRecordLanguage", () => {
     updateUserPreferences.mockResolvedValue(saved);
     const apply = vi.fn();
     const { useRecordLanguage } = await load({ running: "en-US" });
-    renderHook(() => useRecordLanguage(user(), apply));
+    renderHook(() => useRecordLanguage(user(), apply, true));
     await waitFor(() => expect(apply).toHaveBeenCalledWith(saved));
     expect(updateUserPreferences).toHaveBeenCalledWith({ language: "en-US" });
   }, 30_000);
 
-  // Mutation: delete `if (!signedIn) return;`.
+  // Mutation: delete `!enabled ||` in useRecordLanguage (the account would be
+  // written before consent settles).
+  it("writes nothing until the consent gate has settled", async () => {
+    const { useRecordLanguage } = await load({ running: "en-US" });
+    renderHook(() => useRecordLanguage(user(), vi.fn(), false));
+    expect(updateUserPreferences).not.toHaveBeenCalled();
+  }, 30_000);
+
+  // Mutation: delete `|| !signedIn` in useRecordLanguage's guard.
   it("writes nothing while nobody is signed in", async () => {
     const { useRecordLanguage } = await load({ running: "en-US" });
-    renderHook(() => useRecordLanguage(null, vi.fn()));
+    renderHook(() => useRecordLanguage(null, vi.fn(), true));
     expect(updateUserPreferences).not.toHaveBeenCalled();
   }, 30_000);
 
@@ -174,7 +196,7 @@ describe("useRecordLanguage", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     updateUserPreferences.mockRejectedValue(new Error("400"));
     const { useRecordLanguage } = await load({ running: "en-US" });
-    renderHook(() => useRecordLanguage(user(), vi.fn()));
+    renderHook(() => useRecordLanguage(user(), vi.fn(), true));
     await waitFor(() => expect(error).toHaveBeenCalled());
   }, 30_000);
 });

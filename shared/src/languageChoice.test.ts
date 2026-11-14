@@ -1,11 +1,13 @@
 // Which languages a client offers and starts in (languageChoice.ts). Each guard
 // names the mutation that turns it red.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Language } from "./i18n";
 import {
   languageToRecord,
   languageToStart,
+  offeredHere,
   offeredLanguages,
+  showsLanguageChoice,
   wantedLanguage,
 } from "./languageChoice";
 import { LANGUAGES } from "./i18n";
@@ -67,6 +69,44 @@ describe("offeredLanguages", () => {
     );
     expect(declared.length).toBeGreaterThanOrEqual(1);
     for (const tag of declared) expect(LANGUAGES).toContain(tag);
+  });
+});
+
+describe("offeredHere", () => {
+  afterEach(() => {
+    vi.resetModules();
+    delete (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS;
+  });
+
+  // Mutation: pass `true` in place of `simRegionsOn()` to `offeredLanguages` in offeredHere.
+  it("offers the source alone where the simulated regions are off", () => {
+    expect(offeredHere()).toEqual(["en-AU"]);
+    expect(offeredHere([NSW_REGION])).toEqual(["en-AU"]);
+  });
+
+  // Mutation: pass `false` in place of `simRegionsOn()` to `offeredLanguages` in offeredHere.
+  it("adds what a region declares and the pseudo-language where they are on", async () => {
+    (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS = true;
+    vi.resetModules();
+    const fresh = await import("./languageChoice");
+    expect(fresh.offeredHere()).toEqual(ALL);
+  });
+});
+
+describe("showsLanguageChoice", () => {
+  // Mutation: change `offered.length > 1` to `offered.length > 0` in showsLanguageChoice
+  // (prod would draw a choice of one).
+  it("is false with one language offered, true with two or more", () => {
+    expect(showsLanguageChoice(["en-AU"])).toBe(false);
+    expect(showsLanguageChoice(["en-AU", "en-US"])).toBe(true);
+    expect(showsLanguageChoice(ALL)).toBe(true);
+  });
+
+  // Mutation: change `offered.length > 1` to `offered.length > 2` in showsLanguageChoice.
+  it("is true for exactly two", () => {
+    expect(showsLanguageChoice(offeredLanguages(false, SIM_REGIONS))).toBe(
+      true,
+    );
   });
 });
 

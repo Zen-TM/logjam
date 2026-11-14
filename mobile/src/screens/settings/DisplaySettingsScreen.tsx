@@ -15,6 +15,7 @@ import { Pressable, Text, View } from "react-native";
 import {
   language,
   LANGUAGE_SETTING,
+  offeredHere,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type Language,
@@ -38,11 +39,7 @@ import {
   wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
-import {
-  chooseLanguage,
-  languageRow,
-  offeredHere,
-} from "../../languageSetting";
+import { chooseLanguage, languageRow } from "../../languageSetting";
 import { useTracks } from "../../tracks/useTracks";
 import {
   ScreenScroll,
@@ -121,8 +118,8 @@ export function DisplaySettingsScreen() {
   );
 
   // Only with more than one language offered, so prod draws nothing here.
-  const { tracks } = useTracks();
-  const languages = languageRow(offeredHere(), tracks);
+  const { tracks, loaded } = useTracks();
+  const languages = languageRow(offeredHere(), tracks, loaded);
   const pickLanguage = useCallback(
     async (next: Language) => {
       const result = await chooseLanguage(next);

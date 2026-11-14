@@ -3,7 +3,7 @@ import { say, t } from "@logjam/shared";
 import {
   languageFromHeader,
   languageOfAccount,
-  offeredLanguages,
+  acceptedLanguages,
   runInLanguage,
 } from "./requestLanguage";
 
@@ -38,15 +38,15 @@ describe("the language of a request", () => {
   });
 });
 
-describe("offeredLanguages", () => {
+describe("acceptedLanguages", () => {
   // Mutation: return LANGUAGES in a prod runtime, and a client can ask the
   // production API for the pseudo-language.
   it("leaves out the pseudo-language in a prod runtime only", () => {
-    expect(offeredLanguages(DEV)).toContain("en-XA");
-    expect(offeredLanguages(PROD)).not.toContain("en-XA");
-    expect(offeredLanguages(PROD)).toContain("en-US");
+    expect(acceptedLanguages(DEV)).toContain("en-XA");
+    expect(acceptedLanguages(PROD)).not.toContain("en-XA");
+    expect(acceptedLanguages(PROD)).toContain("en-US");
     expect(
-      offeredLanguages({ LOGJAM_RUNTIME: "prod", NODE_ENV: "development" }),
+      acceptedLanguages({ LOGJAM_RUNTIME: "prod", NODE_ENV: "development" }),
     ).not.toContain("en-XA");
   });
 
@@ -55,7 +55,7 @@ describe("offeredLanguages", () => {
   // drops the AWS variables, and a process that only an AWS variable gives away
   // as not dev offers the pseudo-language.
   it("reads the running process's environment, as the other dev-only refusals do", () => {
-    expect(offeredLanguages()).toContain("en-XA");
+    expect(acceptedLanguages()).toContain("en-XA");
     for (const [name, value] of [
       ["NODE_ENV", "production"],
       ["AWS_EXECUTION_ENV", "x"],
@@ -65,7 +65,7 @@ describe("offeredLanguages", () => {
       const before = process.env[name];
       process.env[name] = value;
       try {
-        expect(offeredLanguages()).not.toContain("en-XA");
+        expect(acceptedLanguages()).not.toContain("en-XA");
       } finally {
         if (before === undefined) delete process.env[name];
         else process.env[name] = before;
@@ -98,7 +98,7 @@ describe("languageFromHeader", () => {
     expect(languageFromHeader(undefined, DEV)).toBe("en-AU");
   });
 
-  // Mutation: match against LANGUAGES instead of offeredLanguages(env), and
+  // Mutation: match against LANGUAGES instead of acceptedLanguages(env), and
   // the pseudo-language is honoured in a prod runtime.
   it("does not honour the pseudo-language in a prod runtime", () => {
     expect(languageFromHeader("en-XA", PROD)).toBe("en-AU");

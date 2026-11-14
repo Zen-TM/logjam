@@ -2,25 +2,24 @@
 // when Logjam GPS starts
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md),
 // so a change is stored and the app restarts. Guard: languageSetting.test.ts.
+import { useEffect } from "react";
 import * as Updates from "expo-updates";
 import { I18nManager } from "react-native";
 import {
   isLanguage,
   language,
+  languageToRecord,
   languageToStart,
   LANGUAGE_SETTING,
-  offeredLanguages,
-  offersPseudoLanguage,
+  offeredHere,
+  showsLanguageChoice,
   type Language,
-  type Region,
 } from "@logjam/shared";
 
+import { capabilityStatus, type AccountState } from "./auth/capabilities";
 import { LANGUAGE_PREF_KEY } from "./language";
 import { readPref, writePref } from "./prefsDb";
-
-/** What this phone offers: the source alone in prod, so no row. Only a test passes other `regions`. */
-export const offeredHere = (regions?: readonly Region[]): Language[] =>
-  offeredLanguages(offersPseudoLanguage(), regions);
+import { findActiveTrack } from "./tracks/tracksDb";
 
 /** The phone's own language, as a tag (`en_US` is read as `en-US`); none when it will not say. */
 export function deviceLanguages(): string[] {
@@ -35,25 +34,73 @@ export function deviceLanguages(): string[] {
 /** Reloads the JS bundle; a dev build, with updates off, rejects. */
 const restartClient = (): Promise<void> => Updates.reloadAsync();
 
+/** Whether a track is recording now: a restart would interrupt it. */
+const trackRecording = async (): Promise<boolean> =>
+  (await findActiveTrack())?.state === "recording";
+
 /**
- * At start, before the first render: if the language this phone should run in
- * (what it kept, else what it speaks, among what is offered) is not the one it
- * started in, store it and restart once. Returns true when it did. A phone that
- * cannot store it does not restart, so it cannot restart on every start.
+ * Once the app has mounted: if the language this phone should run in (what it
+ * kept, else what it speaks, among what is offered) is not the one it started
+ * in, store it and restart once. Returns true when it did. Not while a track
+ * records, nor when that cannot be read: the language then applies at the next
+ * start. A phone that cannot store it does not restart, so it cannot restart on
+ * every start.
  */
-export function reconcileLanguage(
-  device: readonly string[] = deviceLanguages(),
-  restart: () => Promise<void> = restartClient,
-): boolean {
+export async function reconcileLanguage({
+  device = deviceLanguages(),
+  restart = restartClient,
+  isRecording = trackRecording,
+}: {
+  device?: readonly string[];
+  restart?: () => Promise<void>;
+  isRecording?: () => Promise<boolean>;
+} = {}): Promise<boolean> {
   const next = languageToStart(
     language(),
     readPref(LANGUAGE_PREF_KEY),
     device,
     offeredHere(),
   );
-  if (next === null || !writePref(LANGUAGE_PREF_KEY, next)) return false;
+  if (next === null) return false;
+  try {
+    if (await isRecording()) return false;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+  if (!writePref(LANGUAGE_PREF_KEY, next)) return false;
   restart().catch(console.error);
   return true;
+}
+
+/**
+ * The root component's start-up: ask for the restart from the mounted app, never
+ * from index.ts's module scope, which Android also evaluates for a headless
+ * relaunch of the track recorder (guard: language.test.ts, "index.ts asks for
+ * no restart at module scope"). The app therefore mounts once in the old
+ * language before the restart lands, so a restart that fails (a dev build)
+ * leaves a working app.
+ */
+export function useStartInLanguage(): void {
+  useEffect(() => {
+    void reconcileLanguage();
+  }, []);
+}
+
+/**
+ * The language to write to the account, or null: a guest has none to write to
+ * (ADR 0007), so the `serverPrefs` capability decides, as `sendsRegionChoice`
+ * does. Guard: languageSetting.test.ts.
+ */
+export function languageToSend(
+  accountState: AccountState,
+  running: Language,
+  recorded: Language | undefined,
+): Language | null {
+  return capabilityStatus("serverPrefs", accountState, true).status ===
+    "available"
+    ? languageToRecord(running, recorded)
+    : null;
 }
 
 /**
@@ -83,18 +130,21 @@ export async function chooseLanguage(
 
 /**
  * What Settings → Display draws for the language: null with one language
- * offered, else the choices and, while a track records, why they are held (the
- * restart would interrupt it).
+ * offered, else the choices and, while a track records or until the track list
+ * has been read (it may never be), why they are held: the restart would
+ * interrupt a recording.
  */
 export function languageRow(
   offered: readonly Language[],
   tracks: readonly { state: string }[],
+  tracksLoaded: boolean,
 ): { offered: readonly Language[]; heldReason: string | null } | null {
-  if (offered.length < 2) return null;
+  if (!showsLanguageChoice(offered)) return null;
   return {
     offered,
-    heldReason: tracks.some((track) => track.state === "recording")
-      ? LANGUAGE_SETTING.held
-      : null,
+    heldReason:
+      !tracksLoaded || tracks.some((track) => track.state === "recording")
+        ? LANGUAGE_SETTING.held
+        : null,
   };
 }

@@ -398,7 +398,6 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
-  useRecordLanguage(currentUser, applyCurrentUser);
   // Keyed by string: the fallback toast's effect depends on this list.
   const regionKey = normalizeUserUiPreferences(
     currentUser?.uiPreferences,
@@ -428,6 +427,7 @@ function App() {
   const { blocked: consentBlocked, settled: consentSettled } =
     consentGate(currentUser);
   const loadsUserData = authenticated && consentSettled;
+  useRecordLanguage(currentUser, applyCurrentUser, loadsUserData);
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
   const {
