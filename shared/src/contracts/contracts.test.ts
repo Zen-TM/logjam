@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { gridZonesFor } from "../grids.js";
+import { REGIONS } from "../regions.js";
+import { SIM_REGIONS } from "../simRegions.js";
 import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
@@ -63,6 +66,7 @@ import {
   attributeDeleteConfirm,
   SETTINGS_LIST,
   contractSectionKeys,
+  gridOverlayTitle,
   deleteAccountPhrase,
   deleteAccountPhraseMatches,
   contractSectionsFor,
@@ -1027,6 +1031,68 @@ describe("the map's overlays list", () => {
     for (const row of Object.keys(MAP_OVERLAY_REFINEMENTS))
       expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
   });
+});
+
+describe("the grid row's title", () => {
+  const sydney = { lon: 151.2, lat: -33.9 };
+  const wanaka = { lon: 169.1, lat: -44.63 };
+  const bryce = { lon: -112.17, lat: 37.6 };
+
+  // Mutation: return a fixed "MGA grid", or the first region's grid whatever
+  // the view, and New Zealand reads "MGA grid".
+  it("names the grid in view", () => {
+    expect(gridOverlayTitle(wanaka, SIM_REGIONS)).toBe("NZTM grid");
+    expect(gridOverlayTitle(bryce, SIM_REGIONS)).toBe("UTM grid");
+  });
+
+  // Mutation: drop the one-region rule (name a centre outside every region
+  // "UTM grid") and Queensland and the sea off Sydney stop reading "MGA grid".
+  it('reads "MGA grid" over Queensland and just offshore with only New South Wales', () => {
+    expect(gridOverlayTitle({ lon: 153.03, lat: -27.47 })).toBe("MGA grid"); // Brisbane
+    expect(gridOverlayTitle({ lon: 151.6, lat: -33.9 })).toBe("MGA grid"); // off Sydney
+  });
+
+  // Mutation: apply the one-region rule whatever the count (return
+  // `regions[0]`'s grid for a centre in no region) and, with two regions
+  // declared, a centre outside them reads "NZTM grid" instead of "UTM grid".
+  it('reads "UTM grid" for a centre outside every region when there are several', () => {
+    expect(gridOverlayTitle({ lon: 2.35, lat: 48.85 }, SIM_REGIONS)).toBe(
+      "UTM grid",
+    );
+    expect(
+      gridOverlayTitle({ lon: 144.9, lat: -37.8 }, [
+        ...REGIONS,
+        ...SIM_REGIONS,
+      ]),
+    ).toBe("UTM grid");
+  });
+
+  // Mutation: name a view not yet reported "UTM grid" (drop the fallback to
+  // the first region's grid), or look the view up in no region and Sydney
+  // reads "UTM grid": the row is not "MGA grid" any more.
+  it('reads "MGA grid" with only New South Wales', () => {
+    expect(gridOverlayTitle(sydney)).toBe("MGA grid");
+    expect(gridOverlayTitle(null)).toBe("MGA grid");
+  });
+
+  // Mutation: have the title read the grid by another rule than
+  // `gridZonesFor` and a view can be titled NZTM while it draws UTM lines.
+  it.each([wanaka, bryce, sydney])(
+    "is the name of the zone drawn at %j",
+    (at) => {
+      const box = {
+        west: at.lon - 0.03,
+        east: at.lon + 0.03,
+        south: at.lat - 0.02,
+        north: at.lat + 0.02,
+      };
+      const regions = [...REGIONS, ...SIM_REGIONS];
+      const zone = gridZonesFor(box, regions)[0]!;
+      expect(gridOverlayTitle(at, regions)).toBe(
+        `${zone.name.split(" ")[0]} grid`,
+      );
+    },
+  );
 });
 
 // What a press on empty map answers, on both clients (shared/DESIGN.md §3).
