@@ -62,6 +62,8 @@ export const MAP_TERRAIN = {
     // What "What is here?" says after the carrier; the first is the
     // legend's swatch too.
     coverageNoReception: t`no mobile reception`,
+    // The legend row's heading: the same words as a sentence of their own.
+    coverageNoReceptionRow: t`No mobile reception`,
     coverageReception: t`mobile reception`,
     slopeBands: t`Slope bands`,
     // One sentence under each switch. Slope's colours are the account's bands,

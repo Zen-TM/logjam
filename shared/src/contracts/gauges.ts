@@ -48,8 +48,9 @@ export const GAUGE_RECENT_MS = 7 * DAY_MS;
 export const GAUGE_STALE_FILE_MS = DAY_MS;
 
 // BoM's long names are mostly upper case, some abbreviated: "COLO RIVER AT
-// UPPER COLO", "RICHMOND RV @ OAKLAND ROAD".
-const NAME_WORDS: Record<string, string> = {
+// UPPER COLO", "RICHMOND RV @ OAKLAND ROAD". A function, so each word is
+// written in the language in force when a name is read.
+const nameWords = (): Record<string, string> => ({
   "@": t`at`,
   AT: t`at`,
   NEAR: t`near`,
@@ -63,19 +64,38 @@ const NAME_WORDS: Record<string, string> = {
   "U/S": t`upstream of`,
   DOWNSTREAM: t`downstream`,
   UPSTREAM: t`upstream`,
-};
+});
 
 /** A gauge's name for reading: "Colo River at Upper Colo". A word the table
  *  doesn't know is only re-cased, never guessed at. */
 export function gaugeDisplayName(raw: string): string {
-  return raw
+  const key = (word: string | undefined) =>
+    (word ?? "").replace(/\.$/, "").toUpperCase();
+  // The clean-up reads BoM's tokens, never the catalogue's words, so it holds
+  // in every language. "OF" is the `nameWords` key a stream phrase ends in.
+  const words = raw
     .replace(/@/g, " @ ")
-    .replace(/\b(up|down) ?(stream)( of)?\b/gi, "$1$2 of")
+    .replace(/\b(up|down) ?(stream)( of)?\b/gi, "$1$2 OF")
     .replace(/(\S)\(/g, "$1 (")
     .split(/\s+/)
-    .filter(Boolean)
+    .filter(Boolean);
+  const table = nameWords();
+  return words
+    .filter((word, i) => {
+      if (key(word) !== "AT" && key(word) !== "@") return true;
+      // "at" before a stream phrase and a place: "at downstream of X" is
+      // "downstream of X". A phrase is one token (D/S) or two (DOWNSTREAM OF).
+      const next = key(words[i + 1]);
+      const length =
+        next === "D/S" || next === "U/S"
+          ? 2
+          : next === "DOWNSTREAM" || next === "UPSTREAM"
+            ? 3
+            : 0;
+      return length === 0 || words.length <= i + length;
+    })
     .map((word) => {
-      const known = NAME_WORDS[word.replace(/\.$/, "").toUpperCase()];
+      const known = table[key(word)];
       if (known) return known;
       // Mixed case ("McKIMMS", "Beechwod") was typed by a person: leave it.
       if (word !== word.toUpperCase()) return word;
@@ -85,8 +105,7 @@ export function gaugeDisplayName(raw: string): string {
         .toLowerCase()
         .replace(/(^|[-'(])([a-z])/g, (_, a, b) => a + b.toUpperCase());
     })
-    .join(" ")
-    .replace(/ at ((?:up|down)stream of) /, " $1 ");
+    .join(" ");
 }
 
 export type GaugeLatest = {
