@@ -60,8 +60,13 @@ export type FlowNetworkLookup =
   /** Outside every basin the layer has been built for. */
   | { status: "not-covered"; attribution: string };
 
-/** How far from a click a creek may be and still count, in metres. */
-export const FLOW_NETWORK_SNAP_M = 50;
+/**
+ * How far from a click a creek may be and still count, in metres. 150, not
+ * 50: on the Grose layer half of all presses land over 80 m from a creek, and
+ * a canyon's pin is often that far off its creek, as is a press zoomed out.
+ * Wider takes the nearest gully more often, which `biggerNearby` then names.
+ */
+export const FLOW_NETWORK_SNAP_M = 150;
 /** A creek this many times bigger in range is worth mentioning. */
 export const FLOW_NETWORK_BIGGER_FACTOR = 3;
 /** The most upstream segments one response carries. */

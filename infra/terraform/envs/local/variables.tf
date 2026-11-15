@@ -21,7 +21,7 @@ variable "oidc_audience" {
 # state, build it (topo/build_flow_network.py) and point this at it in a
 # gitignored `*.auto.tfvars` beside this file, e.g.
 #
-#   flow_network_gpkg = "/home/you/logjam-data/flow-network.gpkg"
+#   flow_network_gpkg = "<path to>/flow-network.gpkg"
 #
 # A changed file is uploaded again on the next `make dev`; the API checks for
 # a new one every five minutes and swaps it in without a restart.
