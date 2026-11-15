@@ -73,6 +73,38 @@ describe("the declaration", () => {
     expect(demCredits([])).toEqual([]);
   });
 
+  // Mutation: pair every area with `regions[0]` in demCredits in place of the
+  // region `areasInRegion` finds, and an area outside every region is credited
+  // to the first one; drop the `coverage` test and an area with none throws.
+  it("credits an area with the heights of the region it lies in", () => {
+    const area = (coverage: DemSource["coverage"]) => ({
+      ...sharpenedDemSource({
+        id: "a1",
+        zmax: 16,
+        tiles15: [0, 0, 1, 1],
+        coverage: [0, 0, 0, 0],
+        contours: true,
+        credit: "Elevation: a survey.",
+        createdAt: "2026-10-24T00:00:00.000Z",
+      }),
+      coverage,
+    });
+    const nz = SIM_REGIONS.find((r) => r.id === "simnz")!;
+    const inNz = area([169.05, -44.65, 169.1, -44.6]);
+    expect(demCredits([inNz.id], [inNz], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+      nz.terrain.heights!.credit,
+    ]);
+    const nowhere = area([0, 0, 0.01, 0.01]);
+    expect(demCredits([nowhere.id], [nowhere], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+    const unplaced = area(null);
+    expect(demCredits([unplaced.id], [unplaced], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+  });
+
   // Mutation: paste a source's host into a reader instead of importing the
   // declaration, and this names the file. A region declares its own sources,
   // and so do the simulated regions, whose sources join `DEM_SOURCES` when

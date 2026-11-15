@@ -12,6 +12,7 @@ import {
   overlayAttributionLines,
   toEastingNorthing,
   type GeoPdfConfig,
+  type TopoLayerName,
 } from "@logjam/shared";
 import {
   ACCENT,
@@ -687,8 +688,14 @@ export function drawGridLines(
 /** What the credits are made of: the page's config and what drew. */
 export type AttributionInput = {
   baseLayer: string;
-  /** Overlay layer names whose data is on the page (`overlayAttributionLines`). */
-  renderedOverlays: readonly string[];
+  /**
+   * Topo layers whose data is on the page (`overlayAttributionLines`). Land is
+   * not one: its credit is the region's own, in `landCredit`. The type holds no
+   * `land`, so the typecheck (which covers the tests) is the guard.
+   */
+  renderedOverlays: readonly TopoLayerName[];
+  /** The credit of the sheet's region's Land archive when Land drew, else null. */
+  landCredit: string | null;
   /** `terrainCreditLines` of what drew. */
   terrainLines: readonly string[];
   /** When the base tiles were taken (the dated NSW Spatial Services credit). */
@@ -735,6 +742,7 @@ export function attributionLines(
     extractionCreditLine(input.baseLayer, input.extractedAt),
     ...input.terrainLines,
     ...overlayAttributionLines([...input.renderedOverlays]),
+    input.landCredit,
   ]
     .filter((line): line is string => line !== null)
     .flatMap(wrap);

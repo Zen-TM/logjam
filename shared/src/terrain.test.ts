@@ -114,29 +114,33 @@ describe("slopeBandAt", () => {
 });
 
 describe("terrainCredit", () => {
+  const HEIGHTS = NSW_REGION.terrain.heights.credit;
+
   // Mutation: list the layers in the order drawn, not top of the map first.
   it("credits the layers drawn in one line, top of the map first", () => {
-    expect(terrainCredit(["hillshade", "contours", "slope"])).toBe(
+    expect(terrainCredit(["hillshade", "contours", "slope"], HEIGHTS)).toBe(
       NSW_REGION.terrain.heights.credit.replace(
         /^Elevation/,
         "Contours, slope and hillshade",
       ),
     );
-    expect(terrainCredit(["hillshade", "slope"])).toBe(
+    expect(terrainCredit(["hillshade", "slope"], HEIGHTS)).toBe(
       NSW_REGION.terrain.heights.credit.replace(
         /^Elevation/,
         "Slope and hillshade",
       ),
     );
-    expect(terrainCredit(["slope"])).toBe(NSW_REGION.terrain.slope.credit);
-    expect(terrainCredit([])).toBeNull();
+    expect(terrainCredit(["slope"], HEIGHTS)).toBe(
+      NSW_REGION.terrain.slope.credit,
+    );
+    expect(terrainCredit([], HEIGHTS)).toBeNull();
   });
 
   // Mutation: drop the `land` test, and a print of Land credits it to the 5 m
   // DEM, which it does not come from.
   it("leaves Land to its own credit", () => {
-    expect(terrainCredit(["land"])).toBeNull();
-    expect(terrainCredit(["land", "slope"])).toBe(
+    expect(terrainCredit(["land"], HEIGHTS)).toBeNull();
+    expect(terrainCredit(["land", "slope"], HEIGHTS)).toBe(
       NSW_REGION.terrain.slope.credit,
     );
   });

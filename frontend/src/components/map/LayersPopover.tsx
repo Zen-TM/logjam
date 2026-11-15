@@ -14,8 +14,8 @@ import {
   type CarrierId,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
   type OverlayLegend,
   type SectionKeysOn,
   type SlopeBand,
@@ -420,8 +420,8 @@ export function TerrainPane({
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
-    const printed = key === "contours" && !takesNswContours(activeLayerId);
-    const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
+    const printed = key === "contours" && !takesContours(activeLayerId);
+    const shadowed = key === "hillshade" && !takesHillshade(activeLayerId);
     const reason = printed
       ? terrainCopy.contoursPrinted
       : shadowed
