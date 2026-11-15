@@ -149,7 +149,11 @@ export function formatPlacePosition(latitude: number, longitude: number) {
  *  where the label does not already say it. Guard: `units.test.ts` ("a length
  *  field"). */
 export function withFieldUnit(key: string, text: string): string {
-  if (!isLengthField(key)) return text;
+  // Text that already ends in the unit is left as it is, so applying this
+  // twice is the same as once. Guard: `contracts.test.ts` ("withRowUnit applied
+  // twice is applied once").
+  if (!isLengthField(key) || text.endsWith(` ${lengthUnitLabel()}`))
+    return text;
   const metres = Number(text);
   const shown =
     text.trim() === "" || !Number.isFinite(metres)
@@ -161,8 +165,9 @@ export function withFieldUnit(key: string, text: string): string {
 /** An attribute row with its built-in unit on the value ("15" becomes "15
  *  m"). The value is otherwise left raw: the table formats it by type, and
  *  formatting it here as well would format a date twice. `attributeRows` and
- *  `tripPlanSetAsideRows` apply it, so a caller of either does not: the value
- *  is text by then and would take the unit twice. */
+ *  `tripPlanSetAsideRows` apply it; a row that has the unit already keeps it,
+ *  so applying it again changes nothing. Guard: `contracts.test.ts`
+ *  ("withRowUnit applied twice is applied once"). */
 export function withRowUnit(row: AttributeRow): AttributeRow {
   const [key, label, value, type] = row;
   if (value == null || value === "" || !isLengthField(key)) return row;

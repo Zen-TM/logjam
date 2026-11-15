@@ -23,14 +23,19 @@ const read = (file: string) =>
 describe("every form of a length field converts it", () => {
   // Mutation: change any of these calls back to the unit-blind one
   // (`String(raw)`, `coerceFieldValue(...)`, or `coerceCustomFields` without
-  // the stored values), or drop `length={isLengthField(def.key)}` from either
-  // filter.
+  // the stored values), drop `fieldKey={def.key}` from either filter, or drop
+  // the units from any one input's seed key (`displayUnits()` in `openKey`,
+  // `seedKey`, `populatedFor`, the plan item sheet's `key` or the plan item
+  // dialog's `key`, or the filters' `shownUnits` reseed).
   it.each([
     [
       "frontend/src/components/dialogs/PlaceDialog.tsx",
       [
         "vals[def.key] = fieldInputText(def.key, raw);",
         "attributes[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, fieldValue(place?.fieldValues, def.key), );",
+        "const units = displayUnits();",
+        "units !== populatedFor.units",
+        "setPopulatedFor({ open, placeId, units });",
       ],
     ],
     [
@@ -39,6 +44,7 @@ describe("every form of a length field converts it", () => {
         "vals[def.key] = fieldInputText(def.key, raw);",
         "customFields[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, );",
         "customFields[def.key] = coerceFieldInput( def.key, raw, def.type, tripLog?.customFields[def.key], );",
+        'const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;',
       ],
     ],
     [
@@ -46,6 +52,8 @@ describe("every form of a length field converts it", () => {
       [
         "fieldValues: fieldValueStrings(userFieldValues(place?.fieldValues)),",
         "coerceCustomFields( fieldValues, typeFieldDefs, place?.fieldValues, );",
+        "units: displayUnits(),",
+        "seededFor.units !== seedKey.units",
       ],
     ],
     [
@@ -53,23 +61,36 @@ describe("every form of a length field converts it", () => {
       [
         "setFieldValues(fieldValueStrings(trip?.customFields));",
         "coerceCustomFields(fieldValues, visibleFieldDefs, trip?.customFields),",
+        'const openKey = visible ? `${trip?.id ?? "new"}|${displayUnits()}` : null;',
       ],
+    ],
+    [
+      "mobile/src/plans/PlanItemSheet.tsx",
+      [
+        "const key = item ? `${item.kind}:${item.id}|${displayUnits()}` : null;",
+      ],
+    ],
+    [
+      "frontend/src/components/plans/PlanItems.tsx",
+      ["key={displayUnits()} planId={plan.id}"],
     ],
     [
       "frontend/src/ui/AttributeFilter.tsx",
       [
-        "length={isLengthField(def.key)}",
+        "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        "[nextOperator, length ? lengthFromInput(parsed) : parsed]",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", value?.[1], ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) setText(fieldInputText(fieldKey, value[1])); }",
         "formatThreshold(value, length)",
       ],
     ],
     [
       "mobile/src/ui/AttributeFilter.tsx",
       [
-        "length={isLengthField(def.key)}",
+        "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        "[nextOperator, length ? lengthFromInput(parsed) : parsed]",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", value?.[1], ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) setText(fieldInputText(fieldKey, value[1])); }",
         "formatThreshold(value, length)",
       ],
     ],

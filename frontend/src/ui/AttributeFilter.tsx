@@ -5,9 +5,9 @@ import {
   formatRange,
   formatThreshold,
   isFullRange,
+  coerceFieldInput,
+  fieldInputText,
   isLengthField,
-  lengthFromInput,
-  lengthInputText,
   stopLabel,
   withLengthUnit,
   THRESHOLD_OPERATOR_LABELS,
@@ -16,6 +16,7 @@ import {
   type NumberRange,
   type PlaceThresholdFilter,
   type ScopedCustomFieldDef,
+  displayUnits,
 } from "@logjam/shared";
 import { Chip } from "./Chip";
 import { FilterField } from "./FilterField";
@@ -78,7 +79,7 @@ export function AttributeFilter({
     return (
       <ThresholdFilter
         label={withLengthUnit(def.key, def.label)}
-        length={isLengthField(def.key)}
+        fieldKey={def.key}
         value={value?.kind === "number" ? [value.op, value.value] : null}
         onChange={(next) =>
           onChange(
@@ -262,31 +263,43 @@ function MinMaxFilter({
  */
 function ThresholdFilter({
   label,
-  length,
+  fieldKey,
   value,
   onChange,
 }: {
   label: string;
   /**
-   * A length: the filter holds metres, the field is typed in the display
-   * units. Guards: `attributeFilter.test.tsx` ("a length's threshold") on
-   * Logjam Web; on Logjam GPS `lengthFieldClients.test.ts` ("every form of a
-   * length field converts it").
+   * The field's key: a length's filter holds metres while its field is typed in
+   * the display units. Guards: `attributeFilter.test.tsx` ("a length's
+   * threshold") on Logjam Web; on Logjam GPS `lengthFieldClients.test.ts`
+   * ("every form of a length field converts it").
    */
-  length: boolean;
+  fieldKey: string;
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
+  const length = isLengthField(fieldKey);
   const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
     value?.[0] ?? "Less than",
   );
   const [text, setText] = useState(
-    value ? (length ? lengthInputText(value[1]) : String(value[1])) : "",
+    value ? fieldInputText(fieldKey, value[1]) : "",
   );
   const [shownValue, setShownValue] = useState(value);
   if (value !== shownValue) {
     setShownValue(value);
     if (value == null) setText("");
+  }
+  // The text is in the display units, so a change of units writes it again from
+  // the metres held (a typed "30" would otherwise commit as 9.144 m). Guard:
+  // `attributeFilter.test.tsx` ("a length's threshold") on Logjam Web, and on
+  // Logjam GPS `lengthFieldClients.test.ts` ("every form of a length field
+  // converts it").
+  const units = displayUnits();
+  const [shownUnits, setShownUnits] = useState(units);
+  if (units !== shownUnits) {
+    setShownUnits(units);
+    if (length && value) setText(fieldInputText(fieldKey, value[1]));
   }
 
   const commit = (nextOperator: PlaceThresholdFilter[0], nextText: string) => {
@@ -294,7 +307,15 @@ function ThresholdFilter({
     onChange(
       nextText.trim() === "" || !Number.isFinite(parsed)
         ? null
-        : [nextOperator, length ? lengthFromInput(parsed) : parsed],
+        : [
+            nextOperator,
+            coerceFieldInput(
+              fieldKey,
+              nextText.trim(),
+              "float",
+              value?.[1],
+            ) as number,
+          ],
     );
   };
 

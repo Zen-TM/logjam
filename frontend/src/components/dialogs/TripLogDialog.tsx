@@ -47,6 +47,7 @@ import {
   type TripLogCustomFieldType,
   coordinateEntry,
   coordinateNumber,
+  displayUnits,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -375,7 +376,12 @@ function TripLogDialog({
   // session's values, and the Dialog's focus-on-open sees the offer.
   // customFieldDefs is deliberately not part of the key — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
-  const openKey = open ? (tripLog?.id ?? "") : null;
+  //
+  // The units are in the key: the form's length text and its conversion are in
+  // one unit, so a change of units reseeds it (dropping what was typed) rather
+  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
+  // of a length field converts it").
+  const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;
   const [populatedFor, setPopulatedFor] = useState<string | null>(null);
   if (openKey !== populatedFor) {
     setPopulatedFor(openKey);

@@ -95,8 +95,9 @@ describe("a length's threshold", () => {
   const typed = (label: string, value: string) =>
     fireEvent.change(input(label), { target: { value } });
 
-  // Mutation: drop `lengthFromInput` from `ThresholdFilter.commit`, or
-  // `lengthInputText` from its first text, or `length` from its call site.
+  // Mutation: have `ThresholdFilter` commit `parsed` instead of
+  // `coerceFieldInput(...)`, seed its text with `String(value[1])` instead of
+  // `fieldInputText`, or pass `fieldKey=""` from its call site.
   it("takes feet and holds metres, and shows stored metres as feet", () => {
     setDisplayUnits("imperial");
     const onChange = vi.fn();
@@ -117,6 +118,29 @@ describe("a length's threshold", () => {
     );
     expect(input("Longest pitch (ft)").value).toBe("100");
     expect(screen.getByText("Over 100")).toBeTruthy();
+  });
+
+  // Mutation: drop the `shownUnits` reseed from `ThresholdFilter` (the text
+  // stays "30" in feet), or commit the text without `coerceFieldInput`'s
+  // `stored` (30 m comes back as 29.99232).
+  it("is written again when the units change under it, and keeps its metres", () => {
+    const onChange = vi.fn();
+    const filter = { kind: "number", op: "Less than", value: 30 } as const;
+    const { rerender } = render(
+      <AttributeFilter def={longest} value={filter} onChange={onChange} />,
+    );
+    expect(input("Longest pitch").value).toBe("30");
+    setDisplayUnits("imperial");
+    rerender(
+      <AttributeFilter def={longest} value={filter} onChange={onChange} />,
+    );
+    expect(input("Longest pitch (ft)").value).toBe("98.4");
+    fireEvent.click(screen.getByRole("button", { name: "Over" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      kind: "number",
+      op: "More than",
+      value: 30,
+    });
   });
 
   // Mutation: `withLengthUnit` in shared/src/tripLogFields.ts loses its

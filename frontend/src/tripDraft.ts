@@ -26,9 +26,15 @@
  *   when a session lapses without a sign-out: the next person to sign in is
  *   never offered the last one's place names, and the same user's unsaved
  *   work survives an expiry.
+ * - **In one unit.** The record carries the display units its text was typed
+ *   in, and a read in other units drops a length field's text (it would be
+ *   read as metres where it was feet). A record from before this field was
+ *   metric. Guard: `tripDraft.test.ts` ("a draft typed in other units").
  * - **Also cleared on sign-out** — `useAuth.ts` and `RootErrorBoundary.tsx`.
  *   Guards: `tripDraft.test.ts`, `useAuth.test.tsx`.
  */
+
+import { displayUnits, isLengthField, type Units } from "@logjam/shared";
 
 export const TRIP_DRAFT_STORAGE_KEY = "logjam.tripDraft";
 
@@ -65,6 +71,8 @@ export type TripDraft = {
   ownerId: string;
   /** ISO timestamp of the last autosave. */
   savedAt: string;
+  /** The display units the form's length text was typed in. */
+  units: Units;
   form: TripDraftForm;
 };
 
@@ -106,12 +114,14 @@ export function serializeTripDraft(
   ownerId: string,
   form: TripDraftForm,
   savedAt: Date,
+  units: Units = displayUnits(),
 ): { status: "ok"; raw: string } | { status: "too-large"; chars: number } {
   const draft: TripDraft = {
     version: TRIP_DRAFT_VERSION,
     mode: "create",
     ownerId,
     savedAt: savedAt.toISOString(),
+    units,
     form,
   };
   const raw = JSON.stringify(draft);
@@ -154,6 +164,7 @@ function parseCreating(value: unknown): TripDraftForm["creating"] | undefined {
 export function parseTripDraft(
   raw: string | null,
   now: Date,
+  units: Units = displayUnits(),
 ): TripDraft | null {
   if (raw === null) return null;
   let parsed: unknown;
@@ -186,19 +197,28 @@ export function parseTripDraft(
   }
   const creating = parseCreating(f.creating);
   if (creating === undefined) return null;
+  // Text typed in feet is not metres: a length from another unit is dropped.
+  const typedIn: Units = record.units === "imperial" ? "imperial" : "metric";
+  const fieldValues =
+    typedIn === units
+      ? f.fieldValues
+      : Object.fromEntries(
+          Object.entries(f.fieldValues).filter(([key]) => !isLengthField(key)),
+        );
 
   return {
     version: TRIP_DRAFT_VERSION,
     mode: "create",
     ownerId: record.ownerId,
     savedAt: record.savedAt,
+    units,
     form: {
       date: f.date,
       notes: f.notes,
       selectedPlaceIds: f.selectedPlaceIds,
       displayNameInput: f.displayNameInput,
       selectedTypes: f.selectedTypes,
-      fieldValues: f.fieldValues,
+      fieldValues,
       creating,
     },
   };

@@ -19,7 +19,7 @@ import {
   type FieldStat,
   type LogbookStats,
 } from "./logbookStats.js";
-import { withRowUnit } from "./contracts/placePage.js";
+import { withFieldUnit, withRowUnit } from "./contracts/placePage.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
 
 export type LogbookTrip = {
@@ -488,13 +488,19 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
           ? `highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}`
           : undefined,
       };
-    case "quantity":
+    case "quantity": {
+      // A length (a canyon's longest pitch) is stored in metres and read in
+      // the display units; any other quantity is the number itself. Guard:
+      // `logbook.test.ts` ("gives a length its unit in the display units, and
+      // another quantity none").
+      const shown = (n: number) => withFieldUnit(stat.key, formatStatNumber(n));
       return {
-        metric: { value: formatStatNumber(stat.average), suffix: "avg" },
+        metric: { value: shown(stat.average), suffix: "avg" },
         subtitle: stat.best
-          ? `highest ${formatStatNumber(stat.best.value)}, ${stat.best.label}`
+          ? `highest ${shown(stat.best.value)}, ${stat.best.label}`
           : undefined,
       };
+    }
     case "boolean":
       return {
         metric: { value: `${stat.yes}`, suffix: "yes" },
