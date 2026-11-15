@@ -5,9 +5,10 @@
 // regions.test.ts, "declares only NSW unless the simulated-regions flag is
 // set"); a unit test passes `SIM_REGIONS` as `regions` instead.
 //
-// Every box, id, path, zoom and credit here is a placeholder until the
-// simulated-region archives are built, which sets the real values; the archive
-// paths follow `master/<kind>/<id>-…`.
+// The boxes and the heights' top zoom are the ones scripts/sim-regions builds
+// (guard: simRegionsBuild.test.ts); credits, tile sizes and the land, fire and
+// coverage archives are placeholders, and the archive paths follow
+// `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
 import { t } from "./i18n.js";
 import type {
@@ -44,7 +45,12 @@ function placeholderTileBytes(minzoom: number, maxzoom: number): TileBytes {
 }
 
 /** The heights, slope, hillshade and contours of a simulated region. */
-function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
+function simTerrain(
+  id: string,
+  name: string,
+  coverage: Box,
+  topZoom: number,
+): RegionTerrain {
   const credit = (layer: string) => ({
     coverage,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
@@ -52,10 +58,10 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
   });
   const heights = {
     id: `${id}-heights`,
-    sampleZoom: 15,
+    sampleZoom: topZoom,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
-    tileBytes: placeholderTileBytes(8, 15),
+    tileBytes: placeholderTileBytes(8, topZoom),
     ...credit("Elevation"),
   } as const satisfies DemSource & { tileBytes: TileBytes };
   return {
@@ -64,8 +70,8 @@ function simTerrain(id: string, name: string, coverage: Box): RegionTerrain {
       id: `${id}-slope`,
       archivePath: `master/dem/${id}-slope.pmtiles`,
       minzoom: 8,
-      maxzoom: 15,
-      tileBytes: placeholderTileBytes(8, 15),
+      maxzoom: topZoom,
+      tileBytes: placeholderTileBytes(8, topZoom),
       ...credit("Slope"),
     },
     hillshade: {
@@ -153,10 +159,11 @@ function simOverlays(
   };
 }
 
-// Placeholder: two islands, one ring each. Heights cover the box round both,
-// as NSW's do round its outline; a tile the build did not make is absent.
-const NZ_SOUTH_BOX: Box = [169.0, -44.7, 169.2, -44.55]; // near Wanaka
-const NZ_NORTH_BOX: Box = [175.5, -37.1, 175.7, -36.95]; // the Coromandel
+// Two islands, one ring each, round the boxes the build cuts. Heights cover the
+// box round both, as NSW's do round its outline; a tile the build did not make
+// is absent.
+const NZ_SOUTH_BOX: Box = [169.2, -44.1, 169.3, -44.01]; // Makarora
+const NZ_NORTH_BOX: Box = [175.58, -37.14, 175.68, -37.06]; // Kauaeranga
 const NZ_COVERAGE: Box = [
   NZ_SOUTH_BOX[0],
   NZ_SOUTH_BOX[1],
@@ -164,7 +171,7 @@ const NZ_COVERAGE: Box = [
   NZ_NORTH_BOX[3],
 ];
 const NZ_TERRAIN: RegionTerrain = {
-  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE),
+  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17),
   ...simOverlays("simnz", "New Zealand", NZ_COVERAGE, [
     { id: "simone", name: t`Simulated One` },
     { id: "simtwo", name: t`Simulated Two` },
@@ -174,7 +181,7 @@ const NZ_TERRAIN: RegionTerrain = {
 export const SIM_NZ: Region = {
   id: "simnz",
   name: "Simulated New Zealand",
-  view: { center: [169.1, -44.62], zoom: 11 },
+  view: { center: [169.25, -44.055], zoom: 11 },
   timeZone: "Pacific/Auckland",
   borders: [ringAround(NZ_SOUTH_BOX), ringAround(NZ_NORTH_BOX)],
   // The worldwide entries are the only basemaps a simulated region has.
@@ -194,18 +201,19 @@ export const SIM_NZ: Region = {
   canyons: null,
 };
 
-// Placeholder: one ring, in the western and northern hemispheres.
-const UTAH_BOX: Box = [-110.9, 38.2, -110.7, 38.35];
+// One ring, in the western and northern hemispheres, round the box the build
+// cuts (Zion).
+const UTAH_BOX: Box = [-113.0, 37.24, -112.89, 37.33];
 // No coverage: a second simulated region that lacks a layer NZ has.
 const UTAH_TERRAIN: RegionTerrain = {
-  ...simTerrain("simutah", "Utah", UTAH_BOX),
+  ...simTerrain("simutah", "Utah", UTAH_BOX, 15),
   ...simOverlays("simutah", "Utah", UTAH_BOX),
 };
 
 export const SIM_UTAH: Region = {
   id: "simutah",
   name: "Simulated Utah",
-  view: { center: [-110.8, 38.27], zoom: 11 },
+  view: { center: [-112.945, 37.285], zoom: 11 },
   timeZone: "America/Denver",
   borders: [ringAround(UTAH_BOX)],
   basemaps: [],
@@ -224,12 +232,13 @@ export const SIM_UTAH: Region = {
   canyons: null,
 };
 
-// Placeholder for the everywhere tier: whole-world coverage, where a tile the
-// build did not make is absent.
+// The everywhere tier: whole-world coverage, where a tile the build did not
+// make is absent. Its heights stop at z13, as the planet file does.
 const WORLD_TERRAIN = simTerrain(
   "simworld",
   "the world",
   [-180, -85.06, 180, 85.06],
+  13,
 );
 
 export const SIM_WORLD: Region = {

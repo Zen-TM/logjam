@@ -25,29 +25,38 @@ const peak: PlaceResult = {
 describe("placeSearchSource", () => {
   // Mutation: check the account before the file.
   it("searches the phone's own copy whenever it has one, even online", () => {
-    expect(placeSearchSource(true, "linked", true)).toBe("device");
-    expect(placeSearchSource(true, "guest", false)).toBe("device");
+    expect(placeSearchSource("nsw", true, "linked", true)).toBe("device");
+    expect(placeSearchSource("nsw", true, "guest", false)).toBe("device");
   });
 
   // Mutation: return "api" without asking capabilities.ts.
   it("asks the API only for a signed-in phone with signal", () => {
-    expect(placeSearchSource(false, "linked", true)).toBe("api");
-    expect(placeSearchSource(false, "linked", false)).toBe("none");
-    expect(placeSearchSource(false, "guest", true)).toBe("none");
+    expect(placeSearchSource("nsw", false, "linked", true)).toBe("api");
+    expect(placeSearchSource("nsw", false, "linked", false)).toBe("none");
+    expect(placeSearchSource("nsw", false, "guest", true)).toBe("none");
+  });
+
+  // Mutation: drop the `regionId === null` return, and a map over ground no
+  // registry covers still searches (a copy held for another region, or the
+  // API for a registry it does not have).
+  it("has no registry source over ground none covers", () => {
+    expect(placeSearchSource(null, true, "linked", true)).toBe("none");
+    expect(placeSearchSource(null, false, "linked", true)).toBe("none");
   });
 });
 
 describe("searchPlacesOnline", () => {
-  // Mutation: put `q` in the path's query string, or send a GET.
-  it("sends the query in the body, never the URL", async () => {
-    await searchPlacesOnline("Claustral", new AbortController().signal);
+  // Mutation: put `q` or `region` in the path's query string, send a GET, or
+  // leave the region out of the body.
+  it("sends the query and the region in the body, never the URL", async () => {
+    await searchPlacesOnline("Claustral", "nsw", new AbortController().signal);
     const [path, options] = apiFetch.mock.calls[0] as unknown as [
       string,
       { method: string; body: unknown },
     ];
     expect(path).toBe("/places/search");
     expect(options.method).toBe("POST");
-    expect(options.body).toEqual({ q: "Claustral", limit: 8 });
+    expect(options.body).toEqual({ q: "Claustral", limit: 8, region: "nsw" });
   });
 });
 
@@ -88,10 +97,10 @@ describe("the API's answer", () => {
       );
       const settled: string[] = [];
       const settle = (answer: { query: string }) => settled.push(answer.query);
-      const cancelOlder = askPlacesOnline("Kat", settle);
+      const cancelOlder = askPlacesOnline("Kat", "nsw", settle);
       await vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS);
       cancelOlder();
-      askPlacesOnline("Kato", settle);
+      askPlacesOnline("Kato", "nsw", settle);
       await vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS);
       pending[1]({ results: [peak] });
       await vi.advanceTimersByTimeAsync(0);
@@ -111,12 +120,13 @@ describe("the API's answer", () => {
     try {
       apiFetch.mockRejectedValueOnce(new Error("Server unavailable"));
       let answer: unknown = null;
-      askPlacesOnline("Kato", (next) => {
+      askPlacesOnline("Kato", "nsw", (next) => {
         answer = next;
       });
       await vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS);
       expect(answer).toEqual({
         query: "Kato",
+        region: "nsw",
         results: [],
         error: expect.any(String),
       });
@@ -127,18 +137,40 @@ describe("the API's answer", () => {
 
   // Mutation: show the last answer whatever the query is now.
   it("still fits while the query only grows, and is awaited otherwise", () => {
-    const answer = { query: "Kat", results: [peak], error: null };
-    expect(placesFromAnswer(answer, "Kato")).toEqual([peak]);
-    expect(placesFromAnswer(answer, "Ka")).toBe("loading");
-    expect(placesFromAnswer(answer, "Blue")).toBe("loading");
-    expect(placesFromAnswer(null, "Kato")).toBe("loading");
+    const answer = {
+      query: "Kat",
+      region: "nsw",
+      results: [peak],
+      error: null,
+    };
+    expect(placesFromAnswer(answer, "Kato", "nsw")).toEqual([peak]);
+    expect(placesFromAnswer(answer, "Ka", "nsw")).toBe("loading");
+    expect(placesFromAnswer(answer, "Blue", "nsw")).toBe("loading");
+    expect(placesFromAnswer(null, "Kato", "nsw")).toBe("loading");
+  });
+
+  // Mutation: drop the `answer.region !== regionId` test from
+  // `placesFromAnswer`, and one region's answer shows over another's.
+  it("is never one region's answer over another's", () => {
+    const answer = {
+      query: "Kat",
+      region: "nsw",
+      results: [peak],
+      error: null,
+    };
+    expect(placesFromAnswer(answer, "Kato", "elsewhere")).toBe("loading");
   });
 
   // Mutation: drop the user's own matches or the ask row on a failure.
   it("keeps the user's own matches and the ask row on a failure", () => {
-    const failed = { query: "Kat", results: [], error: "Server unavailable" };
+    const failed = {
+      query: "Kat",
+      region: "nsw",
+      results: [],
+      error: "Server unavailable",
+    };
     expect(
-      searchRows(["yours"], placesFromAnswer(failed, "Kat"), true),
+      searchRows(["yours"], placesFromAnswer(failed, "Kat", "nsw"), true),
     ).toEqual([
       { kind: "saved", item: "yours" },
       { kind: "error", message: "Server unavailable" },

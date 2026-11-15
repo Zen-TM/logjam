@@ -3,7 +3,8 @@
 //
 // A worker has its own global scope, so the simulated-regions switch the page
 // set is not here: this import sets it again, before `@logjam/shared` loads,
-// for the region a sheet's terrain is read from. Guard: workerGrid.test.ts.
+// for the region a sheet's terrain is read from. Guards: workerSimRegions.test.ts,
+// workerGrid.test.ts.
 // The display units are in the same case: each request carries the page's, and
 // the scale bar is written in them. Guard: worker.test.ts ("the render worker's
 // display units").

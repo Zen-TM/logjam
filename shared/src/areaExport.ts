@@ -2,8 +2,15 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
-import { nswContourStyle } from "./nswContours.js";
-import { layerIn, REGIONS, regionTouchesBox, type Region } from "./regions.js";
+import { boxCentre, gridZoneOf } from "./grids.js";
+import { nswContourStyle } from "./contourRules.js";
+import {
+  layerIn,
+  regionInView,
+  REGIONS,
+  regionTouchesBox,
+  type Region,
+} from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
@@ -37,6 +44,26 @@ export type AreaBbox = {
   east: number;
   north: number;
 };
+
+/**
+ * The EPSG code of the grid the worker warps an export of this box to: the
+ * grid of a region with heights, in the zone at the box's centre. That is the
+ * region with heights holding the centre, else the first region with heights
+ * touching the box (the regions `areaInTerrainRegion` admits a box by, and
+ * the ones the data comes from), so a box over the edge of NSW stays in MGA
+ * however its centre falls. UTM when no region with heights touches the box.
+ * The API stores the code on the job beside the box, so the worker needs no
+ * regions of its own. Guard: `areaExport.test.ts`.
+ */
+export function areaExportEpsg(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): number {
+  const { lon, lat } = boxCentre(bbox);
+  const withHeights = regions.filter((each) => layerIn(each, "heights"));
+  const region = regionInView(bbox, withHeights);
+  return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
+}
 
 /**
  * The longest side a box may have. On the export task's size (4 vCPU, 8 GiB,

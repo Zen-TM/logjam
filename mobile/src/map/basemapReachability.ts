@@ -5,21 +5,24 @@
 // an outage is found.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  basemapHere,
   BASEMAP_CATALOG,
   serverAnswers,
+  vectorBasemapIn,
   withBasemapDown,
+  type LonLatBox,
 } from "@logjam/shared";
 
-import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
+import { mobileBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 // The Katoomba tile the bundled swatches are cut from.
 const PROBE_TILE = { z: 13, x: 7516, y: 4911 };
 
-/** The fetched basemaps. The drawn one is read from our own archive and has no
- *  third-party server to probe. */
-export const probedBasemaps = (regionIds: readonly string[]): BasemapId[] =>
-  mobileBasemaps(regionIds).filter(
+/** The fetched basemaps the view offers. The drawn one is read from our own
+ *  archive and has no third-party server to probe. */
+export const probedBasemaps = (view: LonLatBox): BasemapId[] =>
+  mobileBasemaps(view).filter(
     (id) => BASEMAP_CATALOG.find((e) => e.id === id)?.kind === "raster",
   );
 
@@ -32,16 +35,19 @@ function probeUrl(id: BasemapId): string {
     .replace("{y}", String(PROBE_TILE.y));
 }
 
-/** What stands in for `picked` while its server is down: the default, or the
- *  drawn basemap when the pick is the default or the default is down too (a
- *  SIX outage takes out topo and imagery together). */
+/** What stands in for `picked` while its server is down: the default of the
+ *  region in view, or the drawn basemap when the pick is the default or the
+ *  default is down too (a SIX outage takes out topo and imagery together). The
+ *  drawn basemap stands in only where the view offers it; elsewhere the pick
+ *  stays, as there is nothing to draw instead. */
 export function basemapFallbackFor(
   picked: BasemapId,
   down: ReadonlySet<BasemapId>,
-  regionIds: readonly string[],
+  view: LonLatBox,
 ): BasemapId {
-  const fallback = defaultBasemap(regionIds);
-  return picked === fallback || down.has(fallback) ? "protomaps" : fallback;
+  const fallback = basemapHere("", view);
+  const drawn = vectorBasemapIn(mobileBasemaps(view)) ?? picked;
+  return picked === fallback || down.has(fallback) ? drawn : fallback;
 }
 
 /** The basemaps whose server did not answer, and `probe`, which asks again (the
@@ -49,7 +55,7 @@ export function basemapFallbackFor(
  *  an offline phone marks nothing down. */
 export function useDownBasemaps(
   online: boolean,
-  regionIds: readonly string[],
+  view: LonLatBox,
 ): {
   down: ReadonlySet<BasemapId>;
   probe: () => void;
@@ -62,10 +68,13 @@ export function useDownBasemaps(
   // The latest probe's number. An older probe that answers late would put its
   // stale verdict over a newer one, so only the latest may write.
   const latest = useRef(0);
+  // The ids as a string, so a pan within ground that offers the same
+  // basemaps does not re-probe their servers.
+  const probing = probedBasemaps(view).join(",");
   const probe = useCallback(() => {
     if (!online) return;
     const mine = ++latest.current;
-    for (const id of probedBasemaps(regionIds)) {
+    for (const id of probing === "" ? [] : probing.split(",")) {
       void serverAnswers(probeUrl(id)).then((ok) => {
         if (latest.current !== mine) return;
         const next = withBasemapDown(verdict.current, id, !ok);
@@ -74,7 +83,7 @@ export function useDownBasemaps(
         setDown(next);
       });
     }
-  }, [online, regionIds]);
+  }, [online, probing]);
   useEffect(() => {
     probe();
     return () => {

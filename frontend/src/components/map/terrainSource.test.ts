@@ -1,19 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  NSW_TERRAIN_SOURCE,
+  REGION_TERRAIN_SOURCE,
   WORLDWIDE_TERRAIN_SOURCE,
   applyTerrain,
   dropStaleTerrainSources,
   terrainSourceFor,
 } from "./terrainSource";
-import { NSW_REGION, type SharpenedOverlay } from "@logjam/shared";
+import {
+  NSW_REGION,
+  SIM_NZ,
+  SIM_UTAH,
+  SIM_WORLD,
+  type Region,
+  type SharpenedOverlay,
+} from "@logjam/shared";
 
+const NSW_TERRAIN_SOURCE = `${REGION_TERRAIN_SOURCE}${NSW_REGION.id}`;
+const SIM_REGIONS = [NSW_REGION, SIM_NZ, SIM_UTAH];
+
+/** A map showing a small view round a point, its longitudes raw as MapLibre reports them. */
 function fakeMap(lng: number, lat: number) {
   const sources = new Map<string, unknown>();
   return {
-    getCenter: () => ({
-      wrap: () => ({ lng: ((((lng + 180) % 360) + 360) % 360) - 180, lat }),
+    getBounds: () => ({
+      getWest: () => lng - 0.01,
+      getEast: () => lng + 0.01,
+      getSouth: () => lat - 0.01,
+      getNorth: () => lat + 0.01,
     }),
     getSource: (id: string) => sources.get(id),
     addSource: vi.fn((id: string, source: unknown) => {
@@ -88,8 +102,9 @@ describe("terrainSourceFor", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  // Mutation: read the centre unwrapped and a map panned once around the
-  // world draws NSW from the worldwide tiles.
+  // Mutation: read the view unwrapped (`regionInView` in place of
+  // `regionInWrappedView`) and a map panned once around the world draws NSW
+  // from the worldwide tiles.
   it("uses the NSW archive over NSW after a pan around the world", async () => {
     const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
     expect(
@@ -111,6 +126,127 @@ describe("terrainSourceFor", () => {
     expect(map.addSource).toHaveBeenCalledTimes(1);
   });
 
+  describe("by region", () => {
+    const MAKARORA = [169.25, -44.055] as const;
+    const NZ_ARCHIVE = `https://web.test/${SIM_NZ.terrain.heights!.archivePath}`;
+    const nzArea: SharpenedOverlay = {
+      ...area,
+      id: "nz1",
+      coverage: [169.22, -44.08, 169.24, -44.06],
+    };
+    const ask = (
+      map: ReturnType<typeof fakeMap>,
+      areas: SharpenedOverlay[] = [],
+      open: (url: string) => Promise<unknown> = opens,
+      world?: Region,
+    ) =>
+      terrainSourceFor(
+        map,
+        areas,
+        open,
+        "https://web.test",
+        SIM_REGIONS,
+        world,
+      );
+
+    // Mutation: read NSW's archive whatever the region, and a map over
+    // another region draws its terrain from New South Wales's heights.
+    it("reads the heights of the region the map shows", async () => {
+      const map = fakeMap(...MAKARORA);
+      const open = vi.fn(opens);
+      expect(await ask(map, [], open)).toBe(`${REGION_TERRAIN_SOURCE}simnz`);
+      expect(open).toHaveBeenCalledWith(NZ_ARCHIVE);
+      expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+        url: `pmtiles://${NZ_ARCHIVE}`,
+        attribution: SIM_NZ.terrain.heights!.creditHtml,
+      });
+    });
+
+    // Mutation: test the view's centre against the heights' coverage box in
+    // place of `regionInWrappedView`, and a view centred just east of the
+    // Kauaeranga box, whose border still touches it, draws the worldwide tiles.
+    it("reads a region whose border touches the view, as the Terrain group does", async () => {
+      expect(await ask(fakeMap(175.685, -37.1))).toBe(
+        `${REGION_TERRAIN_SOURCE}simnz`,
+      );
+    });
+
+    // Mutation: return the region's source whenever `region` is set, and a
+    // region with no heights draws a source over an archive that is not there.
+    it("uses the worldwide tiles over a region that declares no heights", async () => {
+      const noHeights: Region = { ...SIM_NZ, terrain: {} };
+      const open = vi.fn(opens);
+      expect(
+        await terrainSourceFor(
+          fakeMap(...MAKARORA),
+          [],
+          open,
+          "https://web.test",
+          [noHeights],
+        ),
+      ).toBe(WORLDWIDE_TERRAIN_SOURCE);
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    // Mutation: skip the world fallback and a map outside every region draws
+    // no heights of the everywhere tier.
+    it("falls back to the everywhere tier outside every region, when there is one", async () => {
+      const map = fakeMap(0, 20);
+      expect(await ask(map, [], opens, SIM_WORLD)).toBe(
+        `${REGION_TERRAIN_SOURCE}world`,
+      );
+      expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+        url: `pmtiles://https://web.test/${SIM_WORLD.terrain.heights!.archivePath}`,
+      });
+    });
+
+    // Mutation: hand the router every area (`areas` in place of `held`), and
+    // an area in New South Wales turns another region's source into a routed
+    // one whose zooms reach past its archive.
+    it("ignores an area another region holds", async () => {
+      const map = fakeMap(...MAKARORA);
+      expect(await ask(map, [area])).toBe(`${REGION_TERRAIN_SOURCE}simnz`);
+      const spec = map.addSource.mock.calls[0]![1] as Record<string, unknown>;
+      expect(spec.url).toBe(`pmtiles://${NZ_ARCHIVE}`);
+      expect(spec.tiles).toBeUndefined();
+    });
+
+    // Mutation: build the template with NSW's region in place of `region`,
+    // and an area in another region is routed under the wrong archives.
+    it("routes the areas a region holds under its own id", async () => {
+      const map = fakeMap(...MAKARORA);
+      const id = await ask(map, [nzArea]);
+      expect(id).toMatch(/^3d-terrain-dem-simnz-./);
+      expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+        tiles: [
+          expect.stringMatching(/^logjam-terrain:\/\/simnz\/hillshade\//),
+        ],
+        bounds: [...SIM_NZ.terrain.heights!.coverage],
+        minzoom: SIM_NZ.terrain.hillshade!.minzoom,
+      });
+    });
+
+    // Mutation: keep the NSW-only prefix test in `dropStaleTerrainSources`,
+    // and a region's source is left behind when the map crosses into another.
+    it("drops the source of the region the map has left, never the worldwide one", () => {
+      const removed: string[] = [];
+      dropStaleTerrainSources(
+        {
+          getStyle: () => ({
+            sources: {
+              [`${REGION_TERRAIN_SOURCE}simnz`]: {},
+              [NSW_TERRAIN_SOURCE]: {},
+              [WORLDWIDE_TERRAIN_SOURCE]: {},
+            },
+          }),
+          removeSource: (id: string) => void removed.push(id),
+        } as never,
+        NSW_TERRAIN_SOURCE,
+      );
+      expect(removed).toEqual([`${REGION_TERRAIN_SOURCE}simnz`]);
+    });
+  });
+
   describe("with sharpened areas", () => {
     // Mutation: keep the archive's own URL when areas exist and 3D ignores
     // them, as it did before the router.
@@ -120,7 +256,7 @@ describe("terrainSourceFor", () => {
       expect(id).not.toBe(NSW_TERRAIN_SOURCE);
       const spec = map.addSource.mock.calls[0]![1] as Record<string, unknown>;
       expect(spec).toMatchObject({
-        tiles: [expect.stringMatching(/^logjam-terrain:\/\/hillshade\//)],
+        tiles: [expect.stringMatching(/^logjam-terrain:\/\/nsw\/hillshade\//)],
         maxzoom: 16,
         encoding: "terrarium",
       });
@@ -199,6 +335,35 @@ describe("terrainSourceFor", () => {
       expect(map.removeSource).not.toHaveBeenCalledWith(
         WORLDWIDE_TERRAIN_SOURCE,
       );
+    });
+
+    // Mutation: drop `dropStaleTerrainSources` from `applyTerrain`, and the
+    // source of the region the map has left stays in the style.
+    it("moves to the source of the region the map has entered, and drops the one it left", async () => {
+      const map = terrainMap();
+      const view: { lng: number; lat: number } = {
+        lng: KATOOMBA[0],
+        lat: KATOOMBA[1],
+      };
+      map.getBounds = () =>
+        ({
+          getWest: () => view.lng - 0.01,
+          getEast: () => view.lng + 0.01,
+          getSouth: () => view.lat - 0.01,
+          getNorth: () => view.lat + 0.01,
+        }) as never;
+      const go = () =>
+        applyTerrain(map as never, [], opens, "https://web.test", () => true);
+      await go();
+      expect(map.setTerrain.mock.calls[0]![0].source).toBe(NSW_TERRAIN_SOURCE);
+      // Perth: no declared region, and prod has no everywhere tier.
+      view.lng = 115.86;
+      view.lat = -31.95;
+      await go();
+      expect(map.setTerrain.mock.calls[1]![0].source).toBe(
+        WORLDWIDE_TERRAIN_SOURCE,
+      );
+      expect(map.removeSource).toHaveBeenCalledWith(NSW_TERRAIN_SOURCE);
     });
 
     it("draws nothing for a stale answer, and tilts once idle", async () => {

@@ -36,6 +36,7 @@
 import {
   Fragment,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ComponentProps,
@@ -56,7 +57,10 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
+  overlayLegends,
   type CarrierId,
+  type LonLatBox,
+  type Region,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type OverlayLegend,
@@ -87,14 +91,17 @@ import {
   type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
-import { useRegions } from "../regionsPreference";
 import { mobileBasemaps } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { pickCoverageCarrier } from "./coverageLayers";
-import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
+import {
+  coverageCarrierHere,
+  terrainSwitch,
+  type TerrainSwitchState,
+} from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
@@ -131,9 +138,9 @@ export type LayerToggleEntry = {
   note?: string;
   value: boolean;
   onChange: (next: boolean) => void;
-  /** Dimmed and untappable because something above it already decided. A row
-   *  whose switch moves while the map draws nothing is a lie. */
-  inert?: boolean;
+  /** Dimmed and untappable, with `note` as the reason (shared/DESIGN.md §5):
+   *  a row whose switch moves while the map draws nothing is a lie. */
+  disabled?: boolean;
   /**
    * Sub-rows under a master, for a layer whose contents are a vocabulary
    * rather than one thing — the place TYPES. Same master-plus-children shape
@@ -179,8 +186,10 @@ export function MapLayersSheet({
   visible,
   onClose,
   connectivity,
+  region,
   basemapId,
   onBasemapChange,
+  view,
   downBasemaps,
   terrainLayers,
   onTerrainLayerChange,
@@ -198,8 +207,13 @@ export function MapLayersSheet({
   visible: boolean;
   onClose: () => void;
   connectivity: Connectivity;
+  /** The region the map shows (`regionShown`): its archives decide which
+   *  Terrain layers are here, and its legends and carriers are the ones listed. */
+  region: Region | null;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  /** The ground the map shows: it decides which basemaps are listed. */
+  view: LonLatBox;
   /** Basemaps whose tile server did not answer (`useDownBasemaps`). */
   downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
@@ -234,6 +248,8 @@ export function MapLayersSheet({
     setLegend(null);
   }
   const online = connectivity === "online";
+  const legends = useMemo(() => overlayLegends(region), [region]);
+  const carrierHere = coverageCarrierHere(region, coverageCarrier);
 
   // Exhaustive by type: a tab the contract names and this sheet does not
   // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
@@ -242,6 +258,7 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
+        view={view}
         down={downBasemaps}
         online={online}
       />
@@ -250,6 +267,7 @@ export function MapLayersSheet({
       <TerrainTab
         layers={terrainLayers}
         onChange={onTerrainLayerChange}
+        region={region}
         basemapId={basemapId}
         online={online}
         artifacts={artifacts}
@@ -272,13 +290,15 @@ export function MapLayersSheet({
                 basemapId,
                 online,
                 artifacts,
+                region,
               ),
             ]),
           ) as Record<OverlayTerrainKey, TerrainSwitchState>
         }
+        legends={legends}
         onOverlayChange={onTerrainLayerChange}
         onOpenOverlayLegend={setLegend}
-        choices={{ coverage: coverageCarrier }}
+        choices={{ coverage: carrierHere }}
       />
     ),
     offline: () => (
@@ -305,23 +325,24 @@ export function MapLayersSheet({
       // The slope bands editor is taller than any tab, so it takes the tab's
       // place instead.
       overlay={
-        legend && isOverlayTerrainKey(legend) ? (
+        legend && isOverlayTerrainKey(legend) && legends[legend] ? (
           <OverlayLegendSheet
-            legend={OVERLAY_LEGENDS[legend]}
+            legend={legends[legend]}
             {...(legend === "coverage"
               ? {
                   choice: {
-                    value: coverageCarrier,
+                    value: carrierHere,
                     onChange: (value: string) =>
                       pickCoverageCarrier(
                         value,
-                        coverageCarrier,
+                        carrierHere,
                         terrainSwitch(
                           "coverage",
                           terrainLayers.coverage,
                           basemapId,
                           online,
                           artifacts,
+                          region,
                         ).disabled,
                         {
                           choose: onCoverageCarrierChange,
@@ -364,23 +385,24 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  view,
   down,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  view: LonLatBox;
   down: ReadonlySet<BasemapId>;
   online: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const regionIds = useRegions();
   // The map draws the fallback while the pick's server is down (MapScreen);
   // the pick itself stays, so it comes back with the server.
   const shown = basemapToShow(
     basemapId,
     down,
-    basemapFallbackFor(basemapId, down, regionIds),
+    basemapFallbackFor(basemapId, down, view),
   );
   const name = (id: string) =>
     BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
@@ -395,7 +417,7 @@ function BasemapTab({
       {/* Order and membership are `mobileBasemaps`', not the catalog's — see
           basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
           raster). */}
-      {mobileBasemaps(regionIds).map((id) => {
+      {mobileBasemaps(view).map((id) => {
         const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
         // Fail loudly: an id the catalog doesn't know is a programming error.
         if (!entry) throw new Error(`Unknown basemap id: ${id}`);
@@ -449,6 +471,7 @@ function BasemapTab({
 function TerrainTab({
   layers,
   onChange,
+  region,
   basemapId,
   online,
   artifacts,
@@ -458,6 +481,7 @@ function TerrainTab({
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
+  region: Region | null;
   basemapId: BasemapId;
   online: boolean;
   /** What is saved on this phone: offline, a layer needs a clip of itself. */
@@ -477,6 +501,7 @@ function TerrainTab({
           basemapId,
           online,
           artifacts,
+          region,
         );
         return [
           key,
@@ -671,24 +696,20 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
   }
 
   return (
-    <View
-      style={entry.inert ? styles.inert : undefined}
-      pointerEvents={entry.inert ? "none" : "auto"}
-    >
-      <SwitchRow
-        icon={entry.icon}
-        hue={entry.hue}
-        title={entry.title}
-        description={entry.note}
-        badge={
-          entry.count === undefined ? undefined : (
-            <Text style={styles.count}>{entry.count}</Text>
-          )
-        }
-        checked={entry.value}
-        onChange={entry.onChange}
-      />
-    </View>
+    <SwitchRow
+      icon={entry.icon}
+      hue={entry.hue}
+      title={entry.title}
+      description={entry.note}
+      badge={
+        entry.count === undefined ? undefined : (
+          <Text style={styles.count}>{entry.count}</Text>
+        )
+      }
+      disabled={entry.disabled}
+      checked={entry.value}
+      onChange={entry.onChange}
+    />
   );
 }
 
@@ -696,6 +717,7 @@ function LayersTab({
   layers,
   onImportFile,
   overlays,
+  legends,
   onOverlayChange,
   onOpenOverlayLegend,
   choices,
@@ -703,6 +725,8 @@ function LayersTab({
   layers: LayerToggleEntry[];
   onImportFile: () => void;
   overlays: Record<OverlayTerrainKey, TerrainSwitchState>;
+  /** The region in view's legends: a key is absent where it has no such layer. */
+  legends: ReturnType<typeof overlayLegends>;
   onOverlayChange: (key: OverlayTerrainKey, on: boolean) => void;
   onOpenOverlayLegend: (key: OverlayTerrainKey) => void;
   /** Each overlay's `choice` value, which its row names: null until one is
@@ -713,10 +737,13 @@ function LayersTab({
   const styles = useStyles();
 
   const overlayRow = (key: OverlayTerrainKey) => {
-    const legend = OVERLAY_LEGENDS[key];
+    const here = legends[key];
+    // A layer this region lacks keeps its row, named and tinted as NSW's
+    // legend has it, with no help button: there is no legend to open.
+    const legend = here ?? OVERLAY_LEGENDS[key];
     const state = overlays[key];
     const openLegend = () => onOpenOverlayLegend(key);
-    if (legend.choice && overlayAwaitsChoice(legend, choices[key]))
+    if (here?.choice && overlayAwaitsChoice(here, choices[key]))
       return (
         <Row
           icon="layers"
@@ -727,7 +754,7 @@ function LayersTab({
             <Button
               compact
               variant="outlineAccent"
-              label={legend.choice.choose}
+              label={here.choice.choose}
               onPress={openLegend}
             />
           }
@@ -744,7 +771,7 @@ function LayersTab({
         disabled={state.disabled}
         checked={state.checked}
         onChange={(on) => onOverlayChange(key, on)}
-        help={{ label: legend.about, onPress: openLegend }}
+        help={here ? { label: legend.about, onPress: openLegend } : undefined}
       />
     );
   };

@@ -26,7 +26,7 @@ Measured on Geofabrik's NSW extract of 2026-10-15 (269 MB) with
 | Named objects kept | 610,000, merged to 321,000 rows |
 | File | 4.4 MB gzipped, one column per field |
 | Build | 80 s, 1.3 GB peak memory |
-| Node, loaded and indexed | 25 MB heap and 8 MB of typed arrays, 0.6 s; resident memory grows about 175 MB, the load's peak, which V8 keeps |
+| Node, loaded and indexed | 25 MB heap and 8 MB of typed arrays, 0.6 s; resident memory grows about 175 MB, the load's peak, which V8 keeps (updated 2026-11-14: on a made-up file with NSW's row count, 321,000 rows and 16 MB of JSON, node 24, resident memory grew 164 to 171 MB at the peak and 110 to 125 MB once the parse was collected; the real file's settled figure was not measured) |
 | A search | 2–5 ms; 36 ms for the worst two-letter query |
 | House addresses, if added | 409,000 objects, about 3.5 MB gzipped more |
 
@@ -83,20 +83,81 @@ feature in NSW, never a geocoding service.**
   registry leaves out. No guard.
 - **Logjam GPS holds the whole file,** fetched with the first region download
   and refreshed on Wi-Fi by default, and a download replaces the stored file
-  only once it parses. Guards: `mobile/src/offline/placeRegistry.test.ts`,
+  only once it parses (updated 2026-11-14: one file for each region it keeps,
+  fetched with the first region download or, for another region the account
+  chose or saved a map over, at the next check). Guards: `mobile/src/offline/placeRegistry.test.ts`,
   and `mobile/src/map/placeSearch.test.ts` for the phone's copy answering
   first and a guest making no API call, and `mobile/src/shellTriggers.test.ts`
   for the refresh being registered for a guest as for a signed-in user
   (updated 2026-10-18).
+- **Update 2026-11-14: one registry for each region that declares one.** A
+  region's `placeSearch` is the CDN prefix of its registry; NSW's is
+  `PLACE_REGISTRY_PREFIX`, and every declared region's prefix carries
+  `PLACE_REGISTRY_FORMAT`, so a format bump moves each as above (guard:
+  `shared/src/regions.test.ts`, "carries the current registry format, for every
+  declared and simulated region"). The API holds one index for each, and
+  `POST /places/search` answers from the one its `region` names (the default
+  region's when absent, for a build that predates regions). Both clients name
+  the region the map shows (`placeRegistryIn`) and, over ground no registry
+  covers, offer no registry rows and ask nothing, so the geocoder row alone
+  remains (what a map offers at a location follows its view, as
+  [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)
+  says; online search does too). Logjam GPS keeps one copy for each region the
+  account chose or saved a map over (a save still queued, downloading or paused
+  counts), and no other, so the chosen regions also decide which offline
+  place-name copies the phone keeps. Once it asks for the file, each such region
+  gets its copy at the next check (app start, return to the foreground, or
+  regained signal; Wi-Fi by default, never in the background, where a check in
+  progress stops at the next region, as
+  [0013](0013-background-work-battery-rules.md) says) without a region
+  download of its own, and a copy of any other region, and any folder named for
+  one, is deleted at the next check. At every wipe (`wipeAllLocalData`: at
+  sign-out, and from `finishSignIn` when a different account signs in) the wipe
+  first stops the refresh and holds it (nothing fetched or installed, a
+  transfer in flight cancelled, so the wipe never waits on bytes) until it has
+  run that check once the chosen regions and saved maps are gone, so the default region's copy alone stays, as it did when
+  it was the only one: which regions a phone holds would otherwise show where
+  its last user was interested. A copy that will not delete is reported at
+  sign-out and stops the sign-in of a different account, like any other store.
+  The refresh resumes however the wipe ends. The ranking, the public file, what
+  is never logged and the replacement rule stand for each registry. Guards:
+  `shared/src/regions.test.ts` ("placeRegistryIn"),
+  `api/src/routes/placeSearch.unit.test.ts` ("answers from the registry of the
+  region it names, and the default region's when it names none"),
+  `mobile/src/offline/placeRegistry.test.ts` ("keeps each region's copy apart",
+  "lets a copy lapse once its region is neither chosen nor saved over",
+  "keeps a copy for a region a queued save touches", "leaves only the default
+  region's copy after a wipe, at sign-out or when a different account signs in",
+  "installs nothing once a wipe has stopped the refresh", "stops a download
+  without waiting for its bytes", "stops a pointer read without waiting for its
+  answer", "starts no check between a wipe's stop and its lapse, and runs again
+  after", "leaves no folder for a region after a failed or stopped first fetch,
+  or a lapse", "does not check while the app is in the background", "stops a
+  check at the next region once the app goes to the background" and "still
+  checks while the app's state is not yet known"),
+  `mobile/src/offline/regionDownloadQueue.test.ts` ("lists queued, downloading
+  and paused jobs, and not ready or failed ones"),
+  `mobile/src/offline/wipeLocalData.test.ts` ("lets the place registries lapse
+  after the chosen regions and saved maps are gone", "holds the place registry
+  refresh until the lapse has finished, then lets it run again" and "lets the
+  place registry refresh run again when a step between its stop and its lapse
+  throws") and
+  `frontend/src/components/map/MapSearchBox.test.tsx` ("asks no registry over
+  ground none covers, and shows no answer from the ground it left"). Everything
+  else above stands.
 
 ## Consequences
 
 - **Positive:** search as you type on both clients, offline on the phone, with
   nothing typed leaving a phone that has the file, and the unofficial names
   OpenStreetMap holds.
-- **Negative:** every phone downloads about 4.4 MB a month, and the API holds
-  about 35 MB more in memory once loaded, with a peak near 175 MB while it
-  loads. Results are up to a month stale. The ODbL binds
+- **Negative:** every phone downloads about 4.4 MB a month (NSW's build; one
+  such download for each region it keeps, updated 2026-11-14), and the API
+  holds about 35 MB more in memory once loaded (heap and typed arrays on the
+  real file, with a peak near 175 MB resident while it loads). For each region
+  that declares a registry, plan on its resident cost: 110 to 125 MB once
+  loaded and up to 171 MB at the peak, measured on a made-up file with NSW's
+  row count (updated 2026-11-14). Results are up to a month stale. The ODbL binds
   us: the "© OpenStreetMap contributors" credit wherever results show, and the
   public copy must stay. A format bump must keep a build of the old format
   publishing for as long as a supported build reads it
@@ -131,6 +192,8 @@ feature in NSW, never a geocoding service.**
 - **Refreshes by OTA update:** ties data to signed releases every month
   ([0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)) and ignores the Wi-Fi rule.
 - **Postgres trigram search:** it would rank differently from the phone, and
-  the in-memory index measured above costs about 35 MB.
+  the in-memory index measured above costs about 35 MB of heap and typed
+  arrays (110 to 125 MB resident on a made-up file with NSW's row count, as the
+  Context table and Consequences give, updated 2026-11-14).
 - **Diffs between versions:** a diff format, apply logic and a fallback to save
   a few MB a month. Revisit if transfer numbers say it matters.

@@ -675,6 +675,17 @@ small) and 100 failed, on CPU. So a bigger `t4g` adds memory, not speed. Prod
 averages about 0.004 a second; the limit is where growth would end, not a
 number to approach soon.
 
+**What place registries cost in memory.** The API holds one place-search index
+for each region that declares `placeSearch` (prod declares one). Measured
+2026-11-14 on a made-up file with NSW's row count (321,000 rows, 16 MB of JSON;
+node 24, not NSW's own file): loading one took the API process 164 to 171 MB of
+resident memory above where it began at the peak, and 110 to 125 MB above it
+once the parse was collected. Each further region declaring a registry adds
+about that much, and the loads run one after another so only one parse is alive
+at a time. A country needs an on-disk index or a larger instance: this holds for
+regions the size of NSW's registry, not for a country's. The same note sits
+beside `refreshPlaceRegistry` in `api/src/services/placeRegistry.ts`.
+
 **The ladder**, in order; stop at the first step that helps:
 
 1. **Memory alarm: one size up.** One line, `brain_instance_type`, about two

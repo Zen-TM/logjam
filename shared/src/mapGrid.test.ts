@@ -222,8 +222,8 @@ describe("with only New South Wales", () => {
 });
 
 describe("the grid of the region the view is in", () => {
-  // Wanaka, in the simulated New Zealand's south island.
-  const nz = { west: 169.05, south: -44.66, east: 169.15, north: -44.6 };
+  // Makarora, in the simulated New Zealand's south island.
+  const nz = { west: 169.2, south: -44.085, east: 169.3, north: -44.025 };
   const offKm = (m: number) => Math.abs(m / 1e3 - Math.round(m / 1e3));
 
   // Mutation: ignore the `regions` argument (pass nothing on to
@@ -232,7 +232,7 @@ describe("the grid of the region the view is in", () => {
   it("draws NZTM lines over a simulated New Zealand", () => {
     const g = mapGrid(nz, 14, SIM_REGIONS);
     expect(g.features.length).toBeGreaterThan(8);
-    const zone = gridZoneAt(169.1, -44.63, SIM_REGIONS);
+    const zone = gridZoneAt(169.25, -44.055, SIM_REGIONS);
     expect(zone.name).toBe("NZTM");
     for (const f of g.features) {
       const [lon, lat] = f.geometry.coordinates[0];

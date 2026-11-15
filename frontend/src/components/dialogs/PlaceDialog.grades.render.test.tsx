@@ -68,7 +68,7 @@ const DEFS = SYSTEM_FIELD_DEFS.map((def) => ({
 
 // Made-up points: the Blue Mountains, and the simulated Utah slice.
 const NSW = { latitude: -33.74, longitude: 150.31 };
-const UTAH = { latitude: 38.27, longitude: -110.8 };
+const UTAH = { latitude: 37.285, longitude: -112.945 };
 
 function place(position: typeof NSW, fieldValues = {}): TPlace {
   return {
@@ -134,10 +134,10 @@ describe("PlaceDialog, a canyon's grade fields", () => {
     render(dialog(place(NSW)));
     expect(has("ACA water")).toBe(false);
     fireEvent.change(screen.getByRole("textbox", { name: /Latitude/ }), {
-      target: { value: "38.27" },
+      target: { value: "37.285" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: /Longitude/ }), {
-      target: { value: "-110.8" },
+      target: { value: "-112.945" },
     });
     expect(has("ACA water")).toBe(true);
     expect(has("V grade")).toBe(false);

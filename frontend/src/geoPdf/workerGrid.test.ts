@@ -25,14 +25,19 @@ describe("the render worker's regions", () => {
   });
 
   // Mutation: have `sheetGrid` read no default regions (pass `[]` for them),
-  // and a sheet over Wanaka is UTM, as it printed in the worker before.
-  it("gives a sheet over simulated Wanaka NZTM with the default regions", async () => {
+  // and a sheet over Makarora is UTM, as it printed in the worker before.
+  it("gives a sheet over simulated Makarora NZTM with the default regions", async () => {
     vi.stubEnv("VITE_SIM_REGIONS", "1");
     vi.stubEnv("VITE_AUTH_MODE", "fake");
     vi.resetModules();
     await import("../simRegions");
     const { sheetGrid } = await import("./sheetGrid");
-    const wanaka = { north: -44.6, south: -44.7, east: 169.2, west: 169.1 };
-    expect(sheetGrid(wanaka).zone.name).toBe("NZTM");
+    const makarora = {
+      north: -44.005,
+      south: -44.105,
+      east: 169.3,
+      west: 169.2,
+    };
+    expect(sheetGrid(makarora).zone.name).toBe("NZTM");
   });
 });
