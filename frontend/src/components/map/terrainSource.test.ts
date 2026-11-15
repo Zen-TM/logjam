@@ -226,6 +226,19 @@ describe("terrainSourceFor", () => {
       });
     });
 
+    // Mutation: take the areas' deepest zmax alone for the source's maxzoom
+    // (drop `shade.maxzoom`), and a region whose archive holds z17 beside an
+    // area that stops at z16 is never asked for its z17 tiles.
+    it("reaches the region's own top zoom where an area stops shallower", async () => {
+      const map = fakeMap(...MAKARORA);
+      await ask(map, [nzArea]);
+      expect(nzArea.zmax).toBe(16);
+      expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+        maxzoom: SIM_NZ.terrain.hillshade!.maxzoom,
+      });
+      expect(SIM_NZ.terrain.hillshade!.maxzoom).toBe(17);
+    });
+
     // Mutation: keep the NSW-only prefix test in `dropStaleTerrainSources`,
     // and a region's source is left behind when the map crosses into another.
     it("drops the source of the region the map has left, never the worldwide one", () => {

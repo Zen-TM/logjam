@@ -59,7 +59,7 @@ describe("terrainRoutes", () => {
             const owners = routes.filter((r) => holds(r, x, y));
             expect(owners).toHaveLength(1);
             expect(owners[0].archive).toBe(
-              terrainTileArchive(AREAS, layer, z, x, y),
+              terrainTileArchive(AREAS, layer, z, x, y, 15),
             );
           }
     });
@@ -81,6 +81,7 @@ describe("terrainRoutes", () => {
               z,
               x * s + s - 1,
               y * s,
+              15,
             );
             if (answer !== "absent") expect(route.archive).toBe(answer);
             // Absent: the route's archive stops above z, and MapLibre draws

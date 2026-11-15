@@ -247,7 +247,7 @@ describe("terrainGrid", () => {
   // "absent" (the ancestor walk), or read the statewide tile inside the area.
   it("reads each tile from the archive the router gives it, its parent past the area's zmax", () => {
     const tiles = acrossTheEdge(17);
-    const read = terrainTileReader([area(16)], "slope");
+    const read = terrainTileReader([area(16)], "slope", 15);
     const reads = terrainTileReads(tiles, 17, read, false);
     expect(reads.map((r) => [r.source, r.z]).sort()).toEqual([
       ["area-16", 16],
@@ -278,7 +278,7 @@ describe("terrainGrid", () => {
   it("stretches heights with no seam at an area's edge", () => {
     const z = 17;
     const tiles = acrossTheEdge(z, 2);
-    const read = terrainTileReader([area(17)], "heights");
+    const read = terrainTileReader([area(17)], "heights", 15);
     const reads = terrainTileReads(tiles, z, read, true);
     const x0 = 60001 * 4 * 256;
     const y0 = 39000 * 4 * 256;

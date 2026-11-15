@@ -154,12 +154,15 @@ const holds = (
 
 /**
  * The one archive a terrain tile is read from, so no pixel is drawn by two.
+ * `statewideMax` is the deepest zoom of the region's own archive (the
+ * entry's `maxzoom`: z15 for New South Wales's).
  *
  * Heights and slope: statewide below z15. From z15 the first area (in
  * `compareSharpenedAreas` order) whose range holds the tile's z15 ancestor
- * answers down to its zmax; past it, or past z15 where no area holds the
- * tile, the tile is absent and the renderer draws its parent. A z15 tile in
- * an area's range has every descendant, and one outside has none, so a
+ * answers down to its zmax; past it, the tile is absent and the renderer
+ * draws its parent. Where no area holds the tile, the region's archive
+ * answers down to `statewideMax` and the tile is absent past it. A z15 tile
+ * in an area's range has every descendant, and one outside has none, so a
  * parent never draws beside its own children.
  *
  * Contours: statewide below z14 (the statewide archive's deepest zoom); at
@@ -174,6 +177,7 @@ export function terrainTileArchive<A extends RoutedTerrain>(
   z: number,
   x: number,
   y: number,
+  statewideMax: number,
 ): TerrainTileAnswer<A> {
   const ordered = [...areas].sort(compareSharpenedAreas);
   const from = TERRAIN_ROUTED_FROM[layer];
@@ -196,7 +200,7 @@ export function terrainTileArchive<A extends RoutedTerrain>(
   );
   if (layer === "contours") return area ?? "statewide";
   if (area) return z <= area.zmax ? area : "absent";
-  return z === from ? "statewide" : "absent";
+  return z <= Math.max(from, statewideMax) ? "statewide" : "absent";
 }
 
 /**
