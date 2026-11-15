@@ -568,7 +568,10 @@ function App() {
   const gaugesHere = viewRegion?.gauges != null;
   // The stored pick where the region in view lists it, which the map's
   // Coverage layer draws and filters by (the Layers popover asks the same).
-  const carrierHere = coverageCarrierHere(viewRegion, coverageCarrier);
+  const carrierHere = useMemo(
+    () => coverageCarrierHere(viewRegion, coverageCarrier),
+    [viewRegion, coverageCarrier],
+  );
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
