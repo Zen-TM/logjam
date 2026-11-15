@@ -61,7 +61,7 @@ export type RegionClipSpec = {
   basemapId: string;
   /** Set when the clip is of a DEM archive: shared demSources.ts. */
   demSourceId?: string;
-  /** Set when the clip is of the statewide contours: shared nswContours.ts. */
+  /** Set when the clip is of the statewide contours: shared contourRules.ts. */
   contours?: boolean;
   /** Set when the clip is of the statewide slope: shared terrain.ts. */
   slope?: boolean;

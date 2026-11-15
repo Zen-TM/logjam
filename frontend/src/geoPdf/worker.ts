@@ -1,5 +1,10 @@
 // The render worker's entry: one render per worker. The client terminates it
 // to cancel, so nothing here listens for a cancel.
+//
+// A worker has its own global scope, so the simulated-regions switch the page
+// set is not here: this import sets it again, before `@logjam/shared` loads,
+// for the region a sheet's terrain is read from. Guard: workerSimRegions.test.ts.
+import "../simRegions";
 import { tileCache } from "./cache";
 import { renderGeoPdf, TooLarge } from "./render";
 import type { WorkerMessage, WorkerRequest } from "./types";

@@ -18,7 +18,7 @@ import regions  # noqa: E402
 
 TOPO = os.path.dirname(os.path.dirname(__file__))
 KATOOMBA = (150.31, -33.71)
-MAKARORA = (169.25, -44.055)
+WANAKA = (169.25, -44.055)
 DEV = {"DB_HOST": "postgres"}
 
 
@@ -148,12 +148,12 @@ class TestRegionLookup(unittest.TestCase):
     # Mutation: test the region's bounding box instead of its rings.
     def test_region_at_finds_the_region_holding_a_point(self):
         self.assertEqual(regions.region_at(*KATOOMBA)["id"], "nsw")
-        self.assertIsNone(regions.region_at(*MAKARORA))
+        self.assertIsNone(regions.region_at(*WANAKA))
         self.assertIsNone(regions.region_at(156.0, -33.0))  # the Tasman Sea
         # Victoria, inside NSW's bounding box.
         self.assertIsNone(regions.region_at(141.5, -36.5))
         with mock.patch.object(regions, "REGIONS", load({**DEV, "SIM_REGIONS": "1"})):
-            self.assertEqual(regions.region_at(*MAKARORA)["id"], "simnz")
+            self.assertEqual(regions.region_at(*WANAKA)["id"], "simnz")
             # Inside the box round NZ's two rings, between them.
             self.assertIsNone(regions.region_at(172.0, -40.0))
 

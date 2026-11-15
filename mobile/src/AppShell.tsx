@@ -1091,7 +1091,8 @@ export function AppShell({
     keepAccountSlopeBands(slopeBandsFetched, accountId);
   }, [slopeBandsFetched, accountId, isGuest]);
 
-  // The account's regions, kept the same way: they set what the pickers offer.
+  // The account's regions, kept the same way: they set where the map first opens, the first-run
+  // basemap and the canyon-list offers (ADR 0049).
   const accountRegions = userQuery.data?.uiPreferences?.regions;
   const accountLoaded = userQuery.data != null;
   useEffect(() => {

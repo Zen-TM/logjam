@@ -5,10 +5,10 @@ import {
   contourLabelHalo,
   drawsNswContours,
   drawsNswHillshade,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
   nswContourStyle,
-} from "./nswContours.js";
+} from "./contourRules.js";
 import { VECTOR_STYLE_DEFAULTS } from "./topoSettings.js";
 import { NSW_REGION } from "./regions.js";
 
@@ -24,17 +24,26 @@ describe("drawsNswContours", () => {
     expect(drawsNswContours("six-imagery", false)).toBe(false);
   });
 
-  // Mutation: drop the basemap test, and the sheets that print their own
-  // contours get a second set on top.
+  // Mutation: drop the `printsContours` test, and the sheets that print their
+  // own contours get a second set on top.
   it("never draws over a basemap that prints its own", () => {
-    const others = BASEMAP_CATALOG.map((entry) => entry.id).filter(
-      (id) => id !== "protomaps" && id !== "six-imagery",
-    );
-    expect(others.length).toBeGreaterThan(0);
-    for (const id of others) {
+    const printing = BASEMAP_CATALOG.filter((entry) => entry.printsContours);
+    expect(printing.map((entry) => entry.id)).toEqual([
+      "osm-topo",
+      "osm-cycle",
+      "six-topo",
+      "six-base",
+    ]);
+    for (const { id } of printing) {
       expect(drawsNswContours(id, true)).toBe(false);
-      expect(takesNswContours(id)).toBe(false);
+      expect(takesContours(id)).toBe(false);
     }
+  });
+
+  // Mutation: let an unknown id through, and a basemap the catalogue does not
+  // hold is drawn under contours nobody checked fit it.
+  it("takes none for an id the catalogue does not hold", () => {
+    expect(takesContours("no-such-basemap")).toBe(false);
   });
 
   it("credits the contours, not the elevation", () => {
@@ -45,12 +54,12 @@ describe("drawsNswContours", () => {
 });
 
 describe("drawsNswHillshade", () => {
-  // Mutation: let imagery take it, and the shading doubles the photographs'.
-  it("draws over every basemap but imagery while the switch is on", () => {
+  // Mutation: drop the `photo` test, and the shading doubles the photographs'.
+  it("draws over every basemap but photographs while the switch is on", () => {
     for (const { id } of BASEMAP_CATALOG)
       expect(drawsNswHillshade(id, true)).toBe(id !== "six-imagery");
-    expect(takesNswHillshade("six-imagery")).toBe(false);
-    expect(takesNswHillshade("protomaps")).toBe(true);
+    expect(takesHillshade("six-imagery")).toBe(false);
+    expect(takesHillshade("protomaps")).toBe(true);
   });
 
   it("draws nowhere while the switch is off", () => {
