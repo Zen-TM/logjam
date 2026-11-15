@@ -3,8 +3,8 @@
 //
 // Mutations that turn it red: add `{ key: "wind" }` to `GAUGES.sections`;
 // delete `credit` from `GAUGE_SECTIONS`; drop `stopSourcePress(event)` from
-// `handleGaugePress`; mount `GaugesLayer` without `showGauges &&`; give the
-// layer a `useGauges(true)`.
+// `handleGaugePress`; mount `GaugesLayer` on `showGauges` alone; give the
+// layer a `useGauges(true)`; gate `openGauge` on `gaugesShown`.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { contractSectionKeys, GAUGES } from "@logjam/shared";
@@ -72,9 +72,17 @@ describe("the map's gauge layer", () => {
   });
   // Mutation: pass `showGauges` to `useGauges`, and the feed is fetched over a
   // region that has none.
-  it("is fetched only while on, and only over a region with a feed", () => {
+  it("is fetched only while on, over a region with a feed or for a picked gauge", () => {
     expect(read("./useGauges.ts")).toContain("if (!enabled) return;");
-    expect(screen).toContain("} = useGauges(gaugesShown);");
+    expect(screen).toContain("} = useGauges(gaugesShown || gaugeWanted);");
+    expect(screen).toContain(
+      "const gaugeWanted = showGauges && gaugeId !== null;",
+    );
+  });
+  // Mutation: gate `openGauge` on `gaugesShown`, and a gauge picked in search
+  // from outside New South Wales does not open its sheet at the pick.
+  it("opens a picked gauge's sheet whatever the region", () => {
+    expect(screen).toMatch(/const openGauge = showGauges\s*\?/);
   });
 });
 

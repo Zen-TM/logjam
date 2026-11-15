@@ -1602,14 +1602,17 @@ export function MapScreen({
     [viewportBbox, camera],
   );
   // The Gauges row reads OFF where the region has no feed, and the map's gauge
-  // layer fetches and draws nothing (search and the place page still read gauges).
+  // layer draws nothing there (search and the place page still read gauges). A
+  // gauge picked in search still loads the file its sheet reads, and opens at
+  // the pick whatever the region.
   const gaugesHere = hasGauges(terrainRegion);
   const gaugesShown = showGauges && gaugesHere;
+  const gaugeWanted = showGauges && gaugeId !== null;
   const {
     file: gaugeFile,
     settled: gaugesSettled,
     now: gaugesNow,
-  } = useGauges(gaugesShown);
+  } = useGauges(gaugesShown || gaugeWanted);
   const landArchive = layerIn(terrainRegion, "land");
   const fireArchive = layerIn(terrainRegion, "fire");
   const coverageArchive = layerIn(terrainRegion, "coverage");
@@ -2506,7 +2509,7 @@ export function MapScreen({
     },
     [addToolPoint, collectingPoints],
   );
-  const openGauge = gaugesShown
+  const openGauge = showGauges
     ? gaugeFile?.gauges.find((g) => g.id === gaugeId)
     : undefined;
 
