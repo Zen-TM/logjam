@@ -12,7 +12,10 @@ import {
 } from "./regions.js";
 
 /** A region's gauge feed prefix, or null where it has none. Whether a region
- *  has gauges is whether this is not null: both clients ask it here. */
+ *  has gauges is whether this is not null: both clients ask it here (guards:
+ *  `frontend/src/components/gauges/gauges.test.tsx`, "asks whether the region in
+ *  view has a feed the way the map does"; `mobile/src/gauges/gauges.test.ts`,
+ *  "reads the feed of the region the map shows, only while the layer is on"). */
 export const gaugeFeedOf = (region: Region | null): string | null =>
   region?.gauges ?? null;
 

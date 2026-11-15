@@ -106,11 +106,20 @@ service.**
   holds a feed's file with the feed it came from and never reads it as
   another's, and Logjam GPS keeps each feed's files under its own prefix. The
   CDN's logs show which feed a client read, so the region its map showed, as a
-  history's path already names its gauge. Guards: `shared/src/gaugeFeeds.test.ts`,
-  `frontend/src/components/gauges/gauges.test.tsx` ("never shows one feed's
-  file as another's"), `mobile/src/gauges/gaugeFeed.test.ts` ("fetches the
-  feed it is given, and each feed has its own five minutes"). Everything else
-  above stands.
+  history's path already names its gauge. Guards:
+  - the map and search read the region the map shows:
+    `frontend/src/components/gauges/gauges.test.tsx` ("reads the feed of the
+    region the map shows, only while the layer is on"), the `MapSearchBox`
+    test, `mobile/src/gauges/gauges.test.ts` (the same title);
+  - no gauge section where the feed is null: the `PlaceDetailPanel` and
+    `TripDetailPanel` render tests, and `mobile/src/gauges/gauges.test.ts`
+    for the place screen;
+  - a file only for its own feed: `gauges.test.tsx` ("never shows one feed's
+    file as another's"), `gaugeStorage.test.ts` ("keeps each feed's file
+    apart"), `gaugeFeed.test.ts` ("fetches the feed it is given, and each
+    feed has its own five minutes"), `shared/src/gaugeFeeds.test.ts`.
+
+  Everything else above stands.
 
 ## Consequences
 

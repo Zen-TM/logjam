@@ -286,6 +286,18 @@ describe("the Layers row's gauges", () => {
   });
 });
 
+describe("a gauge picked in search", () => {
+  // Mutation: drop `onShowGauges()` from `onSelectGauge` in `Map.tsx`, and a
+  // picked gauge's panel has no feed loaded (the layer is off).
+  it("turns the gauges layer on before the map flies to it", () => {
+    const map = readFileSync(
+      join(import.meta.dirname, "../map/Map.tsx"),
+      "utf8",
+    );
+    expect(map).toMatch(/onSelectGauge=\{\(gauge\) => \{\s*onShowGauges\(\);/);
+  });
+});
+
 describe("GaugeLoadNotice", () => {
   // Mutation: drop the render, or draw it over a mode banner.
   it("says the layer could not load, and only when no mode banner is up", () => {

@@ -4,7 +4,7 @@
 // Mutations that turn it red: add `{ key: "wind" }` to `GAUGES.sections`;
 // delete `credit` from `GAUGE_SECTIONS`; drop `stopSourcePress(event)` from
 // `handleGaugePress`; mount `GaugesLayer` on `showGauges` alone; give the
-// layer a `useGauges(GAUGE_PREFIX)`; gate `openGauge` on `gaugesShown`.
+// layer a `useGauges(GAUGE_PREFIX)`.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { contractSectionKeys, GAUGES } from "@logjam/shared";
@@ -55,9 +55,10 @@ describe("the map's gauge layer", () => {
     );
     expect(screen).toContain("Date.now() - pinPressedAt.current < 250");
   });
-  // Mutation: mount on `showGauges` alone, and the layer draws over a region
-  // that has no feed, though its row reads OFF.
+  // Mutation: mount on `showGauges` alone, or set `gaugesHere = true`, and the
+  // layer draws over a region that has no feed, though its row reads OFF.
   it("mounts only while the layer is on and the region has a feed", () => {
+    expect(screen).toContain("const gaugesHere = gaugeFeed !== null;");
     expect(screen).toContain("const gaugesShown = showGauges && gaugesHere;");
     expect(screen).toContain("{gaugesShown && gaugeFile ? (");
   });
@@ -80,6 +81,11 @@ describe("the map's gauge layer", () => {
     expect(read("../map/MapSearchBar.tsx")).toContain(
       "useGauges(expanded ? gaugeFeedIn(view) : null)",
     );
+  });
+  // Mutation: drop `setShowGauges(true)` from `onSelectSaved`, and a gauge
+  // picked in search has no feed loaded for its sheet (the layer is off).
+  it("turns the gauges layer on when a gauge is picked in search", () => {
+    expect(screen).toMatch(/if \(item\.gaugeId\) \{\s*setShowGauges\(true\);/);
   });
   // Mutation: return `held.file` whatever feed it came from, and a map that
   // moves into another region draws the last region's gauges for it.
