@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { MAP_TERRAIN } from "@logjam/shared";
+import { GAUGE_LATEST_PATH, MAP_TERRAIN } from "@logjam/shared";
 import { stubMaster } from "./__fixtures__/stubMaster";
 
 // With the map over ground no region declares, every layer that draws a
@@ -44,8 +44,9 @@ async function openLayers(page: Page, tab: "Terrain" | "Overlays") {
   return popover;
 }
 
-// Mutation: set `gaugesHere` in LayersPopover.tsx to true, and the Overlays
-// tab over Queenstown offers river gauges (three reasons, not four).
+// Mutation: set `gaugesHere` in App.tsx to true, and the Overlays tab over
+// Queenstown offers river gauges (three reasons, not four); or pass the map
+// `showGauges` alone, and it reads the gauge feed over Queenstown.
 test("a layer with no data here says so, and the choices return over NSW", async ({
   page,
 }) => {
@@ -63,10 +64,17 @@ test("a layer with no data here says so, and the choices return over NSW", async
     },
     [QUEENSTOWN, JSON.stringify(ON)],
   );
+  // The map reads the gauge feed only where a region has one.
+  const gaugeReads: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes(GAUGE_LATEST_PATH))
+      gaugeReads.push(request.url());
+  });
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled({
     timeout: 30_000,
   });
+  expect(gaugeReads).toEqual([]);
 
   const away = await openLayers(page, "Terrain");
   await expect(away.getByText(MAP_TERRAIN.copy.notHere)).toHaveCount(3);
@@ -92,6 +100,7 @@ test("a layer with no data here says so, and the choices return over NSW", async
   await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled({
     timeout: 30_000,
   });
+  await expect.poll(() => gaugeReads.length).toBeGreaterThan(0);
   const home = await openLayers(page, "Terrain");
   await expect(home.getByText(MAP_TERRAIN.copy.notHere)).toHaveCount(0);
   for (const name of SWITCHES.slice(0, 3))

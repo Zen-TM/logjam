@@ -73,6 +73,7 @@ export default function LayersPopover({
   showWays,
   setShowWays,
   showGauges,
+  gaugesHere,
   setShowGauges,
   showMgaGrid,
   setShowMgaGrid,
@@ -112,6 +113,8 @@ export default function LayersPopover({
   showWays: boolean;
   setShowWays: (v: boolean) => void;
   showGauges: boolean;
+  /** Whether the region the map shows has a gauge feed: without one the row reads "Not available here" and is off. */
+  gaugesHere: boolean;
   setShowGauges: (v: boolean) => void;
   showMgaGrid: boolean;
   setShowMgaGrid: (v: boolean) => void;
@@ -176,7 +179,6 @@ export default function LayersPopover({
     job.layers.some((layer) => layer.name === "vegetation"),
   );
   const legends = overlayLegends(region);
-  const gaugesHere = region?.gauges != null;
   // A stored pick is one carrier for every region; where the region in view
   // does not list it the row asks again, as if none were picked.
   const carrierHere = coverageCarrierHere(region, coverageCarrier);

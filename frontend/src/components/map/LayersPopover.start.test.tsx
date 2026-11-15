@@ -40,6 +40,7 @@ function popover(
     region?: Region | null;
     coverageCarrier?: string | null;
     showGauges?: boolean;
+    gaugesHere?: boolean;
     terrainLayers?: typeof TERRAIN_LAYER_DEFAULTS;
   } = {},
 ) {
@@ -55,6 +56,7 @@ function popover(
         showWays
         setShowWays={noop}
         showGauges={shown.showGauges ?? false}
+        gaugesHere={shown.gaugesHere ?? false}
         setShowGauges={noop}
         showMgaGrid={false}
         setShowMgaGrid={noop}
@@ -204,7 +206,7 @@ describe("the Overlays tab where the map's region lacks a layer", () => {
   // Mutation: pass `NSW_REGION` to `overlayLegends` in place of `region`, and a map over a region with no coverage offers
   // Coverage, and the legends credit NSW's data.
   it("says so on the one overlay a region lacks, and keeps the rest", () => {
-    overlays({ region: SIM_UTAH, showGauges: true });
+    overlays({ region: SIM_UTAH, showGauges: true, gaugesHere: false });
     expect(toggle("Show coverage").disabled).toBe(true);
     expect(toggle("Show coverage").getAttribute("aria-checked")).toBe("false");
     expect(toggle("Show land tenure").disabled).toBe(false);
@@ -215,10 +217,11 @@ describe("the Overlays tab where the map's region lacks a layer", () => {
     expect(screen.getAllByText(MAP_TERRAIN.copy.notHere)).toHaveLength(2);
   });
 
-  // Mutation: set `gaugesHere` to true, and a map
-  // outside every region offers river gauges its feed does not cover.
+  // Mutation: read the row's checked and disabled state from `showGauges`
+  // alone, ignoring `gaugesHere`, and a map outside every region offers river
+  // gauges its feed does not cover.
   it("says so on every overlay over no region, and offers gauges over NSW", () => {
-    overlays({ region: null, showGauges: true });
+    overlays({ region: null, showGauges: true, gaugesHere: false });
     for (const name of [
       "Show land tenure",
       "Show fire history",
@@ -230,7 +233,7 @@ describe("the Overlays tab where the map's region lacks a layer", () => {
     }
     expect(screen.getAllByText(MAP_TERRAIN.copy.notHere)).toHaveLength(4);
     cleanup();
-    overlays({ region: NSW_REGION, showGauges: true });
+    overlays({ region: NSW_REGION, showGauges: true, gaugesHere: true });
     expect(toggle("Show river gauges").disabled).toBe(false);
     expect(toggle("Show river gauges").getAttribute("aria-checked")).toBe(
       "true",
@@ -241,7 +244,7 @@ describe("the Overlays tab where the map's region lacks a layer", () => {
   // Mutation: count `terrainLayers.land` and the others without the region's
   // legends, and the tab's badge counts layers the rows show off.
   it("counts only the overlays on offer in the badge", () => {
-    overlays({ region: null, showGauges: true });
+    overlays({ region: null, showGauges: true, gaugesHere: false });
     // Places and Ways are on; the MGA grid is off.
     expect(chip("Overlays").textContent).toContain("2");
   });
