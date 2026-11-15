@@ -123,8 +123,8 @@ describe("a length's threshold", () => {
   });
 
   // Mutation: drop the `shownUnits` reseed from `ThresholdFilter` (the text
-  // stays "30" in feet), or commit the text without `coerceFieldInput`'s
-  // `stored` (30 m comes back as 29.99232).
+  // stays "30" in feet), or leave `seedMetres` out of its `coerceFieldInput`
+  // call (30 m comes back as 29.99232).
   it("is written again when the units change under it, and keeps its metres", () => {
     const onChange = vi.fn();
     const filter = { kind: "number", op: "Less than", value: 30 } as const;
@@ -180,8 +180,9 @@ describe("a length's threshold", () => {
     });
   });
 
-  // Mutation: drop `seed.metres` from `ThresholdFilter.commit` and convert the
-  // seeded text instead: 30 m comes back as 29.99232 m.
+  // Mutation: drop `seedMetres` from `ThresholdFilter.commit`'s
+  // `coerceFieldInput` call (leave out the fourth argument) and convert the
+  // typed text instead: 30 m comes back as 29.99232 m.
   it("keeps the metres it was shown as while the text is as it was seeded", () => {
     setDisplayUnits("imperial");
     const commits: unknown[] = [];
