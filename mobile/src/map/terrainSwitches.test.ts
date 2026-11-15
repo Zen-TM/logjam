@@ -4,13 +4,12 @@ import {
   layerIn,
   MAP_TERRAIN,
   NSW_REGION,
-  SIM_NZ,
   SIM_UTAH,
   SIM_WORLD,
   TERRAIN_LAYER_KEYS,
   type Region,
 } from "@logjam/shared";
-import { hasGauges, terrainSwitch as switchIn } from "./terrainSwitches";
+import { terrainSwitch as switchIn } from "./terrainSwitches";
 
 // The cases below are over New South Wales, which has every layer.
 const terrainSwitch = (
@@ -162,16 +161,6 @@ describe("terrainSwitch where the region lacks the layer", () => {
       terrainSwitch("contours", true, "protomaps", false, saved, SIM_WORLD)
         .reason,
     ).toBe(copy.notHere);
-  });
-});
-
-describe("hasGauges", () => {
-  // Mutation: return true for a region with no gauge feed, and the Gauges row
-  // stays live over New Zealand.
-  it("is true only for a region with a gauge feed", () => {
-    expect(hasGauges(NSW_REGION)).toBe(true);
-    expect(hasGauges(SIM_NZ)).toBe(false);
-    expect(hasGauges(null)).toBe(false);
   });
 });
 

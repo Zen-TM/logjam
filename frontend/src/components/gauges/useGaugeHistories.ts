@@ -6,12 +6,14 @@ import {
 } from "@logjam/shared";
 
 /**
- * The daily history of some gauges: public files, asked for once when the
- * section mounts (ADR 0044), with no timer. Null until every request has
+ * The daily history of some gauges of the feed at `feed` (a region's `gauges`
+ * prefix): public files, asked for once when the section mounts (ADR 0044),
+ * with no timer. Null until every request has
  * finished; a missing file (the job has not written it yet), a failed fetch
  * and a malformed file each leave that gauge out.
  */
 export function useGaugeHistories(
+  feed: string,
   ids: string[],
 ): Record<string, GaugeHistoryFile> | null {
   const key = ids.join(",");
@@ -23,7 +25,7 @@ export function useGaugeHistories(
     const controller = new AbortController();
     Promise.all(
       key.split(",").map(async (id) => {
-        const url = gaugeHistoryUrl("", id);
+        const url = gaugeHistoryUrl("", feed, id);
         try {
           const res = url && (await fetch(url, { signal: controller.signal }));
           return [
@@ -39,6 +41,6 @@ export function useGaugeHistories(
       setFound(Object.fromEntries(list.filter((entry) => entry[1] !== null)));
     });
     return () => controller.abort();
-  }, [key]);
+  }, [feed, key]);
   return found;
 }

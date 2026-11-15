@@ -210,6 +210,7 @@ import {
   BASEMAP_FAIL_AFTER,
   isServerFault,
   extentFromCentreAndSize,
+  gaugeFeedOf,
   rgbaCssFromHex,
   contourWidthStops,
   TERRARIUM,
@@ -909,7 +910,9 @@ function Map({
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
-  const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
+  const { file: gaugeFile, failed: gaugesFailed } = useGauges(
+    showGauges ? gaugeFeedOf(region) : null,
+  );
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
   const closedGaugeRef = useRef<{ id: string; at: number } | null>(null);
