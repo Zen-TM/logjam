@@ -131,11 +131,25 @@ found three problems:
   `maxzoom` of its entry (`terrainTileArchive`'s `statewideMax`), and the
   tile is absent only past that. New South Wales's archives stop at z15, so
   nothing changes there; a region whose archives hold z17 is read at z17 by
-  the map, by 3D terrain and by a GeoPDF. An area's own zmax still ends its
+  the map, by 3D terrain and by a GeoPDF (updated 2026-11-16: and by an area
+  export, under the last Update). An area's own zmax still ends its
   tiles. Guards: `shared/src/sharpen.test.ts` ("reads statewide to the
   region's own deepest zoom outside an area") and
   `frontend/src/components/map/terrainRouter.test.ts` ("reads the region's
   archive to its own top zoom beside an area"). Everything else above stands.
+- **Update 2026-11-16: an area export reads a deeper region at a cell its box
+  can afford.** An area export (`topo/area_export.py`) is one more reader past
+  z15. A GeoTIFF or GeoPackage reads the region's heights and slope at the
+  region's own top zoom, warped to 2 m (z16) or 1 m (z17), only while the box
+  has no more cells than a 100 km box (the API's longest side) has at 5 m, and
+  falls back a zoom, to z15 and 5 m at last, when it would have more
+  (`export_zoom`): a 100 km box at 1 m is 25 times the file the export task is
+  sized for (its 100 km, 5 m figures are in `AREA_EXPORT_MAX_SIDE_KM`'s
+  comment). An MBTiles reads its mosaics no deeper than its own last zoom,
+  z16. A region whose archives end at z15 is read at z15 and 5 m for every
+  box, as before. Guards: `topo/tests/test_area_export.py` (`ExportZoom`,
+  `TileArchive`, `NswExportUnchanged`, `RegionExportFiles`). Everything else
+  above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of

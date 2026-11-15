@@ -19,6 +19,7 @@ import regions  # noqa: E402
 
 TOPO = os.path.dirname(os.path.dirname(__file__))
 AREA_CASES = os.path.join(TOPO, "..", "shared/src/__fixtures__/area-region.json")
+EXPORT_CASES = os.path.join(TOPO, "..", "shared/src/__fixtures__/export-region.json")
 KATOOMBA = (150.31, -33.71)
 WANAKA = (169.25, -44.055)
 DEV = {"DB_HOST": "postgres"}
@@ -182,6 +183,48 @@ class TestRegionOfArea(unittest.TestCase):
         for case in cases:
             with self.subTest(case["why"]):
                 found = regions.region_of_area(case["coverage"], every)
+                self.assertEqual(found and found["id"], case["region"])
+
+
+class TestExportRegion(unittest.TestCase):
+    # Mutation: `export_region` testing the centre only (no touching
+    # fallback): a box over NSW's edge is then read from no region, though
+    # the API admitted it and named MGA for it
+    # (shared/src/areaExport.test.ts reads the same cases for `areaExportRegion`).
+    def test_a_box_is_read_from_the_region_the_api_names_its_grid_by(self):
+        with open(EXPORT_CASES, encoding="utf-8") as f:
+            cases = json.load(f)["cases"]
+        self.assertGreaterEqual(len(cases), 8)
+        every = load({**DEV, "SIM_REGIONS": "1"})
+        for case in cases:
+            with self.subTest(case["why"]):
+                found = regions.export_region(case["bbox"], every)
+                self.assertEqual(found and found["id"], case["region"])
+
+    # Mutation: drop the centre step of `export_region` (take the first
+    # region touching the box), and a box centred in a later region is read
+    # from an earlier one it also touches; or require only heights (drop
+    # `slope` and `contours` from `EXPORT_ARCHIVES`), and a box over a region
+    # with no slope is read from it, and the worker fails with a KeyError.
+    def test_the_centre_comes_first_and_a_region_missing_an_archive_is_skipped(self):
+        with open(EXPORT_CASES, encoding="utf-8") as f:
+            made_up = json.load(f)["madeUp"]
+
+        def ring(w, s, e, n):
+            return [[w, s], [e, s], [e, n], [w, n], [w, s]]
+
+        every = [
+            {
+                "id": r["id"],
+                "borders": [ring(*r["box"])],
+                "terrain": {layer: {"id": layer} for layer in r["archives"]},
+            }
+            for r in made_up["regions"]
+        ]
+        self.assertGreaterEqual(len(made_up["cases"]), 4)
+        for case in made_up["cases"]:
+            with self.subTest(case["why"]):
+                found = regions.export_region(case["bbox"], every)
                 self.assertEqual(found and found["id"], case["region"])
 
 

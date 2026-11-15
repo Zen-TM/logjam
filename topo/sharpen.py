@@ -31,7 +31,7 @@ survey, too big for memory or disk) and exits 2.
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
 zmax (z14 for contours). Where the survey has no ground, a tile holds the
-statewide 5 m data instead, so a client can take each tile from exactly one
+region's heights instead, so a client can take each tile from exactly one
 archive and draw no seam.
 
 Ground is the ZIP's ELVIS DEM when it has one finer than 5 m; otherwise the
