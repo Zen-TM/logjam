@@ -3,7 +3,8 @@
 //
 // A worker has its own global scope, so the simulated-regions switch the page
 // set is not here: this import sets it again, before `@logjam/shared` loads,
-// for the region a sheet's terrain is read from. Guard: workerSimRegions.test.ts.
+// for the region a sheet's terrain is read from. Guards: workerSimRegions.test.ts,
+// workerGrid.test.ts.
 import "../simRegions";
 import { tileCache } from "./cache";
 import { renderGeoPdf, TooLarge } from "./render";

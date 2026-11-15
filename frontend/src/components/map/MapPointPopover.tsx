@@ -11,7 +11,6 @@ import {
   type MapPointView,
   type CarrierId,
   type Region,
-  layerIn,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
@@ -89,23 +88,17 @@ export default function MapPointPopover({
   const metres = reading?.elevationM ?? null;
   const [{ land, fire, coverage }] = useState(() => {
     const { x, y } = map.project([point.longitude, point.latitude]);
-    const [landArchive, fireArchive, coverageArchive] = [
-      layerIn(region, "land"),
-      layerIn(region, "fire"),
-      layerIn(region, "coverage"),
-    ];
     return {
-      land: landArchive && landClassAt(map, [x, y], landArchive),
-      fire: fireArchive && fireAt(map, [x, y], fireArchive),
+      land: landClassAt(map, [x, y], region),
+      fire: fireAt(map, [x, y], region),
       coverage:
         coverageCarrier &&
-        coverageArchive &&
         coverageAt(
           map,
           [x, y],
           [point.longitude, point.latitude],
           coverageCarrier,
-          coverageArchive,
+          region,
         ),
     };
   });

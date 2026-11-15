@@ -231,11 +231,11 @@ describe("a sheet's grid follows the ground it covers", () => {
     `${Math.floor(km / 100)} ${String(km % 100).padStart(2, "0")} 000`;
 
   it("prints NZTM's eastings and northings over New Zealand", () => {
-    // Wanaka, E 1 291 018 to 1 298 422 and N 5 042 972 to 5 054 456 in NZTM.
-    const box = { north: -44.6, south: -44.7, east: 169.2, west: 169.1 };
+    // Makarora, E 1 295 356 to 1 303 873 and N 5 109 440 to 5 120 914 in NZTM.
+    const box = { north: -44.005, south: -44.105, east: 169.3, west: 169.2 };
     expect(printed(box)).toEqual([
-      ...through(1292, 1298).map(label),
-      ...through(5043, 5054).map(label),
+      ...through(1296, 1303).map(label),
+      ...through(5110, 5120).map(label),
     ]);
   });
 
@@ -292,7 +292,7 @@ describe("a sheet over the date line", () => {
 // the meridian reads west, and south of the equator the sign flips back.
 // Mutation: take the zone from the wrong grid (always NSW's) and the Utah and
 // UTM 33 figures move; drop `regions` from the `sheetGrid` call in
-// `drawCompass` and the Wanaka figure reads 1.3° E.
+// `drawCompass` and the Makarora figure reads 1.2° E.
 describe("the compass's grid north", () => {
   const gn = (extent: GeoPdfConfig["extent"]) => {
     const { ctx, ops } = recorder();
@@ -323,9 +323,9 @@ describe("the compass's grid north", () => {
       "0.5° E",
     ],
     [
-      "near Wanaka, in NZTM (UTM 59 would read 1.3° E)",
-      { north: -44.6, south: -44.7, east: 169.2, west: 169.1 },
-      "2.7° E",
+      "near Makarora, in NZTM (UTM 59 would read 1.2° E)",
+      { north: -44.005, south: -44.105, east: 169.3, west: 169.2 },
+      "2.6° E",
     ],
   ])("prints the figure for a sheet %s", (_name, extent, text) => {
     expect(gn(extent)).toBe(text);

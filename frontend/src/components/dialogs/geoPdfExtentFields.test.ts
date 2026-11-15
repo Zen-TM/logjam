@@ -236,7 +236,7 @@ describe("a typed easting no grid can place", () => {
   const SYDNEY = { north: -33.6, south: -33.7, east: 150.4, west: 150.3 };
   const MELBOURNE = { north: -37.7, south: -37.9, east: 145.0, west: 144.8 };
   const UTAH = { north: 37.55, south: 37.45, east: -107.95, west: -108.05 };
-  const WANAKA = { north: -44.6, south: -44.7, east: 169.2, west: 169.1 };
+  const MAKARORA = { north: -44.005, south: -44.105, east: 169.3, west: 169.2 };
 
   // Mutation: name the grid by the zone (`sheetGrid(state).zone.grid`) in
   // `gridOf` in place of `gridNamedAt`, and the Melbourne row reads UTM; test
@@ -252,10 +252,10 @@ describe("a typed easting no grid can place", () => {
   });
 
   // Mutation: write "MGA" in the message whatever the grid, and the Utah,
-  // Wanaka and Melbourne rows read it.
+  // Makarora and Melbourne rows read it.
   it.each([
     ["Utah", UTAH, "UTM"],
-    ["Wanaka", WANAKA, "NZTM"],
+    ["Makarora", MAKARORA, "NZTM"],
     ["Melbourne", MELBOURNE, "UTM"],
   ])(
     "is named for the grid at %s with regions declared",
@@ -291,7 +291,7 @@ describe("the E/N chip's tooltip", () => {
       tip({ north: 37.55, south: 37.45, east: -107.95, west: -108.05 }),
     ).toMatch(/E\/N is the UTM grid/);
     expect(
-      tip({ north: -44.6, south: -44.7, east: 169.2, west: 169.1 }),
+      tip({ north: -44.005, south: -44.105, east: 169.3, west: 169.2 }),
     ).toMatch(
       /E\/N is the NZTM2000 grid, the one printed on New Zealand topo maps/,
     );

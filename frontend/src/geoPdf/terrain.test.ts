@@ -3,6 +3,7 @@ import {
   lat2tileY,
   NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
+  SIM_NZ,
   type SharpenedArea,
   type TileCoord,
   tileY2lat,
@@ -18,7 +19,7 @@ import {
   contourTilesBySource,
   decodeTerrarium,
   hillshadePixels,
-  nswVectorZoom,
+  vectorReadZoom,
   overlaysDrawn,
   slopePixels,
   STATEWIDE,
@@ -33,6 +34,10 @@ import {
   type DemGrid,
   type TerrainTileRead,
 } from "./terrain";
+import { sheetTerrain } from "./sheetTerrain";
+
+// A made-up box near Katoomba, inside NSW.
+const NSW_BOX = { north: -33.7, south: -33.76, east: 150.36, west: 150.3 };
 
 // Made-up grids: a plane tilted a known way, at latitude -33.7.
 const SIZE = 8;
@@ -173,25 +178,31 @@ describe("decodeTerrarium", () => {
   });
 });
 
-describe("nswVectorZoom", () => {
+describe("vectorReadZoom", () => {
   // Logjam Web shows the statewide contours from camera z11, about 1:120 000
   // at lat -33.7. Mutation: gate on the print's 256-based style zoom, one
   // level higher, and a 1:200 000 print draws and credits 50 m lines the map
   // never shows.
   it("reads no contours where the map draws none", () => {
     expect(
-      nswVectorZoom(NSW_REGION.terrain.contours, 200000, -33.7, 12),
+      vectorReadZoom(NSW_REGION.terrain.contours, 200000, -33.7, 12),
     ).toBeNull();
     expect(
-      nswVectorZoom(NSW_REGION.terrain.contours, 130000, -33.7, 13),
+      vectorReadZoom(NSW_REGION.terrain.contours, 130000, -33.7, 13),
     ).toBeNull();
-    expect(nswVectorZoom(NSW_REGION.terrain.contours, 110000, -33.7, 13)).toBe(
+    expect(vectorReadZoom(NSW_REGION.terrain.contours, 110000, -33.7, 13)).toBe(
       13,
     );
     // The archive stops at z14; deeper prints stretch it.
-    expect(nswVectorZoom(NSW_REGION.terrain.contours, 25000, -33.7, 16)).toBe(
+    expect(vectorReadZoom(NSW_REGION.terrain.contours, 25000, -33.7, 16)).toBe(
       14,
     );
+  });
+
+  // Mutation: drop the `if (!archive) return null` guard in vectorReadZoom,
+  // and a sheet whose region has no contours reads a null archive's zooms.
+  it("reads nothing where the sheet's region has no archive", () => {
+    expect(vectorReadZoom(null, 25000, -33.7, 16)).toBeNull();
   });
 });
 
@@ -361,13 +372,14 @@ describe("contourTilesBySource", () => {
 });
 
 describe("terrainCreditLines", () => {
+  const HEIGHTS_CREDIT = NSW_REGION.terrain.heights.credit;
   const SURVEY = "derived from a made-up survey. CC BY 3.0 AU.";
 
   // Mutations: word an area's line from every layer the page drew; build the
-  // NSW 5 m line from `drawn` alone, leaving an area's layers out of it.
-  it("credits each area's survey for the layers it supplied, beside the NSW 5 m data", () => {
+  // region's heights line from `drawn` alone, leaving an area's layers out of it.
+  it("credits each area's survey for the layers it supplied, beside the region's own heights", () => {
     const drawn = new Set(["contours", "slope"] as const);
-    expect(terrainCreditLines(drawn, new Map())).toEqual([
+    expect(terrainCreditLines(drawn, new Map(), HEIGHTS_CREDIT)).toEqual([
       NSW_REGION.terrain.heights.credit.replace(
         /^Elevation/,
         "Contours and slope",
@@ -380,6 +392,7 @@ describe("terrainCreditLines", () => {
           [area(16), new Set(["slope"] as const)],
           [area(17, "another"), new Set(["slope"] as const)],
         ]),
+        HEIGHTS_CREDIT,
       ),
     ).toEqual([
       NSW_REGION.terrain.heights.credit.replace(
@@ -392,8 +405,20 @@ describe("terrainCreditLines", () => {
       terrainCreditLines(
         new Set(),
         new Map([[area(16), new Set(["hillshade"] as const)]]),
+        HEIGHTS_CREDIT,
       ),
     ).toEqual([NSW_REGION.terrain.hillshade.credit, `Hillshade: ${SURVEY}`]);
+  });
+
+  // Mutation: read `NSW_REGION.terrain.heights.credit` in terrainCreditLines in
+  // place of its `credit` argument, and a print in another region credits
+  // NSW's data; drop the `credit &&` guard and a sheet with no region throws.
+  it("credits the heights it is given, and none where there are none", () => {
+    const simnz = SIM_NZ.terrain.heights!.credit;
+    const [line] = terrainCreditLines(new Set(["slope"]), new Map(), simnz);
+    expect(line).toBe(simnz.replace(/^Elevation/, "Slope"));
+    expect(line).not.toContain("New South Wales");
+    expect(terrainCreditLines(new Set(["slope"]), new Map(), null)).toEqual([]);
   });
 });
 
@@ -403,18 +428,36 @@ describe("overlaysDrawn", () => {
   // that carry their own.
   it("draws no hillshade over imagery, and no contours over a topographic sheet", () => {
     const overlays = ["hillshade", "contours"];
-    expect(overlaysDrawn({ baseLayer: "six-imagery", overlays })).toEqual({
+    const nsw = sheetTerrain(NSW_BOX);
+    expect(overlaysDrawn({ baseLayer: "six-imagery", overlays }, nsw)).toEqual({
       hillshade: false,
       contours: true,
     });
-    expect(overlaysDrawn({ baseLayer: "six-topo", overlays })).toEqual({
+    expect(overlaysDrawn({ baseLayer: "six-topo", overlays }, nsw)).toEqual({
       hillshade: true,
       contours: false,
     });
-    expect(overlaysDrawn({ baseLayer: "protomaps", overlays: [] })).toEqual({
+    expect(
+      overlaysDrawn({ baseLayer: "protomaps", overlays: [] }, nsw),
+    ).toEqual({ hillshade: false, contours: false });
+  });
+
+  // Mutation: drop the `terrain.heights !== null` or the `terrain.contours !==
+  // null` test in overlaysDrawn, and a sheet in a region without that archive
+  // asks the renderer for a layer it cannot read.
+  it("draws nothing from an archive the sheet's region lacks", () => {
+    const overlays = ["hillshade", "contours"];
+    const bare = { heights: null, contours: null };
+    expect(overlaysDrawn({ baseLayer: "protomaps", overlays }, bare)).toEqual({
       hillshade: false,
       contours: false,
     });
+    expect(
+      overlaysDrawn(
+        { baseLayer: "protomaps", overlays },
+        { heights: null, contours: sheetTerrain(NSW_BOX).contours },
+      ),
+    ).toEqual({ hillshade: false, contours: true });
   });
 });
 

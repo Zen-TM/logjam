@@ -6,8 +6,8 @@
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
 // first-run basemap, the first-run units, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
-// saved, printed or exported; nothing draws from either yet, and
-// `offeredBasemaps` (geoPdfBaseLayers.ts) still lists by the chosen regions. Heights, gauges and the area-export check never took a
+// saved, printed or exported; the basemap gallery asks them through
+// `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts). Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
 // (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
@@ -604,6 +604,11 @@ export type LonLatBox = {
   north: number;
 };
 
+/** The box of one point: the view of a map that has not yet said what it shows. */
+export function pointBox(lon: number, lat: number): LonLatBox {
+  return { west: lon, south: lat, east: lon, north: lat };
+}
+
 /**
  * The same box moved by whole turns until its centre is in [-180, 180): a map
  * panned round the world reports longitudes past ±180, while a region's
@@ -697,6 +702,21 @@ export function regionTouchesBox(region: Region, box: LonLatBox): boolean {
 }
 
 /**
+ * The areas of `areas` whose survey box shares ground with `region`'s border:
+ * the ones a map or a save of that region draws from, the same test the
+ * area-export check applies (`areaInTerrainRegion`). A box centred just
+ * outside the border still counts. Guard: `regions.test.ts` ("areasInRegion").
+ */
+export function areasInRegion<
+  A extends { coverage: readonly [number, number, number, number] },
+>(region: Region | null, areas: readonly A[]): A[] {
+  if (!region) return [];
+  return areas.filter(({ coverage: [west, south, east, north] }) =>
+    regionTouchesBox(region, { west, south, east, north }),
+  );
+}
+
+/**
  * The region whose border holds a point, in `REGIONS` order, or null. Never
  * `WORLD`, which has no border. Guard: `regions.test.ts` ("never returns the
  * world").
@@ -753,6 +773,59 @@ export function regionInView(
     regionsTouching(view, regions)[0] ??
     (declaresAnything(world) ? world : null)
   );
+}
+
+/** A region that declares a place registry (ADR 0034): `placeSearch` is its CDN prefix. */
+export type RegionWithRegistry = Region & { placeSearch: string };
+
+/**
+ * The regions that declare a place registry, in `REGIONS` order. Guard:
+ * `regions.test.ts` ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionsWithRegistry(
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry[] {
+  return regions.filter((r): r is RegionWithRegistry => r.placeSearch !== null);
+}
+
+/**
+ * The region with this id if it declares a place registry, else null. `id` is
+ * `unknown` because a request body names it. Guard: `regions.test.ts`
+ * ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionWithRegistry(
+  id: unknown,
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry | null {
+  return regionsWithRegistry(regions).find((r) => r.id === id) ?? null;
+}
+
+/**
+ * The region the map shows, when it has a place registry (ADR 0034), or null:
+ * no registry answers here, and a client offers only the geocoder row. An
+ * unknown view reads as none. Guard: `regions.test.ts` ("placeRegistryIn").
+ */
+export function placeRegistryIn(
+  view: LonLatBox | null | undefined,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): RegionWithRegistry | null {
+  const region = view ? regionInWrappedView(view, regions, world) : null;
+  return region ? regionWithRegistry(region.id, [region]) : null;
+}
+
+/**
+ * `regionInView` for a view as a map reports it: its longitudes wrapped first
+ * (`wrapView`), since a map panned round the world reports them past ±180 and
+ * a region's borders are read in [-180, 180). What a map asks of the region it
+ * shows. Guard: `regions.test.ts` ("reads a view panned past the antimeridian").
+ */
+export function regionInWrappedView(
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): Region | null {
+  return regionInView(wrapView(view), regions, world);
 }
 
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */

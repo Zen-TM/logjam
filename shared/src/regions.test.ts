@@ -10,14 +10,21 @@ import {
 } from "./contracts/settings.js";
 import {
   BASEMAP_CATALOG,
+  basemapHere,
   defaultBasemapFor,
+  LISTED_BASEMAPS,
   offeredBasemaps,
+  vectorBasemapIn,
 } from "./geoPdfBaseLayers.js";
 import {
   accountRegion,
+  areasInRegion,
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
+  placeRegistryIn,
+  regionsWithRegistry,
+  regionWithRegistry,
   NSW_REGION,
   normalizeRegionIds,
   offersRegionChoice,
@@ -25,6 +32,7 @@ import {
   regionAt,
   regionBounds,
   regionInView,
+  regionInWrappedView,
   regionsOf,
   regionsTouching,
   regionTouchesBox,
@@ -34,6 +42,7 @@ import {
   type LonLatBox,
   type Region,
 } from "./regions.js";
+import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
@@ -53,18 +62,20 @@ describe("the declaration", () => {
     for (const id of claimed) expect(ids(BASEMAP_CATALOG)).toContain(id);
   });
 
-  // Mutation: set a default basemap the region doesn't list, and Logjam GPS
-  // opens on a map its picker can't show. A region with none opens on a
-  // worldwide entry, which no region lists.
+  // Mutation: set a default basemap the region doesn't list, or default to an
+  // `offered: false` entry, and Logjam GPS opens on a map its picker can't
+  // show. A region with none opens on a worldwide entry, which no region lists.
   it("opens each region on one of its own basemaps", () => {
     const owned = ALL.flatMap((region) => region.basemaps);
-    for (const region of ALL)
+    for (const region of ALL) {
+      expect(ids(LISTED_BASEMAPS)).toContain(region.defaultBasemap);
       if (region.basemaps.length > 0)
         expect(region.basemaps).toContain(region.defaultBasemap);
       else {
         expect(ids(BASEMAP_CATALOG)).toContain(region.defaultBasemap);
         expect(owned).not.toContain(region.defaultBasemap);
       }
+    }
   });
 
   // Mutation: an id with a capital or a hyphen, and a map's layer ids
@@ -332,41 +343,120 @@ describe("regionTouchesBox", () => {
 
 describe("offeredBasemaps", () => {
   const nz: Region = {
-    ...NSW_REGION,
-    id: "nz",
-    name: "New Zealand",
+    ...SIM_NZ,
     basemaps: ["osm-cycle"],
     defaultBasemap: "osm-cycle",
   };
   const two = [NSW_REGION, nz];
+  const around = (
+    [lon, lat]: readonly [number, number],
+    r = 0.1,
+  ): LonLatBox => ({
+    west: lon - r,
+    south: lat - r,
+    east: lon + r,
+    north: lat + r,
+  });
+  const inNsw = around([150.3, -33.7]);
+  const inNz = around([169.25, -44.055]);
+  const atSea = around([160, -40]);
+  const both: LonLatBox = { west: 140, south: -45, east: 175, north: -30 };
 
-  // Mutation: list every catalogue entry, and a user who chose New Zealand is
+  // Mutation: list every catalogue entry, and a map over New Zealand is
   // offered SIX Maps of NSW.
-  it("lists the worldwide basemaps and the chosen regions' own", () => {
-    expect(ids(offeredBasemaps(["nz"], two))).toEqual([
-      "osm-topo",
-      "osm-cycle",
-    ]);
-    expect(ids(offeredBasemaps(["nsw"], two))).toEqual([
+  it("lists the worldwide basemaps and the own ones of what the view touches", () => {
+    expect(ids(offeredBasemaps(inNz, two))).toEqual(["osm-topo", "osm-cycle"]);
+    expect(ids(offeredBasemaps(inNsw, two))).toEqual([
       "protomaps",
       "osm-topo",
       "six-topo",
       "six-base",
       "six-imagery",
     ]);
+    expect(ids(offeredBasemaps(atSea, two))).toEqual(["osm-topo"]);
+  });
+
+  // Mutation: read only the region under the centre, and a view that shows
+  // two regions loses one's basemaps.
+  it("lists every region the view touches, in the catalogue's order", () => {
+    expect(ids(offeredBasemaps(both, two))).toEqual([
+      "protomaps",
+      "osm-topo",
+      "osm-cycle",
+      "six-topo",
+      "six-base",
+      "six-imagery",
+    ]);
+  });
+
+  // Mutation: drop `wrapView`, and a map panned a turn past the antimeridian
+  // loses New Zealand's basemaps.
+  it("reads a view panned past the antimeridian where it is on the globe", () => {
+    expect(
+      ids(
+        offeredBasemaps(
+          { ...inNz, west: inNz.west + 360, east: inNz.east + 360 },
+          two,
+        ),
+      ),
+    ).toEqual(["osm-topo", "osm-cycle"]);
   });
 
   // Mutation: drop the `offered` test, and both pickers grow a second
   // OpenStreetMap row that can't be saved.
   it("leaves out what no picker lists", () => {
-    expect(ids(offeredBasemaps(["nsw"]))).not.toContain("osm");
+    expect(ids(offeredBasemaps(inNsw))).not.toContain("osm");
   });
 
+  // Mutation: take the last chosen region's, and an account that chose two
+  // opens on the second's map.
   it("opens on the first chosen region's default, else a worldwide one", () => {
     expect(defaultBasemapFor(["nsw"])).toBe("six-topo");
-    expect(defaultBasemapFor(["nz", "nsw"], two)).toBe("six-topo");
-    expect(defaultBasemapFor(["nz"], two)).toBe("osm-cycle");
+    expect(defaultBasemapFor([nz.id, "nsw"], two)).toBe("six-topo");
+    expect(defaultBasemapFor([nz.id], two)).toBe("osm-cycle");
     expect(defaultBasemapFor([], two)).toBe("osm-topo");
+  });
+
+  // Mutation: return the region's default for any pick, and a pick the view
+  // offers is swapped for the default.
+  it("keeps a pick the view offers", () => {
+    expect(basemapHere("six-base", inNsw, two)).toBe("six-base");
+    expect(basemapHere("osm-topo", inNz, two)).toBe("osm-topo");
+  });
+
+  // Mutation: fall back to the first offered, and over New Zealand a picked
+  // NSW sheet shows OSM Topo instead of the region's own default.
+  it("shows the default of the region in view for a pick it does not offer", () => {
+    expect(basemapHere("six-base", inNz, two)).toBe("osm-cycle");
+    expect(basemapHere("osm-cycle", inNsw, two)).toBe("six-topo");
+    expect(basemapHere("gone", both, two)).toBe("six-topo");
+  });
+
+  // Mutation: return the pick when no region is in view, and a map over open
+  // sea draws a sheet that covers none of it.
+  it("shows the first offered where no region is in view", () => {
+    expect(basemapHere("six-base", atSea, two)).toBe("osm-topo");
+  });
+});
+
+describe("LISTED_BASEMAPS", () => {
+  // Mutation: drop the `offered` test, and Logjam Web mounts, and Logjam GPS
+  // accepts a stored pick of, the raster "Default" no picker lists.
+  it("is the catalogue without what no picker lists, in its order", () => {
+    expect(ids(LISTED_BASEMAPS)).toEqual(
+      ids(BASEMAP_CATALOG).filter((id) => id !== "osm"),
+    );
+  });
+});
+
+describe("vectorBasemapIn", () => {
+  // Mutation: return the vector id without the `includes` test, and a client
+  // falls to a vector map over ground its archive does not cover; return the
+  // first id offered, and it falls to a map that is not the vector one.
+  it("names the vector basemap only where it is offered", () => {
+    expect(vectorBasemapIn(["osm-topo", "protomaps"])).toBe("protomaps");
+    expect(vectorBasemapIn(["six-topo", "protomaps"])).toBe("protomaps");
+    expect(vectorBasemapIn(["osm-topo", "osm-cycle"])).toBeUndefined();
   });
 });
 
@@ -480,13 +570,13 @@ describe("simRegionsOn", () => {
 
 describe("regionAt", () => {
   const two = [NSW_REGION, ...SIM_REGIONS];
-  const wanaka: [number, number] = [169.1, -44.62];
-  const coromandel: [number, number] = [175.6, -37.0];
+  const makarora: [number, number] = [169.25, -44.055];
+  const coromandel: [number, number] = [175.63, -37.1];
 
   // Mutation: test only `borders[0]`, and a point on the second island
   // belongs to no region.
   it("finds a point on each island of a region", () => {
-    expect(regionAt(...wanaka, two)).toBe(SIM_NZ);
+    expect(regionAt(...makarora, two)).toBe(SIM_NZ);
     expect(regionAt(...coromandel, two)).toBe(SIM_NZ);
   });
 
@@ -501,7 +591,7 @@ describe("regionAt", () => {
 
   // Mutation: return NSW whatever the point, and Utah is New South Wales.
   it("tells the hemispheres apart", () => {
-    expect(regionAt(-110.8, 38.27, two)).toBe(SIM_UTAH);
+    expect(regionAt(-112.945, 37.285, two)).toBe(SIM_UTAH);
     expect(regionAt(150.31, -33.7, two)).toBe(NSW_REGION);
   });
 
@@ -513,8 +603,8 @@ describe("regionAt", () => {
   // Mutation: search from the end, and an overlap reads as the later region.
   it("takes the first region in order where two overlap", () => {
     const twin: Region = { ...SIM_NZ, id: "twin" };
-    expect(regionAt(...wanaka, [SIM_NZ, twin])).toBe(SIM_NZ);
-    expect(regionAt(...wanaka, [twin, SIM_NZ])).toBe(twin);
+    expect(regionAt(...makarora, [SIM_NZ, twin])).toBe(SIM_NZ);
+    expect(regionAt(...makarora, [twin, SIM_NZ])).toBe(twin);
   });
 });
 
@@ -531,7 +621,7 @@ describe("regionsTouching", () => {
     ).toEqual(["simnz"]);
     expect(
       ids(
-        regionsTouching({ west: -111, south: -40, east: 155, north: 40 }, two),
+        regionsTouching({ west: -113, south: -40, east: 155, north: 40 }, two),
       ),
     ).toEqual(["nsw", "simutah"]);
   });
@@ -602,6 +692,89 @@ describe("regionInView", () => {
   });
 });
 
+describe("placeRegistryIn", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const two = [NSW_REGION, nz, SIM_UTAH];
+  const over = (lon: number, lat: number) => ({
+    west: lon - 0.05,
+    south: lat - 0.05,
+    east: lon + 0.05,
+    north: lat + 0.05,
+  });
+
+  // Mutation: return `regionInView(view)` as it is, without the `placeSearch`
+  // test, and a map over Utah (no registry) reads as having one.
+  it("is the region in view when it has a registry, and null when it has none", () => {
+    expect(placeRegistryIn(over(150.31, -33.7), two)).toBe(NSW_REGION);
+    expect(placeRegistryIn(over(...nz.view.center), two)).toBe(nz);
+    expect(placeRegistryIn(over(...SIM_UTAH.view.center), two)).toBeNull();
+  });
+
+  // Mutation: fall back to the first region with a registry for a view in
+  // none, and a map over the open sea is searched as NSW.
+  it("is null outside every region, whatever the world declares", () => {
+    expect(placeRegistryIn(over(156, -33), two, SIM_WORLD)).toBeNull();
+    expect(placeRegistryIn(over(156, -33))).toBeNull();
+  });
+
+  // Mutation: read an unknown view as the default region, and a map not yet
+  // settled asks the registry for a place it is not showing.
+  it("is null for a view that is not known yet", () => {
+    expect(placeRegistryIn(null, two)).toBeNull();
+    expect(placeRegistryIn(undefined, two)).toBeNull();
+  });
+
+  // Mutation: call `regionInView` and not `regionInWrappedView` in
+  // `placeRegistryIn`, and a map panned once round the world matches no region.
+  it("reads a map panned round the world", () => {
+    const [lon, lat] = nz.view.center;
+    expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
+  });
+});
+
+describe("regionsWithRegistry and regionWithRegistry", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const all = [NSW_REGION, nz, SIM_UTAH];
+
+  // Mutation: return `regions` unfiltered from `regionsWithRegistry`.
+  it("lists, in order, the regions that declare a registry", () => {
+    expect(regionsWithRegistry(all)).toEqual([NSW_REGION, nz]);
+    expect(regionsWithRegistry([SIM_UTAH])).toEqual([]);
+  });
+
+  // Mutation: find by id in `regions` without the registry filter, and a
+  // region with no registry is answered as having one.
+  it("finds a region by its id only when it declares a registry, whatever the id's type", () => {
+    expect(regionWithRegistry(nz.id, all)).toBe(nz);
+    expect(regionWithRegistry(SIM_UTAH.id, all)).toBeNull();
+    expect(regionWithRegistry("nowhere", all)).toBeNull();
+    for (const id of [7, [nz.id], {}, null, undefined]) {
+      expect(regionWithRegistry(id, all), JSON.stringify(id)).toBeNull();
+    }
+  });
+});
+
+describe("a region's registry prefix", () => {
+  const current = new RegExp(`/v${PLACE_REGISTRY_FORMAT}/$`);
+
+  // The prefix carries the file's format, so a bump moves every region's
+  // registry (ADR 0034). Mutation: give any declared region a literal prefix
+  // for another format, e.g. NSW's `placeSearch` as "master/places/v0/", or a
+  // simulated region's `placeSearch` as "master/places/simnz/v0/".
+  it("carries the current registry format, for every declared and simulated region", () => {
+    const declared = regionsWithRegistry([
+      NSW_REGION,
+      ...SIM_REGIONS,
+      SIM_WORLD,
+    ]);
+    // A floor: a filter that stopped matching would check nothing.
+    expect(declared.length).toBeGreaterThanOrEqual(1);
+    for (const region of declared) {
+      expect(region.placeSearch, region.id).toMatch(current);
+    }
+  });
+});
+
 describe("layerIn", () => {
   // Mutation: return `{}` or the region for an absent layer, and a switch
   // reads "available" over no data.
@@ -618,6 +791,51 @@ describe("layerIn", () => {
 
   it("is null for no region", () => {
     expect(layerIn(null, "heights")).toBeNull();
+  });
+});
+
+describe("areasInRegion", () => {
+  const area = (id: string, coverage: [number, number, number, number]) => ({
+    id,
+    coverage,
+  });
+  const inside = area("inside", [150.3, -33.7, 150.32, -33.68]);
+  // Its centre (154.5) is in the sea, east of NSW's border, but its west edge
+  // is inside.
+  const coastal = area("coastal", [154.0, -33.9, 155.0, -33.5]);
+  const abroad = area("abroad", [169.22, -44.08, 169.24, -44.06]);
+
+  // Mutation: test the box's centre in `areasInRegion` in place of its
+  // overlap with the border, and the coastal area drops out of NSW.
+  it("keeps an area whose box touches the border, though its centre is outside", () => {
+    expect(areasInRegion(NSW_REGION, [inside, coastal, abroad])).toEqual([
+      inside,
+      coastal,
+    ]);
+  });
+
+  // Mutation: keep every area whatever the region, and an NSW area is routed
+  // in another region.
+  it("holds none of another region's, and none for no region", () => {
+    expect(areasInRegion(SIM_NZ, [inside, coastal, abroad])).toEqual([abroad]);
+    expect(areasInRegion(null, [inside])).toEqual([]);
+  });
+});
+
+describe("regionInWrappedView", () => {
+  // Mutation: pass the view to `regionInView` without `wrapView`, and a map
+  // panned a turn round the world is over no region.
+  it("reads a view panned past the antimeridian by whole turns", () => {
+    const at = (lon: number): LonLatBox => ({
+      west: lon - 0.1,
+      south: -33.8,
+      east: lon + 0.1,
+      north: -33.6,
+    });
+    expect(regionInWrappedView(at(150.3))).toBe(NSW_REGION);
+    expect(regionInWrappedView(at(150.3 + 360))).toBe(NSW_REGION);
+    expect(regionInWrappedView(at(150.3 - 360))).toBe(NSW_REGION);
+    expect(regionInView(at(150.3 + 360))).toBeNull();
   });
 });
 

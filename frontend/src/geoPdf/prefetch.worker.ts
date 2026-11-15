@@ -1,4 +1,8 @@
 // The prefetch worker's entry. The client ends it to stop it.
+//
+// Sets the simulated-regions switch first, as the render worker does, so it
+// plans the archives of the same region. Guard: workerSimRegions.test.ts.
+import "../simRegions";
 import { prefetchTiles } from "./prefetch";
 import type { GeoPdfRenderInput } from "./types";
 

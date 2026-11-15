@@ -305,6 +305,7 @@ def render_area_export(conn, export_job: dict, work: Path) -> Path:
         work,
         export_job["vector_style_snapshot"],
         [(area, s3_area_archives(s3, BUCKET, area)) for area in areas],
+        epsg=bbox.get("epsg"),
     )
 
 

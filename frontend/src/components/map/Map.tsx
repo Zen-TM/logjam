@@ -49,7 +49,8 @@ import {
   landColor,
   landEdgeOpacity,
   nswContourStyle,
-  NSW_REGION,
+  layerIn,
+  type Region,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
@@ -58,7 +59,11 @@ import {
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
-import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import {
+  WORLDWIDE_TERRAIN_SOURCE,
+  applyTerrain,
+  terrainReapplyKey,
+} from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
@@ -72,12 +77,13 @@ import {
   GAUGE_LAYER,
   GRID_LABELS,
   GRID_LINES,
-  LAND_EDGE_LAYER,
-  COVERAGE_FILL_LAYER,
-  LAND_FILL_LAYER,
+  coverageFillLayer,
+  landEdgeLayer,
+  landFillLayer,
   PRESSABLE_LAYERS,
   pressClosedGauge,
   pressedGaugeId,
+  terrainKeyOf,
 } from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
@@ -189,10 +195,9 @@ import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
 import { coverageLayerSpec } from "./coverageLayers";
 import { fireLayerSpecs } from "./fireLayers";
-import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
+import type { RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
-  areasKey,
   isAbsentTerrainTile,
   terrainTile,
 } from "./terrainRouter";
@@ -607,6 +612,7 @@ function Map({
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
+  region,
   sharpenedAreas,
   onBasemapHealth,
   slopeBands,
@@ -731,6 +737,8 @@ function Map({
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
   }[];
+  /** The region whose Terrain group `topoLayers` holds: its overlays are styled and answer a tap from its archives. */
+  region: Region | null;
   /** The sharpened areas the user can see: 3D terrain reads them too. */
   sharpenedAreas?: readonly SharpenedOverlay[];
   /** A basemap's tiles keep failing on a server fault (`down`), or load again. */
@@ -1215,8 +1223,8 @@ function Map({
 
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // The worldwide source in shared/src/demSources.ts. The NSW one is
-        // added when 3D is switched on over NSW: see terrainSource.ts.
+        // The worldwide source in shared/src/demSources.ts. A region's own is
+        // added when 3D is switched on over it: see terrainSource.ts.
         tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
         attribution: TERRARIUM.creditHtml,
@@ -2929,7 +2937,7 @@ function Map({
       const fmt = format ?? "raster";
       // A Terrain source made for another set of areas (or for none) has the
       // wrong zooms and holds tiles from the wrong archives: rebuild it.
-      if (TERRAIN_LAYER_KEYS.some((key) => TERRAIN_ENTRIES[key].id === id)) {
+      if (terrainKeyOf(id)) {
         const reads = tiles?.template ?? pmtilesUrl;
         const before = terrainSourceFromRef.current.get(srcId);
         if (before !== undefined && before !== reads && map.getSource(srcId)) {
@@ -3003,50 +3011,46 @@ function Map({
       if (fmt === "coverage") {
         const carrier = coverageCarrierRef.current;
         if (!carrier) return;
-        const layer = coverageLayerSpec(
-          NSW_REGION.terrain.coverage,
-          srcId,
-          carrier,
-        );
-        if (!map.getLayer(layer.id)) map.addLayer(layer);
+        const layer = region && coverageLayerSpec(region, srcId, carrier);
+        if (layer && !map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
 
       if (fmt === "fire") {
         // The tint ages by the month: a map left open for weeks is at most
         // that stale.
-        for (const layer of fireLayerSpecs(
-          NSW_REGION.terrain.fire,
-          srcId,
-          new Date(),
-        ))
+        for (const layer of (region &&
+          fireLayerSpecs(region, srcId, new Date())) ||
+          [])
           if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
 
       if (fmt === "land") {
-        if (!map.getLayer(LAND_FILL_LAYER)) {
+        const land = layerIn(region, "land");
+        if (!region || !land) return;
+        if (!map.getLayer(landFillLayer(region))) {
           map.addLayer({
-            id: LAND_FILL_LAYER,
+            id: landFillLayer(region),
             type: "fill",
             source: srcId,
-            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            "source-layer": land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             // Unseen: it is what a tap reads, since a line has no inside.
             paint: { "fill-opacity": 0 },
           });
         }
         LAND_EDGE_LINES.forEach(({ width, offset, blur, opacity }, i) => {
-          if (map.getLayer(`${LAND_EDGE_LAYER}-${i}`)) return;
+          if (map.getLayer(`${landEdgeLayer(region)}-${i}`)) return;
           map.addLayer({
-            id: `${LAND_EDGE_LAYER}-${i}`,
+            id: `${landEdgeLayer(region)}-${i}`,
             type: "line",
             source: srcId,
-            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            "source-layer": land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
               "line-color": landColor(
-                NSW_REGION.terrain.land,
+                land,
               ) as maplibregl.ExpressionSpecification,
               "line-width": width,
               "line-offset": offset,
@@ -3143,8 +3147,8 @@ function Map({
 
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
-    if (layers.some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
-      applyContourPaint(map, TERRAIN_ENTRIES.contours.id, vs);
+    for (const { id } of layers)
+      if (terrainKeyOf(id) === "contours") applyContourPaint(map, id, vs);
 
     // In the topoLayers order, each entry's layers as a group.
     stackTopoLayers(
@@ -3157,22 +3161,21 @@ function Map({
         Object.fromEntries(
           TERRAIN_LAYER_KEYS.map((key) => [
             key,
-            ownedLayerIds(TERRAIN_ENTRIES[key].id),
+            layers
+              .filter(({ id }) => terrainKeyOf(id) === key)
+              .flatMap(({ id }) => ownedLayerIds(id)),
           ]),
         ) as Record<TerrainLayerKey, string[]>,
         PROTOMAPS_LAYER_PREFIX,
       );
-  }, [topoLayers, mapLoaded, activeLayerId]);
+  }, [topoLayers, region, mapLoaded, activeLayerId]);
 
   // The contours' look follows the basemap: a paint change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    if ((topoLayers ?? []).some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
-      applyContourPaint(
-        mapRef.current,
-        TERRAIN_ENTRIES.contours.id,
-        nswContourStyle(activeLayerId),
-      );
+    for (const { id } of topoLayers ?? [])
+      if (terrainKeyOf(id) === "contours")
+        applyContourPaint(mapRef.current, id, nswContourStyle(activeLayerId));
   }, [topoLayers, mapLoaded, activeLayerId]);
 
   // The slope bands, live, the same way: a paint change, never a new layer.
@@ -3195,15 +3198,21 @@ function Map({
   // The carrier, live, the same way: a filter change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+    const coverage = layerIn(region, "coverage");
+    if (
+      region &&
+      coverage &&
+      coverageCarrier &&
+      mapRef.current.getLayer(coverageFillLayer(region))
+    )
       mapRef.current.setFilter(
-        COVERAGE_FILL_LAYER,
+        coverageFillLayer(region),
         coverageFilter(
-          NSW_REGION.terrain.coverage,
+          coverage,
           coverageCarrier,
         ) as maplibregl.FilterSpecification,
       );
-  }, [topoLayers, coverageCarrier, mapLoaded]);
+  }, [topoLayers, region, coverageCarrier, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3628,13 +3637,18 @@ function Map({
       tilt,
     );
   };
-  // A change of areas while 3D is on draws terrain again from the new set:
-  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
-  // ("applyTerrain": the new source, the old one removed).
-  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
-    const map = mapRef.current;
-    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
-  });
+  // A change of areas, or of the region the map shows, while 3D is on draws
+  // terrain again from the new set: `useTerrainReapply.test.ts` (the trigger)
+  // and `terrainSource.test.ts` ("applyTerrain": the new source, the old one
+  // removed).
+  useTerrainReapply(
+    terrainReapplyKey(region, sharpenedAreas ?? []),
+    is3D,
+    () => {
+      const map = mapRef.current;
+      if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+    },
+  );
   const toggleTerrain = () => setTerrainOn(!is3D);
   const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
@@ -3760,7 +3774,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
-          region={NSW_REGION}
+          region={region}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

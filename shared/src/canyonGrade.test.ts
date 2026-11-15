@@ -145,7 +145,7 @@ describe("the Grade row's key", () => {
 // no position yet, is French.
 const REGIONS_WITH_UTAH = [NSW_REGION, ...SIM_REGIONS];
 const BLUE_MOUNTAINS = [150.31, -33.7] as const;
-const UTAH = [-110.8, 38.27] as const;
+const UTAH = [-112.945, 37.285] as const;
 const MID_PACIFIC = [-150, 0] as const;
 const FRENCH_KEYS = ["v_grade", "a_grade", "commitment"];
 const ACA_KEYS = ["aca_technical", "aca_water", "aca_time", "aca_risk"];
