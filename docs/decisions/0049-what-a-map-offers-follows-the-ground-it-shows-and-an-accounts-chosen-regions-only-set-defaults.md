@@ -122,7 +122,8 @@ read, none of them a location.)
 - **Negative:** with one region in prod, a layer switch outside NSW reads "Not
   available here" where it used to turn on and draw nothing.
 - **Neutral:** the region step and Settings section stay, and what they set
-  is a default. Home with several chosen regions is the first in `REGIONS`
+  is a default (updated 2026-11-15: and the grade attributes the lists with no map
+  position name, the last Update). Home with several chosen regions is the first in `REGIONS`
   order, as `defaultBasemapFor` already does.
 
 ## Alternatives considered
