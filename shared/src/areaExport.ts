@@ -48,22 +48,22 @@ export type AreaBbox = {
 
 /**
  * The EPSG code of the grid the worker warps an export of this box to: the
- * grid of the region the box is exported from, in the zone at the box's
- * centre. That region is the one holding the centre, else the first touching
- * the box that has heights (the regions `areaInTerrainRegion` admits a box
- * by), so a box over the edge of NSW stays in MGA however its centre falls.
- * UTM when no region touches the box. The API stores the code on the job
- * beside the box, so the worker needs no regions of its own. Guard:
- * `areaExport.test.ts`.
+ * grid of a region with heights, in the zone at the box's centre. That is the
+ * region with heights holding the centre, else the first region with heights
+ * touching the box (the regions `areaInTerrainRegion` admits a box by, and
+ * the ones the data comes from), so a box over the edge of NSW stays in MGA
+ * however its centre falls. UTM when no region with heights touches the box.
+ * The API stores the code on the job beside the box, so the worker needs no
+ * regions of its own. Guard: `areaExport.test.ts`.
  */
 export function areaExportEpsg(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
 ): number {
   const { lon, lat } = boxCentre(bbox);
+  const withHeights = regions.filter((each) => layerIn(each, "heights"));
   const region =
-    regionAt(lon, lat, regions) ??
-    regionsTouching(bbox, regions).find((each) => layerIn(each, "heights"));
+    regionAt(lon, lat, withHeights) ?? regionsTouching(bbox, withHeights)[0];
   return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
 }
 

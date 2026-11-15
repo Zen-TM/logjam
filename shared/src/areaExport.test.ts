@@ -13,7 +13,7 @@ import {
 } from "./areaExport.js";
 import { nswContourStyle } from "./nswContours.js";
 import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
-import { SIM_REGIONS } from "./simRegions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 // A square of `sideKm` centred near Katoomba.
@@ -82,6 +82,56 @@ describe("areaExportEpsg", () => {
     expect(nsw(153.1, -28.2, 0.1)).toBe(7856); // off the Queensland border
     expect(nsw(140.8, -33, 0.3)).toBe(7854); // off the South Australian one
     expect(nsw(154.6, -30, 0.5)).toBe(7856); // east of the border's 154.2 cut
+  });
+
+  // Made-up regions on a flat map: `bare` has no heights and its own grid,
+  // `full` and `other` have heights. The box is read by the regions with
+  // heights, the first of them in list order, wherever it is centred.
+  describe("with a region that has no heights", () => {
+    const ring = (w: number, s: number, e: number, n: number) =>
+      [
+        [w, s],
+        [e, s],
+        [e, n],
+        [w, n],
+      ] as [number, number][];
+    const bare = {
+      ...SIM_NZ,
+      id: "bare",
+      grid: "nztm2000" as const,
+      terrain: {},
+      borders: [ring(10, 10, 20, 20)],
+    };
+    const full = { ...SIM_UTAH, id: "full", borders: [ring(15, 10, 25, 20)] };
+    const other = {
+      ...SIM_NZ,
+      id: "other",
+      grid: "nztm2000" as const,
+      borders: [ring(5, 22, 12, 30)],
+    };
+    const UTM_33_NORTH = 32633;
+
+    // Mutation: drop the `layerIn(each, "heights")` filter, and the box takes
+    // the grid of `bare`, which the export reads no heights from.
+    it("takes the grid of the first region with heights that the box touches", () => {
+      const box = boxAround(14, 25, 6); // centred in none, over all three
+      expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
+    });
+
+    // Mutation: take the last region touching the box instead of the first,
+    // and `other` wins.
+    it("goes by list order between two regions with heights", () => {
+      const box = boxAround(14, 25, 6);
+      expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
+      expect(areaExportEpsg(box, [bare, other, full])).toBe(2193);
+    });
+
+    // Mutation: look the centre up among every region, not those with
+    // heights, and the box takes `bare`'s grid.
+    it("ignores a region with no heights even where it holds the centre", () => {
+      const box = boxAround(12, 15, 4); // centred in `bare`, over `full`
+      expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
+    });
   });
 
   // The worker falls back to `7800 + zone` for a job an older API queued
