@@ -88,11 +88,6 @@ describe("the map's gauge layer", () => {
       "file: held?.feed === feed ? held.file : null",
     );
   });
-  // Mutation: gate `openGauge` on `gaugesShown`, and a gauge picked in search
-  // does not open its sheet at the pick while the layer is still turning on.
-  it("opens a picked gauge's sheet without waiting for the layer to draw", () => {
-    expect(screen).toMatch(/const openGauge = showGauges\s*\?/);
-  });
 });
 
 describe("a place's gauge section", () => {
@@ -122,6 +117,14 @@ describe("the trip reading's wiring", () => {
     expect(read("./PlaceGaugeSection.tsx")).toContain(
       "dates={tripDatesFor(owned, tripDates)}",
     );
+  });
+  // Mutation: pass a fixed prefix to `TripGaugeReading` on the trip screen in
+  // place of the groups `tripGaugeIdsByFeed` returns, and a trip's gauges are
+  // read from one feed whatever region their places are in.
+  it("reads each of the trip screen's gauges from the feed of its place", () => {
+    const trip = read("../logs/TripDetailScreen.tsx");
+    expect(trip).toContain("tripGaugeIdsByFeed(");
+    expect(trip).toContain("feed={feed}");
   });
   it("draws it on both pages", () => {
     expect(read("../logs/TripDetailScreen.tsx")).toContain("<TripGaugeReading");

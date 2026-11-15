@@ -87,6 +87,24 @@ describe("a trip's river gauge reading", () => {
     expect(screen.queryByText(GAUGES.copy.failed)).toBeNull();
   });
 
+  // Mutation: build the history URL from `GAUGE_PREFIX` in `useGaugeHistories`
+  // (not the feed it is handed) → red.
+  it("asks for each gauge's history in the feed that holds it", async () => {
+    render(
+      <TripGaugeReading
+        feed="master/gauges/other/v1/"
+        gaugeIds={["900001"]}
+        dates={[trip]}
+        when="trip"
+      />,
+    );
+    await vi.waitFor(() => expect(fetched).toHaveLength(2));
+    expect(fetched.sort()).toEqual([
+      "/master/gauges/other/v1/history/900001.json",
+      "/master/gauges/other/v1/latest.json",
+    ]);
+  });
+
   it("asks for nothing when no place has a gauge", () => {
     render(
       <TripGaugeReading

@@ -10,7 +10,8 @@ import { readCachedGauges } from "./gaugeStorage";
  * The gauge file of the feed at `feed` (a region's `gauges` prefix): the
  * phone's kept copy at once, a fresh one when something asks for it, when the
  * app returns to the front and when signal returns. Nothing runs while `feed`
- * is null, and a file is only ever returned for the feed it came from.
+ * is null, and a file is only ever returned for the feed it came from
+ * (guard: `gauges.test.ts`, "never reads one feed's file as another's").
  */
 export function useGauges(feed: string | null): {
   file: GaugeLatestFile | null;

@@ -30,7 +30,6 @@ import {
   gaugeDay,
   GAUGE_DAY_OFFSET_DEFAULT,
   GAUGE_UNITS_DEFAULT,
-  distinctGaugeIds,
   gaugeReadingOnDay,
   levelOnDate,
   tripDatesFor,
@@ -201,12 +200,6 @@ describe("a gauge on a trip's date", () => {
       gaugeReadingOnDay(gauge, history, "2026-10-31", now, AEST),
     ).toBeNull();
     expect(gaugeReadingOnDay(gauge, null, "2026-10-20", now, AEST)).toBeNull();
-  });
-
-  it("keeps a few distinct gauges", () => {
-    expect(
-      distinctGaugeIds([null, "1", "2", "1", undefined, "3", "4"]),
-    ).toEqual(["1", "2", "3"]);
   });
 
   it("puts the trip's reading beside the current one, flow only where the gauge has it", () => {

@@ -5,7 +5,8 @@
 // only for the gauges a screen or a saved place names.
 //
 // PRIVACY: the request carries no headers and no query, only the public
-// file's path, so every phone sends the same thing. A history's path names its
+// file's path, so every phone over the same region sends the same thing; the
+// path names the region's feed (ADR 0044). A history's path names its
 // gauge, which our own CDN's logs hold without the account (ADR 0044). Guard: gaugeFeed.test.ts
 // ("from the CDN with nothing else sent"). A failure is a state, never a log
 // line.

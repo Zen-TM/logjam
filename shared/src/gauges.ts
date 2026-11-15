@@ -262,14 +262,6 @@ export function gaugeReadingOnDay(
 /** Trip readings are shown for at most this many gauges. */
 export const TRIP_GAUGE_MAX = 3;
 
-/** The distinct gauges of some places, a few at most, in order. */
-export function distinctGaugeIds(ids: (string | null | undefined)[]): string[] {
-  return [...new Set(ids.flatMap((id) => (id ? [id] : [])))].slice(
-    0,
-    TRIP_GAUGE_MAX,
-  );
-}
-
 /** The trip dates a viewer's reading may use: a sharee's are none, because
  *  trips are the owner's alone (ADR 0002). */
 export function tripDatesFor(owned: boolean, dates: string[]): string[] {

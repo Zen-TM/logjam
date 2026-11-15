@@ -1,6 +1,6 @@
 // The last river gauge file of each feed on this phone (ADR 0044), under the
 // feed's own prefix (a region's `gauges`) so one feed's file is never read as
-// another's. It is public and the same for everyone; it is wiped anyway
+// another's (guard: `gaugeStorage.test.ts`, "keeps each feed's file apart"). It is public and the same for everyone; it is wiped anyway
 // because every on-device store joins the wipe (ADR 0006).
 import * as FileSystem from "expo-file-system/legacy";
 import {

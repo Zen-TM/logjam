@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -254,6 +256,21 @@ describe("useGauges", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(screen.getByText("3")).toBeTruthy();
+  });
+});
+
+describe("the web map's gauge layer", () => {
+  // Mutation: pass a fixed prefix, `gaugeFeedOf(null)`, or drop the
+  // `showGauges` gate in `Map.tsx`, and the map reads the wrong region's feed
+  // or fetches while the layer is off.
+  it("reads the feed of the region the map shows, only while the layer is on", () => {
+    const map = readFileSync(
+      join(import.meta.dirname, "../map/Map.tsx"),
+      "utf8",
+    );
+    expect(map).toMatch(
+      /useGauges\(\s*showGauges \? gaugeFeedOf\(region\) : null,?\s*\)/,
+    );
   });
 });
 

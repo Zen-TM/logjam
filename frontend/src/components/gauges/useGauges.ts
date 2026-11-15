@@ -12,7 +12,8 @@ export const GAUGE_REFRESH_MS = 5 * 60_000;
  * public file, the same for everyone (ADR 0044), asked for only while
  * something shows them and again every five minutes while the tab is visible.
  * A failed or malformed fetch keeps the last good file. A null `feed` asks for
- * nothing; a file is only ever returned for the feed it came from.
+ * nothing; a file is only ever returned for the feed it came from (guard:
+ * `gauges.test.tsx`, "never shows one feed's file as another's").
  */
 export function useGauges(feed: string | null): {
   file: GaugeLatestFile | null;
@@ -20,7 +21,9 @@ export function useGauges(feed: string | null): {
   /** Epoch ms, renewed with each load, so a panel left open keeps ages true. */
   now: number;
 } {
-  // The feed it came from rides with the file, so a file is never read as another feed's.
+  // The feed it came from rides with the file, so a file is never read as
+  // another feed's (guard: `gauges.test.tsx`, "never shows one feed's file as
+  // another's").
   const [kept, setKept] = useState<{
     feed: string;
     file: GaugeLatestFile;
