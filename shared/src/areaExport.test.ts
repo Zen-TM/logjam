@@ -74,8 +74,9 @@ describe("areaExportEpsg", () => {
 
   // A box centred outside NSW's border that still overlaps it is admitted by
   // `areaInTerrainRegion`, and is warped to MGA like the rest of the state.
-  // Mutation: read the grid at the centre alone (no fall back to the regions
-  // the box touches), and each of these gets UTM, a datum off by about 2 m.
+  // Mutation: resolve the region from the box's centre point alone (give
+  // `regionInView` a box with no width), and each of these gets UTM, a datum
+  // off by about 2 m.
   it("stays in MGA for a box over NSW's edge whose centre is outside it", () => {
     const nsw = (lon: number, lat: number, half: number) =>
       areaExportEpsg(boxAround(lon, lat, half));
@@ -118,16 +119,16 @@ describe("areaExportEpsg", () => {
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
     });
 
-    // Mutation: take the last region touching the box instead of the first,
-    // and `other` wins.
+    // Mutation: reverse `withHeights` before `regionInView`, and `other`
+    // wins.
     it("goes by list order between two regions with heights", () => {
       const box = boxAround(14, 25, 6);
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
       expect(areaExportEpsg(box, [bare, other, full])).toBe(2193);
     });
 
-    // Mutation: look the centre up among every region, not those with
-    // heights, and the box takes `bare`'s grid.
+    // Mutation: pass `regions` to `regionInView` in place of `withHeights`,
+    // and a box centred in `bare` takes its grid.
     it("ignores a region with no heights even where it holds the centre", () => {
       const box = boxAround(12, 15, 4); // centred in `bare`, over `full`
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);

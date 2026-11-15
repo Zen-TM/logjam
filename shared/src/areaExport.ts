@@ -6,9 +6,8 @@ import { boxCentre, gridZoneOf } from "./grids.js";
 import { nswContourStyle } from "./nswContours.js";
 import {
   layerIn,
-  regionAt,
+  regionInView,
   REGIONS,
-  regionsTouching,
   regionTouchesBox,
   type Region,
 } from "./regions.js";
@@ -62,8 +61,7 @@ export function areaExportEpsg(
 ): number {
   const { lon, lat } = boxCentre(bbox);
   const withHeights = regions.filter((each) => layerIn(each, "heights"));
-  const region =
-    regionAt(lon, lat, withHeights) ?? regionsTouching(bbox, withHeights)[0];
+  const region = regionInView(bbox, withHeights);
   return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
 }
 
