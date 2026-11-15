@@ -486,9 +486,9 @@ docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpen
 
 ## Building the place registry
 
-`build_place_registry.py` turns Geofabrik's NSW OpenStreetMap extract into the
-place registry Logjam's location search reads: every named feature, one row
-each, in one gzipped JSON file. Why, and what it leaves out:
+`build_place_registry.py` turns Geofabrik's OpenStreetMap extract of a region
+into the place registry Logjam's location search reads: every named feature, one
+row each, in one gzipped JSON file. Why, and what it leaves out:
 [ADR 0034](../docs/decisions/0034-location-search-reads-a-public-osm-place-registry.md).
 A scheduled ECS task runs `publish` monthly; these commands are for trying a
 change by hand. They need Python 3 and `pip install osmium boto3` (boto3 and AWS
@@ -501,12 +501,17 @@ python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 ```
 
 `build` writes `places-<extract date>-<hash>.json.gz` and its pointer `latest.json`:
-about 4.5 MB, in under two minutes at a 1.3 GB peak. `measure` prints how much
-each class of feature (roads, shops, creeks…) adds to the file, which is how
-to judge a change to `EXCLUDED`.
+about 4.5 MB, in under two minutes at a 1.3 GB peak. `build --bbox=W,S,E,N`
+keeps only the features inside a box (write `--bbox=…` when W is negative), to
+cut a small registry from a large extract. `measure` prints how much each class
+of feature (roads, shops, creeks…) adds to the file, which is how to judge a
+change to `EXCLUDED`.
 
-`publish` downloads the extract, builds, and uploads the file then the pointer
-to `master/places/v1/` in the topo bucket. The file goes up as
+`publish` downloads the extract of one region (`--region`, `nsw` by default, and
+what the monthly task runs), builds, and uploads the file then the pointer under
+the prefix the region declares as `placeSearch` in `regions.json`
+(`master/places/v1/` for NSW) in the topo bucket. A region is listed in
+`EXTRACTS` with its extract's URL when it declares a prefix. The file goes up as
 `places-<extract date>-<hash>.json`, still gzipped, with `Content-Encoding:
 gzip`, so clients' HTTP stacks decompress it. It refuses a build much smaller than
 the one it replaces. Publishing is a prod change and the maintainer's to make:
