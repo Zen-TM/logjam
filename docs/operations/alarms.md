@@ -133,8 +133,9 @@ once a month, so one failure fires.
    (137 is an out-of-memory kill) and `detail.stoppedReason`.
 2. Read `/ecs/logjam-place-registry`. "refusing to publish" means the new
    build was much smaller than the live one, usually a truncated download of
-   Geofabrik's extract: run it again. Anything else is a bug in
-   `topo/build_place_registry.py` or the topo worker image; if a worker
+   Geofabrik's extract: run it again. "the registry holds no named feature"
+   means the extract read as empty, usually a bad download: run it again.
+   Anything else is a bug in `topo/build_place_registry.py` or the topo worker image; if a worker
    deploy just ran, roll the worker back ([rollback.md](rollback.md)).
 
 ### `logjam-place-registry-not-launched`
