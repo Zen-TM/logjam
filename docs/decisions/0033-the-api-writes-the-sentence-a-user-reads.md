@@ -62,17 +62,18 @@ the API. A client shows it as it is.
   reads as the source language. A `say` is therefore written where a request
   needs it, not as a module-level constant: a sentence several modules share is
   a function (`malformedRequestSentence()`). The guard holds that no `say`
-  literal sits outside a function; one import-time call of such a function
-  remains (`visibleToLocked` in `shared/src/contracts/plans.ts`), which is
-  right for a client whose language is fixed at start and which a later
-  change to the plan contracts removes. A sentence written
-  with nobody asking, a push title or a mail, is written in the language the
-  recipient's account last ran in (`uiPreferences.language`); a sentence
-  stored for later keeps the language it was written in. A reason code beside
+  literal sits outside a function. The announcement's push title, a contract
+  member the API reads for each recipient, is a getter, so it is written when
+  read, as is the plan form builder's locked-visibility sentence
+  (`shared/src/contracts/contractLanguage.test.ts`) (updated 2026-11-15). A
+  sentence written with nobody asking, a push title or a mail, is written in
+  the language the recipient's account last ran in (`uiPreferences.language`);
+  a sentence stored for later keeps the language it was written in. A reason code beside
   the status stays rejected, for the reason under Alternatives. Guards:
   `api/src/userCopy.unit.test.ts` ("are never a say literal outside a
-  function"), `api/src/middleware/language.unit.test.ts` and
-  `api/src/__tests__/language.test.ts`. Everything else above stands.
+  function"), `api/src/middleware/language.unit.test.ts`,
+  `api/src/__tests__/language.test.ts` and
+  `shared/src/contracts/contractLanguage.test.ts`. Everything else above stands.
 
 Guards:
 
