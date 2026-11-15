@@ -300,17 +300,22 @@ async function currentLayer(): Promise<FlowNetworkLayer> {
   }
 }
 
-/** Test seam: the layer is process-wide, and so is its five-minute memory. */
-export function forgetFlowNetwork({ keepFile = false } = {}) {
-  if (layer) {
-    if (layer.db.isOpen) layer.db.close();
-    // keepFile: as a restart leaves it.
-    if (!keepFile) unlink(layer.path).catch(() => {});
-  }
+/**
+ * Test seam: the layer is process-wide, and so is its five-minute memory.
+ * Resolves once the copy is deleted: a test that lists the directory straight
+ * after would otherwise still find the last test's file, and take it for one
+ * it did not make.
+ */
+export async function forgetFlowNetwork({ keepFile = false } = {}) {
+  const old = layer;
   layer = null;
   loading = null;
   refreshing = null;
   failedAt = null;
+  if (!old) return;
+  if (old.db.isOpen) old.db.close();
+  // keepFile: as a restart leaves it.
+  if (!keepFile) await unlink(old.path).catch(() => {});
 }
 
 /** Six decimals is about 0.1 m, and an upstream answer can carry 4,000 lines. */

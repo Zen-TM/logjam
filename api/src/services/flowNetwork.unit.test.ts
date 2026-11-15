@@ -122,13 +122,13 @@ describe("lookupIn, against the fixture", () => {
 });
 
 describe("loading the layer from S3", () => {
-  beforeEach(() => {
-    forgetFlowNetwork();
+  beforeEach(async () => {
+    await forgetFlowNetwork();
     send.mockReset();
   });
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
-    forgetFlowNetwork();
+    await forgetFlowNetwork();
   });
 
   const fixtureObject = (etag: string) => ({
@@ -259,7 +259,7 @@ describe("loading the layer from S3", () => {
     const before = ours();
     expect(before).toHaveLength(1);
 
-    forgetFlowNetwork({ keepFile: true });
+    await forgetFlowNetwork({ keepFile: true });
     let read = false;
     const body = new Readable({
       read() {
@@ -283,7 +283,7 @@ describe("loading the layer from S3", () => {
     send.mockImplementation(async () => fixtureObject('"corrupt"'));
     await lookupFlowNetwork(ON_GOVETTS, false);
     const [copy] = ours();
-    forgetFlowNetwork({ keepFile: true });
+    await forgetFlowNetwork({ keepFile: true });
     writeFileSync(join(tmpdir(), copy!), "not a GeoPackage");
 
     send.mockImplementation(async () => ({
