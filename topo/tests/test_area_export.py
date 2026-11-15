@@ -583,8 +583,9 @@ def made_up_area(**over) -> Area:
 
 
 class TileArchive(unittest.TestCase):
-    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts,
-    over areas already in the router's order (the API's)."""
+    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts
+    for an archive whose deepest zoom is z15, over areas already in the
+    router's order (the API's)."""
 
     a = made_up_area()
 

@@ -44,6 +44,7 @@ import {
 } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
+  coverageCarrierHere,
   BASEMAP_CATALOG,
   BASEMAP_UNAVAILABLE_LABEL,
   basemapFallbackNotice,
@@ -97,11 +98,7 @@ import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { pickCoverageCarrier } from "./coverageLayers";
-import {
-  coverageCarrierHere,
-  terrainSwitch,
-  type TerrainSwitchState,
-} from "./terrainSwitches";
+import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;

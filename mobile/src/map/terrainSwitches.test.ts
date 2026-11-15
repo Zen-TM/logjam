@@ -10,11 +10,7 @@ import {
   TERRAIN_LAYER_KEYS,
   type Region,
 } from "@logjam/shared";
-import {
-  coverageCarrierHere,
-  hasGauges,
-  terrainSwitch as switchIn,
-} from "./terrainSwitches";
+import { hasGauges, terrainSwitch as switchIn } from "./terrainSwitches";
 
 // The cases below are over New South Wales, which has every layer.
 const terrainSwitch = (
@@ -166,19 +162,6 @@ describe("terrainSwitch where the region lacks the layer", () => {
       terrainSwitch("contours", true, "protomaps", false, saved, SIM_WORLD)
         .reason,
     ).toBe(copy.notHere);
-  });
-});
-
-describe("coverageCarrierHere", () => {
-  // Mutation: return the stored carrier whatever the region lists, and the
-  // Coverage row names a network the region in view has no data for.
-  it("keeps a stored carrier only where the region lists it", () => {
-    expect(coverageCarrierHere(NSW_REGION, "optus")).toBe("optus");
-    expect(coverageCarrierHere(SIM_NZ, "optus")).toBeNull();
-    expect(coverageCarrierHere(SIM_NZ, "simtwo")).toBe("simtwo");
-    expect(coverageCarrierHere(SIM_UTAH, "simtwo")).toBeNull();
-    expect(coverageCarrierHere(null, "optus")).toBeNull();
-    expect(coverageCarrierHere(NSW_REGION, null)).toBeNull();
   });
 });
 

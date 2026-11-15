@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import { NSW_REGION, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import { ToastProvider } from "../feedback/ToastProvider";
 import LayersPopover from "./LayersPopover";
 
@@ -48,6 +48,7 @@ function popover(
         showWays
         setShowWays={noop}
         showGauges={false}
+        gaugesHere={false}
         setShowGauges={noop}
         showMgaGrid={false}
         setShowMgaGrid={noop}
@@ -65,6 +66,7 @@ function popover(
         onSlopeBandsChange={noop}
         mapView={mapView}
         mapBounds={mapBounds}
+        region={NSW_REGION}
         onImportFile={noop}
         startView={null}
         sharpenedLoaded
