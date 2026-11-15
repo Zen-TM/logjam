@@ -254,4 +254,4 @@ is therefore not that the public reads it day to day — it is that the record i
 ## Contact
 
 Logjam is operated by Zen Marcos. Privacy or data-access questions:
-zentmarcos@gmail.com.
+support@logjam.earth.
