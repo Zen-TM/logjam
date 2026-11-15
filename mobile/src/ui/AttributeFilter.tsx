@@ -9,6 +9,7 @@ import {
   lengthFromInput,
   lengthInputText,
   stopLabel,
+  withLengthUnit,
   THRESHOLD_OPERATOR_LABELS as OPERATOR_LABEL,
   THRESHOLD_OPERATORS as OPERATORS,
   type AttributeFilterShape,
@@ -64,7 +65,7 @@ const SHAPES: Record<AttributeFilterShape, (props: Props) => ReactNode> = {
 
   threshold: ({ def, value, onChange }) => (
     <ThresholdFilter
-      label={def.label}
+      label={withLengthUnit(def.key, def.label)}
       length={isLengthField(def.key)}
       value={value?.kind === "number" ? [value.op, value.value] : null}
       onChange={(next) =>
@@ -226,7 +227,12 @@ function ThresholdFilter({
   onChange,
 }: {
   label: string;
-  /** A length: the filter holds metres, the field is typed in the display units. */
+  /**
+   * A length: the filter holds metres, the field is typed in the display
+   * units. Guards: `attributeFilter.test.tsx` ("a length's threshold") on
+   * Logjam Web; on Logjam GPS `lengthFieldClients.test.ts` ("every form of a
+   * length field converts it").
+   */
   length: boolean;
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;

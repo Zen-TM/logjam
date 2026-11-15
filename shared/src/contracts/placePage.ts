@@ -146,7 +146,8 @@ export function formatPlacePosition(latitude: number, longitude: number) {
 
 /** A value as it is READ: the unit its definition declares ("15 m", or "49.2
  *  ft" where the account reads feet). Only a built-in carries one, and only
- *  where the label does not already say it. */
+ *  where the label does not already say it. Guard: `units.test.ts` ("a length
+ *  field"). */
 export function withFieldUnit(key: string, text: string): string {
   if (!isLengthField(key)) return text;
   const metres = Number(text);
@@ -159,7 +160,9 @@ export function withFieldUnit(key: string, text: string): string {
 
 /** An attribute row with its built-in unit on the value ("15" becomes "15
  *  m"). The value is otherwise left raw: the table formats it by type, and
- *  formatting it here as well would format a date twice. */
+ *  formatting it here as well would format a date twice. `attributeRows` and
+ *  `tripPlanSetAsideRows` apply it, so a caller of either does not: the value
+ *  is text by then and would take the unit twice. */
 export function withRowUnit(row: AttributeRow): AttributeRow {
   const [key, label, value, type] = row;
   if (value == null || value === "" || !isLengthField(key)) return row;

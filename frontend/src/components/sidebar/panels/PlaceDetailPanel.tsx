@@ -168,10 +168,16 @@ function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before
  *  deciding what to do with it. */
-function foreignValueText(item: { value: unknown; type: string }): string {
+function foreignValueText(item: {
+  key: string;
+  value: unknown;
+  type: string;
+}): string {
   if (item.value !== null && typeof item.value === "object")
     return JSON.stringify(item.value);
-  return formatFieldValue(item.value, item.type);
+  const text = formatFieldValue(item.value, item.type);
+  // A built-in length parked here still reads in the display units.
+  return typeof item.value === "number" ? withFieldUnit(item.key, text) : text;
 }
 
 // Grammatical list: "a", "a and b", "a, b, and c".

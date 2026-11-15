@@ -101,6 +101,7 @@ import {
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
+  displayUnits,
   type LonLatBox,
   type RouteDraft,
   type RoutePoint,
@@ -170,6 +171,7 @@ import {
 } from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
+import { makeScaleControl } from "./scaleControl";
 import { collapseCreditsOnce } from "./collapseCredits";
 import type {
   TPlace,
@@ -811,6 +813,12 @@ function Map({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const scaleControlRef = useRef<maplibregl.ScaleControl | null>(null);
+  // Read while rendering: the app sets the account's units before it renders
+  // the map, so a change of units reaches the scale bar's effect below.
+  // Guard: `scaleControl.test.ts` ("is made with the display units and told
+  // when they change").
+  const units = displayUnits();
   /**
    * The map and its locate control, once it is safe to attach handlers to —
    * null before load, so the box-draw hook can key its effect on the map
@@ -1105,13 +1113,12 @@ function Map({
     );
     const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
     if (credits) collapseCreditsOnce(credits);
-    map.addControl(
-      new maplibregl.ScaleControl({
-        unit: "metric",
-        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 160,
-      }),
-      "bottom-left",
+    const scale = makeScaleControl(
+      displayUnits(),
+      window.innerWidth <= MOBILE_MAX_WIDTH_PX,
     );
+    scaleControlRef.current = scale;
+    map.addControl(scale, "bottom-left");
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
     // tile request, silently renders nothing, and retries each load.
@@ -1809,11 +1816,16 @@ function Map({
     return () => {
       map.remove();
       mapRef.current = null;
+      scaleControlRef.current = null;
       // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
       setLoaded(null);
     };
   }, []);
+
+  useEffect(() => {
+    scaleControlRef.current?.setUnit(units);
+  }, [units]);
 
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;

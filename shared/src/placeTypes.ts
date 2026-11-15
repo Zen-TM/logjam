@@ -354,7 +354,7 @@ export type SystemFieldDef = {
    * The unit a VALUE is stored in, written where one is displayed ("30 m").
    * Only where the label does not already carry it: "Hours" says hours. A
    * length is stored in metres and read and typed in the display units
-   * (`isLengthField`).
+   * (`isLengthField`). Guard: `units.test.ts` ("a length field").
    */
   unit?: "m";
   /**

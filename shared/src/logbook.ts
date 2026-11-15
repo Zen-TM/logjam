@@ -19,6 +19,7 @@ import {
   type FieldStat,
   type LogbookStats,
 } from "./logbookStats.js";
+import { withRowUnit } from "./contracts/placePage.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
 
 export type LogbookTrip = {
@@ -556,7 +557,10 @@ export function attributeRows(
     .map(
       ([key, value]): AttributeRow => [key, humanizeFieldKey(key), value, null],
     );
-  return [...defined, ...orphaned];
+  // A length reads in the display units, on every table built here. Guard:
+  // `lengthFieldClients.test.ts` ("every table of attribute rows reads a
+  // length in the display units").
+  return [...defined, ...orphaned].map(withRowUnit);
 }
 
 /** Keys are slugs of the original label (`makeCustomFieldKey`), so un-slugging

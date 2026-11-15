@@ -20,9 +20,9 @@ import {
   type SectionKeysOn,
   CANYONING_TRIP_TYPE,
   coerceFieldInput,
-  coerceFieldValue,
   fieldInputText,
   formatFieldValue,
+  withFieldUnit,
   enforceCanyoningTag,
   linksCanyon,
   formatTripPlaceNames,
@@ -876,6 +876,18 @@ function TripLogDialog({
     return fieldValues[key] ?? "";
   }
 
+  /** A leftover value as its row reads it: a length with its unit. */
+  function leftoverText(def: { key: string; type: TripLogCustomFieldType }) {
+    const value = coerceFieldInput(
+      def.key,
+      getFieldValue(def.key),
+      def.type,
+      tripLog?.customFields[def.key],
+    );
+    const text = formatFieldValue(value, def.type);
+    return typeof value === "number" ? withFieldUnit(def.key, text) : text;
+  }
+
   function setFieldValue(key: string, value: string) {
     setKeptFieldKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     setFieldValues((prev) => ({ ...prev, [key]: value }));
@@ -1417,10 +1429,7 @@ function TripLogDialog({
                 key={def.key}
                 leading={<IconTile icon="help" hue="var(--color-accent)" />}
                 title={def.label}
-                subtitle={formatFieldValue(
-                  coerceFieldValue(getFieldValue(def.key), def.type),
-                  def.type,
-                )}
+                subtitle={leftoverText(def)}
                 trailing={
                   <IconButton
                     icon="close"

@@ -77,7 +77,9 @@ export const THRESHOLD_OPERATOR_LABELS: Record<
 /**
  * "Over 30": a filter's operator and number, which is never written with a
  * unit. A length's number is stored in metres and written in the display units
- * (`length`), as its field is typed.
+ * (`length`), as its field is typed. Guard: `units.test.ts` ("a length field":
+ * "writes a filter's threshold in the display units, with no unit, as
+ * before").
  */
 export function formatThreshold(
   filter: PlaceThresholdFilter,

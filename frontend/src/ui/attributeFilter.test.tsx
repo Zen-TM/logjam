@@ -1,9 +1,16 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { SYSTEM_FIELD_DEFS, type ScopedCustomFieldDef } from "@logjam/shared";
+import {
+  setDisplayUnits,
+  SYSTEM_FIELD_DEFS,
+  type ScopedCustomFieldDef,
+} from "@logjam/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AttributeFilter } from "./AttributeFilter";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setDisplayUnits("metric");
+});
 
 const depth: ScopedCustomFieldDef = {
   key: "depth",
@@ -72,5 +79,56 @@ describe("a labelled field's pills", () => {
       />,
     );
     expect(screen.getByText("B–C2")).toBeTruthy();
+  });
+});
+
+// A length's threshold is typed in the display units and held in metres.
+describe("a length's threshold", () => {
+  const longest = {
+    ...SYSTEM_FIELD_DEFS.find((def) => def.key === "longest_abseil")!,
+    placeTypeIds: [],
+    tripTypes: [],
+    appliesToAllTypes: true,
+  } as ScopedCustomFieldDef;
+  const input = (label: string) =>
+    screen.getByRole("spinbutton", { name: label }) as HTMLInputElement;
+  const typed = (label: string, value: string) =>
+    fireEvent.change(input(label), { target: { value } });
+
+  // Mutation: drop `lengthFromInput` from `ThresholdFilter.commit`, or
+  // `lengthInputText` from its first text, or `length` from its call site.
+  it("takes feet and holds metres, and shows stored metres as feet", () => {
+    setDisplayUnits("imperial");
+    const onChange = vi.fn();
+    render(<AttributeFilter def={longest} value={null} onChange={onChange} />);
+    typed("Longest pitch (ft)", "100");
+    expect(onChange).toHaveBeenLastCalledWith({
+      kind: "number",
+      op: "Less than",
+      value: 30.48,
+    });
+    cleanup();
+    render(
+      <AttributeFilter
+        def={longest}
+        value={{ kind: "number", op: "More than", value: 30.48 }}
+        onChange={() => {}}
+      />,
+    );
+    expect(input("Longest pitch (ft)").value).toBe("100");
+    expect(screen.getByText("Over 100")).toBeTruthy();
+  });
+
+  // Mutation: `withLengthUnit` in shared/src/tripLogFields.ts loses its
+  // `lengthUnitLabel() === "m"` check, and the metric label gains "(m)".
+  it("is as it was in metric: metres, and the label as written", () => {
+    const onChange = vi.fn();
+    render(<AttributeFilter def={longest} value={null} onChange={onChange} />);
+    typed("Longest pitch", "30");
+    expect(onChange).toHaveBeenLastCalledWith({
+      kind: "number",
+      op: "Less than",
+      value: 30,
+    });
   });
 });

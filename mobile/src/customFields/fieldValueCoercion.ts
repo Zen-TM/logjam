@@ -32,7 +32,8 @@ export function fieldValueStrings(
  * String form → stored value, using the shared coercion so a number typed here
  * lands as a number, not a string, and a length typed in feet lands in metres.
  * `stored` is what the form opened with: a length whose text was not edited
- * keeps its stored metres (`coerceFieldInput`).
+ * keeps its stored metres (`coerceFieldInput`). Guard:
+ * `fieldValueCoercion.test.ts` ("a length in the editor").
  *
  * AN EMPTIED FIELD IS `null`, NOT ABSENT, and that distinction is the whole
  * point. The place form merges this over the stored object, where `null` means

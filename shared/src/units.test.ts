@@ -34,7 +34,12 @@ import {
 } from "./units.js";
 import { withFieldUnit, withRowUnit } from "./contracts/placePage.js";
 import { formatThreshold } from "./placeFilterOptions.js";
-import { coerceFieldInput, fieldInputText } from "./tripLogFields.js";
+import {
+  coerceFieldInput,
+  customFieldDisplayLabel,
+  fieldInputText,
+  withLengthUnit,
+} from "./tripLogFields.js";
 import { NSW_REGION, simRegionsOn } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
@@ -309,6 +314,43 @@ describe("a length field", () => {
     // Another field is untouched by the unit.
     expect(fieldInputText("num_abseils", 6)).toBe("6");
     expect(coerceFieldInput("num_abseils", "6", "integer")).toBe(6);
+  });
+
+  // Mutation: `withLengthUnit` appends the unit in metric too, or for every
+  // key, or `customFieldDisplayLabel` stops calling it.
+  it("says the unit it is typed in once the setting is not metric", () => {
+    const def = (key: string, over = {}) =>
+      ({ key, label: "Longest pitch", type: "float", ...over }) as Parameters<
+        typeof customFieldDisplayLabel
+      >[0];
+    const longestDef = def(longest, { min: 0, max: null });
+    expect(customFieldDisplayLabel(longestDef)).toBe("Longest pitch (0+)");
+    expect(withLengthUnit(longest, "Longest pitch")).toBe("Longest pitch");
+    setDisplayUnits("imperial");
+    expect(customFieldDisplayLabel(longestDef)).toBe("Longest pitch (0+ ft)");
+    expect(customFieldDisplayLabel(def(longest))).toBe("Longest pitch (ft)");
+    expect(withLengthUnit(longest, "Longest pitch")).toBe("Longest pitch (ft)");
+    expect(customFieldDisplayLabel(def("num_abseils", { min: 0 }))).toBe(
+      "Longest pitch (0+)",
+    );
+  });
+
+  // Mutation: drop the rounding in `lengthFromInput` (`value * METRES_PER_FOOT`
+  // alone): 35 ft stores 10.668000000000001 m.
+  it("stores feet as clean metres a metric reader reads exactly", () => {
+    setDisplayUnits("imperial");
+    const ten = coerceFieldInput(longest, "35", "float");
+    const ninety = coerceFieldInput(longest, "98.4", "float");
+    expect([ten, ninety]).toEqual([10.668, 29.99232]);
+    // Nothing switched: the feet typed read back as typed.
+    expect(fieldInputText(longest, ninety)).toBe("98.4");
+    setDisplayUnits("metric");
+    expect(fieldInputText(longest, ten)).toBe("10.668");
+    expect(fieldInputText(longest, ninety)).toBe("29.99232");
+    expect(withFieldUnit(longest, String(ten))).toBe("10.668 m");
+    expect(formatThreshold(["More than", ten as number], true)).toBe(
+      "Over 10.668",
+    );
   });
 
   // Mutation: drop the `stored` comparison from `coerceFieldInput`, and a

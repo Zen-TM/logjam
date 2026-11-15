@@ -5,7 +5,8 @@
 // set is not here: this import sets it again, before `@logjam/shared` loads,
 // for the region a sheet's terrain is read from. Guard: workerGrid.test.ts.
 // The display units are in the same case: each request carries the page's, and
-// the scale bar is written in them. Guard: worker.test.ts.
+// the scale bar is written in them. Guard: worker.test.ts ("the render worker's
+// display units").
 import "../simRegions";
 import { setDisplayUnits } from "@logjam/shared";
 import { tileCache } from "./cache";

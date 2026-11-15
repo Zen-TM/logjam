@@ -52,9 +52,20 @@ export function lengthUnitLabel(): string {
   return imperial() ? "ft" : "m";
 }
 
-/** What the user typed in a length field, as metres. */
+// Feet stored as metres are rounded to this many decimals: finer than a foot
+// typed to three decimals (0.0003048 m), and coarse enough that 35 ft is
+// 10.668 m, not the 10.668000000000001 the multiplication leaves.
+const STORED_METRE_DECIMALS = 7;
+
+/**
+ * What the user typed in a length field, as metres. Metric is stored as typed;
+ * feet are rounded to `STORED_METRE_DECIMALS`, so a metric reader of the same
+ * place sees "10.668 m". Guard: `units.test.ts` ("a length field").
+ */
 export function lengthFromInput(value: number): number {
-  return imperial() ? value * METRES_PER_FOOT : value;
+  if (!imperial()) return value;
+  const scale = 10 ** STORED_METRE_DECIMALS;
+  return Math.round(value * METRES_PER_FOOT * scale) / scale;
 }
 
 /** Metres as the length field shows them, unrounded: the form rounds. */
@@ -163,7 +174,7 @@ export function scaleBarSteps(kind: "screen" | "print"): readonly number[] {
  * A scale bar's label: "500 m", "2 km", "0.5 mi", "200 ft". A whole number of
  * km or mi drops its decimal (a bar says "1 km", where a distance says
  * "1.0 km"), so this is not `formatDistance`. Metric is km from 1000 m,
- * imperial miles from half a mile.
+ * imperial miles from half a mile. Guard: `units.test.ts` ("scale bars").
  */
 export function formatScaleStep(metres: number): string {
   if (imperial()) {

@@ -1,14 +1,20 @@
 // A length field (`isLengthField`) is typed in the display units and stored in
-// metres, and every form that draws one converts at the same two places: the
-// text it opens with (`fieldInputText`, or `fieldValueStrings` on Logjam GPS)
-// and the value it saves (`coerceFieldInput`, with the stored value so an
-// unedited length keeps its metres, or `coerceCustomFields` with it). The
-// behaviour is in `units.test.ts` ("a length field"); this reads each form's
-// source for the call, since none of the forms has a render harness that
-// reaches its save.
+// metres. Every form that draws one converts at the same two places: the text
+// it opens with (`fieldInputText`, or `fieldValueStrings` on Logjam GPS) and
+// the value it saves (`coerceFieldInput`, with the stored value so an unedited
+// length keeps its metres, or `coerceCustomFields` with it). Every page that
+// reads one builds its rows with `attributeRows` or `tripPlanSetAsideRows`, or
+// calls `withFieldUnit` itself. The conversions are held by `units.test.ts` ("a
+// length field"); this file reads each form's and page's source for the call,
+// since none of the forms has a render harness that reaches its save, and
+// `attributeFilter.test.tsx` renders the web filter.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { tripPlanSetAsideRows } from "./contracts/plans.js";
+import { attributeRows } from "./logbook.js";
+import { SYSTEM_FIELD_DEFS } from "./placeTypes.js";
+import { setDisplayUnits } from "./units.js";
 
 const repo = join(import.meta.dirname, "..", "..");
 const read = (file: string) =>
@@ -53,6 +59,7 @@ describe("every form of a length field converts it", () => {
       "frontend/src/ui/AttributeFilter.tsx",
       [
         "length={isLengthField(def.key)}",
+        "label={withLengthUnit(def.key, def.label)}",
         "[nextOperator, length ? lengthFromInput(parsed) : parsed]",
         "formatThreshold(value, length)",
       ],
@@ -61,9 +68,91 @@ describe("every form of a length field converts it", () => {
       "mobile/src/ui/AttributeFilter.tsx",
       [
         "length={isLengthField(def.key)}",
+        "label={withLengthUnit(def.key, def.label)}",
         "[nextOperator, length ? lengthFromInput(parsed) : parsed]",
         "formatThreshold(value, length)",
       ],
+    ],
+  ])("%s", (file, calls) => {
+    const source = read(file);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(source, call).toContain(call);
+  });
+});
+
+describe("every page that reads a length goes through the units module", () => {
+  const rows = () => [
+    ...attributeRows(SYSTEM_FIELD_DEFS, { longest_abseil: 15, num_abseils: 6 }),
+    // A value whose definition is gone lists under its key, and is a length too.
+    ...attributeRows([], { longest_abseil: 15 }),
+    ...tripPlanSetAsideRows({
+      foreignFields: [
+        {
+          key: "longest_abseil",
+          label: "Longest pitch",
+          value: 15,
+          type: "float",
+        },
+      ],
+    } as Parameters<typeof tripPlanSetAsideRows>[0]),
+  ];
+  const lengths = () =>
+    rows()
+      .filter(([key]) => key === "longest_abseil")
+      .map(([, , value]) => value);
+
+  // Mutation: drop `.map(withRowUnit)` from `attributeRows`, or `withRowUnit`
+  // from `tripPlanSetAsideRows`: the bare 15 comes back.
+  it("every table of attribute rows reads a length in the display units", () => {
+    try {
+      expect(lengths()).toEqual(["15 m", "15 m", "15 m"]);
+      setDisplayUnits("imperial");
+      expect(lengths()).toEqual(["49.2 ft", "49.2 ft", "49.2 ft"]);
+      // A count is a count.
+      expect(rows().find(([key]) => key === "num_abseils")?.[2]).toBe(6);
+    } finally {
+      setDisplayUnits("metric");
+    }
+  });
+
+  // Mutation: build the rows by hand in any of these (a bare
+  // `[key, label, value, type]`), or print a parked value without
+  // `withFieldUnit`.
+  it.each([
+    [
+      "frontend/src/components/plans/PlanPlacePage.tsx",
+      ["attributeRows(", "tripPlanSetAsideRows(place)"],
+    ],
+    [
+      "mobile/src/plans/PlanPlaceSheet.tsx",
+      ["attributeRows(", "tripPlanSetAsideRows(place)"],
+    ],
+    [
+      "frontend/src/components/plans/PlanItemEditDialog.tsx",
+      ["tripPlanSetAsideRows(place)"],
+    ],
+    [
+      "frontend/src/components/sidebar/panels/TripDetailPanel.tsx",
+      ["attributeRows(customFieldDefs, trip.customFields)"],
+    ],
+    [
+      "mobile/src/logs/TripDetailScreen.tsx",
+      ["attributeRows(fieldDefs, current.customFields)"],
+    ],
+    [
+      "mobile/src/places/PlaceDetailScreen.tsx",
+      [
+        "attributeRows(labellingDefs, storedFields)",
+        "withFieldUnit(key, String(value))",
+      ],
+    ],
+    [
+      "frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx",
+      ["withFieldUnit(def.key, text)", "withFieldUnit(item.key, text)"],
+    ],
+    [
+      "frontend/src/components/dialogs/TripLogDialog.tsx",
+      ["withFieldUnit(def.key, text)"],
     ],
   ])("%s", (file, calls) => {
     const source = read(file);
