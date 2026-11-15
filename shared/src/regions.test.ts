@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
@@ -26,10 +27,12 @@ import {
   normalizeRegionIds,
   offersRegionChoice,
   REGIONS,
+  REGIONS_WITH_SIMULATED,
   regionAt,
   regionBounds,
   regionInView,
   regionInWrappedView,
+  regionOfArea,
   regionsOf,
   regionsTouching,
   regionTouchesBox,
@@ -732,6 +735,33 @@ describe("areasInRegion", () => {
   it("holds none of another region's, and none for no region", () => {
     expect(areasInRegion(SIM_NZ, [inside, coastal, abroad])).toEqual([abroad]);
     expect(areasInRegion(null, [inside])).toEqual([]);
+  });
+});
+
+describe("regionOfArea", () => {
+  // Mutation: test a corner of the box (`regionAt(west, south, regions)`) in
+  // place of its centre, and the clients credit an area to a region
+  // topo/regions.py `region_of_area` did not fill it from (its test reads the
+  // same cases).
+  it("is the region holding the centre of the area's box, as the worker picks it", () => {
+    const { cases } = JSON.parse(
+      readFileSync(
+        new URL("./__fixtures__/area-region.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      cases: {
+        why: string;
+        coverage: [number, number, number, number];
+        region: string | null;
+      }[];
+    };
+    expect(cases.length).toBeGreaterThanOrEqual(6);
+    for (const { why, coverage, region } of cases)
+      expect(
+        regionOfArea(coverage, REGIONS_WITH_SIMULATED)?.id ?? null,
+        why,
+      ).toBe(region);
   });
 });
 

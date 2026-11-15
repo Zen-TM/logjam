@@ -170,7 +170,7 @@ describe("topo-jobs route (fake auth)", () => {
         .post(`/topo-jobs/${jobId}/start`)
         .set(AUTH);
       expect(startRes.status).toBe(400);
-      expect(startRes.body.error).toContain("holds only 5 m DEMs");
+      expect(startRes.body.error).toContain("holds only DEMs too coarse");
     } finally {
       await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
     }

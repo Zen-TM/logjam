@@ -22,7 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
-import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
+import { layerIn, regionOfArea, REGIONS, type Region } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -160,8 +160,10 @@ export function demTileUrl(
 
 /**
  * The credit lines for the sources a result was read from, each once. A
- * sharpened area's carries the heights credit of the region it lies in too:
- * where its survey has no ground, its archive holds that region's heights.
+ * sharpened area's carries the heights credit of the region it was filled
+ * from too (`regionOfArea`): where its survey has no ground, its archive holds
+ * that region's heights. Guard: `demSources.test.ts` ("credits a sharpened
+ * area with the region that filled it").
  */
 export function demCredits(
   sourceIds: readonly string[] = DEM_SOURCES.map((source) => source.id),
@@ -173,11 +175,7 @@ export function demCredits(
     .flatMap((source) => {
       const { areaId, coverage } = source;
       if (!areaId || !coverage) return [source.credit];
-      // The first region the area's box shares ground with: the same test a
-      // map and a save use to say which areas belong to a region.
-      const region =
-        regions.find((r) => areasInRegion(r, [{ coverage }]).length > 0) ??
-        null;
+      const region = regionOfArea(coverage, regions);
       return [source.credit, layerIn(region, "heights")?.credit ?? null];
     })
     .filter((line): line is string => line !== null);

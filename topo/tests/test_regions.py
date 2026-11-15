@@ -2,6 +2,7 @@
 from shared/src/regions.ts; shared/src/topoRegions.test.ts holds the file equal
 to it). Every coordinate here is a place on a map or made up."""
 
+import json
 import os
 import re
 import subprocess
@@ -17,6 +18,7 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 import regions  # noqa: E402
 
 TOPO = os.path.dirname(os.path.dirname(__file__))
+AREA_CASES = os.path.join(TOPO, "..", "shared/src/__fixtures__/area-region.json")
 KATOOMBA = (150.31, -33.71)
 WANAKA = (169.25, -44.055)
 DEV = {"DB_HOST": "postgres"}
@@ -165,6 +167,40 @@ class TestRegionLookup(unittest.TestCase):
         with mock.patch.object(regions, "REGIONS", [a, b]):
             self.assertEqual(regions.region_at(1.5, 1.5)["id"], "a")
             self.assertEqual(regions.region_at(2.5, 2.5)["id"], "b")
+
+
+class TestRegionOfArea(unittest.TestCase):
+    # Mutation: `region_of_area` testing a corner of the box (`region_at(west,
+    # south, regions)`) in place of its centre: the worker then fills an area
+    # from one region and the clients credit another
+    # (shared/src/regions.test.ts reads the same cases for `regionOfArea`).
+    def test_an_area_belongs_to_the_region_holding_its_centre(self):
+        with open(AREA_CASES, encoding="utf-8") as f:
+            cases = json.load(f)["cases"]
+        self.assertGreaterEqual(len(cases), 6)
+        every = load({**DEV, "SIM_REGIONS": "1"})
+        for case in cases:
+            with self.subTest(case["why"]):
+                found = regions.region_of_area(case["coverage"], every)
+                self.assertEqual(found and found["id"], case["region"])
+
+
+class TestSharpenEntry(unittest.TestCase):
+    # Mutation: give a region whose heights go deeper than z15 (simnz, to z17)
+    # `mode: "upload"` in shared/src/regions.ts and regenerate: sharpen.py
+    # would read its z15 tiles as the finest it has and write an area that
+    # starts at z15 over heights that are already finer. Or drop the slope
+    # archive from an upload region.
+    def test_an_upload_region_is_filled_from_z15(self):
+        import sharpen
+
+        every = load({**DEV, "SIM_REGIONS": "1"})
+        upload = [r for r in every if r["sharpen"]["mode"] == "upload"]
+        self.assertIn("nsw", [r["id"] for r in upload])
+        for r in upload:
+            with self.subTest(r["id"]):
+                self.assertEqual(r["terrain"]["heights"]["sampleZoom"], sharpen.ZMIN)
+                self.assertEqual(r["terrain"]["slope"]["maxzoom"], sharpen.ZMIN)
 
 
 if __name__ == "__main__":

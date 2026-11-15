@@ -74,7 +74,7 @@ describe("the declaration", () => {
   });
 
   // Mutation: pair every area with `regions[0]` in demCredits in place of the
-  // region `areasInRegion` finds, and an area outside every region is credited
+  // region `regionOfArea` finds, and an area outside every region is credited
   // to the first one; drop the `coverage` test and an area with none throws.
   it("credits an area with the heights of the region it lies in", () => {
     const area = (coverage: DemSource["coverage"]) => ({
@@ -102,6 +102,40 @@ describe("the declaration", () => {
     const unplaced = area(null);
     expect(demCredits([unplaced.id], [unplaced], SIM_REGIONS)).toEqual([
       "Elevation: a survey.",
+    ]);
+  });
+
+  // Mutation: find the area's region with `areasInRegion` (the first region
+  // its box touches) in place of `regionOfArea` in demCredits, and an area on
+  // a border is credited to the neighbour the worker did not fill it from.
+  it("credits a sharpened area with the region that filled it", () => {
+    const square = (west: number, east: number) =>
+      [
+        [west, 0],
+        [east, 0],
+        [east, 1],
+        [west, 1],
+      ] as const;
+    // Two made-up neighbours that meet at longitude 1.
+    const [nz, utah] = SIM_REGIONS;
+    const first = { ...nz!, id: "first", borders: [square(0, 1)] };
+    const second = { ...utah!, id: "second", borders: [square(1, 2)] };
+    // Its box takes in ground of both, and its centre (1.1) is in the second.
+    const straddling = {
+      ...sharpenedDemSource({
+        id: "a1",
+        zmax: 16,
+        tiles15: [0, 0, 1, 1],
+        coverage: [0.9, 0.4, 1.3, 0.6],
+        contours: true,
+        credit: "Elevation: a survey.",
+        createdAt: "2026-10-24T00:00:00.000Z",
+      }),
+    };
+    expect(straddling.coverage).toEqual([0.9, 0.4, 1.3, 0.6]);
+    expect(demCredits([straddling.id], [straddling], [first, second])).toEqual([
+      "Elevation: a survey.",
+      utah!.terrain.heights!.credit,
     ]);
   });
 
