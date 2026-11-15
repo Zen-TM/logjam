@@ -23,10 +23,12 @@ const read = (file: string) =>
 describe("every form of a length field converts it", () => {
   // Mutation: change any of these calls back to the unit-blind one
   // (`String(raw)`, `coerceFieldValue(...)`, or `coerceCustomFields` without
-  // the stored values), drop `fieldKey={def.key}` from either filter, or drop
-  // the units from any one input's seed key (`displayUnits()` in `openKey`,
-  // `seedKey`, `populatedFor`, the plan item sheet's `key` or the plan item
-  // dialog's `key`, or the filters' `shownUnits` reseed).
+  // the stored values), drop `fieldKey={def.key}` from either filter, drop the
+  // units from any one input's seed key (`displayUnits()` in `openKey`,
+  // `seedKey`, `seededUnits`, the plan item sheet's `key` or the plan item
+  // dialog's `key`), drop the `seededUnits` check from a pick's return that
+  // keeps the form, drop the filters' `shownUnits` reseed, or give a filter's
+  // `coerceFieldInput` the `value` it is fed back instead of its `seed`.
   it.each([
     [
       "frontend/src/components/dialogs/PlaceDialog.tsx",
@@ -34,8 +36,8 @@ describe("every form of a length field converts it", () => {
         "vals[def.key] = fieldInputText(def.key, raw);",
         "attributes[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, fieldValue(place?.fieldValues, def.key), );",
         "const units = displayUnits();",
-        "units !== populatedFor.units",
-        "setPopulatedFor({ open, placeId, units });",
+        "setSeededUnits(displayUnits());",
+        "} else if (open && seededUnits !== units) { populateForm(); }",
       ],
     ],
     [
@@ -45,6 +47,8 @@ describe("every form of a length field converts it", () => {
         "customFields[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, );",
         "customFields[def.key] = coerceFieldInput( def.key, raw, def.type, tripLog?.customFields[def.key], );",
         'const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;',
+        "if (picking && seededUnits === displayUnits()) {",
+        "setSeededUnits(displayUnits());",
       ],
     ],
     [
@@ -54,6 +58,8 @@ describe("every form of a length field converts it", () => {
         "coerceCustomFields( fieldValues, typeFieldDefs, place?.fieldValues, );",
         "units: displayUnits(),",
         "seededFor.units !== seedKey.units",
+        "if (visible && (!resuming || seededUnits !== seedKey.units)) seed();",
+        "setSeededUnits(displayUnits());",
       ],
     ],
     [
@@ -79,8 +85,8 @@ describe("every form of a length field converts it", () => {
       [
         "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        'coerceFieldInput( fieldKey, nextText.trim(), "float", value?.[1], ) as number',
-        "if (units !== shownUnits) { setShownUnits(units); if (length && value) setText(fieldInputText(fieldKey, value[1])); }",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", seed && seed.text === nextText.trim() ? seed.metres : undefined, ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeed(seeded(value)); setText(fieldInputText(fieldKey, value[1])); } }",
         "formatThreshold(value, length)",
       ],
     ],
@@ -89,8 +95,8 @@ describe("every form of a length field converts it", () => {
       [
         "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        'coerceFieldInput( fieldKey, nextText.trim(), "float", value?.[1], ) as number',
-        "if (units !== shownUnits) { setShownUnits(units); if (length && value) setText(fieldInputText(fieldKey, value[1])); }",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", seed && seed.text === nextText.trim() ? seed.metres : undefined, ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeed(seeded(value)); setText(fieldInputText(fieldKey, value[1])); } }",
         "formatThreshold(value, length)",
       ],
     ],

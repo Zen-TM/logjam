@@ -282,13 +282,20 @@ function ThresholdFilter({
   const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
     value?.[0] ?? "Less than",
   );
-  const [text, setText] = useState(
-    value ? fieldInputText(fieldKey, value[1]) : "",
-  );
+  const seeded = (held: PlaceThresholdFilter | null) =>
+    held ? { text: fieldInputText(fieldKey, held[1]), metres: held[1] } : null;
+  // What the text was last written from, and the metres it was written from.
+  // Text still equal to it is the value the user was shown, so it keeps those
+  // metres; `value` is not that, since it follows every keystroke.
+  const [seed, setSeed] = useState(() => seeded(value));
+  const [text, setText] = useState(seed?.text ?? "");
   const [shownValue, setShownValue] = useState(value);
   if (value !== shownValue) {
     setShownValue(value);
-    if (value == null) setText("");
+    if (value == null) {
+      setText("");
+      setSeed(null);
+    }
   }
   // The text is in the display units, so a change of units writes it again from
   // the metres held (a typed "30" would otherwise commit as 9.144 m). Guard:
@@ -299,7 +306,10 @@ function ThresholdFilter({
   const [shownUnits, setShownUnits] = useState(units);
   if (units !== shownUnits) {
     setShownUnits(units);
-    if (length && value) setText(fieldInputText(fieldKey, value[1]));
+    if (length && value) {
+      setSeed(seeded(value));
+      setText(fieldInputText(fieldKey, value[1]));
+    }
   }
 
   const commit = (nextOperator: PlaceThresholdFilter[0], nextText: string) => {
@@ -313,7 +323,7 @@ function ThresholdFilter({
               fieldKey,
               nextText.trim(),
               "float",
-              value?.[1],
+              seed && seed.text === nextText.trim() ? seed.metres : undefined,
             ) as number,
           ],
     );

@@ -216,26 +216,23 @@ function PlaceDialog({
   // Keyed on the place's id, not the object: a refetch hands over a new object
   // for the same place and must not replace what the user has typed.
   const placeId = place?.id ?? null;
-  // The units are in the key: the form's length text and its conversion are in
-  // one unit, so a change of units reseeds it (dropping what was typed) rather
-  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
-  // of a length field converts it").
+  const [populatedFor, setPopulatedFor] = useState({ open: false, placeId });
+  // The units the form's text was written in, set by `populateForm` alone: the
+  // length text and its conversion are always in one unit. A change of units
+  // while the form is open, or closed for a pick on the map, writes the text
+  // again from the stored values (dropping what was typed) rather than saving
+  // feet as metres. Guards: `PlaceDialog.units.render.test.tsx` and
+  // `lengthFieldClients.test.ts` ("every form of a length field converts it").
   const units = displayUnits();
-  const [populatedFor, setPopulatedFor] = useState({
-    open: false,
-    placeId,
-    units,
-  });
-  if (
-    open !== populatedFor.open ||
-    placeId !== populatedFor.placeId ||
-    units !== populatedFor.units
-  ) {
-    setPopulatedFor({ open, placeId, units });
+  const [seededUnits, setSeededUnits] = useState(units);
+  if (open !== populatedFor.open || placeId !== populatedFor.placeId) {
+    setPopulatedFor({ open, placeId });
     if (open) {
-      if (picking && units === populatedFor.units) setPicking(false);
+      if (picking) setPicking(false);
       else populateForm();
     }
+  } else if (open && seededUnits !== units) {
+    populateForm();
   }
 
   // An existing place's media is refetched on each open (fresh presigned
@@ -248,6 +245,7 @@ function PlaceDialog({
   }
 
   function populateForm() {
+    setSeededUnits(displayUnits());
     let initialName: string;
     let initialAltNames: string;
     let initialLatitude: string;

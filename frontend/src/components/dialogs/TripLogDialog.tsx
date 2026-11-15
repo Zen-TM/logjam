@@ -383,17 +383,24 @@ function TripLogDialog({
   // of a length field converts it").
   const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;
   const [populatedFor, setPopulatedFor] = useState<string | null>(null);
+  // The units `populateForm` wrote the form's text in, so that a return from a
+  // pick on the map, which keeps the form, still re-seeds it when they changed
+  // while the dialog was closed. Guard: `lengthFieldClients.test.ts` ("every
+  // form of a length field converts it").
+  const [seededUnits, setSeededUnits] = useState(displayUnits());
   if (openKey !== populatedFor) {
     setPopulatedFor(openKey);
     if (openKey !== null) {
       // Each open (re)loads an existing trip's media, the return from picking
       // too; see the media effect below.
       setMediaLoading(!!tripLog);
-      if (picking) {
-        // Returning from a pick-on-map cycle — don't reset form state.
+      if (picking && seededUnits === displayUnits()) {
+        // Returning from a pick-on-map cycle — don't reset form state, unless
+        // the units changed meanwhile: the typed length is in the old ones.
         setPicking(false);
         setFocusDateWhenOpened(false);
       } else {
+        if (picking) setPicking(false);
         populateForm();
       }
     }
@@ -414,6 +421,7 @@ function TripLogDialog({
   }
 
   function populateForm() {
+    setSeededUnits(displayUnits());
     let initialDate: string;
     let initialNotes: string;
     let initialSelectedPlaceIds: string[];

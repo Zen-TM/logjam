@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import {
   setDisplayUnits,
   SYSTEM_FIELD_DEFS,
+  type CustomFieldFilter,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -139,6 +141,57 @@ describe("a length's threshold", () => {
     expect(onChange).toHaveBeenLastCalledWith({
       kind: "number",
       op: "More than",
+      value: 30,
+    });
+  });
+
+  // The filter's `value` follows every keystroke, so a test that feeds each
+  // commit back sees what a bare `vi.fn()` cannot.
+  const held = (start: CustomFieldFilter | null, commits: unknown[]) => {
+    function Held() {
+      const [value, setValue] = useState(start);
+      return (
+        <AttributeFilter
+          def={longest}
+          value={value}
+          onChange={(next) => {
+            setValue(next);
+            commits.push(next);
+          }}
+        />
+      );
+    }
+    return render(<Held />);
+  };
+
+  // Mutation: pass `value?.[1]` (the last keystroke's metres) as the fourth
+  // argument of `coerceFieldInput` in `ThresholdFilter.commit`, and "98.4" typed
+  // after "98.44" keeps 30.004512 m.
+  it("converts text the user typed, not the metres of the keystroke before", () => {
+    setDisplayUnits("imperial");
+    const commits: unknown[] = [];
+    held(null, commits);
+    typed("Longest pitch (ft)", "98.44");
+    typed("Longest pitch (ft)", "98.4");
+    expect(commits[commits.length - 1]).toEqual({
+      kind: "number",
+      op: "Less than",
+      value: 29.99232,
+    });
+  });
+
+  // Mutation: drop `seed.metres` from `ThresholdFilter.commit` and convert the
+  // seeded text instead: 30 m comes back as 29.99232 m.
+  it("keeps the metres it was shown as while the text is as it was seeded", () => {
+    setDisplayUnits("imperial");
+    const commits: unknown[] = [];
+    held({ kind: "number", op: "Less than", value: 30 }, commits);
+    expect(input("Longest pitch (ft)").value).toBe("98.4");
+    typed("Longest pitch (ft)", "98.44");
+    typed("Longest pitch (ft)", "98.4");
+    expect(commits[commits.length - 1]).toEqual({
+      kind: "number",
+      op: "Less than",
       value: 30,
     });
   });

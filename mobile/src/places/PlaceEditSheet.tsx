@@ -247,6 +247,9 @@ export function PlaceEditSheet({
     units: displayUnits(),
   };
   const [seededFor, setSeededFor] = useState<typeof seedKey | null>(null);
+  // The units `seed` wrote the form's text in (a `seededFor` that skipped a
+  // resume does not know them).
+  const [seededUnits, setSeededUnits] = useState(seedKey.units);
   if (
     seededFor === null ||
     seededFor.placeId !== seedKey.placeId ||
@@ -255,10 +258,13 @@ export function PlaceEditSheet({
     seededFor.units !== seedKey.units
   ) {
     setSeededFor(seedKey);
-    if (visible && !resuming) seed();
+    // A return from the map picker keeps the form (`resuming`), unless the
+    // units changed while it was away: the typed length is in the old ones.
+    if (visible && (!resuming || seededUnits !== seedKey.units)) seed();
   }
 
   function seed() {
+    setSeededUnits(displayUnits());
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
