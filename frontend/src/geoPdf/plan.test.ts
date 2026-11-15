@@ -24,7 +24,7 @@ import type { GeoPdfRenderInput } from "./types";
 // A made-up point inside the NSW coverage, and one inside the first simulated
 // New Zealand box.
 const CENTRE = { lat: -30, lon: 150 };
-const NZ_CENTRE = { lat: -44.62, lon: 169.07 };
+const NZ_CENTRE = { lat: -44.055, lon: 169.25 };
 
 function input(
   over: Partial<GeoPdfConfig>,

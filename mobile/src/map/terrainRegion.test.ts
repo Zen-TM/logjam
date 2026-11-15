@@ -18,7 +18,7 @@ describe("regionShown", () => {
   // group draws New South Wales's archives over any other region.
   it("is the region under the centre of what is on screen", () => {
     expect(regionShown(around(150.3, -33.7), CAMERA, regions)).toBe(NSW_REGION);
-    expect(regionShown(around(169.1, -44.6), CAMERA, regions)).toBe(SIM_NZ);
+    expect(regionShown(around(169.25, -44.055), CAMERA, regions)).toBe(SIM_NZ);
   });
 
   // Mutation: call `regionInView` in place of `regionInWrappedView`, and a map
@@ -33,7 +33,7 @@ describe("regionShown", () => {
   // blank until the map first settles.
   it("stands the camera's point in before the first settle", () => {
     expect(
-      regionShown(null, { latitude: -44.6, longitude: 169.1 }, regions),
+      regionShown(null, { latitude: -44.055, longitude: 169.25 }, regions),
     ).toBe(SIM_NZ);
   });
 
