@@ -308,6 +308,19 @@ describe("scripts/sim-regions/build.sh up", () => {
     ]);
   });
 
+  it("writes the same keys to a bucket URL with a trailing slash", async () => {
+    // Mutation: drop the `%/` from `${bucket%/}` in build.sh up.
+    const result = await up(
+      ["master/dem/simnz-heights.pmtiles"],
+      200,
+      "http://127.0.0.1:PORT/logjam-topo-local/",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.got).toEqual([
+      "PUT /logjam-topo-local/master/dem/simnz-heights.pmtiles bytes of master/dem/simnz-heights.pmtiles",
+    ]);
+  });
+
   it("fails when the bucket refuses a file", async () => {
     // Mutation: drop `-f` from the curl call in build.sh up.
     const result = await up(["master/dem/simnz-heights.pmtiles"], 500);

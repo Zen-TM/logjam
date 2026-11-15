@@ -34,7 +34,7 @@ if [ "${1:-}" = up ]; then
   while IFS= read -r file; do
     key=${file#"$out"/}
     # test/test: MiniStack's dummy credentials, as in the README's Local Development.
-    curl -fsS -u test:test --upload-file "$file" "$bucket/$key" >/dev/null
+    curl -fsS -u test:test --upload-file "$file" "${bucket%/}/$key" >/dev/null
     echo "uploaded $key"
     count=$((count + 1))
   done < <(find "$out/master" -type f -name '*.pmtiles' | sort)
