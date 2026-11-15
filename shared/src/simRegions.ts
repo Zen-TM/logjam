@@ -58,7 +58,7 @@ function simTerrain(
   });
   const heights = {
     id: `${id}-heights`,
-    name: `${name} (simulated)`,
+    name: t`${name} (simulated)`,
     sampleZoom: topZoom,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,

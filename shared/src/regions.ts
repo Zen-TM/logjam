@@ -21,6 +21,7 @@
 // Guard: `regions.test.ts` ("keeps NSW's stored ids and paths").
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
+import { t } from "./i18n.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
@@ -168,7 +169,7 @@ export type Region = {
  */
 const NSW_HEIGHTS = {
   id: "nsw-5m",
-  name: "NSW 5 m",
+  name: t`NSW 5 m`,
   sampleZoom: 15,
   // NSW and the ACT. Inside it a tile the build did not produce is simply
   // absent, and the position falls through.

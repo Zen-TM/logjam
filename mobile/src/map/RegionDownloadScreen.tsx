@@ -46,7 +46,6 @@ import {
   DEM_SOURCE_ID,
   downloadableBasemaps,
   planRegionForBasemaps,
-  pointBox,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -102,6 +101,8 @@ import {
   bboxToFrame,
   defaultFrameInsets,
   startingArea,
+  startBox,
+  startPicks,
   frameToBbox,
   detailLabel,
   metresPerPixel,
@@ -221,16 +222,9 @@ export function RegionDownloadScreen({
     [initialBounds],
   );
 
-  const [selected, setSelected] = useState<string[]>(() => {
-    const here = downloadableBasemaps(pointBox(startCenter[0], startCenter[1]));
-    return here.some((entry) => entry.id === startBasemapId)
-      ? [startBasemapId]
-      : // Arriving from the Vector map: that map is coming anyway, so nothing
-        // else is picked for them.
-        startBasemapId === "protomaps"
-        ? []
-        : here.slice(0, 1).map((entry) => entry.id);
-  });
+  const [selected, setSelected] = useState<string[]>(() =>
+    startPicks(startBox(startArea, startCenter), startBasemapId),
+  );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [frame, setFrame] = useState<FrameInsets | null>(null);
@@ -275,7 +269,7 @@ export function RegionDownloadScreen({
 
   // The maps the frame's ground offers. A pick the frame has moved off stays
   // picked, and comes back when the frame returns, but is not saved from here.
-  const framed = bbox ?? pointBox(startCenter[0], startCenter[1]);
+  const framed = bbox ?? startBox(startArea, startCenter);
   const downloadable = useMemo(
     () =>
       downloadableBasemaps({

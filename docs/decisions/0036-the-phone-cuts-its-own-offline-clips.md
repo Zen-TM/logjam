@@ -57,11 +57,13 @@ bytes as before, plus the gaps it reads through.
 
 **Every region a user saves on Logjam GPS, guest or signed in, includes a clip
 of the vector map, of each DEM archive the area touches and of the statewide
-contours, and the phone cuts each one itself** from the public archive on the
-CDN. `regionClipSpecs` in `mobile/src/offline/regionTilePlanning.ts` is the
+contours (updated 2026-11-15: of the contours and every other Terrain archive
+of each region the area touches; outside every region, the vector map alone),
+and the phone cuts each one itself** from the public archive on the CDN. `regionClipSpecs` in `mobile/src/offline/regionTilePlanning.ts` is the
 one place that lists them, with no account check and no control to leave one
 out; a save with no raster picked is the vector map, the DEMs and the
-contours. Guard: `regionTilePlanning.test.ts` ("regionClipSpecs").
+contours (updated 2026-11-15: the vector map and the archives of each region
+the box touches). Guard: `regionTilePlanning.test.ts` ("regionClipSpecs").
 
 **A save makes no request to Logjam's API, and the bbox never reaches it.**
 `runRegionClip` in `mobile/src/offline/regionDownloads.ts` asks the CDN for
@@ -162,8 +164,10 @@ Nothing new calls it.
   stays in `shared/`, for the phone. The paragraph above and the guards it names
   no longer apply. Everything else above stands.
 - **Update 2026-10-23: every saved area also clips the statewide slope**
-  (`NSW_REGION.terrain.slope` in `shared/src/regions.ts`), so Logjam GPS draws the Terrain
-  group's Slope offline. It is a fourth entry in `regionClipSpecs`, cut the
+  (`NSW_REGION.terrain.slope` in `shared/src/regions.ts`; updated 2026-11-15:
+  the slope of each region the area touches), so Logjam GPS draws the Terrain
+  group's Slope offline. It is a fourth entry in `regionClipSpecs` (updated
+  2026-11-15: one more clip per region, from that region's `clips`), cut the
   same way, at the archive's own zooms (z8 to z15), and filed as
   `slope-region`. A slope archive the CDN lacks is left out like a DEM or
   contour one. Guards: `regionTilePlanning.test.ts` ("regionClipSpecs"),
