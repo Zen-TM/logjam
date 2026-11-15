@@ -248,6 +248,7 @@ function SettingsPanel({
         onTypesChange={onPlaceTypesChange}
         placeDefs={placeCustomFieldDefs}
         onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+        uiPreferences={currentUser?.uiPreferences}
         onBack={() => setPage(null)}
       />
     );
@@ -266,6 +267,7 @@ function SettingsPanel({
           isTrip ? onCustomFieldDefsChange : onPlaceCustomFieldDefsChange
         }
         placeTypes={isTrip ? undefined : placeTypes}
+        uiPreferences={currentUser?.uiPreferences}
         onBack={() => setPage(null)}
       />
     );

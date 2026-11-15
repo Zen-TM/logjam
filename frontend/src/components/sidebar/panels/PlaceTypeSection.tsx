@@ -83,6 +83,7 @@ function PlaceTypeSection({
   onTypesChange,
   placeDefs,
   onPlaceDefsChange,
+  uiPreferences,
   onBack,
 }: {
   types: TPlaceType[];
@@ -91,6 +92,8 @@ function PlaceTypeSection({
   /** The user's place attributes, for the step a new type leads into. */
   placeDefs: ScopedCustomFieldDef[];
   onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** The account's preferences, for the grade attributes the step lists. */
+  uiPreferences: unknown;
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
@@ -262,6 +265,7 @@ function PlaceTypeSection({
           onTypesChange={onTypesChange}
           placeDefs={placeDefs}
           onPlaceDefsChange={onPlaceDefsChange}
+          uiPreferences={uiPreferences}
           onClose={() => setEditing(null)}
         />
       )}
@@ -371,12 +375,14 @@ export function NewPlaceTypeFlow({
   onTypesChange,
   placeDefs,
   onPlaceDefsChange,
+  uiPreferences,
   onClose,
 }: {
   types: TPlaceType[];
   onTypesChange: (types: TPlaceType[]) => void;
   placeDefs: ScopedCustomFieldDef[];
   onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  uiPreferences: unknown;
   onClose: () => void;
 }) {
   const [made, setMade] = useState<TPlaceType | null>(null);
@@ -390,6 +396,7 @@ export function NewPlaceTypeFlow({
         placeTypes={types}
         defs={placeDefs}
         onDefsChange={onPlaceDefsChange}
+        uiPreferences={uiPreferences}
         onClose={onClose}
       />
     );
