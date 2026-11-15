@@ -63,6 +63,7 @@ import {
   type DeviceMotionMeasurement,
 } from "expo-sensors";
 import {
+  coverageCarrierHere,
   abandonConfirm,
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
@@ -272,7 +273,7 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
-import { coverageCarrierHere, hasGauges } from "./terrainSwitches";
+import { hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";

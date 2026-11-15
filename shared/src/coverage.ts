@@ -10,7 +10,12 @@
 // and Land.
 import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
-import { REGIONS, type CoverageArchive, type Region } from "./regions.js";
+import {
+  layerIn,
+  REGIONS,
+  type CoverageArchive,
+  type Region,
+} from "./regions.js";
 
 /** A network's id, as a coverage archive's `carriers` and a stored choice hold it. */
 export type CarrierId = string;
@@ -34,6 +39,18 @@ export function carriersOf(
   regions: readonly Region[] = REGIONS,
 ): { id: string; name: string }[] {
   return regions.flatMap((r) => r.terrain.coverage?.carriers ?? []);
+}
+
+/**
+ * The carrier the Coverage row names for the region in view: the stored pick
+ * where that region lists it, else none, so the row asks again. Guard:
+ * `coverage.test.ts` ("keeps a stored carrier only where the region lists it").
+ */
+export function coverageCarrierHere(
+  region: Region | null,
+  stored: CarrierId | null,
+): CarrierId | null {
+  return normalizeCarrier(stored, layerIn(region, "coverage")?.carriers ?? []);
 }
 
 /** The style image's name, registered on each map with `COVERAGE_HATCH_URIS`. */

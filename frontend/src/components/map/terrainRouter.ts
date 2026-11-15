@@ -147,6 +147,7 @@ export async function terrainTile(
     z,
     x,
     y,
+    archive.maxzoom,
   );
   if (answer === "absent") throw new AbsentTerrainTile();
   const statewide = answer === "statewide";

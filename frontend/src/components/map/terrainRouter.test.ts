@@ -1,4 +1,6 @@
 import {
+  lat2tileY,
+  lon2tileX,
   NSW_REGION,
   type Region,
   type SharpenedOverlay,
@@ -261,5 +263,60 @@ describe("the router's regions", () => {
     expect(await read("slope", 15, 30410, 19654)).toBe(
       `${coastal.slopeUrl}@15`,
     );
+  });
+});
+
+describe("a region whose archive goes deeper than z15", () => {
+  const top = SIM_NZ.terrain.slope!.maxzoom;
+  const own = statewide(SIM_NZ.terrain.slope!.archivePath);
+  // A made-up area 100 m west of the box's centre, to z16, in the region.
+  const lon = 169.2;
+  const lat = -44.05;
+  const x15 = lon2tileX(lon, 15);
+  const y15 = lat2tileY(lat, 15);
+  const nzArea: SharpenedOverlay = {
+    ...area,
+    id: "nz1",
+    tiles15: [x15, y15, x15 + 1, y15 + 1],
+    coverage: [lon, lat - 0.01, lon + 0.01, lat],
+  };
+  // The z15 tile beside the area's range, and a z`z` descendant of it.
+  const beside = (z: number) => ({
+    x: (x15 + 5) * 2 ** (z - 15),
+    y: y15 * 2 ** (z - 15),
+  });
+
+  // Mutation: pass 15 to `terrainTileArchive` in place of `archive.maxzoom`
+  // in `terrainTile`, and the region's z16 and z17 tiles beside an area are
+  // answered as absent, so a map stretches z15.
+  it("reads the region's archive to its own top zoom beside an area", async () => {
+    expect(top).toBe(17);
+    setRoutedAreas([nzArea], [NSW_REGION, SIM_NZ]);
+    held.set(own, new Set([15, 16, 17, 18]));
+    for (const z of [15, 16, 17]) {
+      const { x, y } = beside(z);
+      expect(await read("slope", z, x, y, SIM_NZ)).toBe(`${own}@${z}`);
+    }
+    const deeper = beside(18);
+    await expect(
+      read("slope", 18, deeper.x, deeper.y, SIM_NZ),
+    ).rejects.toSatisfy(isAbsentTerrainTile);
+  });
+
+  // Mutation: the same literal 15, and a router asked for z16 or z17 with no
+  // area held (a plain source never asks it) answers them as absent.
+  it("reads it to its top zoom with no area held", async () => {
+    setRoutedAreas([], [NSW_REGION, SIM_NZ]);
+    held.set(own, new Set([16, 17]));
+    for (const z of [16, 17])
+      expect(
+        await read(
+          "slope",
+          z,
+          x15 * 2 ** (z - 15),
+          y15 * 2 ** (z - 15),
+          SIM_NZ,
+        ),
+      ).toBe(`${own}@${z}`);
   });
 });

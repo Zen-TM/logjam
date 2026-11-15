@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  lonLatToTile,
   NSW_REGION,
   SIM_NZ,
   SIM_REGIONS,
@@ -922,6 +923,35 @@ describe("routes the Terrain group", () => {
           maxzoom: 15,
         });
     }
+  });
+
+  // Mutation: take the statewide rectangle's maxzoom as 15 in `routeTerrain`
+  // in place of the region's archive's, and a map over a region whose archive
+  // holds z17 stops drawing it at z15 beside an area.
+  it("reads the region's own archive to its top zoom beside an area", () => {
+    const { x, y } = lonLatToTile(169.23, -44.07, 15);
+    const nzArea: SharpenedOverlay = {
+      ...area("a"),
+      zmax: 16,
+      tiles15: [x, y, x, y],
+      coverage: [169.22, -44.08, 169.24, -44.06],
+    };
+    const [statewide, ...routed] = ok(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: SIM_NZ },
+        ctx({ sharpenedAreas: [nzArea] }),
+      ),
+    );
+    expect(statewide.layerMaxZoom).toBe(15);
+    const beside = routed.filter(
+      (r) => r.attribution !== "Made-up area credit",
+    );
+    expect(beside.length).toBeGreaterThan(0);
+    for (const r of beside)
+      expect(r.tileJson).toMatchObject({
+        maxzoom: SIM_NZ.terrain.slope!.maxzoom,
+      });
+    expect(SIM_NZ.terrain.slope!.maxzoom).toBe(17);
   });
 
   // Red if the hillshade reads the slope archive.

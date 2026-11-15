@@ -28,7 +28,8 @@ export type SheetTerrain = {
 
 /**
  * What the region `regionInView` picks for the sheet's box has to draw:
- * the one at its centre, whichever world copy the box was picked in.
+ * the one at its centre, else the first the sheet touches, whichever world
+ * copy the box was picked in.
  * ponytail: a sheet over two regions prints all its contours, hillshade, slope
  * and land from that one, so a sheet straddling a border draws the far side
  * from the wrong archives or none. Upgrade: plan the reads of each region in

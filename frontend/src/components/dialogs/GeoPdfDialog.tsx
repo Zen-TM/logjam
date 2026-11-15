@@ -83,7 +83,6 @@ import {
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
-  t,
   type AreaExportFormat,
   type AreaExportLayer,
   type SharpenedArea,
@@ -616,7 +615,7 @@ function GeoPdfDialog({
   // is available where no region holds the sheet").
   const offReason = (key: TerrainLayerKey): string | null =>
     layerMissingHere(sheet, key)
-      ? t`Not available here.`
+      ? `${MAP_TERRAIN.copy.notHere}.`
       : key === "contours" &&
           contoursPrintedHere(selectedBaseLayer, lidarOverlap)
         ? "This map prints its own contours."
@@ -1419,7 +1418,7 @@ function GeoPdfDialog({
                   ]}
                   hint={
                     layerMissingHere(sheet, "land")
-                      ? t`Not available here.`
+                      ? `${MAP_TERRAIN.copy.notHere}.`
                       : undefined
                   }
                   onToggle={(value) => {
