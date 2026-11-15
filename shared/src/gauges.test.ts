@@ -187,7 +187,7 @@ describe("a gauge on a trip's date", () => {
     );
     // The newest past trip, 2 Oct, has no value: nothing older stands in.
     expect(line(["2026-10-01", "2026-10-02"])).toEqual([
-      `${gaugeDisplayName(g.name)} ${GAUGES.copy.noneForDate}`,
+      `${gaugeDisplayName(g.name)} has no reading for that date.`,
     ]);
   });
 
@@ -226,7 +226,7 @@ describe("a gauge on a trip's date", () => {
     ).toEqual([]);
     expect(
       tripGaugeLines([{ gauge: g, history }], ["2026-10-02"], "trip", now),
-    ).toEqual([`${gaugeDisplayName(g.name)} ${GAUGES.copy.noneForDate}`]);
+    ).toEqual([`${gaugeDisplayName(g.name)} has no reading for that date.`]);
     expect(
       tripGaugeLines([{ gauge: g, history }], [], "lastTrip", now),
     ).toEqual([]);

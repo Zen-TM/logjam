@@ -16,10 +16,11 @@ import {
 import { PLACE_FORM } from "./placeForm.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
 import type { ContractSection, ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const PLACE_PAGE = {
   id: "places.page",
-  question: "What do I need to know before I go?",
+  question: t`What do I need to know before I go?`,
   sections: [
     // Name, then what it is: type, status, grade, other names, who it is
     // shared with.
@@ -29,7 +30,7 @@ export const PLACE_PAGE = {
     {
       key: "navigate",
       on: "gps",
-      gap: "A browser has no app to hand a position to, so Logjam Web has Copy position. A link to a third-party map would send the point off the account: the maintainer's call.",
+      gap: t`A browser has no app to hand a position to, so Logjam Web has Copy position. A link to a third-party map would send the point off the account: the maintainer's call.`,
     },
     // Only the attributes the place answered: a form asks every question, a
     // page reports the answers. They come before the forecast and the gauge:
@@ -54,60 +55,57 @@ export const PLACE_PAGE = {
   copy: {
     // A section's title is the copy under its own key, where it is constant.
     position: PLACE_FORM.copy.position,
-    gauge: "River gauge",
-    doesntFit: "Doesn't fit this type",
+    gauge: t`River gauge`,
+    doesntFit: t`Doesn't fit this type`,
     notes: PLACE_FORM.copy.notes,
     sources: PLACE_FORM.copy.sources,
     alsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
     photos: PLACE_FORM.copy.photos,
     route: PLACE_FORM.copy.route,
-    linkedPlaces: "Linked places",
-    trips: "Your trips",
-    sharedWith: "Shared with",
+    linkedPlaces: t`Linked places`,
+    trips: t`Your trips`,
+    sharedWith: t`Shared with`,
 
-    copyPosition: "Coordinates copied.",
-    openInMaps: "Open in a maps app",
-    sharedMarker: "visible to friends you share with",
+    copyPosition: t`Coordinates copied.`,
+    openInMaps: t`Open in a maps app`,
+    sharedMarker: t`visible to friends you share with`,
 
-    chooseGauge: "Choose a river gauge",
-    changeGauge: "Change gauge",
-    removeGauge: "Remove gauge",
-    cancelPick: "Cancel",
-    gaugePickerHint:
-      "The nearest gauge can be on a different river, so check the name.",
-    gaugeLoading: "Loading river gauges…",
-    gaugeMissing: "This gauge isn't in the latest readings.",
-    gaugeSaveFailed: "Couldn't save the river gauge.",
+    chooseGauge: t`Choose a river gauge`,
+    changeGauge: t`Change gauge`,
+    removeGauge: t`Remove gauge`,
+    cancelPick: t`Cancel`,
+    gaugePickerHint: t`The nearest gauge can be on a different river, so check the name.`,
+    gaugeLoading: t`Loading river gauges…`,
+    gaugeMissing: t`This gauge isn't in the latest readings.`,
+    gaugeSaveFailed: t`Couldn't save the river gauge.`,
 
     // An empty slot gets a short label, not a lesson (UX §11).
-    notesEmpty: "No notes yet.",
-    photosEmpty: "No photos yet.",
-    routeEmpty: "No route yet.",
-    linkedPlacesEmpty: "No linked places.",
-    tripsEmpty: "No trips logged here yet.",
+    notesEmpty: t`No notes yet.`,
+    photosEmpty: t`No photos yet.`,
+    routeEmpty: t`No route yet.`,
+    linkedPlacesEmpty: t`No linked places.`,
+    tripsEmpty: t`No trips logged here yet.`,
     // Trips are private to their owner, so a sharee sees only their own.
-    tripsShared: "None of your trips are linked to this place.",
-    sharedWithEmpty: "Not shared with anyone yet.",
-    shareWithFriend: "Share with a friend",
-    linkAPlace: "Link a place",
-    linkAPlaceHint: "A carpark, a campsite, the exit.",
-    unlinkFromPlace: "Unlink from this place",
-    unlinkHint: "Both places are kept.",
-    unlinked: "Unlinked.",
-    linkFailed: "Couldn't link that place.",
-    unlinkFailed: "Couldn't unlink that place.",
+    tripsShared: t`None of your trips are linked to this place.`,
+    sharedWithEmpty: t`Not shared with anyone yet.`,
+    shareWithFriend: t`Share with a friend`,
+    linkAPlace: t`Link a place`,
+    linkAPlaceHint: t`A carpark, a campsite, the exit.`,
+    unlinkFromPlace: t`Unlink from this place`,
+    unlinkHint: t`Both places are kept.`,
+    unlinked: t`Unlinked.`,
+    linkFailed: t`Couldn't link that place.`,
+    unlinkFailed: t`Couldn't unlink that place.`,
 
     // Both clients open a parked value to decide what to do with it.
-    doesntFitCopied:
-      "These came across when you copied this place. Open one to decide what to do with it.",
-    doesntFitTypeChange:
-      "These are left over from when you changed this place's type. Open one to decide what to do with it.",
+    doesntFitCopied: t`These came across when you copied this place. Open one to decide what to do with it.`,
+    doesntFitTypeChange: t`These are left over from when you changed this place's type. Open one to decide what to do with it.`,
   },
 } as const satisfies ScreenContract;
 
 /** The done-toast for a new link, on both clients. */
 export function placeLinkedToast(name: string): string {
-  return `Linked to ${name}.`;
+  return t`Linked to ${name}.`;
 }
 
 /** The two verbs the page draws as buttons, in order; the ⋯ holds the rest. */
@@ -161,7 +159,9 @@ export function withRowUnit(row: AttributeRow): AttributeRow {
 
 /** "Canyon attributes": the heading of what this KIND of place records. */
 export function placeAttributesTitle(typeName: string | null): string {
-  return `${typeName ?? "Place"} ${ATTRIBUTE_NOUN.many}`;
+  return typeName === null
+    ? t`Place ${ATTRIBUTE_NOUN.many}`
+    : t`${typeName} ${ATTRIBUTE_NOUN.many}`;
 }
 
 /** The status pill: the bucket's label, and for a visited place its tally. A
@@ -173,7 +173,7 @@ export function placeStatusLabel(
 ): string {
   if (status === "shared") return incomingLabel(owner);
   if (status !== "done") return PLACE_STATUS_LABELS[status];
-  return `${PLACE_STATUS_LABELS.done} · ${tripCount} ${tripCount === 1 ? "trip" : "trips"}`;
+  return `${PLACE_STATUS_LABELS.done} · ${plural(tripCount, "# trip", "# trips")}`;
 }
 
 export type PlaceSource = {

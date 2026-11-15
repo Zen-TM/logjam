@@ -5,6 +5,7 @@ import type { IconIdea } from "../icons.js";
 import { LIDAR_JOB_COPY } from "../sharpen.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform } from "./types.js";
+import { t } from "../i18n.js";
 
 type MapToolDeclaration = {
   id: string;
@@ -26,28 +27,26 @@ export const MAP_TOOLS = [
   {
     id: "route",
     icon: "draw",
-    label: "Draw a route",
+    label: t`Draw a route`,
   },
   {
     id: "place",
     icon: "addPlace",
-    label: "Add a place",
+    label: t`Add a place`,
   },
   {
     id: "makeMap",
     icon: "pickArea",
-    label: "Make a map",
+    label: t`Make a map`,
     on: "web",
-    reason:
-      "A GeoPDF is framed and printed at a desk, and a GIS export is made there; Logjam GPS shows what Logjam Web made, offline.",
+    reason: t`A GeoPDF is framed and printed at a desk, and a GIS export is made there; Logjam GPS shows what Logjam Web made, offline.`,
   },
   {
     id: "sharpen",
     icon: "lidar",
     label: LIDAR_JOB_COPY.make,
     on: "web",
-    reason:
-      "A LiDAR map is framed at a desk and takes minutes to make; Logjam GPS shows what Logjam Web sharpened, offline.",
+    reason: t`A LiDAR map is framed at a desk and takes minutes to make; Logjam GPS shows what Logjam Web sharpened, offline.`,
   },
 ] as const satisfies readonly MapToolDeclaration[];
 

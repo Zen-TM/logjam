@@ -10,6 +10,7 @@ import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_TERRAIN } from "./mapTerrain.js";
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const MAP_OVERLAYS = {
   id: "map.overlays",
@@ -19,8 +20,7 @@ export const MAP_OVERLAYS = {
     {
       key: "geoPdfs",
       on: "gps",
-      reason:
-        "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
+      reason: t`A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.`,
     },
     { key: "land" },
     { key: "fire" },
@@ -36,8 +36,8 @@ export const MAP_OVERLAYS = {
     fire: MAP_TERRAIN.copy.fire,
     coverage: MAP_TERRAIN.copy.coverage,
     gauges: GAUGES.copy.overlay,
-    mgaGrid: "MGA grid",
-    geoPdfs: "GeoPDF maps",
+    mgaGrid: t`MGA grid`,
+    geoPdfs: t`GeoPDF maps`,
     importFile: MAP_LAYERS.copy.importFile,
   },
 } as const satisfies ScreenContract;
@@ -67,12 +67,12 @@ export const MAP_OVERLAY_REFINEMENTS = {
   places: {
     // One per place type, from the user's own vocabulary, then the one axis
     // that crosses every type.
-    sharedWithMe: "Shared with me",
+    sharedWithMe: t`Shared with me`,
   },
   ways: {
-    routes: "My routes",
-    placeRoutes: "Place routes",
-    importedWays: "Imported ways",
-    tracks: "Tracks",
+    routes: t`My routes`,
+    placeRoutes: t`Place routes`,
+    importedWays: t`Imported ways`,
+    tracks: t`Tracks`,
   },
 } as const;
