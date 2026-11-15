@@ -599,7 +599,7 @@ function GeoPdfDialog({
   // is available where no region holds the sheet").
   const offReason = (key: TerrainLayerKey): string | null =>
     layerMissingHere(sheet, key)
-      ? MAP_TERRAIN.copy.notHere
+      ? `${MAP_TERRAIN.copy.notHere}.`
       : key === "contours" &&
           contoursPrintedHere(selectedBaseLayer, lidarOverlap)
         ? "This map prints its own contours."
@@ -1399,7 +1399,7 @@ function GeoPdfDialog({
                   ]}
                   hint={
                     layerMissingHere(sheet, "land")
-                      ? MAP_TERRAIN.copy.notHere
+                      ? `${MAP_TERRAIN.copy.notHere}.`
                       : undefined
                   }
                   onToggle={(value) => {

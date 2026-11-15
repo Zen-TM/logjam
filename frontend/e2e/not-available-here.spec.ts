@@ -3,7 +3,7 @@ import { MAP_TERRAIN } from "@logjam/shared";
 import { stubMaster } from "./__fixtures__/stubMaster";
 
 // With the map over ground no region declares, every layer that draws a
-// region's data reads "Not available here." and is off; with the map back over
+// region's data reads "Not available here" and is off; with the map back over
 // New South Wales the choices the user stored return. Local dev only: it
 // needs the fake-auth server, and prod's map is the user's own.
 test.skip(
