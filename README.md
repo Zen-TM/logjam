@@ -141,6 +141,13 @@ in `frontend/.env`, and `EXPO_PUBLIC_SIM_REGIONS=1` in `mobile/.env`. A new
 account then sees the region step, and Settings lists the regions. Each
 runtime refuses the switch outside a dev stack: the API in a prod runtime,
 Logjam Web unless it uses fake auth, Logjam GPS unless its API is local.
+The dev stack's topo worker does not take the switch: the local ECS emulator
+(MiniStack) gives every task container a variable the worker reads as a prod
+runtime, so the worker refuses the switch there. A sharpen job over simulated
+ground started through the stack is refused with "Sharpening an area isn't
+available where this survey is." To sharpen a survey in a simulated region, run
+`topo/sharpen.py` by hand with `SIM_REGIONS=1`, as
+[`topo/README.md`](topo/README.md#sharpening-an-area) describes.
 
 ### Command reference
 

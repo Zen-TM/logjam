@@ -491,6 +491,14 @@ docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpen
   --statewide-slope /output/statewide/nsw-5m-slope.pmtiles
 ```
 
+For a survey in a simulated region, build that region's archives with
+[`scripts/sim-regions/`](../scripts/sim-regions/README.md), put its
+`simutah-heights.pmtiles` and `simutah-slope.pmtiles` (from `out/master/dem/`)
+in `./output/statewide`, name them in the two flags, and add `-e SIM_REGIONS=1`
+after `run`: the worker takes the switch from its own environment only, and
+refuses it where it sees a prod runtime. A worker the dev stack starts does not
+get the switch, so a job over simulated ground made through the stack is refused.
+
 ---
 
 ## Building the place registry
