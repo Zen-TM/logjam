@@ -49,7 +49,8 @@ describe("gaugeFeedIn", () => {
     expect(gaugeFeedIn(undefined, regions)).toBeNull();
   });
 
-  // Mutation: call `regionInView` in place of `regionInWrappedView` → red.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView` → red.
   it("reads a map panned once round the world", () => {
     expect(gaugeFeedIn(over(nzLon + 360, nzLat), regions)).toBe(NZ_FEED);
   });
