@@ -7,6 +7,7 @@
 // way has is decided by what it is and whose it is, where the rows are built.
 import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
+import { t } from "../i18n.js";
 
 type WayVerbDeclaration = {
   id: string;
@@ -19,32 +20,32 @@ type WayVerbDeclaration = {
 };
 
 export const WAY_VERBS = [
-  { id: "open", label: "Open" },
-  { id: "openPlace", label: "Open its place" },
+  { id: "open", label: t`Open` },
+  { id: "openPlace", label: t`Open its place` },
   // A recorded track only: it opens the real trip form with the track's day, its
   // place and the track itself already in it (`tripPrefillFromTrack`). The
   // same verb as a place's "Log a trip here", at the same glyph.
-  { id: "logTrip", label: "Log a trip", icon: "trip" },
-  { id: "edit", label: "Edit points" },
+  { id: "logTrip", label: t`Log a trip`, icon: "trip" },
+  { id: "edit", label: t`Edit points` },
   // Not "Copy": the promise is that it becomes YOURS, unaffected by the owner
   // later unsharing it.
-  { id: "copy", label: "Save a copy" },
-  { id: "copyAndRemove", label: "Save a copy and remove" },
-  { id: "share", label: { web: "Share…", gps: "Share" } },
-  { id: "sendCopy", label: "Send a copy" },
-  { id: "exportGpx", label: "Export as GPX" },
-  { id: "exportKml", label: "Export as KML" },
+  { id: "copy", label: t`Save a copy` },
+  { id: "copyAndRemove", label: t`Save a copy and remove` },
+  { id: "share", label: { web: t`Share…`, gps: t`Share` } },
+  { id: "sendCopy", label: t`Send a copy` },
+  { id: "exportGpx", label: t`Export as GPX` },
+  { id: "exportKml", label: t`Export as KML` },
   // Not "Export": this hands back the FILE the user brought or recorded, byte
   // for byte, where Export writes a new one out of geometry.
-  { id: "download", label: "Download" },
+  { id: "download", label: t`Download` },
   {
     id: "rename",
-    label: { web: "Rename…", gps: "Rename" },
+    label: { web: t`Rename…`, gps: t`Rename` },
   },
-  { id: "removeShare", label: "Remove from my account" },
+  { id: "removeShare", label: t`Remove from my account` },
   // A route's menu item on both clients. A recording and an import keep the
   // noun they are known by on Logjam GPS ("Delete track", "Delete").
-  { id: "delete", label: "Delete way" },
+  { id: "delete", label: t`Delete way` },
 ] as const satisfies readonly WayVerbDeclaration[];
 
 export type WayVerbId = (typeof WAY_VERBS)[number]["id"];

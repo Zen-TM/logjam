@@ -20,11 +20,12 @@ import {
   type WeatherHour,
 } from "../weather.js";
 import type { ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const WEATHER = {
   id: "weather",
-  question: "What will the weather be here?",
-  title: "Weather",
+  question: t`What will the weather be here?`,
+  title: t`Weather`,
   sections: [
     { key: "hours" },
     { key: "days" },
@@ -32,32 +33,31 @@ export const WEATHER = {
     { key: "credit" },
   ],
   copy: {
-    show: "Show the weather here",
-    hours: `Next ${WEATHER_HOURS_SHOWN} hours`,
-    days: "Next 7 days",
+    show: t`Show the weather here`,
+    hours: t`Next ${WEATHER_HOURS_SHOWN} hours`,
+    days: t`Next 7 days`,
     // Named for where its figures come from, so a measured week (a gauge's)
     // never reads as the model's guess.
-    pastModel: `Modelled rain, past ${WEATHER_PAST_DAYS} days`,
-    pastGauge: `Rain gauge, past ${WEATHER_PAST_DAYS} days`,
-    model: "Forecast model",
+    pastModel: t`Modelled rain, past ${WEATHER_PAST_DAYS} days`,
+    pastGauge: t`Rain gauge, past ${WEATHER_PAST_DAYS} days`,
+    model: t`Forecast model`,
     // Says what the choice means; the models' names are `WEATHER_MODELS`.
     // Logjam GPS shows it above the chips. Logjam Web's menu heads the list
     // with `model` instead: a menu heading holds two lines, and this is more.
-    modelHint:
-      "Best match lets Open-Meteo choose; pick a model to see its own forecast.",
-    now: "Now",
-    earlier: "Scroll back",
-    later: "Scroll on",
-    loading: "Getting the forecast…",
-    failed: "Couldn't get the forecast.",
-    needsConnection: "Needs a connection",
-    refresh: "Refresh",
-    hide: "Hide",
-    tryAgain: "Try again",
+    modelHint: t`Best match lets Open-Meteo choose; pick a model to see its own forecast.`,
+    now: t`Now`,
+    earlier: t`Scroll back`,
+    later: t`Scroll on`,
+    loading: t`Getting the forecast…`,
+    failed: t`Couldn't get the forecast.`,
+    needsConnection: t`Needs a connection`,
+    refresh: t`Refresh`,
+    hide: t`Hide`,
+    tryAgain: t`Try again`,
     // Every day the forecast held is past: a stale forecast is never shown.
-    outOfDate: "This forecast has run out.",
-    today: "Today",
-    credit: "Weather data by Open-Meteo.com",
+    outOfDate: t`This forecast has run out.`,
+    today: t`Today`,
+    credit: t`Weather data by Open-Meteo.com`,
   },
 } as const satisfies ScreenContract;
 
@@ -70,22 +70,22 @@ const WEATHER_CONDITIONS: readonly [
   (code: number) => boolean,
   WeatherCondition,
 ][] = [
-  [(c) => c === 0, { label: "Clear", icon: "weatherClear" }],
-  [(c) => c <= 2, { label: "Partly cloudy", icon: "weatherPartCloud" }],
-  [(c) => c === 3, { label: "Cloudy", icon: "weatherCloud" }],
-  [(c) => c === 45 || c === 48, { label: "Fog", icon: "weatherFog" }],
-  [(c) => c >= 51 && c <= 57, { label: "Drizzle", icon: "weatherDrizzle" }],
-  [(c) => c >= 61 && c <= 67, { label: "Rain", icon: "weatherRain" }],
-  [(c) => c >= 71 && c <= 77, { label: "Snow", icon: "weatherSnow" }],
-  [(c) => c >= 80 && c <= 82, { label: "Showers", icon: "weatherRain" }],
-  [(c) => c === 85 || c === 86, { label: "Snow", icon: "weatherSnow" }],
-  [(c) => c >= 95, { label: "Thunderstorms", icon: "weatherStorm" }],
+  [(c) => c === 0, { label: t`Clear`, icon: "weatherClear" }],
+  [(c) => c <= 2, { label: t`Partly cloudy`, icon: "weatherPartCloud" }],
+  [(c) => c === 3, { label: t`Cloudy`, icon: "weatherCloud" }],
+  [(c) => c === 45 || c === 48, { label: t`Fog`, icon: "weatherFog" }],
+  [(c) => c >= 51 && c <= 57, { label: t`Drizzle`, icon: "weatherDrizzle" }],
+  [(c) => c >= 61 && c <= 67, { label: t`Rain`, icon: "weatherRain" }],
+  [(c) => c >= 71 && c <= 77, { label: t`Snow`, icon: "weatherSnow" }],
+  [(c) => c >= 80 && c <= 82, { label: t`Showers`, icon: "weatherRain" }],
+  [(c) => c === 85 || c === 86, { label: t`Snow`, icon: "weatherSnow" }],
+  [(c) => c >= 95, { label: t`Thunderstorms`, icon: "weatherStorm" }],
 ];
 
 export function weatherCondition(code: number): WeatherCondition {
   return (
     WEATHER_CONDITIONS.find(([test]) => test(code))?.[1] ?? {
-      label: "Cloudy",
+      label: t`Cloudy`,
       icon: "weatherCloud",
     }
   );
@@ -265,7 +265,7 @@ export function weatherRows(
       // how many rather than promising 24.
       title:
         hours.length < WEATHER_HOURS_SHOWN
-          ? `Next ${hours.length} ${hours.length === 1 ? "hour" : "hours"}`
+          ? plural(hours.length, "Next # hour", "Next # hours")
           : WEATHER.copy.hours,
       summary: null,
       cards: withSpoken(
@@ -356,11 +356,13 @@ function withSpoken(cards: BareCard[]): WeatherCard[] {
       spokenLabel ?? card.label,
       card.glyphLabel,
       card.temperature,
-      card.rain === WEATHER_NONE ? "no rain" : `rain ${card.rain}`,
+      card.rain === WEATHER_NONE ? t`no rain` : t`rain ${card.rain}`,
       card.chance &&
-        `${card.chance === WEATHER_NONE ? "0%" : card.chance} chance`,
+        (card.chance === WEATHER_NONE
+          ? t`0% chance`
+          : t`${card.chance} chance`),
       card.wind &&
-        (card.wind === WEATHER_NONE ? "no wind" : `wind ${card.wind}`),
+        (card.wind === WEATHER_NONE ? t`no wind` : t`wind ${card.wind}`),
     ]
       .filter(Boolean)
       .join(", "),
@@ -370,10 +372,10 @@ function withSpoken(cards: BareCard[]): WeatherCard[] {
 /** "Updated 3 h ago": how old the figures on screen are. */
 export function weatherAge(fetchedAt: number, now: number): string {
   const minutes = Math.floor((now - fetchedAt) / 60_000);
-  if (minutes < 1) return "Updated just now";
-  if (minutes < 60) return `Updated ${minutes} min ago`;
+  if (minutes < 1) return t`Updated just now`;
+  if (minutes < 60) return t`Updated ${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours} h ago`;
+  if (hours < 24) return t`Updated ${hours} h ago`;
   const days = Math.floor(hours / 24);
-  return `Updated ${days} ${days === 1 ? "day" : "days"} ago`;
+  return plural(days, "Updated # day ago", "Updated # days ago");
 }

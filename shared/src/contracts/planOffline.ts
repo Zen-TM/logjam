@@ -7,25 +7,25 @@ import {
   tripPlansBadgeCount,
   TRIP_PLANS_LIST,
 } from "./plans.js";
+import { t } from "../i18n.js";
 
 export const TRIP_PLAN_OFFLINE = {
-  downloaded: "Downloaded",
-  changed: "Changed since you downloaded it",
-  notDownloaded:
-    "Not downloaded yet. Open it once with signal to read it here.",
+  downloaded: t`Downloaded`,
+  changed: t`Changed since you downloaded it`,
+  notDownloaded: t`Not downloaded yet. Open it once with signal to read it here.`,
   // The plan went while this phone held it, or a stale row or push opened it.
-  gone: "You're no longer in this plan, or it was deleted.",
-  noPlansOffline: "Open Plans once with signal to read them here.",
-  download: "Download for the trip",
-  downloading: "Downloading the plan's files…",
-  downloadFailed: "Couldn't download the plan's files.",
-  downloadDone: "Downloaded for the trip.",
+  gone: t`You're no longer in this plan, or it was deleted.`,
+  noPlansOffline: t`Open Plans once with signal to read them here.`,
+  download: t`Download for the trip`,
+  downloading: t`Downloading the plan's files…`,
+  downloadFailed: t`Couldn't download the plan's files.`,
+  downloadDone: t`Downloaded for the trip.`,
   // It runs only while Logjam GPS is on screen (ADR 0013).
-  downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
+  downloadKeepOpen: t`Keep Logjam GPS open until it finishes.`,
   // Map data is the offline-map save, framed on the plan's items.
-  downloadMap: "Save an offline map of this area",
+  downloadMap: t`Save an offline map of this area`,
   // Once a saved offline map holds the plan's whole area.
-  mapDownloaded: "Offline map saved",
+  mapDownloaded: t`Offline map saved`,
 } as const;
 
 /**
@@ -37,12 +37,12 @@ export function tripPlansMoreSubtitle(
   today: DateOnly,
 ): string {
   const waiting = tripPlansBadgeCount(plans);
-  if (waiting > 0) return `${waiting} waiting on you`;
+  if (waiting > 0) return t`${waiting} waiting on you`;
   const upcoming = plans.filter(
     (plan) =>
       plan.status === "active" && tripPlanBucket(plan, today) === "upcoming",
   ).length;
   return upcoming > 0
-    ? `${upcoming} upcoming`
+    ? t`${upcoming} upcoming`
     : TRIP_PLANS_LIST.copy.nothingPlanned;
 }
