@@ -20,14 +20,10 @@ const TEST_FILE = /\.test\.tsx?$|(^|\/)__(tests|fixtures|mocks)__\//;
 const DECLARES = ["shared/src/regions.ts"];
 
 const STILL_NAMING = [
-  "api/src/routes/ropewiki.ts",
-  "frontend/src/components/SignIn.tsx",
-  "frontend/src/components/SignInTerrain.tsx",
   "shared/src/contourRules.ts",
   "shared/src/geoPdfBaseLayers.ts",
   "shared/src/overlayLegends.ts",
   "shared/src/overlayZoom.ts",
-  "shared/src/profileSeries.ts",
 ];
 
 function sources(dir: string): string[] {

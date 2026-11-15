@@ -3,6 +3,7 @@
 // `screens/SettingsScreen.tsx`, `places/PlaceTypesEditor.tsx` and
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
 // has no hero (shared/DESIGN.md §2).
+import { t } from "../i18n.js";
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { REGIONS, regionsOf, type Region } from "../regions.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
@@ -109,7 +110,7 @@ export const COPY_MEDIA_SETTING = {
  */
 export const REGION_CHOICE = {
   title: "Where do you canyon?",
-  hint: "Logjam offers the maps and canyon list of each region you choose.",
+  hint: t`Logjam opens on your regions and offers their canyon lists.`,
   continue: "Continue",
   saveFailed: "Couldn't save your regions.",
 } as const;
