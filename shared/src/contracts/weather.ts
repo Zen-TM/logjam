@@ -19,7 +19,12 @@ import {
   type WeatherForecast,
   type WeatherHour,
 } from "../weather.js";
-import { formatRain, formatWind } from "../units.js";
+import {
+  formatRain,
+  formatTemperature,
+  formatTemperatureRange,
+  formatWind,
+} from "../units.js";
 import type { ScreenContract } from "./types.js";
 
 export const WEATHER = {
@@ -167,7 +172,7 @@ export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
     condition: weatherCondition(day.code),
     // Degrees alone, as an hour's card says them: a "C" wrapped onto its own
     // line in a day card with a two-digit low (weather.test.ts pins it).
-    temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°`,
+    temperature: formatTemperatureRange(day.tempMinC, day.tempMaxC),
     rain: rainText(day.rainMm),
     chance: day.rainChance != null ? chanceText(day.rainChance) : null,
     wind: windText(day.windMaxKmh),
@@ -229,9 +234,14 @@ const RAIN_FULL_MM: Record<WeatherRowKey, number> = {
   past: 20,
 };
 
+// A bar is empty where the card's text is the dash, so a bar never draws rain
+// the text says did not fall (0.1 mm reads "0.00 in"). Test: `units.test.ts`,
+// "draws no bar for rain its text reads as the dash".
 function rainLevels(key: WeatherRowKey, mm: number[]): number[] {
   const full = Math.max(RAIN_FULL_MM[key], ...mm);
-  return mm.map((value) => (value >= RAIN_SHOWN_MM ? value / full : 0));
+  return mm.map((value) =>
+    rainText(value) === WEATHER_NONE ? 0 : value / full,
+  );
 }
 
 function hourLabel(hour: WeatherHour): string {
@@ -294,7 +304,7 @@ export function weatherRows(
             current,
             glyph: condition.icon,
             glyphLabel: condition.label,
-            temperature: `${Math.round(hour.tempC)}°`,
+            temperature: formatTemperature(hour.tempC),
             rain: rainText(hour.rainMm),
             rainLevel: hourLevels[i],
             chance:
