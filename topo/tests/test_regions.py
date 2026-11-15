@@ -201,38 +201,31 @@ class TestExportRegion(unittest.TestCase):
                 found = regions.export_region(case["bbox"], every)
                 self.assertEqual(found and found["id"], case["region"])
 
-    @staticmethod
-    def made_up():
+    # Mutation: drop the centre step of `export_region` (take the first
+    # region touching the box), and a box centred in a later region is read
+    # from an earlier one it also touches; or require only heights (drop
+    # `slope` and `contours` from `EXPORT_ARCHIVES`), and a box over a region
+    # with no slope is read from it, and the worker fails with a KeyError.
+    def test_the_centre_comes_first_and_a_region_missing_an_archive_is_skipped(self):
+        with open(EXPORT_CASES, encoding="utf-8") as f:
+            made_up = json.load(f)["madeUp"]
+
         def ring(w, s, e, n):
             return [[w, s], [e, s], [e, n], [w, n], [w, s]]
 
-        def one(rid, heights, *borders):
-            terrain = {"heights": {"id": rid}} if heights else {}
-            return {"id": rid, "borders": list(borders), "terrain": terrain}
-
-        # `bare` holds the box's centre but has no heights.
-        return [
-            one("bare", False, ring(10, 10, 20, 20)),
-            one("full", True, ring(15, 10, 25, 20)),
-            one("other", True, ring(5, 22, 12, 30)),
+        every = [
+            {
+                "id": r["id"],
+                "borders": [ring(*r["box"])],
+                "terrain": {layer: {"id": layer} for layer in r["archives"]},
+            }
+            for r in made_up["regions"]
         ]
-
-    # Mutation: leave the `heights` filter out, and a box centred in a region
-    # that has none is read from it, with no archive to read.
-    def test_a_region_with_no_heights_is_never_the_one(self):
-        every = self.made_up()
-        found = regions.export_region((8, 12, 16, 18), every)  # centre (12, 15)
-        self.assertEqual(found["id"], "full")
-
-    # Mutation: take the last touching region, or the nearest, in place of the
-    # first in the list's order.
-    def test_two_regions_touching_the_box_go_by_list_order(self):
-        box = (8, 19, 20, 31)  # centred in none, over `full` and `other`
-        every = self.made_up()
-        self.assertEqual(regions.export_region(box, every)["id"], "full")
-        self.assertEqual(
-            regions.export_region(box, [every[0], every[2], every[1]])["id"], "other"
-        )
+        self.assertGreaterEqual(len(made_up["cases"]), 4)
+        for case in made_up["cases"]:
+            with self.subTest(case["why"]):
+                found = regions.export_region(case["bbox"], every)
+                self.assertEqual(found and found["id"], case["region"])
 
 
 class TestSharpenEntry(unittest.TestCase):

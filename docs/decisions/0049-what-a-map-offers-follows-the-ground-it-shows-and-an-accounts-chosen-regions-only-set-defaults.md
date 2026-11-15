@@ -44,7 +44,9 @@ read, none of them a location.)
   `regionsTouching(box)`, not one, except a printed sheet's Terrain layers,
   which come from the one region at the sheet's centre, else the first region
   the sheet touches (updated 2026-11-15;
-  see the Update below).
+  see the Update below), and an area export's rasters, which come from the
+  one region `areaExportRegion` picks (updated 2026-11-16: see the last
+  Update).
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.
 - **The declaration's shape.** A region's border is a list of rings; the
@@ -58,7 +60,8 @@ read, none of them a location.)
   far side from the wrong archives, or none. It is held to one region
   because the renderer plans each strip's tiles, credits and Land legend
   from a single archive per layer, and no planned region is adjacent to
-  another. A saved or exported box still uses every region touching it. Guard:
+  another. A saved box still uses every region touching it (updated
+  2026-11-16: an exported box does not; see the last Update). Guard:
   `frontend/src/geoPdf/sheetTerrain.test.ts` ("takes all its Terrain from
   the one region at its centre, though another touches the sheet"). Everything
   else above stands.
@@ -108,6 +111,18 @@ read, none of them a location.)
   ([0051](0051-a-lettered-grade-is-stored-as-its-rank.md) holds the rule). Guard:
   `shared/src/canyonGrade.test.ts` ("the definitions an attribute list shows").
   Everything else above stands.
+- **Update 2026-11-16: an area export's rasters come from one region.** An
+  area export (GeoTIFF, GeoPackage, MBTiles) reads its heights, slope and
+  contours from the one region `areaExportRegion` (`shared/src/areaExport.ts`)
+  and `export_region` (`topo/regions.py`) pick: the region with heights, slope
+  and contours holding the box's centre, else the first such region touching
+  it, in `REGIONS` order. An export is one grid and one archive for each
+  layer, so ground of the box outside that region is left empty, and a box no
+  such region touches is refused up front. A saved box still uses every region
+  touching it. Guards: `shared/src/areaExport.test.ts` ("is the region the
+  worker reads the archives from") and `topo/tests/test_regions.py`
+  (`TestExportRegion`), both reading `shared/src/__fixtures__/export-region.json`.
+  Everything else above stands.
 
 ## Consequences
 
@@ -144,6 +159,11 @@ read, none of them a location.)
   archives. Rejected for now: the planner, the renderer's strips and the
   credit and legend blocks each assume one archive per layer, and no planned
   region is adjacent to another. Revisit when two regions are adjacent.
+- **Every region touching an exported box** (the rule above, without the
+  export's exception). Mosaic each touching region's archives into one export.
+  Rejected for now: more worker code (one mosaic and one grid per region, a
+  credit for each) for a case no declared region has, since none share a
+  border. Revisit when two regions are adjacent.
 - **The basemap gallery listing only the region `regionInView` names** (the
   rule above, without the gallery's exception). Rejected: a view across a
   border would hide the basemap that covers half of what the map shows.

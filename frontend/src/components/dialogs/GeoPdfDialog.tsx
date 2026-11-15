@@ -2,7 +2,7 @@
 // area, on one sheet of paper, at one scale: the form asks the paper and the
 // scale, which size the area, then where it is, then what goes on top. For a
 // GIS (GeoTIFF, GeoPackage, MBTiles) the area is a free box with no paper, and
-// the file holds the statewide terrain over it (`AreaExportFields`).
+// the file holds the terrain of the area's region over it (`AreaExportFields`).
 //
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once Make it renders it —

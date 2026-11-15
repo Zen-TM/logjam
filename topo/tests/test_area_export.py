@@ -522,7 +522,7 @@ class ContourFilesNamedByIndex(unittest.TestCase):
     "needs pmtiles, numpy and Pillow",
 )
 class ContoursAlone(unittest.TestCase):
-    """Contours alone: the heights say whether the box is in NSW."""
+    """Contours alone: the heights say whether the box is in the region's terrain."""
 
     box = (150.299, -33.701, 150.301, -33.699)
 
@@ -551,19 +551,19 @@ class ContoursAlone(unittest.TestCase):
             with closing(sqlite3.connect(path)) as db:
                 return dict(db.execute("SELECT name, value FROM metadata"))
 
-    # Mutation: treat no contour tiles as outside NSW, and a box on flat NSW
-    # ground is refused with "outside NSW". Or drop the attribution row, and
-    # the file loses its credit.
-    def test_flat_ground_in_nsw_is_an_export_with_its_credit(self):
+    # Mutation: treat no contour tiles as outside the terrain, and a box on
+    # flat ground is refused with `AreaOutsideTerrain.SENTENCE`. Or drop the
+    # attribution row, and the file loses its credit.
+    def test_flat_ground_is_an_export_with_its_credit(self):
         from build_nsw_dem import lonlat_to_tile
 
         inside = lonlat_to_tile(150.3, -33.7, 15)
         meta = self.export({(15, *inside): b"heights"})
         self.assertEqual(meta["attribution"], credit_line(["contours"], "made up"))
 
-    # Mutation: drop the heights check, and a contours-only box outside NSW
-    # comes out an empty file instead of the outside-NSW sentence.
-    def test_no_heights_is_outside_nsw(self):
+    # Mutation: drop the heights check, and a contours-only box outside the
+    # region comes out an empty file instead of raising `AreaOutsideTerrain`.
+    def test_no_heights_is_outside_terrain(self):
         from build_nsw_dem import lonlat_to_tile
 
         far = lonlat_to_tile(145.0, -30.0, 15)
@@ -819,7 +819,8 @@ class SharpenedAreaInAnExport(unittest.TestCase):
                 return dict(db.execute("SELECT name, value FROM metadata"))
 
     # Mutation: let an area with no tile in the box raise, and a box mostly
-    # in NSW fails as "outside NSW". Its tiles go to statewide instead.
+    # in the region fails with `AreaOutsideTerrain`. Its tiles go to the
+    # region's archive instead.
     def test_an_area_with_no_tile_in_the_box_leaves_it_to_statewide(self):
         meta = self.mbtiles_meta(["slope"], [self.empty_area()])
         self.assertNotIn("empty survey", meta["attribution"])
@@ -1133,6 +1134,54 @@ class RegionExportFiles(unittest.TestCase):
         heights = rasters["heights.tif"][2]
         self.assertEqual(set(heights[heights > -1000].round().tolist()), {900})
         self.assertIn("simulated data for New Zealand", credits)
+
+    # Mutation: read the MBTiles mosaics at `export_zoom` alone (drop the
+    # `min(..., MBTILES_ZOOMS[1])`), and a 1 m region's file builds z17
+    # mosaics that no tile of it (they end at z16) draws from. A z15 region is
+    # read at z15 either way, which is what the NSW pin above shows.
+    def test_an_mbtiles_reads_its_mosaics_no_deeper_than_its_tiles(self):
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor
+        from unittest import mock
+
+        import area_export
+        from build_nsw_dem import lonlat_to_tile
+
+        def tiles(box, zoom, value):
+            x0, y0 = lonlat_to_tile(box[0], box[3], zoom)
+            x1, y1 = lonlat_to_tile(box[2], box[1], zoom)
+            return {
+                (zoom, x, y): terrarium_png(value)
+                for x in range(x0, x1 + 1)
+                for y in range(y0, y1 + 1)
+            }
+
+        def zooms_read(box, top, tile_zooms, credit):
+            archives = {
+                "heights": archive_of(
+                    {t: b for z in tile_zooms for t, b in tiles(box, z, 900.0).items()},
+                    credit,
+                ),
+                "slope": archive_of(
+                    {t: b for z in tile_zooms for t, b in tiles(box, z, 7.0).items()}
+                ),
+            }
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
+                mock.patch.object(
+                    area_export, "write_mosaic", wraps=area_export.write_mosaic
+                ) as mosaic,
+            ):
+                area_export.render_mbtiles(
+                    archives, box, ["slope"], {}, Path(tmp), top_zoom=top
+                )
+            return {call.args[5] for call in mosaic.call_args_list}
+
+        self.assertEqual(
+            zooms_read(self.nz_box, 17, (16, 17), self.nz_credit), {MBTILES_ZOOMS[1]}
+        )
+        self.assertEqual(zooms_read(self.nsw_box, 15, (15,), ATTRIBUTION), {15})
 
     # Mutation: drop the refusal in `write_mosaic` (the `== 0` check), and a
     # box the region's archives hold no tile of comes out an empty file.

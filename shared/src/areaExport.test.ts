@@ -117,14 +117,14 @@ describe("areaExportEpsg", () => {
     };
     const UTM_33_NORTH = 32633;
 
-    // Mutation: drop the `layerIn(each, "heights")` filter, and the box takes
+    // Mutation: drop the `hasExportArchives` filter, and the box takes
     // the grid of `bare`, which the export reads no heights from.
     it("takes the grid of the first region with heights that the box touches", () => {
       const box = boxAround(14, 25, 6); // centred in none, over all three
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
     });
 
-    // Mutation: reverse `withHeights` before `regionInView`, and `other`
+    // Mutation: reverse `exporting` before `regionsTouching`, and `other`
     // wins.
     it("goes by list order between two regions with heights", () => {
       const box = boxAround(14, 25, 6);
@@ -132,8 +132,8 @@ describe("areaExportEpsg", () => {
       expect(areaExportEpsg(box, [bare, other, full])).toBe(2193);
     });
 
-    // Mutation: pass `regions` to `regionInView` in place of `withHeights`,
-    // and a box centred in `bare` takes its grid.
+    // Mutation: pass `regions` to `regionAt` in place of `exporting`, and a
+    // box centred in `bare` takes its grid.
     it("ignores a region with no heights even where it holds the centre", () => {
       const box = boxAround(12, 15, 4); // centred in `bare`, over `full`
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
@@ -166,35 +166,76 @@ describe("areaExportEpsg", () => {
 });
 
 describe("areaExportRegion", () => {
-  const cases = (
-    JSON.parse(
-      readFileSync(
-        new URL("./__fixtures__/export-region.json", import.meta.url),
-        "utf8",
-      ),
-    ) as {
-      cases: {
-        why: string;
-        bbox: [number, number, number, number];
-        region: string | null;
+  type Case = {
+    why: string;
+    bbox: [number, number, number, number];
+    region: string | null;
+  };
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL("./__fixtures__/export-region.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    cases: Case[];
+    madeUp: {
+      regions: {
+        id: string;
+        box: [number, number, number, number];
+        archives: (keyof typeof SIM_UTAH.terrain)[];
       }[];
-    }
-  ).cases;
+      cases: Case[];
+    };
+  };
+  const asBox = ([west, south, east, north]: Case["bbox"]) => ({
+    west,
+    south,
+    east,
+    north,
+  });
 
   // Mutation: test the centre only (give `regionAt` the centre and drop the
   // `regionsTouching` fallback), and a box over NSW's edge is read from no
   // region, as topo/regions.py `export_region` (its test reads the same
   // cases) reads it from NSW.
   it("is the region the worker reads the archives from", () => {
-    expect(cases.length).toBeGreaterThanOrEqual(8);
-    for (const { why, bbox, region } of cases) {
-      const [west, south, east, north] = bbox;
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(8);
+    for (const { why, bbox, region } of fixture.cases)
       expect(
-        areaExportRegion({ west, south, east, north }, REGIONS_WITH_SIMULATED)
-          ?.id ?? null,
+        areaExportRegion(asBox(bbox), REGIONS_WITH_SIMULATED)?.id ?? null,
         why,
       ).toBe(region);
-    }
+  });
+
+  // Mutation: drop the `regionAt` step (take the first region touching the
+  // box), and a box centred in a later region is read from an earlier one it
+  // also touches; or keep every region that declares heights (drop the slope
+  // and contours test in `hasExportArchives`), and a box over a region with
+  // no slope is exported from it, and fails in the worker.
+  it("holds the centre first and skips a region missing an archive, as the worker does", () => {
+    const regions = fixture.madeUp.regions.map(({ id, box, archives }) => {
+      const [w, s, e, n] = box;
+      return {
+        ...SIM_UTAH,
+        id,
+        borders: [
+          [
+            [w, s],
+            [e, s],
+            [e, n],
+            [w, n],
+          ] as [number, number][],
+        ],
+        terrain: Object.fromEntries(
+          archives.map((layer) => [layer, SIM_UTAH.terrain[layer]]),
+        ),
+      };
+    });
+    expect(fixture.madeUp.cases.length).toBeGreaterThanOrEqual(4);
+    for (const { why, bbox, region } of fixture.madeUp.cases)
+      expect(areaExportRegion(asBox(bbox), regions)?.id ?? null, why).toBe(
+        region,
+      );
   });
 
   // Mutation: answer `regions[0]` for a box no region touches, and an export

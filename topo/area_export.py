@@ -93,6 +93,7 @@ from pipeline import (
     tile_to_bbox,
     tiles_for_bbox,
 )
+from regions import EXPORT_ARCHIVES
 from renderers.tile_compose import (
     _composite_workers,
     _vector_style_to_render_settings,
@@ -278,23 +279,14 @@ def tile_archive(
 
 
 def region_keys(region: dict) -> Dict[str, str]:
-    """The archive keys an export reads from a region: the heights, slope and
-    contours it has."""
-    terrain = region["terrain"]
-    return {
-        layer: terrain[layer]["archivePath"]
-        for layer in ("heights", "slope", "contours")
-        if layer in terrain
-    }
+    """The archive keys an export reads from a region `export_region` picked."""
+    return {layer: region["terrain"][layer]["archivePath"] for layer in EXPORT_ARCHIVES}
 
 
 def region_top_zoom(region: dict) -> int:
     """The deepest zoom the region's heights and slope archives share."""
     terrain = region["terrain"]
-    zooms = [terrain["heights"]["sampleZoom"]]
-    if "slope" in terrain:
-        zooms.append(terrain["slope"]["maxzoom"])
-    return min(zooms)
+    return min(terrain["heights"]["sampleZoom"], terrain["slope"]["maxzoom"])
 
 
 def export_zoom(top: int, bbox: Bbox) -> Tuple[int, int]:
@@ -853,12 +845,13 @@ def render_mbtiles(
     tile reads the one archive the map would (`tile_archive`): the region's,
     or an area down to its zmax, with z17 tiles inside a 1 m area. `top_zoom`
     is the deepest zoom of the region's archives; the mosaics under the tiles
-    are read at the zoom `export_zoom` picks from it."""
+    are read at the zoom `export_zoom` picks from it, to z16 at most."""
     heights_reader = Archive(archives["heights"])
     attribution = heights_reader.metadata().get("attribution")
     if not attribution:
         raise AreaExportError("the heights archive carries no attribution")
-    zoom, _ = export_zoom(top_zoom, bbox)
+    # The tiles end at MBTILES_ZOOMS[1], so a deeper mosaic is never drawn from.
+    zoom = min(export_zoom(top_zoom, bbox)[0], MBTILES_ZOOMS[1])
     # With slope or hillshade, write_mosaic finds a box outside the region.
     # With contours alone the heights decide, because flat ground has no
     # contour tiles either (tests/test_area_export.py `ContoursAlone`).

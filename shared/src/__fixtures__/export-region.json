@@ -1,5 +1,5 @@
 {
-  "_comment": "Which region an area export reads its archives from: the region with heights holding the centre of the box [west, south, east, north], else the first one touching it, else null. Made-up boxes over NSW and the simulated regions. Read by shared/src/areaExport.test.ts (areaExportRegion) and topo/tests/test_regions.py (TestExportRegion), so the API that names the grid and the worker that reads the archives cannot pick differently.",
+  "_comment": "Which region an area export reads its archives from: the region holding the centre of the box [west, south, east, north], else the first touching it, among the regions that declare heights, slope and contours; else null. `cases` are made-up boxes over NSW and the simulated regions. `madeUp` are made-up regions on a flat map (each a box [west, south, east, north] and the archives it declares) with boxes over them. Read by shared/src/areaExport.test.ts (areaExportRegion) and topo/tests/test_regions.py (TestExportRegion), so the API that names the grid and the worker that reads the archives cannot pick differently.",
   "cases": [
     {
       "why": "inside NSW",
@@ -46,5 +46,51 @@
       "bbox": [-112.89, 37.28, -112.83, 37.3],
       "region": "simutah"
     }
-  ]
+  ],
+  "madeUp": {
+    "regions": [
+      {
+        "id": "bare",
+        "box": [10, 10, 20, 20],
+        "archives": []
+      },
+      {
+        "id": "noslope",
+        "box": [30, 10, 40, 20],
+        "archives": ["heights", "contours"]
+      },
+      {
+        "id": "full",
+        "box": [15, 10, 25, 20],
+        "archives": ["heights", "slope", "contours"]
+      },
+      {
+        "id": "other",
+        "box": [5, 22, 17, 30],
+        "archives": ["heights", "slope", "contours"]
+      }
+    ],
+    "cases": [
+      {
+        "why": "centred in a region with no archives, over one that has them",
+        "bbox": [8, 12, 16, 18],
+        "region": "full"
+      },
+      {
+        "why": "centred in none, over two that have them: the first listed",
+        "bbox": [16, 19, 18, 23],
+        "region": "full"
+      },
+      {
+        "why": "centred in a later region that an earlier one also touches: the one holding the centre",
+        "bbox": [9, 16, 17, 29],
+        "region": "other"
+      },
+      {
+        "why": "inside a region with heights and contours but no slope",
+        "bbox": [32, 12, 38, 18],
+        "region": null
+      }
+    ]
+  }
 }

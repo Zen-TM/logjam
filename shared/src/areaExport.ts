@@ -1,4 +1,4 @@
-// An export of an area: the statewide terrain over a box, as raw data for a
+// An export of an area: the terrain of a box's region over it, as raw data for a
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
@@ -46,12 +46,19 @@ export type AreaBbox = {
   north: number;
 };
 
+/** The archives an export reads: a region without all of them is no export region (`areaExportRegion`). */
+const EXPORT_ARCHIVES = ["heights", "slope", "contours"] as const;
+
+const hasExportArchives = (region: Region): boolean =>
+  EXPORT_ARCHIVES.every((layer) => layerIn(region, layer) !== null);
+
 /**
- * The region an export of this box reads its archives from: the region with
- * heights holding the box's centre, else the first region with heights
- * touching the box (the regions `areaInTerrainRegion` admits a box by), so a
- * box over the edge of NSW is exported from NSW however its centre falls.
- * Null when none touches it. `WORLD` has no border and is never the answer.
+ * The region an export of this box reads its archives from: the region
+ * holding the box's centre, else the first region touching the box, among the
+ * regions that declare heights, slope and contours (the regions
+ * `areaInTerrainRegion` admits a box by), so a box over the edge of NSW is
+ * exported from NSW however its centre falls. Null when none touches it.
+ * `WORLD` has no border and is never the answer.
  * topo/regions.py `export_region` is the same choice, for the worker that
  * reads the archives: `__fixtures__/export-region.json` holds the two equal
  * (this file's test and topo/tests/test_regions.py read it).
@@ -60,16 +67,14 @@ export function areaExportRegion(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
 ): Region | null {
-  const withHeights = regions.filter((each) => layerIn(each, "heights"));
+  const exporting = regions.filter(hasExportArchives);
   const { lon, lat } = boxCentre(bbox);
   return (
-    regionAt(lon, lat, withHeights) ??
-    regionsTouching(bbox, withHeights)[0] ??
-    null
+    regionAt(lon, lat, exporting) ?? regionsTouching(bbox, exporting)[0] ?? null
   );
 }
 
-/** The grid an export of this box is warped to: its region's, UTM where no region with heights touches the box. */
+/** The grid an export of this box is warped to: its region's, UTM where no export region touches the box. */
 export function areaExportGrid(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
@@ -139,8 +144,8 @@ export function areaExportTooLarge(bbox: AreaBbox): boolean {
 }
 
 /**
- * Whether the box touches a region with terrain, by its border, a quick check
- * at submit. The border runs a little outside the real one, so a box just
+ * Whether the box touches a region an export can read (`areaExportRegion`), by
+ * its border, a quick check at submit. The border runs a little outside the real one, so a box just
  * over it passes, and the worker, finding no tiles, fails it with the same
  * sentence (topo/area_export.py `AreaOutsideTerrain`).
  */
@@ -149,8 +154,7 @@ export function areaInTerrainRegion(
   regions: readonly Region[] = REGIONS,
 ): boolean {
   return regions.some(
-    (region) =>
-      layerIn(region, "heights") !== null && regionTouchesBox(region, bbox),
+    (region) => hasExportArchives(region) && regionTouchesBox(region, bbox),
   );
 }
 

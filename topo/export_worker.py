@@ -4,7 +4,7 @@ export_worker.py
 ECS Fargate export worker. Processes a single TopoExportJob then exits.
 
 Reads the export-job ID from EXPORT_JOB_ID. An export of an area renders the
-statewide terrain over its box (area_export.py). An export of a topo, which
+terrain of its box's region over it (area_export.py). An export of a topo, which
 only a row queued before Make a map can be, fetches the source TopoJob's
 outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
 PMTiles where needed) and dispatches to the renderer for its
