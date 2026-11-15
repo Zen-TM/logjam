@@ -74,7 +74,12 @@ export function withExtraLinks(
  * in the ACA system, absent otherwise, so an NSW canyon, its snapshot and its
  * ownership list read as they did before the system existed.
  */
-const ACA_FIELDS = ["acaTechnical", "acaWater", "acaTime", "acaRisk"] as const;
+export const ACA_FIELDS = [
+  "acaTechnical",
+  "acaWater",
+  "acaTime",
+  "acaRisk",
+] as const;
 type AcaField = (typeof ACA_FIELDS)[number];
 type AcaRating = Partial<Record<AcaField, number | null>>;
 
@@ -414,7 +419,9 @@ function parseRating(html: string): {
 
 /**
  * Parse the ACA part of rating HTML: technical 1 to 4, water A to C4, time
- * I to VI and risk, written together ("3B III", "4C1 III R"), where the French
+ * I to VI and risk, written together ("3B III", "4C1 III R"): technical and
+ * water joined, the time and the risk each after a space, so "3B IX" is no
+ * rating rather than a time I and a risk X. The French
  * grade, if there is one, sits in parentheses after it. The words are read by
  * the field's own labels (`fieldValueOfLabel`), so what is stored is the rank
  * ADR 0051 defines. A rating that is not that shape, or has no technical grade,
@@ -441,7 +448,7 @@ function parseAcaRating(html: string): Record<AcaField, number | null> {
     .trim()
     .toUpperCase();
   const m = text.match(
-    /^([1-4])\s*(C[1-4]?|[AB])?\s*(VI|IV|V|I{1,3})?\s*(PG13|PG|XX|X|R|G)?$/,
+    /^([1-4])\s*(C[1-4]?|[AB])?(?:\s+(VI|IV|V|I{1,3}))?(?:\s+(PG13|PG|XX|X|R|G))?$/,
   );
   if (!m) return none;
   const rank = (key: string, word: string | undefined) =>

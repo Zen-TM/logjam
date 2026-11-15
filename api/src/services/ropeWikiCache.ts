@@ -108,7 +108,9 @@ async function loadSnapshotFromS3(
  *
  * `grades` is the region's grade system, which decides the fields the corpus
  * is parsed into. A source belongs to one region, so the memo is keyed by the
- * source alone.
+ * source alone and a French parse is never served for an ACA call. Guard:
+ * `shared/src/regions.test.ts` ("give each region its own RopeWiki region and
+ * snapshot").
  */
 export async function getRopeWikiCanyons(
   source: RopeWikiSource,

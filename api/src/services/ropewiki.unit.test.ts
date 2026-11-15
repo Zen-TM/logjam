@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isReservedFieldKey, NSW_REGION } from "@logjam/shared";
+import {
+  isReservedFieldKey,
+  NSW_REGION,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_KEYS,
+} from "@logjam/shared";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   fetchAndParseRopeWiki,
   parseRopeWikiCsv,
   ropeWikiCsvUrl,
+  ACA_FIELDS,
   ropeWikiFieldsOf,
   ropeWikiFieldValues,
   withExtraLinks,
@@ -344,6 +350,14 @@ describe("ROPE_WIKI_FIELD_KEYS", () => {
     }
   });
 
+  // Mutation: point one ACA field at another's key in `ROPE_WIKI_FIELD_KEYS`
+  // (`acaWater: "aca_time"`): the water grade is written over the time.
+  it("writes the ACA fields under the keys shared declares, in its order", () => {
+    expect(ACA_FIELDS.map((field) => ROPE_WIKI_FIELD_KEYS[field])).toEqual(
+      SYSTEM_KEYS.aca,
+    );
+  });
+
   it("covers every ownable field", () => {
     expect(Object.keys(ROPE_WIKI_FIELD_KEYS).sort()).toEqual(
       [...ROPE_WIKI_OWNABLE_FIELDS].sort(),
@@ -442,14 +456,51 @@ describe("a rating in an ACA region", () => {
     expect(acaOf("2B IV PG")[3]).toBe(1);
   });
 
-  // Mutation: return the words matched so far when the whole rating does not
-  // match in `parseAcaRating`: "3B III Q" stores 3, 2, 3.
-  it.each(["", "v3a2 III", "(v3a2 III)", "5B III", "3D II", "3B III Q", "III"])(
-    "reads nothing from %j",
-    (rating) => {
-      expect(acaOf(rating)).toEqual([null, null, null, null]);
-    },
-  );
+  // Mutation: drop the `$` anchor from the pattern in `parseAcaRating`:
+  // "3B III Q" stores 3, 2, 3. Or let the time or the risk follow with no
+  // space (`\s*` for `\s+`): "3BIII" stores a time, "3B IX" a time I and a risk X.
+  it.each([
+    "",
+    "v3a2 III",
+    "(v3a2 III)",
+    "5B III",
+    "3D II",
+    "3B III Q",
+    "III",
+    "3B IX",
+    "3B VX",
+    "3B IIR",
+    "3BIII",
+  ])("reads nothing from %j", (rating) => {
+    expect(acaOf(rating)).toEqual([null, null, null, null]);
+  });
+
+  // Mutation: append a word to a `labels` list in `SYSTEM_FIELD_DEFS` (or drop
+  // `XX|` from the pattern in `parseAcaRating`): the word reads as nothing,
+  // and this names it.
+  it("reads every word the four ACA fields declare as its rank", () => {
+    const fixed: Record<string, string> = {
+      aca_technical: "3",
+      aca_water: "B",
+      aca_time: "III",
+      aca_risk: "R",
+    };
+    const keys = Object.keys(fixed);
+    let checked = 0;
+    for (const key of keys) {
+      const def = SYSTEM_FIELD_DEFS.find((d) => d.key === key)!;
+      def.labels!.forEach((word, i) => {
+        const words = { ...fixed, [key]: word };
+        const rating = `${words.aca_technical}${words.aca_water} ${words.aca_time} ${words.aca_risk}`;
+        const [c] = parseRopeWikiCsv(csv(rating), "aca").places;
+        const field = ACA_FIELDS[keys.indexOf(key)];
+        expect(c[field], `${rating}: ${key} ${word}`).toBe(def.min! + i);
+        checked++;
+      });
+    }
+    // 4 technical, 7 water, 6 time and 5 risk words.
+    expect(checked).toBe(22);
+  });
 
   // Mutation: fill the French fields from the parentheses for an ACA source in
   // `parseRopeWikiCsv`: this canyon gains `vGrade` 2.

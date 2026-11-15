@@ -497,7 +497,7 @@ router.post(
       for (const field of fields) {
         const key = ROPE_WIKI_FIELD_KEYS[field];
         const existingVal = fieldValue(existingValues, key) ?? null;
-        const snapshotVal = effectiveSnapshot[field];
+        const snapshotVal = effectiveSnapshot[field] ?? null;
         const freshVal = freshWithOz[field];
 
         if (isRopeWikiOwned(effectiveSnapshot, field)) {
