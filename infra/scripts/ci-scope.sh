@@ -42,8 +42,9 @@ paths_for() {
   case "$1" in
     # The live-API suite, the topo status guard against its Postgres (it
     # imports topo's top-level modules), the Playwright smoke spec and the Expo
-    # push stub the job starts.
-    api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
+    # push stub the job starts, and the simulated regions' boxes the master stub
+    # reads.
+    api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|scripts/sim-regions/boxes\.json$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
     # legalLinks.test.ts checks the documents the consent screen links to, and
     # otaHotfix.test.ts reads the three OTA workflows. The emulator smoke check
     # (mobile-emulator.yml) and the action that builds its APK are part of the
@@ -157,6 +158,7 @@ self_test() {
   check "api_integration: shared source"                  api_integration true  0 'shared/src/sync.ts'
   check "api_integration: Logjam Web (Playwright smoke)"  api_integration true  0 'frontend/src/main.tsx'
   check "api_integration: the Expo push stub it starts"   api_integration true  0 'infra/scripts/expo-push-stub.mjs'
+  check "api_integration: the simulated regions' boxes the e2e stub reads" api_integration true 0 'scripts/sim-regions/boxes.json'
   check "api_integration: topo module the guard imports"  api_integration true  0 'topo/worker.py'
   check "api_integration: the guard test"                 api_integration true  0 'topo/tests/test_status_guard_db.py'
   check "api_integration: topo requirements"              api_integration true  0 'topo/requirements.txt'

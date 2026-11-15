@@ -135,7 +135,8 @@ and takes the rest from the prod CDN. On a phone, also run
 To try the screens a second region adds, switch on the simulated regions: a
 made-up New Zealand and Utah, declared over the Makarora and Kauaeranga valleys
 and Zion, with no data behind them until archives for those boxes are in the dev
-bucket. Set `SIM_REGIONS=1` for
+bucket ([scripts/sim-regions/README.md](scripts/sim-regions/README.md) builds and
+uploads them). Set `SIM_REGIONS=1` for
 the API (in the shell that starts it; `.env.local` is regenerated), `VITE_SIM_REGIONS=1`
 in `frontend/.env`, and `EXPO_PUBLIC_SIM_REGIONS=1` in `mobile/.env`. A new
 account then sees the region step, and Settings lists the regions. Each

@@ -53,6 +53,33 @@ Overpass. If your machine cannot reach it, put the `.osm` files in `out/places/`
 by hand, named `<region>-<box number>.osm` (`simnz-0.osm`): the step uses a file
 that exists, unless you pass `--force`, which fetches it again.
 
+## Serve it to the dev stack
+
+With the stack up, `scripts/sim-regions/build.sh up` uploads every `.pmtiles`
+under `out/master/` (or `$OUT/master/`) to MiniStack's `logjam-topo-local` at the
+key it has there, with the `test`/`test` credentials the README's Local
+Development uses. `BUCKET_URL` names another bucket, for a stack that serves S3
+on a different port; it must be `http://127.0.0.1:<port>/...` or
+`http://localhost:<port>/...`, and `up` refuses any other host before it uploads
+anything. It needs only `curl`, and fails when there is nothing to upload or the
+bucket refuses a file.
+
+Logjam Web then reads the archives through `DEV_MASTER_URL` set to the bucket.
+With the default bucket it can instead use `http://127.0.0.1:4567` with
+`node scripts/dev-master.mjs` running, which serves that bucket's files ahead of
+the prod CDN (it reads no other bucket).
+
+A phone reads the default bucket in either of two ways. Directly, over the 4566
+reverse that `npm run dev:android` sets up, with
+`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4566/logjam-topo-local` (as
+`mobile/.env.example` shows). Or through `node scripts/dev-master.mjs`, after
+`adb reverse tcp:4567 tcp:4567`, with
+`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4567`, which also takes from the
+prod CDN what the bucket lacks.
+
+Playwright's `stubMaster.ts` answers the same paths from the fixtures below, so
+a spec needs none of this.
+
 ## What is built
 
 The regions, their boxes, the archives each gets and their zoom ranges are in
