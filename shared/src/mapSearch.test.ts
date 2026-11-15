@@ -114,8 +114,8 @@ describe("parseCoordinates", () => {
   });
 
   // MapLibre's bounds run past ±180 after a pan around the world: the copy of
-  // the world a view sits in must not decide east or west. Mutation: drop the
-  // `wrapView` call in `parseLatLon`.
+  // the world a view sits in must not decide east or west. Mutation: pass
+  // `view` in place of `wrapBox(view)` in `mapCentre`.
   it.each([
     [
       "Sydney, 360 west",

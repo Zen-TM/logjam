@@ -6,7 +6,7 @@ import { TRIP_GAUGE_MAX } from "./gauges.js";
 import {
   REGIONS,
   regionAt,
-  regionInWrappedView,
+  regionInView,
   type LonLatBox,
   type Region,
 } from "./regions.js";
@@ -24,7 +24,7 @@ export function gaugeFeedIn(
   view: LonLatBox | null | undefined,
   regions: readonly Region[] = REGIONS,
 ): string | null {
-  return gaugeFeedOf(view ? regionInWrappedView(view, regions) : null);
+  return gaugeFeedOf(view ? regionInView(view, regions) : null);
 }
 
 /** The feed that holds a place's gauge: that of the region its coordinates fall in. */

@@ -102,9 +102,9 @@ describe("terrainSourceFor", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  // Mutation: read the view unwrapped (`regionInView` in place of
-  // `regionInWrappedView`) and a map panned once around the world draws NSW
-  // from the worldwide tiles.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
+  // once around the world draws NSW from the worldwide tiles.
   it("uses the NSW archive over NSW after a pan around the world", async () => {
     const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
     expect(
@@ -163,7 +163,7 @@ describe("terrainSourceFor", () => {
     });
 
     // Mutation: test the view's centre against the heights' coverage box in
-    // place of `regionInWrappedView`, and a view centred just east of the
+    // place of `regionInView`, and a view centred just east of the
     // Kauaeranga box, whose border still touches it, draws the worldwide tiles.
     it("reads a region whose border touches the view, as the Terrain group does", async () => {
       expect(await ask(fakeMap(175.685, -37.1))).toBe(

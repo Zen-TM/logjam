@@ -22,6 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
+import { lonWithin } from "./placeGeo.js";
 import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
 
 export type DemSource = {
@@ -35,8 +36,10 @@ export type DemSource = {
   sampleZoom: number;
   /**
    * [west, south, east, north] the source can answer in, or null for
-   * worldwide. Inside it a missing tile or a no-data pixel still means "not
-   * here", and the position falls through to the next source.
+   * worldwide. A box across the date line is wrapped or unwrapped
+   * (`lonWithin`; guard: `demSources.test.ts`, the describe
+   * "demSourceCovers"). Inside it a missing tile or a no-data pixel still
+   * means "not here", and the position falls through to the next source.
    */
   coverage: readonly [number, number, number, number] | null;
   /**
@@ -290,8 +293,7 @@ export function demSourceCovers(
   if (!source.coverage) return true;
   const [west, south, east, north] = source.coverage;
   return (
-    position.lon >= west &&
-    position.lon <= east &&
+    lonWithin(position.lon, west, east) &&
     position.lat >= south &&
     position.lat <= north
   );

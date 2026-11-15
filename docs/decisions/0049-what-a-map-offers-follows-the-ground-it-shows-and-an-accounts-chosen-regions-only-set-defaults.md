@@ -52,7 +52,7 @@ read, none of them a location.)
   at a time.
 - **Update 2026-11-15: a printed sheet's Terrain comes from one region.** A
   GeoPDF takes its hillshade, slope, contours and Land from the one region
-  `regionInWrappedView` picks for the sheet's box (`sheetTerrain` in
+  `regionInView` picks for the sheet's box (`sheetTerrain` in
   `frontend/src/geoPdf/sheetTerrain.ts`), the way a map does, not from every
   region in `regionsTouching(box)`. A sheet straddling two regions prints the
   far side from the wrong archives, or none. It is held to one region
