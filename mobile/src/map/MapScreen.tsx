@@ -272,7 +272,7 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
-import { coverageCarrierHere, hasGauges } from "./terrainSwitches";
+import { coverageCarrierHere } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -285,6 +285,7 @@ import {
   pointBox,
   ROUTE_ARROW_SDF_URI,
   placeStatus,
+  gaugeFeedOf,
 } from "@logjam/shared";
 import { basemapFallbackFor, useDownBasemaps } from "./basemapReachability";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
@@ -1605,17 +1606,15 @@ export function MapScreen({
     [viewportBbox, camera],
   );
   // The Gauges row reads OFF where the region has no feed, and the map's gauge
-  // layer draws nothing there (search and the place page still read gauges). A
-  // gauge picked in search still loads the file its sheet reads, and opens at
-  // the pick whatever the region.
-  const gaugesHere = hasGauges(terrainRegion);
+  // layer draws nothing there. The map reads the feed of the region it shows.
+  const gaugeFeed = gaugeFeedOf(terrainRegion);
+  const gaugesHere = gaugeFeed !== null;
   const gaugesShown = showGauges && gaugesHere;
-  const gaugeWanted = showGauges && gaugeId !== null;
   const {
     file: gaugeFile,
     settled: gaugesSettled,
     now: gaugesNow,
-  } = useGauges(gaugesShown || gaugeWanted);
+  } = useGauges(showGauges ? gaugeFeed : null);
   const landArchive = layerIn(terrainRegion, "land");
   const fireArchive = layerIn(terrainRegion, "fire");
   const coverageArchive = layerIn(terrainRegion, "coverage");

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  GAUGE_LATEST_PATH,
+  gaugeLatestPath,
   parseGaugeLatest,
   type GaugeLatestFile,
 } from "@logjam/shared";
@@ -8,21 +8,27 @@ import {
 export const GAUGE_REFRESH_MS = 5 * 60_000;
 
 /**
- * The gauge readings: a public file, the same for everyone (ADR 0044), asked
- * for only while something shows them and again every five minutes while the
- * tab is visible. A failed or malformed fetch keeps the last good file.
+ * The gauge readings of the feed at `feed` (a region's `gauges` prefix): a
+ * public file, the same for everyone (ADR 0044), asked for only while
+ * something shows them and again every five minutes while the tab is visible.
+ * A failed or malformed fetch keeps the last good file. A null `feed` asks for
+ * nothing; a file is only ever returned for the feed it came from.
  */
-export function useGauges(enabled: boolean): {
+export function useGauges(feed: string | null): {
   file: GaugeLatestFile | null;
   failed: boolean;
   /** Epoch ms, renewed with each load, so a panel left open keeps ages true. */
   now: number;
 } {
-  const [file, setFile] = useState<GaugeLatestFile | null>(null);
+  // The feed it came from rides with the file, so a file is never read as another feed's.
+  const [kept, setKept] = useState<{
+    feed: string;
+    file: GaugeLatestFile;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!enabled) return;
+    if (feed === null) return;
     let lastAt = 0;
     let controller: AbortController | null = null;
     const load = () => {
@@ -30,12 +36,12 @@ export function useGauges(enabled: boolean): {
       const abort = (controller = new AbortController());
       lastAt = Date.now();
       setNow(lastAt);
-      fetch(`/${GAUGE_LATEST_PATH}`, { signal: abort.signal })
+      fetch(`/${gaugeLatestPath(feed)}`, { signal: abort.signal })
         .then((res) => (res.ok ? res.json() : null))
         .then((json) => {
           if (abort.signal.aborted) return;
           const parsed = parseGaugeLatest(json);
-          if (parsed) setFile(parsed);
+          if (parsed) setKept({ feed, file: parsed });
           setFailed(!parsed);
         })
         .catch(() => {
@@ -58,7 +64,8 @@ export function useGauges(enabled: boolean): {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [enabled]);
+  }, [feed]);
   // Only a first load that failed is said; the 5-minute timer is the retry.
-  return { file, failed: enabled && failed && !file, now };
+  const file = kept && kept.feed === feed ? kept.file : null;
+  return { file, failed: feed !== null && failed && !file, now };
 }

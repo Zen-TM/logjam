@@ -88,8 +88,3 @@ export function coverageCarrierHere(
 ): CarrierId | null {
   return normalizeCarrier(stored, layerIn(region, "coverage")?.carriers ?? []);
 }
-
-/** Whether the region in view has a gauge feed, which the Gauges row needs. */
-export function hasGauges(region: Region | null): boolean {
-  return region?.gauges != null;
-}

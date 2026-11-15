@@ -95,6 +95,22 @@ service.**
   `shared/src/gauges.test.ts` ("a feed that is not New South Wales's"),
   `topo/tests/test_gauges.py` ("the feed states the units and day it is cut
   in"). Everything else above stands.
+- **Update 2026-11-15: a client reads the feed of the region it shows.** A
+  region's `gauges` (`shared/src/regions.ts`) is the CDN prefix of its feed,
+  or null where it has none, and `latest.json` and `history/<id>.json` are
+  read under that prefix, never under a fixed one. The map and its search
+  read the feed of the region the map shows (`gaugeFeedIn`, `gaugeFeedOf` in
+  `shared/src/gaugeFeeds.ts`); a place's gauge, and a trip's, the feed of the
+  region the place's coordinates fall in (`gaugeFeedAt`). Where there is no
+  feed nothing is fetched, and a place or trip page draws no gauge section. A client
+  holds a feed's file with the feed it came from and never reads it as
+  another's, and Logjam GPS keeps each feed's files under its own prefix. The
+  CDN's logs show which feed a client read, so the region its map showed, as a
+  history's path already names its gauge. Guards: `shared/src/gaugeFeeds.test.ts`,
+  `frontend/src/components/gauges/gauges.test.tsx` ("never shows one feed's
+  file as another's"), `mobile/src/gauges/gaugeFeed.test.ts` ("fetches the
+  feed it is given, and each feed has its own five minutes"). Everything else
+  above stands.
 
 ## Consequences
 

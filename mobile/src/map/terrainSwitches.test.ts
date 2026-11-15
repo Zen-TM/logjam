@@ -12,7 +12,6 @@ import {
 } from "@logjam/shared";
 import {
   coverageCarrierHere,
-  hasGauges,
   terrainSwitch as switchIn,
 } from "./terrainSwitches";
 
@@ -179,16 +178,6 @@ describe("coverageCarrierHere", () => {
     expect(coverageCarrierHere(SIM_UTAH, "simtwo")).toBeNull();
     expect(coverageCarrierHere(null, "optus")).toBeNull();
     expect(coverageCarrierHere(NSW_REGION, null)).toBeNull();
-  });
-});
-
-describe("hasGauges", () => {
-  // Mutation: return true for a region with no gauge feed, and the Gauges row
-  // stays live over New Zealand.
-  it("is true only for a region with a gauge feed", () => {
-    expect(hasGauges(NSW_REGION)).toBe(true);
-    expect(hasGauges(SIM_NZ)).toBe(false);
-    expect(hasGauges(null)).toBe(false);
   });
 });
 

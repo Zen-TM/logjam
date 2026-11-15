@@ -42,6 +42,7 @@ import {
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
   formatPlacePosition,
+  gaugeFeedAt,
   placeAttributesTitle,
   placeSectionTitle,
   placeSources,
@@ -712,6 +713,7 @@ function PlaceDetailPanel({
     : placeStatus({ syncRole: "shared" }, 0);
   const grade = formatCanyonGrade(current.fieldValues);
   const isShared = placeShares.length > 0;
+  const gaugeFeed = gaugeFeedAt(current.longitude, current.latitude);
   const primaryVerbs = placeVerbs("web", "page", isOwnedPlace).filter((verb) =>
     (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
   );
@@ -806,8 +808,9 @@ function PlaceDetailPanel({
     ),
 
     // A sharee sees the owner's pick, read-only, and nothing when none is set.
+    // Only where the place's region has a gauge feed.
     gauge: () =>
-      current.gaugeId || isOwnedPlace ? (
+      gaugeFeed !== null && (current.gaugeId || isOwnedPlace) ? (
         <section className={classes.section}>
           <SectionHeader
             title={placeSectionTitle("gauge", copy.gauge, {
@@ -817,6 +820,7 @@ function PlaceDetailPanel({
             })}
           />
           <PlaceGauge
+            feed={gaugeFeed}
             latitude={current.latitude}
             longitude={current.longitude}
             gaugeId={current.gaugeId}

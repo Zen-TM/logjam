@@ -29,6 +29,7 @@ import {
   PLACE_PAGE_PRIMARY_VERBS,
   placeLinkedToast,
   formatPlacePosition,
+  gaugeFeedAt,
   placeAttributesTitle,
   placeSectionTitle,
   placeSources,
@@ -224,6 +225,7 @@ export function PlaceDetailScreen({
   }
 
   const isOwner = place.syncRole === "owner";
+  const gaugeFeed = gaugeFeedAt(place.longitude, place.latitude);
   const attachments = media.data ?? [];
   const linkedTrips = (trips.data ?? []).filter((trip) =>
     trip.places.some((link) => link.id === placeId),
@@ -432,8 +434,9 @@ export function PlaceDetailScreen({
     weather: () => <PlaceWeatherSection place={place} />,
 
     // A sharee sees the owner's pick, read-only, and nothing when none is set.
+    // Only where the place's region has a gauge feed.
     gauge: () =>
-      place.gaugeId || isOwner ? (
+      gaugeFeed !== null && (place.gaugeId || isOwner) ? (
         <>
           <SectionHeader
             title={placeSectionTitle("gauge", copy.gauge, {
@@ -443,6 +446,7 @@ export function PlaceDetailScreen({
             })}
           />
           <PlaceGaugeSection
+            feed={gaugeFeed}
             latitude={place.latitude}
             longitude={place.longitude}
             gaugeId={place.gaugeId}

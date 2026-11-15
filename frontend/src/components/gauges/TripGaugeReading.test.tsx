@@ -4,7 +4,7 @@
 // reading.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GAUGES } from "@logjam/shared";
+import { GAUGES, GAUGE_PREFIX } from "@logjam/shared";
 import historyJson from "../../../../shared/src/__fixtures__/gauge-history.json";
 import latestJson from "../../../../shared/src/__fixtures__/gauges-latest.json";
 import { PlaceGauge } from "./PlaceGauge";
@@ -45,6 +45,7 @@ describe("a trip's river gauge reading", () => {
   it("shows the trip's date beside now, with the credit, from one history request", async () => {
     const { rerender } = render(
       <TripGaugeReading
+        feed={GAUGE_PREFIX}
         gaugeIds={["900001"]}
         dates={[trip]}
         when="trip"
@@ -59,6 +60,7 @@ describe("a trip's river gauge reading", () => {
     ).toBeTruthy();
     rerender(
       <TripGaugeReading
+        feed={GAUGE_PREFIX}
         gaugeIds={["900001"]}
         dates={[trip]}
         when="trip"
@@ -72,6 +74,7 @@ describe("a trip's river gauge reading", () => {
     historyStatus = 404;
     const { container } = render(
       <TripGaugeReading
+        feed={GAUGE_PREFIX}
         gaugeIds={["900001"]}
         dates={[trip]}
         when="trip"
@@ -85,7 +88,14 @@ describe("a trip's river gauge reading", () => {
   });
 
   it("asks for nothing when no place has a gauge", () => {
-    render(<TripGaugeReading gaugeIds={[]} dates={[trip]} when="trip" />);
+    render(
+      <TripGaugeReading
+        feed={GAUGE_PREFIX}
+        gaugeIds={[]}
+        dates={[trip]}
+        when="trip"
+      />,
+    );
     expect(fetched).toEqual([]);
   });
 });
@@ -95,7 +105,13 @@ describe("the place page's reading", () => {
 
   it("shows the owner the latest trip's reading", async () => {
     render(
-      <PlaceGauge {...place} owned tripDates={[trip]} onChange={vi.fn()} />,
+      <PlaceGauge
+        feed={GAUGE_PREFIX}
+        {...place}
+        owned
+        tripDates={[trip]}
+        onChange={vi.fn()}
+      />,
     );
     await screen.findByText(/0\.91 m and 121 ML\/d on your last trip here/);
   });
@@ -103,6 +119,7 @@ describe("the place page's reading", () => {
   it("shows a sharee none, and asks for no history", async () => {
     render(
       <PlaceGauge
+        feed={GAUGE_PREFIX}
         {...place}
         owned={false}
         tripDates={[trip]}

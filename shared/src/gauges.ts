@@ -12,9 +12,13 @@ import type { ProfileSeries } from "./profileSeries.js";
 /** Bumped when either file's shape changes; each format has its own prefix. */
 export const GAUGE_FORMAT = 1;
 
-/** Path under the topo CDN base URL (TOPO_CDN_BASE_URL). */
+/** New South Wales's feed, the `gauges` of its region declaration, as a path under the topo CDN
+ *  base URL (TOPO_CDN_BASE_URL). Another region's is its own `Region.gauges`. */
 export const GAUGE_PREFIX = `master/gauges/v${GAUGE_FORMAT}/`;
-export const GAUGE_LATEST_PATH = `${GAUGE_PREFIX}latest.json`;
+
+/** Path under the topo CDN base URL of the latest file of the feed at `feed`,
+ *  a region's `gauges` prefix. */
+export const gaugeLatestPath = (feed: string): string => `${feed}latest.json`;
 
 /** The units a feed's readings may be in, as published and never converted.
  *  The formatters print whatever unit they are handed, so this allowlist,
@@ -162,11 +166,14 @@ export function parseGaugeHistory(value: unknown): GaugeHistoryFile | null {
   return v as unknown as GaugeHistoryFile;
 }
 
-/** A gauge's history file URL, or null for an id that is not a gauge id. */
-export function gaugeHistoryUrl(baseUrl: string, id: string): string | null {
-  return isValidGaugeId(id)
-    ? `${baseUrl}/${GAUGE_PREFIX}history/${id}.json`
-    : null;
+/** A gauge's history file URL in the feed at `feed`, or null for an id that is
+ *  not a gauge id. */
+export function gaugeHistoryUrl(
+  baseUrl: string,
+  feed: string,
+  id: string,
+): string | null {
+  return isValidGaugeId(id) ? `${baseUrl}/${feed}history/${id}.json` : null;
 }
 
 function onDate(

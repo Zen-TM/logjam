@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GAUGE_PREFIX } from "@logjam/shared";
 
 import { useGauges } from "./gauges/useGauges";
 import { useNow } from "./ui/useNow";
@@ -125,7 +126,7 @@ describe("the hooks that tick", () => {
 
   it("useGauges starts no timer behind a dark screen", async () => {
     appState.currentState = "background";
-    const setNow = mount(() => useGauges(true), 2);
+    const setNow = mount(() => useGauges(GAUGE_PREFIX), 2);
     await vi.advanceTimersByTimeAsync(0);
     const afterFirstLoad = setNow.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60 * MINUTE);
@@ -136,7 +137,7 @@ describe("the hooks that tick", () => {
   });
 
   it("useGauges ticks in front and stops on background", async () => {
-    const setNow = mount(() => useGauges(true), 2);
+    const setNow = mount(() => useGauges(GAUGE_PREFIX), 2);
     await vi.advanceTimersByTimeAsync(0);
     const afterFirstLoad = setNow.mock.calls.length;
     await vi.advanceTimersByTimeAsync(15 * MINUTE);
