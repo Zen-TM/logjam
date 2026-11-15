@@ -6,9 +6,10 @@ import {
   type ItemWords,
 } from "./planItemEdit.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
+import { setDisplayUnits } from "./units.js";
 import { NSW_REGION } from "./regions.js";
 import { SIM_REGIONS } from "./simRegions.js";
-import type { TripPlanItem } from "./tripPlans.js";
+import type { TripPlanItem, TripPlanPlacePatch } from "./tripPlans.js";
 
 const place = {
   kind: "place",
@@ -31,6 +32,32 @@ const file = {
 /** `itemPatch` with the list a form on this item would hand it. */
 const patchOf = (seen: TripPlanItem, now: ItemWords) =>
   itemPatch(seen, now, seen.kind === "place" ? itemFieldDefs(seen) : []);
+
+describe("a place's length in a plan item's form", () => {
+  const canyon = {
+    ...place,
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+    fieldValues: { longest_abseil: 15 },
+  } as unknown as TripPlanItem;
+
+  // Mutation: seed the form with `String(raw)` or compare it with
+  // `coerceFieldValue` in `itemWords` / `itemPatch`, and a form of feet that
+  // was not edited sends 49.2 m, or a patch.
+  it("is typed in feet and sent in metres, and unedited sends nothing", () => {
+    setDisplayUnits("imperial");
+    try {
+      const words = itemWords(canyon);
+      expect(words["attr:longest_abseil"]).toBe("49.2");
+      expect(patchOf(canyon, words)).toBeNull();
+      const patch = patchOf(canyon, { ...words, "attr:longest_abseil": "50" });
+      const change = (patch as TripPlanPlacePatch).fieldValues?.longest_abseil;
+      expect(change?.from).toBe(15);
+      expect(change?.to).toBeCloseTo(15.24, 10);
+    } finally {
+      setDisplayUnits("metric");
+    }
+  });
+});
 
 describe("itemPatch", () => {
   // Mutation: send every attribute, or write the form's "" as the stored

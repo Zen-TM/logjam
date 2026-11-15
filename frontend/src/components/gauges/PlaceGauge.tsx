@@ -24,6 +24,7 @@ const NEARBY = 8;
  * nearest gauge is often on another river, so a person picks.
  */
 export function PlaceGauge({
+  feed,
   latitude,
   longitude,
   gaugeId,
@@ -31,6 +32,8 @@ export function PlaceGauge({
   tripDates,
   onChange,
 }: {
+  /** The feed of the region the place is in (`gaugeFeedAt`): its gauges are read from there. */
+  feed: string;
   latitude: number;
   longitude: number;
   gaugeId: string | null | undefined;
@@ -50,7 +53,7 @@ export function PlaceGauge({
     chooser.current?.scrollIntoView?.({ block: "nearest" });
     chooser.current?.focus({ preventScroll: true });
   }, [picking]);
-  const { file, failed, now } = useGauges(owned || !!gaugeId);
+  const { file, failed, now } = useGauges(owned || !!gaugeId ? feed : null);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
   const tile = <IconTile icon="gauge" hue="var(--color-accent)" />;
   return (
@@ -59,6 +62,7 @@ export function PlaceGauge({
         (chosen && file ? (
           <>
             <TripGaugeReading
+              feed={feed}
               gaugeIds={[gaugeId]}
               dates={tripDatesFor(owned, tripDates)}
               when="lastTrip"

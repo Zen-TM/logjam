@@ -142,6 +142,14 @@ describe("the declaration", () => {
     }
   });
 
+  // Mutation: drop the trailing slash from `GAUGE_PREFIX`, and a feed's files
+  // are asked for at `…v1latest.json`.
+  it("every gauge feed prefix ends in a slash", () => {
+    const feeds = ALL.flatMap((region) => region.gauges ?? []);
+    expect(feeds.length).toBeGreaterThan(0);
+    for (const feed of feeds) expect(feed.endsWith("/")).toBe(true);
+  });
+
   // Stored on phones, in climb labels and in installed builds: a new value
   // here strands every copy of the old one.
   // Mutation: rename any of these, and every phone, track and build that

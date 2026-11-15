@@ -32,6 +32,7 @@ import {
   type TripPlanItem,
   type TripPlanRole,
   coordinateEntry,
+  displayUnits,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -106,7 +107,11 @@ export function PlanItemSheet({
   const [seen, setSeen] = useState<TripPlanItem | null>(null);
   const [opened, setOpened] = useState<ItemWords | null>(null);
   const [moved, setMoved] = useState(false);
-  const key = item ? `${item.kind}:${item.id}` : null;
+  // The units are in the key: the form's length text and its conversion are in
+  // one unit, so a change of units reseeds it (dropping what was typed) rather
+  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
+  // of a length field converts it").
+  const key = item ? `${item.kind}:${item.id}|${displayUnits()}` : null;
   if (key !== shownFor) {
     setShownFor(key);
     setEditing(false);

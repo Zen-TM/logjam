@@ -450,4 +450,15 @@ describe("typed grid references", () => {
     const none = parseGridReference(text, { lat: 40, lon: -100 }, MADE_UP)!;
     expect(none.label).toBe("MGA 56 245000 6264000");
   });
+
+  // The text's own "MGA" beats the grid of the region the map is over.
+  // Mutation: read the grid from the map first in `parseGridReference` (change
+  // `prefix === "MGA" || (!prefix && nearGrid === "mga2020")` to
+  // `nearGrid ? nearGrid === "mga2020" : prefix === "MGA"`).
+  it("lets an MGA prefix win over a UTM region's grid", () => {
+    const mga = parseGridReference("MGA 56 245000 6264000", overUtah, MADE_UP)!;
+    expect(mga.label).toBe("MGA 56 245000 6264000");
+    expect(mga.lat).toBeCloseTo(-33.7, 0);
+    expect(mga.lon).toBeCloseTo(150.3, 0);
+  });
 });

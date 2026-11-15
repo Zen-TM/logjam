@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { setDisplayUnits, type TripLogCustomFieldDef } from "@logjam/shared";
 
 import {
   coerceCustomFields,
+  fieldValueStrings,
   sameFieldValues,
   withoutClearedFields,
 } from "./fieldValueCoercion";
@@ -26,6 +27,32 @@ const isCave: TripLogCustomFieldDef = {
   label: "Is a cave?",
   type: "boolean",
 };
+
+const longest: TripLogCustomFieldDef = {
+  key: "longest_abseil",
+  label: "Longest pitch",
+  type: "float",
+};
+
+describe("a length in the editor", () => {
+  // Mutation: seed with `String(value)` in `fieldValueStrings`, drop the
+  // `stored` argument from `coerceCustomFields`' call of `coerceFieldInput`, or
+  // call `coerceFieldValue` there.
+  it("is shown in feet, stored in metres, and kept when it was not edited", () => {
+    setDisplayUnits("imperial");
+    try {
+      const shown = fieldValueStrings({ longest_abseil: 15, permit: "NP-1" });
+      expect(shown).toEqual({ longest_abseil: "49.2", permit: "NP-1" });
+      expect(
+        coerceCustomFields(shown, [longest, permit], { longest_abseil: 15 }),
+      ).toEqual({ longest_abseil: 15, permit: "NP-1" });
+      const typed = coerceCustomFields({ longest_abseil: "100" }, [longest]);
+      expect(typed.longest_abseil).toBeCloseTo(30.48, 10);
+    } finally {
+      setDisplayUnits("metric");
+    }
+  });
+});
 
 describe("coerceCustomFields", () => {
   it("writes what was typed", () => {

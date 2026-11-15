@@ -1,6 +1,12 @@
 // `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
 // which is erased, so this edge does not close a runtime cycle.
-import { isReservedFieldKey, nameKey, stopLabel } from "./placeTypes.js";
+import {
+  isLengthField,
+  isReservedFieldKey,
+  nameKey,
+  stopLabel,
+} from "./placeTypes.js";
+import { lengthFromInput, lengthInputText, lengthUnitLabel } from "./units.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
@@ -287,11 +293,26 @@ export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
   // One-sided bounds get shown too, so min-only and max-only fields display
   // their bounds to the user before a write is attempted.
   if (def.min != null && def.max != null) {
-    return `${def.label} (${def.min}-${def.max})`;
+    return withLengthUnit(def.key, `${def.label} (${def.min}-${def.max})`);
   }
-  if (def.min != null) return `${def.label} (${def.min}+)`;
-  if (def.max != null) return `${def.label} (up to ${def.max})`;
-  return def.label;
+  if (def.min != null)
+    return withLengthUnit(def.key, `${def.label} (${def.min}+)`);
+  if (def.max != null)
+    return withLengthUnit(def.key, `${def.label} (up to ${def.max})`);
+  return withLengthUnit(def.key, def.label);
+}
+
+/**
+ * A length field's label with the unit it is typed in, "Longest pitch (ft)",
+ * or "Longest pitch (0+ ft)" inside a bracket the label already has. In metric
+ * the label is as written, so New South Wales reads what it always did; any
+ * other key's is too. Guard: `units.test.ts` ("a length field").
+ */
+export function withLengthUnit(key: string, label: string): string {
+  if (!isLengthField(key) || lengthUnitLabel() === "m") return label;
+  return label.endsWith(")")
+    ? `${label.slice(0, -1)} ${lengthUnitLabel()})`
+    : `${label} (${lengthUnitLabel()})`;
 }
 
 export function makeCustomFieldKey(label: string): string {
@@ -310,6 +331,42 @@ export function coerceFieldValue(
   if (type === "float") return parseFloat(value);
   if (type === "boolean") return value === "true";
   return value;
+}
+
+/**
+ * A stored value as its form field holds it: "" for none, a length in the
+ * display units, else the value as text. The form's one way in; a length
+ * reads the same unit it is typed in (`coerceFieldInput`). Guard:
+ * `lengthFieldClients.test.ts` ("every form of a length field converts it"),
+ * which turns red when a form builds its text another way.
+ */
+export function fieldInputText(key: string, stored: unknown): string {
+  if (stored == null) return "";
+  return isLengthField(key) && typeof stored === "number"
+    ? lengthInputText(stored)
+    : String(stored);
+}
+
+/**
+ * A form field's text as the value to store: `coerceFieldValue`, with a length
+ * typed in the display units stored in metres. Text that still reads as the
+ * stored value (`stored`, shown by `fieldInputText`) keeps it exactly, so
+ * saving a place whose feet were not edited does not nudge its metres. The
+ * form's one way out. Guards: `units.test.ts` ("a length field") for the
+ * conversion and `lengthFieldClients.test.ts` ("every form of a length field
+ * converts it") for the forms that must call it.
+ */
+export function coerceFieldInput(
+  key: string,
+  text: string,
+  type: TripLogCustomFieldType,
+  stored?: unknown,
+): unknown {
+  const value = coerceFieldValue(text, type);
+  if (!isLengthField(key) || typeof value !== "number") return value;
+  return stored !== undefined && fieldInputText(key, stored) === text
+    ? stored
+    : lengthFromInput(value);
 }
 
 /**

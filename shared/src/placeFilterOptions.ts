@@ -8,6 +8,7 @@ import type {
   PlaceThresholdFilter,
 } from "./placeFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import { lengthInputText } from "./units.js";
 
 /** The widest span still drawn as pills; a wider axis gets two number boxes. */
 export const MAX_FILTER_PILL_SPAN = 12;
@@ -73,9 +74,17 @@ export const THRESHOLD_OPERATOR_LABELS: Record<
   Exactly: "Exactly",
 };
 
+/**
+ * "Over 30": a filter's operator and number, which is never written with a
+ * unit. A length's number is stored in metres and written in the display units
+ * (`length`), as its field is typed. Guard: `units.test.ts` ("a length field":
+ * "writes a filter's threshold in the display units, with no unit, as
+ * before").
+ */
 export function formatThreshold(
   filter: PlaceThresholdFilter,
-  unit: string,
+  length = false,
 ): string {
-  return `${THRESHOLD_OPERATOR_LABELS[filter[0]]} ${filter[1]}${unit ? ` ${unit}` : ""}`;
+  const number = length ? lengthInputText(filter[1]) : filter[1];
+  return `${THRESHOLD_OPERATOR_LABELS[filter[0]]} ${number}`;
 }

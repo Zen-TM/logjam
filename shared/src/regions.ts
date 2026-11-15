@@ -152,7 +152,11 @@ export type Region = {
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */
   placeSearch: string | null;
-  /** The CDN prefix of the gauge feed (ADR 0044), or null. */
+  /**
+   * The CDN prefix of the gauge feed (ADR 0044), ending in "/" because a feed's
+   * paths are this prefix and a file name (`gaugeLatestPath`, `gaugeHistoryUrl`),
+   * or null. Guard: `regions.test.ts` ("every gauge feed prefix ends in a slash").
+   */
   gauges: string | null;
   /** The map grid coordinates are given in. */
   grid: GridId;

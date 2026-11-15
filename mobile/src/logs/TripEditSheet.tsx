@@ -27,6 +27,7 @@ import {
   tripPrefillFromTrack,
   type TripPlanTripLogPrefill,
   type ScopedCustomFieldDef,
+  displayUnits,
 } from "@logjam/shared";
 
 import {
@@ -254,7 +255,12 @@ export function TripEditSheet({
   // pull, an upload tick, an inbox refresh), and re-seeding on that would wipe
   // whatever the user was halfway through typing. `initialPlaces` is left out
   // for the same reason: callers build that array inline.
-  const openKey = visible ? (trip?.id ?? "new") : null;
+  //
+  // The units are in the key: the form's length text and its conversion are in
+  // one unit, so a change of units reseeds it (dropping what was typed) rather
+  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
+  // of a length field converts it").
+  const openKey = visible ? `${trip?.id ?? "new"}|${displayUnits()}` : null;
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (openKey !== seededFor) setSeededFor(openKey);
   if (openKey !== null && openKey !== seededFor) {
@@ -455,7 +461,7 @@ export function TripEditSheet({
     // cleared field is absent here rather than null — there is nothing on the
     // other side to clear.
     const effectiveCustomFields = withoutClearedFields(
-      coerceCustomFields(fieldValues, visibleFieldDefs),
+      coerceCustomFields(fieldValues, visibleFieldDefs, trip?.customFields),
     );
     const base = openedWith ?? trip;
     try {

@@ -210,8 +210,10 @@ describe("parseCoordinates", () => {
     },
   );
 
-  // Mutation: ignore the "MGA" prefix and take the grid from the map, which
-  // here reads zone 56 as UTM north.
+  // Over no region an unprefixed zone 56 reads as MGA too, so this holds the
+  // prefix through the map's hemisphere. Mutation: make the MGA branch of
+  // `parseGridReference` need a southern map (`prefix === "MGA" && south`),
+  // and zone 56 over Utah reads as UTM north.
   it("reads MGA over a map that is not over Australia when the text says MGA", () => {
     const p = parseCoordinates("MGA 56 245000 6264000", OVER_UTAH)!;
     expect(p.label).toBe("MGA 56 245000 6264000");
