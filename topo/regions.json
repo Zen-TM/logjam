@@ -193,7 +193,7 @@
    },
    "placeSearch": null,
    "gauges": null,
-   "grid": "mga2020",
+   "grid": "nztm2000",
    "sharpen": {
     "mode": "off",
     "reason": "already-fine"
@@ -268,7 +268,7 @@
    },
    "placeSearch": null,
    "gauges": null,
-   "grid": "mga2020",
+   "grid": "utm",
    "sharpen": {
     "mode": "upload",
     "credit": "Elevation: derived from a LiDAR survey, U.S. Geological Survey 3D Elevation Program{extracted}.",

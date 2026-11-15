@@ -22,6 +22,7 @@ const view = (gauge: Gauge, at = now, generatedAt = file.generatedAt) =>
       gauge={gauge}
       attribution={file.attribution}
       generatedAt={generatedAt}
+      units={file.units}
       now={at}
     />,
   );
@@ -64,6 +65,7 @@ describe("GaugeView", () => {
         gauge={withFlow}
         attribution={file.attribution}
         generatedAt={file.generatedAt}
+        units={file.units}
         now={now}
         onClose={onClose}
       />,

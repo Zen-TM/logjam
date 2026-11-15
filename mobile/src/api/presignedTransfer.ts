@@ -99,12 +99,15 @@ export async function uploadToPresignedUrl(
 }
 
 /** Download a presigned URL to `fileUri`. The directory must already exist.
- *  `onBytes` hears the bytes written so far, for a progress row. */
+ *  `onBytes` hears the bytes written so far, for a progress row. `signal`
+ *  cancels the transfer when it aborts, which rejects the call. */
 export async function downloadFromPresignedUrl(
   downloadUrl: string,
   fileUri: string,
   onBytes?: (written: number) => void,
+  signal?: AbortSignal,
 ): Promise<FileSystem.FileSystemDownloadResult> {
+  if (signal?.aborted) throw new Error("Download cancelled.");
   let moved = false;
   const task = FileSystem.createDownloadResumable(
     downloadUrl,
@@ -115,10 +118,16 @@ export async function downloadFromPresignedUrl(
       onBytes?.(totalBytesWritten);
     },
   );
-  return awaitStart(
-    task.downloadAsync(),
-    task,
-    () => moved,
-    "Download timed out — try again.",
-  );
+  const cancel = () => void task.cancelAsync().catch(() => {});
+  signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    return await awaitStart(
+      task.downloadAsync(),
+      task,
+      () => moved,
+      "Download timed out — try again.",
+    );
+  } finally {
+    signal?.removeEventListener("abort", cancel);
+  }
 }

@@ -1,5 +1,7 @@
 // Whether saved map regions already hold a place's or a way's ground, for the
 // coverage line on their pages and the plan's "Map downloaded" pill.
+import { lonWithin } from "@logjam/shared";
+
 import type { MapArtifact } from "../map/sourceResolver";
 
 type Bbox = [number, number, number, number];
@@ -9,8 +11,10 @@ type Point = [lon: number, lat: number];
 /** The longest stretch of a way checked in one step, in degrees (~1 km). */
 const LEG_STEP_DEGREES = 0.01;
 
+// A saved region's box may run past 180° (it was framed on a map panned past
+// the line); a point's longitude is always in [-180, 180].
 const holds = (region: Bbox, [lon, lat]: Point) =>
-  region[0] <= lon && region[1] <= lat && region[2] >= lon && region[3] >= lat;
+  lonWithin(lon, region[0], region[2]) && region[1] <= lat && region[3] >= lat;
 
 function savedBoxes(regions: readonly Region[]): Bbox[] {
   return regions.flatMap(({ kind, bbox }) =>

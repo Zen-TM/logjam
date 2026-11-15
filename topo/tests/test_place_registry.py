@@ -102,7 +102,7 @@ class TestFixture(unittest.TestCase):
         self.assertEqual(
             regions.region("nsw")["placeSearch"], f"master/places/v{reg.FORMAT}/"
         )
-        self.assertIn("${PLACE_REGISTRY_PREFIX}latest.json", ts)
+        self.assertIn("`${prefix}latest.json`", ts)
 
 
 class TestKindOf(unittest.TestCase):

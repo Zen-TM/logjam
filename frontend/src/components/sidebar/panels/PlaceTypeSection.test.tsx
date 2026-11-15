@@ -98,6 +98,7 @@ function renderSection(types = [CANYON, HUT]) {
       onTypesChange={() => {}}
       placeDefs={DEFS}
       onPlaceDefsChange={() => {}}
+      uiPreferences={undefined}
       onBack={() => {}}
     />,
   );

@@ -22,10 +22,12 @@ import {
   estimateElvisTileCount,
   formatCreditsLike,
   formatCreditsOf,
+  formatArea,
   formatMinutes,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
+  formatFixedMetres,
 } from "@logjam/shared";
 import {
   Button,
@@ -40,7 +42,6 @@ import {
   Checkbox,
 } from "../../ui";
 import { nextTopoName } from "./jobName";
-import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
 import { submitFailureMessage, useTopoUpload } from "./topoUpload";
 import { sharpenJobRequest } from "./sharpenJob";
@@ -664,7 +665,7 @@ function ZipSummary({
     stats.demCount > 0
       ? [
           "DEM",
-          `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${stats.demResolutionMeters}m` : ""}`,
+          `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${formatFixedMetres(stats.demResolutionMeters)}` : ""}`,
         ]
       : null,
     ["Size", formatBytes(stats.uncompressedBytes)],
@@ -742,7 +743,7 @@ function ElvisInstructions({
               {pendingBbox ? "Draw it again" : "Draw the area"}
             </Button>
             {pendingBbox && area != null && (
-              <StatusPill label={formatAreaKm2(area)} />
+              <StatusPill label={formatArea(area)} />
             )}
             {pendingBbox && (
               <Button

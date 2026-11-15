@@ -4,7 +4,7 @@
 // What a map offers follows the ground it shows: a layer, a basemap or a grid
 // is offered where its data covers the view, and the regions an account chose
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
-// first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
+// first-run basemap, the first-run units, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
 // saved, printed or exported; the basemap gallery asks them through
 // `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts). Heights, gauges and the area-export check never took a
@@ -21,11 +21,19 @@
 // Guard: `regions.test.ts` ("keeps NSW's stored ids and paths").
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
+import type { GridId } from "./grids.js";
+import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
+
+/**
+ * The rating system a canyon's grade is written in: the French one (V, A and
+ * commitment) or the American Canyoneering Association's. ADR 0051.
+ */
+export type CanyonGradeSystem = "french" | "aca";
 
 /** One closed outline of [lon, lat]; the last vertex joins the first. */
 export type Ring = readonly (readonly [lon: number, lat: number])[];
@@ -169,7 +177,14 @@ export type Region = {
   /** The CDN prefix of the gauge feed (ADR 0044), or null. */
   gauges: string | null;
   /** The map grid coordinates are given in. */
-  grid: "mga2020";
+  grid: GridId;
+  /**
+   * The system a canyon's grade is written in here: a canyon form offers that
+   * system's fields (`gradeFieldsAt`). Outside every region it is French.
+   */
+  canyonGrades: CanyonGradeSystem;
+  /** How distances and heights are written for an account whose home this is, until it chooses (`unitsOf`). */
+  units: Units;
   /** Whether a LiDAR survey of ground here can be sharpened into an area. */
   sharpen: RegionSharpen;
   /** Where the canyon-list import reads from, or null where there is none. */
@@ -485,6 +500,8 @@ export const NSW_REGION = {
   placeSearch: PLACE_REGISTRY_PREFIX,
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
+  canyonGrades: "french",
+  units: "metric",
   sharpen: {
     mode: "upload",
     // What ELVIS's metadata asks of a derived product (CC BY 3.0 AU).
@@ -554,7 +571,9 @@ const EMPTY_WORLD: Region = {
   terrain: {},
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
+  canyonGrades: "french",
+  units: "metric",
   sharpen: { mode: "off", reason: "no-lidar" },
   canyons: null,
 };
@@ -815,6 +834,45 @@ export function regionInView(
     regionsTouching(view, regions)[0] ??
     (declaresAnything(world) ? world : null)
   );
+}
+
+/** A region that declares a place registry (ADR 0034): `placeSearch` is its CDN prefix. */
+export type RegionWithRegistry = Region & { placeSearch: string };
+
+/**
+ * The regions that declare a place registry, in `REGIONS` order. Guard:
+ * `regions.test.ts` ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionsWithRegistry(
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry[] {
+  return regions.filter((r): r is RegionWithRegistry => r.placeSearch !== null);
+}
+
+/**
+ * The region with this id if it declares a place registry, else null. `id` is
+ * `unknown` because a request body names it. Guard: `regions.test.ts`
+ * ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionWithRegistry(
+  id: unknown,
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry | null {
+  return regionsWithRegistry(regions).find((r) => r.id === id) ?? null;
+}
+
+/**
+ * The region the map shows, when it has a place registry (ADR 0034), or null:
+ * no registry answers here, and a client offers only the geocoder row. An
+ * unknown view reads as none. Guard: `regions.test.ts` ("placeRegistryIn").
+ */
+export function placeRegistryIn(
+  view: LonLatBox | null | undefined,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): RegionWithRegistry | null {
+  const region = view ? regionInWrappedView(view, regions, world) : null;
+  return region ? regionWithRegistry(region.id, [region]) : null;
 }
 
 /**

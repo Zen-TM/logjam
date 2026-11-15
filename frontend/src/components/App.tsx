@@ -35,6 +35,7 @@ import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { terrainKeyOf } from "./map/layerOrder";
+import { terrainDrawn } from "./map/terrainDrawn";
 import { terrainEntries } from "./map/terrainEntries";
 import { nextViewRegion } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
@@ -141,12 +142,9 @@ import {
   WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
-  drawsNswContours,
-  drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
   carriersOf,
-  drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -166,6 +164,7 @@ import {
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { applyDisplayUnits } from "../displayUnits";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
@@ -408,6 +407,9 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Set while rendering, so every formatter below reads the account's units on
+  // this render; a choice in Settings replaces `currentUser` and re-renders from here.
+  applyDisplayUnits(currentUser?.uiPreferences);
   // Map view state — persisted for session restore and used for GeoPDF initialisation
   const [mapCenter, setMapCenter] = useStoredState<{
     lat: number;
@@ -563,19 +565,35 @@ function App() {
   // holds that a pan inside one keeps the same object). Unknown until the map
   // reports its first view.
   const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // Only a region with a gauge feed has river gauges to draw.
+  const gaugesHere = viewRegion?.gauges != null;
+  // The layers drawn over the region in view, and the stored carrier where
+  // that region lists it (the Layers popover asks the same).
+  const { shown, carrier: carrierHere } = useMemo(
+    () =>
+      terrainDrawn(
+        { contours, coverage, fire, slope, land, hillshade },
+        activeLayerId,
+        viewRegion,
+        coverageCarrier,
+      ),
+    [
+      contours,
+      coverage,
+      fire,
+      slope,
+      land,
+      hillshade,
+      activeLayerId,
+      viewRegion,
+      coverageCarrier,
+    ],
+  );
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
     setRoutedAreas(sharpenedAreas);
     const entries = terrainEntries(viewRegion, sharpenedAreas);
-    const shown = {
-      contours: drawsNswContours(activeLayerId, contours),
-      coverage: drawsCoverage(coverage, coverageCarrier),
-      fire,
-      slope,
-      land,
-      hillshade: drawsNswHillshade(activeLayerId, hillshade),
-    };
     return [
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
@@ -583,19 +601,7 @@ function App() {
         .flatMap((key) => entries[key] ?? []),
       ...vegetationLayers,
     ];
-  }, [
-    activeLayerId,
-    contours,
-    coverage,
-    coverageCarrier,
-    fire,
-    slope,
-    land,
-    hillshade,
-    vegetationLayers,
-    sharpenedAreas,
-    viewRegion,
-  ]);
+  }, [shown, vegetationLayers, sharpenedAreas, viewRegion]);
 
   // A PMTiles source failed to load (Map already tore it down to stop the
   // retry spam). Tell the user once.
@@ -641,12 +647,15 @@ function App() {
   }, []);
 
   /**
-   * The map's visible bounds, kept in a ref rather than in state: "Filter to
-   * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render App on every pan for a value nothing
-   * renders.
+   * The map's visible bounds, in a ref as well as in state: "Filter to the
+   * current view" reads them once, when the button is pressed, from a callback
+   * that must not see a stale render.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
+  // The Layers popover names the grid row for these bounds, which the grid
+  // lines are drawn from. `mapCenter` already re-renders App after every pan,
+  // so this costs no extra render.
+  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -2040,6 +2049,7 @@ function App() {
               refetchStandaloneFiles();
               refetchPlaceTracks();
             }}
+            mapCenter={mapCenter}
             currentUser={currentUser}
             currentUserError={currentUserError}
             onRetryCurrentUser={refetchCurrentUser}
@@ -2095,7 +2105,7 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays || !!planOnMap}
-            showGauges={showGauges}
+            showGauges={showGauges && gaugesHere}
             onShowGauges={() => setShowGauges(true)}
             showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
@@ -2170,6 +2180,7 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setMapBounds(bounds);
               setBasemapView((prev) => viewForBasemaps(prev, bounds));
               setViewRegion((previous) => nextViewRegion(previous, bounds));
             }}
@@ -2198,7 +2209,7 @@ function App() {
             region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
-            coverageCarrier={coverageCarrier}
+            coverageCarrier={carrierHere}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2267,6 +2278,7 @@ function App() {
           showWays={showWays}
           setShowWays={setShowWays}
           showGauges={showGauges}
+          gaugesHere={gaugesHere}
           setShowGauges={setShowGauges}
           showMgaGrid={showMgaGrid}
           setShowMgaGrid={setShowMgaGrid}
@@ -2285,6 +2297,8 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          mapBounds={mapBounds}
+          region={viewRegion}
         />
 
         <PlanInviteLinkDialog

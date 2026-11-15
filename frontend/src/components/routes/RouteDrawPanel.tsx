@@ -14,6 +14,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   elevationSeries,
   formatElevationM,
+  formatHeight,
+  formatHeightRange,
   TRACK_PROFILE_COPY,
   densifyLine,
   formatDistanceM,
@@ -127,11 +129,11 @@ export function RouteDrawPanel({
     },
     {
       label: PAIRED_STAT_LABELS.ascent,
-      value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+      value: profile ? `↑ ${formatHeight(profile.gainM)}` : "—",
     },
     {
       label: PAIRED_STAT_LABELS.descent,
-      value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+      value: profile ? `↓ ${formatHeight(profile.lossM)}` : "—",
     },
   ];
 
@@ -200,8 +202,8 @@ export function RouteDrawPanel({
                   <>
                     {profile.minM != null && profile.maxM != null && (
                       <p className={classes.band}>
-                        {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
-                        above sea level
+                        {formatHeightRange(profile.minM, profile.maxM)} above
+                        sea level
                       </p>
                     )}
                     <SectionHeader title="Elevation vs distance" />

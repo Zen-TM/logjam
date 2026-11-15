@@ -1,6 +1,26 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MAP_TERRAIN, TERRAIN_LAYER_KEYS } from "@logjam/shared";
-import { terrainSwitch } from "./terrainSwitches";
+import {
+  layerIn,
+  MAP_TERRAIN,
+  NSW_REGION,
+  SIM_NZ,
+  SIM_UTAH,
+  SIM_WORLD,
+  TERRAIN_LAYER_KEYS,
+  type Region,
+} from "@logjam/shared";
+import { hasGauges, terrainSwitch as switchIn } from "./terrainSwitches";
+
+// The cases below are over New South Wales, which has every layer.
+const terrainSwitch = (
+  key: Parameters<typeof switchIn>[0],
+  stored: boolean,
+  basemapId: Parameters<typeof switchIn>[2],
+  online: boolean,
+  artifacts: Parameters<typeof switchIn>[4],
+  region: Region | null = NSW_REGION,
+) => switchIn(key, stored, basemapId, online, artifacts, region);
 
 const copy = MAP_TERRAIN.copy;
 const clip = (
@@ -83,5 +103,101 @@ describe("terrainSwitch", () => {
     expect(
       terrainSwitch("coverage", true, "protomaps", false, [saved[3]!]).disabled,
     ).toBe(true);
+  });
+});
+
+describe("terrainSwitch where the region lacks the layer", () => {
+  // Mutation: drop the `layerIn(region, key) === null` test, and every switch
+  // is live over a region with no archive for it, drawing nothing.
+  it("reads OFF and disabled, saying so, for each layer the region lacks", () => {
+    let lacking = 0;
+    for (const key of TERRAIN_LAYER_KEYS) {
+      const state = terrainSwitch(key, true, "protomaps", true, [], SIM_UTAH);
+      if (layerIn(SIM_UTAH, key)) {
+        expect(state, key).toEqual({ checked: true, disabled: false });
+      } else {
+        lacking += 1;
+        expect(state, key).toEqual({
+          checked: false,
+          disabled: true,
+          reason: copy.notHere,
+        });
+      }
+    }
+    // Utah has no coverage, so the loop met a layer it lacks and one it has.
+    expect(lacking).toBe(1);
+  });
+
+  // Mutation: test the basemap or the connection before the region, and
+  // contours over the world tier, which has none, read the reason of a sheet
+  // that prints its own, or "Needs a connection".
+  it("outranks the basemap's reason and the connection's", () => {
+    const here = { checked: false, disabled: true, reason: copy.notHere };
+    expect(
+      terrainSwitch("contours", true, "six-topo", true, [], SIM_WORLD),
+    ).toEqual(here);
+    expect(
+      terrainSwitch("contours", true, "protomaps", false, [], SIM_WORLD),
+    ).toEqual(here);
+    // The world tier has hillshade: that switch falls through to the rest.
+    expect(
+      terrainSwitch("hillshade", true, "protomaps", true, [], SIM_WORLD),
+    ).toEqual({ checked: true, disabled: false });
+  });
+
+  // Mutation: read a null region as New South Wales, and the switches stay
+  // live over open ocean.
+  it("is not available over ground no region holds", () => {
+    for (const key of TERRAIN_LAYER_KEYS) {
+      expect(
+        terrainSwitch(key, true, "protomaps", true, saved, null).reason,
+      ).toBe(copy.notHere);
+    }
+  });
+
+  // Mutation: keep a saved clip as a way round the reason, and an NSW clip
+  // makes the switch live over a region the clip does not cover.
+  it("is not lifted by a saved clip of the layer", () => {
+    expect(
+      terrainSwitch("contours", true, "protomaps", false, saved, SIM_WORLD)
+        .reason,
+    ).toBe(copy.notHere);
+  });
+});
+
+describe("hasGauges", () => {
+  // Mutation: return true for a region with no gauge feed, and the Gauges row
+  // stays live over New Zealand.
+  it("is true only for a region with a gauge feed", () => {
+    expect(hasGauges(NSW_REGION)).toBe(true);
+    expect(hasGauges(SIM_NZ)).toBe(false);
+    expect(hasGauges(null)).toBe(false);
+  });
+});
+
+describe("the map's Coverage layer", () => {
+  const screen = readFileSync(
+    new URL("./MapScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Mutation: pass the stored `coverageCarrier` to `drawsCoverage`,
+  // `coverageLayerFilter` or `coverageAtTap`, and over a region that lists
+  // other carriers the layer fetches tiles for a network the row says is not
+  // chosen.
+  it("draws, filters and answers a tap with the carrier that counts here", () => {
+    expect(screen).toContain(
+      "const carrierHere = coverageCarrierHere(terrainRegion, coverageCarrier);",
+    );
+    expect(screen).toContain(
+      "drawsCoverage(terrainLayers.coverage, carrierHere)",
+    );
+    expect(screen).toContain(
+      "coverageLayerFilter(coverageArchive, carrierHere)",
+    );
+    expect(screen).toMatch(
+      /coverageLayerIdList,\s*carrierHere,\s*coverageArchive/,
+    );
+    expect(screen).not.toMatch(/coverageLayerFilter\([^)]*coverageCarrier\b/);
   });
 });

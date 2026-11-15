@@ -3,9 +3,11 @@
 // `screens/SettingsScreen.tsx`, `places/PlaceTypesEditor.tsx` and
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
 // has no hero (shared/DESIGN.md §2).
+import { t } from "../i18n.js";
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { REGIONS, regionsOf, type Region } from "../regions.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
+import type { Units } from "../units.js";
 import type { ConfirmCopy } from "./confirm.js";
 import type { ClientOnly, ScreenContract } from "./types.js";
 
@@ -17,6 +19,8 @@ export const SETTINGS = {
     // per section here that opens a page of its own (split by where the
     // settings are stored, so each page says once what it needs), Logjam Web
     // draws each one inline. A section only one client has is below.
+    // Holds the theme, and on Logjam GPS the text size; the units row
+    // (`UNITS_CHOICE`) joins it while `offersUnitsChoice()`.
     { key: "display" },
     // Drawn only while `offersRegionChoice()`: with one region there is
     // nothing to choose.
@@ -112,6 +116,22 @@ export const REGION_CHOICE = {
   hint: "Logjam offers the maps and canyon list of each region you choose.",
   continue: "Continue",
   saveFailed: "Couldn't save your regions.",
+} as const;
+
+/**
+ * The units choice, a row of Display on both clients, drawn only while
+ * `offersUnitsChoice()` (units.ts): with every region metric there is nothing
+ * to choose. The two options are the stored values.
+ */
+export const UNITS_CHOICE = {
+  title: t`Units`,
+  hint: t`How distances, heights and speeds are written.`,
+  options: [
+    { value: "metric", label: t`Metric` },
+    { value: "imperial", label: t`Imperial` },
+  ] as const satisfies readonly { value: Units; label: string }[],
+  saving: t`Saving…`,
+  saveFailed: t`Couldn't save your units.`,
 } as const;
 
 /** Why a choice can't be saved, or null: at least one region stays chosen. */

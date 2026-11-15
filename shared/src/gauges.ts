@@ -6,6 +6,7 @@
 // safe, high or runnable. Guard: gauges.test.ts, against the fixtures the
 // builder writes (topo/tests/test_gauges.py).
 import { haversineMeters } from "./placeGeo.js";
+import { isValidGaugeId } from "./placeValidation.js";
 import type { ProfileSeries } from "./profileSeries.js";
 
 /** Bumped when either file's shape changes; each format has its own prefix. */
@@ -15,10 +16,26 @@ export const GAUGE_FORMAT = 1;
 export const GAUGE_PREFIX = `master/gauges/v${GAUGE_FORMAT}/`;
 export const GAUGE_LATEST_PATH = `${GAUGE_PREFIX}latest.json`;
 
-/** Gauge ids are WaterNSW station numbers. Anything else in a URL is refused. */
-const GAUGE_ID = /^\d{1,10}$/;
+/** The units a feed's readings may be in, as published and never converted.
+ *  The formatters print whatever unit they are handed, so this allowlist,
+ *  checked in `parseGaugeLatest`, is the only gate. Guard: gauges.test.ts
+ *  ("refuses units off the allowlist"). */
+export const GAUGE_LEVEL_UNITS = ["m", "ft"] as const;
+export const GAUGE_FLOW_UNITS = ["ML/d", "cfs"] as const;
 
-/** `[epoch seconds, level in metres, flow in ML/d]`, either value may be null. */
+export interface GaugeUnits {
+  level: (typeof GAUGE_LEVEL_UNITS)[number];
+  flow: (typeof GAUGE_FLOW_UNITS)[number];
+}
+
+/** What a feed that states no units is in: New South Wales's, as first written. */
+export const GAUGE_UNITS_DEFAULT: GaugeUnits = { level: "m", flow: "ML/d" };
+
+/** Minutes east of UTC of the day a feed's history is cut on: AEST, as first
+ *  written. A feed's own offset has no daylight saving. */
+export const GAUGE_DAY_OFFSET_DEFAULT = 600;
+
+/** `[epoch seconds, level, flow]` in the file's `units`, either may be null. */
 export type GaugeReading = [number, number | null, number | null];
 
 export interface Gauge {
@@ -33,7 +50,14 @@ export interface Gauge {
   readings: GaugeReading[];
 }
 
-export interface GaugeLatestFile {
+/** What a feed says about its figures; the parser fills what a file omits. */
+export interface GaugeFeedFormat {
+  units: GaugeUnits;
+  /** Minutes east of UTC; a history day and a trip's day are cut here. */
+  dayOffsetMinutes: number;
+}
+
+export interface GaugeLatestFile extends GaugeFeedFormat {
   version: number;
   generatedAt: string;
   coldSweptAt: string;
@@ -60,7 +84,7 @@ function isGauge(value: unknown): value is Gauge {
   const g = value as Record<string, unknown>;
   return (
     typeof g.id === "string" &&
-    GAUGE_ID.test(g.id) &&
+    isValidGaugeId(g.id) &&
     typeof g.name === "string" &&
     isNum(g.lat) &&
     isNum(g.lon) &&
@@ -78,7 +102,22 @@ function isGauge(value: unknown): value is Gauge {
   );
 }
 
-/** The latest file, or null when it is not this format or is malformed. */
+function isUnits(value: unknown): value is GaugeUnits {
+  if (typeof value !== "object" || value === null) return false;
+  const u = value as Record<string, unknown>;
+  return (
+    (GAUGE_LEVEL_UNITS as readonly unknown[]).includes(u.level) &&
+    (GAUGE_FLOW_UNITS as readonly unknown[]).includes(u.flow)
+  );
+}
+
+/** Real offsets run from UTC-12:00 to UTC+14:00. */
+const isDayOffset = (v: unknown): v is number =>
+  Number.isInteger(v) && (v as number) >= -720 && (v as number) <= 840;
+
+/** The latest file, or null when it is not this format or is malformed. A
+ *  file that states units off that allowlist is refused, not printed in the
+ *  wrong ones; one that states none is New South Wales's, as first written. */
 export function parseGaugeLatest(value: unknown): GaugeLatestFile | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
@@ -88,11 +127,17 @@ export function parseGaugeLatest(value: unknown): GaugeLatestFile | null {
     typeof v.coldSweptAt !== "string" ||
     typeof v.attribution !== "string" ||
     !Array.isArray(v.gauges) ||
-    !v.gauges.every(isGauge)
+    !v.gauges.every(isGauge) ||
+    (v.units !== undefined && !isUnits(v.units)) ||
+    (v.dayOffsetMinutes !== undefined && !isDayOffset(v.dayOffsetMinutes))
   ) {
     return null;
   }
-  return v as unknown as GaugeLatestFile;
+  return {
+    ...v,
+    units: v.units ?? GAUGE_UNITS_DEFAULT,
+    dayOffsetMinutes: v.dayOffsetMinutes ?? GAUGE_DAY_OFFSET_DEFAULT,
+  } as unknown as GaugeLatestFile;
 }
 
 /** A gauge's history file, or null when malformed. The slots must match: a
@@ -103,7 +148,7 @@ export function parseGaugeHistory(value: unknown): GaugeHistoryFile | null {
   if (
     v.version !== GAUGE_FORMAT ||
     typeof v.id !== "string" ||
-    !GAUGE_ID.test(v.id) ||
+    !isValidGaugeId(v.id) ||
     typeof v.start !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(v.start) ||
     !Array.isArray(v.level) ||
@@ -117,9 +162,9 @@ export function parseGaugeHistory(value: unknown): GaugeHistoryFile | null {
   return v as unknown as GaugeHistoryFile;
 }
 
-/** A gauge's history file URL, or null for an id that is not a station number. */
+/** A gauge's history file URL, or null for an id that is not a gauge id. */
 export function gaugeHistoryUrl(baseUrl: string, id: string): string | null {
-  return GAUGE_ID.test(id)
+  return isValidGaugeId(id)
     ? `${baseUrl}/${GAUGE_PREFIX}history/${id}.json`
     : null;
 }
@@ -137,7 +182,7 @@ function onDate(
   return day >= 0 && day < column.length ? (column[day] ?? null) : null;
 }
 
-/** The daily mean level in metres on `YYYY-MM-DD`, or null. */
+/** The daily mean level, in the feed's level unit, on `YYYY-MM-DD`, or null. */
 export function levelOnDate(
   history: GaugeHistoryFile,
   date: string,
@@ -145,7 +190,7 @@ export function levelOnDate(
   return onDate(history, date, history.level);
 }
 
-/** The daily mean flow in ML/d on `YYYY-MM-DD`, or null. */
+/** The daily mean flow, in the feed's flow unit, on `YYYY-MM-DD`, or null. */
 export function flowOnDate(
   history: GaugeHistoryFile,
   date: string,
@@ -154,12 +199,11 @@ export function flowOnDate(
 }
 
 const DAY_MS = 86_400_000;
-/** History days are Australian Eastern Standard days, with no daylight saving. */
-const AEST_MS = 10 * 3_600_000;
 
-/** The `YYYY-MM-DD` of the AEST day a moment falls in. */
-export function aestDay(ms: number): string {
-  return new Date(ms + AEST_MS).toISOString().slice(0, 10);
+/** The `YYYY-MM-DD` of the feed's day a moment falls in: history days are cut
+ *  at `dayOffsetMinutes` east of UTC, with no daylight saving. */
+export function gaugeDay(ms: number, offsetMinutes: number): string {
+  return new Date(ms + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
 /** A trip's calendar day. A trip's date is a day held as UTC midnight, so its
@@ -183,18 +227,21 @@ export function gaugeReadingOnDay(
   history: GaugeHistoryFile | null,
   day: string,
   now: number,
+  offsetMinutes: number,
 ): GaugeDayReading | null {
   let level = history ? levelOnDate(history, day) : null;
   let flow = history ? flowOnDate(history, day) : null;
   if (
     level === null &&
     flow === null &&
-    aestDay(now - 7 * DAY_MS) <= day &&
-    day <= aestDay(now)
+    gaugeDay(now - 7 * DAY_MS, offsetMinutes) <= day &&
+    day <= gaugeDay(now, offsetMinutes)
   ) {
     const mean = (at: 1 | 2): number | null => {
       const v = gauge.readings.flatMap((r) =>
-        r[at] !== null && aestDay(r[0] * 1000) === day ? [r[at] as number] : [],
+        r[at] !== null && gaugeDay(r[0] * 1000, offsetMinutes) === day
+          ? [r[at] as number]
+          : [],
       );
       return v.length ? v.reduce((a, b) => a + b) / v.length : null;
     };

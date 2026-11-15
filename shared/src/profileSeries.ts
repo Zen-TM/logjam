@@ -24,6 +24,7 @@ import {
   type TrackDetail,
 } from "./trackStats.js";
 import { NSW_REGION } from "./regions.js";
+import { formatHeight } from "./units.js";
 
 export type ProfilePoint = { x: number; value: number | null };
 
@@ -80,9 +81,9 @@ export function elevationSeries(
   };
 }
 
-/** A height as the charts and their readouts print it. */
+/** A height as the charts and their readouts print it: `formatHeight` in `units.ts`. */
 export function formatElevationM(elevationM: number): string {
-  return `${Math.round(elevationM)} m`;
+  return formatHeight(elevationM);
 }
 
 /** A recorded speed series over TIME, scaled from a standstill up. */
@@ -269,8 +270,8 @@ export function trackStatRows(
     rows.push({ label: L.moving, value: formatDurationMs(detail.movingMs) });
     rows.push({ label: L.stopped, value: formatDurationMs(detail.stoppedMs) });
   }
-  rows.push({ label: L.ascent, value: `↑ ${Math.round(gainM)} m` });
-  rows.push({ label: L.descent, value: `↓ ${Math.round(lossM)} m` });
+  rows.push({ label: L.ascent, value: `↑ ${formatHeight(gainM)}` });
+  rows.push({ label: L.descent, value: `↓ ${formatHeight(lossM)}` });
   if (timed) {
     // Two speeds, because they answer different questions: the first is "how
     // long did the day take", the second is "how fast do we walk". A trip with

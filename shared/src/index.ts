@@ -1,5 +1,6 @@
 export * from "./geoPdfExtent.js";
-export * from "./mgaGrid.js";
+export * from "./grids.js";
+export * from "./mapGrid.js";
 export * from "./mapZoom.js";
 export * from "./geoPdfConfig.js";
 export * from "./geoPdfBaseLayers.js";
@@ -67,6 +68,8 @@ export * from "./trackStats.js";
 export * from "./trackLine.js";
 export * from "./importedTrackSeries.js";
 export * from "./profileSeries.js";
+export * from "./units.js";
+export * from "./numberFormat.js";
 export * from "./trackPasses.js";
 export * from "./apiTypes.js";
 export * from "./sync.js";

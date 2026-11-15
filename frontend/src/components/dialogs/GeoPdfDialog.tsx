@@ -35,6 +35,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
+  coordTooltip,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -80,7 +81,6 @@ import {
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
-  t,
   type AreaExportFormat,
   type AreaExportLayer,
   type SharpenedArea,
@@ -178,8 +178,6 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
 
-const COORD_TOOLTIP =
-  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -600,7 +598,7 @@ function GeoPdfDialog({
   // is available where no region holds the sheet").
   const offReason = (key: TerrainLayerKey): string | null =>
     layerMissingHere(sheet, key)
-      ? t`Not available here.`
+      ? `${MAP_TERRAIN.copy.notHere}.`
       : key === "contours" &&
           contoursPrintedHere(selectedBaseLayer, lidarOverlap)
         ? "This map prints its own contours."
@@ -1218,7 +1216,10 @@ function GeoPdfDialog({
                 />
                 {coordsOpen && (
                   <div className={classes.group}>
-                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                    <SettingsRow
+                      label="Coordinates"
+                      tooltip={coordTooltip(extentState)}
+                    >
                       <ChipRail
                         label="Coordinates"
                         className={classes.railCell}
@@ -1400,7 +1401,7 @@ function GeoPdfDialog({
                   ]}
                   hint={
                     layerMissingHere(sheet, "land")
-                      ? t`Not available here.`
+                      ? `${MAP_TERRAIN.copy.notHere}.`
                       : undefined
                   }
                   onToggle={(value) => {
@@ -1752,7 +1753,7 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+            <SettingsRow label="Coordinates" tooltip={coordTooltip(edges)}>
               <ChipRail
                 label="Coordinates"
                 className={classes.railCell}

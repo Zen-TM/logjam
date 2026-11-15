@@ -15,6 +15,7 @@
 // spot. Nothing here is logged, toasted or persisted; the point lives in the
 // map's state until the panel is dismissed.
 import { haversineMeters } from "../placeGeo.js";
+import { formatHeight } from "../units.js";
 import { gaugeAgo } from "./gauges.js";
 import {
   compassPointFor,
@@ -331,7 +332,7 @@ export function mapPointFacts(input: {
       label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,
       value:
         elevation.state === "known" || elevation.state === "receiver"
-          ? `${Math.round(elevation.metres)} m`
+          ? formatHeight(elevation.metres)
           : elevation.state === "checking"
             ? copy.elevationChecking
             : "—",
@@ -348,7 +349,7 @@ export function mapPointFacts(input: {
         value:
           fix.accuracyM == null
             ? copy.notReported
-            : `± ${Math.round(fix.accuracyM)} m`,
+            : `± ${formatHeight(fix.accuracyM)}`,
       },
       {
         key: "fixAge",

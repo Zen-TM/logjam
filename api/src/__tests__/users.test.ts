@@ -224,6 +224,35 @@ describe("users routes (fake auth = alice)", () => {
     expect(tooMany.status).toBe(413);
   });
 
+  // Mutation: store `units` as sent, and a value no formatter knows reaches
+  // both clients; or drop the PATCH branch, and a choice is never kept.
+  it("PATCH /users/me stores a units choice and refuses any other value", async () => {
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ units: "imperial" });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.units).toBe("imperial");
+      const read = await request(API_URL).get("/users/me").set(AUTH);
+      expect(read.body.uiPreferences.units).toBe("imperial");
+      for (const units of ["furlongs", "", null, 7, ["metric"]]) {
+        const bad = await request(API_URL)
+          .patch("/users/me")
+          .set(AUTH)
+          .send({ units });
+        expect(bad.status).toBe(400);
+      }
+    } finally {
+      // A stored choice cannot be unset; "metric" is what the seeded user's
+      // home region (NSW) reads anyway.
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ units: "metric" });
+    }
+  });
+
   // Mutation: store the body's bands without `parseSlopeBands`, and a band
   // MapLibre cannot draw reaches both clients' maps.
   it("PATCH /users/me rejects slope bands the editor would not accept", async () => {

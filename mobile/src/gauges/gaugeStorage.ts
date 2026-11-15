@@ -15,7 +15,7 @@ import { GAUGES_DIR } from "../offline/localStores";
 const FILE = `${GAUGES_DIR}latest.json`;
 const HISTORY_DIR = `${GAUGES_DIR}history/`;
 
-/** A gauge's history path, or null for an id that is not a station number. */
+/** A gauge's history path, or null for an id that is not a gauge id. */
 const historyPath = (id: string): string | null =>
   gaugeHistoryUrl("", id) && `${HISTORY_DIR}${id}.json`;
 

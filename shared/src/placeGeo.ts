@@ -31,3 +31,18 @@ export function withinBbox(
     Math.abs(lat1 - lat2) <= degLatLng && Math.abs(lng1 - lng2) <= degLatLng
   );
 }
+
+/**
+ * Whether a stored longitude, always in [-180, 180], lies in the box between
+ * `west` and `east`, inclusive, across the date line.
+ *
+ * The box arrives in one of two shapes: unwrapped, as MapLibre reports a view
+ * panned past the line (an edge below -180 or above 180, possibly a whole
+ * world copy away), or wrapped, with `west` above `east`. A box a turn or more
+ * wide holds every longitude. Guard: placeGeo.test.ts.
+ */
+export function lonWithin(lon: number, west: number, east: number): boolean {
+  if (west > east) return lon >= west || lon <= east;
+  // The copy of `lon` nearest above `west`, whatever world copy the box is in.
+  return lon + 360 * Math.ceil((west - lon) / 360) <= east;
+}

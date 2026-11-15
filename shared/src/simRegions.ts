@@ -195,7 +195,9 @@ export const SIM_NZ: Region = {
   terrain: NZ_TERRAIN,
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "nztm2000",
+  canyonGrades: "french",
+  units: "metric",
   // Its heights go to z17, as fine as a survey would make them.
   sharpen: { mode: "off", reason: "already-fine" },
   canyons: null,
@@ -226,7 +228,9 @@ export const SIM_UTAH: Region = {
   terrain: UTAH_TERRAIN,
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
+  canyonGrades: "aca",
+  units: "imperial",
   // Its heights stop at z15, and USGS publishes LiDAR of the box: the one
   // simulated region a survey can be sharpened in. No vegetation model.
   sharpen: {
@@ -267,7 +271,9 @@ export const SIM_WORLD: Region = {
   },
   placeSearch: null,
   gauges: null,
-  grid: "mga2020",
+  grid: "utm",
+  canyonGrades: "french",
+  units: "metric",
   sharpen: { mode: "off", reason: "no-lidar" },
   canyons: null,
 };

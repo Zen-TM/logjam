@@ -15,6 +15,7 @@ import {
   elevationSeries,
   formatDistanceM,
   formatSpeedMps,
+  formatHeight,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedSeries,
@@ -145,7 +146,7 @@ export function TrackStatsBody({
           </Text>
           <ProfileChart
             series={elevationSeries(elevation, detail.distanceM)}
-            formatValue={(elevationM) => `${Math.round(elevationM)} m`}
+            formatValue={formatHeight}
             formatX={formatDistanceM}
             hint="Press or drag for heights."
             accessibilityLabel={TRACK_PROFILE_COPY.elevationLabel}

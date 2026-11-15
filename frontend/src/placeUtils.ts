@@ -12,6 +12,7 @@ import type {
   MediaOrigin,
   PlaceMergePolicy,
   SlopeBand,
+  Units,
   ElevationPoint,
   ElevationProfile,
   TrackClimb,
@@ -891,6 +892,7 @@ export function updateUserPreferences(
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
     regions: string[];
+    units: Units;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
@@ -1671,13 +1673,15 @@ export function useStandaloneTracks(
 
 // ── Location search ───────────────────────────────────────────
 
-/** The place registry, through the API. The query goes in the body. */
+/** The place registry of region `region`, through the API. The query goes in
+ *  the body. */
 export function searchPlaceRegistry(
   q: string,
   limit: number,
   signal: AbortSignal,
+  region: string,
 ): Promise<PlaceSearchResponse> {
-  const body: PlaceSearchRequest = { q, limit };
+  const body: PlaceSearchRequest = { q, limit, region };
   return apiFetch(PLACE_SEARCH_API_PATH, { method: "POST", body, signal });
 }
 

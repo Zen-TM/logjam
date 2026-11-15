@@ -37,7 +37,7 @@ from area_export import (  # noqa: E402
     hillshade_colours,
     mbtiles_settings,
     mga_epsg,
-    mga_extent,
+    grid_extent,
     slope_colours,
     plan,
     tile_archive,
@@ -57,6 +57,9 @@ ATTRIBUTION = (
 
 
 class MgaZone(unittest.TestCase):
+    """The zone `render_area` falls back to for a job that names no EPSG, as one
+    queued before the API did."""
+
     # Mutation: an off-by-one in the zone, and a Katoomba export lands in
     # zone 55, a few hundred kilometres east of its own grid.
     def test_zone_of_the_box_centre(self):
@@ -158,15 +161,23 @@ class ArchiveReads(unittest.TestCase):
 @unittest.skipUnless(
     not is_stubbed("osgeo"), "needs real GDAL/PROJ (skipped under host stub)"
 )
-class MgaExtent(unittest.TestCase):
+class GridExtent(unittest.TestCase):
     # Mutation: return the box itself as `around`, or swap floor and ceil, and
-    # the rectangle's corners (the box is rotated in MGA) come out no-data.
+    # the rectangle's corners (the box is rotated in the grid) come out no-data.
     def test_the_mosaic_reaches_every_corner_of_the_rectangle(self):
         from osgeo import osr
 
-        box = (150.28, -33.75, 150.36, -33.69)  # Katoomba, zone 56
-        epsg = mga_epsg((box[0] + box[2]) / 2)
-        rect, around = mga_extent(box, epsg)
+        boxes = [
+            ((150.28, -33.75, 150.36, -33.69), 7856),  # Katoomba, MGA 56
+            ((168.6, -44.7, 168.7, -44.6), 2193),  # Queenstown, NZTM
+            ((-110.9, 38.2, -110.7, 38.3), 32612),  # Utah, UTM 12 north
+        ]
+        for box, epsg in boxes:
+            with self.subTest(epsg=epsg):
+                self.check_corners(osr, box, epsg)
+
+    def check_corners(self, osr, box, epsg):
+        rect, around = grid_extent(box, epsg)
 
         self.assertTrue(all(v % CELL_M == 0 for v in rect), rect)
         west, south, east, north = around
@@ -175,15 +186,15 @@ class MgaExtent(unittest.TestCase):
             (around, box),
         )
 
-        wgs84, mga = osr.SpatialReference(), osr.SpatialReference()
+        wgs84, grid = osr.SpatialReference(), osr.SpatialReference()
         wgs84.ImportFromEPSG(4326)
-        mga.ImportFromEPSG(epsg)
-        for srs in (wgs84, mga):
+        grid.ImportFromEPSG(epsg)
+        for srs in (wgs84, grid):
             srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-        to_mga = osr.CoordinateTransformation(wgs84, mga)
-        to_wgs84 = osr.CoordinateTransformation(mga, wgs84)
+        to_grid = osr.CoordinateTransformation(wgs84, grid)
+        to_wgs84 = osr.CoordinateTransformation(grid, wgs84)
         for lon, lat in [(x, y) for x in (box[0], box[2]) for y in (box[1], box[3])]:
-            x, y, _ = to_mga.TransformPoint(lon, lat)
+            x, y, _ = to_grid.TransformPoint(lon, lat)
             self.assertTrue(rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3])
         for x, y in [(x, y) for x in (rect[0], rect[2]) for y in (rect[1], rect[3])]:
             lon, lat, _ = to_wgs84.TransformPoint(x, y)
@@ -572,8 +583,9 @@ def made_up_area(**over) -> Area:
 
 
 class TileArchive(unittest.TestCase):
-    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts,
-    over areas already in the router's order (the API's)."""
+    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts
+    for an archive whose deepest zoom is z15, over areas already in the
+    router's order (the API's)."""
 
     a = made_up_area()
 
@@ -952,6 +964,45 @@ class AreaCells(unittest.TestCase):
             self.assertEqual(zoom_for_cell(cell), zoom)
 
 
+class ExportGrid(unittest.TestCase):
+    """The grid an export is warped to is the one the API stored with the box,
+    for the statewide files and for each area's."""
+
+    def render(self, **kwargs):
+        from unittest import mock
+
+        import area_export
+
+        box = (168.6, -44.7, 168.7, -44.6)
+        statewide = area_export.Made(rasters={}, contours=None, credit="c")
+        with (
+            mock.patch.object(
+                area_export, "make_layers", return_value=statewide
+            ) as layers,
+            mock.patch.object(area_export, "area_made", return_value=None) as area,
+            mock.patch.object(area_export, "package"),
+        ):
+            area_export.render_area(
+                {}, box, ["heights"], "geotiff", Path("/work"),
+                areas=[("an area", {})], **kwargs,
+            )  # fmt: skip
+        return layers, area
+
+    # Mutation: warp to `mga_epsg(centre)` whatever the job says, and a New
+    # Zealand export is warped to an MGA zone 12,000 km from its ground.
+    def test_a_box_is_warped_to_the_epsg_the_job_names(self):
+        layers, area = self.render(epsg=2193)
+        self.assertEqual(layers.call_args.kwargs["epsg"], 2193)
+        self.assertEqual(area.call_args.args[5], 2193)
+
+    # Mutation: pass None when the job names no grid, and make_layers warps to
+    # a zone of its own while the areas take another.
+    def test_a_job_with_no_epsg_keeps_the_zone_of_its_centre(self):
+        layers, area = self.render()
+        self.assertEqual(layers.call_args.kwargs["epsg"], mga_epsg(168.65))
+        self.assertEqual(area.call_args.args[5], mga_epsg(168.65))
+
+
 class CutlineErrors(unittest.TestCase):
     # Mutation: keep GDAL's stderr when a warp reads a footprint, and a bad
     # geometry's coordinates ("Self-intersection at or near point 150.0051
@@ -959,20 +1010,22 @@ class CutlineErrors(unittest.TestCase):
     def test_a_failed_cut_says_nothing_of_the_footprint(self):
         from unittest import mock
 
-        from area_export import AreaExportError, warp_to_mga
+        from area_export import AreaExportError, warp_to_grid
 
         failed = mock.Mock(
             returncode=1, stderr="Self-intersection at 150.0051 -33.0051"
         )
         with mock.patch("area_export.subprocess.run", return_value=failed):
             with self.assertRaises(AreaExportError) as raised:
-                warp_to_mga(
+                warp_to_grid(
                     Path("in.tif"), Path("out.tif"), (0, 0, 2, 2), 7856, "near",
                     2, Path("footprint.geojson"),
                 )  # fmt: skip
             self.assertNotIn("150.0051", str(raised.exception))
             with self.assertRaises(AreaExportError) as raised:
-                warp_to_mga(Path("in.tif"), Path("out.tif"), (0, 0, 5, 5), 7856, "near")
+                warp_to_grid(
+                    Path("in.tif"), Path("out.tif"), (0, 0, 5, 5), 7856, "near"
+                )
             self.assertIn("150.0051", str(raised.exception))
 
 

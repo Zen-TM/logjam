@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
-import { GAUGES, type Gauge } from "@logjam/shared";
+import { GAUGES, type Gauge, type GaugeUnits } from "@logjam/shared";
 import { useIsMobile } from "../../useIsMobile";
 import { Popover } from "../../ui";
 import { GaugeView } from "./GaugeView";
@@ -12,12 +12,14 @@ export default function GaugePopover({
   gauge,
   attribution,
   generatedAt,
+  units,
   onClose,
 }: {
   map: maplibregl.Map;
   gauge: Gauge;
   attribution: string;
   generatedAt: string;
+  units: GaugeUnits;
   onClose: (id: string) => void;
 }) {
   const narrow = useIsMobile();
@@ -55,6 +57,7 @@ export default function GaugePopover({
         gauge={gauge}
         attribution={attribution}
         generatedAt={generatedAt}
+        units={units}
         now={now}
         onClose={dismiss}
       />
