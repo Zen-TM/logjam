@@ -10,7 +10,7 @@ one unset → send_email is a logged no-op):
   SMTP_HOST, SMTP_PORT - implicit TLS on 465, required STARTTLS on any other.
   SMTP_USER            - SMTP login.
   SMTP_PASSWORD        - SMTP password.
-  EMAIL_FROM           - verified sender, e.g. noreply@notifications.logjamnsw.com.
+  EMAIL_FROM           - verified sender, e.g. noreply@notifications.logjam.earth.
 Optional:
   SMTP_CA_CERT         - base64 PEM of the only CA to trust instead of the
                          public roots. Local dev's Mailpit; unset in prod.
