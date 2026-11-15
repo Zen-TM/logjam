@@ -35,8 +35,10 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   `<key>_<n>`, moving its stored values with it. Guard: the migration-upgrade job
   (`api/prisma/upgrade-check/verify.sql`). `formatCanyonGrade` writes the French grade
   when any French field is set and the ACA one otherwise (`shared/src/canyonGrade.test.ts`).
-- **No value in `aca_risk` means no stated extra risk,** so a source's lowest level
-  is stored as unset, never as `PG`. No test holds this: nothing imports an ACA rating yet.
+- **No value in `aca_risk` means no stated extra risk,** so a source's `G`, the level
+  below `PG`, is stored as unset, never as `PG`, which stays a level of its own.
+  Guard: `api/src/services/ropewiki.unit.test.ts` ("stores a risk of G as unset and
+  PG as its own level"), through the RopeWiki import (updated 2026-11-15).
 - **Update 2026-11-14: where a canyon stands decides which grade fields its form
   offers.** A region declares `canyonGrades`, `"french"` or `"aca"` (`shared/src/regions.ts`),
   and a Canyon form offers that system's fields at the place's position, the French
@@ -68,7 +70,9 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   graded ones").
 - **Negative:** a stored 5 means nothing without the declaration. Whatever prints
   a value outside the clients (an export, a raw database read) shows the rank
-  unless it calls `fieldValueLabel`. A level added before the first one
+  unless it calls `fieldValueLabel`: the CSV export does and its import reads the
+  word back (`fieldValueOfLabel`), the GeoJSON export writes the rank
+  (updated 2026-11-15). A level added before the first one
   of a list cannot be inserted: it gets a new field, or the data is rewritten in a
   migration.
 - **Negative:** a system key is reserved only for attributes made after it
