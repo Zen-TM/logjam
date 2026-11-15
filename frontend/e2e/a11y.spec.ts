@@ -44,6 +44,7 @@ const READ_ONLY_POSTS = [
   "/elevation/point",
   "/elevation/profile",
   "/compute-estimate",
+  "/flow-network/lookup",
 ];
 
 test.beforeEach(async ({ page, context }) => {
