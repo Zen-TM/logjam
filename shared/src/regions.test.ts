@@ -38,7 +38,6 @@ import {
   regionTouchesBox,
   simRegionsOn,
   vectorArchiveAt,
-  vectorIn,
   vectorsTouching,
   WORLD,
   wrapView,

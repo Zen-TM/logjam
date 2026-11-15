@@ -904,6 +904,9 @@ function Map({
   // without refs it would close over the first render's points and snap every
   // segment from the same stale vertex.
   // Read inside the map's one-shot load handler, which cannot see later props.
+  // The URL the vector source reads now, so a region change that names the same
+  // archive reloads nothing.
+  const vectorUrlRef = useRef<string | null>(null);
   const activeLayerIdRef = useRef(activeLayerId);
   useEffect(() => {
     activeLayerIdRef.current = activeLayerId;
@@ -2748,7 +2751,6 @@ function Map({
   // The vector source reads the archive of the region the map shows. A region
   // with none leaves it as it was: the vector map is not offered there, so its
   // layers are hidden and nothing is read.
-  const vectorUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const archive = vectorIn(region);
     const map = mapRef.current;
