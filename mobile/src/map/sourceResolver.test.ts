@@ -1228,7 +1228,7 @@ describe("draws the region the map shows", () => {
             kind,
             logicalKey,
             path: `/maps/${logicalKey}.pmtiles`,
-            bbox: [169, -44.7, 169.2, -44.55],
+            bbox: [169.2, -44.1, 169.3, -44.01],
             minzoom: 8,
             maxzoom: 15,
           }),

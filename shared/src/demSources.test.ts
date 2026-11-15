@@ -90,7 +90,7 @@ describe("the declaration", () => {
       coverage,
     });
     const nz = SIM_REGIONS.find((r) => r.id === "simnz")!;
-    const inNz = area([169.05, -44.65, 169.1, -44.6]);
+    const inNz = area([169.22, -44.08, 169.28, -44.03]);
     expect(demCredits([inNz.id], [inNz], SIM_REGIONS)).toEqual([
       "Elevation: a survey.",
       nz.terrain.heights!.credit,
