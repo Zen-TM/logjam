@@ -1,7 +1,7 @@
 import {
   MAP_TERRAIN,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
@@ -39,24 +39,24 @@ export function terrainSwitch(
   artifacts: readonly Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">[],
 ): TerrainSwitchState {
   const copy = MAP_TERRAIN.copy;
-  if (key === "contours" && !takesNswContours(basemapId)) {
+  if (key === "contours" && !takesContours(basemapId)) {
     return { checked: false, disabled: true, reason: copy.contoursPrinted };
   }
-  if (key === "hillshade" && !takesNswHillshade(basemapId)) {
+  if (key === "hillshade" && !takesHillshade(basemapId)) {
     return { checked: false, disabled: true, reason: copy.hillshadeImagery };
   }
-  const saved = artifacts.some(
+  const saved = artifacts.some((artifact) =>
     key === "contours"
-      ? holdsContours
+      ? holdsContours(artifact)
       : key === "slope"
-        ? holdsSlope
+        ? holdsSlope(artifact)
         : key === "land"
-          ? holdsLand
+          ? holdsLand(artifact)
           : key === "fire"
-            ? holdsFire
+            ? holdsFire(artifact)
             : key === "coverage"
-              ? holdsCoverage
-              : holdsHillshade,
+              ? holdsCoverage(artifact)
+              : holdsHillshade(artifact),
   );
   if (!online && !saved) {
     return {

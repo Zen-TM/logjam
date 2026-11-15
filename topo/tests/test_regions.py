@@ -18,7 +18,7 @@ import regions  # noqa: E402
 
 TOPO = os.path.dirname(os.path.dirname(__file__))
 KATOOMBA = (150.31, -33.71)
-WANAKA = (169.1, -44.62)
+WANAKA = (169.25, -44.055)
 DEV = {"DB_HOST": "postgres"}
 
 

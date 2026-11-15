@@ -18,7 +18,7 @@ type LinePaint = NonNullable<LineLayerSpecification["paint"]>;
 
 /** Bottom first: the edge lies over the tint. */
 export function fireLayerIds(sourceKey: string): [fill: string, edge: string] {
-  return [`nsw-fire-${sourceKey}`, `nsw-fire-edge-${sourceKey}`];
+  return [`terrain-fire-${sourceKey}`, `terrain-fire-edge-${sourceKey}`];
 }
 
 /** The paint as of `now`, which a mount takes once. */

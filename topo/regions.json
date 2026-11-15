@@ -110,49 +110,49 @@
    "sim": true,
    "borders": [
     [
-     [168.98, -44.720000000000006],
-     [169.22, -44.720000000000006],
-     [169.22, -44.529999999999994],
-     [168.98, -44.529999999999994]
+     [169.17999999999998, -44.120000000000005],
+     [169.32000000000002, -44.120000000000005],
+     [169.32000000000002, -43.989999999999995],
+     [169.17999999999998, -43.989999999999995]
     ],
     [
-     [175.48, -37.120000000000005],
-     [175.72, -37.120000000000005],
-     [175.72, -36.93],
-     [175.48, -36.93]
+     [175.56, -37.160000000000004],
+     [175.70000000000002, -37.160000000000004],
+     [175.70000000000002, -37.04],
+     [175.56, -37.04]
     ]
    ],
    "terrain": {
     "heights": {
      "id": "simnz-heights",
      "archivePath": "master/dem/simnz-heights.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Elevation: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Elevation: simulated data for New Zealand, not a real survey.",
-     "sampleZoom": 15
+     "sampleZoom": 17
     },
     "slope": {
      "id": "simnz-slope",
      "archivePath": "master/dem/simnz-slope.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Slope: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Slope: simulated data for New Zealand, not a real survey.",
      "minzoom": 8,
-     "maxzoom": 15
+     "maxzoom": 17
     },
     "hillshade": {
      "id": "simnz-hillshade",
      "archivePath": "master/dem/simnz-heights.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Hillshade: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Hillshade: simulated data for New Zealand, not a real survey.",
      "minzoom": 8,
-     "maxzoom": 15
+     "maxzoom": 17
     },
     "contours": {
      "id": "simnz-contours",
      "archivePath": "master/contours/simnz-10m.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Contours: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Contours: simulated data for New Zealand, not a real survey.",
      "minzoom": 11,
@@ -161,7 +161,7 @@
     "land": {
      "id": "simnz-land",
      "archivePath": "master/land/simnz-tenure.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Land: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Land: simulated data for New Zealand, not a real survey.",
      "minzoom": 8,
@@ -170,7 +170,7 @@
     "fire": {
      "id": "simnz-fire",
      "archivePath": "master/fire/simnz-fire-history.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Fire history: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Fire history: simulated data for New Zealand, not a real survey.",
      "minzoom": 8,
@@ -179,7 +179,7 @@
     "coverage": {
      "id": "simnz-coverage",
      "archivePath": "master/coverage/simnz-coverage.pmtiles",
-     "coverage": [169, -44.7, 175.7, -36.95],
+     "coverage": [169.2, -44.1, 175.68, -37.06],
      "credit": "Mobile coverage: simulated data for New Zealand, not a real survey.",
      "creditHtml": "Mobile coverage: simulated data for New Zealand, not a real survey.",
      "minzoom": 12,
@@ -196,17 +196,17 @@
    "sim": true,
    "borders": [
     [
-     [-110.92, 38.18],
-     [-110.68, 38.18],
-     [-110.68, 38.370000000000005],
-     [-110.92, 38.370000000000005]
+     [-113.02, 37.22],
+     [-112.87, 37.22],
+     [-112.87, 37.35],
+     [-113.02, 37.35]
     ]
    ],
    "terrain": {
     "heights": {
      "id": "simutah-heights",
      "archivePath": "master/dem/simutah-heights.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Elevation: simulated data for Utah, not a real survey.",
      "creditHtml": "Elevation: simulated data for Utah, not a real survey.",
      "sampleZoom": 15
@@ -214,7 +214,7 @@
     "slope": {
      "id": "simutah-slope",
      "archivePath": "master/dem/simutah-slope.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Slope: simulated data for Utah, not a real survey.",
      "creditHtml": "Slope: simulated data for Utah, not a real survey.",
      "minzoom": 8,
@@ -223,7 +223,7 @@
     "hillshade": {
      "id": "simutah-hillshade",
      "archivePath": "master/dem/simutah-heights.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Hillshade: simulated data for Utah, not a real survey.",
      "creditHtml": "Hillshade: simulated data for Utah, not a real survey.",
      "minzoom": 8,
@@ -232,7 +232,7 @@
     "contours": {
      "id": "simutah-contours",
      "archivePath": "master/contours/simutah-10m.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Contours: simulated data for Utah, not a real survey.",
      "creditHtml": "Contours: simulated data for Utah, not a real survey.",
      "minzoom": 11,
@@ -241,7 +241,7 @@
     "land": {
      "id": "simutah-land",
      "archivePath": "master/land/simutah-tenure.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Land: simulated data for Utah, not a real survey.",
      "creditHtml": "Land: simulated data for Utah, not a real survey.",
      "minzoom": 8,
@@ -250,7 +250,7 @@
     "fire": {
      "id": "simutah-fire",
      "archivePath": "master/fire/simutah-fire-history.pmtiles",
-     "coverage": [-110.9, 38.2, -110.7, 38.35],
+     "coverage": [-113, 37.24, -112.89, 37.33],
      "credit": "Fire history: simulated data for Utah, not a real survey.",
      "creditHtml": "Fire history: simulated data for Utah, not a real survey.",
      "minzoom": 8,

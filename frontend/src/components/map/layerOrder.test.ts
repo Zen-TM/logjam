@@ -5,23 +5,28 @@ import {
   drawsOverTerrain,
   NSW_REGION,
   TERRAIN_BASEMAP_ANCHORS,
+  TERRAIN_LAYER_KEYS,
+  SIM_NZ,
+  SIM_UTAH,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
-import { TERRAIN_ENTRIES } from "./terrainEntries";
 import {
   coverageAt,
-  COVERAGE_FILL_LAYER,
+  coverageFillLayer,
   fireAt,
-  FIRE_EDGE_LAYER,
-  FIRE_FILL_LAYER,
+  fireEdgeLayer,
+  fireFillLayer,
   GAUGE_BELOW,
   GAUGE_LAYER,
   GRID_LABELS,
   GRID_LINES,
-  LAND_FILL_LAYER,
   landClassAt,
+  landEdgeLayer,
+  landFillLayer,
   PRESSABLE_LAYERS,
+  terrainEntryId,
+  terrainKeyOf,
   pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
@@ -44,7 +49,8 @@ function fakeMap(ids: string[]) {
 
 describe("landClassAt", () => {
   const drawn = (properties: Record<string, unknown>) => ({
-    getLayer: (id: string) => (id === LAND_FILL_LAYER ? {} : undefined),
+    getLayer: (id: string) =>
+      id === landFillLayer(NSW_REGION) ? {} : undefined,
     queryRenderedFeatures: () => [{ properties }],
   });
 
@@ -57,16 +63,37 @@ describe("landClassAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(landClassAt(off, [1, 2], NSW_REGION.terrain.land)).toBeNull();
+    expect(landClassAt(off, [1, 2], NSW_REGION)).toBeNull();
+  });
+
+  // Mutation: query NSW's layer id whatever the region, or answer for a region
+  // with no land archive, and a tap in another region reads NSW's classes.
+  it("reads the region in view's layer, and nothing where it has no land", () => {
+    const asked: string[][] = [];
+    const map = {
+      getLayer: () => ({}),
+      queryRenderedFeatures: (
+        _point: [number, number],
+        options: { layers: string[] },
+      ) => {
+        asked.push(options.layers);
+        return [];
+      },
+    };
+    landClassAt(map, [1, 2], SIM_NZ);
+    expect(asked).toEqual([[landFillLayer(SIM_NZ)]]);
+    expect(landClassAt(map, [1, 2], null)).toBeNull();
+    expect(
+      landClassAt(map, [1, 2], { ...SIM_NZ, terrain: { heights: undefined } }),
+    ).toBeNull();
+    expect(asked).toHaveLength(1);
   });
 
   it("names the class drawn at the point", () => {
     const map = drawn({
       [NSW_REGION.terrain.land.classProperty]: "State Forest",
     });
-    expect(landClassAt(map, [1, 2], NSW_REGION.terrain.land)).toBe(
-      "State forest",
-    );
+    expect(landClassAt(map, [1, 2], NSW_REGION)).toBe("State forest");
   });
 });
 
@@ -80,7 +107,7 @@ describe("fireAt", () => {
         throw new Error("no such layer");
       },
     };
-    expect(fireAt(off, [1, 2], NSW_REGION.terrain.fire)).toBeNull();
+    expect(fireAt(off, [1, 2], NSW_REGION)).toBeNull();
   });
 
   // Mutation: query a layer id other than the fill, and a tap over a fire
@@ -88,7 +115,8 @@ describe("fireAt", () => {
   it("names the most recent fire drawn at the point", () => {
     const asked: string[][] = [];
     const map = {
-      getLayer: (id: string) => (id === FIRE_FILL_LAYER ? {} : undefined),
+      getLayer: (id: string) =>
+        id === fireFillLayer(NSW_REGION) ? {} : undefined,
       queryRenderedFeatures: (
         _point: [number, number],
         options: { layers: string[] },
@@ -105,10 +133,8 @@ describe("fireAt", () => {
         ];
       },
     };
-    expect(fireAt(map, [1, 2], NSW_REGION.terrain.fire)).toBe(
-      "Wildfire, Dec 2019",
-    );
-    expect(asked).toEqual([[FIRE_FILL_LAYER]]);
+    expect(fireAt(map, [1, 2], NSW_REGION)).toBe("Wildfire, Dec 2019");
+    expect(asked).toEqual([[fireFillLayer(NSW_REGION)]]);
   });
 });
 
@@ -123,13 +149,7 @@ describe("coverageAt", () => {
       },
     };
     expect(
-      coverageAt(
-        off,
-        [1, 2],
-        [150, -33],
-        "telstra",
-        NSW_REGION.terrain.coverage,
-      ),
+      coverageAt(off, [1, 2], [150, -33], "telstra", NSW_REGION),
     ).toBeNull();
   });
 
@@ -138,16 +158,17 @@ describe("coverageAt", () => {
   it("names the drawn carrier's reception at the point", () => {
     const asked: unknown[] = [];
     const map = {
-      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      getLayer: (id: string) =>
+        id === coverageFillLayer(NSW_REGION) ? {} : undefined,
       queryRenderedFeatures: (at: unknown, options: { layers: string[] }) => {
         asked.push([at, options.layers]);
         return [{ properties: { level: "external", carrier: "tpg" } }];
       },
     };
-    expect(
-      coverageAt(map, [1, 2], [150, -33], "tpg", NSW_REGION.terrain.coverage),
-    ).toBe("TPG: no mobile reception");
-    expect(asked).toEqual([[[1, 2], [COVERAGE_FILL_LAYER]]]);
+    expect(coverageAt(map, [1, 2], [150, -33], "tpg", NSW_REGION)).toBe(
+      "TPG: no mobile reception",
+    );
+    expect(asked).toEqual([[[1, 2], [coverageFillLayer(NSW_REGION)]]]);
   });
 
   // Mutation: drop `at` on its way to coverageNameOf, or swap it with the
@@ -162,7 +183,8 @@ describe("coverageAt", () => {
       [x0, y0],
     ];
     const map = {
-      getLayer: (id: string) => (id === COVERAGE_FILL_LAYER ? {} : undefined),
+      getLayer: (id: string) =>
+        id === coverageFillLayer(NSW_REGION) ? {} : undefined,
       queryRenderedFeatures: () => [
         {
           properties: { level: "external" },
@@ -183,24 +205,65 @@ describe("coverageAt", () => {
         },
       ],
     };
-    expect(
-      coverageAt(
-        map,
-        [1, 2],
-        [150.5, -33.5],
-        "telstra",
-        NSW_REGION.terrain.coverage,
-      ),
-    ).toBe("Telstra: mobile reception");
+    expect(coverageAt(map, [1, 2], [150.5, -33.5], "telstra", NSW_REGION)).toBe(
+      "Telstra: mobile reception",
+    );
   });
 });
 
-describe("the Fire history layer ids", () => {
-  // Mutation: rename the entry or a layer alone, and the stack and the
-  // basemap move never find the layers: Map.tsx owns `topo-<entry id>-*`.
-  it("belong to the fire entry", () => {
-    for (const id of [FIRE_FILL_LAYER, FIRE_EDGE_LAYER])
-      expect(id.startsWith(`topo-${TERRAIN_ENTRIES.fire.id}-`)).toBe(true);
+describe("the overlay layer ids", () => {
+  // Mutation: build a layer id from anything but the region's entry id, and
+  // the stack and the basemap move never find the layers: Map.tsx owns
+  // `topo-<entry id>-*`.
+  it("belong to the region's entry for the layer", () => {
+    for (const region of [NSW_REGION, SIM_NZ]) {
+      for (const id of [fireFillLayer(region), fireEdgeLayer(region)])
+        expect(id.startsWith(`topo-${terrainEntryId(region, "fire")}-`)).toBe(
+          true,
+        );
+      for (const id of [landFillLayer(region), landEdgeLayer(region)])
+        expect(id.startsWith(`topo-${terrainEntryId(region, "land")}-`)).toBe(
+          true,
+        );
+      expect(
+        coverageFillLayer(region).startsWith(
+          `topo-${terrainEntryId(region, "coverage")}-`,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  // Mutation: drop the region from a layer id, and a map that crosses into
+  // another region keeps the first region's layer under the second's source.
+  it("differ between regions", () => {
+    expect(fireFillLayer(SIM_NZ)).not.toBe(fireFillLayer(NSW_REGION));
+    expect(fireFillLayer(NSW_REGION)).toBe("topo-nswfire-fill");
+  });
+});
+
+describe("terrainKeyOf", () => {
+  // Mutation: let the pattern take a dash, and an id with a job's id before a
+  // layer's name ("<job id>-contours") reads as a region's.
+  it("reads the layer back from a region's entry id, and nothing from another entry", () => {
+    for (const region of [NSW_REGION, SIM_NZ, SIM_UTAH])
+      for (const key of TERRAIN_LAYER_KEYS)
+        expect(terrainKeyOf(terrainEntryId(region, key))).toBe(key);
+    expect(
+      terrainKeyOf("1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed-vegetation"),
+    ).toBe(null);
+    expect(terrainKeyOf("1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed-contours")).toBe(
+      null,
+    );
+    expect(terrainKeyOf("contours")).toBe(null);
+  });
+
+  // Mutation: add a layer key that another key ends in ("shade", which
+  // "hillshade" ends with), and a region's hillshade id reads back as the
+  // wrong layer.
+  it("holds for keys none of which ends another", () => {
+    for (const a of TERRAIN_LAYER_KEYS)
+      for (const b of TERRAIN_LAYER_KEYS)
+        if (a !== b) expect(a.endsWith(b)).toBe(false);
   });
 });
 
