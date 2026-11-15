@@ -95,7 +95,7 @@ service.**
   `shared/src/gauges.test.ts` ("a feed that is not New South Wales's"),
   `topo/tests/test_gauges.py` ("the feed states the units and day it is cut
   in"). Everything else above stands.
-- **Update 2026-11-15: a client reads the feed of the region it shows.** A
+- **Update 2026-11-16: a client reads the feed of the region it shows.** A
   region's `gauges` (`shared/src/regions.ts`) is the CDN prefix of its feed,
   or null where it has none, and `latest.json` and `history/<id>.json` are
   read under that prefix, never under a fixed one. The map and its search
