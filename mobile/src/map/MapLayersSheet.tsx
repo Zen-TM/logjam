@@ -59,6 +59,7 @@ import {
   overlayChoiceLabel,
   overlayLegends,
   type CarrierId,
+  type LonLatBox,
   type Region,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
@@ -90,7 +91,6 @@ import {
   type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
-import { useRegions } from "../regionsPreference";
 import { mobileBasemaps } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
@@ -189,6 +189,7 @@ export function MapLayersSheet({
   region,
   basemapId,
   onBasemapChange,
+  view,
   downBasemaps,
   terrainLayers,
   onTerrainLayerChange,
@@ -211,6 +212,8 @@ export function MapLayersSheet({
   region: Region | null;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  /** The ground the map shows: it decides which basemaps are listed. */
+  view: LonLatBox;
   /** Basemaps whose tile server did not answer (`useDownBasemaps`). */
   downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
@@ -255,6 +258,7 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
+        view={view}
         down={downBasemaps}
         online={online}
       />
@@ -381,23 +385,24 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  view,
   down,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  view: LonLatBox;
   down: ReadonlySet<BasemapId>;
   online: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const regionIds = useRegions();
   // The map draws the fallback while the pick's server is down (MapScreen);
   // the pick itself stays, so it comes back with the server.
   const shown = basemapToShow(
     basemapId,
     down,
-    basemapFallbackFor(basemapId, down, regionIds),
+    basemapFallbackFor(basemapId, down, view),
   );
   const name = (id: string) =>
     BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
@@ -412,7 +417,7 @@ function BasemapTab({
       {/* Order and membership are `mobileBasemaps`', not the catalog's — see
           basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
           raster). */}
-      {mobileBasemaps(regionIds).map((id) => {
+      {mobileBasemaps(view).map((id) => {
         const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
         // Fail loudly: an id the catalog doesn't know is a programming error.
         if (!entry) throw new Error(`Unknown basemap id: ${id}`);

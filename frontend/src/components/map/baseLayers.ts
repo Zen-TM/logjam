@@ -1,7 +1,10 @@
 import {
-  BASEMAP_CATALOG,
+  LISTED_BASEMAPS,
+  basemapHere,
   offeredBasemaps,
+  vectorBasemapIn,
   type BasemapCatalogEntry,
+  type LonLatBox,
 } from "@logjam/shared";
 
 // Derived from the canonical shared basemap catalog —
@@ -23,15 +26,39 @@ const toBaseLayer = (entry: BasemapCatalogEntry) => ({
   attribution: entry.attributionHtml,
 });
 
-/** The gallery's basemaps for an account that chose `regionIds`. */
-export const baseLayersFor = (regionIds: readonly string[]) =>
-  offeredBasemaps(regionIds).map(toBaseLayer);
+/** The gallery's basemaps for the ground a map shows (ADR 0049). */
+export const baseLayersFor = (view: LonLatBox) =>
+  offeredBasemaps(view).map(toBaseLayer);
 
 /**
- * The full offered catalogue, whatever the account chose, so every basemap
- * source stays mounted and the GeoPDF dialog lists them all. A stored pick no
- * longer in `baseLayersFor` falls back to the default (App.tsx).
+ * The basemap Logjam Web draws for a stored pick: the pick where the view
+ * offers it, else the vector map where that is offered (what an unoffered pick
+ * has always shown), else `basemapHere`'s. Guard: `baseLayers.test.ts`.
  */
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.offered !== false,
-).map(toBaseLayer);
+export function basemapPicked(stored: string, view: LonLatBox): string {
+  const offered = offeredBasemaps(view).map((entry) => entry.id);
+  return offered.includes(stored)
+    ? stored
+    : (vectorBasemapIn(offered) ?? basemapHere(stored, view));
+}
+
+const offerOf = (view: LonLatBox) =>
+  [
+    ...offeredBasemaps(view).map((entry) => entry.id),
+    basemapHere("", view),
+  ].join();
+
+/**
+ * `prev` while `next` lists the same basemaps and falls back to the same one,
+ * else `next`: a view held in state this way changes only when the gallery
+ * would, so a pan within one region redraws nothing for it.
+ */
+export const viewForBasemaps = (prev: LonLatBox, next: LonLatBox): LonLatBox =>
+  offerOf(prev) === offerOf(next) ? prev : next;
+
+/**
+ * The full offered catalogue, wherever the map is, so every basemap source
+ * stays mounted and the GeoPDF dialog lists them all. A stored pick that
+ * `baseLayersFor` does not list shows `basemapPicked`'s (App.tsx).
+ */
+export const BASE_LAYERS = LISTED_BASEMAPS.map(toBaseLayer);

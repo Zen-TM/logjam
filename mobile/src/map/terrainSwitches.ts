@@ -2,8 +2,8 @@ import {
   layerIn,
   MAP_TERRAIN,
   normalizeCarrier,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
   type CarrierId,
   type Region,
   type TerrainLayerKey,
@@ -48,10 +48,10 @@ export function terrainSwitch(
   if (layerIn(region, key) === null) {
     return { checked: false, disabled: true, reason: copy.notHere };
   }
-  if (key === "contours" && !takesNswContours(basemapId)) {
+  if (key === "contours" && !takesContours(basemapId)) {
     return { checked: false, disabled: true, reason: copy.contoursPrinted };
   }
-  if (key === "hillshade" && !takesNswHillshade(basemapId)) {
+  if (key === "hillshade" && !takesHillshade(basemapId)) {
     return { checked: false, disabled: true, reason: copy.hillshadeImagery };
   }
   const saved = artifacts.some((artifact) =>

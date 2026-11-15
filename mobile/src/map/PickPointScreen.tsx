@@ -46,7 +46,7 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BASEMAP_CATALOG, MAP_INK } from "@logjam/shared";
+import { BASEMAP_CATALOG, MAP_INK, pointBox } from "@logjam/shared";
 
 import { config } from "../config";
 import {
@@ -68,8 +68,8 @@ import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
 import { BasemapThumb } from "./BasemapThumb";
 import { useRegions } from "../regionsPreference";
-import { mobileBasemaps } from "./basemapMeta";
-import { readBasemapPreference } from "./basemapPreference";
+import { effectiveBasemap, mobileBasemaps, settledView } from "./basemapMeta";
+import { pickPointStart } from "./pickPointStart";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { BAND_MARKERS } from "./layerOrder";
@@ -91,10 +91,6 @@ import { TrackMapLayers } from "../tracks/TrackMapLayers";
 /** The selection ring's width, and the amount its radius has to exceed the
  *  thumb's for the two curves to sit concentric. */
 const THUMB_RING = 2;
-
-/** Zoom for a picker opened on a coordinate someone already typed: close enough
- *  to see which side of the creek the point is on. */
-const TYPED_POINT_ZOOM = 15;
 
 export type PickedPoint = { latitude: number; longitude: number };
 
@@ -135,19 +131,31 @@ export function PickPointScreen({
   // Read once: `initialViewState` is only honoured on the first render, and
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as RegionDownloadScreen.
-  const [lastCamera] = useState(() => readLastMapCamera());
-  const [basemapId, setBasemapId] = useState<BasemapId>(
-    () => lastCamera?.basemapId ?? readBasemapPreference(),
+  const [start] = useState(() =>
+    pickPointStart(initialPoint, readLastMapCamera(), home),
+  );
+  const [pickedBasemapId, setBasemapId] = useState<BasemapId>(
+    start.pickedBasemapId,
   );
   const [picked, setPicked] = useState<PickedPoint | null>(initialPoint);
   const mapRef = useRef<MapRef>(null);
 
-  const startCenter: [number, number] = initialPoint
-    ? [initialPoint.longitude, initialPoint.latitude]
-    : (lastCamera?.center ?? home.center);
-  const startZoom = initialPoint
-    ? TYPED_POINT_ZOOM
-    : (lastCamera?.zoom ?? home.zoom);
+  const { center: startCenter, zoom: startZoom } = start;
+  // The ground the map shows decides its basemaps (ADR 0049): the bounds of
+  // its last settle, the opening point before the first.
+  const [startLon, startLat] = startCenter;
+  const startView = useMemo(
+    () => pointBox(startLon, startLat),
+    [startLon, startLat],
+  );
+  const [settledBounds, setSettledBounds] = useState<readonly number[] | null>(
+    null,
+  );
+  const view = useMemo(
+    () => settledView(settledBounds, startView),
+    [settledBounds, startView],
+  );
+  const basemapId = effectiveBasemap(pickedBasemapId, view);
 
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(
@@ -242,6 +250,9 @@ export function PickPointScreen({
         logo={false}
         compass={false}
         onPress={handleMapPress}
+        onRegionDidChange={(event) =>
+          setSettledBounds(event.nativeEvent.bounds)
+        }
       >
         <Camera initialViewState={{ center: startCenter, zoom: startZoom }} />
 
@@ -307,7 +318,7 @@ export function PickPointScreen({
       {/* Basemaps down the side the action column is NOT on, mirroring the map
           screen's own split so the two feel like the same map. */}
       <View style={[styles.basemaps, { top: insets.top + spacing(2) }]}>
-        {mobileBasemaps(regionIds).map((id) => (
+        {mobileBasemaps(view).map((id) => (
           <Pressable
             key={id}
             accessibilityRole="button"
