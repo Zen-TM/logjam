@@ -425,6 +425,7 @@ function SidebarPanel({
             onExpandSheet={expandSheetToFull}
             canyonRegions={canyonOffersFor(currentUser?.uiPreferences)}
             gradeSystem={placesGradeSystem}
+            uiPreferences={currentUser?.uiPreferences}
           />
         )}
         {!accountFailed && activePanel === "friends" && (
