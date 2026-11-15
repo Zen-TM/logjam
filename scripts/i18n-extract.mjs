@@ -8,11 +8,18 @@
 //   node scripts/i18n-extract.mjs <file-or-directory>...   # rewrite in place
 //   node scripts/i18n-extract.mjs --dry-run <path>...      # list only
 //   node scripts/i18n-extract.mjs --words <path>...        # also one-word labels
+//   node scripts/i18n-extract.mjs --prose <path>...        # also prose literals
 //
 // `--words` converts a capitalised single word in any position the scanner
 // treats as text ("Friends", "Delete"), which the ratchet does not count: such a
 // word is as often an id as a label, so read the diff. Then run `make format`
 // and `node scripts/i18n-identity-check.mjs origin/main`.
+//
+// `--prose` converts every literal in the named files that reads as a sentence,
+// wherever it stands (a data table, a returned string), which the ratchet counts
+// but the stock run leaves for a person. Point it at files whose strings are all
+// user copy, such as the screen contracts in `shared/src/contracts/`, and read
+// the diff: a log line or an id that reads as words is converted too.
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -32,8 +39,8 @@ const { EXEMPT_FILES, ratchetReads } = await import(`${dist}/i18nSource.js`);
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const paths = args.filter((arg) => !arg.startsWith("--"));
-if (!paths.length || args.some((a) => a.startsWith("--") && !["--words", "--dry-run"].includes(a))) {
-  console.error("usage: i18n-extract.mjs [--words] [--dry-run] <file-or-directory>...");
+if (!paths.length || args.some((a) => a.startsWith("--") && !["--words", "--prose", "--dry-run"].includes(a))) {
+  console.error("usage: i18n-extract.mjs [--words] [--prose] [--dry-run] <file-or-directory>...");
   process.exit(2);
 }
 
@@ -69,6 +76,7 @@ for (const file of paths.flatMap((p) => sources(resolve(p)))) {
   const source = readFileSync(file, "utf8");
   const result = extractMessages(ts, file, source, {
     words: flag("--words"),
+    prose: flag("--prose"),
     importFrom: importFor(repoPath),
   });
   for (const skip of result.skipped)
