@@ -1834,7 +1834,7 @@ describe("Show catchment on a place's page", () => {
 
   it("says why nothing is drawn when the pin is off a creek or unmapped", () => {
     expect(contracts.MAP_POINT.copy.upstreamNoCreek).toBe(
-      "No creek within 50 m to show the catchment of.",
+      "No creek within 150 m to show the catchment of.",
     );
     expect(contracts.MAP_POINT.copy.upstreamNotCovered).toBe(
       "Catchments aren't mapped here yet.",
