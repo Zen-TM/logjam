@@ -8,6 +8,7 @@ import {
 } from "@playwright/test";
 import { pseudo } from "@logjam/shared";
 import { stubMaster } from "./__fixtures__/stubMaster";
+import { statewideArchives } from "./__fixtures__/geoPdfTiles";
 import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // Logjam Web in the pseudo-language (the `pseudo` project, playwright.config.ts):
@@ -112,7 +113,11 @@ function scan(): Scan {
 const named = (english: string) =>
   new RegExp(`^(${escaped(english)}|${escaped(pseudo(english))})`);
 
-/** A weekday, a month and a half of the day, each read as one fixed word, so the list does not change with the day or the hour of the run. */
+/**
+ * A weekday, a month, a half of the day and a year (shown only when it is not
+ * this year's), each read as one fixed form, so the list does not change with
+ * the day or the hour of the run, or how long ago the stack was seeded.
+ */
 const CALENDAR: [RegExp, string][] = [
   [/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:[a-z]*day)?\b/g, "Mon"],
   [
@@ -120,6 +125,7 @@ const CALENDAR: [RegExp, string][] = [
     "Jan",
   ],
   [/\b[AP]M\b/g, "AM"],
+  [/\bJan 0\b(?!, 0)/g, "Jan 0, 0"],
 ];
 
 const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -227,7 +233,6 @@ class Walk {
       const asked = [...this.asked].map((request) => request.url());
       found = await this.page.evaluate(scan);
       const now = JSON.stringify(found);
-      console.log("DBG", screen, asked, now === before, now.length);
       quiet = asked.length === 0 && now === before ? quiet + 1 : 0;
       before = now;
       expect(quiet, `${screen} keeps changing, or waits on ${asked}`).toBe(3);
@@ -248,6 +253,15 @@ class Walk {
     });
   }
 }
+
+// stubMaster builds the made-up archives when the map first asks for one, and
+// building them blocks this process for 10 to 40 s. By then the page is up and
+// its first `evaluate` is waiting on this process, so the screen is read as
+// 30 s of silence. Built here, the cost falls in a hook, ahead of the page.
+test.beforeAll(() => {
+  test.setTimeout(180_000);
+  statewideArchives();
+});
 
 test.beforeEach(async ({ page }) => {
   // `en-XA` is offered only where the simulated regions are on
