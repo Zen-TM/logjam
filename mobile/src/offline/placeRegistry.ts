@@ -40,7 +40,8 @@
 // on regained signal, as `topoAutoDownload.ts` is, Wi-Fi only by default, and
 // never in offline-only mode, on a timer or while the app is in the background
 // (ADR 0013). Guards: placeRegistry.test.ts ("does not check while the app is in
-// the background", "still checks while the app's state is not yet known"). A
+// the background", "stops a check at the next region once the app goes to the
+// background", "still checks while the app's state is not yet known"). A
 // region that declares no registry has no copy.
 //
 // A BAD DOWNLOAD NEVER REPLACES A GOOD FILE: the new file lands at a temporary
@@ -98,6 +99,7 @@ import { readPref, writePref } from "../prefsDb";
 import { readRegions } from "../regionsPreference";
 import { assertSpaceFor, hasSpaceFor, NotEnoughSpaceError } from "./freeSpace";
 import { PLACE_REGISTRY_DIR } from "./localStores";
+import { boundsView } from "../map/basemapMeta";
 import { pendingRegionBoxes } from "./regionDownloadQueue";
 import { canRunNow } from "./networkPolicy";
 import { isOfflineOnly } from "./offlineOnlyMode";
@@ -617,15 +619,7 @@ export function refreshPlaceRegistry(regionId: string): Promise<FetchOutcome> {
 async function regionsToKeep(): Promise<RegionWithRegistry[]> {
   const saved = (await listArtifacts()).flatMap((artifact) =>
     artifact.kind === "basemap-region" && artifact.bbox
-      ? regionsTouching(
-          {
-            west: artifact.bbox[0],
-            south: artifact.bbox[1],
-            east: artifact.bbox[2],
-            north: artifact.bbox[3],
-          },
-          REGIONS,
-        )
+      ? regionsTouching(boundsView(artifact.bbox), REGIONS)
       : [],
   );
   const saving = pendingRegionBoxes().flatMap((box) =>
@@ -738,6 +732,9 @@ async function refreshAll(): Promise<void> {
   await lapseExcept(keep).catch((err: unknown) => console.error(err));
   for (const region of keep) {
     if (epoch.aborted) return;
+    // The screen went dark since the check began: a fetch in flight finishes,
+    // and the next region waits for the next foreground check (ADR 0013).
+    if (AppState.currentState === "background") return;
     await refreshPlaceRegistry(region.id);
   }
 }

@@ -107,8 +107,9 @@ feature in NSW, never a geocoding service.**
   counts), and no other, so the chosen regions also decide which offline
   place-name copies the phone keeps. Once it asks for the file, each such region
   gets its copy at the next check (app start, return to the foreground, or
-  regained signal; Wi-Fi by default, never while the app is in the background,
-  as [0013](0013-background-work-battery-rules.md) says) without a region
+  regained signal; Wi-Fi by default, never in the background, where a check in
+  progress stops at the next region, as
+  [0013](0013-background-work-battery-rules.md) says) without a region
   download of its own, and a copy of any other region, and any folder named for
   one, is deleted at the next check. At every wipe (`wipeAllLocalData`: at
   sign-out, and from `finishSignIn` when a different account signs in) the wipe
@@ -131,7 +132,8 @@ feature in NSW, never a geocoding service.**
   without waiting for its bytes", "stops a pointer read without waiting for its
   answer", "starts no check between a wipe's stop and its lapse, and runs again
   after", "leaves no folder for a region after a failed or stopped first fetch,
-  or a lapse", "does not check while the app is in the background" and "still
+  or a lapse", "does not check while the app is in the background", "stops a
+  check at the next region once the app goes to the background" and "still
   checks while the app's state is not yet known"),
   `mobile/src/offline/regionDownloadQueue.test.ts` ("lists queued, downloading
   and paused jobs, and not ready or failed ones"),

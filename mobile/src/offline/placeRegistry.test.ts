@@ -1173,6 +1173,38 @@ describe("the lapse and the wipe, around a fetch", () => {
     await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
   });
 
+  // A check that began in the foreground stops at the next region once the
+  // screen goes dark: a fetch in flight finishes. Mutation: drop the
+  // `AppState.currentState === "background"` return from `refreshAll`'s loop,
+  // and a chain of automatic downloads runs behind a dark screen.
+  it("stops a check at the next region once the app goes to the background", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW, OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const releaseRead = holdInstall();
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
+    app.state = "background";
+    releaseRead();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+
+    // The next foreground check fetches it.
+    app.state = "active";
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    for (const change of app.changes) change("active");
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    vi.mocked(Date.now).mockRestore();
+  });
+
   // Android reports "unknown" until the first AppState event, and the check at
   // launch runs inside that window. Mutation: return unless the state is
   // "active" in `requestCheck`, and the check at launch is dropped.
