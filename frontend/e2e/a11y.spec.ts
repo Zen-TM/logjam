@@ -1662,7 +1662,7 @@ test.describe("desktop", () => {
       .click();
     await show.click();
     await expect(
-      page.getByText("No creek within 50 m to show the catchment of."),
+      page.getByText("No creek within 150 m to show the catchment of."),
     ).toBeVisible();
     await expect(page.getByText(/^Creeks upstream ·/)).toHaveCount(0);
   });
