@@ -119,6 +119,21 @@ describe("terrainEntries", () => {
       expect(entry.tiles).toBeUndefined();
   });
 
+  // Mutation: take `deepest` alone for the routed zoom (drop the
+  // `archive.maxzoom` floor), and a region whose archive holds z17 beside an
+  // area that stops at z16 is never asked for its z17 tiles.
+  it("routes to the region's own top zoom where an area stops shallower", () => {
+    const nzArea = {
+      ...area,
+      coverage: [169.22, -44.08, 169.24, -44.06] as const,
+    };
+    const entries = terrainEntries(SIM_NZ, [nzArea]);
+    expect(SIM_NZ.terrain.slope!.maxzoom).toBe(17);
+    expect(entries.slope?.tiles?.maxzoom).toBe(17);
+    expect(entries.hillshade?.tiles?.maxzoom).toBe(17);
+    expect(entries.contours?.tiles?.maxzoom).toBe(14);
+  });
+
   // Mutations: a routed source that stops at z15 (the area's z16 is never
   // asked for), contours past z14, or the survey's credit left out.
   it("routes each layer to the deepest zoom an area holds, crediting it", () => {
