@@ -159,6 +159,8 @@ import {
   type TripPlanPageView,
   accountRegion,
   pointBox,
+  sharpenOfferFor,
+  sharpenUnavailable,
   type LonLatBox,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -565,6 +567,10 @@ function App() {
   // holds that a pan inside one keeps the same object). Unknown until the map
   // reports its first view.
   const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // What sharpening offers for an action about `box`, else about the ground the
+  // map shows (`sharpenOfferFor`).
+  const sharpenFor = (box: LonLatBox | null) =>
+    sharpenOfferFor(box, viewRegion);
   // Only a region with a gauge feed has river gauges to draw.
   const gaugesHere = viewRegion?.gauges != null;
   // The layers drawn over the region in view, and the stored carrier where
@@ -1718,7 +1724,10 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => setShowTopo(true),
+      unavailable: sharpenUnavailable(sharpenFor(null)) ?? undefined,
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -1765,6 +1774,7 @@ function App() {
           }}
           awaitingBbox={selectingTopoBbox}
           pendingBbox={pendingTopoBbox}
+          offer={sharpenFor(pendingTopoBbox)}
           onJobCreated={handleTopoJobCreated}
           existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
             .map((j) => j.name)
@@ -2032,6 +2042,7 @@ function App() {
             onSharePlaces={(ids) => openSelection(ids, "share")}
             onExportPlaces={(ids) => openSelection(ids, "export")}
             onMakeMap={makeMap}
+            sharpenFor={sharpenFor}
             onHoverPlace={placeHighlight.set}
             onFiltersOpenChange={setSidebarSheetOpen}
             onRefetch={refetch}

@@ -11,8 +11,17 @@ import {
   SHARPENED_SOURCE_PREFIX,
   type DemSource,
 } from "./demSources.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { escapeXml } from "./escapeXml.js";
 import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
+import { t } from "./i18n.js";
+import {
+  REGIONS,
+  regionOfArea,
+  type LonLatBox,
+  type Region,
+  type RegionSharpen,
+} from "./regions.js";
 
 /**
  * What a new LiDAR job is called wherever one is offered or made: declared
@@ -27,6 +36,84 @@ export const LIDAR_JOB_COPY = {
   unnamed: "Your area",
   beingMade: "is being sharpened",
 } as const;
+
+type SharpenUpload = Extract<RegionSharpen, { mode: "upload" }>;
+/** Where a region's users get a survey, and the steps the dialog walks them through. */
+export type SharpenPortal = SharpenUpload["portal"];
+type SharpenOffReason = Extract<RegionSharpen, { mode: "off" }>["reason"];
+
+/**
+ * Why sharpening is off where a region says so, as a sentence. Held beside
+ * the worker's own refusals (topo/sharpen.py `NOT_SHARPENED`), which say it
+ * after an upload; these say it before one.
+ */
+export const SHARPEN_OFF_REASON: Record<SharpenOffReason, string> = {
+  "no-lidar": t`There is no LiDAR survey to sharpen from here.`,
+  "already-fine": t`Logjam's terrain here is already at 1 m, so there is nothing to sharpen.`,
+};
+
+/** What Logjam Web offers for sharpening over some ground. */
+export type SharpenOffer =
+  | {
+      mode: "upload";
+      portal: SharpenPortal;
+      /** Whether the vegetation layer can be asked for here. */
+      vegetation: boolean;
+    }
+  | { mode: "off"; reason: string };
+
+/**
+ * What sharpening offers where `region` is. With no region (a map not yet
+ * placed, or over ground no region declares) it offers what the first
+ * upload region does, as the dialog always did when New South Wales was the
+ * only region; the worker still refuses a survey of ground in none
+ * (topo/sharpen.py `upload_region`). Guard: `sharpen.test.ts` ("sharpenOffer").
+ */
+export function sharpenOffer(
+  region: Region | null,
+  regions: readonly Region[] = REGIONS,
+): SharpenOffer {
+  const entry: RegionSharpen = (
+    region ?? regions.find((r) => r.sharpen.mode === "upload")
+  )?.sharpen ?? { mode: "off", reason: "no-lidar" };
+  return entry.mode === "upload"
+    ? {
+        mode: "upload",
+        portal: entry.portal,
+        vegetation: entry.vegetation,
+      }
+    : { mode: "off", reason: SHARPEN_OFF_REASON[entry.reason] };
+}
+
+/**
+ * What an entry point to sharpening says where it is off: the Terrain layers'
+ * "Not available here" beside it, and the region's reason for a tooltip or a
+ * screen reader. Null where sharpening is on. Guard: `sharpen.test.ts`
+ * ("sharpenUnavailable").
+ */
+export function sharpenUnavailable(
+  offer: SharpenOffer,
+): { state: string; reason: string } | null {
+  return offer.mode === "off"
+    ? { state: MAP_TERRAIN.copy.notHere, reason: offer.reason }
+    : null;
+}
+
+/**
+ * The offer for an action about `box`, else about what the map shows: the
+ * region holding the box's centre decides, which is how the worker picks one
+ * (`regionOfArea`), and a box in no region falls back to `view`. Guard:
+ * `sharpen.test.ts` ("sharpenOfferFor").
+ */
+export function sharpenOfferFor(
+  box: LonLatBox | null,
+  view: Region | null,
+  regions: readonly Region[] = REGIONS,
+): SharpenOffer {
+  const there =
+    box && regionOfArea([box.west, box.south, box.east, box.north], regions);
+  return sharpenOffer(there || view, regions);
+}
 
 /** A completed sharpened job, as a client and the API's sampler need it. */
 export type SharpenedArea = {

@@ -142,6 +142,18 @@
   color: var(--color-accent);
 }
 
+/* A tool the map's region cannot run: its words dim, its reason stays at full
+   strength (shared/DESIGN.md §5). */
+.trayUnavailable .trayGlyph,
+.trayUnavailable .trayLabel {
+  opacity: var(--opacity-disabled);
+}
+
+.trayState {
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
 /* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:
    where the credits are wider than the room beside them and Map.module.css
    does not lift them (a desktop with a panel open) they run leftwards over

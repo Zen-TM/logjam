@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import {
+  NSW_REGION,
+  RASTER_TEMPLATE_DEFAULTS,
+  SHARPEN_OFF_REASON,
+  SIM_NZ,
+  SIM_UTAH,
+  WORLD,
+  sharpenOffer,
+  type SharpenOffer,
+} from "@logjam/shared";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -80,9 +89,15 @@ afterEach(() => {
   expect(network).not.toHaveBeenCalled();
 });
 
-function dialog(props: { open: boolean; awaitingBbox?: boolean }) {
+function dialog(props: {
+  open: boolean;
+  awaitingBbox?: boolean;
+  offer?: SharpenOffer;
+  onClose?: () => void;
+}) {
   return (
     <TopoDialog
+      offer={sharpenOffer(NSW_REGION)}
       onClose={() => {}}
       onSelectBbox={() => {}}
       awaitingBbox={false}
@@ -172,4 +187,121 @@ describe("TopoDialog's Vegetation choice", () => {
       vegetation: { ...RASTER_TEMPLATE_DEFAULTS.vegetation, enabled: true },
     });
   });
+});
+
+const heading = (name: string) => screen.getByRole("heading", { name });
+const button = (name: string | RegExp) => screen.getByRole("button", { name });
+
+// What Logjam Web said before a region chose its portal, word for word: New
+// South Wales, the only region in prod, must read as it did.
+describe("TopoDialog in New South Wales", () => {
+  // Mutation: change a word of the ELVIS hint in TopoDialog.tsx ("No need to
+  // unzip it."), or write "ELVIS" into the drop line's template.
+  it("names ELVIS in the drop zone and the errand button", () => {
+    render(dialog({ open: true }));
+    expect(
+      screen.getByText(
+        "Drop your ELVIS ZIP here, or select it in your file system.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("No need to unzip it.")).toBeTruthy();
+    expect(button("Haven't got one? Order LiDAR from ELVIS")).toBeTruthy();
+    expect(screen.getByText("Name")).toBeTruthy();
+  });
+
+  // Mutation: send the ELVIS steps through the link sub-view, or open a
+  // portal address other than the one NSW declares.
+  it("walks through ELVIS's four steps and opens its portal", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(dialog({ open: true }));
+    fireEvent.click(button("Haven't got one? Order LiDAR from ELVIS"));
+    expect(heading("Getting LiDAR from ELVIS")).toBeTruthy();
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual([
+      "Mark out what you want covered",
+      "Order the data from ELVIS",
+      "Take the 1 m or 2 m DEM",
+      "Have it sent to you",
+    ]);
+    fireEvent.click(button("Open the ELVIS portal"));
+    expect(open).toHaveBeenCalledWith(
+      "https://elevation.fsdf.org.au/",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+});
+
+describe("TopoDialog where the region's portal has no errand of its own", () => {
+  const usgs = () => sharpenOffer(SIM_UTAH);
+
+  // Mutation: hard-code "ELVIS" in the drop line, or leave the one-ZIP hint
+  // as ELVIS's "No need to unzip it.".
+  it("names that portal and says an upload is one ZIP", () => {
+    render(dialog({ open: true, offer: usgs() }));
+    expect(
+      screen.getByText(
+        "Drop your USGS ZIP here, or select it in your file system.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Put all the files in one ZIP.")).toBeTruthy();
+    expect(button("Haven't got one? Get LiDAR from USGS")).toBeTruthy();
+    expect(screen.queryByText(/ELVIS/)).toBeNull();
+  });
+
+  // Mutation: send this portal through ElvisInstructions (swap the two
+  // `steps` conditions in TopoDialog.tsx).
+  it("gives the portal's link and the reminder to zip, and no shapefile errand", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(dialog({ open: true, offer: usgs() }));
+    fireEvent.click(button("Haven't got one? Get LiDAR from USGS"));
+    expect(heading("Getting LiDAR from USGS")).toBeTruthy();
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual(["Get the LiDAR from USGS", "Put the files in one ZIP"]);
+    expect(screen.queryByText(/shapefile/i)).toBeNull();
+    fireEvent.click(button("Open the USGS portal"));
+    expect(open).toHaveBeenCalledWith(
+      "https://apps.nationalmap.gov/lidar-explorer/",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+
+  // Mutation: show Vegetation whatever the region's `vegetation` says, and a
+  // region with no vegetation model offers a layer its worker leaves out.
+  it("does not offer Vegetation, which the region has no model for", async () => {
+    const { container } = render(dialog({ open: true, offer: usgs() }));
+    pick(container, lazZip());
+    await screen.findByText("Survey");
+    expect(screen.queryByRole("checkbox", { name: /Vegetation/ })).toBeNull();
+  });
+});
+
+describe("TopoDialog where the region has no sharpening", () => {
+  const OFF: [string, SharpenOffer, string][] = [
+    ["already-fine", sharpenOffer(SIM_NZ), SHARPEN_OFF_REASON["already-fine"]],
+    ["no-lidar", sharpenOffer(WORLD), SHARPEN_OFF_REASON["no-lidar"]],
+  ];
+
+  // Mutation: render the form for an `off` offer (make its condition in
+  // TopoDialog.tsx never true).
+  it.each(OFF)(
+    "says Not available here and why (%s), and offers no ZIP",
+    (_reason, offer, sentence) => {
+      const onClose = vi.fn();
+      const { container } = render(dialog({ open: true, offer, onClose }));
+      expect(heading("Not available here")).toBeTruthy();
+      expect(screen.getByText(sentence)).toBeTruthy();
+      expect(container.ownerDocument.querySelector('input[type="file"]')).toBe(
+        null,
+      );
+      expect(screen.queryByRole("button", { name: "Make it" })).toBeNull();
+      fireEvent.click(button("Close"));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    },
+  );
 });

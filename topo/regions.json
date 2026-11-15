@@ -105,6 +105,11 @@
    "grid": "mga2020",
    "sharpen": {
     "mode": "upload",
+    "portal": {
+     "name": "ELVIS",
+     "url": "https://elevation.fsdf.org.au/",
+     "steps": "elvis"
+    },
     "credit": "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",
     "vegetation": true
    }
@@ -271,6 +276,11 @@
    "grid": "utm",
    "sharpen": {
     "mode": "upload",
+    "portal": {
+     "name": "USGS",
+     "url": "https://apps.nationalmap.gov/lidar-explorer/",
+     "steps": "link"
+    },
     "credit": "Elevation: derived from a LiDAR survey, U.S. Geological Survey 3D Elevation Program{extracted}.",
     "vegetation": false
    }

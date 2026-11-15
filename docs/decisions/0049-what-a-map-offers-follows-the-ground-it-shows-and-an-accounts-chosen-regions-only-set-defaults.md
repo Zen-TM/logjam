@@ -108,6 +108,18 @@ read, none of them a location.)
   ([0051](0051-a-lettered-grade-is-stored-as-its-rank.md) holds the rule). Guard:
   `shared/src/canyonGrade.test.ts` ("the definitions an attribute list shows").
   Everything else above stands.
+- **Update 2026-11-16: Sharpen an area is offered where the region sharpens.**
+  The Tools tray's tool, the Sharpened areas view's button, a place's
+  "Sharpen an area here" and the dialog read `Region.sharpen` through
+  `sharpenOfferFor` (`shared/src/sharpen.ts`). Where it is `off` they read "Not
+  available here" with the region's reason; where it is `upload` the dialog
+  names the region's portal. An action about a box (a place's verb, an area
+  already drawn) asks the region holding the box's centre, which is how the
+  worker picks the region that fills the area, before the one in view; a view
+  over no region offers what the first upload region does, so New South Wales
+  alone reads as it did. Guard: `shared/src/sharpen.test.ts` ("sharpenOffer",
+  "sharpenOfferFor") and `frontend/e2e/sharpen-region.spec.ts`. Everything
+  else above stands.
 
 ## Consequences
 

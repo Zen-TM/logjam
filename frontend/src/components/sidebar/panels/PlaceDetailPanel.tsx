@@ -52,8 +52,12 @@ import {
   type SectionKeysOn,
   type MediaItem,
   type ScopedCustomFieldDef,
+  sharpenUnavailable,
+  type RegionBbox,
+  type SharpenOffer,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
+import { placesBounds } from "./placesModel";
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -195,6 +199,7 @@ function PlaceDetailPanel({
   onBack,
   onOpenTrip,
   onMakeMap,
+  sharpenFor,
   onExportPlace,
   verbRequest,
   onVerbRequestConsumed,
@@ -231,6 +236,8 @@ function PlaceDetailPanel({
   onOpenTrip: (tripLogId: string) => void;
   /** Start a map over this place; the menu names the two kinds. */
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
+  /** What sharpening offers for a box, else for the ground the map shows. */
+  sharpenFor: (box: RegionBbox | null) => SharpenOffer;
   /** Open the share-or-export dialog on this place, the one the list uses. */
   onExportPlace: (placeId: string) => void;
   /** A verb pressed on this place's row in the list, for this page to run. */
@@ -689,11 +696,13 @@ function PlaceDetailPanel({
     delete: () => setShowDeleteConfirm(true),
   };
 
+  const sharpenOff = sharpenUnavailable(sharpenFor(placesBounds([current])));
   const entries = placeVerbEntries(
     "page",
     isOwnedPlace,
     (id) => verbRunners[id](),
     busy,
+    sharpenOff ? { makeTopo: sharpenOff } : {},
   );
 
   const visualMedia = placeMedia.filter(

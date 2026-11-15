@@ -13,6 +13,7 @@ import {
   Icon,
   Menu,
   NorthNeedle,
+  Tooltip,
   useEscape,
   useOutsidePress,
   type MenuEntry,
@@ -24,10 +25,14 @@ import classes from "./MapChrome.module.css";
 /** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
 const TRAY_CLOSE_MS = 100;
 
+/** A tool that cannot run where the map is: `state` is drawn beside its label, `reason` is the tooltip. */
+export type MapToolUnavailable = { state: string; reason: string };
+
 type MapToolBase = {
   id: string;
   label: string;
   icon: Glyph;
+  unavailable?: MapToolUnavailable;
 };
 export type MapTool =
   | (MapToolBase & { onSelect: () => void })
@@ -221,6 +226,30 @@ export default function MapChrome({
                       </button>
                     )}
                   />
+                ) : tool.unavailable ? (
+                  // Stays focusable and says why, as a disabled Button does
+                  // (shared/DESIGN.md §5); pressing it does nothing.
+                  <Tooltip
+                    key={tool.id}
+                    content={tool.unavailable.reason}
+                    placement="top-end"
+                    openOnPress
+                  >
+                    {(describedById) => (
+                      <button
+                        type="button"
+                        aria-disabled
+                        aria-describedby={describedById}
+                        {...item}
+                        className={`${item.className} ${classes.trayUnavailable}`}
+                      >
+                        {face}
+                        <span className={classes.trayState}>
+                          {tool.unavailable!.state}
+                        </span>
+                      </button>
+                    )}
+                  </Tooltip>
                 ) : (
                   <button
                     key={tool.id}
