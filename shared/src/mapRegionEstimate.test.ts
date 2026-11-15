@@ -577,9 +577,8 @@ describe("planRegionForBasemaps", () => {
   });
 
   // Mutation: read `REGIONS` instead of the `regions` argument in
-  // `saveClipArchive` and a simulated clip's id finds nothing; leave a kind out
-  // of the `.find` in `saveClipArchive` (the slope, say) and the slope's id
-  // finds nothing.
+  // `saveClipArchive` and a simulated clip's id finds nothing; drop the slope's
+  // `add` line in `clipArchivesOf` and the slope's id finds nothing.
   it("finds the archive a clip is filed under, with the zooms it is cut at", () => {
     const every = [NSW_REGION, ...SIM_REGIONS];
     const found = (id: string) => {
