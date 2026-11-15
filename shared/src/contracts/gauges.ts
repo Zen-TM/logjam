@@ -72,7 +72,9 @@ export function gaugeDisplayName(raw: string): string {
   const key = (word: string | undefined) =>
     (word ?? "").replace(/\.$/, "").toUpperCase();
   // The clean-up reads BoM's tokens, never the catalogue's words, so it holds
-  // in every language. "OF" is the `nameWords` key a stream phrase ends in.
+  // in every language (gauges.test.ts, "drops the 'at' before a stream phrase
+  // whatever language the words are in"). "OF" is the `nameWords` key a stream
+  // phrase ends in.
   const words = raw
     .replace(/@/g, " @ ")
     .replace(/\b(up|down) ?(stream)( of)?\b/gi, "$1$2 OF")
