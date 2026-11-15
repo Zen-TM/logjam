@@ -76,6 +76,7 @@ import {
   placeCountLabel,
   placeTypeDeleteConfirm,
   placeTypeInUseNote,
+  tripTitleHint,
   FRIEND_SHARE_VERBS,
   PLAN_VERB_LISTS,
   friendRemoveConfirm,
@@ -1719,5 +1720,25 @@ describe("delete done-toasts", () => {
     expect(placeDeleteDone(3)).toBe("3 places deleted.");
     expect(tripDeleteDone(1)).toBe("Trip deleted.");
     expect(tripDeleteDone(3)).toBe("3 trips deleted.");
+  });
+});
+
+describe("sentences written whole for each count or case", () => {
+  // Mutation: swap the two messages in `placeTypeInUseNote` (settings.ts).
+  it("says a place type in use with the verb and the pronoun that agree", () => {
+    expect(placeTypeInUseNote(1)).toBe(
+      "1 place uses this type. Change it to another type, or merge it on Logjam Web, to delete it.",
+    );
+    expect(placeTypeInUseNote(3)).toBe(
+      "3 places use this type. Change them to another type, or merge it on Logjam Web, to delete it.",
+    );
+  });
+
+  // Mutation: swap the two branches of `tripTitleHint` (tripForm.ts).
+  it("says what an empty trip title falls back to", () => {
+    expect(tripTitleHint(null)).toBe("Defaults to “Untitled trip”");
+    expect(tripTitleHint("Claustral Canyon")).toBe(
+      "Defaults to Claustral Canyon",
+    );
   });
 });

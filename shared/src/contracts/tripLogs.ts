@@ -9,10 +9,11 @@ import type { IconIdea } from "../icons.js";
 import { TRIP_SORT_OPTIONS, type TripSortKey } from "../tripFilter.js";
 import { navLabel } from "./nav.js";
 import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const TRIPS_LIST = {
   id: "logs.list",
-  question: "What have I done?",
+  question: t`What have I done?`,
   title: navLabel("logs"),
   sections: [
     { key: "hero" },
@@ -25,35 +26,30 @@ export const TRIPS_LIST = {
     {
       key: "truncated",
       on: "web",
-      reason:
-        "Only Logjam Web lists straight from the server's capped response. Logjam GPS lists the mirror that sync fills.",
+      reason: t`Only Logjam Web lists straight from the server's capped response. Logjam GPS lists the mirror that sync fills.`,
     },
     { key: "list" },
   ],
   copy: {
-    typeRail: "Trip type",
-    allTypes: "All",
-    noType: "No type",
+    typeRail: t`Trip type`,
+    allTypes: t`All`,
+    noType: t`No type`,
 
-    search: "Search trips",
-    stats: "Trip stats",
-    clearFilters: "Clear filters",
-    loading: "Loading your trips…",
+    search: t`Search trips`,
+    stats: t`Trip stats`,
+    clearFilters: t`Clear filters`,
+    loading: t`Loading your trips…`,
 
-    firstRunTitle: "No trips yet",
+    firstRunTitle: t`No trips yet`,
     // The first-run body names the ways in, and they differ: Logjam Web
     // imports, Logjam GPS does not, and a guest's trips never sync.
-    firstRunBodyWeb:
-      "Log a trip, or bring your trips in from a file. Trips you log here reach Logjam GPS for offline use.",
-    firstRunBodyGps:
-      "Log a trip, or import your trips on Logjam Web. Once synced, it works offline.",
-    firstRunBodyGuest:
-      "Log a trip to start. Everything is saved on this phone and works offline.",
-    filteredTitle: "No trips match",
-    filteredBody:
-      "Nothing matches your search and filters. Clear them to see the rest.",
+    firstRunBodyWeb: t`Log a trip, or bring your trips in from a file. Trips you log here reach Logjam GPS for offline use.`,
+    firstRunBodyGps: t`Log a trip, or import your trips on Logjam Web. Once synced, it works offline.`,
+    firstRunBodyGuest: t`Log a trip to start. Everything is saved on this phone and works offline.`,
+    filteredTitle: t`No trips match`,
+    filteredBody: t`Nothing matches your search and filters. Clear them to see the rest.`,
 
-    hasNotes: "Has notes",
+    hasNotes: t`Has notes`,
   },
 } as const satisfies ScreenContract;
 
@@ -61,20 +57,19 @@ export const TRIPS_LIST = {
  *  has one way in, so it draws that entry as a button. */
 export const TRIPS_ADD = {
   id: "logs.list.add",
-  title: "Add",
+  title: t`Add`,
   sections: [
     { key: "add" },
     {
       key: "importFile",
       on: "web",
-      reason:
-        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
+      reason: t`Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.`,
     },
   ],
   copy: {
-    add: "Log a trip",
-    importFile: "Import from CSV",
-    menu: "Add trips",
+    add: t`Log a trip`,
+    importFile: t`Import from CSV`,
+    menu: t`Add trips`,
   },
 } as const satisfies ScreenContract;
 
@@ -88,7 +83,7 @@ export const TRIPS_ADD_ICON: Record<
 
 export const TRIPS_FILTER_SHEET = {
   id: "logs.filterSheet",
-  title: "Sort and filter",
+  title: t`Sort and filter`,
   sections: [
     // The options are `TRIP_SORT_OPTIONS`.
     { key: "sort" },
@@ -100,19 +95,21 @@ export const TRIPS_FILTER_SHEET = {
     { key: "dates" },
   ],
   copy: {
-    sort: "Sort",
-    attributes: "Attributes",
-    dates: "Dates",
+    sort: t`Sort`,
+    attributes: t`Attributes`,
+    dates: t`Dates`,
 
+    // A switch's words stay plain literals: each client's `switchCopy.test.ts`
+    // measures them by their literal types, which `t` widens to `string`.
     includeMissing: "Include if not set",
     includeMissingHint: "Also show ones with no value",
-    tripDate: "Trip date",
-    dateFrom: "From",
-    dateTo: "To",
-    datePresets: "Date presets",
-    clear: "Clear",
-    reset: "Reset",
-    done: "Done",
+    tripDate: t`Trip date`,
+    dateFrom: t`From`,
+    dateTo: t`To`,
+    datePresets: t`Date presets`,
+    clear: t`Clear`,
+    reset: t`Reset`,
+    done: t`Done`,
   },
 } as const satisfies ScreenContract;
 
@@ -120,11 +117,11 @@ export const TRIPS_FILTER_SHEET = {
  * The trip form's chip row of saved places near the ends of the track it was
  * opened from.
  */
-export const TRIP_NEAR_TRACK_LABEL = "Near this track";
+export const TRIP_NEAR_TRACK_LABEL = t`Near this track`;
 
 /** "1 trip", "37 trips". */
 export function tripsCountLabel(count: number): string {
-  return `${count} ${count === 1 ? "trip" : "trips"}`;
+  return plural(count, "# trip", "# trips");
 }
 
 /**
@@ -153,9 +150,7 @@ export function tripsFilterNote(args: {
   const sort = TRIP_SORT_OPTIONS.find((option) => option.key === args.sort);
   const parts = [
     args.rangeLabel,
-    others > 0
-      ? `${others} ${others === 1 ? "filter" : "filters"} active`
-      : null,
+    others > 0 ? plural(others, "# filter active", "# filters active") : null,
     args.sort !== "newest" && sort ? sort.label : null,
   ].filter((part): part is string => part != null);
   return parts.length > 0 ? parts.join(" · ") : null;
@@ -211,25 +206,22 @@ export const SELECTION_GESTURES = [
   {
     id: "shiftClickRange",
     on: "web",
-    reason:
-      "A range needs a modifier key and a pointer, and a touch screen has neither. Logjam Web's list says so under its header.",
+    reason: t`A range needs a modifier key and a pointer, and a touch screen has neither. Logjam Web's list says so under its header.`,
   },
   {
     id: "pressAndHold",
     on: "gps",
-    reason:
-      "A finger cannot hover or hold a modifier key, so a press and hold on a row starts a selection. Logjam Web selects with its checkboxes.",
+    reason: t`A finger cannot hover or hold a modifier key, so a press and hold on a row starts a selection. Logjam Web selects with its checkboxes.`,
   },
   {
     id: "selectAllButton",
     on: "gps",
-    reason:
-      "A touch screen cannot press Ctrl+A, which is how Logjam Web selects every row.",
+    reason: t`A touch screen cannot press Ctrl+A, which is how Logjam Web selects every row.`,
   },
 ] as const satisfies readonly ClientOnly[];
 
 /** The selection bar's count, on every list: "3 selected". The list's own
  *  noun is already on screen. */
 export function listSelectionLabel(count: number): string {
-  return `${count} selected`;
+  return t`${count} selected`;
 }

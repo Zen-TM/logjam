@@ -3,6 +3,7 @@
 // on the page you are already on (shared/DESIGN.md §9).
 import type { IconIdea } from "../icons.js";
 import type { ConfirmCopy } from "./confirm.js";
+import { plural, t } from "../i18n.js";
 
 export type TripVerbSurface = "row" | "page";
 
@@ -19,12 +20,12 @@ type TripVerbDeclaration = {
 
 /** In menu order. */
 export const TRIP_VERBS = [
-  { id: "open", icon: "trip", label: "Open trip", omitOn: "page" },
-  { id: "edit", icon: "edit", label: "Edit trip" },
+  { id: "open", icon: "trip", label: t`Open trip`, omitOn: "page" },
+  { id: "edit", icon: "edit", label: t`Edit trip` },
   {
     id: "delete",
     icon: "delete",
-    label: "Delete trip",
+    label: t`Delete trip`,
     danger: true,
     separated: true,
   },
@@ -55,7 +56,7 @@ export function tripVerbs(surface: TripVerbSurface): TripVerb[] {
 
 /** The done-toast after deleting trips, from a page and a list alike. */
 export function tripDeleteDone(count: number): string {
-  return count === 1 ? "Trip deleted." : `${count} trips deleted.`;
+  return plural(count, "Trip deleted.", "# trips deleted.");
 }
 
 /**
@@ -69,12 +70,14 @@ export function tripDeleteConfirm(
   return {
     confirmTitle:
       "title" in target
-        ? `Delete ${target.title}?`
+        ? t`Delete ${target.title}?`
         : one
-          ? "Delete this trip?"
-          : `Delete ${target.count} trips?`,
-    confirmBody: `${one ? "Its" : "Their"} photos, videos and tracks go too. The ${one ? "places it links" : "places they link"} to stay. This can't be undone.`,
-    confirmLabel: "Delete",
+          ? t`Delete this trip?`
+          : t`Delete ${target.count} trips?`,
+    confirmBody: one
+      ? t`Its photos, videos and tracks go too. The places it links to stay. This can't be undone.`
+      : t`Their photos, videos and tracks go too. The places they link to stay. This can't be undone.`,
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }

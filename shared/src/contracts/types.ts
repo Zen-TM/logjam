@@ -9,6 +9,7 @@
 // level also gets a test (`placesContracts.test.ts`); one that closes over
 // component state cannot be imported, so the `Record` is its only check.
 
+import { t } from "../i18n.js";
 export type ContractPlatform = "web" | "gps";
 
 /**
@@ -109,7 +110,7 @@ export function contractSectionKeys<
 
 /** The mark on a form field that cannot be left empty: both clients' text
  *  fields draw it beside the label when told the field is `required`. */
-export const FORM_REQUIRED = "Required";
+export const FORM_REQUIRED = t`Required`;
 
 /** What a list's data is: still coming, could not be had, or in hand. */
 export type LoadState = "loading" | "failed" | "ready";
