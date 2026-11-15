@@ -66,9 +66,10 @@ pseudo-language in a prod runtime (`api/src/lib/requestLanguage.unit.test.ts`,
 the simulated regions are off (`frontend/src/languageSetting.test.ts`,
 `mobile/src/languageSetting.test.ts`). No `say` literal in `api/src` or
 `shared/src` sits outside a function (`api/src/userCopy.unit.test.ts`). The
-announcement's push title, which the API reads for each recipient, and the
-plan form builder's locked-visibility sentence are getters, so they are written
-when read, not when their module loads
+announcement's push title, which the API reads for each recipient, is a
+getter, so it is written when read, not when its module loads. So is the plan
+form builder's locked-visibility sentence, which the clients read, so that no
+contract sentence is written at import
 (`shared/src/contracts/contractLanguage.test.ts`).
 (updated 2026-11-15)
 
