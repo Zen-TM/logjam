@@ -6,9 +6,11 @@ import { model as magneticModel } from "geomagnetism";
 import {
   extractionCreditLine,
   BASEMAP_CATALOG,
+  formatScaleStep,
   gridConvergence,
   overlayAttributionLines,
   REGIONS,
+  scaleBarSteps,
   type GeoPdfConfig,
   type Region,
   type TopoLayerName,
@@ -29,14 +31,6 @@ import {
   TN_COLOR,
   type Ctx,
 } from "./common";
-
-const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
-
-/** Format distance label for scale bar */
-function formatDistance(m: number): string {
-  if (m >= 1000) return `${m / 1000} km`;
-  return `${m} m`;
-}
 
 export function drawRoundedRect(
   ctx: Ctx,
@@ -133,8 +127,9 @@ export function drawScaleBar(
     111320 *
     Math.cos(midLat * DEG_TO_RAD);
   const maxBarM = mapWidthM * 0.25;
-  let barDistM = SCALE_BAR_DISTANCES[0];
-  for (const d of SCALE_BAR_DISTANCES) {
+  const steps = scaleBarSteps("print");
+  let barDistM = steps[0];
+  for (const d of steps) {
     if (d <= maxBarM) barDistM = d;
     else break;
   }
@@ -145,7 +140,7 @@ export function drawScaleBar(
   const segments = 4;
   const segWidth = barWidthPx / segments;
 
-  const labelText = formatDistance(barDistM);
+  const labelText = formatScaleStep(barDistM);
   ctx.font = `${fontPx}px ${MAP_FONT}`;
   const labelW = ctx.measureText(labelText).width;
 

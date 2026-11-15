@@ -37,9 +37,9 @@ import {
   type PlaceVerbIdOn,
   type SectionKeysOn,
   userFieldValues,
-  withRowUnit,
   distinctTripTypes,
   formatCanyonGrade,
+  withFieldUnit,
   canyonGradeRows,
   formatDistanceM,
   formatTripDate,
@@ -119,11 +119,14 @@ import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before
  *  deciding what to do with it. */
-function foreignValueText(value: unknown): string {
+function foreignValueText(key: string, value: unknown): string {
   if (value === null || value === undefined) return "No value";
   if (typeof value === "object") return JSON.stringify(value);
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
+  // A built-in length parked here still reads in the display units.
+  return typeof value === "number"
+    ? withFieldUnit(key, String(value))
+    : String(value);
 }
 
 /** Extent of a drawn route's points, for "show it on the map". Built at
@@ -286,7 +289,7 @@ export function PlaceDetailScreen({
   const customFields = canyonGradeRows(
     attributeRows(labellingDefs, storedFields),
     place.fieldValues,
-  ).map(withRowUnit);
+  );
 
   // Position is what every place has. Type-specific attributes render in the
   // type's own attribute table below rather than in bespoke stat tiles.
@@ -491,7 +494,7 @@ export function PlaceDetailScreen({
               key={item.key}
               icon="help"
               title={item.label}
-              subtitle={foreignValueText(item.value)}
+              subtitle={foreignValueText(item.key, item.value)}
               chevron
               onPress={() => setForeignKey(item.key)}
             />
@@ -912,7 +915,7 @@ export function PlaceDetailScreen({
           <View style={[styles.fieldRow, styles.fieldRowLast]}>
             <Text style={styles.fieldKey}>{foreignItem?.label}</Text>
             <Text style={styles.fieldValue}>
-              {foreignValueText(foreignItem?.value)}
+              {foreignValueText(foreignItem?.key ?? "", foreignItem?.value)}
             </Text>
           </View>
           {/* HIDDEN on a built-in key, not greyed out, and with no sentence
