@@ -1,0 +1,50 @@
+{
+  "_comment": "Which region an area export reads its archives from: the region with heights holding the centre of the box [west, south, east, north], else the first one touching it, else null. Made-up boxes over NSW and the simulated regions. Read by shared/src/areaExport.test.ts (areaExportRegion) and topo/tests/test_regions.py (TestExportRegion), so the API that names the grid and the worker that reads the archives cannot pick differently.",
+  "cases": [
+    {
+      "why": "inside NSW",
+      "bbox": [150.3, -33.72, 150.32, -33.7],
+      "region": "nsw"
+    },
+    {
+      "why": "centre off NSW's northern border, the box over it",
+      "bbox": [153.0, -28.3, 153.2, -28.1],
+      "region": "nsw"
+    },
+    {
+      "why": "centre off NSW's western border, the box over it",
+      "bbox": [140.5, -33.3, 141.1, -32.7],
+      "region": "nsw"
+    },
+    {
+      "why": "all of it at sea",
+      "bbox": [155.5, -34.0, 156.5, -33.5],
+      "region": null
+    },
+    {
+      "why": "inside the heights' coverage box and all in Victoria",
+      "bbox": [144.2, -36.8, 144.3, -36.7],
+      "region": null
+    },
+    {
+      "why": "simulated New Zealand's first ring",
+      "bbox": [169.22, -44.08, 169.24, -44.06],
+      "region": "simnz"
+    },
+    {
+      "why": "simulated New Zealand's second ring",
+      "bbox": [175.6, -37.12, 175.62, -37.1],
+      "region": "simnz"
+    },
+    {
+      "why": "inside simulated Utah",
+      "bbox": [-112.95, 37.27, -112.93, 37.29],
+      "region": "simutah"
+    },
+    {
+      "why": "centre past simulated Utah's east edge, the box over it",
+      "bbox": [-112.89, 37.28, -112.83, 37.3],
+      "region": "simutah"
+    }
+  ]
+}

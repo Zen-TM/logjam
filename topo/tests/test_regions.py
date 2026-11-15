@@ -19,6 +19,7 @@ import regions  # noqa: E402
 
 TOPO = os.path.dirname(os.path.dirname(__file__))
 AREA_CASES = os.path.join(TOPO, "..", "shared/src/__fixtures__/area-region.json")
+EXPORT_CASES = os.path.join(TOPO, "..", "shared/src/__fixtures__/export-region.json")
 KATOOMBA = (150.31, -33.71)
 WANAKA = (169.25, -44.055)
 DEV = {"DB_HOST": "postgres"}
@@ -183,6 +184,55 @@ class TestRegionOfArea(unittest.TestCase):
             with self.subTest(case["why"]):
                 found = regions.region_of_area(case["coverage"], every)
                 self.assertEqual(found and found["id"], case["region"])
+
+
+class TestExportRegion(unittest.TestCase):
+    # Mutation: `export_region` testing the centre only (no touching
+    # fallback): a box over NSW's edge is then read from no region, though
+    # the API admitted it and named MGA for it
+    # (shared/src/areaExport.test.ts reads the same cases for `areaExportRegion`).
+    def test_a_box_is_read_from_the_region_the_api_names_its_grid_by(self):
+        with open(EXPORT_CASES, encoding="utf-8") as f:
+            cases = json.load(f)["cases"]
+        self.assertGreaterEqual(len(cases), 8)
+        every = load({**DEV, "SIM_REGIONS": "1"})
+        for case in cases:
+            with self.subTest(case["why"]):
+                found = regions.export_region(case["bbox"], every)
+                self.assertEqual(found and found["id"], case["region"])
+
+    @staticmethod
+    def made_up():
+        def ring(w, s, e, n):
+            return [[w, s], [e, s], [e, n], [w, n], [w, s]]
+
+        def one(rid, heights, *borders):
+            terrain = {"heights": {"id": rid}} if heights else {}
+            return {"id": rid, "borders": list(borders), "terrain": terrain}
+
+        # `bare` holds the box's centre but has no heights.
+        return [
+            one("bare", False, ring(10, 10, 20, 20)),
+            one("full", True, ring(15, 10, 25, 20)),
+            one("other", True, ring(5, 22, 12, 30)),
+        ]
+
+    # Mutation: leave the `heights` filter out, and a box centred in a region
+    # that has none is read from it, with no archive to read.
+    def test_a_region_with_no_heights_is_never_the_one(self):
+        every = self.made_up()
+        found = regions.export_region((8, 12, 16, 18), every)  # centre (12, 15)
+        self.assertEqual(found["id"], "full")
+
+    # Mutation: take the last touching region, or the nearest, in place of the
+    # first in the list's order.
+    def test_two_regions_touching_the_box_go_by_list_order(self):
+        box = (8, 19, 20, 31)  # centred in none, over `full` and `other`
+        every = self.made_up()
+        self.assertEqual(regions.export_region(box, every)["id"], "full")
+        self.assertEqual(
+            regions.export_region(box, [every[0], every[2], every[1]])["id"], "other"
+        )
 
 
 class TestSharpenEntry(unittest.TestCase):

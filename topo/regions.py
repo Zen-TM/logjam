@@ -84,3 +84,29 @@ def region_of_area(coverage, regions=None):
     the cases its test reads)."""
     west, south, east, north = coverage
     return region_at((west + east) / 2, (south + north) / 2, regions)
+
+
+def export_region(bbox, regions=None):
+    """The region an area export reads its archives from: the one with
+    heights holding the centre of the (west, south, east, north) box, else
+    the first with heights touching it, or None. `areaExportRegion` in
+    shared/src/areaExport.ts is the same choice, so the API's grid and the
+    worker's archives come from one region (tests/test_regions.py
+    `TestExportRegion` reads the cases its test reads)."""
+    from shapely.geometry import Polygon
+    from shapely.geometry import box as box_polygon
+
+    west, south, east, north = bbox
+    withheights = [
+        r
+        for r in (REGIONS if regions is None else regions)
+        if r["terrain"].get("heights")
+    ]
+    found = region_at((west + east) / 2, (south + north) / 2, withheights)
+    if found:
+        return found
+    cover = box_polygon(west, south, east, north)
+    for r in withheights:
+        if any(Polygon(ring).intersects(cover) for ring in r["borders"]):
+            return r
+    return None

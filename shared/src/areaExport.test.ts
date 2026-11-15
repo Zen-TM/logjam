@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   AREA_EXPORT_MAX_SIDE_KM,
   areaExportEpsg,
+  areaExportGrid,
+  areaExportRegion,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
@@ -12,7 +15,7 @@ import {
   type AreaBbox,
 } from "./areaExport.js";
 import { nswContourStyle } from "./contourRules.js";
-import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
+import { NSW_REGION, REGIONS, REGIONS_WITH_SIMULATED } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
@@ -162,6 +165,47 @@ describe("areaExportEpsg", () => {
   });
 });
 
+describe("areaExportRegion", () => {
+  const cases = (
+    JSON.parse(
+      readFileSync(
+        new URL("./__fixtures__/export-region.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      cases: {
+        why: string;
+        bbox: [number, number, number, number];
+        region: string | null;
+      }[];
+    }
+  ).cases;
+
+  // Mutation: test the centre only (give `regionAt` the centre and drop the
+  // `regionsTouching` fallback), and a box over NSW's edge is read from no
+  // region, as topo/regions.py `export_region` (its test reads the same
+  // cases) reads it from NSW.
+  it("is the region the worker reads the archives from", () => {
+    expect(cases.length).toBeGreaterThanOrEqual(8);
+    for (const { why, bbox, region } of cases) {
+      const [west, south, east, north] = bbox;
+      expect(
+        areaExportRegion({ west, south, east, north }, REGIONS_WITH_SIMULATED)
+          ?.id ?? null,
+        why,
+      ).toBe(region);
+    }
+  });
+
+  // Mutation: answer `regions[0]` for a box no region touches, and an export
+  // of open sea is warped to a region's grid, not UTM.
+  it("gives a box no region touches the UTM grid", () => {
+    const sea = { west: 155.5, south: -34, east: 156.5, north: -33.5 };
+    expect(areaExportRegion(sea, REGIONS_WITH_SIMULATED)).toBeNull();
+    expect(areaExportGrid(sea, REGIONS_WITH_SIMULATED)).toBe("utm");
+  });
+});
+
 describe("areaExportTooLarge", () => {
   // Mutation: compare the area, or the shorter side, with the limit, and a
   // long thin strip past the limit gets through.
@@ -194,10 +238,11 @@ describe("areaInTerrainRegion", () => {
     ).toBe(false);
   });
 
-  // Mutation: add terrain to a region and leave the sentence alone.
-  it("names every region with terrain in its refusal", () => {
-    for (const region of REGIONS.filter((r) => layerIn(r, "heights")))
-      expect(AREA_EXPORT_OUTSIDE_TERRAIN).toContain(region.name);
+  // Mutation: put a region's name in the sentence, and it goes stale when a
+  // region is added or this one is renamed.
+  it("names no region in its refusal", () => {
+    for (const region of REGIONS_WITH_SIMULATED)
+      expect(AREA_EXPORT_OUTSIDE_TERRAIN).not.toContain(region.name);
   });
 });
 

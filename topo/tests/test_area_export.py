@@ -5,6 +5,7 @@ archive reader against one pmtiles itself wrote. The GDAL steps need the worker 
 run here (topo/AGENTS.md).
 """
 
+import math
 import os
 import re
 import sys
@@ -22,16 +23,18 @@ from area_export import (  # noqa: E402
     AREA_CELL_M,
     CELL_M,
     FORMATS,
+    MAX_SIDE_KM,
     LAYERS,
     LAYERS_BY_FORMAT,
     MBTILES_ZOOMS,
     STYLE_SLOPE_BANDS,
     ROUTED_FROM,
     Area,
-    AreaOutsideNsw,
+    AreaOutsideTerrain,
     area_credit_line,
     area_from,
     credit_line,
+    export_zoom,
     HILLSHADE_FLAT,
     HILLSHADE_MAX_ALPHA,
     hillshade_colours,
@@ -40,6 +43,8 @@ from area_export import (  # noqa: E402
     grid_extent,
     slope_colours,
     plan,
+    region_keys,
+    region_top_zoom,
     tile_archive,
     tile_range,
 )
@@ -562,7 +567,7 @@ class ContoursAlone(unittest.TestCase):
         from build_nsw_dem import lonlat_to_tile
 
         far = lonlat_to_tile(145.0, -30.0, 15)
-        with self.assertRaises(AreaOutsideNsw):
+        with self.assertRaises(AreaOutsideTerrain):
             self.export({(15, *far): b"heights"})
 
 
@@ -583,15 +588,45 @@ def made_up_area(**over) -> Area:
 
 
 class TileArchive(unittest.TestCase):
-    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts
-    for an archive whose deepest zoom is z15, over areas already in the
-    router's order (the API's)."""
+    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts,
+    for an archive whose deepest zoom is z15 unless a test gives another, over
+    areas already in the router's order (the API's)."""
 
     a = made_up_area()
 
-    def route(self, layer, z, x, y, areas=None):
-        answer = tile_archive([self.a] if areas is None else areas, layer, z, x, y)
+    def route(self, layer, z, x, y, areas=None, deepest=15):
+        answer = tile_archive(
+            [self.a] if areas is None else areas, layer, z, x, y, deepest
+        )
         return answer if isinstance(answer, str) else answer.id
+
+    # Mutation: answer "absent" past z15 whatever the archive's own top zoom
+    # (`z == start`), and a region's z16 and z17 tiles outside every area are
+    # read as missing; or answer "statewide" past it, and a z15 archive's
+    # overzoom is drawn from tiles it does not have.
+    def test_the_regions_own_archive_answers_down_to_its_top_zoom(self):
+        for layer in ("heights", "slope"):
+            self.assertEqual(
+                self.route(layer, 16, 60198, 38800, deepest=17), "statewide"
+            )
+            self.assertEqual(
+                self.route(layer, 17, 120396, 77600, deepest=17), "statewide"
+            )
+            self.assertEqual(
+                self.route(layer, 18, 240792, 155200, deepest=17), "absent"
+            )
+            self.assertEqual(
+                self.route(layer, 16, 60198, 38800, deepest=16), "statewide"
+            )
+            self.assertEqual(self.route(layer, 17, 120396, 77600, deepest=16), "absent")
+
+    # Mutation: let the archive's top zoom outrank an area's zmax, and a tile
+    # past the area's zmax is read from the region instead of left to the
+    # area's parent.
+    def test_an_areas_zmax_still_ends_its_tiles_in_a_deeper_archive(self):
+        self.assertEqual(self.route("heights", 16, 60200, 38800, deepest=17), "a")
+        self.assertEqual(self.route("heights", 17, 120400, 77600, deepest=17), "absent")
+        self.assertEqual(self.route("slope", 17, 120400, 77600, deepest=17), "absent")
 
     # Mutations: an area answering below z15, or a statewide tile past z15.
     def test_statewide_below_z15_and_nothing_past_it_outside_an_area(self):
@@ -948,10 +983,163 @@ class SharpenedAreaInAnExport(unittest.TestCase):
             centre = Image.open(io.BytesIO(data)).convert("RGBA").getpixel((128, 128))
             if centre[3] == 0:
                 continue  # outside the box
-            inside = tile_archive([self.area], "slope", z, x, y) is self.area
+            inside = tile_archive([self.area], "slope", z, x, y, 15) is self.area
             seen.add(inside)
             self.assertEqual(centre[:3], (255, 0, 0) if inside else (0, 255, 0))
         self.assertEqual(seen, {True, False})
+
+
+class NswExportUnchanged(unittest.TestCase):
+    """An export of a box over New South Wales reads what it read before
+    regions: these are the keys and the zoom of its archives."""
+
+    @classmethod
+    def setUpClass(cls):
+        import regions
+
+        cls.nsw = regions.region("nsw")
+
+    # Mutation: change a key in `region_keys` (read the contours from another
+    # archive, or drop the slope), and an NSW export is made from a different
+    # archive than the map draws.
+    def test_the_archives_are_the_ones_it_always_read(self):
+        self.assertEqual(
+            region_keys(self.nsw),
+            {
+                "heights": "master/dem/nsw-5m.pmtiles",
+                "slope": "master/dem/nsw-5m-slope.pmtiles",
+                "contours": "master/contours/nsw-10m.pmtiles",
+            },
+        )
+        self.assertEqual(region_top_zoom(self.nsw), 15)
+
+    # Mutation: let a box under the cell budget go finer than z15 for an
+    # archive that ends at z15 (drop the `zoom <= top` test), and a small NSW
+    # box is asked for z16 tiles the archive does not have.
+    def test_every_box_over_nsw_is_read_at_z15_and_5_m(self):
+        for box in (
+            (150.30, -33.72, 150.32, -33.70),  # 2 km
+            (149.5, -34.2, 150.5, -33.2),  # 1 degree
+            (146.0, -34.0, 148.0, -33.0),  # past the API's limit
+        ):
+            self.assertEqual(export_zoom(15, box), (15, CELL_M), box)
+
+
+class ExportZoom(unittest.TestCase):
+    wanaka = (169.25, -44.055)
+
+    def box(self, side_km):
+        lon, lat = self.wanaka
+        d_lat = side_km / 110.57 / 2
+        d_lon = side_km / (111.32 * math.cos(math.radians(lat))) / 2
+        return (lon - d_lon, lat - d_lat, lon + d_lon, lat + d_lat)
+
+    # Mutation: ignore the box's size (return the deepest zoom the archive
+    # has), and a 100 km box at 1 m is 25 times the cells the export task is
+    # sized for; or compare cells against a limit of another size.
+    def test_a_finer_archive_is_read_as_deep_as_the_box_allows(self):
+        self.assertEqual(export_zoom(17, self.box(5)), (17, 1))
+        self.assertEqual(export_zoom(17, self.box(19)), (17, 1))
+        self.assertEqual(export_zoom(17, self.box(21)), (16, 2))
+        self.assertEqual(export_zoom(17, self.box(39)), (16, 2))
+        self.assertEqual(export_zoom(17, self.box(41)), (15, CELL_M))
+        self.assertEqual(export_zoom(17, self.box(MAX_SIDE_KM)), (15, CELL_M))
+
+    # Mutation: give a z16 archive z17 (drop the `zoom <= top` test).
+    def test_an_archive_ending_at_z16_is_not_read_at_z17(self):
+        self.assertEqual(export_zoom(16, self.box(5)), (16, 2))
+
+
+@unittest.skipIf(
+    is_stubbed("osgeo") or is_stubbed("pmtiles") or is_stubbed("numpy"),
+    "needs real GDAL, pmtiles and numpy",
+)
+class RegionExportFiles(unittest.TestCase):
+    """The files of an export of a made-up box over New South Wales and over
+    New Zealand, from made-up archives."""
+
+    nsw_box = (150.300, -33.705, 150.320, -33.690)
+    nz_box = (169.250, -44.056, 169.254, -44.053)
+    nz_credit = "Elevation: simulated data for New Zealand, not a real survey."
+
+    @staticmethod
+    def archives(box, zoom, heights_attribution):
+        from build_nsw_dem import lonlat_to_tile
+
+        x0, y0 = lonlat_to_tile(box[0], box[3], zoom)
+        x1, y1 = lonlat_to_tile(box[2], box[1], zoom)
+        xy = [(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
+        return {
+            "heights": archive_of(
+                {(zoom, x, y): terrarium_png(900.0) for x, y in xy},
+                heights_attribution,
+            ),
+            "slope": archive_of({(zoom, x, y): terrarium_png(7.0) for x, y in xy}),
+        }
+
+    def export(self, box, archives, layers, **kwargs):
+        import tempfile
+        import zipfile
+
+        from osgeo import gdal
+
+        from area_export import render_area
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(archives, box, layers, "geotiff", Path(tmp), **kwargs)
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+                zf.extractall(tmp)
+            rasters = {}
+            for name in names:
+                if name.endswith(".tif"):
+                    ds = gdal.Open(str(Path(tmp, name)))
+                    srs = ds.GetSpatialRef()
+                    rasters[name] = (
+                        ds.GetGeoTransform()[1],
+                        srs.GetAuthorityCode(None),
+                        ds.GetRasterBand(1).ReadAsArray(),
+                    )
+        return names, credits, rasters
+
+    # Mutation: warp an NSW box to a cell, grid, credit or file name other than
+    # what the export made before regions: 5 m, the EPSG the API named, the
+    # archive's own attribution, "heights.tif" and "slope.tif".
+    def test_a_box_over_nsw_is_5_m_in_mga_with_its_credit(self):
+        names, credits, rasters = self.export(
+            self.nsw_box,
+            self.archives(self.nsw_box, 15, ATTRIBUTION),
+            ["heights", "slope"],
+            epsg=7856,
+            top_zoom=15,
+        )
+        self.assertEqual(names, {"heights.tif", "slope.tif", "CREDITS.txt"})
+        for name in ("heights.tif", "slope.tif"):
+            self.assertEqual(rasters[name][:2], (CELL_M, "7856"), name)
+        self.assertIn("Heights and slope: derived from the NSW 5 m", credits)
+
+    # Mutation: read the archives at z15 whatever `top_zoom` says, and a New
+    # Zealand box finds no tile (or a 5 m cell from a 1 m archive); or take the
+    # cell from the grid, and an NZTM file is not 1 m.
+    def test_a_box_over_a_1_m_region_is_1_m_in_its_own_grid_with_its_credit(self):
+        archives = self.archives(self.nz_box, 17, self.nz_credit)
+        names, credits, rasters = self.export(
+            self.nz_box, archives, ["heights", "slope"], epsg=2193, top_zoom=17
+        )
+        self.assertEqual(names, {"heights.tif", "slope.tif", "CREDITS.txt"})
+        for name in ("heights.tif", "slope.tif"):
+            self.assertEqual(rasters[name][:2], (1, "2193"), name)
+        heights = rasters["heights.tif"][2]
+        self.assertEqual(set(heights[heights > -1000].round().tolist()), {900})
+        self.assertIn("simulated data for New Zealand", credits)
+
+    # Mutation: drop the refusal in `write_mosaic` (the `== 0` check), and a
+    # box the region's archives hold no tile of comes out an empty file.
+    def test_a_box_the_archives_hold_no_tile_of_is_outside_terrain(self):
+        archives = self.archives(self.nz_box, 17, self.nz_credit)
+        with self.assertRaises(AreaOutsideTerrain):
+            self.export(self.nsw_box, archives, ["heights"], epsg=7856, top_zoom=17)
 
 
 class AreaCells(unittest.TestCase):
@@ -1069,12 +1257,19 @@ class SyncWithShared(unittest.TestCase):
 
     # Mutation: reword one copy of the sentence, and a box past NSW reads
     # differently refused at submit and failed by the worker.
-    def test_outside_nsw_sentence_matches(self):
+    def test_outside_terrain_sentence_matches(self):
         match = re.search(r"AREA_EXPORT_OUTSIDE_TERRAIN = say`([^`]*)`", self.src)
         self.assertIsNotNone(
             match, "AREA_EXPORT_OUTSIDE_TERRAIN not found in areaExport.ts"
         )
-        self.assertEqual(match.group(1), AreaOutsideNsw.SENTENCE)
+        self.assertEqual(match.group(1), AreaOutsideTerrain.SENTENCE)
+
+    # Mutation: change the limit on one side only, and a box the API admits is
+    # sized for a cell count the worker's `export_zoom` does not expect.
+    def test_the_longest_side_matches(self):
+        match = re.search(r"AREA_EXPORT_MAX_SIDE_KM = (\d+);", self.src)
+        self.assertIsNotNone(match, "AREA_EXPORT_MAX_SIDE_KM not found")
+        self.assertEqual(int(match.group(1)), MAX_SIDE_KM)
 
     # Mutation: rename the key on one side only, and every MBTiles is drawn
     # in the default bands, not the account's.
