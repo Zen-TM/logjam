@@ -1,6 +1,8 @@
 // What Logjam Web's and Logjam GPS's own sign-in and sign-up forms decide
 // before and after they reach Cognito (ADR 0045), so the two cannot drift
 // (ADR 0020). Each client draws the forms itself.
+import { t } from "./i18n.js";
+import { REGIONS, soleRegion, type Region } from "./regions.js";
 import { USERNAME_RULE, isValidUsername } from "./username.js";
 
 /**
@@ -10,9 +12,6 @@ import { USERNAME_RULE, isValidUsername } from "./username.js";
  * `frontend/src/linkPreview.test.ts` holds `intro` equal to index.html's.
  */
 export const SIGN_IN_COPY = {
-  /** Logjam Web's sign-in card description. It lives here so the page and its
-   *  link preview (index.html's tags) share one declaration. */
-  intro: "Your private map and trips for canyoning in New South Wales.",
   createAccount: "Create account",
   creatingAccount: "Creating account…",
   /** The link from the sign-in form to the sign-up form. */
@@ -24,6 +23,20 @@ export const SIGN_IN_COPY = {
   ageConfirm: "I am 18 or older",
   resetIntro: "Enter your email and we'll send you a reset code.",
 } as const;
+
+/**
+ * Logjam Web's sign-in card description, which names the region while there
+ * is one. It lives here so the page and its link preview (index.html's tags)
+ * share one declaration. Guards: `signInForm.test.ts` ("names the region
+ * while there is one, and no region with several") and
+ * `frontend/src/linkPreview.test.ts`.
+ */
+export function signInIntro(regions: readonly Region[] = REGIONS): string {
+  const only = soleRegion(regions);
+  return only
+    ? t`Your private map and trips for canyoning in ${only.fullName}.`
+    : t`Your private map and trips for canyoning.`;
+}
 
 /** The verify form's intro: where the code went, and where it may be hiding. */
 export function verifyIntro(email: string): string {

@@ -182,6 +182,7 @@ const NZ_TERRAIN: RegionTerrain = {
 export const SIM_NZ: Region = {
   id: "simnz",
   name: "Simulated New Zealand",
+  fullName: "Simulated New Zealand",
   view: { center: [169.25, -44.055], zoom: 11 },
   timeZone: "Pacific/Auckland",
   borders: [ringAround(NZ_SOUTH_BOX), ringAround(NZ_NORTH_BOX)],
@@ -212,6 +213,7 @@ const UTAH_TERRAIN: RegionTerrain = {
 export const SIM_UTAH: Region = {
   id: "simutah",
   name: "Simulated Utah",
+  fullName: "Simulated Utah",
   view: { center: [-112.945, 37.285], zoom: 11 },
   timeZone: "America/Denver",
   borders: [ringAround(UTAH_BOX)],
@@ -241,6 +243,7 @@ const WORLD_TERRAIN = simTerrain(
 export const SIM_WORLD: Region = {
   id: "world",
   name: "The world",
+  fullName: "The world",
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",
   borders: [],
