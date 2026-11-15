@@ -471,8 +471,17 @@ cut); a unit Logjam does not know fails with a sentence. A file with no
 coordinate system is read as metres, so a survey in feet that carries none is
 not told apart.
 
-To run it by hand, put the two statewide archives in `./output/statewide`,
-or a clip of them over the area (the [NSW 5 m DEM
+The area belongs to the region that holds the centre of the survey's ground
+(`regions.json`, written from `shared/src/regions.ts`). That region's heights
+and slope archives are the fill, and its `sharpen.credit` is the credit the
+area carries, with the month the ZIP was packed. Ground in a region that takes
+no uploads (its own heights are already as fine, or it has no LiDAR to offer),
+or in no region, fails with a sentence for its owner. The vegetation layer is
+made only in a region that declares it (`sharpen.vegetation`): elsewhere a
+ticked job finishes without it and records `vegetationLeftOut`.
+
+To run it by hand, put the region's two archives in `./output/statewide`,
+or a clip of them over the area (for NSW, the [NSW 5 m DEM
 archive](#building-the-nsw-5-m-dem-archive) and [the statewide slope
 archive](#the-statewide-slope-archive) say how they are built), then:
 
@@ -481,6 +490,14 @@ docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpen
   --statewide-heights /output/statewide/nsw-5m.pmtiles \
   --statewide-slope /output/statewide/nsw-5m-slope.pmtiles
 ```
+
+For a survey in a simulated region, build that region's archives with
+[`scripts/sim-regions/`](../scripts/sim-regions/README.md), put its
+`simutah-heights.pmtiles` and `simutah-slope.pmtiles` (from `out/master/dem/`)
+in `./output/statewide`, name them in the two flags, and add `-e SIM_REGIONS=1`
+after `run`: the worker takes the switch from its own environment only, and
+refuses it where it sees a prod runtime. A worker the dev stack starts does not
+get the switch, so a job over simulated ground made through the stack is refused.
 
 ---
 

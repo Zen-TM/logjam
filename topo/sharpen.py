@@ -2,14 +2,17 @@
 """
 sharpen.py
 ----------
-Sharpen an area: an ELVIS ZIP to the statewide terrain formats at the
-survey's own cell, for a job the API marked to sharpen (`topo_jobs.sharpen`).
+Sharpen an area: a ZIP of a LiDAR survey to the terrain formats of the
+region it lies in, at the survey's own cell, for a job the API marked to
+sharpen (`topo_jobs.sharpen`).
 
     sharpen.py ZIP OUT [--statewide-heights SRC] [--statewide-slope SRC]
                        [--workers N] [--progress-file P] [--metrics-json P]
 
 SRC is a local `.pmtiles` path or `s3://bucket/key`; the default is the
-published `nsw-5m.pmtiles` or `nsw-5m-slope.pmtiles` in $S3_BUCKET_TOPO.
+heights or the slope archive, in $S3_BUCKET_TOPO, of the region that holds the
+centre of the survey's ground (`upload_region`). The archives are called
+statewide below, after the first region's.
 OUT receives:
 
   heights.pmtiles   terrarium heights, z15 to zmax, a mean pyramid (ADR 0030)
@@ -22,8 +25,8 @@ OUT receives:
 
 A ZIP Logjam cannot sharpen writes `error.json` with the sentence its owner
 reads (the `CannotSharpen` sentences: no ground with a height, only 5 m
-DEMs, a measuring unit Logjam can't read, too big for memory or disk) and
-exits 2.
+DEMs, a measuring unit Logjam can't read, ground where no region takes a
+survey, too big for memory or disk) and exits 2.
 
 Each archive holds every tile of one range: the z15 tiles over the
 footprint's bbox, widened to whole z14 tiles, and all their descendants to
@@ -71,6 +74,7 @@ import numpy as np
 
 import build_nsw_dem as dem
 import pipeline
+import regions
 from worker_common import TOO_BIG
 
 log = logging.getLogger("sharpen")
@@ -107,18 +111,32 @@ HEIGHTS = dataclasses.replace(
 )
 SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 
+# Written before the survey's ground is found, so for a survey of any region
+# from any portal (tests/test_sharpen.py `TestRegion`,
+# `test_no_sentence_names_a_region_or_a_portal`). The form says ONLY_5M before
+# the upload (shared/src/elvisZip.ts, whose test holds the two word for word:
+# shared/src/elvisZip.test.ts, "refuses it in the worker's own words").
 EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
-    "from ELVIS with its DEM, and make it again."
+    "with its DEM, and make it again."
 )
 UNKNOWN_UNIT = (
     "This survey's measuring unit isn't one Logjam can read. "
     "Download it again in metres or feet, and make it again."
 )
 ONLY_5M = (
-    "This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. "
-    "Choose the 1 m or 2 m DEM, or the point clouds, in ELVIS."
+    "This ZIP holds only DEMs too coarse to sharpen an area. "
+    "Choose a 1 m or 2 m DEM, or the point clouds."
 )
+# Why a survey's ground is not sharpened, by the `reason` of its region's
+# `sharpen` entry; ground in no region reads as "no-lidar".
+NOT_SHARPENED = {
+    "no-lidar": "Sharpening an area isn't available where this survey is.",
+    "already-fine": (
+        "Logjam's terrain is already at 1 m where this survey is, so there is "
+        "nothing to sharpen."
+    ),
+}
 
 
 class CannotSharpen(Exception):
@@ -270,13 +288,24 @@ def extraction_month(zip_path: str) -> Optional[str]:
     return max(dated).strftime("%B %Y") if dated else None
 
 
-def credit(extracted: Optional[str]) -> str:
-    """What ELVIS metadata asks of a derived product (CC BY 3.0 AU)."""
+def upload_region(coverage: Tuple[float, float, float, float]) -> dict:
+    """The region a survey's ground is filled from and credited to: the one
+    holding the centre of its box, when that region takes uploads. Any other
+    ground is refused, in the sentence for its reason (tests/test_sharpen.py
+    `TestRegion`)."""
+    region = regions.region_of_area(coverage)
+    entry = region["sharpen"] if region else {"mode": "off", "reason": "no-lidar"}
+    if entry["mode"] != "upload":
+        raise CannotSharpen(NOT_SHARPENED[entry["reason"]])
+    return region
+
+
+def credit(region: dict, extracted: Optional[str]) -> str:
+    """What the survey's publisher asks of a derived product: the region's
+    line (`sharpen.credit` in shared/src/regions.ts), with the month the ZIP
+    was packed where the line takes one."""
     when = f", extracted {extracted}" if extracted else ""
-    return (
-        "Elevation: derived from a LiDAR survey, © Department of Customer"
-        f" Service (NSW Spatial Services){when}. CC BY 3.0 AU."
-    )
+    return region["sharpen"]["credit"].replace("{extracted}", when)
 
 
 # ── Ground ───────────────────────────────────────────────────────────────────
@@ -432,9 +461,15 @@ def metric_dem(path: Path, out: Path, epsg: Optional[int] = None) -> Path:
         creationOptions=["COMPRESS=DEFLATE"],
     )
     if z != 1.0:
+        # A strip of rows at a time: the whole band of a large DEM is more
+        # memory than the job has to spare (tests/test_sharpen_units.py
+        # `test_heights_in_feet_are_scaled_a_strip_at_a_time`).
         band = warped.GetRasterBand(1)
-        grid = band.ReadAsArray()
-        band.WriteArray(np.where(grid == NODATA, NODATA, grid * z).astype(np.float32))
+        for top in range(0, band.YSize, pipeline.VALID_BLOCK_ROWS):
+            rows = min(pipeline.VALID_BLOCK_ROWS, band.YSize - top)
+            a = band.ReadAsArray(0, top, band.XSize, rows)
+            a[a != NODATA] *= z
+            band.WriteArray(a, 0, top)
     warped = ds = None
     return out
 
@@ -492,7 +527,7 @@ def cloud_units(srs: Optional[dict]) -> Tuple[Optional[float], float]:
     The height unit is the factor of the UNIT in the `vertical` WKT, not
     `units.vertical`: PDAL 2.6.2 reported "metre" there for a file whose
     vertical CRS is in US survey feet (tests/test_sharpen_units.py
-    `METRES_OVER_FEET`).
+    `test_the_vertical_wkt_gives_the_height_unit`).
     A file with no vertical CRS has its Z in the horizontal unit.
 
     Untested: a survey in feet as its agency wrote it, whose header differs in
@@ -517,7 +552,8 @@ def metre_filters(srs: dict, epsg: Optional[int]):
     unit is the metre: the reprojection rewrites the header as a CRS with no
     vertical part, where the Z-only scale would leave the feet in it, and GDAL's
     warp converts a raster's heights by its CRS's vertical unit, so the heights
-    would be scaled twice (tests/test_sharpen_units.py `METRES_OVER_FEET`)."""
+    would be scaled twice (tests/test_sharpen_units.py
+    `test_metres_over_feet_is_reprojected_too`)."""
     flat, z = cloud_units(srs)
     if flat == 1.0 and z == 1.0:
         return None
@@ -1031,7 +1067,7 @@ def range_bounds(tiles15: Tuple[int, int, int, int]) -> str:
     return f"{west},{south},{east},{north}"
 
 
-def raster_archives(work: Path, out: Path, tiles15, zmax: int, extracted: str):
+def raster_archives(work: Path, out: Path, tiles15, zmax: int, attribution: str):
     for layer, name in ((HEIGHTS, "heights"), (SLOPE, "slope")):
 
         def rows():
@@ -1052,12 +1088,12 @@ def raster_archives(work: Path, out: Path, tiles15, zmax: int, extracted: str):
                 "bounds": range_bounds(tiles15),
                 "minzoom": str(ZMIN),
                 "maxzoom": str(zmax),
-                "attribution": credit(extracted),
+                "attribution": attribution,
             },
         )
 
 
-def contour_archive(work: Path, out: Path, extracted: Optional[str]) -> bool:
+def contour_archive(work: Path, out: Path, attribution: str) -> bool:
     """10 m contours of the blocks' filled heights, as the statewide archive
     has them: one `contours` layer, an `elev` attribute, at z14 only. False,
     and no archive, when no 10 m level crosses the area: the statewide
@@ -1080,7 +1116,7 @@ def contour_archive(work: Path, out: Path, extracted: Optional[str]) -> bool:
         *["ogr2ogr", "-q", "-f", "MVT", str(mbtiles), str(lines)],
         *["-dsco", "FORMAT=MBTILES", "-dsco", f"MINZOOM={z}", "-dsco", f"MAXZOOM={z}"],
         *["-dsco", f"CONF={json.dumps(conf)}"],
-        *["-dsco", f"DESCRIPTION={credit(extracted).replace('Elevation', 'Contours')}"],
+        *["-dsco", f"DESCRIPTION={re.sub('^Elevation', 'Contours', attribution)}"],
     )
     has_tiles = False
     if mbtiles.exists():
@@ -1112,12 +1148,12 @@ def footprint_bbox(path: Path) -> Tuple[float, float, float, float]:
     return tuple(round(v, 6) for v in shape(geometry).bounds)
 
 
-def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
+def sharpen_result(zmax, tiles15, coverage, kind, extracted, attribution) -> dict:
     """What the job reports. topo/worker.py stores it with the archive keys,
     and the API reads it (api/src/services/sharpenedAreas.ts): the example in
     shared/src/__fixtures__/sharpen-result.json holds all three to one shape
-    (tests/test_sharpen.py `TestResult`). The credit the clients show is
-    declared here, once."""
+    (tests/test_sharpen.py `TestResult`). `attribution` is the credit the
+    clients show (`credit`)."""
     return {
         "v": 1,
         "zmax": zmax,
@@ -1125,7 +1161,7 @@ def sharpen_result(zmax, tiles15, coverage, kind, extracted) -> dict:
         "coverage": list(coverage),
         "ground": kind,
         "extracted": extracted,
-        "credit": credit(extracted),
+        "credit": attribution,
     }
 
 
@@ -1149,6 +1185,20 @@ def too_big_if_disk_full(path: str):
         if no_space or shutil.disk_usage(path).free < DISK_FULL_BYTES:
             raise CannotSharpen(TOO_BIG) from e
         raise
+
+
+def fill_archives(region: dict, args) -> Tuple[str, str]:
+    """Where the heights and the slope that fill an area are read from: the
+    region's own archives in $S3_BUCKET_TOPO, unless the command names one
+    (tests/test_sharpen.py `TestRegion`)."""
+    bucket = os.environ.get("S3_BUCKET_TOPO", "")
+    return tuple(
+        named or f"s3://{bucket}/{region['terrain'][layer]['archivePath']}"
+        for layer, named in (
+            ("heights", args.statewide_heights),
+            ("slope", args.statewide_slope),
+        )
+    )
 
 
 def sharpen(args) -> dict:
@@ -1176,9 +1226,14 @@ def sharpen(args) -> dict:
         with bench.step("Footprint", key="footprint"):
             pipeline.compute_data_footprint(ground, str(out / "footprint.geojson"))
         coverage = footprint_bbox(out / "footprint.geojson")
+        region = upload_region(coverage)
+        attribution = credit(region, extracted)
         tiles15 = tile_range(coverage)
         blocks = blocks_of(tiles15)
-        log.info(f"Ground: {kind}, zmax {zmax}, {len(blocks)} block(s)")
+        log.info(
+            f"Ground: {kind}, zmax {zmax}, {len(blocks)} block(s), "
+            f"filled from {region['id']}"
+        )
 
         blocks_dir = work / "blocks"
         blocks_dir.mkdir()
@@ -1189,8 +1244,7 @@ def sharpen(args) -> dict:
                 args.workers,
                 initializer=init_block_worker,
                 initargs=(
-                    args.statewide_heights,
-                    args.statewide_slope,
+                    *fill_archives(region, args),
                     ground,
                     zmax,
                     str(blocks_dir),
@@ -1205,11 +1259,11 @@ def sharpen(args) -> dict:
                 tile_count += done.result()
                 pipeline._write_progress(n, len(blocks), "tiles")
         with bench.step("Archives", key="archives"):
-            raster_archives(blocks_dir, out, tiles15, zmax, extracted)
-            if not contour_archive(blocks_dir, out, extracted):
+            raster_archives(blocks_dir, out, tiles15, zmax, attribution)
+            if not contour_archive(blocks_dir, out, attribution):
                 log.info("No 10 m contour crosses the area: no contour archive")
 
-    result = sharpen_result(zmax, tiles15, coverage, kind, extracted)
+    result = sharpen_result(zmax, tiles15, coverage, kind, extracted, attribution)
     (out / "sharpen.json").write_text(json.dumps(result))
     if args.metrics_json:
         bench.set_tile_counts(len(contents.las_files or contents.dem_files), tile_count)
@@ -1223,11 +1277,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("zip")
     parser.add_argument("out")
-    bucket = os.environ.get("S3_BUCKET_TOPO", "")
-    parser.add_argument(
-        "--statewide-heights", default=f"s3://{bucket}/{dem.HEIGHT_KEY}"
-    )
-    parser.add_argument("--statewide-slope", default=f"s3://{bucket}/{dem.SLOPE_KEY}")
+    parser.add_argument("--statewide-heights")
+    parser.add_argument("--statewide-slope")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 2)
     parser.add_argument("--progress-file")
     parser.add_argument("--metrics-json")

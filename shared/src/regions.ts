@@ -107,6 +107,32 @@ export type RegionTerrain = {
   coverage?: CoverageArchive;
 };
 
+/**
+ * `upload`: a user's own download of a survey is sharpened, and where the
+ * survey has no ground the area is filled from the region's heights and slope,
+ * which therefore stop at z15, where a sharpened area starts (guard:
+ * topo/tests/test_regions.py `test_an_upload_region_is_filled_from_z15`). `off`:
+ * the worker refuses the survey, with a sentence for the reason
+ * (topo/sharpen.py `upload_region`).
+ */
+export type RegionSharpen =
+  | {
+      mode: "upload";
+      /**
+       * What the survey's publisher asks a derived product to show.
+       * `{extracted}` is where topo/sharpen.py `credit` puts ", extracted
+       * <month>", or nothing when the upload does not say.
+       */
+      credit: string;
+      /** Whether the vegetation layer's inputs (topo/pipeline.py) cover the region. */
+      vegetation: boolean;
+    }
+  | {
+      mode: "off";
+      /** No survey to sharpen from, or heights already as fine as one. */
+      reason: "no-lidar" | "already-fine";
+    };
+
 export type Region = {
   /**
    * Stored in `uiPreferences.regions`: never change one. Lower-case letters
@@ -144,6 +170,8 @@ export type Region = {
   gauges: string | null;
   /** The map grid coordinates are given in. */
   grid: "mga2020";
+  /** Whether a LiDAR survey of ground here can be sharpened into an area. */
+  sharpen: RegionSharpen;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
@@ -457,6 +485,14 @@ export const NSW_REGION = {
   placeSearch: PLACE_REGISTRY_PREFIX,
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
+  sharpen: {
+    mode: "upload",
+    // What ELVIS's metadata asks of a derived product (CC BY 3.0 AU).
+    credit:
+      "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",
+    // The vegetation model is NSW's: SVTM formations and the NPWS fire raster.
+    vegetation: true,
+  },
   canyons: {
     kind: "ropewiki",
     ropewikiRegion: "New South Wales",
@@ -519,6 +555,7 @@ const EMPTY_WORLD: Region = {
   placeSearch: null,
   gauges: null,
   grid: "mga2020",
+  sharpen: { mode: "off", reason: "no-lidar" },
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;
@@ -722,6 +759,20 @@ export function regionAt(
       region.borders.some((ring) => inRing(ring, lon, lat)),
     ) ?? null
   );
+}
+
+/**
+ * The region a sharpened area was filled from and is credited to: the one that
+ * holds the centre of its survey box, which is how topo/regions.py
+ * `region_of_area` picks it when the area is made. Not `areasInRegion`, which
+ * asks where an area is drawn and counts every region its box touches. Guard:
+ * `regions.test.ts` ("regionOfArea"), on the cases the worker's test reads.
+ */
+export function regionOfArea(
+  [west, south, east, north]: readonly [number, number, number, number],
+  regions: readonly Region[] = REGIONS,
+): Region | null {
+  return regionAt((west + east) / 2, (south + north) / 2, regions);
 }
 
 /**

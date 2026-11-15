@@ -77,6 +77,7 @@ export function topoRegionsFile(): string {
     placeSearch: region.placeSearch,
     gauges: region.gauges,
     grid: region.grid,
+    sharpen: region.sharpen,
   });
   const regions = REGIONS_WITH_SIMULATED.map(entry);
   const text = inlineNumberLists(

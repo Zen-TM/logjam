@@ -64,12 +64,23 @@ def region(region_id: str) -> dict:
     raise KeyError(region_id)
 
 
-def region_at(lon: float, lat: float):
-    """The first region whose border holds the point, or None."""
+def region_at(lon: float, lat: float, regions=None):
+    """The first of `regions` (this module's, when not given) whose border
+    holds the point, or None."""
     from shapely.geometry import Point, Polygon
 
     point = Point(lon, lat)
-    for r in REGIONS:
+    for r in REGIONS if regions is None else regions:
         if any(Polygon(ring).covers(point) for ring in r["borders"]):
             return r
     return None
+
+
+def region_of_area(coverage, regions=None):
+    """The region a sharpened area is filled from and credited to: the one
+    holding the centre of its (west, south, east, north) box, or None.
+    `regionOfArea` in shared/src/regions.ts is the same test, for a client
+    crediting the area later (tests/test_regions.py `TestRegionOfArea` reads
+    the cases its test reads)."""
+    west, south, east, north = coverage
+    return region_at((west + east) / 2, (south + north) / 2, regions)

@@ -102,7 +102,12 @@
    },
    "placeSearch": "master/places/v1/",
    "gauges": "master/gauges/v1/",
-   "grid": "mga2020"
+   "grid": "mga2020",
+   "sharpen": {
+    "mode": "upload",
+    "credit": "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",
+    "vegetation": true
+   }
   },
   {
    "id": "simnz",
@@ -188,7 +193,11 @@
    },
    "placeSearch": null,
    "gauges": null,
-   "grid": "mga2020"
+   "grid": "mga2020",
+   "sharpen": {
+    "mode": "off",
+    "reason": "already-fine"
+   }
   },
   {
    "id": "simutah",
@@ -259,7 +268,12 @@
    },
    "placeSearch": null,
    "gauges": null,
-   "grid": "mga2020"
+   "grid": "mga2020",
+   "sharpen": {
+    "mode": "upload",
+    "credit": "Elevation: derived from a LiDAR survey, U.S. Geological Survey 3D Elevation Program{extracted}.",
+    "vegetation": false
+   }
   }
  ]
 }

@@ -511,6 +511,31 @@ class TestRealDem(unittest.TestCase):
             ds.GetRasterBand(1).ReadAsArray(), 100 * FOOT, atol=1e-3
         )
 
+    # Mutation: scale the first strip alone (`range(0, pipeline.VALID_BLOCK_ROWS,
+    # ...)` in `metric_dem`), write every strip at row 0 (`band.WriteArray(a,
+    # 0, 0)`), or scale the hole with the heights (`a *= z`).
+    def test_heights_in_feet_are_scaled_a_strip_at_a_time(self):
+        from osgeo import gdal
+
+        values = np.arange(70, dtype=np.float32).reshape(10, 7) + 100
+        values[4, 3] = -9999.0
+        path = self.dem(
+            "tall.tif",
+            "EPSG:32612",
+            (330_000.0, 1, 0, 4_130_000.0, 0, -1),
+            values,
+            band_unit="ft",
+        )
+        out = self.dir / "tall-metric.tif"
+        # Ten rows in strips of three: three whole strips and a short last one.
+        with mock.patch.object(sharpen.pipeline, "VALID_BLOCK_ROWS", 3):
+            sharpen.metric_dem(path, out)
+        ds = gdal.Open(str(out))
+        grid = ds.GetRasterBand(1).ReadAsArray()
+        expected = np.where(values == -9999.0, -9999.0, values * FOOT)
+        np.testing.assert_allclose(grid, expected, atol=1e-3)
+        self.assertEqual(grid[4, 3], -9999.0)
+
     def test_a_dem_with_a_vertical_crs_in_feet_is_scaled_once(self):
         # GDAL's warp scales heights by a vertical CRS's unit by itself: a DEM
         # whose CRS says feet must be scaled once, and leave with no vertical CRS.

@@ -5,12 +5,15 @@ sharpen.py imports pipeline.py, which imports osgeo at module top, so it is
 stubbed first (the topo/tests/_native_stub.py convention).
 """
 
+import argparse
+import json
 import os
 import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -21,6 +24,7 @@ import _native_stub  # noqa: F401,E402
 
 import build_nsw_dem as dem  # noqa: E402
 import pipeline  # noqa: E402
+import regions  # noqa: E402
 import sharpen as sharpen_module  # noqa: E402
 from sharpen import (  # noqa: E402
     CannotSharpen,
@@ -187,6 +191,124 @@ class TestPyramid(unittest.TestCase):
         self.assertEqual(float(z15[0, 0]), 80.0)
 
 
+# Every region in regions.json, the simulated ones too, whatever the shell's
+# SIM_REGIONS says.
+with open(regions.REGIONS_FILE, encoding="utf-8") as _f:
+    EVERY_REGION = json.load(_f)["regions"]
+NSW, SIM_NZ, SIM_UTAH = EVERY_REGION
+# Made-up boxes inside each region, and one in the Tasman Sea.
+IN_NSW = (150.7, -33.8, 150.72, -33.78)
+IN_SIM_NZ = (169.22, -44.08, 169.24, -44.06)
+IN_SIM_UTAH = (-112.96, 37.27, -112.94, 37.29)
+AT_SEA = (156.0, -33.1, 156.02, -33.08)
+
+
+class TestRegion(unittest.TestCase):
+    """What a job takes from the region its ground is in."""
+
+    def setUp(self):
+        patch = mock.patch.object(regions, "REGIONS", EVERY_REGION)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    # Mutation: `upload_region` returning the region whatever its `mode`, and
+    # a survey of ground whose heights are already 1 m is sharpened; the two
+    # sentences swapped in NOT_SHARPENED; ground in no region read as
+    # "already-fine".
+    def test_ground_where_no_region_takes_a_survey_is_refused_with_its_reason(self):
+        self.assertEqual(sharpen_module.upload_region(IN_NSW)["id"], "nsw")
+        self.assertEqual(sharpen_module.upload_region(IN_SIM_UTAH)["id"], "simutah")
+        for box, said in ((IN_SIM_NZ, "already at 1 m"), (AT_SEA, "isn't available")):
+            with self.assertRaises(CannotSharpen) as ctx:
+                sharpen_module.upload_region(box)
+            self.assertIn(said, str(ctx.exception))
+
+    # Mutation: `fill_archives` reading `regions.region("nsw")` (as the
+    # defaults did), and an area in Utah is filled with NSW's heights, which
+    # have no tile there; or the named archive dropped for the region's.
+    def test_an_area_is_filled_from_its_regions_archives_unless_one_is_named(self):
+        none = argparse.Namespace(statewide_heights=None, statewide_slope=None)
+        with mock.patch.dict(os.environ, {"S3_BUCKET_TOPO": "bkt"}):
+            self.assertEqual(
+                sharpen_module.fill_archives(SIM_UTAH, none),
+                (
+                    "s3://bkt/master/dem/simutah-heights.pmtiles",
+                    "s3://bkt/master/dem/simutah-slope.pmtiles",
+                ),
+            )
+            self.assertEqual(
+                sharpen_module.fill_archives(NSW, none),
+                (f"s3://bkt/{dem.HEIGHT_KEY}", f"s3://bkt/{dem.SLOPE_KEY}"),
+            )
+            named = argparse.Namespace(statewide_heights="/h", statewide_slope=None)
+            self.assertEqual(
+                sharpen_module.fill_archives(SIM_UTAH, named),
+                ("/h", "s3://bkt/master/dem/simutah-slope.pmtiles"),
+            )
+
+    # Mutation: `credit` returning NSW's line for every region (the text it
+    # held before a region declared it), and a survey from USGS is stamped
+    # "NSW Spatial Services"; or the `{extracted}` slot left in the line.
+    def test_a_survey_is_credited_to_its_regions_publisher(self):
+        self.assertEqual(
+            credit(SIM_UTAH, "May 2026"),
+            "Elevation: derived from a LiDAR survey, U.S. Geological Survey 3D "
+            "Elevation Program, extracted May 2026.",
+        )
+        self.assertNotIn("NSW", credit(SIM_UTAH, None))
+        for region in (NSW, SIM_UTAH):
+            self.assertNotIn("{", credit(region, None))
+            self.assertNotIn("{", credit(region, "May 2026"))
+
+    # Mutation: `sharpen` taking `regions.region("nsw")` in place of
+    # `upload_region(coverage)`: a survey is sharpened wherever its ground is.
+    def test_a_refused_survey_makes_no_tile(self):
+        from types import SimpleNamespace
+
+        contents = SimpleNamespace(dem_files=[Path("a.tif")], las_files=[])
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(pipeline, "extract_elvis_zip", return_value=contents),
+            mock.patch.object(sharpen_module, "extraction_month", return_value=None),
+            mock.patch.object(sharpen_module, "dem_cell", return_value=1.0),
+            mock.patch.object(sharpen_module, "dem_ground"),
+            mock.patch.object(pipeline, "raster_has_valid_pixels", return_value=True),
+            mock.patch.object(pipeline, "compute_data_footprint"),
+            mock.patch.object(sharpen_module, "footprint_bbox", return_value=IN_SIM_NZ),
+            mock.patch.object(
+                sharpen_module,
+                "ProcessPoolExecutor",
+                side_effect=AssertionError("the tiles were started"),
+            ),
+        ):
+            args = SimpleNamespace(
+                zip="in.zip",
+                out=tmp,
+                workers=1,
+                metrics_json=None,
+                statewide_heights=None,
+                statewide_slope=None,
+            )
+            with self.assertRaises(CannotSharpen) as ctx:
+                sharpen_module.sharpen(args)
+        self.assertEqual(
+            str(ctx.exception), sharpen_module.NOT_SHARPENED["already-fine"]
+        )
+
+    # Mutation: put "from ELVIS" back into EMPTY_GROUND, or "all of NSW" into
+    # ONLY_5M: a survey from another portal, of another region, is told so.
+    def test_no_sentence_names_a_region_or_a_portal(self):
+        sentences = [
+            sharpen_module.EMPTY_GROUND,
+            sharpen_module.UNKNOWN_UNIT,
+            sharpen_module.ONLY_5M,
+            *sharpen_module.NOT_SHARPENED.values(),
+        ]
+        self.assertEqual(len(sentences), 5)
+        for sentence in sentences:
+            self.assertNotRegex(sentence, r"ELVIS|NSW|New South Wales")
+
+
 class TestCredit(unittest.TestCase):
     """Mutations that turn it red: the month taken from the oldest entry, and
     a DOS date that is no date (month 0 or 13, day 0, hour 25) taken as one
@@ -203,7 +325,9 @@ class TestCredit(unittest.TestCase):
     def test_the_month_elvis_packed_the_zip(self):
         path = self.zip_dated((2025, 3, 1, 0, 0, 0), (2026, 10, 2, 0, 0, 0))
         self.assertEqual(extraction_month(path), "October 2026")
-        self.assertIn("extracted October 2026. CC BY 3.0 AU", credit("October 2026"))
+        self.assertIn(
+            "extracted October 2026. CC BY 3.0 AU", credit(NSW, "October 2026")
+        )
 
     def test_an_entry_with_no_date_is_skipped(self):
         path = self.zip_dated((2025, 3, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0))
@@ -219,7 +343,7 @@ class TestCredit(unittest.TestCase):
                 "March 2025",
             )
         self.assertIsNone(extraction_month(self.zip_dated((1980, 0, 0, 0, 0, 0))))
-        self.assertNotIn("extracted", credit(None))
+        self.assertNotIn("extracted", credit(NSW, None))
 
 
 class TestResult(unittest.TestCase):
@@ -241,6 +365,9 @@ class TestResult(unittest.TestCase):
             tuple(stored["coverage"]),
             stored["ground"],
             stored["extracted"],
+            # The example is an area in NSW: its credit is NSW's, as it has
+            # read since before a region declared it.
+            credit(NSW, stored["extracted"]),
         )
         added_by_the_worker = {"keys", "vegetation", "vegetationLeftOut"}
         self.assertEqual(
@@ -305,7 +432,7 @@ class TestGround(unittest.TestCase):
         self.assertIn("couldn't map any ground", str(ctx.exception))
         with self.assertRaises(CannotSharpen) as ctx:
             dem_plan([None, 5.0], has_laz=False)
-        self.assertIn("5 m", str(ctx.exception))
+        self.assertEqual(str(ctx.exception), sharpen_module.ONLY_5M)
 
     def test_a_dem_finer_than_5m_beats_the_point_clouds(self):
         self.assertEqual(dem_plan([2.0], has_laz=True), (16, [0]))
@@ -320,7 +447,7 @@ class TestGround(unittest.TestCase):
     def test_only_5m_dems_is_refused(self):
         with self.assertRaises(CannotSharpen) as ctx:
             dem_plan([5.0, 5.0], has_laz=False)
-        self.assertIn("5 m", str(ctx.exception))
+        self.assertEqual(str(ctx.exception), sharpen_module.ONLY_5M)
 
     def test_no_ground_is_refused(self):
         with self.assertRaises(CannotSharpen) as ctx:
@@ -802,10 +929,37 @@ class TestContourArchive(unittest.TestCase):
                 mock.patch.object(sharpen.pipeline, "gdal"),
                 mock.patch("pmtiles.convert.mbtiles_to_pmtiles") as convert,
             ):
-                made = contour_archive(Path(tmp), Path(tmp), "October 2026")
+                made = contour_archive(Path(tmp), Path(tmp), "Elevation: made up.")
             self.assertFalse(made)
             convert.assert_not_called()
             self.assertEqual(os.listdir(tmp), [])
+
+    # Mutation: `attribution.replace("Elevation", "Contours")` in
+    # `contour_archive` in place of renaming the leading label only: a line that
+    # holds the word twice ("3D Elevation Program") reads "3D Contours Program".
+    def test_only_the_leading_label_of_the_credit_becomes_contours(self):
+        from unittest import mock
+
+        import sharpen
+
+        commands = []
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                mock.patch.object(
+                    sharpen, "run", side_effect=lambda *c: commands.append(c) or ""
+                ),
+                mock.patch.object(sharpen.pipeline, "gdal"),
+            ):
+                contour_archive(Path(tmp), Path(tmp), credit(SIM_UTAH, None))
+        (ogr,) = [c for c in commands if "MVT" in c]
+        described = [a for a in ogr if a.startswith("DESCRIPTION=")]
+        self.assertEqual(
+            described,
+            [
+                "DESCRIPTION=Contours: derived from a LiDAR survey, U.S. Geological "
+                "Survey 3D Elevation Program."
+            ],
+        )
 
 
 class TestDiskFull(unittest.TestCase):

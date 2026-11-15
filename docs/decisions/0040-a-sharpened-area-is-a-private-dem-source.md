@@ -59,17 +59,18 @@ found three problems:
   at z14, the statewide archive's deepest zoom, and are never absent. To make
   that hold, an area's archives hold every tile of the range: the footprint's
   bbox in z15 tiles, widened to whole z14 tiles, and every descendant. Where
-  the survey has no ground, the worker bakes in the statewide 5 m value when
-  the job runs.
+  the survey has no ground, the worker bakes in the heights of the area's
+  region when the job runs (updated 2026-11-15).
 - **A track's climb from any area is stored as `lidar`**
   (`SHARPENED_CLIMB_SOURCE`), first in `CLIMB_SOURCES`, so a stored label
   names no job.
 - **The credit is declared once, by the worker.** `credit` in
-  `topo/sharpen.py` writes it into the job's result, and the API passes it
+  `topo/sharpen.py` completes the line of the area's region and writes it
+  into the job's result (updated 2026-11-15), and the API passes it
   on. Every result read from an area also carries the heights credit of
-  the region the area lies in (`demCredits`; the NSW 5 m credit in NSW),
-  because the area's edge tiles hold that region's heights (updated
-  2026-11-14).
+  the region the area was filled from (`demCredits`; the NSW 5 m credit in
+  NSW), because the area's edge tiles hold that region's heights (updated
+  2026-11-15).
 - **Update 2026-10-24: a file made from an area can leave that circle.** An
   export of an area (GeoTIFF, GeoPackage, MBTiles) or a GeoPDF made by
   someone who may read a sharpened area carries the area's terrain. Which
@@ -107,6 +108,21 @@ found three problems:
   `shared/src/regions.test.ts` ("areasInRegion") and
   `frontend/src/components/map/terrainRouter.test.ts` ("routes an area only
   inside the region that holds it"). Everything else above stands.
+- **Update 2026-11-15: an area belongs to the region that holds its centre,
+  and is filled and credited by it.** The worker takes the region from the
+  centre of the survey's box (`upload_region` in `topo/sharpen.py`). That
+  region's heights and slope are the fill; its `sharpen.credit`
+  (`shared/src/regions.ts`, which the worker reads through
+  `topo/regions.json`) is the line `credit` completes with the extraction
+  month; and ground in a region that takes no uploads, or in none, is refused
+  with a sentence for the owner. `demCredits` pairs an area with that same
+  region (`regionOfArea`), not with the first region its box touches, which
+  stays the routing test (the update above). The worker still writes the
+  credit into the result once and every client shows what is stored. Guards:
+  `topo/tests/test_sharpen.py` (`TestRegion`), `topo/tests/test_regions.py`
+  (`TestRegionOfArea`, `TestSharpenEntry`) and `shared/src/demSources.test.ts`
+  ("credits a sharpened area with the region that filled it"). Everything
+  else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of
@@ -182,7 +198,9 @@ Guards:
   label, and a phone could not rank an id it has never seen.
 - **The survey credit as a constant in `shared/`.** It would need a parity
   test against the worker's copy, and the extraction month differs for each
-  area.
+  area. The wording is now a region's declaration in `shared/`, which the
+  worker reads instead of copying; the month is still the worker's to add
+  (updated 2026-11-15, the update above).
 - **Refuse to share a GeoPDF onward in Logjam once it drew a shared area.**
   It would keep a sharee's print inside Logjam's circle, at the cost of a
   column on `geo_pdf_jobs` the worker writes and a refusal on the GeoPDF's
