@@ -113,20 +113,6 @@ import { SelectionFrame } from "./SelectionFrame";
 import { resolveMapSource, type BasemapId } from "./sourceResolver";
 
 /**
- * What may be kept on the device, of the ground the frame holds: the
- * `offlineCapable` raster basemaps offered there (`downloadableBasemaps`).
- * Over NSW those are the three SIX rasters, whose CC licence permits
- * redistribution (operator-verified); the OSM-family sources are NOT, and are
- * absent rather than disabled: an affordance that exists only to refuse is
- * worse than no affordance. Over ground with none, the row is not shown.
- *
- * `protomaps`, our own vector basemap, is not a choice here: it comes with
- * every area anyone saves (`regionClipSpecs`). It is a few megabytes
- * against tens for one raster, and the route and measure tools snap to it, so
- * leaving it optional would mean a tool that quietly stops working in the field.
- */
-
-/**
  * Detail levels offered. The ceiling is per-source (topo stops at z16), so the
  * rail shows every level any selected source can reach and each source clamps
  * itself — picking z18 with topo selected saves topo at 16 rather than failing.
@@ -267,8 +253,15 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
-  // The maps the frame's ground offers. A pick the frame has moved off stays
-  // picked, and comes back when the frame returns, but is not saved from here.
+  // What may be kept on the device, of the ground the frame holds: the
+  // `offlineCapable` raster basemaps offered there. Over NSW those are the
+  // three SIX rasters, whose CC licence permits redistribution
+  // (operator-verified); the OSM-family sources are NOT, and are absent rather
+  // than disabled. Over ground with none, the row is not shown. `protomaps`,
+  // our own vector basemap, is not a choice: it comes with every area
+  // (`regionClipSpecs`), and the route and measure tools snap to it. A pick the
+  // frame has moved off stays picked, and comes back when the frame returns,
+  // but is not saved from here.
   const framed = bbox ?? startBox(startArea, startCenter);
   const downloadable = useMemo(
     () =>

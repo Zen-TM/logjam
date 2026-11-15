@@ -576,9 +576,10 @@ describe("planRegionForBasemaps", () => {
     expect(job.perSource[0].plan.perZoom[0].z).toBe(REGION_MIN_ZOOM);
   });
 
-  // Mutation: read `REGIONS` instead of the `regions` argument and a
-  // simulated clip's id finds nothing; leave a kind out of the search (the
-  // slope, say) and no clip of that kind is found.
+  // Mutation: read `REGIONS` instead of the `regions` argument in
+  // `saveClipArchive` and a simulated clip's id finds nothing; leave a kind out
+  // of the `.find` in `saveClipArchive` (the slope, say) and the slope's id
+  // finds nothing.
   it("finds the archive a clip is filed under, with the zooms it is cut at", () => {
     const every = [NSW_REGION, ...SIM_REGIONS];
     const found = (id: string) => {
@@ -588,6 +589,11 @@ describe("planRegionForBasemaps", () => {
     expect(found("nsw-5m")).toEqual([
       "heights",
       "master/dem/nsw-5m.pmtiles",
+      { minzoom: 8, maxzoom: 15 },
+    ]);
+    expect(found("nsw-5m-slope")).toEqual([
+      "slope",
+      "master/dem/nsw-5m-slope.pmtiles",
       { minzoom: 8, maxzoom: 15 },
     ]);
     expect(found("nsw-land")).toEqual([
