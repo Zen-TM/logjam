@@ -69,7 +69,7 @@ the simulated regions are off (`frontend/src/languageSetting.test.ts`,
 announcement's push title, which the API reads for each recipient, is a
 getter, so it is written when read, not when its module loads. So is the plan
 form builder's locked-visibility sentence, which the clients read, so that no
-contract sentence is written at import
+`say` sentence function is called at import
 (`shared/src/contracts/contractLanguage.test.ts`).
 (updated 2026-11-15)
 

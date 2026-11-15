@@ -7,8 +7,8 @@ import { TRIP_PLAN_FORMS } from "./plans.js";
 // module loads, which the API cannot use: its language is per request.
 // `ANNOUNCEMENT.untitled` is the member the API reads per recipient (the push
 // title), so it is a getter, written when read. `visibleToLocked` is read by
-// the clients' form builders and is a getter so that no contract sentence is
-// written at import; the API's refusal uses the same function
+// the clients' form builders and is a getter so that no `say` sentence function
+// is called at import; the API's refusal calls the same function
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
 
 afterEach(() => setLanguageResolver(() => undefined));

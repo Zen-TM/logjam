@@ -65,7 +65,7 @@ the API. A client shows it as it is.
   literal sits outside a function. The announcement's push title, a contract
   member the API reads for each recipient, is a getter, so it is written when
   read. So is the plan form builder's locked-visibility sentence, which the
-  clients read, so that no contract sentence is written at import
+  clients read, so that no `say` sentence function is called at import
   (`shared/src/contracts/contractLanguage.test.ts`) (updated 2026-11-15). A
   sentence written with nobody asking, a push title or a mail, is written in
   the language the recipient's account last ran in (`uiPreferences.language`);
