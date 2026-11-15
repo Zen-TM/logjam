@@ -377,16 +377,16 @@ function TripLogDialog({
   // customFieldDefs is deliberately not part of the key — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
   //
-  // The units are in the key: the form's length text and its conversion are in
-  // one unit, so a change of units reseeds it (dropping what was typed) rather
-  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
-  // of a length field converts it").
-  const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;
+  // The units `populateForm` wrote the form's text in: the length text and its
+  // conversion are always in one unit, so a change of units while the form is
+  // open, or closed for a pick on the map, writes the fields again (dropping
+  // what was typed) rather than saving feet as metres, and leaves the files, the
+  // uploads and the draft trip as the session has them (`unitsOnly`). Guard:
+  // `lengthFieldClients.test.ts` ("every form of a length field converts it"),
+  // and `TripLogDialog.render.test.tsx` ("a trip log being edited, when the
+  // units change under it").
+  const openKey = open ? (tripLog?.id ?? "") : null;
   const [populatedFor, setPopulatedFor] = useState<string | null>(null);
-  // The units `populateForm` wrote the form's text in, so that a return from a
-  // pick on the map, which keeps the form, still re-seeds it when they changed
-  // while the dialog was closed. Guard: `lengthFieldClients.test.ts` ("every
-  // form of a length field converts it").
   const [seededUnits, setSeededUnits] = useState(displayUnits());
   if (openKey !== populatedFor) {
     setPopulatedFor(openKey);
@@ -394,16 +394,18 @@ function TripLogDialog({
       // Each open (re)loads an existing trip's media, the return from picking
       // too; see the media effect below.
       setMediaLoading(!!tripLog);
-      if (picking && seededUnits === displayUnits()) {
+      if (picking) {
         // Returning from a pick-on-map cycle — don't reset form state, unless
         // the units changed meanwhile: the typed length is in the old ones.
         setPicking(false);
-        setFocusDateWhenOpened(false);
+        if (seededUnits === displayUnits()) setFocusDateWhenOpened(false);
+        else populateForm({ unitsOnly: true });
       } else {
-        if (picking) setPicking(false);
         populateForm();
       }
     }
+  } else if (open && seededUnits !== displayUnits()) {
+    populateForm({ unitsOnly: true });
   }
 
   // The user arrived, changed or went (an expiry) while the form was open:
@@ -420,7 +422,7 @@ function TripLogDialog({
     );
   }
 
-  function populateForm() {
+  function populateForm({ unitsOnly = false } = {}) {
     setSeededUnits(displayUnits());
     let initialDate: string;
     let initialNotes: string;
@@ -523,6 +525,7 @@ function TripLogDialog({
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
+    if (unitsOnly) return;
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);

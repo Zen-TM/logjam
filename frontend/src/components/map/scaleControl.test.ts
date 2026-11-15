@@ -18,9 +18,8 @@ beforeEach(() => {
 });
 
 describe("the map's scale bar", () => {
-  // Mutation: pass `unit: "metric"` whatever the units (the bar was fixed to
-  // metric before), or swap the two widths.
-  it("is made in the display units, and as wide as it always was", () => {
+  // Mutation: pass `unit: "metric"` whatever the units, or swap the two widths.
+  it("is made in the display units, at the width its screen takes", () => {
     makeScaleControl("metric", false);
     makeScaleControl("imperial", false);
     makeScaleControl("imperial", true);

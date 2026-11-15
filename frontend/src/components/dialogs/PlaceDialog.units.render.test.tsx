@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PLACE_FORM,
@@ -10,11 +16,24 @@ import {
 
 import PlaceDialog from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
+import { deleteMedia } from "../../placeUtils";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ media: [] })),
+  deleteMedia: vi.fn(async () => {}),
+}));
+// The real one needs a file chooser: this one "uploads" (m1) on a press.
+vi.mock("../media/MediaUpload", () => ({
+  default: ({ onUploaded }: { onUploaded: (item: unknown) => void }) => (
+    <button
+      type="button"
+      onClick={() => onUploaded({ id: "m1", mediaType: "image/jpeg" })}
+    >
+      Fake upload
+    </button>
+  ),
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
@@ -70,12 +89,13 @@ const GORGE = {
   fieldValues: { longest_abseil: 15 },
 } as unknown as TPlace;
 
+const onClose = vi.fn();
 const dialog = (open: boolean) => (
   <ToastProvider>
     <PlaceDialog
       place={GORGE}
       open={open}
-      onClose={() => {}}
+      onClose={onClose}
       onSaved={() => {}}
       onPickCoords={() => {}}
       onCancelPickCoords={() => {}}
@@ -133,5 +153,25 @@ describe("PlaceDialog, a length when the units change", () => {
     rerender(dialog(false));
     rerender(dialog(true));
     expect(longest("Longest pitch (0+)").value).toBe("20");
+  });
+
+  // A flip re-seeds the fields and nothing else: this session's uploads stay on
+  // the dialog's books, so Cancel still asks and takes them back.
+  // Mutation: let the units path run all of `populateForm` (no `unitsOnly`), and
+  // `uploadedIds` empties: Cancel closes without asking and `deleteMedia` is
+  // never called.
+  it("keeps this session's uploads when the units change under it", async () => {
+    onClose.mockClear();
+    vi.mocked(deleteMedia).mockClear();
+    const { rerender } = render(dialog(true));
+    fireEvent.click(screen.getAllByText("Fake upload")[0]);
+    setDisplayUnits("imperial");
+    rerender(dialog(true));
+    expect(longest("Longest pitch (0+ ft)").value).toBe("49.2");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(deleteMedia).toHaveBeenCalledWith("m1");
   });
 });

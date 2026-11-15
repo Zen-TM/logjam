@@ -19,7 +19,9 @@ import {
   type FieldStat,
   type LogbookStats,
 } from "./logbookStats.js";
-import { withFieldUnit, withRowUnit } from "./contracts/placePage.js";
+import { withRowUnit } from "./contracts/placePage.js";
+import { isLengthField } from "./placeTypes.js";
+import { displayUnits, lengthInputText, lengthUnitLabel } from "./units.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
 
 export type LogbookTrip = {
@@ -493,7 +495,12 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
       // the display units; any other quantity is the number itself. Guard:
       // `logbook.test.ts` ("gives a length its unit in the display units, and
       // another quantity none").
-      const shown = (n: number) => withFieldUnit(stat.key, formatStatNumber(n));
+      // In feet the figure is the place page's own (`lengthInputText`), so the
+      // two never disagree; in metric it is a stat's one decimal.
+      const shown = (n: number) =>
+        isLengthField(stat.key)
+          ? `${displayUnits() === "imperial" ? lengthInputText(n) : formatStatNumber(n)} ${lengthUnitLabel()}`
+          : formatStatNumber(n);
       return {
         metric: { value: shown(stat.average), suffix: "avg" },
         subtitle: stat.best

@@ -24,10 +24,11 @@ describe("every form of a length field converts it", () => {
   // Mutation: change any of these calls back to the unit-blind one
   // (`String(raw)`, `coerceFieldValue(...)`, or `coerceCustomFields` without
   // the stored values), drop `fieldKey={def.key}` from either filter, drop the
-  // units from any one input's seed key (`displayUnits()` in `openKey`,
-  // `seedKey`, `seededUnits`, the plan item sheet's `key` or the plan item
+  // units from any one input's seed key (`displayUnits()` in the trip
+  // sheet's `openKey`, `seedKey`, `seededUnits`, the plan item sheet's `key` or the plan item
   // dialog's `key`), drop the `seededUnits` check from a pick's return that
-  // keeps the form, drop the filters' `shownUnits` reseed, or give a filter's
+  // keeps the form, let a flip run all of `populateForm` (drop `unitsOnly`),
+  // drop the filters' `shownUnits` reseed, or give a filter's
   // `coerceFieldInput` the `value` it is fed back instead of its `seed`.
   it.each([
     [
@@ -37,7 +38,8 @@ describe("every form of a length field converts it", () => {
         "attributes[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, fieldValue(place?.fieldValues, def.key), );",
         "const units = displayUnits();",
         "setSeededUnits(displayUnits());",
-        "} else if (open && seededUnits !== units) { populateForm(); }",
+        "} else if (open && seededUnits !== units) { populateForm({ unitsOnly: true }); }",
+        "if (unitsOnly) return;",
       ],
     ],
     [
@@ -46,8 +48,9 @@ describe("every form of a length field converts it", () => {
         "vals[def.key] = fieldInputText(def.key, raw);",
         "customFields[def.key] = coerceFieldInput( def.key, getFieldValue(def.key), def.type, );",
         "customFields[def.key] = coerceFieldInput( def.key, raw, def.type, tripLog?.customFields[def.key], );",
-        'const openKey = open ? `${tripLog?.id ?? ""}|${displayUnits()}` : null;',
-        "if (picking && seededUnits === displayUnits()) {",
+        "if (seededUnits === displayUnits()) setFocusDateWhenOpened(false);",
+        "} else if (open && seededUnits !== displayUnits()) { populateForm({ unitsOnly: true }); }",
+        "if (unitsOnly) return;",
         "setSeededUnits(displayUnits());",
       ],
     ],

@@ -232,7 +232,7 @@ function PlaceDialog({
       else populateForm();
     }
   } else if (open && seededUnits !== units) {
-    populateForm();
+    populateForm({ unitsOnly: true });
   }
 
   // An existing place's media is refetched on each open (fresh presigned
@@ -244,7 +244,10 @@ function PlaceDialog({
     if (mediaFor !== null) setMediaLoading(true);
   }
 
-  function populateForm() {
+  // `unitsOnly` writes the fields again in the new units and leaves the rest of
+  // the session as it is: the media shown, the draft place and the uploads made
+  // so far, which Cancel and Save still have to account for.
+  function populateForm({ unitsOnly = false } = {}) {
     setSeededUnits(displayUnits());
     let initialName: string;
     let initialAltNames: string;
@@ -319,6 +322,7 @@ function PlaceDialog({
     setNewFieldMin("");
     setNewFieldMax("");
     setAddFieldError(null);
+    if (unitsOnly) return;
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);

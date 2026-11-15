@@ -34,7 +34,12 @@
  *   Guards: `tripDraft.test.ts`, `useAuth.test.tsx`.
  */
 
-import { displayUnits, isLengthField, type Units } from "@logjam/shared";
+import {
+  displayUnits,
+  isLengthField,
+  isUnits,
+  type Units,
+} from "@logjam/shared";
 
 export const TRIP_DRAFT_STORAGE_KEY = "logjam.tripDraft";
 
@@ -198,7 +203,7 @@ export function parseTripDraft(
   const creating = parseCreating(f.creating);
   if (creating === undefined) return null;
   // Text typed in feet is not metres: a length from another unit is dropped.
-  const typedIn: Units = record.units === "imperial" ? "imperial" : "metric";
+  const typedIn: Units = isUnits(record.units) ? record.units : "metric";
   const fieldValues =
     typedIn === units
       ? f.fieldValues

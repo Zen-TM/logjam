@@ -183,8 +183,9 @@ export function formatScaleStep(metres: number): string {
     const mi = Math.round((metres / METRES_PER_MILE) * 10) / 10;
     return `${formatNumber(mi, Number.isInteger(mi) ? 0 : 1)} mi`;
   }
-  if (metres < 1_000) return `${formatNumber(Math.round(metres), 0)} m`;
-  const km = metres / 1_000;
+  const whole = Math.round(metres);
+  if (whole < 1_000) return `${formatNumber(whole, 0)} m`;
+  const km = whole / 1_000;
   return `${formatNumber(km, Number.isInteger(km) ? 0 : 1)} km`;
 }
 

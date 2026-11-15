@@ -65,6 +65,16 @@ describe("chooseScaleStep", () => {
     expect(chooseScaleStep(100, 300).label).toBe("10 mi");
   });
 
+  // Mutation: the fallback goes back to `Math.max(1, Math.round(maxMeters))`,
+  // and a bar under a foot reads "3 ft".
+  it("is never labelled 0 and never in metres when the smallest step overflows, in feet too", () => {
+    setDisplayUnits("imperial");
+    // 0.1 m is 0.3 ft, under the smallest step (1 ft, 0.3048 m).
+    expect(chooseScaleStep(1000, 0.0001).label).toBe("1 ft");
+    setDisplayUnits("metric");
+    expect(chooseScaleStep(1000, 0.0001).label).toBe("1 m");
+  });
+
   it("clamps to the offered width when even the smallest step overflows", () => {
     // 1000 m/px over 0.5 px offers 500 m of ground in half a pixel; the
     // smallest round step (1 m) would still need 0.001 px, so it fits — force

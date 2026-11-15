@@ -441,8 +441,10 @@ describe("stats presentation", () => {
     });
   });
 
-  // Mutation: drop `withFieldUnit` from the "quantity" case of
-  // `fieldStatDisplay`, and a longest pitch of 25 m reads "25 avg".
+  // Mutation: drop the unit from the "quantity" case of `fieldStatDisplay`
+  // (`shown` returns `formatStatNumber(n)`), and a longest pitch of 25 m reads
+  // "25 avg"; or round the metres first in imperial (`formatStatNumber(n)` into
+  // `lengthInputText`), and 10.8204 m reads "35.4 ft".
   it("gives a length its unit in the display units, and another quantity none", () => {
     const stat = (key: string) =>
       ({
@@ -468,6 +470,14 @@ describe("stats presentation", () => {
         subtitle: "highest 131.2 ft, Claustral",
       });
       expect(fieldStatDisplay(stat("pitches")).metric?.value).toBe("25");
+      // The place page's own figures: 35 ft is stored as 10.668 m, 100 ft as
+      // 30.48 m, and 10.8204 m is 35.5 ft.
+      const average = (metres: number) =>
+        fieldStatDisplay({ ...stat("longest_abseil"), average: metres }).metric
+          ?.value;
+      expect(average(10.668)).toBe("35 ft");
+      expect(average(30.48)).toBe("100 ft");
+      expect(average(10.8204)).toBe("35.5 ft");
     } finally {
       setDisplayUnits("metric");
     }

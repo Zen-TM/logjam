@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import { setDisplayUnits, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import TripLogDialog, { type TripLogPrefill } from "./TripLogDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -71,7 +71,10 @@ HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setDisplayUnits("metric");
+});
 
 // Synthetic, like the e2e fixtures.
 function place(id: string, name: string): TPlace {
@@ -231,5 +234,68 @@ describe("a trip log being edited, after an upload", () => {
         .getByRole("button", { name: "Cancel" })
         .getAttribute("aria-disabled"),
     ).toBeNull();
+  });
+});
+
+// A change of units re-seeds the form's fields and nothing else: the files shown,
+// the uploads made and the draft trip stay as the session has them.
+describe("a trip log being edited, when the units change under it", () => {
+  const onClose = vi.fn();
+  const tripLog = {
+    id: "t1",
+    date: "2026-11-07",
+    notes: null,
+    places: [],
+    displayName: "Wollangambe trip",
+    types: [],
+    customFields: {},
+  } as unknown as TTripLog;
+  const edit = () => (
+    <ToastProvider>
+      <TripLogDialog
+        open
+        tripLog={tripLog}
+        onClose={onClose}
+        onSaved={() => {}}
+        places={[]}
+        customFieldDefs={[]}
+        onCustomFieldDefsChange={() => {}}
+        existingTripTypes={[]}
+      />
+    </ToastProvider>
+  );
+  beforeEach(() => {
+    upload.n = 0;
+    onClose.mockClear();
+    vi.mocked(deleteMedia).mockReset();
+    vi.mocked(deleteMedia).mockResolvedValue(undefined);
+  });
+
+  // Mutation: add `setMediaLoading(!!tripLog);` to the `else if (open &&
+  // seededUnits !== displayUnits())` arm: the media effect does not re-run, so
+  // "Loading files…" stays.
+  it("does not leave the files loading", async () => {
+    const { rerender } = render(edit());
+    await waitFor(() =>
+      expect(screen.queryByText("Loading files…")).toBeNull(),
+    );
+    setDisplayUnits("imperial");
+    rerender(edit());
+    expect(screen.queryByText("Loading files…")).toBeNull();
+  });
+
+  // Mutation: call `populateForm();` without `unitsOnly` in that arm, and
+  // `uploadedIds` empties: Cancel closes without asking and `deleteMedia` is
+  // never called.
+  it("still takes this session's uploads back on Discard", async () => {
+    const { rerender } = render(edit());
+    fireEvent.click(screen.getAllByText("Fake upload")[0]);
+    setDisplayUnits("imperial");
+    rerender(edit());
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(deleteMedia).toHaveBeenCalledWith("m1");
   });
 });

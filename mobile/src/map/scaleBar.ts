@@ -85,9 +85,9 @@ export function chooseScaleStep(
   const maxMeters = metersPerPixelValue * maxWidthPx;
   const fitting = scaleBarSteps("screen").filter((step) => step <= maxMeters);
   if (fitting.length === 0) {
-    // Never label the bar "0 m": below half a metre the rounding would wipe
-    // the number out entirely and the bar would claim no scale at all.
-    const meters = Math.max(1, Math.round(maxMeters));
+    // Never label the bar "0": below the smallest step ("1 m", "1 ft") the
+    // rounding would wipe the number out and the bar would claim no scale.
+    const meters = Math.max(scaleBarSteps("screen")[0]!, maxMeters);
     return { meters, widthPx: maxWidthPx, label: formatScaleStep(meters) };
   }
   const meters = fitting[fitting.length - 1]!;
