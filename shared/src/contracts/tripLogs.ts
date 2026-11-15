@@ -99,8 +99,11 @@ export const TRIPS_FILTER_SHEET = {
     attributes: t`Attributes`,
     dates: t`Dates`,
 
-    // A switch's words stay plain literals: each client's `switchCopy.test.ts`
-    // measures them by their literal types, which `t` widens to `string`.
+    // Plain literals: a switch's words are measured through their literal types
+    // in each client's `switchCopy.test.ts`, and `t` widens them to `string`.
+    // No switch-copy test names these words, so a wrap passes there; it turns
+    // `i18nCoverage.test.ts` ("writes no new text outside the catalogue, and
+    // every ceiling is the count") red until the contracts ceiling is lowered.
     includeMissing: "Include if not set",
     includeMissingHint: "Also show ones with no value",
     tripDate: t`Trip date`,

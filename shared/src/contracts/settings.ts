@@ -91,8 +91,11 @@ export const SETTINGS_PHONE_ONLY = [
  * loses what the sharee could see (`themeSchemes.ts`).
  */
 export const COPY_MEDIA_SETTING = {
-  // Plain literals: each client's `switchCopy.test.ts` measures a switch's
-  // words by their literal types, which `t` widens to `string`.
+  // Plain literals: a switch's words are measured through their literal types
+  // in each client's `switchCopy.test.ts`, and `t` widens them to `string`. No
+  // switch-copy test names these two, so a wrap passes there; it turns
+  // `i18nCoverage.test.ts` ("writes no new text outside the catalogue, and
+  // every ceiling is the count") red until the contracts ceiling is lowered.
   label: "Copy photos too",
   hint: "Shared place photos and files.",
   saveFailed: t`Couldn't save that setting.`,
@@ -223,10 +226,10 @@ export type NotificationPreferenceGroup = "email" | "inApp";
 export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or a print or GIS map mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
-  // The labels stay plain literals: each client's `switchCopy.test.ts` measures
-  // a switch's words by their literal types, which `t` widens to `string`.
-  // The labels stay plain literals: each client's `switchCopy.test.ts` measures
-  // a switch's words by their literal types, which `t` widens to `string`.
+  // Plain literals: a switch's words are measured through their literal types,
+  // which `t` widens to `string`. Each client's `switchCopy.test.ts` ("keeps to
+  // the limit") asserts every label here by name, so wrapping one turns it red
+  // on both clients.
   { key: "topoEmail", group: "email", label: "LiDAR maps" },
   { key: "exportEmail", group: "email", label: "Print and GIS maps" },
   { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
