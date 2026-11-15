@@ -42,8 +42,8 @@ export type TerrainEntry = {
  *
  * For a user who can see sharpened `areas` that `region` holds, the surfaces
  * a sharpened area replaces are read through the router (terrainRouter.ts), to
- * the deepest zoom an area holds. Contours stop at z14 either way, and deeper
- * zooms overzoom it.
+ * the deeper of the region archive's top zoom and the deepest zoom an area
+ * holds. Contours stop at z14 either way, and deeper zooms overzoom it.
  */
 export function terrainEntries(
   region: Region | null,
