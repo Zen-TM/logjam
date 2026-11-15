@@ -1589,18 +1589,25 @@ export function MapScreen({
    */
   const renderedBasemapId = useDeferredValue(shownBasemapId);
 
-  const basemapResolved = useMemo(
-    () =>
-      resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
-    [renderedBasemapId, ctx],
-  );
-  // The Terrain group (shared terrain.ts), drawn from the one region the map
-  // shows (terrainRegion.ts): a layer that region lacks draws nothing. The
-  // contours only where this basemap takes them; offline, each is whatever
-  // clips were saved of it.
+  // The one region the map draws from (terrainRegion.ts): the vector basemap
+  // and the Terrain group (shared terrain.ts) read its archives, and a layer
+  // that region lacks draws nothing. The contours only where this basemap takes
+  // them; offline, each is whatever clips were saved of it.
   const terrainRegion = useMemo(
     () => regionShown(viewportBbox, camera),
     [viewportBbox, camera],
+  );
+  const basemapResolved = useMemo(
+    () =>
+      resolveMapSource(
+        {
+          kind: "basemap",
+          basemapId: renderedBasemapId,
+          region: terrainRegion,
+        },
+        ctx,
+      ),
+    [renderedBasemapId, terrainRegion, ctx],
   );
   // The Gauges row reads OFF where the region has no feed, and the map's gauge
   // layer draws nothing there (search and the place page still read gauges). A

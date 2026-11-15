@@ -414,7 +414,7 @@ async function renderInner(
     Record<TerrainArchiveLayer | "land", string | null>
   > = {};
 
-  const vectorBase = vectorBasemap(config, geometry);
+  const vectorBase = vectorBasemap(config, geometry, sheet.vector);
   const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
 
   const fontsReady = loadMapFonts(signal);

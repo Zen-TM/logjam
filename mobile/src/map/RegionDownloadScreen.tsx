@@ -46,6 +46,7 @@ import {
   DEM_SOURCE_ID,
   downloadableBasemaps,
   planRegionForBasemaps,
+  regionInWrappedView,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -290,10 +291,15 @@ export function RegionDownloadScreen({
   const previewBasemap: BasemapId = pyramidIds.includes(preview)
     ? preview
     : defaultPreview;
+  // The vector basemap is read from the archive of the region the map shows.
+  const previewRegion = useMemo(
+    () => regionInWrappedView(viewport ?? framed),
+    [viewport, framed],
+  );
   const previewResolved = useMemo(
     () =>
       resolveMapSource(
-        { kind: "basemap", basemapId: previewBasemap },
+        { kind: "basemap", basemapId: previewBasemap, region: previewRegion },
         // `artifacts: []` on purpose: the preview is the ONLINE map, not
         // whatever this phone already holds. `cdnBaseUrl` builds the vector
         // source's pmtiles:// URL — without it, it would resolve to an
@@ -304,7 +310,7 @@ export function RegionDownloadScreen({
           cdnBaseUrl: config.topoCdnBaseUrl,
         },
       ),
-    [previewBasemap],
+    [previewBasemap, previewRegion],
   );
 
   // Stable identity: the frame's gesture handlers are rebuilt whenever this
@@ -487,6 +493,7 @@ export function RegionDownloadScreen({
         ...regionClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
           job.clips,
+          job.vectors,
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
       ]);

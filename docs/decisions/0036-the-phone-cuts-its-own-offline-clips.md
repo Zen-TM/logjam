@@ -58,7 +58,9 @@ bytes as before, plus the gaps it reads through.
 **Every region a user saves on Logjam GPS, guest or signed in, includes a clip
 of the vector map, of each DEM archive the area touches and of the statewide
 contours (updated 2026-11-15: of the contours and every other Terrain archive
-of each region the area touches; outside every region, the vector map alone),
+of each region the area touches; outside every region, the vector map alone
+(updated 2026-11-16: the vector map of each region the area touches, else the
+world's where one is declared, else none)),
 and the phone cuts each one itself** from the public archive on the CDN. `regionClipSpecs` in `mobile/src/offline/regionTilePlanning.ts` is the
 one place that lists them, with no account check and no control to leave one
 out; a save with no raster picked is the vector map, the DEMs and the
@@ -234,18 +236,40 @@ Nothing new calls it.
   `saveClipArchive` in `shared/src/mapRegionEstimate.ts`), each filed under its
   archive's id. A box outside every region cuts none of them, and a box in two
   regions cuts both regions' archives. A save over NSW is the clips above, cut
-  and filed as they were. The vector map's clip is not part of this: it still
-  reads the one `protomaps` catalogue entry. The raster maps a save offers are
+  and filed as they were. The vector map's clip is not part of this (updated
+  2026-11-16: it is, see the Update below). The raster maps a save offers are
   the `offlineCapable` ones the framed box's ground offers
   (`downloadableBasemaps`), so over ground no region owns the row is absent.
   What holds the decision up still holds: the phone cuts every clip, no
   request about a clip goes to the API, and the bbox never reaches it. Guards:
   `regionTilePlanning.test.ts` ("gives an area the archives of the region it
-  lies in, and one in the sea only the vector map", "gives an area every
+  lies in, and one in the sea none", "gives an area every
   region it touches its archives"), `regionDownloads.test.ts` ("cuts each clip
   of a save over NSW from its archive and files it under its key"),
   `mapRegionEstimate.test.ts` ("offers a save the downloadable basemaps of the
   ground it frames"). Everything else above stands.
+- **Update 2026-11-16: the vector map's clip is one for each region the box
+  touches.** The vector basemap is each region's own extract (`Region.vector`
+  in `shared/src/regions.ts`), not one catalogue file. A save clips the vector
+  archive of every region whose border touches the box, or the world's when
+  none does and it declares one (`vectorsTouching`, the `vectors` of
+  `planRegionForBasemaps`); a box outside every region of a build with no world
+  archive cuts none. Each clip is cut from its archive's path and filed under
+  `logicalKey: "protomaps"`, with that path in `archivePath`, so the map draws
+  only the vector clips cut from the archive of the region it shows, snapping
+  reads a saved clip only where it was cut from the archive of the segment's
+  region, and an update cuts each clip again from the archive it names. A save
+  over NSW is the clip it always was, from the same archive, under the same key.
+  A vector clip saved before `archivePath` was kept names no archive: it is
+  not drawn offline and an update leaves it as saved, until the area is saved
+  again. What holds the decision up still holds: the phone cuts every clip, no
+  request about a clip goes to the API, and the bbox never reaches it. Guards:
+  `regionTilePlanning.test.ts` ("gives an area over two regions a vector clip
+  of each"), `regionDownloads.test.ts` ("files a vector clip under protomaps
+  with the archive it was cut from"), `sourceResolver.test.ts` ("offline: draws
+  only the clips cut from the archive of the region shown"),
+  `snapRegion.test.ts` ("declines a clip of another archive, or of none").
+  Everything else above stands.
 
 ## Consequences
 

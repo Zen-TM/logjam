@@ -5,6 +5,7 @@ import {
   SIM_NZ,
   SIM_REGIONS,
   SIM_UTAH,
+  type Region,
   type SharpenedOverlay,
 } from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
@@ -52,7 +53,7 @@ function artifact(overrides: Partial<MapArtifact>): MapArtifact {
 describe("basemap resolution", () => {
   it("online: catalog raster resolves to remote XYZ tiles with display cap", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx(),
     );
     expect(r.status).toBe("ok");
@@ -65,7 +66,7 @@ describe("basemap resolution", () => {
 
   it("offline: OSM-family is online-only by policy", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -76,7 +77,7 @@ describe("basemap resolution", () => {
 
   it("offline: offline-capable basemap without downloads is unavailable (no silent remote fallback)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -89,17 +90,102 @@ describe("basemap resolution", () => {
   // draws on top. The registry lists the newest first.
   it("offline: lists saved regions oldest first, so the newest mounts on top", () => {
     const save = (id: string, path: string) =>
-      artifact({ id, kind: "basemap-region", logicalKey: "protomaps", path });
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath: NSW_REGION.vector!.archivePath,
+        path,
+      });
     const newest = save("new", "/files/maps/new.pmtiles");
     const oldest = save("old", "/files/maps/old.pmtiles");
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "protomaps" },
+      { kind: "basemap", basemapId: "protomaps", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: [newest, oldest] }),
     );
     expect(resolved.map((r) => (r.status === "ok" ? r.url : null))).toEqual([
       "pmtiles://file:///files/maps/old.pmtiles",
       "pmtiles://file:///files/maps/new.pmtiles",
     ]);
+  });
+
+  // Mutation: read the archive from the catalogue entry (a fixed NSW path), and
+  // the vector map in simulated New Zealand draws NSW's tiles; build the
+  // URL differently over NSW, and every NSW map remounts on a new key.
+  it("online: the vector basemap is read from the archive of the region shown", () => {
+    const vector = (region: Region | null) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx(),
+      );
+    const nsw = `pmtiles://${CDN}/master/basemap/protomaps-nsw.pmtiles`;
+    expect(vector(NSW_REGION)).toEqual([
+      {
+        status: "ok",
+        key: `basemap:protomaps:remote:${hashKey(nsw)}`,
+        sourceType: "vector",
+        url: nsw,
+        attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+        origin: "remote",
+      },
+    ]);
+    expect(vector(SIM_NZ)).toMatchObject([
+      {
+        status: "ok",
+        url: `pmtiles://${CDN}/${SIM_NZ.vector!.archivePath}`,
+      },
+    ]);
+  });
+
+  // Mutation: fall back to the first region's archive where the region shown
+  // has none, and the map outside every region draws NSW's.
+  it("the vector basemap is unavailable where the region shown has no archive of it", () => {
+    for (const region of [null, { ...SIM_UTAH, vector: null }]) {
+      for (const connectivity of ["online", "offline"] as const) {
+        expect(
+          resolveMapSource(
+            { kind: "basemap", basemapId: "protomaps", region },
+            ctx({ connectivity }),
+          ),
+        ).toEqual([
+          {
+            status: "unavailable",
+            key: "basemap:protomaps",
+            reason: "not-available-here",
+          },
+        ]);
+      }
+    }
+  });
+
+  // Mutation: drop the `archivePath` test, and the map over New Zealand draws a
+  // clip of NSW's archive (which holds nothing there) beside its own; match a
+  // clip with no archive, and one saved before clips kept theirs is drawn as
+  // whichever region the map is over.
+  it("offline: draws only the clips cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        path: `/files/maps/${id}.pmtiles`,
+        archivePath,
+      });
+    const artifacts = [
+      clip("nsw", NSW_REGION.vector!.archivePath),
+      clip("nz", SIM_NZ.vector!.archivePath),
+      clip("legacy", null),
+    ];
+    const drawn = (region: Region) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx({ connectivity: "offline", artifacts }),
+      ).map((r) => (r.status === "ok" ? r.url : r.reason));
+    expect(drawn(NSW_REGION)).toEqual([
+      "pmtiles://file:///files/maps/nsw.pmtiles",
+    ]);
+    expect(drawn(SIM_NZ)).toEqual(["pmtiles://file:///files/maps/nz.pmtiles"]);
+    expect(drawn(SIM_UTAH)).toEqual(["offline-not-downloaded"]);
   });
 
   it("offline: resolves to ALL downloaded regions with bounds and zoom clamps", () => {
@@ -124,7 +210,7 @@ describe("basemap resolution", () => {
       }),
     ];
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline", artifacts: regions }),
     );
     expect(resolved).toHaveLength(2);
@@ -141,7 +227,7 @@ describe("basemap resolution", () => {
 
   it("forced-offline behaves like offline (user override)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "forced-offline" }),
     );
     expect(r.status).toBe("unavailable");
@@ -149,7 +235,7 @@ describe("basemap resolution", () => {
 
   it("online: subset-coverage basemaps prefer remote even when a region is downloaded", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({
         artifacts: [
           artifact({
@@ -167,7 +253,10 @@ describe("basemap resolution", () => {
 
   it("throws loudly on an unknown basemap id", () => {
     expect(() =>
-      resolveMapSource({ kind: "basemap", basemapId: "bogus" as never }, ctx()),
+      resolveMapSource(
+        { kind: "basemap", basemapId: "bogus" as never, region: null },
+        ctx(),
+      ),
     ).toThrow(/Unknown basemap id/);
   });
 });

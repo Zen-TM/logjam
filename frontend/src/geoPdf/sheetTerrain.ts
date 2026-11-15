@@ -1,15 +1,17 @@
-// The archives a GeoPDF reads its Terrain layers from: those of the region its
+// The archives a GeoPDF reads its Terrain layers and vector basemap from: those of the region its
 // sheet is in. Imports only `@logjam/shared`, so the dialog can ask the same
 // question as the renderer without loading the render code.
 import {
   layerIn,
   REGIONS,
   regionInWrappedView,
+  vectorIn,
   WORLD,
   type LandArchive,
   type LonLatBox,
   type Region,
   type TerrainArchive,
+  type VectorArchive,
 } from "@logjam/shared";
 
 /** A member is null where the region has no such archive: the layer is not available here. */
@@ -19,6 +21,8 @@ export type SheetTerrain = {
   slope: TerrainArchive | null;
   contours: TerrainArchive | null;
   land: LandArchive | null;
+  /** The archive the vector basemap is drawn from; null where the region has none. */
+  vector: VectorArchive | null;
   /**
    * The credit of the heights every derived layer is cut from, which a print
    * carries for each of them; null with no region.
@@ -49,6 +53,7 @@ export function sheetTerrain(
     slope: layerIn(region, "slope"),
     contours: layerIn(region, "contours"),
     land: layerIn(region, "land"),
+    vector: vectorIn(region),
     credit: layerIn(region, "heights")?.credit ?? null,
   };
 }

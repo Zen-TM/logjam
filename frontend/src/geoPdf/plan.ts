@@ -14,6 +14,7 @@ import {
   type TerrainArchive,
   type TileCoord,
   type TileToMapTransform,
+  type VectorArchive,
 } from "@logjam/shared";
 import {
   areasOnPage,
@@ -78,16 +79,17 @@ export function rasterBaseTiles(
 export function vectorBasemap(
   config: GeoPdfRenderInput["config"],
   g: PrintGeometry,
+  archive: VectorArchive | null,
 ) {
   const entry = BASEMAP_CATALOG.find(
     (e) => e.id === config.baseLayer && e.kind === "vector",
   );
-  if (!entry) return null;
+  if (!entry || !archive) return null;
   const { north, south, east, west } = config.extent;
   const styleZoom = displayZoomForScale(config.scale, g.centreLat);
-  const zoom = Math.floor(Math.min(styleZoom, entry.maxNativeZoom));
+  const zoom = Math.floor(Math.min(styleZoom, archive.maxzoom));
   return {
-    path: entry.urlTemplate,
+    path: archive.archivePath,
     styleZoom,
     transform: computeTileToMapTransform(
       Math.max(zoom, 0),
@@ -186,7 +188,7 @@ export function statewideReads(
   const out = new Map<string, StatewideRead>();
   const add = (path: string, r: TileCoord) =>
     out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
-  const basemap = vectorBasemap(config, g);
+  const basemap = vectorBasemap(config, g, terrain.vector);
   if (basemap)
     for (const tile of basemap.transform.tiles) add(basemap.path, tile);
   const whole = [{ from: 0, to: g.nativeH }];

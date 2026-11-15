@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { BASEMAP_CATALOG, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 // Deliberate subpath imports: the import parser is kept out of the shared
 // barrel so pdf-lib never rides into the web bundle.
 import {
@@ -36,9 +36,7 @@ test.skip(
 );
 
 const archives = statewideArchives();
-const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
-  (entry) => entry.id === "protomaps",
-)!.urlTemplate;
+const PROTOMAPS_ARCHIVE = NSW_REGION.vector!.archivePath;
 const ARCHIVE_PATHS: Record<string, Buffer> = {
   [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
   [NSW_REGION.terrain.slope.archivePath]: archives.slope,

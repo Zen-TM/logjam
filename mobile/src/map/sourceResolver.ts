@@ -30,6 +30,7 @@ import {
   type TerrainLayerKey,
   type TopoLayerFormat,
   type TopoLayerKey,
+  vectorIn,
 } from "@logjam/shared";
 
 import {
@@ -49,7 +50,13 @@ import type { TileJson } from "./tileJsonFile";
 export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =
-  | { kind: "basemap"; basemapId: BasemapId }
+  /**
+   * `region` is the one the map shows (`regionShown`): the vector basemap is
+   * read from its archive, online, and from the clips saved of it, offline.
+   * Any other basemap ignores it. Required, so that a caller cannot leave the
+   * vector map with no archive by leaving it out.
+   */
+  | { kind: "basemap"; basemapId: BasemapId; region: Region | null }
   | {
       kind: "topo-overlay";
       jobId: string;
@@ -98,7 +105,11 @@ export type ResolvedTileSource =
   | {
       status: "unavailable";
       key: string;
-      reason: "offline-not-downloaded" | "online-only-source" | "no-remote-url";
+      reason:
+        | "offline-not-downloaded"
+        | "online-only-source"
+        | "no-remote-url"
+        | "not-available-here";
     };
 
 export interface MapArtifact {
@@ -156,6 +167,12 @@ export interface MapArtifact {
    */
   groupId?: string | null;
   groupLabel?: string | null;
+  /**
+   * The CDN path of the archive a vector basemap clip was cut from: the vector
+   * map draws only the clips cut from the archive of the region it shows. Null
+   * on every other artifact, and on a vector clip saved before it was kept.
+   */
+  archivePath?: string | null;
 }
 
 export interface ResolveContext {
@@ -229,6 +246,7 @@ function localArtifactSource(
 function resolveBasemap(
   basemapId: BasemapId,
   ctx: ResolveContext,
+  region: Region | null,
 ): ResolvedTileSource[] {
   const logicalId = `basemap:${basemapId}`;
   const online = ctx.connectivity === "online";
@@ -240,15 +258,22 @@ function resolveBasemap(
     .reverse();
 
   if (basemapId === "protomaps") {
-    // Self-hosted vector basemap. Remote archive lives on our CDN (catalog
-    // urlTemplate = CDN-relative archive path); offline it needs a downloaded
-    // region.
+    // Self-hosted vector basemap, read from the archive of the region the map
+    // shows: remote online, and offline the clips saved from that archive. A
+    // clip of another region's archive is never drawn here, nor one saved
+    // before clips named their archive.
+    const archive = vectorIn(region);
     const protomapsEntry = catalogEntry("protomaps");
     if (!protomapsEntry) {
       throw new Error("protomaps missing from BASEMAP_CATALOG");
     }
+    if (!archive) {
+      return [
+        { status: "unavailable", key: logicalId, reason: "not-available-here" },
+      ];
+    }
     if (online) {
-      const url = `pmtiles://${ctx.cdnBaseUrl}/${protomapsEntry.urlTemplate}`;
+      const url = `pmtiles://${ctx.cdnBaseUrl}/${archive.archivePath}`;
       return [
         {
           status: "ok",
@@ -260,8 +285,9 @@ function resolveBasemap(
         },
       ];
     }
-    if (regions.length > 0) {
-      return regions.map((r) =>
+    const here = regions.filter((r) => r.archivePath === archive.archivePath);
+    if (here.length > 0) {
+      return here.map((r) =>
         localArtifactSource(r, logicalId, protomapsEntry.attribution),
       );
     }
@@ -275,9 +301,9 @@ function resolveBasemap(
   }
 
   const entry = catalogEntry(basemapId);
-  if (!entry) {
+  if (entry?.kind !== "raster") {
     // Fail loudly — an unknown basemap id is a programming error, not a
-    // degradable state.
+    // degradable state. The one vector entry is drawn above.
     throw new Error(`Unknown basemap id: ${basemapId}`);
   }
 
@@ -876,7 +902,7 @@ export function resolveMapSource(
 ): ResolvedTileSource[] {
   switch (ref.kind) {
     case "basemap":
-      return resolveBasemap(ref.basemapId, ctx);
+      return resolveBasemap(ref.basemapId, ctx, ref.region);
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
     case "terrain":

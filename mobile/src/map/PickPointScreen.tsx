@@ -46,7 +46,12 @@ import {
   type PressEvent,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BASEMAP_CATALOG, MAP_INK, pointBox } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  MAP_INK,
+  pointBox,
+  regionInWrappedView,
+} from "@logjam/shared";
 
 import { config } from "../config";
 import {
@@ -172,9 +177,11 @@ export function PickPointScreen({
     () => ({ connectivity, artifacts, cdnBaseUrl: config.topoCdnBaseUrl }),
     [connectivity, artifacts],
   );
+  // The vector basemap is read from the archive of the region the map shows.
+  const region = useMemo(() => regionInWrappedView(view), [view]);
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
-    [basemapId, ctx],
+    () => resolveMapSource({ kind: "basemap", basemapId, region }, ctx),
+    [basemapId, region, ctx],
   );
 
   const places = useMirrorPlaces();
