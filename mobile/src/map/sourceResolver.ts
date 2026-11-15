@@ -18,6 +18,7 @@ import {
   areasInRegion,
   BASEMAP_CATALOG,
   layerIn,
+  lonMid,
   lonOverlap,
   lonWidth,
   REGIONS,
@@ -666,9 +667,7 @@ export const drawsTerrain = (
  */
 function mainRegion(viewport: Viewport | null | undefined) {
   return (regions: MapArtifact[]): MapArtifact[] => {
-    const lng = viewport
-      ? viewport.west + lonWidth(viewport.west, viewport.east) / 2
-      : 0;
+    const lng = viewport ? lonMid(viewport.west, viewport.east) : 0;
     const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
     const perLng = Math.cos((lat * Math.PI) / 180);
     const away = ({ bbox }: MapArtifact) => {

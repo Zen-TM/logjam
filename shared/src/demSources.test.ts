@@ -165,6 +165,8 @@ describe("demSourceCovers", () => {
     },
   );
 
+  // Mutation: return false for a null `coverage` in `demSourceCovers`, and a
+  // worldwide source answers for no position.
   it("covers every position for a source with no box", () => {
     expect(demSourceCovers(over(null), position(-179.5))).toBe(true);
   });

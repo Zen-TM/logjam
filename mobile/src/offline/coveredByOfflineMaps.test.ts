@@ -225,7 +225,7 @@ describe("a saved region that runs past 180°", () => {
   });
 
   // Mutation: take the centre sample as `(west + east) / 2` in
-  // `coveredByOfflineMaps`, and a box saved wrapped, held by two regions that
+  // `coveredByOfflineMaps` (in place of `lonMid`), and a box saved wrapped, held by two regions that
   // meet at the line, has its centre at 0 and is not held.
   it("holds a box that two regions meeting at the line cover between them", () => {
     const eastSide = region([178, -18, 180, -16]);

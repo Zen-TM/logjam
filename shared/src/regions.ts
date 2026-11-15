@@ -25,7 +25,7 @@ import type { GridId } from "./grids.js";
 import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
-import { lonWidth, wrapLon } from "./placeGeo.js";
+import { lonMid, lonWidth, wrapLon } from "./placeGeo.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
@@ -775,7 +775,9 @@ function declaresAnything(region: Region): boolean {
  * first touching the view, else `world` when it declares anything, else null.
  * The view is read as a map reports it: longitudes past ±180, in any world
  * copy, are the ground they wrap to (`regionTouchesBox`). Guard:
- * `regions.test.ts` ("reads a view panned past the antimeridian").
+ * `regions.test.ts`, the describe "a view panned round the world" ("reads a
+ * view past the antimeridian by whole turns", "takes the region under the
+ * centre, in whatever world copy the view is").
  * // ponytail: a map that draws from this answer draws one region's Terrain
  * group and vector basemap at a time, so with two regions on screen the one
  * under the centre wins. Upgrade: a source per region per layer.
@@ -787,7 +789,7 @@ export function regionInView(
 ): Region | null {
   return (
     regionAt(
-      wrapLon(view.west + lonWidth(view.west, view.east) / 2),
+      wrapLon(lonMid(view.west, view.east)),
       (view.south + view.north) / 2,
       regions,
     ) ??

@@ -1,6 +1,6 @@
 // Whether saved map regions already hold a place's or a way's ground, for the
 // coverage line on their pages and the plan's "Map downloaded" pill.
-import { lonBoxWithin, lonNear, lonWidth, lonWithin } from "@logjam/shared";
+import { lonBoxWithin, lonMid, lonNear, lonWithin } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 
@@ -46,7 +46,7 @@ export function coveredByOfflineMaps(
     [west, north],
     [east, south],
     [east, north],
-    [west + lonWidth(west, east) / 2, (south + north) / 2],
+    [lonMid(west, east), (south + north) / 2],
   ];
   return samples.every((point) => boxes.some((box) => holds(box, point)));
 }

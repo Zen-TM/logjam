@@ -59,7 +59,7 @@ export function lonWidth(west: number, east: number): number {
 export function wrapBox<B extends { west: number; east: number }>(box: B): B {
   const east =
     box.east >= box.west ? box.east : box.west + lonWidth(box.west, box.east);
-  const turn = lonTurn((box.west + east) / 2);
+  const turn = lonTurn(lonMid(box.west, box.east));
   return turn === 0 && east === box.east
     ? box
     : { ...box, west: box.west - turn, east: east - turn };
@@ -119,9 +119,10 @@ export function lonWithin(lon: number, west: number, east: number): boolean {
 
 /**
  * The width in degrees where two longitude ranges meet, or null where they do
- * not. Ranges that only touch meet in a width of 0. Either range may be
- * unwrapped or wrapped, in any world copy, and the widest overlap in any copy
- * counts. Guard: placeGeo.test.ts.
+ * not. Ranges that only touch meet in a width of 0, exactly, whatever their
+ * edges: the other range is compared as given where it is in the same world
+ * copy. Either range may be unwrapped or wrapped, in any world copy, and the
+ * widest overlap in any copy counts. Guard: placeGeo.test.ts.
  */
 export function lonOverlap(
   west: number,
@@ -131,16 +132,30 @@ export function lonOverlap(
 ): number | null {
   const span = lonWidth(west, east);
   const otherSpan = lonWidth(otherWest, otherEast);
+  // Both ranges as unwrapped edges, so a range that arrives unwrapped is
+  // compared by the edges it was given.
+  const top = east >= west ? east : west + span;
+  const otherTop = otherEast >= otherWest ? otherEast : otherWest + otherSpan;
   let widest: number | null = null;
-  // `shift` is where the other range starts, measured from `west`, in each
-  // world copy from the one just below `west` up past `east`.
-  for (
-    let shift = wrapTurn(otherWest - west) - 360;
-    shift <= span;
-    shift += 360
-  ) {
-    const width = Math.min(span, shift + otherSpan) - Math.max(0, shift);
+  // The copy of the other range just below `west`, in the one copy the raw
+  // difference says (`turns` = 0 is the other range as given), then each copy
+  // above it up past `top`.
+  const raw = otherWest - west;
+  for (let turns = Math.floor(raw / 360) + 1; ; turns--) {
+    const shift = 360 * turns;
+    const otherLow = turns === 0 ? otherWest : otherWest - shift;
+    if (!(otherLow <= top)) break;
+    const otherHigh = turns === 0 ? otherTop : otherTop - shift;
+    const width = Math.min(top, otherHigh) - Math.max(west, otherLow);
     if (width >= 0 && (widest === null || width > widest)) widest = width;
   }
   return widest;
 }
+
+/**
+ * The middle of a box across the date line: `west` plus half its width, so a
+ * box that arrives wrapped (170 to -170) has its middle at 180 and not at 0,
+ * in the copy of the world `west` is in. Guard: placeGeo.test.ts.
+ */
+export const lonMid = (west: number, east: number): number =>
+  west + lonWidth(west, east) / 2;

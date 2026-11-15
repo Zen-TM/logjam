@@ -420,6 +420,33 @@ describe("saved regions across the date line", () => {
     ).toEqual(["six-topo"]);
   });
 
+  // Mutation: in `lonOverlap` (placeGeo.ts) measure the other range from `west`
+  // by shifts (`shift = wrapTurn(otherWest - west) - 360`, up by 360 while
+  // `shift <= span`), and a box whose edge is the view's edge to the last bit
+  // (150.3, 151.7) reads as off screen.
+  it("counts a view whose edge is a saved box's edge, for non-integer edges", () => {
+    const box = artifact({
+      id: "edge",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [150.3, -34, 151.7, -33],
+    });
+    const at = (west: number, east: number): Viewport => ({
+      west,
+      south: -33.6,
+      east,
+      north: -33.4,
+    });
+    for (const [west, east] of [
+      [151.7, 152.9],
+      [149.1, 150.3],
+      [0.1 + 150.2, 151.7],
+    ])
+      expect(
+        basemapsCoveringViewport([box], at(west!, east!), ["six-topo"]),
+      ).toEqual(["six-topo"]);
+  });
+
   const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
     artifact({
       id,

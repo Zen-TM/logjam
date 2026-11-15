@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   haversineMeters,
   lonBoxWithin,
+  lonMid,
   lonTurn,
   lonNear,
   lonOverlap,
@@ -280,6 +281,18 @@ describe("lonBoxWithin", () => {
   });
 });
 
+describe("lonMid", () => {
+  // Mutation: return `(west + east) / 2` from `lonMid`, and a box that arrives
+  // wrapped, 170 to -170, has its middle at 0.
+  it("is the middle of a box, across the date line when it is wrapped", () => {
+    expect(lonMid(150, 152)).toBe(151);
+    expect(lonMid(170, 190)).toBe(180);
+    expect(lonMid(170, -170)).toBe(180);
+    expect(lonMid(-190, -170)).toBe(-180);
+    expect(lonMid(-200, 200)).toBe(0);
+  });
+});
+
 describe("lonOverlap", () => {
   // Mutation: replace `width >= 0` with `width > 0` in `lonOverlap`, and ranges
   // that touch read as apart.
@@ -291,15 +304,34 @@ describe("lonOverlap", () => {
     expect(lonOverlap(150, 151, 148, 149)).toBeNull();
   });
 
-  // Mutation: start the loop at `wrapTurn(otherWest - west)` without the
-  // `- 360` in `lonOverlap`, and a range starting below `west` misses it.
+  // Mutation: in `lonOverlap` measure the other range from `west` by shifts
+  // (`shift = wrapTurn(otherWest - west) - 360`, up by 360 while `shift <=
+  // span`, width `Math.min(span, shift + otherSpan) - Math.max(0, shift)`), and
+  // ranges whose edges are the same non-integer longitude read as apart.
+  it("meets in a width of 0 where non-integer edges are the same longitude", () => {
+    const edges = [150.3, 151.7, 0.1, 0.7, 33.3, 33.9, 148.9, 149.2, 150.1];
+    for (const a of edges)
+      for (const b of edges) {
+        if (a === b) continue;
+        const [low, high] = a < b ? [a, b] : [b, a];
+        // The range ending where the other starts, both ways round.
+        expect(lonOverlap(low - 1, low, low, high)).toBe(0);
+        expect(lonOverlap(low, high, low - 1, low)).toBe(0);
+        expect(lonOverlap(low, high, high, high + 1)).toBe(0);
+        expect(lonOverlap(high, high + 1, low, high)).toBe(0);
+      }
+  });
+
+  // Mutation: start the loop's `turns` at `Math.floor(raw / 360)` without the
+  // `+ 1` in `lonOverlap`, and a range starting below `west` misses it.
   it("sees a range that starts below the first one's west edge", () => {
     expect(lonOverlap(170, 190, 160, 175)).toBe(5);
     expect(lonOverlap(150, 151, 149.5, 150.25)).toBeCloseTo(0.25, 9);
   });
 
-  // Mutation: stop the loop in `lonOverlap` after the copy below `west`
-  // (`shift <= span` as `shift < 0`), and ranges either side of 180 read as apart.
+  // Mutation: stop the loop in `lonOverlap` at the copy of the other range at
+  // `west` (`otherLow <= top` as `otherLow <= west`), and ranges either side
+  // of 180 read as apart.
   it("meets across the date line, whatever world copy each range is in", () => {
     expect(lonOverlap(170, 190, -175, -170)).toBe(5);
     expect(lonOverlap(170, 190, 530, 540)).toBe(10);

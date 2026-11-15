@@ -36,9 +36,10 @@ export type DemSource = {
   sampleZoom: number;
   /**
    * [west, south, east, north] the source can answer in, or null for
-   * worldwide, a box across the date line either wrapped or unwrapped
-   * (`lonWithin`). Inside it a missing tile or a no-data pixel still means "not
-   * here", and the position falls through to the next source.
+   * worldwide. A box across the date line is wrapped or unwrapped
+   * (`lonWithin`; guard: `demSources.test.ts`, the describe
+   * "demSourceCovers"). Inside it a missing tile or a no-data pixel still
+   * means "not here", and the position falls through to the next source.
    */
   coverage: readonly [number, number, number, number] | null;
   /**
