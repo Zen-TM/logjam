@@ -58,16 +58,19 @@ that exists, unless you pass `--force`, which fetches it again.
 With the stack up, `scripts/sim-regions/build.sh up` uploads every `.pmtiles`
 under `out/master/` (or `$OUT/master/`) to MiniStack's `logjam-topo-local` at the
 key it has there, with the `test`/`test` credentials the README's Local
-Development uses. `BUCKET_URL` names another bucket (a laptop slot's is
-`http://127.0.0.1:14566/logjam-topo-local`). It needs only `curl`, and fails when
-there is nothing to upload or the bucket refuses a file.
+Development uses. `BUCKET_URL` names another bucket, for a stack that serves S3
+on a different port; it must be `http://127.0.0.1:<port>/...` or
+`http://localhost:<port>/...`, and `up` refuses any other host before it uploads
+anything. It needs only `curl`, and fails when there is nothing to upload or the
+bucket refuses a file.
 
-Logjam Web then reads the archives through `DEV_MASTER_URL` set to that bucket,
-or to `http://127.0.0.1:4567` with `node scripts/dev-master.mjs` running, which
-serves the bucket's files ahead of the prod CDN. A phone reads them through the
-same `4567` after `adb reverse tcp:4567 tcp:4567`, with
-`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4567`. Playwright's `stubMaster.ts`
-answers the same paths from the fixtures below, so a spec needs none of this.
+Logjam Web then reads the archives through `DEV_MASTER_URL` set to the bucket.
+With the default bucket it can instead use `http://127.0.0.1:4567` with
+`node scripts/dev-master.mjs` running, which serves that bucket's files ahead of
+the prod CDN (it reads no other bucket). A phone has only that route: after
+`adb reverse tcp:4567 tcp:4567`, with
+`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4567`, so a phone sees only what
+is in the default bucket. Playwright's `stubMaster.ts` answers the same paths from the fixtures below, so a spec needs none of this.
 
 ## What is built
 

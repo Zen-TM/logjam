@@ -252,8 +252,10 @@ describe("scripts/sim-regions/build.sh up", () => {
   );
 
   /** Runs `build.sh up` over `files` (paths under OUT) against a bucket that
-   *  answers each PUT with `status`; resolves with what the bucket received. */
-  async function up(files: string[], status = 200) {
+   *  answers each PUT with `status`; resolves with what the bucket received.
+   *  `bucket` replaces the URL of that fake bucket; `PORT` in it is
+   *  the fake bucket's port. */
+  async function up(files: string[], status = 200, bucket?: string) {
     const out = mkdtempSync(join(tmpdir(), "sim-up-"));
     for (const f of files) {
       mkdirSync(join(out, f, ".."), { recursive: true });
@@ -275,7 +277,9 @@ describe("scripts/sim-regions/build.sh up", () => {
         env: {
           ...process.env,
           OUT: out,
-          BUCKET_URL: `http://127.0.0.1:${port}/logjam-topo-local`,
+          BUCKET_URL: (
+            bucket ?? "http://127.0.0.1:PORT/logjam-topo-local"
+          ).replace("PORT", String(port)),
         },
       }).then(
         () => ({ ok: true }),
@@ -308,6 +312,26 @@ describe("scripts/sim-regions/build.sh up", () => {
     // Mutation: drop `-f` from the curl call in build.sh up.
     const result = await up(["master/dem/simnz-heights.pmtiles"], 500);
     expect(result.ok).toBe(false);
+  });
+
+  it("refuses a bucket that is not on this machine, before any upload", async () => {
+    // Mutation: drop the `=~` loopback check from build.sh up.
+    // The last URL reaches the fake bucket if the check is dropped: curl reads
+    // "localhost:1" as a user name and connects to the host after the "@".
+    for (const bucket of [
+      "http://bucket.example.invalid:4566/logjam-topo-local",
+      "https://127.0.0.1:4566/logjam-topo-local",
+      "http://127.0.0.1.example.invalid:4566/logjam-topo-local",
+      "http://localhost:1@127.0.0.1:PORT/logjam-topo-local",
+    ]) {
+      const result = await up(
+        ["master/dem/simnz-heights.pmtiles"],
+        200,
+        bucket,
+      );
+      expect(result.ok, bucket).toBe(false);
+      expect(result.got, bucket).toEqual([]);
+    }
   });
 
   it("fails when there is nothing to upload", async () => {
