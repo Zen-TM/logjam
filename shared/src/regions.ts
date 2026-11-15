@@ -54,6 +54,8 @@ export type TerrainArchive = {
 
 /** The height source the other archives are cut from; one of the region's `dem`. */
 export type HeightsArchive = DemSource & {
+  /** What a save's list calls the clip, after "Elevation data,": "NSW 5 m". */
+  name: string;
   archivePath: string;
   coverage: TerrainArchive["coverage"];
   tileBytes: TileBytes;
@@ -166,6 +168,7 @@ export type Region = {
  */
 const NSW_HEIGHTS = {
   id: "nsw-5m",
+  name: "NSW 5 m",
   sampleZoom: 15,
   // NSW and the ACT. Inside it a tile the build did not produce is simply
   // absent, and the position falls through.
@@ -196,7 +199,7 @@ const NSW_HEIGHTS = {
     "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
   creditHtml:
     'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
-} as const satisfies DemSource & { tileBytes: TileBytes };
+} as const satisfies DemSource & { name: string; tileBytes: TileBytes };
 
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({

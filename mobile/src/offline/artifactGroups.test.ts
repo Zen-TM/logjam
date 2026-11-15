@@ -1,3 +1,4 @@
+import { planRegionForBasemaps } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -161,14 +162,10 @@ describe("REGION_ARTIFACT_KINDS", () => {
   // Mutation: drop `slope-region` from the list, and a saved area's slope clip
   // leaves its card in Saved and the bytes sign-out warns about.
   it("holds every kind a saved area's run files", () => {
+    const bbox = { west: 150.2, south: -33.8, east: 150.4, north: -33.6 };
     const specs = regionClipSpecs(
-      {
-        bbox: { west: 150.2, south: -33.8, east: 150.4, north: -33.6 },
-        groupId: "g",
-        groupLabel: "Katoomba",
-        allowCellular: false,
-      },
-      ["nsw-5m"],
+      { bbox, groupId: "g", groupLabel: "Katoomba", allowCellular: false },
+      planRegionForBasemaps(bbox, [], 15, () => 16).clips,
       (id) => ({ id, label: id }),
     );
     const kinds = specs.map(regionClipKind);

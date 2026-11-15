@@ -58,12 +58,13 @@ function simTerrain(
   });
   const heights = {
     id: `${id}-heights`,
+    name: `${name} (simulated)`,
     sampleZoom: topZoom,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
     tileBytes: placeholderTileBytes(8, topZoom),
     ...credit("Elevation"),
-  } as const satisfies DemSource & { tileBytes: TileBytes };
+  } as const satisfies DemSource & { name: string; tileBytes: TileBytes };
   return {
     heights,
     slope: {

@@ -40,6 +40,8 @@ type BasemapCatalogBase = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
   name: string;
+  /** The label on a chip in a row of maps, where `name` would run to a second line. */
+  chipName?: string;
   /**
    * "raster" = XYZ tile provider (urlTemplate is a {z}/{x}/{y} template).
    * "vector" = self-hosted PMTiles archive (urlTemplate is the CDN-relative
@@ -199,6 +201,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-topo",
     printsContours: true,
     name: "SIX Maps Topo",
+    chipName: "Topo",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
@@ -237,6 +240,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-base",
     printsContours: true,
     name: "SIX Maps Base Map",
+    chipName: "Base Map",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
@@ -262,6 +266,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-imagery",
     photo: true,
     name: "SIX Maps Imagery",
+    chipName: "Imagery",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
