@@ -79,6 +79,7 @@ import type { MapToolActions } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
+  accountWriteSettled,
   consentGate,
   currentConsentVersionOf,
   showsRegionStep,
@@ -156,6 +157,7 @@ import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
+import { useRecordLanguage } from "../languageSetting";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { useToastOnce } from "./feedback/useToastOnce";
@@ -426,6 +428,14 @@ function App() {
   const { blocked: consentBlocked, settled: consentSettled } =
     consentGate(currentUser);
   const loadsUserData = authenticated && consentSettled;
+  useRecordLanguage(
+    currentUser,
+    applyCurrentUser,
+    accountWriteSettled({
+      settled: loadsUserData,
+      signedUpNow: auth.newAccount,
+    }),
+  );
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
   const {

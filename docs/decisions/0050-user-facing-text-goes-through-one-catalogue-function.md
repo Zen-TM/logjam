@@ -56,11 +56,15 @@ directory that may only fall, found by `shared/src/i18nSource.ts`; the same
 tests hold each message to its hygiene rules (no leading or trailing space, no
 literal `{0}`, a `#` in a plural, only tags `rich` can consume). No test yet
 holds that every call site uses it, since existing literals are not converted,
-or that each client's entry file sets the global before it imports
-`@logjam/shared`; a later change adds it. The API installs the resolver from
-`AsyncLocalStorage` and refuses the pseudo-language in a prod runtime
-(`api/src/lib/requestLanguage.unit.test.ts`,
-`api/src/middleware/language.unit.test.ts`), and no `say` literal in `api/src` or
+or that the API's resolver is installed from `AsyncLocalStorage` for every
+path that writes text; a later change adds it. Each client's entry file sets
+the global before it imports `@logjam/shared`
+(`frontend/src/language.test.ts`, `frontend/src/mainLanguage.test.ts`,
+`mobile/src/language.test.ts`). The API installs the resolver and refuses the
+pseudo-language in a prod runtime (`api/src/lib/requestLanguage.unit.test.ts`,
+`api/src/middleware/language.unit.test.ts`), and both clients refuse it where
+the simulated regions are off (`frontend/src/languageSetting.test.ts`,
+`mobile/src/languageSetting.test.ts`). No `say` literal in `api/src` or
 `shared/src` sits outside a function (`api/src/userCopy.unit.test.ts`); one
 import-time call of a sentence function remains (`visibleToLocked` in
 `shared/src/contracts/plans.ts`), which a later change to the plan contracts

@@ -35,7 +35,7 @@ import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
-import { offeredLanguages } from "../lib/requestLanguage";
+import { acceptedLanguages } from "../lib/requestLanguage";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { handOverPlans } from "../lib/planItems";
@@ -465,7 +465,7 @@ router.patch(
       }
       if (
         language !== undefined &&
-        !offeredLanguages().includes(language as Language)
+        !acceptedLanguages().includes(language as Language)
       ) {
         throw malformed("Invalid language");
       }

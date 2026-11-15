@@ -31,6 +31,8 @@ const CLEARED_BY_OWN_MODULE = [
 ];
 
 const KEPT: Record<string, string> = {
+  "logjam.language":
+    "the language this browser runs in, read before anyone signs in: a device preference",
   "logjam.signInArea":
     "which sign-in picture was shown last; read while nobody is signed in",
   "logjam.activeLayerId":

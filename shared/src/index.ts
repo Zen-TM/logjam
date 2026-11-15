@@ -127,6 +127,7 @@ export * from "./tripPlans.js";
 export * from "./tripPlanAnswerDraft.js";
 export * from "./tripPlanEdits.js";
 export * from "./tripPlanTripLog.js";
+export * from "./languageChoice.js";
 export {
   LANGUAGES,
   PSEUDO_LANGUAGE,
