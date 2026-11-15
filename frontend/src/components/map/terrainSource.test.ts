@@ -127,12 +127,12 @@ describe("terrainSourceFor", () => {
   });
 
   describe("by region", () => {
-    const WANAKA = [169.1, -44.62] as const;
+    const MAKARORA = [169.25, -44.055] as const;
     const NZ_ARCHIVE = `https://web.test/${SIM_NZ.terrain.heights!.archivePath}`;
     const nzArea: SharpenedOverlay = {
       ...area,
       id: "nz1",
-      coverage: [169.05, -44.65, 169.07, -44.63],
+      coverage: [169.22, -44.08, 169.24, -44.06],
     };
     const ask = (
       map: ReturnType<typeof fakeMap>,
@@ -152,7 +152,7 @@ describe("terrainSourceFor", () => {
     // Mutation: read NSW's archive whatever the region, and a map over
     // another region draws its terrain from New South Wales's heights.
     it("reads the heights of the region the map shows", async () => {
-      const map = fakeMap(...WANAKA);
+      const map = fakeMap(...MAKARORA);
       const open = vi.fn(opens);
       expect(await ask(map, [], open)).toBe(`${REGION_TERRAIN_SOURCE}simnz`);
       expect(open).toHaveBeenCalledWith(NZ_ARCHIVE);
@@ -164,9 +164,9 @@ describe("terrainSourceFor", () => {
 
     // Mutation: test the view's centre against the heights' coverage box in
     // place of `regionInWrappedView`, and a view centred just east of the
-    // Coromandel, whose border still touches it, draws the worldwide tiles.
+    // Kauaeranga box, whose border still touches it, draws the worldwide tiles.
     it("reads a region whose border touches the view, as the Terrain group does", async () => {
-      expect(await ask(fakeMap(175.705, -37.0))).toBe(
+      expect(await ask(fakeMap(175.685, -37.1))).toBe(
         `${REGION_TERRAIN_SOURCE}simnz`,
       );
     });
@@ -178,7 +178,7 @@ describe("terrainSourceFor", () => {
       const open = vi.fn(opens);
       expect(
         await terrainSourceFor(
-          fakeMap(...WANAKA),
+          fakeMap(...MAKARORA),
           [],
           open,
           "https://web.test",
@@ -204,7 +204,7 @@ describe("terrainSourceFor", () => {
     // an area in New South Wales turns another region's source into a routed
     // one whose zooms reach past its archive.
     it("ignores an area another region holds", async () => {
-      const map = fakeMap(...WANAKA);
+      const map = fakeMap(...MAKARORA);
       expect(await ask(map, [area])).toBe(`${REGION_TERRAIN_SOURCE}simnz`);
       const spec = map.addSource.mock.calls[0]![1] as Record<string, unknown>;
       expect(spec.url).toBe(`pmtiles://${NZ_ARCHIVE}`);
@@ -214,7 +214,7 @@ describe("terrainSourceFor", () => {
     // Mutation: build the template with NSW's region in place of `region`,
     // and an area in another region is routed under the wrong archives.
     it("routes the areas a region holds under its own id", async () => {
-      const map = fakeMap(...WANAKA);
+      const map = fakeMap(...MAKARORA);
       const id = await ask(map, [nzArea]);
       expect(id).toMatch(/^3d-terrain-dem-simnz-./);
       expect(map.addSource.mock.calls[0]![1]).toMatchObject({

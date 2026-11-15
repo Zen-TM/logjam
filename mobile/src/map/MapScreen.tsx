@@ -63,6 +63,7 @@ import {
   type DeviceMotionMeasurement,
 } from "expo-sensors";
 import {
+  coverageCarrierHere,
   abandonConfirm,
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
@@ -76,6 +77,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
   MAP_OVERLAY_DEFAULTS,
   messageFromError,
   pickNextTrackColor,
@@ -268,6 +270,7 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
+import { hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -1237,11 +1240,6 @@ export function MapScreen({
     setShowMgaGridState(on);
     setMgaGridLayer(on);
   }, []);
-  const {
-    file: gaugeFile,
-    settled: gaugesSettled,
-    now: gaugesNow,
-  } = useGauges(showGauges);
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
@@ -1604,6 +1602,18 @@ export function MapScreen({
     () => regionShown(viewportBbox, camera),
     [viewportBbox, camera],
   );
+  // The Gauges row reads OFF where the region has no feed, and the map's gauge
+  // layer draws nothing there (search and the place page still read gauges). A
+  // gauge picked in search still loads the file its sheet reads, and opens at
+  // the pick whatever the region.
+  const gaugesHere = hasGauges(terrainRegion);
+  const gaugesShown = showGauges && gaugesHere;
+  const gaugeWanted = showGauges && gaugeId !== null;
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(gaugesShown || gaugeWanted);
   const landArchive = layerIn(terrainRegion, "land");
   const fireArchive = layerIn(terrainRegion, "fire");
   const coverageArchive = layerIn(terrainRegion, "coverage");
@@ -1670,7 +1680,11 @@ export function MapScreen({
     () => (fireArchive ? fireLayerPaints(fireArchive, fireNow) : null),
     [fireArchive, fireNow],
   );
-  const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
+  // The carrier that counts here: the stored pick only where the region lists
+  // it, as the layers sheet reads it, so nothing is fetched or tapped for one
+  // the row says is not chosen.
+  const carrierHere = coverageCarrierHere(terrainRegion, coverageCarrier);
+  const coverageOn = drawsCoverage(terrainLayers.coverage, carrierHere);
   const coverageResolved = useMemo(
     () =>
       coverageOn
@@ -1699,10 +1713,10 @@ export function MapScreen({
   );
   const coverageFilterExpr = useMemo(
     () =>
-      coverageArchive && coverageCarrier
-        ? coverageLayerFilter(coverageArchive, coverageCarrier)
+      coverageArchive && carrierHere
+        ? coverageLayerFilter(coverageArchive, carrierHere)
         : undefined,
-    [coverageArchive, coverageCarrier],
+    [coverageArchive, carrierHere],
   );
   const slopeResolved = useMemo(
     () =>
@@ -2446,7 +2460,7 @@ export function MapScreen({
           event.nativeEvent.point,
           [lon, lat],
           coverageLayerIdList,
-          coverageCarrier,
+          carrierHere,
           coverageArchive,
         )
           .then((name) => {
@@ -2457,9 +2471,9 @@ export function MapScreen({
     [
       addToolPoint,
       anchorDeleteSideFor,
+      carrierHere,
       collectingPoints,
       coverageArchive,
-      coverageCarrier,
       coverageLayerIdList,
       fireArchive,
       fireLayerIdList,
@@ -4867,11 +4881,13 @@ export function MapScreen({
       hue: MAP_INK.gauge,
       title: MAP_OVERLAYS.copy.gauges,
       // Live state only: a layer on with nothing to draw says so.
-      note:
-        showGauges && gaugesSettled && !gaugeFile
+      note: !gaugesHere
+        ? MAP_TERRAIN.copy.notHere
+        : gaugesShown && gaugesSettled && !gaugeFile
           ? GAUGES.copy.failed
           : undefined,
-      value: showGauges,
+      value: gaugesShown,
+      disabled: !gaugesHere,
       onChange: setShowGauges,
     },
     {
@@ -5584,7 +5600,7 @@ export function MapScreen({
           <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
-        {showGauges && gaugeFile ? (
+        {gaugesShown && gaugeFile ? (
           <GaugesLayer
             file={gaugeFile}
             now={gaugesNow}
@@ -6291,6 +6307,7 @@ export function MapScreen({
         open={layersOpen}
         onOpened={probeBasemaps}
         connectivity={connectivity}
+        region={terrainRegion}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
         view={basemapView}

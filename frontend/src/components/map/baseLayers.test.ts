@@ -5,7 +5,7 @@ import { baseLayersFor, basemapPicked, viewForBasemaps } from "./baseLayers";
 const ids = (view: Parameters<typeof baseLayersFor>[0]) =>
   baseLayersFor(view).map((layer) => layer.id);
 const inNsw = pointBox(150.3, -33.7);
-const overNz = pointBox(169.1, -44.62);
+const overNz = pointBox(169.25, -44.055);
 
 describe("baseLayersFor", () => {
   // Mutation: drop a basemap from NSW's `basemaps`, or list "osm" again, and

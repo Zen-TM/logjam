@@ -3,8 +3,8 @@
 //
 // Mutations that turn it red: add `{ key: "wind" }` to `GAUGES.sections`;
 // delete `credit` from `GAUGE_SECTIONS`; drop `stopSourcePress(event)` from
-// `handleGaugePress`; mount `GaugesLayer` without `showGauges &&`; give the
-// layer a `useGauges(true)`.
+// `handleGaugePress`; mount `GaugesLayer` on `showGauges` alone; give the
+// layer a `useGauges(true)`; gate `openGauge` on `gaugesShown`.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { contractSectionKeys, GAUGES } from "@logjam/shared";
@@ -55,11 +55,34 @@ describe("the map's gauge layer", () => {
     );
     expect(screen).toContain("Date.now() - pinPressedAt.current < 250");
   });
-  it("mounts only while the layer is on", () => {
-    expect(screen).toContain("{showGauges && gaugeFile ? (");
+  // Mutation: mount on `showGauges` alone, and the layer draws over a region
+  // that has no feed, though its row reads OFF.
+  it("mounts only while the layer is on and the region has a feed", () => {
+    expect(screen).toContain("const gaugesShown = showGauges && gaugesHere;");
+    expect(screen).toContain("{gaugesShown && gaugeFile ? (");
   });
-  it("is fetched only while on", () => {
+  // Mutation: set `inert` in place of `disabled` on the gauges entry, or wrap
+  // the row in a dimming View again, and a screen reader is told nothing and
+  // can still switch it, or the reason dims with the title.
+  it("says why it is unavailable through the row's disabled state", () => {
+    expect(screen).toContain("disabled: !gaugesHere,");
+    const sheet = read("../map/MapLayersSheet.tsx");
+    expect(sheet).toContain("disabled={entry.disabled}");
+    expect(sheet).not.toContain("entry.inert");
+  });
+  // Mutation: pass `showGauges` to `useGauges`, and the feed is fetched over a
+  // region that has none.
+  it("is fetched only while on, over a region with a feed or for a picked gauge", () => {
     expect(read("./useGauges.ts")).toContain("if (!enabled) return;");
+    expect(screen).toContain("} = useGauges(gaugesShown || gaugeWanted);");
+    expect(screen).toContain(
+      "const gaugeWanted = showGauges && gaugeId !== null;",
+    );
+  });
+  // Mutation: gate `openGauge` on `gaugesShown`, and a gauge picked in search
+  // from outside New South Wales does not open its sheet at the pick.
+  it("opens a picked gauge's sheet whatever the region", () => {
+    expect(screen).toMatch(/const openGauge = showGauges\s*\?/);
   });
 });
 

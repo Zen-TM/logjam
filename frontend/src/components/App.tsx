@@ -146,6 +146,7 @@ import {
   normalizeTerrainLayers,
   normalizeCarrier,
   carriersOf,
+  coverageCarrierHere,
   drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
@@ -565,6 +566,9 @@ function App() {
   const [viewRegion, setViewRegion] = useState<Region | null>(null);
   // Only a region with a gauge feed has river gauges to draw.
   const gaugesHere = viewRegion?.gauges != null;
+  // The stored pick where the region in view lists it, which the map's
+  // Coverage layer draws and filters by (the Layers popover asks the same).
+  const carrierHere = coverageCarrierHere(viewRegion, coverageCarrier);
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
@@ -572,7 +576,7 @@ function App() {
     const entries = terrainEntries(viewRegion, sharpenedAreas);
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
-      coverage: drawsCoverage(coverage, coverageCarrier),
+      coverage: drawsCoverage(coverage, carrierHere),
       fire,
       slope,
       land,
@@ -589,7 +593,7 @@ function App() {
     activeLayerId,
     contours,
     coverage,
-    coverageCarrier,
+    carrierHere,
     fire,
     slope,
     land,
@@ -2200,7 +2204,7 @@ function App() {
             region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
-            coverageCarrier={coverageCarrier}
+            coverageCarrier={carrierHere}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}

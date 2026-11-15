@@ -16,8 +16,8 @@ import { sheetTerrain } from "./sheetTerrain";
 // Made-up boxes: one near Katoomba (NSW), one inside the first simulated
 // New Zealand box, one inside simulated Utah's, one in the open ocean.
 const KATOOMBA = { north: -33.7, south: -33.76, east: 150.36, west: 150.3 };
-const NZ = { north: -44.6, south: -44.65, east: 169.1, west: 169.05 };
-const UTAH = { north: 38.3, south: 38.25, east: -110.75, west: -110.8 };
+const NZ = { north: -44.03, south: -44.08, east: 169.28, west: 169.22 };
+const UTAH = { north: 37.32, south: 37.27, east: -112.9, west: -112.95 };
 const OCEAN = { north: -10, south: -10.1, east: -140, west: -140.1 };
 const ALL = [NSW_REGION, ...SIM_REGIONS];
 

@@ -8,7 +8,7 @@ import {
   overlayAwaitsChoice,
   drawsCoverage,
   overlayChoiceLabel,
-  normalizeCarrier,
+  coverageCarrierHere,
   layerIn,
   overlayLegends,
   type CarrierId,
@@ -179,10 +179,7 @@ export default function LayersPopover({
   const gaugesHere = region?.gauges != null;
   // A stored pick is one carrier for every region; where the region in view
   // does not list it the row asks again, as if none were picked.
-  const carrierHere = normalizeCarrier(
-    coverageCarrier,
-    region?.terrain.coverage?.carriers ?? [],
-  );
+  const carrierHere = coverageCarrierHere(region, coverageCarrier);
   const overlaysOn = [
     showPlaces,
     showWays,
@@ -358,9 +355,9 @@ export default function LayersPopover({
                                 choice: {
                                   value: carrierHere,
                                   onChange: (value: string) => {
-                                    const next = normalizeCarrier(
+                                    const next = coverageCarrierHere(
+                                      region,
                                       value,
-                                      region?.terrain.coverage?.carriers ?? [],
                                     );
                                     if (next) onCoverageCarrierChange(next);
                                   },
