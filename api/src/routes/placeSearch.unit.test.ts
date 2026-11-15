@@ -350,8 +350,8 @@ describe("POST /places/search", () => {
   // ROOT AGENTS.md PRIVACY: what the user typed never reaches a log line,
   // on an answer, a refusal, a body that is not JSON or a 503. Mutation: log
   // `req.body` (or `q`) in the route, put `q` in the `malformed` detail (the
-  // region refusals too), or drop the `entity.parse.failed` case from the
-  // error handler, and this goes red.
+  // region refusals too), put the region a request names in that detail, or drop
+  // the `entity.parse.failed` case from the error handler, and this goes red.
   it("never logs the query", async () => {
     const query = "Hidden Gorge";
     await search({ q: query });
@@ -360,7 +360,7 @@ describe("POST /places/search", () => {
     await search({ q: query });
     await search({ q: query, limit: "lots" });
     await search({ q: [query] });
-    await search({ q: query, region: "nowhere" });
+    await search({ q: query, region: "nowhere-land" });
     await search({ q: query, region: 7 });
     // body-parser's own error quotes the text it could not parse.
     const broken = await request(app)
@@ -369,6 +369,11 @@ describe("POST /places/search", () => {
       .send(`{"q":${query}}`);
     expect(broken.status).toBe(400);
     expect(lines.length).toBeGreaterThan(4);
-    for (const line of lines) expect(line).not.toContain("Hidden");
+    for (const line of lines) {
+      expect(line).not.toContain("Hidden");
+      // Nor the region a refused request named (the ids the refresh logs are
+      // the configured ones, which this is not).
+      expect(line).not.toContain("nowhere-land");
+    }
   });
 });

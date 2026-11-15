@@ -110,32 +110,36 @@ feature in NSW, never a geocoding service.**
   regained signal; Wi-Fi by default, never while the app is in the background,
   as [0013](0013-background-work-battery-rules.md) says) without a region
   download of its own, and a copy of any other region, and any folder named for
-  one, is deleted at the next check. When a different account signs in, the wipe
-  (`finishSignIn` → `wipeAllLocalData`) first stops the refresh and holds it
-  (nothing fetched or installed, a transfer in flight cancelled, so the wipe
-  never waits on bytes) until it has run that check once the chosen regions and
-  saved maps are gone, so the default region's copy alone stays, as it did when
+  one, is deleted at the next check. At every wipe (`wipeAllLocalData`: at
+  sign-out, and from `finishSignIn` when a different account signs in) the wipe
+  first stops the refresh and holds it (nothing fetched or installed, a
+  transfer in flight cancelled, so the wipe never waits on bytes) until it has
+  run that check once the chosen regions and saved maps are gone, so the default region's copy alone stays, as it did when
   it was the only one: which regions a phone holds would otherwise show where
-  its last user was interested. A copy that will not delete stops that sign-in,
-  like any other store. The ranking, the public file, what is never logged and
-  the replacement rule stand for each registry. Guards:
+  its last user was interested. A copy that will not delete is reported at
+  sign-out and stops the sign-in of a different account, like any other store.
+  The refresh resumes however the wipe ends. The ranking, the public file, what
+  is never logged and the replacement rule stand for each registry. Guards:
   `shared/src/regions.test.ts` ("placeRegistryIn"),
   `api/src/routes/placeSearch.unit.test.ts` ("answers from the registry of the
   region it names, and the default region's when it names none"),
   `mobile/src/offline/placeRegistry.test.ts` ("keeps each region's copy apart",
   "lets a copy lapse once its region is neither chosen nor saved over",
   "keeps a copy for a region a queued save touches", "leaves only the default
-  region's copy when a different account signs in", "installs nothing once a
-  wipe has stopped the refresh", "stops a download without waiting for its
-  bytes", "starts no check between a wipe's stop and its lapse, and runs again
+  region's copy after a wipe, at sign-out or when a different account signs in",
+  "installs nothing once a wipe has stopped the refresh", "stops a download
+  without waiting for its bytes", "stops a pointer read without waiting for its
+  answer", "starts no check between a wipe's stop and its lapse, and runs again
   after", "leaves no folder for a region after a failed or stopped first fetch,
   or a lapse", "does not check while the app is in the background" and "still
   checks while the app's state is not yet known"),
   `mobile/src/offline/regionDownloadQueue.test.ts` ("lists queued, downloading
   and paused jobs, and not ready or failed ones"),
   `mobile/src/offline/wipeLocalData.test.ts` ("lets the place registries lapse
-  after the chosen regions and saved maps are gone" and "holds the place
-  registry refresh until the lapse has finished, then lets it run again") and
+  after the chosen regions and saved maps are gone", "holds the place registry
+  refresh until the lapse has finished, then lets it run again" and "lets the
+  place registry refresh run again when a step between its stop and its lapse
+  throws") and
   `frontend/src/components/map/MapSearchBox.test.tsx` ("asks no registry over
   ground none covers, and shows no answer from the ground it left"). Everything
   else above stands.
@@ -187,7 +191,7 @@ feature in NSW, never a geocoding service.**
   ([0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)) and ignores the Wi-Fi rule.
 - **Postgres trigram search:** it would rank differently from the phone, and
   the in-memory index measured above costs about 35 MB of heap and typed
-  arrays (110 to 125 MB resident on the made-up file of the Update below,
-  updated 2026-11-14).
+  arrays (110 to 125 MB resident on a made-up file with NSW's row count, as the
+  Context table and Consequences give, updated 2026-11-14).
 - **Diffs between versions:** a diff format, apply logic and a fallback to save
   a few MB a month. Revisit if transfer numbers say it matters.

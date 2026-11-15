@@ -196,6 +196,19 @@ describe("wipeAllLocalData", () => {
     expect(events).toContain("resume:registries");
   });
 
+  // A step between the stop and the lapse that throws must not leave the
+  // refresh held until the next wipe or an app restart. Mutation: resume only
+  // after the lapse, inside the lapse's own `try`, and this goes red.
+  it("lets the place registry refresh run again when a step between its stop and its lapse throws", async () => {
+    forgetRegions.mockImplementationOnce(() => {
+      throw new Error("boom: forgetRegions");
+    });
+    await expect(wipeAllLocalData()).rejects.toThrow("boom: forgetRegions");
+    expect(events).toContain("stop:placeregistry");
+    expect(events).not.toContain("lapse:registries");
+    expect(events).toContain("resume:registries");
+  });
+
   // Mutation: drop the try/catch around `lapsePlaceRegistries()` in the wipe, and
   // a copy that will not delete stops the rest of the wipe, or goes unreported.
   it("reports a place registry that will not delete, and still clears the others", async () => {

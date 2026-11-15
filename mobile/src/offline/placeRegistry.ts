@@ -7,24 +7,28 @@
 // offline place-name copies the phone keeps; what a search offers at a location
 // still follows the map's view (ADR 0049). A saved map includes one still
 // queued, downloading or paused (`pendingRegionBoxes`). A copy of any other
-// region, and any folder named for one, is deleted by the next check. When a
-// DIFFERENT account signs in, `wipeAllLocalData` (from `finishSignIn`) first
-// stops the refresh and holds it (nothing fetched, nothing installed, a
-// transfer in flight cancelled) until it has run that check once the chosen
-// regions and saved maps are gone, so the default region's copy alone is left
-// for the next user: which regions a phone holds would otherwise show where its
-// last user was interested. Guards: placeRegistry.test.ts ("lets a copy lapse
-// once its region is neither chosen nor saved over", "keeps a copy for a region
-// a queued save touches", "leaves only the default region's copy when a
+// region, and any folder named for one, is deleted by the next check. At every
+// wipe (`wipeAllLocalData`: at sign-out, and from `finishSignIn` when a
+// DIFFERENT account signs in) the wipe first stops the refresh and holds it
+// (nothing fetched, nothing installed, a transfer in flight cancelled) until it
+// has run that check once the chosen regions and saved maps are gone, so the
+// default region's copy alone is left for the next user: which regions a phone
+// holds would otherwise show where its last user was interested. A copy that
+// will not delete is reported at sign-out, and stops the sign-in of a different
+// account, as any store does. The refresh resumes however the wipe ends.
+// Guards: placeRegistry.test.ts ("lets a copy lapse once its region is neither
+// chosen nor saved over", "keeps a copy for a region a queued save touches",
+// "leaves only the default region's copy after a wipe, at sign-out or when a
 // different account signs in", "installs nothing once a wipe has stopped the
-// refresh", "stops a download without waiting for its bytes", "starts no check
-// between a wipe's stop and its lapse, and runs again after", "leaves no folder
-// for a region after a failed or stopped first fetch, or a lapse"),
-// regionDownloadQueue.test.ts ("lists queued, downloading and paused jobs, and
-// not ready or failed ones") and wipeLocalData.test.ts ("lets the place
-// registries lapse after the chosen regions and saved maps are gone", "holds
-// the place registry refresh until the lapse has finished, then lets it run
-// again").
+// refresh", "stops a download without waiting for its bytes", "stops a pointer
+// read without waiting for its answer", "starts no check between a wipe's stop
+// and its lapse, and runs again after", "leaves no folder for a region after a
+// failed or stopped first fetch, or a lapse"), regionDownloadQueue.test.ts
+// ("lists queued, downloading and paused jobs, and not ready or failed ones")
+// and wipeLocalData.test.ts ("lets the place registries lapse after the chosen
+// regions and saved maps are gone", "holds the place registry refresh until the
+// lapse has finished, then lets it run again", "lets the place registry refresh
+// run again when a step between its stop and its lapse throws").
 //
 // WHEN A COPY IS FETCHED: once the phone has asked for the file (the user's
 // first region download, or a phone that already held a saved region), for each
@@ -450,7 +454,7 @@ async function runFetch(
   if (isOfflineOnly()) return "offline-only";
   if (!(await canRunNow("placeNames", allowMetered))) return "skipped";
   try {
-    const pointer = await fetchPointer(region);
+    const pointer = await fetchPointer(region, stop);
     if (!pointer) return "failed";
     if (pointer.version === copyOf(region).status.stored?.version)
       return "current";
@@ -465,7 +469,7 @@ async function runFetch(
     await installBuild(region, pointer, stop);
     return "updated";
   } catch (err) {
-    if (err instanceof StoppedError) return "stopped";
+    if (err instanceof StoppedError || stop.aborted) return "stopped";
     if (err instanceof NotEnoughSpaceError) throw err;
     console.error(err);
     return "failed";
@@ -491,9 +495,15 @@ async function deleteFolder(region: RegionWithRegistry): Promise<void> {
 
 async function fetchPointer(
   region: RegionWithRegistry,
+  stop: AbortSignal,
 ): Promise<PlaceRegistryPointer | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), POINTER_TIMEOUT_MS);
+  // The wipe's stop reaches the request too: it waits ten seconds for its
+  // producers, and the timeout above is fifteen.
+  const abort = () => controller.abort();
+  if (stop.aborted) abort();
+  stop.addEventListener("abort", abort, { once: true });
   try {
     // No headers: the platform default and nothing else.
     const response = await fetch(
@@ -505,6 +515,7 @@ async function fetchPointer(
     return isPlaceRegistryPointer(pointer) ? pointer : null;
   } finally {
     clearTimeout(timer);
+    stop.removeEventListener("abort", abort);
   }
 }
 
@@ -686,9 +697,9 @@ async function lapseExcept(keep: readonly RegionWithRegistry[]): Promise<void> {
 
 /**
  * Delete the copy of every region the account neither chose nor saved a map
- * over. Run by every check, and by the wipe when a different account signs in,
- * once the chosen regions and the saved maps are gone, which leaves only the
- * default region's copy.
+ * over. Run by every check, and by every wipe (sign-out, or a different account
+ * signing in) once the chosen regions and the saved maps are gone, which leaves
+ * only the default region's copy.
  */
 export async function lapsePlaceRegistries(): Promise<void> {
   await lapseExcept(await regionsToKeep());

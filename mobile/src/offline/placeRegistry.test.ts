@@ -229,10 +229,25 @@ vi.mock("./registryDb", () => ({
 }));
 vi.mock("../regionsPreference", () => ({ readRegions: () => chosen.ids }));
 
-const fetchMock = vi.fn(async (url: string) => {
-  const body = served.get(url);
-  return { ok: body !== undefined, json: async () => body };
-});
+/** A pointer read that waits for this promise, or for its signal to abort. */
+const pointerGate = { current: null as Promise<void> | null };
+const fetchMock = vi.fn(
+  async (url: string, init?: { signal?: AbortSignal }) => {
+    if (pointerGate.current) {
+      const gate = pointerGate.current;
+      await new Promise<void>((resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new Error("pointer request aborted")),
+          { once: true },
+        );
+        void gate.then(resolve);
+      });
+    }
+    const body = served.get(url);
+    return { ok: body !== undefined, json: async () => body };
+  },
+);
 vi.stubGlobal("fetch", fetchMock);
 
 function build(version: string, names = ["Mount Solitary"], format = 1) {
@@ -322,6 +337,7 @@ beforeEach(() => {
   held.clear();
   fetchMock.mockClear();
   downloadGate.current = Promise.resolve();
+  pointerGate.current = null;
   dirs.clear();
   // A download waits for its gate, and is cancelled by its signal as the real
   // transfer is (`presignedTransfer.test.ts`).
@@ -1030,10 +1046,10 @@ describe("the regions a phone fetches for", () => {
     ]);
   });
 
-  // A different account signing in: the wipe has forgotten the chosen regions (the default
+  // A wipe, at sign-out or when a different account signs in: it has forgotten the chosen regions (the default
   // returns) and deleted the saved maps. Mutation: leave the copies of regions
   // not chosen in `lapsePlaceRegistries`' keep list (e.g. keep every region held).
-  it("leaves only the default region's copy when a different account signs in", async () => {
+  it("leaves only the default region's copy after a wipe, at sign-out or when a different account signs in", async () => {
     chosen.ids = [NSW];
     artifacts.kinds = [];
     holdOnPhone(build("2026-10-15", ["Wollangambe"]));
@@ -1219,6 +1235,25 @@ describe("the lapse and the wipe, around a fetch", () => {
     expect([...files.keys()]).toEqual([]);
   });
 
+  // The wipe gives its producers ten seconds and a pointer request has fifteen.
+  // Mutation: drop the `stop` listener from `fetchPointer`, and the stop waits
+  // for a pointer read that never answers.
+  it("stops a pointer read without waiting for its answer", async () => {
+    publish(build("2026-10-15"));
+    pointerGate.current = new Promise<void>(() => {});
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const outcome = await Promise.race([
+      registry.stopPlaceRegistryForWipe().then(() => "stopped"),
+      new Promise((resolve) => setTimeout(() => resolve("still waiting"), 500)),
+    ]);
+    expect(outcome).toBe("stopped");
+    expect(await fetching).toBe("stopped");
+    expect(download).not.toHaveBeenCalled();
+    expect([...files.keys()]).toEqual([]);
+  });
+
   // The wipe's stop, then the rest of the wipe, then its lapse: a check that
   // begins in between does nothing, and after the wipe the refresh runs again.
   // Mutation: drop `if (wiping) return` from `refreshAll`, or
@@ -1312,9 +1347,10 @@ describe("the lapse and the wipe, around a fetch", () => {
     expect(nonDefaultDirs()).toEqual([]);
   });
 
-  // Mutation: drop `&& !copies.get(region.id)?.fetching` from `lapseExcept`, and
-  // a region's first fetch, with nothing stored yet, is skipped by the lapse and
-  // installs its copy after it.
+  // Mutation: test only `hasPlaceRegistry(region.id)` in `lapseExcept`, not
+  // `|| copies.get(region.id)?.fetching`, and a region's first fetch, with
+  // nothing stored yet, is left running by the lapse (its gated download never
+  // ends, so the race below answers "still fetching").
   it("deletes the first copy of a region that is still being fetched when it lapses", async () => {
     chosen.ids = [NSW];
     publishOther(build("2026-10-15", ["Makarora"]));
@@ -1326,7 +1362,14 @@ describe("the lapse and the wipe, around a fetch", () => {
     await vi.waitFor(() => expect(download).toHaveBeenCalled());
     const lapsing = registry.lapsePlaceRegistries();
     // The lapse cancels the transfer; the gate is never opened.
-    expect(await fetching).toBe("stopped");
+    expect(
+      await Promise.race([
+        fetching,
+        new Promise((resolve) =>
+          setTimeout(() => resolve("still fetching"), 500),
+        ),
+      ]),
+    ).toBe("stopped");
     await lapsing;
     expect(outsideNsw()).toEqual([]);
     expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
