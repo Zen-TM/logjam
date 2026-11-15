@@ -130,6 +130,39 @@ describe("terrainTileArchive", () => {
     }
   });
 
+  // Mutations: drop the `Math.max(from, …)` floor (z15 outside an area is then
+  // absent when `statewideMax` is 0), or answer contours "absent" for a small
+  // `statewideMax`. Callers that ask only at these zooms (Logjam GPS's
+  // `terrainRoutes`, the GeoPDF contour grouping) pass a stand-in.
+  it("answers at the routed zoom, and for contours, whatever the archive's deepest zoom", () => {
+    const tiles = [
+      [30100, 19400],
+      [30103, 19403],
+      [30104, 19403],
+      [30099, 19400],
+    ];
+    const contourTiles = [
+      [15050, 9700, 14],
+      [15049, 9700, 14],
+      [60200, 38800, 16],
+      [60198, 38800, 16],
+      [120400, 77600, 17],
+    ];
+    for (const max of [0, 15, 17]) {
+      for (const layer of ["heights", "slope"] as const)
+        for (const [x, y] of tiles)
+          expect(route(layer, 15, x, y, [a], max)).toBe(
+            route(layer, 15, x, y, [a], 15),
+          );
+      for (const [x, y, z] of contourTiles)
+        expect(route("contours", z, x, y, [a], max)).toBe(
+          route("contours", z, x, y, [a], 15),
+        );
+    }
+    expect(route("heights", 15, 30104, 19403, [a], 0)).toBe("statewide");
+    expect(route("contours", 14, 15049, 9700, [a], 0)).toBe("statewide");
+  });
+
   // Mutations: let `statewideMax` lift an area's zmax (it answers a z17 tile
   // it has none of), or answer statewide past the area's zmax (the archive's
   // z17 tile is drawn beside the area's own z16 one).

@@ -75,7 +75,9 @@ export function terrainRoutes<A extends RoutedTerrain>(
     const column: (typeof routes)[number][] = [];
     for (let j = 0; j + 1 < ys.length; j++) {
       // At the routed zoom the answer does not depend on how deep the
-      // region's archive goes, so `z` stands for it.
+      // region's archive goes, so `z` stands for it. Guard: `sharpen.test.ts`
+      // ("answers at the routed zoom, and for contours, whatever the
+      // archive's deepest zoom").
       const archive = terrainTileArchive(areas, layer, z, xs[i], ys[j], z);
       // At the zoom routing starts a tile is never absent.
       if (archive === "absent") continue;

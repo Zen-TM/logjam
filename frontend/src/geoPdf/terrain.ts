@@ -474,7 +474,9 @@ export function contourTilesBySource(
       tile.z,
       tile.x,
       tile.y,
-      // Contours are never absent, so the zoom does not matter.
+      // Contours are never absent, so the zoom does not matter. Guard:
+      // `sharpen.test.ts` ("answers at the routed zoom, and for contours,
+      // whatever the archive's deepest zoom").
       TERRAIN_ROUTED_FROM.contours,
     );
     if (answer === "absent") continue;
