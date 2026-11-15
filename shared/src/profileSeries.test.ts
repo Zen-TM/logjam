@@ -261,7 +261,7 @@ describe("trackStatRows", () => {
 });
 
 describe("storedClimbCaption", () => {
-  // Mutation: delete an entry of HEIGHT_SOURCE_NAMES.
+  // Mutation: delete an entry of `HEIGHT_SOURCE_NAMES`, or make `regionHeightsName` return nothing.
   it("names every source a climb can be stored from", () => {
     const captions = CLIMB_SOURCES.map(storedClimbCaption);
     expect(new Set(captions).size).toBe(CLIMB_SOURCES.length);
