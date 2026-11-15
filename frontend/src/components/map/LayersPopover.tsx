@@ -15,8 +15,8 @@ import {
   type Region,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
   type OverlayLegend,
   type SectionKeysOn,
   type SlopeBand,
@@ -455,8 +455,8 @@ export function TerrainPane({
     // The region's missing archive outranks the basemap's reasons.
     const absent =
       layerIn(region, key as "contours" | "slope" | "hillshade") === null;
-    const printed = key === "contours" && !takesNswContours(activeLayerId);
-    const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
+    const printed = key === "contours" && !takesContours(activeLayerId);
+    const shadowed = key === "hillshade" && !takesHillshade(activeLayerId);
     const off = absent || printed || shadowed;
     const reason = absent
       ? terrainCopy.notHere

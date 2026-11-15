@@ -11,27 +11,35 @@ import {
   normalizeCarrier,
   carriersOf,
   normalizeTerrainLayers,
+  type LonLatBox,
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
 import { readRegions } from "../regionsPreference";
-import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
+import { defaultBasemap, effectiveBasemap, knownBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 const BASEMAP_PREF_KEY = "mapBasemapId";
 
-/** The last chosen basemap, or the default when nothing usable is recorded. */
+/**
+ * The last chosen basemap as stored, or the default when nothing usable is
+ * recorded: a pick is kept whatever ground the map is over, so a caller that
+ * draws it passes it through `effectiveBasemap(pick, view)` first, or reads
+ * `readEffectiveBasemap`. Guard: `basemapPickReaders.test.ts`.
+ */
 export function readBasemapPreference(): BasemapId {
   const stored = readPref(BASEMAP_PREF_KEY);
-  // An id we no longer offer (a removed source, an older build's pick) reads as
+  // An id no picker lists (a removed source, an older build's pick) reads as
   // "nothing recorded" rather than throwing out of the resolver later.
-  const regions = readRegions();
   return (
-    mobileBasemaps(regions).find((id) => id === stored) ??
-    defaultBasemap(regions)
+    knownBasemaps().find((id) => id === stored) ?? defaultBasemap(readRegions())
   );
 }
+
+/** The stored pick as drawn over `view`: the basemap a screen with no rail of its own shows. */
+export const readEffectiveBasemap = (view: LonLatBox): BasemapId =>
+  effectiveBasemap(readBasemapPreference(), view);
 
 const TERRAIN_LAYERS_PREF_KEY = "mapTerrainLayers";
 
