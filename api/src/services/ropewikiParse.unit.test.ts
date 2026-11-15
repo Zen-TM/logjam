@@ -37,14 +37,20 @@ const golden = (name: string) => join(__dirname, "__fixtures__", name);
 
 describe("parseRopeWikiCsv corpus", () => {
   it("parses the tricky rows as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-nsw-tricky.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-nsw-tricky.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-nsw-tricky.golden"),
     );
   });
 
   it("parses the synthetic shapes as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-synthetic-shapes.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-synthetic-shapes.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-synthetic-shapes.golden"),
     );
@@ -64,7 +70,10 @@ describe("parseRopeWikiCsv corpus", () => {
   });
 
   it("parses the real export sample as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-nsw-sample.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-nsw-sample.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-nsw-sample.golden"),
     );

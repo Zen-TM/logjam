@@ -54,7 +54,10 @@ const VALID_CSV = [
 describe("fetchAndParseRopeWiki", () => {
   it("parses a valid row across every derived field", async () => {
     mockFetchCsv(VALID_CSV);
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places).toHaveLength(1);
     const c = places[0];
     expect(c.ropeWikiId).toBe(12345);
@@ -74,7 +77,10 @@ describe("fetchAndParseRopeWiki", () => {
 
   it("accumulates a per-row error for an invalid pageid and missing coords", async () => {
     mockFetchCsv(VALID_CSV);
-    const { errors } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { errors } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(errors).toHaveLength(2);
     expect(errors.some((e) => /invalid PAGEID/.test(e))).toBe(true);
     expect(errors.some((e) => /could not parse coordinates/.test(e))).toBe(
@@ -88,7 +94,7 @@ describe("fetchAndParseRopeWiki", () => {
   it("throws a 502 AppError on a non-OK HTTP response", async () => {
     mockFetchCsv("", false, 503);
     await expect(
-      fetchAndParseRopeWiki(NSW_REGION.canyons),
+      fetchAndParseRopeWiki(NSW_REGION.canyons, "french"),
     ).rejects.toMatchObject({
       statusCode: 502,
       devDetail: expect.stringMatching(/HTTP 503/),
@@ -101,7 +107,7 @@ describe("fetchAndParseRopeWiki", () => {
   it("throws a 503 AppError when a required column is missing", async () => {
     mockFetchCsv("location,coords\nFoo,bar"); // no pageid column
     await expect(
-      fetchAndParseRopeWiki(NSW_REGION.canyons),
+      fetchAndParseRopeWiki(NSW_REGION.canyons, "french"),
     ).rejects.toMatchObject({
       statusCode: 503,
       devDetail: expect.stringMatching(/missing required column: pageid/i),
@@ -130,7 +136,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,Bare,"${COORD}",,,100,,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places.map((c) => c.longestAbseil)).toEqual([9.1, 18, null]);
   });
 
@@ -141,13 +150,19 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `2,Range,"${COORD}",,,,3-5 hours,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places.map((c) => c.hours)).toEqual([2, 4]);
   });
 
   it("takes the first number of a rappel-count range", async () => {
     mockFetchCsv(rows(`1,Rappels,"${COORD}",,,,,4-8`));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places[0].numAbseils).toBe(4);
   });
 
@@ -159,7 +174,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,NoParens,"${COORD}",,no grade here,,,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect({
       v: places[0].vGrade,
       a: places[0].aGrade,
@@ -179,13 +197,19 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
 
   it("rejects out-of-range quality as null", async () => {
     mockFetchCsv(rows(`1,Good,"${COORD}",4,,,,`, `2,Bad,"${COORD}",6,,,,`));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places.map((c) => c.quality)).toEqual([4, null]);
   });
 
   it("preserves a decimal quality instead of rounding", async () => {
     mockFetchCsv(rows(`1,Half,"${COORD}",3.5,,,,`));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places[0].quality).toBe(3.5);
   });
 
@@ -193,7 +217,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Both,"${COORD}",,,,4 hours,,7 hours`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places[0].hours).toBe(7);
   });
 
@@ -201,7 +228,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,MinOnly,"${COORD}",,,,3 hours,,`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places[0].hours).toBe(3);
   });
 
@@ -209,7 +239,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Nbsp,"${COORD}",,,,,,5 hr`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
+    const { places } = await fetchAndParseRopeWiki(
+      NSW_REGION.canyons,
+      "french",
+    );
     expect(places[0].hours).toBe(5);
   });
 });
@@ -459,6 +492,9 @@ describe("a rating in an ACA region", () => {
   // Mutation: drop the `$` anchor from the pattern in `parseAcaRating`:
   // "3B III Q" stores 3, 2, 3. Or let the time or the risk follow with no
   // space (`\s*` for `\s+`): "3BIII" stores a time, "3B IX" a time I and a risk X.
+  // Or allow a space between the technical grade and the water (`\s*` before
+  // `(C[1-4]?|[AB])`): "3 B III" is read. Or make the water optional before
+  // the time again: "3 III" is read.
   it.each([
     "",
     "v3a2 III",
@@ -471,6 +507,8 @@ describe("a rating in an ACA region", () => {
     "3B VX",
     "3B IIR",
     "3BIII",
+    "3 B III",
+    "3 III",
   ])("reads nothing from %j", (rating) => {
     expect(acaOf(rating)).toEqual([null, null, null, null]);
   });
@@ -565,6 +603,7 @@ describe("a rating in a French region", () => {
   it("leave an NSW canyon, its snapshot and its fields without the ACA four", () => {
     const [c] = parseRopeWikiCsv(
       'pageid,location,coords,quality,rating\n1,Made Up,"33° 1′ 1″ S, 150° 1′ 1″ E",3,3B (v3a2 III)',
+      "french",
     ).places;
     expect(Object.keys(c).filter((key) => key.startsWith("aca"))).toEqual([]);
     expect(

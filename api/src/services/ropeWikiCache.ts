@@ -114,8 +114,8 @@ async function loadSnapshotFromS3(
  */
 export async function getRopeWikiCanyons(
   source: RopeWikiSource,
+  grades: CanyonGradeSystem,
   fresh = false,
-  grades: CanyonGradeSystem = "french",
 ): Promise<RopeWikiData> {
   const held = cache.get(source.snapshotKey);
   if (!fresh && held && Date.now() - held.loadedAt < TTL_MS) {

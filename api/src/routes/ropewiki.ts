@@ -184,7 +184,7 @@ router.post(
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, fresh, grades);
+    } = await getRopeWikiCanyons(source, grades, fresh);
 
     const allUserPlaces = await prisma.place.findMany({
       where: { ownerId: user.id },
@@ -283,7 +283,7 @@ router.post(
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, false, grades);
+    } = await getRopeWikiCanyons(source, grades);
     const parsedByRwId = new Map(parsed.map((c) => [c.ropeWikiId, c]));
 
     const targetIds = normalized
@@ -395,7 +395,7 @@ router.post(
       places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
-    } = await getRopeWikiCanyons(source, fresh, grades);
+    } = await getRopeWikiCanyons(source, grades, fresh);
 
     // Load all existing RopeWiki-sourced places for this user
     const existingPlaces = await prisma.place.findMany({

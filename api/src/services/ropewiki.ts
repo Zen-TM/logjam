@@ -72,7 +72,9 @@ export function withExtraLinks(
  * The four ACA rating fields, in the camelCase the snapshot keeps. Present on a
  * canyon (null when the rating does not give it) only when its region grades
  * in the ACA system, absent otherwise, so an NSW canyon, its snapshot and its
- * ownership list read as they did before the system existed.
+ * ownership list read as they did before the system existed. Guard:
+ * `ropewiki.unit.test.ts` ("leave an NSW canyon, its snapshot and its fields
+ * without the ACA four").
  */
 export const ACA_FIELDS = [
   "acaTechnical",
@@ -125,17 +127,20 @@ export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
 
 /**
  * The ownable fields a canyon takes part in: every one it has a key for, which
- * is the ACA four only when its source grades in ACA. Every loop over the
- * fields goes through this, so a French source never sees the ACA four.
- * Guard: `ropewiki.unit.test.ts` ("leave an NSW canyon, its snapshot and its
- * fields without the ACA four").
+ * is the ACA four only when its source grades in ACA. The refresh route and
+ * `mergeFillNulls` loop over these, so a French source's ownership never lists
+ * the ACA four. Guards: `ropewiki.unit.test.ts` ("leave an NSW canyon, its
+ * snapshot and its fields without the ACA four") and
+ * `ropewikiDedupe.unit.test.ts` ("makes a French canyon's link own none of the
+ * ACA four").
  */
 export function ropeWikiFieldsOf(c: RopeWikiCanyon): RopeWikiOwnableField[] {
   return ROPE_WIKI_OWNABLE_FIELDS.filter((field) => c[field] !== undefined);
 }
 
 /** The ACA four a canyon carries, as an object to spread: empty for a canyon
- *  with none, which keeps the snapshot of a French source as it was. */
+ *  with none, so a French source's snapshot has no ACA key (`ropewiki.unit.test.ts`,
+ *  "leave an NSW canyon, its snapshot and its fields without the ACA four"). */
 export function acaRatingOf(c: AcaRating): AcaRating {
   return Object.fromEntries(
     ACA_FIELDS.filter((field) => c[field] !== undefined).map((field) => [
@@ -420,14 +425,17 @@ function parseRating(html: string): {
 /**
  * Parse the ACA part of rating HTML: technical 1 to 4, water A to C4, time
  * I to VI and risk, written together ("3B III", "4C1 III R"): technical and
- * water joined, the time and the risk each after a space, so "3B IX" is no
- * rating rather than a time I and a risk X. The French
+ * water joined, the time and the risk each after a space, and a time or risk
+ * only after a water, so "3B IX" is no rating rather than a time I and a
+ * risk X, and "3 III" none rather than a time with no water. The French
  * grade, if there is one, sits in parentheses after it. The words are read by
  * the field's own labels (`fieldValueOfLabel`), so what is stored is the rank
  * ADR 0051 defines. A rating that is not that shape, or has no technical grade,
- * gives nothing: a half-read grade would be stored as fact. A risk of "G"
- * (no more than the technical difficulty gives) is no word in the field's list
- * and stays unset, never `PG`.
+ * gives nothing, because a half-read grade would be stored as fact (guard:
+ * `ropewiki.unit.test.ts`, "reads nothing from %j"). A risk of "G" (no more
+ * than the technical difficulty gives) is no word in the field's list and stays
+ * unset, never `PG` (guard: "stores a risk of G as unset and PG as its own
+ * level").
  *
  * Examples:
  *   `3B <i>III</i>  (v2a2 III)`  → technical 3, water B, time III
@@ -448,7 +456,7 @@ function parseAcaRating(html: string): Record<AcaField, number | null> {
     .trim()
     .toUpperCase();
   const m = text.match(
-    /^([1-4])\s*(C[1-4]?|[AB])?(?:\s+(VI|IV|V|I{1,3}))?(?:\s+(PG13|PG|XX|X|R|G))?$/,
+    /^([1-4])(?:(C[1-4]?|[AB])(?:\s+(VI|IV|V|I{1,3}))?(?:\s+(PG13|PG|XX|X|R|G))?)?$/,
   );
   if (!m) return none;
   const rank = (key: string, word: string | undefined) =>
@@ -536,7 +544,7 @@ function parseQuality(value: string): number | null {
  */
 export async function fetchAndParseRopeWiki(
   source: RopeWikiSource,
-  grades: CanyonGradeSystem = "french",
+  grades: CanyonGradeSystem,
 ): Promise<{
   places: RopeWikiCanyon[];
   errors: string[];
@@ -583,11 +591,14 @@ export const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available r
  * `grades` is the system of the region the file is for, and a region grades in
  * one. A French source gets the French grade and no ACA key at all; an ACA
  * source gets the four ACA fields (null where the rating gives none) and an
- * empty French grade, whatever the rating also says in parentheses.
+ * empty French grade, whatever the rating also says in parentheses. Guards:
+ * `ropewiki.unit.test.ts` ("leave an NSW canyon, its snapshot and its fields
+ * without the ACA four", "leaves the French grade empty whatever the
+ * parentheses hold").
  */
 export function parseRopeWikiCsv(
   csvText: string,
-  grades: CanyonGradeSystem = "french",
+  grades: CanyonGradeSystem,
 ): {
   places: RopeWikiCanyon[];
   errors: string[];
