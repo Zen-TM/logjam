@@ -102,8 +102,9 @@ describe("terrainSourceFor", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and `last` to 0) and the centre unwrapped in `regionInView`, and a map
-  // panned once around the world draws NSW from the worldwide tiles.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
+  // once around the world draws NSW from the worldwide tiles.
   it("uses the NSW archive over NSW after a pan around the world", async () => {
     const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
     expect(

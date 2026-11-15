@@ -25,12 +25,19 @@ const wrapTurn = (d: number): number => {
 };
 
 /**
+ * The whole turns, in degrees, from the world copy `lon` is in to the one
+ * [-180, 180) is in: 0 for a longitude in that range, 360 for 180, -360 for a
+ * longitude a hair under -180. Guard: placeGeo.test.ts.
+ */
+export const lonTurn = (lon: number): number => 360 * Math.round(lon / 360);
+
+/**
  * A longitude wrapped into [-180, 180): the one wrap every longitude read goes
  * through, so 180 is -180 and a longitude already in range comes back as it
  * is. Guard: placeGeo.test.ts.
  */
 export const wrapLon = (lon: number): number =>
-  lon >= -180 && lon < 180 ? lon : wrapTurn(lon + 180) - 180;
+  lon >= -180 && lon < 180 ? lon : lon - lonTurn(lon);
 
 /**
  * How many degrees a box spans from `west` east to `east`, a box wrapped across
@@ -45,14 +52,17 @@ export function lonWidth(west: number, east: number): number {
 /**
  * A box shifted by whole turns until its centre is in [-180, 180): a map
  * panned round the world reports longitudes past ±180, while a region's
- * borders and a hemisphere are read in that range. Guard: placeGeo.test.ts.
+ * borders and a hemisphere are read in that range. A box that arrives wrapped
+ * (`west` above `east`) comes back unwrapped, its centre across the line where
+ * it is. A box wider than a turn keeps its width. Guard: placeGeo.test.ts.
  */
 export function wrapBox<B extends { west: number; east: number }>(box: B): B {
-  const centre = (box.west + box.east) / 2;
-  const turn = 360 * Math.round((centre - wrapLon(centre)) / 360);
-  return turn === 0
+  const east =
+    box.east >= box.west ? box.east : box.west + lonWidth(box.west, box.east);
+  const turn = lonTurn((box.west + east) / 2);
+  return turn === 0 && east === box.east
     ? box
-    : { ...box, west: box.west - turn, east: box.east - turn };
+    : { ...box, west: box.west - turn, east: east - turn };
 }
 
 /**

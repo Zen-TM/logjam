@@ -255,9 +255,9 @@ describe("a longitude in another world copy", () => {
     ]);
   });
 
-  // 150.3 - wrapLon(150.3) is about 6e-14, not 0.
-  // Mutation: shift by that difference unrounded and the declared edges and
-  // meridian come back nudged, and these exact comparisons fail.
+  // Mutation: use `Math.ceil` for `Math.round` in `lonTurn` (placeGeo.ts), and
+  // 150.3 is placed a world copy over, so the declared edges and meridian
+  // come back shifted by 360.
   it("hands back an ordinary longitude's zone with its declared edges", () => {
     const zone = gridZoneAt(150.3, -33.7);
     expect([zone.west, zone.east, zone.centralMeridian]).toEqual([

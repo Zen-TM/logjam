@@ -9,7 +9,7 @@
 // published values, not only a round trip.
 import proj4 from "proj4";
 
-import { wrapLon } from "./placeGeo.js";
+import { lonTurn, wrapLon } from "./placeGeo.js";
 import { REGIONS, regionAt, type LonLatBox, type Region } from "./regions.js";
 
 export type GridId = "mga2020" | "nztm2000" | "utm";
@@ -91,9 +91,6 @@ export function mgaZone(zone: 54 | 55 | 56): GridZone {
   return MGA_ZONES.find((z) => z.name === `MGA ${zone}`)!;
 }
 
-/** Whole world copies from the wrapped longitude to `lon`: exactly 0 inside [-180, 180]. */
-const copyShift = (lon: number) => 360 * Math.round((lon - wrapLon(lon)) / 360);
-
 /** `zone` in the world copy `shift` degrees east of the one it is declared in. */
 const shifted = (zone: GridZone, shift: number): GridZone =>
   shift === 0
@@ -138,7 +135,7 @@ export function gridZoneAt(
 /** The zone of grid `id` at a place: the grid is chosen by the caller, the zone by the place. */
 export function gridZoneOf(id: GridId, lon: number, lat: number): GridZone {
   if (id === "nztm2000") return NZTM_ZONE;
-  if (id === "mga2020") return shifted(mgaZoneAt(wrapLon(lon)), copyShift(lon));
+  if (id === "mga2020") return shifted(mgaZoneAt(wrapLon(lon)), lonTurn(lon));
   return utmZone(Math.floor((lon + 180) / 6), lat < 0);
 }
 
@@ -161,7 +158,7 @@ export function gridZonesFor(
   const id = gridIdAt(lon, lat, regions);
   if (id === "nztm2000") return [NZTM_ZONE];
   if (id === "mga2020") {
-    const shift = copyShift(lon);
+    const shift = lonTurn(lon);
     const [west, east] = [box.west - shift, box.east - shift];
     return MGA_ZONES.filter(
       (z) => Math.max(west, z.west) < Math.min(east, z.east),

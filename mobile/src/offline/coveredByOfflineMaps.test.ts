@@ -183,7 +183,8 @@ describe("a saved region that runs past 180°", () => {
     );
   });
 
-  // Mutation: as above; and a hole at the line itself is stepped over.
+  // Mutation: check only a leg's vertices in `routeCoveredByOfflineMaps` (set
+  // `parts` to 1), and the hole at the line itself is stepped over.
   it("does not hold a way across the line where the ground between is missing", () => {
     const eastSide = region([178, -18, 179.99, -16]);
     const westSide = region([-179.99, -18, -178, -16]);

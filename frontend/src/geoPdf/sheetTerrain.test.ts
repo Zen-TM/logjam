@@ -41,8 +41,10 @@ describe("sheetTerrain", () => {
     expect(nz.credit).not.toBe(nsw.credit);
   });
 
-  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and `last` to 0) and the centre unwrapped in `regionInView`, and a sheet picked in another world copy (longitude
-  // shifted by a whole turn) finds no region, so the dialog disables every layer.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a sheet picked
+  // in another world copy (longitude shifted by a whole turn) finds no region,
+  // so the dialog disables every layer.
   it("finds the region of a sheet picked in another world copy", () => {
     const turn = (box: typeof KATOOMBA, by: number) => ({
       ...box,

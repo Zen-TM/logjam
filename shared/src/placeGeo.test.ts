@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   haversineMeters,
   lonBoxWithin,
+  lonTurn,
   lonNear,
   lonOverlap,
   lonWidth,
@@ -65,11 +66,38 @@ describe("wrapLon", () => {
     expect(wrapLon(150.3 + 360)).toBeCloseTo(150.3, 9);
   });
 
+  // Mutation: in `wrapLon`, replace `lon - lonTurn(lon)` with
+  // `wrapTurn(lon + 180) - 180`, and a longitude a hair below -180 comes back
+  // as 180, outside [-180, 180).
+  it("keeps the result below 180 for a longitude a hair under -180", () => {
+    for (const lon of [-180 - 2.9e-14, -180 - 1e-13, -540 - 2.9e-14]) {
+      const wrapped = wrapLon(lon);
+      expect(wrapped).toBeGreaterThanOrEqual(-180);
+      expect(wrapped).toBeLessThan(180);
+    }
+    expect(wrapLon(-180 - 2.9e-14)).toBeCloseTo(180, 9);
+  });
+
   // Mutation: drop the fast path of `wrapLon` (return `wrapTurn(lon + 180) - 180`
   // always), and 150.3 comes back a hair off, which a grid or a margin then reads.
   it("returns a longitude already in range exactly as it was", () => {
     for (const lon of [150.3, -33.7, 0.05, 179.99999999999997, -180])
       expect(wrapLon(lon)).toBe(lon);
+  });
+});
+
+describe("lonTurn", () => {
+  // Mutation: use `Math.ceil` for `Math.round` in `lonTurn`, and 150.3 is
+  // placed a turn over, in the next world copy.
+  it("is the whole turns from [-180, 180) to the copy a longitude is in", () => {
+    // `+ 0` reads a -0 as 0.
+    expect(lonTurn(150.3) + 0).toBe(0);
+    expect(lonTurn(-33.7) + 0).toBe(0);
+    expect(lonTurn(-180) + 0).toBe(0);
+    expect(lonTurn(180)).toBe(360);
+    expect(lonTurn(150.3 + 360)).toBe(360);
+    expect(lonTurn(-179.9 - 360)).toBe(-360);
+    expect(lonTurn(540)).toBe(720);
   });
 });
 
@@ -114,6 +142,21 @@ describe("wrapBox", () => {
       east: 171,
       north: 1,
     });
+  });
+
+  // Mutation: take the centre in `wrapBox` as `(box.west + box.east) / 2`
+  // (drop the unwrapping of `east`), and a box that arrives wrapped, 170 to
+  // -170, has its centre at 0 and is left where it is.
+  it("reads a box that arrives wrapped as the ground it runs across", () => {
+    expect(wrapBox({ west: 170, east: -170 })).toEqual({
+      west: -190,
+      east: -170,
+    });
+    expect(wrapBox({ west: 530, east: 190 })).toEqual({
+      west: -190,
+      east: -170,
+    });
+    expect(wrapBox({ west: -10, east: 10 })).toEqual({ west: -10, east: 10 });
   });
 
   // Mutation: build the result in `wrapBox` from the fields it names, dropping
