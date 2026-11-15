@@ -44,6 +44,16 @@ const WEB_PLAN_ITEM = read(
 );
 const GPS_PLAN_ITEM = read("mobile/src/plans/PlanItemSheet.tsx");
 const WEB_SIDEBAR = read("frontend/src/components/sidebar/SidebarPanel.tsx");
+const WEB_SETTINGS = read(
+  "frontend/src/components/sidebar/panels/SettingsPanel.tsx",
+);
+const WEB_TYPES = read(
+  "frontend/src/components/sidebar/panels/PlaceTypeSection.tsx",
+);
+const GPS_SETTINGS = read("mobile/src/screens/SettingsScreen.tsx");
+const GPS_STEP = read("mobile/src/customFields/useTypeAttributesStep.tsx");
+const GPS_VALUES = read("mobile/src/customFields/CustomFieldValues.tsx");
+const GPS_ATTRIBUTE_FILTER = read("mobile/src/ui/AttributeFilter.tsx");
 
 /** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
 const uses = (source: string) =>
@@ -174,5 +184,79 @@ describe("Logjam GPS's plan item sheet", () => {
     );
     expect(GPS_PLAN_ITEM).toContain("itemPatch(base, values, defs)");
     expect(GPS_PLAN_ITEM.match(/\bitemPatch\(/g)).toHaveLength(1);
+  });
+});
+
+// Each client says where the centre of "the map in view" comes from, which
+// `gradeSystemOfView`'s doc leaves to it. Neither has a map to render here, so
+// the two calls are read.
+describe("the centre each client hands gradeSystemOfView", () => {
+  // Mutation: swap `mapCenter.lng` and `mapCenter.lat` in `placesGradeSystem`
+  // (SidebarPanel), which reads Utah as a point in the Southern Ocean.
+  it("is the map's centre as [longitude, latitude] on Logjam Web", () => {
+    expect(WEB_SIDEBAR).toContain(
+      "gradeSystemOfView( mapCenter ? [mapCenter.lng, mapCenter.lat] : null, currentUser?.uiPreferences, )",
+    );
+  });
+
+  // Mutation: pass `null` in place of `readLastMapCamera()?.center` in
+  // `readGradeSystem` (PlacesScreen): the list follows the account's home
+  // whatever the map shows.
+  it("is the last map camera's centre on Logjam GPS", () => {
+    expect(GPS_LIST).toContain(
+      "gradeSystemOfView(readLastMapCamera()?.center ?? null, { regions: readRegions(), })",
+    );
+  });
+});
+
+// Logjam GPS draws a labelled field (the ACA grades) as its words. Neither
+// widget has a render harness, so each call is read.
+describe("Logjam GPS's labelled fields", () => {
+  // Mutation: build the form's rail from `railStops(def)` in CustomFieldValues,
+  // which draws the ACA grades as bare ranks.
+  it("draw as words in the place form's rail", () => {
+    expect(GPS_VALUES).toContain("const options = railChoices(def);");
+  });
+
+  // Mutation: drop the `word` prop of `RangePills` in AttributeFilter: the
+  // filter's pills read "1" to "4" for the ACA technical grade.
+  it("draw as words in the filter's pills", () => {
+    expect(GPS_ATTRIBUTE_FILTER).toContain(
+      "word={(stop) => stopLabel(def.key, stop)}",
+    );
+  });
+});
+
+// A grade attribute is listed by the system of the account's home region, not
+// by a map: the lists belong to no place. Logjam Web's lists are rendered in
+// CustomFieldSection.test.tsx and UnifiedImportDialog.render.test.tsx, which
+// pass the account's preferences in; here the preferences are followed from
+// where each client holds them, and Logjam GPS's lists, with no render
+// harness, are read.
+describe("the attribute lists", () => {
+  // Mutation: in SettingsPanel, pass `{}` in place of the account's
+  // preferences to either list, or drop one: Logjam Web lists ACA built-ins
+  // over NSW again.
+  it("on Logjam Web take the account's preferences to every list", () => {
+    expect(
+      WEB_SETTINGS.match(/uiPreferences=\{currentUser\?\.uiPreferences\}/g),
+    ).toHaveLength(2);
+    expect(WEB_TYPES.match(/uiPreferences=\{uiPreferences\}/g)).toHaveLength(2);
+    expect(WEB_LIST).toContain("uiPreferences={uiPreferences}");
+    expect(WEB_SIDEBAR).toContain(
+      "gradeSystem={placesGradeSystem} uiPreferences={currentUser?.uiPreferences}",
+    );
+  });
+
+  // Mutation: pass `defsFor(sheet.entity)` to `CustomFieldList` in
+  // SettingsScreen, or `defsForType(defs, type.id)` in the attributes step:
+  // Logjam GPS lists the ACA built-ins over NSW again.
+  it("on Logjam GPS are cut to the account's regions", () => {
+    expect(GPS_SETTINGS).toContain(
+      "defs={listedAttributeDefs(defsFor(sheet.entity), { regions: regionIds, })}",
+    );
+    expect(GPS_STEP).toContain(
+      "listedAttributeDefs(defsForType(defs, type.id), { regions: regionIds, })",
+    );
   });
 });

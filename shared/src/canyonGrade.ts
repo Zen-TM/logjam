@@ -241,7 +241,9 @@ export function gradeSortKeys(system: CanyonGradeSystem): readonly string[] {
  * counts, where ADR 0049's `regionInView` also falls back to the first region
  * touching the view and to the world: no client hands this a view box, and a
  * grade system has no world entry to fall to. Each client says where its
- * centre comes from. Guard: `canyonGrade.test.ts`.
+ * centre comes from, pinned by "the centre each client hands
+ * gradeSystemOfView" in `contracts/placePageClients.test.ts`. Guard:
+ * `canyonGrade.test.ts`.
  */
 export function gradeSystemOfView(
   center: readonly [number, number] | null,
@@ -277,5 +279,30 @@ export function placeFilterDefs(
       SYSTEM_KEYS[gradeSystem].includes(def.key) ||
       def.key in custom ||
       places.some((place) => holdsValue(place.fieldValues, def.key)),
+  );
+}
+
+/**
+ * The definitions a list of attributes names or maps columns onto (Settings'
+ * Place attributes and a type's attributes, an import's "map column to"):
+ * the grade fields cut to the system of the ACCOUNT's home region
+ * (`accountRegion`, not a map's view: these lists belong to no place), plus
+ * any grade field a place in `places` holds a value for. A host with no places
+ * at hand passes none, and the lists of an account in New South Wales show the
+ * French three alone. Guards: `canyonGrade.test.ts`, and for the clients'
+ * calls `contracts/placePageClients.test.ts`, "the attribute lists".
+ */
+export function listedAttributeDefs(
+  defs: readonly ScopedCustomFieldDef[],
+  uiPreferences: unknown,
+  places: readonly { fieldValues?: unknown }[] = [],
+  regions: readonly Region[] = REGIONS,
+): ScopedCustomFieldDef[] {
+  return placeFilterDefs(
+    defs,
+    null,
+    accountRegion(uiPreferences, regions).canyonGrades,
+    places,
+    {},
   );
 }

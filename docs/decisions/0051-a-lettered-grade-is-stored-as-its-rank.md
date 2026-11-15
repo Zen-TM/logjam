@@ -56,6 +56,20 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   that already holds a value, whatever the system", "keeps the axis an active filter
   is set on") and `shared/src/planItemEdit.test.ts` ("keep a grade field the place
   already holds, in either system"). Everything else above stands.
+- **Update 2026-11-15: the lists of built-in attributes follow the account's home
+  region, not a map.** Settings' Place attributes, a type's attributes step and the
+  import's "map column to" options list the grade fields of the system of
+  `accountRegion`'s `canyonGrades`, plus any grade field a place of the user's holds a
+  value on (`listedAttributeDefs` in `shared/src/canyonGrade.ts`); the import dialog
+  has the user's places to look through, the Settings lists do not, so over NSW they
+  show the French three and no ACA field. These lists belong to no place, so there is
+  no position to read. Guards: `shared/src/canyonGrade.test.ts` ("the definitions an
+  attribute list shows"), `frontend/src/components/sidebar/panels/CustomFieldSection.test.tsx`
+  ("the built-in grade attributes of the Place attributes list", "the built-in grade
+  attributes of a type's attributes dialog"), `frontend/src/components/dialogs/UnifiedImportDialog.render.test.tsx`
+  ("UnifiedImportDialog, the grade columns a canyon list maps onto") and, for Logjam
+  GPS's lists, `shared/src/contracts/placePageClients.test.ts` ("the attribute lists").
+  Everything else above stands.
 
 ## Consequences
 
