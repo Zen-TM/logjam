@@ -28,6 +28,7 @@ import {
   parseRgbaHex,
   slopeBandAt,
   terrainCredit,
+  TERRAIN_ROUTED_FROM,
   terrainTileArchive,
   TILE_SIZE,
   tileY2lat,
@@ -305,12 +306,14 @@ export function terrainReadZoom(
  * Which tile a print reads for the heights or slope tile `z/x/y`: the one
  * archive `terrainTileArchive` routes it to or, where that says absent, the
  * nearest ancestor it routes, which a map would draw in its place. Below z15
- * every tile is statewide, so the walk up ends. Memoised: a grid asks for each
- * tile many times.
+ * every tile is statewide, so the walk up ends. `statewideMax` is the deepest
+ * zoom of the sheet's region's archive. Memoised: a grid asks for each tile
+ * many times.
  */
 export function terrainTileReader(
   areas: readonly SharpenedArea[],
   layer: "heights" | "slope",
+  statewideMax: number,
 ): (z: number, x: number, y: number) => TerrainTileRead {
   const known = new Map<string, TerrainTileRead>();
   return (z, x, y) => {
@@ -324,6 +327,7 @@ export function terrainTileReader(
           z - up,
           x >> up,
           y >> up,
+          statewideMax,
         );
         if (answer !== "absent") {
           const source = answer === "statewide" ? STATEWIDE : answer.id;
@@ -470,6 +474,8 @@ export function contourTilesBySource(
       tile.z,
       tile.x,
       tile.y,
+      // Contours are never absent, so the zoom does not matter.
+      TERRAIN_ROUTED_FROM.contours,
     );
     if (answer === "absent") continue;
     const source = answer === "statewide" ? STATEWIDE : answer.id;

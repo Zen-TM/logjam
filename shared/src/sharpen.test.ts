@@ -87,8 +87,9 @@ describe("terrainTileArchive", () => {
     x: number,
     y: number,
     areas = [a],
+    statewideMax = 15,
   ) => {
-    const answer = terrainTileArchive(areas, layer, z, x, y);
+    const answer = terrainTileArchive(areas, layer, z, x, y, statewideMax);
     return typeof answer === "string" ? answer : answer.id;
   };
 
@@ -112,6 +113,32 @@ describe("terrainTileArchive", () => {
     expect(route("slope", 16, 30104 * 2, 19403 * 2)).toBe("absent");
     expect(route("slope", 16, 30100 * 2, 19400 * 2)).toBe("a");
     expect(route("slope", 16, 30100 * 2 - 1, 19400 * 2)).toBe("absent");
+  });
+
+  // Mutation: answer "absent" at z16 or z17 outside every area whatever
+  // `statewideMax` is (the old literal z15), and a region whose archive holds
+  // z17 has its two deepest zooms read as absent once an area is held.
+  it("reads statewide to the region's own deepest zoom outside an area", () => {
+    for (const layer of ["heights", "slope"] as const) {
+      expect(route(layer, 16, 60198, 38800, [a], 17)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [a], 17)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [], 17)).toBe("statewide");
+      expect(route(layer, 18, 240792, 155200, [a], 17)).toBe("absent");
+      // An archive that stops at z16 reads nothing at z17.
+      expect(route(layer, 16, 60198, 38800, [a], 16)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [a], 16)).toBe("absent");
+    }
+  });
+
+  // Mutations: let `statewideMax` lift an area's zmax (it answers a z17 tile
+  // it has none of), or answer statewide past the area's zmax (the archive's
+  // z17 tile is drawn beside the area's own z16 one).
+  it("still gives an area's range to the area where the archive goes deeper", () => {
+    expect(route("heights", 16, 60200, 38800, [a], 17)).toBe("a");
+    expect(route("slope", 17, 120400, 77600, [a], 17)).toBe("absent");
+    expect(route("slope", 17, 120400, 77600, [area({ zmax: 17 })], 17)).toBe(
+      "a",
+    );
   });
 
   // Mutation: an area answering past its zmax, which it has no tile for.

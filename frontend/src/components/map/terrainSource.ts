@@ -104,10 +104,11 @@ export async function terrainSourceFor(
       ? {
           type: "raster-dem",
           tiles: [terrainTileTemplate(region, "hillshade", held)],
-          // An absent tile (past an area's zmax, or past z15 outside every
-          // area) is overzoomed from its parent by MapLibre, as in 2D.
+          // An absent tile (past an area's zmax, or past the region's archive
+          // outside every area) is overzoomed from its parent by MapLibre, as
+          // in 2D.
           minzoom: shade.minzoom,
-          maxzoom: Math.max(...held.map((a) => a.zmax)),
+          maxzoom: Math.max(shade.maxzoom, ...held.map((a) => a.zmax)),
           bounds: [...heights.coverage],
           tileSize: 256,
           encoding: "terrarium",

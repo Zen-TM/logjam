@@ -75,7 +75,10 @@ export function terrainEntries(
       tiles: {
         template,
         minzoom: archive.minzoom,
-        maxzoom: key === "contours" ? archive.maxzoom : deepest,
+        maxzoom:
+          key === "contours"
+            ? archive.maxzoom
+            : Math.max(archive.maxzoom, deepest),
         bounds: layerIn(region, "heights")?.coverage ?? archive.coverage,
       },
     };

@@ -74,7 +74,9 @@ export function terrainRoutes<A extends RoutedTerrain>(
   for (let i = 0; i + 1 < xs.length; i++) {
     const column: (typeof routes)[number][] = [];
     for (let j = 0; j + 1 < ys.length; j++) {
-      const archive = terrainTileArchive(areas, layer, z, xs[i], ys[j]);
+      // At the routed zoom the answer does not depend on how deep the
+      // region's archive goes, so `z` stands for it.
+      const archive = terrainTileArchive(areas, layer, z, xs[i], ys[j], z);
       // At the zoom routing starts a tile is never absent.
       if (archive === "absent") continue;
       const last = column[column.length - 1];
