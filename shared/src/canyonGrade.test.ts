@@ -11,6 +11,7 @@ import {
   isCanyonGradeKey,
   canyonGradeRows,
   formatCanyonGrade,
+  listedAttributeDefs,
   placeFilterDefs,
   placeFormDefs,
   withoutCanyonGradeRows,
@@ -461,5 +462,46 @@ describe("the definitions a place filter offers", () => {
         }),
       ),
     ).toEqual([...FRENCH_KEYS, "aca_water", "quality"]);
+  });
+});
+
+describe("the definitions an attribute list shows", () => {
+  const def = (key: string) =>
+    ({
+      key,
+      label: key,
+      type: "integer",
+      appliesToAllTypes: false,
+      placeTypeIds: ["canyon"],
+    }) as unknown as ScopedCustomFieldDef;
+  const defs = [...FRENCH_KEYS, ...ACA_KEYS, "quality"].map(def);
+  const keys = (shown: ScopedCustomFieldDef[]) => shown.map((d) => d.key);
+  const account = (id: string) => ({ regions: [id] });
+
+  // Mutation: return `defs` unfiltered, as the lists did before.
+  it("is the French three and what is not a grade for an account in NSW", () => {
+    expect(
+      keys(listedAttributeDefs(defs, account("nsw"), [], REGIONS_WITH_UTAH)),
+    ).toEqual([...FRENCH_KEYS, "quality"]);
+  });
+
+  // Mutation: read the default region's system instead of the account's.
+  it("is the ACA four for an account whose home region grades in ACA", () => {
+    expect(
+      keys(
+        listedAttributeDefs(defs, account("simutah"), [], REGIONS_WITH_UTAH),
+      ),
+    ).toEqual([...ACA_KEYS, "quality"]);
+  });
+
+  // Mutation: drop the `places` argument from the `placeFilterDefs` call in
+  // `listedAttributeDefs`.
+  it("adds the field of a value one of the places holds", () => {
+    const places = [{ fieldValues: { aca_risk: 3 } }, { fieldValues: {} }];
+    expect(
+      keys(
+        listedAttributeDefs(defs, account("nsw"), places, REGIONS_WITH_UTAH),
+      ),
+    ).toEqual([...FRENCH_KEYS, "aca_risk", "quality"]);
   });
 });

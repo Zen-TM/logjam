@@ -252,8 +252,10 @@ def tile_archive(
 ) -> Union[str, Area]:
     """`terrainTileArchive` (shared/src/sharpen.ts) over areas already in the
     router's order, which the API gave them: the one archive a tile is read
-    from, "statewide", or "absent" (tests/test_area_export.py `TileArchive`
-    holds the same edges as sharpen.test.ts)."""
+    from, "statewide", or "absent". It takes no `statewideMax`, so it holds
+    the same edges as sharpen.test.ts for an archive whose deepest zoom is
+    z15, which is every archive the export reads (tests/test_area_export.py
+    `TileArchive`)."""
     start = ROUTED_FROM[layer]
     if z < start:
         return "statewide"

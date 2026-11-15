@@ -1,10 +1,8 @@
 import {
   layerIn,
   MAP_TERRAIN,
-  normalizeCarrier,
   takesContours,
   takesHillshade,
-  type CarrierId,
   type Region,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -75,16 +73,4 @@ export function terrainSwitch(
     };
   }
   return { checked: stored, disabled: false };
-}
-
-/**
- * The carrier the Coverage row names for the region in view: the stored pick
- * where that region lists it, else none, so the row asks again. Guard:
- * `terrainSwitches.test.ts`.
- */
-export function coverageCarrierHere(
-  region: Region | null,
-  stored: CarrierId | null,
-): CarrierId | null {
-  return normalizeCarrier(stored, layerIn(region, "coverage")?.carriers ?? []);
 }

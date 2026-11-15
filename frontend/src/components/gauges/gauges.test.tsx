@@ -274,6 +274,18 @@ describe("the web map's gauge layer", () => {
   });
 });
 
+describe("the Layers row's gauges", () => {
+  // Mutation: compute `gaugesHere` from `viewRegion?.gauges != null` or
+  // `viewRegion !== null` in `App.tsx` in place of `gaugeFeedOf(viewRegion)`,
+  // and the row, the map and Logjam GPS stop asking one question.
+  it("asks whether the region in view has a feed the way the map does", () => {
+    const app = readFileSync(join(import.meta.dirname, "../App.tsx"), "utf8");
+    expect(app).toContain(
+      "const gaugesHere = gaugeFeedOf(viewRegion) !== null;",
+    );
+  });
+});
+
 describe("GaugeLoadNotice", () => {
   // Mutation: drop the render, or draw it over a mode banner.
   it("says the layer could not load, and only when no mode banner is up", () => {
