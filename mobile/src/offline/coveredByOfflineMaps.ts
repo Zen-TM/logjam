@@ -1,6 +1,6 @@
 // Whether saved map regions already hold a place's or a way's ground, for the
 // coverage line on their pages and the plan's "Map downloaded" pill.
-import { lonWithin } from "@logjam/shared";
+import { lonBoxWithin, lonNear, lonWidth, lonWithin } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 
@@ -35,7 +35,9 @@ export function coveredByOfflineMaps(
   if (
     boxes.some(
       (box) =>
-        box[0] <= west && box[1] <= south && box[2] >= east && box[3] >= north,
+        lonBoxWithin(box[0], box[2], west, east) &&
+        box[1] <= south &&
+        box[3] >= north,
     )
   )
     return true;
@@ -44,7 +46,7 @@ export function coveredByOfflineMaps(
     [west, north],
     [east, south],
     [east, north],
-    [(west + east) / 2, (south + north) / 2],
+    [west + lonWidth(west, east) / 2, (south + north) / 2],
   ];
   return samples.every((point) => boxes.some((box) => holds(box, point)));
 }
@@ -62,7 +64,10 @@ export function routeCoveredByOfflineMaps(
     if (!covered(points[i])) return false;
     if (i === 0) continue;
     const [lon0, lat0] = points[i - 1];
-    const [lon1, lat1] = points[i];
+    // The leg runs the short way round: this vertex in the world copy nearest
+    // the last, so a leg over the date line is not read as 360 degrees long.
+    const lon1 = lonNear(points[i][0], lon0);
+    const lat1 = points[i][1];
     const parts = Math.ceil(
       Math.max(Math.abs(lon1 - lon0), Math.abs(lat1 - lat0)) / LEG_STEP_DEGREES,
     );

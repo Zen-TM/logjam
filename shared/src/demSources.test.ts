@@ -13,6 +13,7 @@ import {
   readDemArchive,
   TERRARIUM,
   demCredits,
+  demSourceCovers,
   demTileUrl,
   isFinerClimbSource,
   sampleDem,
@@ -135,6 +136,37 @@ describe("the declaration", () => {
       offenders,
       "read a DEM source's URL from DEM_SOURCES (docs/decisions/0028)",
     ).toEqual([]);
+  });
+});
+
+describe("demSourceCovers", () => {
+  const over = (coverage: DemSource["coverage"]): DemSource => ({
+    ...TERRARIUM,
+    id: "made-up",
+    coverage,
+  });
+  const position = (lon: number, lat = -17.5) => ({ lon, lat, distanceM: 0 });
+
+  // Mutation: compare `position.lon >= west && position.lon <= east` in
+  // `demSourceCovers` (no `lonWithin`), and the -179.5 position, which is 180.5
+  // for a source whose box is unwrapped, reads as outside it.
+  it.each([
+    ["unwrapped", [178, -19, 182, -16]],
+    ["wrapped", [178, -19, -178, -16]],
+  ] as const)(
+    "covers a position either side of the date line for a box that is %s",
+    (_form, coverage) => {
+      const source = over(coverage);
+      expect(demSourceCovers(source, position(179.5))).toBe(true);
+      expect(demSourceCovers(source, position(-179.5))).toBe(true);
+      expect(demSourceCovers(source, position(177.9))).toBe(false);
+      expect(demSourceCovers(source, position(-177.9))).toBe(false);
+      expect(demSourceCovers(source, position(179.5, -15))).toBe(false);
+    },
+  );
+
+  it("covers every position for a source with no box", () => {
+    expect(demSourceCovers(over(null), position(-179.5))).toBe(true);
   });
 });
 

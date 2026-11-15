@@ -2,10 +2,9 @@ import type { TopoLayerName } from "./topoSettings.js";
 import {
   NSW_REGION,
   REGIONS,
-  regionInWrappedView,
+  regionInView,
   regionsOf,
   regionsTouching,
-  wrapView,
   type LonLatBox,
   type Region,
   type TileBytes,
@@ -318,9 +317,7 @@ export function offeredBasemaps(
 ): BasemapCatalogEntry[] {
   return listed(
     regions,
-    new Set(
-      regionsTouching(wrapView(view), regions).flatMap((r) => r.basemaps),
-    ),
+    new Set(regionsTouching(view, regions).flatMap((r) => r.basemaps)),
   );
 }
 
@@ -339,7 +336,7 @@ export function basemapHere(
   const offered = offeredBasemaps(view, regions).map((entry) => entry.id);
   return offered.includes(picked)
     ? picked
-    : (regionInWrappedView(view, regions)?.defaultBasemap ?? offered[0]!);
+    : (regionInView(view, regions)?.defaultBasemap ?? offered[0]!);
 }
 
 /**

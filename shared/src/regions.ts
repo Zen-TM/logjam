@@ -25,6 +25,7 @@ import type { GridId } from "./grids.js";
 import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
+import { lonWidth, wrapLon } from "./placeGeo.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
@@ -133,7 +134,10 @@ export type Region = {
    * The border, simplified, as one ring of [lon, lat] for each island, drawn a
    * little outside the real one so it never cuts off ground the region's data
    * covers. A box would not do: neighbouring countries' boxes overlap. `WORLD`
-   * has none.
+   * has none. Longitudes are in [-180, 180]: a region across the date line has
+   * one ring each side of it, and a view past ±180 is read in every world copy
+   * it spans (`regionTouchesBox`). Guard: `regions.test.ts` ("keeps every border
+   * longitude in [-180, 180]").
    */
   borders: readonly Ring[];
   /** Ids in `BASEMAP_CATALOG`, each in one region at most (regions.test.ts). */
@@ -610,19 +614,6 @@ export function pointBox(lon: number, lat: number): LonLatBox {
 }
 
 /**
- * The same box moved by whole turns until its centre is in [-180, 180): a map
- * panned round the world reports longitudes past ±180, while a region's
- * borders and a hemisphere are read in that range. Guard: `regions.test.ts`
- * ("moves a box by whole turns until its centre is in [-180, 180)").
- */
-export function wrapView(view: LonLatBox): LonLatBox {
-  const turn = 360 * Math.floor(((view.west + view.east) / 2 + 180) / 360);
-  return turn === 0
-    ? view
-    : { ...view, west: view.west - turn, east: view.east - turn };
-}
-
-/**
  * The box around a region's borders. Throws for a region with none (`WORLD`),
  * which has no box. Guard: `regions.test.ts` ("bounds the border, and refuses a
  * region with none").
@@ -695,10 +686,37 @@ function ringTouchesBox(ring: Ring, box: LonLatBox): boolean {
 
 /**
  * Whether a box and any of a region's borders share ground: a corner of one
- * inside the other, or an edge of each crossing.
+ * inside the other, or an edge of each crossing. The box is read in every
+ * world copy it spans (a map panned round the world reports longitudes past
+ * ±180, a view over the date line has an edge past it, a view wider than a
+ * turn spans several) against borders in [-180, 180]. Guard: `regions.test.ts`
+ * ("regionTouchesBox across the date line").
  */
 export function regionTouchesBox(region: Region, box: LonLatBox): boolean {
-  return region.borders.some((ring) => ringTouchesBox(ring, box));
+  const width = lonWidth(box.west, box.east);
+  return region.borders.some((ring) => {
+    let ringWest = Infinity;
+    let ringEast = -Infinity;
+    for (const [lon] of ring) {
+      if (lon < ringWest) ringWest = lon;
+      if (lon > ringEast) ringEast = lon;
+    }
+    const east = box.west + width;
+    const first = Math.ceil((box.west - ringEast) / 360);
+    const last = Math.floor((east - ringWest) / 360);
+    for (let turn = first; turn <= last; turn++) {
+      const shift = 360 * turn;
+      if (
+        ringTouchesBox(ring, {
+          ...box,
+          west: box.west - shift,
+          east: east - shift,
+        })
+      )
+        return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -755,6 +773,9 @@ function declaresAnything(region: Region): boolean {
 /**
  * The one region a map draws from: the one holding the view's centre, else the
  * first touching the view, else `world` when it declares anything, else null.
+ * The view is read as a map reports it: longitudes past ±180, in any world
+ * copy, are the ground they wrap to (`regionTouchesBox`). Guard:
+ * `regions.test.ts` ("reads a view panned past the antimeridian").
  * // ponytail: a map that draws from this answer draws one region's Terrain
  * group and vector basemap at a time, so with two regions on screen the one
  * under the centre wins. Upgrade: a source per region per layer.
@@ -766,7 +787,7 @@ export function regionInView(
 ): Region | null {
   return (
     regionAt(
-      (view.west + view.east) / 2,
+      wrapLon(view.west + lonWidth(view.west, view.east) / 2),
       (view.south + view.north) / 2,
       regions,
     ) ??
@@ -810,22 +831,8 @@ export function placeRegistryIn(
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): RegionWithRegistry | null {
-  const region = view ? regionInWrappedView(view, regions, world) : null;
+  const region = view ? regionInView(view, regions, world) : null;
   return region ? regionWithRegistry(region.id, [region]) : null;
-}
-
-/**
- * `regionInView` for a view as a map reports it: its longitudes wrapped first
- * (`wrapView`), since a map panned round the world reports them past ±180 and
- * a region's borders are read in [-180, 180). What a map asks of the region it
- * shows. Guard: `regions.test.ts` ("reads a view panned past the antimeridian").
- */
-export function regionInWrappedView(
-  view: LonLatBox,
-  regions: readonly Region[] = REGIONS,
-  world: Region = WORLD,
-): Region | null {
-  return regionInView(wrapView(view), regions, world);
 }
 
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */

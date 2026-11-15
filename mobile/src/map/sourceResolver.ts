@@ -18,7 +18,10 @@ import {
   areasInRegion,
   BASEMAP_CATALOG,
   layerIn,
+  lonOverlap,
+  lonWidth,
   REGIONS,
+  wrapLon,
   type BasemapCatalogEntry,
   type Region,
   SHARPENED_SOURCE_PREFIX,
@@ -663,24 +666,27 @@ export const drawsTerrain = (
  */
 function mainRegion(viewport: Viewport | null | undefined) {
   return (regions: MapArtifact[]): MapArtifact[] => {
-    const lng = viewport ? (viewport.west + viewport.east) / 2 : 0;
+    const lng = viewport
+      ? viewport.west + lonWidth(viewport.west, viewport.east) / 2
+      : 0;
     const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
     const perLng = Math.cos((lat * Math.PI) / 180);
     const away = ({ bbox }: MapArtifact) => {
       if (!bbox) return Number.POSITIVE_INFINITY;
       if (!viewport) return 0;
       const [west, south, east, north] = bbox;
-      const dx = Math.max(west - lng, 0, lng - east) * perLng;
+      const half = lonWidth(west, east) / 2;
+      const dx =
+        Math.max(Math.abs(wrapLon(lng - (west + half))) - half, 0) * perLng;
       const dy = Math.max(south - lat, 0, lat - north);
       return dx * dx + dy * dy;
     };
     const size = ({ bbox }: MapArtifact) =>
-      bbox ? (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) : 0;
+      bbox ? lonWidth(bbox[0], bbox[2]) * (bbox[3] - bbox[1]) : 0;
     const onScreen = ({ bbox }: MapArtifact) => {
       if (!bbox || !viewport) return 0;
       const [west, south, east, north] = bbox;
-      const wide =
-        Math.min(east, viewport.east) - Math.max(west, viewport.west);
+      const wide = lonOverlap(west, east, viewport.west, viewport.east) ?? 0;
       const tall =
         Math.min(north, viewport.north) - Math.max(south, viewport.south);
       return Math.max(wide, 0) * Math.max(tall, 0);
@@ -756,8 +762,7 @@ export function bboxOnScreen(
   if (bbox == null) return false;
   const [west, south, east, north] = bbox;
   return (
-    west <= viewport.east &&
-    east >= viewport.west &&
+    lonOverlap(west, east, viewport.west, viewport.east) !== null &&
     south <= viewport.north &&
     north >= viewport.south
   );

@@ -22,7 +22,7 @@ describe("nextViewRegion", () => {
     expect(nextViewRegion(null, elsewhere)).toBeNull();
   });
 
-  // Mutation: call `regionInView` in place of `regionInWrappedView`, and a map
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and `last` to 0) and the centre unwrapped in `regionInView`, and a map
   // panned round the world (longitudes past 180) is over no region where it
   // shows one.
   it("reads a view panned round the world as where it is", () => {

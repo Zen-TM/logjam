@@ -6,7 +6,8 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
-import { GRID_NAMES, wrapLon, type GridId } from "../grids.js";
+import { GRID_NAMES, type GridId } from "../grids.js";
+import { wrapLon } from "../placeGeo.js";
 import { REGIONS, regionAt, type Region } from "../regions.js";
 import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";

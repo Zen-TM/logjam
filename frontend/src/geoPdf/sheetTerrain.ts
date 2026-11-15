@@ -4,7 +4,7 @@
 import {
   layerIn,
   REGIONS,
-  regionInWrappedView,
+  regionInView,
   WORLD,
   type LandArchive,
   type LonLatBox,
@@ -27,7 +27,7 @@ export type SheetTerrain = {
 };
 
 /**
- * What the region `regionInWrappedView` picks for the sheet's box has to draw:
+ * What the region `regionInView` picks for the sheet's box has to draw:
  * the one at its centre, whichever world copy the box was picked in.
  * ponytail: a sheet over two regions prints all its contours, hillshade, slope
  * and land from that one, so a sheet straddling a border draws the far side
@@ -42,7 +42,7 @@ export function sheetTerrain(
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): SheetTerrain {
-  const region = regionInWrappedView(extent, regions, world);
+  const region = regionInView(extent, regions, world);
   return {
     heights: layerIn(region, "hillshade"),
     slope: layerIn(region, "slope"),
