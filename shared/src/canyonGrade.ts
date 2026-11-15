@@ -74,7 +74,7 @@ export function formatCanyonGrade(fieldValues: unknown): string | null {
 }
 
 /** The stored fields each system writes a grade in. */
-const SYSTEM_KEYS: Record<CanyonGradeSystem, readonly string[]> = {
+export const SYSTEM_KEYS: Record<CanyonGradeSystem, readonly string[]> = {
   french: ["v_grade", "a_grade", "commitment"],
   aca: ["aca_technical", "aca_water", "aca_time", "aca_risk"],
 };

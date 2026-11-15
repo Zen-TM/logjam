@@ -3,6 +3,7 @@ import { s3 } from "./awsClients";
 import { getEnv } from "../lib/env";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { AppError } from "../middleware/errorHandler";
+import type { CanyonGradeSystem } from "@logjam/shared";
 import {
   fetchAndParseRopeWiki,
   parseRopeWikiCsv,
@@ -54,7 +55,10 @@ type CacheEntry = RopeWikiData & { loadedAt: number };
 /** Keyed by the source's snapshot key: one corpus per region. */
 const cache = new Map<string, CacheEntry>();
 
-async function loadSnapshotFromS3(key: string): Promise<RopeWikiData> {
+async function loadSnapshotFromS3(
+  key: string,
+  grades: CanyonGradeSystem,
+): Promise<RopeWikiData> {
   const bucket = getEnv().S3_BUCKET_MEDIA;
   if (!bucket) {
     throw new AppError(
@@ -91,7 +95,7 @@ async function loadSnapshotFromS3(key: string): Promise<RopeWikiData> {
     );
   }
 
-  const { places, errors } = parseRopeWikiCsv(body);
+  const { places, errors } = parseRopeWikiCsv(body, grades);
   return { places, errors, sourceUpdatedAt: lastModified ?? null };
 }
 
@@ -101,9 +105,16 @@ async function loadSnapshotFromS3(key: string): Promise<RopeWikiData> {
  * Default source is the S3 snapshot. `fresh` re-reads the source, and attempts
  * the live RopeWiki fetch — kept wired up so that if RopeWiki ever allowlists
  * us the live path is one default away, rather than needing to be rebuilt.
+ *
+ * `grades` is the region's grade system, which decides the fields the corpus
+ * is parsed into. A source belongs to one region, so the memo is keyed by the
+ * source alone and a French parse is never served for an ACA call. Guard:
+ * `shared/src/regions.test.ts` ("give each region its own RopeWiki region and
+ * snapshot").
  */
 export async function getRopeWikiCanyons(
   source: RopeWikiSource,
+  grades: CanyonGradeSystem,
   fresh = false,
 ): Promise<RopeWikiData> {
   const held = cache.get(source.snapshotKey);
@@ -113,8 +124,11 @@ export async function getRopeWikiCanyons(
   }
 
   const data: RopeWikiData = fresh
-    ? { ...(await fetchAndParseRopeWiki(source)), sourceUpdatedAt: new Date() }
-    : await loadSnapshotFromS3(source.snapshotKey);
+    ? {
+        ...(await fetchAndParseRopeWiki(source, grades)),
+        sourceUpdatedAt: new Date(),
+      }
+    : await loadSnapshotFromS3(source.snapshotKey, grades);
 
   cache.set(source.snapshotKey, { ...data, loadedAt: Date.now() });
   return data;
