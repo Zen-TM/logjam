@@ -29,7 +29,7 @@ describe("every form of a length field converts it", () => {
   // dialog's `key`), drop the `seededUnits` check from a pick's return that
   // keeps the form, let a flip run all of `populateForm` (drop `unitsOnly`),
   // drop the filters' `shownUnits` reseed, or give a filter's
-  // `coerceFieldInput` the `value` it is fed back instead of its `seed`.
+  // `coerceFieldInput` the `value` it is fed back instead of its `seedMetres`.
   it.each([
     [
       "frontend/src/components/dialogs/PlaceDialog.tsx",
@@ -88,8 +88,8 @@ describe("every form of a length field converts it", () => {
       [
         "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        'coerceFieldInput( fieldKey, nextText.trim(), "float", seed && seed.text === nextText.trim() ? seed.metres : undefined, ) as number',
-        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeed(seeded(value)); setText(fieldInputText(fieldKey, value[1])); } }",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", seedMetres, ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeedMetres(value[1]); setText(fieldInputText(fieldKey, value[1])); } }",
         "formatThreshold(value, length)",
       ],
     ],
@@ -98,8 +98,8 @@ describe("every form of a length field converts it", () => {
       [
         "fieldKey={def.key}",
         "label={withLengthUnit(def.key, def.label)}",
-        'coerceFieldInput( fieldKey, nextText.trim(), "float", seed && seed.text === nextText.trim() ? seed.metres : undefined, ) as number',
-        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeed(seeded(value)); setText(fieldInputText(fieldKey, value[1])); } }",
+        'coerceFieldInput( fieldKey, nextText.trim(), "float", seedMetres, ) as number',
+        "if (units !== shownUnits) { setShownUnits(units); if (length && value) { setSeedMetres(value[1]); setText(fieldInputText(fieldKey, value[1])); } }",
         "formatThreshold(value, length)",
       ],
     ],
@@ -157,6 +157,7 @@ describe("every page that reads a length goes through the units module", () => {
       "mobile/src/plans/PlanPlaceSheet.tsx",
       ["attributeRows(", "tripPlanSetAsideRows(place)"],
     ],
+    ["mobile/src/plans/PlanItemSheet.tsx", ["tripPlanSetAsideRows(item)"]],
     [
       "frontend/src/components/plans/PlanItemEditDialog.tsx",
       ["tripPlanSetAsideRows(place)"],

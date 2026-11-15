@@ -282,19 +282,19 @@ function ThresholdFilter({
   const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
     value?.[0] ?? "Less than",
   );
-  const seeded = (held: PlaceThresholdFilter | null) =>
-    held ? { text: fieldInputText(fieldKey, held[1]), metres: held[1] } : null;
-  // What the text was last written from, and the metres it was written from.
-  // Text still equal to it is the value the user was shown, so it keeps those
-  // metres; `value` is not that, since it follows every keystroke.
-  const [seed, setSeed] = useState(() => seeded(value));
-  const [text, setText] = useState(seed?.text ?? "");
+  // The metres the text was last written from. Text still as written is the
+  // value the user was shown, so `coerceFieldInput` keeps these metres;
+  // `value` is not that, since it follows every keystroke.
+  const [seedMetres, setSeedMetres] = useState(value?.[1]);
+  const [text, setText] = useState(
+    value ? fieldInputText(fieldKey, value[1]) : "",
+  );
   const [shownValue, setShownValue] = useState(value);
   if (value !== shownValue) {
     setShownValue(value);
     if (value == null) {
       setText("");
-      setSeed(null);
+      setSeedMetres(undefined);
     }
   }
   // The text is in the display units, so a change of units writes it again from
@@ -307,7 +307,7 @@ function ThresholdFilter({
   if (units !== shownUnits) {
     setShownUnits(units);
     if (length && value) {
-      setSeed(seeded(value));
+      setSeedMetres(value[1]);
       setText(fieldInputText(fieldKey, value[1]));
     }
   }
@@ -323,7 +323,7 @@ function ThresholdFilter({
               fieldKey,
               nextText.trim(),
               "float",
-              seed && seed.text === nextText.trim() ? seed.metres : undefined,
+              seedMetres,
             ) as number,
           ],
     );
