@@ -18,6 +18,8 @@ import {
   leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   ACCOUNT_PHONE_ONLY,
+  SIGN_OUT_EVERYWHERE_BODY,
+  SIGN_OUT_EVERYWHERE_NOTE,
   COPY_MEDIA_SETTING,
   SETTINGS,
   SETTINGS_PHONE_ONLY,
@@ -831,6 +833,16 @@ describe("the account", () => {
 
   it("says what stays as well as what goes", () => {
     expect(ACCOUNT_DELETE_BODY).toContain("stay theirs");
+  });
+
+  // Logjam Web's confirm body writes the note out whole beside its own
+  // sentence (a glued message could not reorder), while Logjam GPS reads the
+  // note alone: the two must not drift.
+  // Mutation: reword the first sentence of `SIGN_OUT_EVERYWHERE_BODY` in account.ts.
+  it("opens Logjam Web's sign-out-everywhere body with the note Logjam GPS shows", () => {
+    expect(SIGN_OUT_EVERYWHERE_BODY.startsWith(SIGN_OUT_EVERYWHERE_NOTE)).toBe(
+      true,
+    );
   });
 });
 

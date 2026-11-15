@@ -1,4 +1,5 @@
 import type { IconIdea } from "../icons.js";
+import { t } from "../i18n.js";
 
 /**
  * One confirm, drawn by `confirm()` on Logjam GPS and `ConfirmDialog` on
@@ -17,16 +18,16 @@ export type ConfirmCopy = {
 export function abandonConfirm(thing: string, isNew: boolean): ConfirmCopy {
   return isNew
     ? {
-        confirmTitle: `Discard this ${thing}?`,
-        confirmBody: "Nothing you've entered is kept.",
-        confirmLabel: "Discard",
+        confirmTitle: t`Discard this ${thing}?`,
+        confirmBody: t`Nothing you've entered is kept.`,
+        confirmLabel: t`Discard`,
         tone: "destructive",
         icon: "close",
       }
     : {
-        confirmTitle: "Discard your changes?",
-        confirmBody: `The ${thing} stays as it was.`,
-        confirmLabel: "Discard",
+        confirmTitle: t`Discard your changes?`,
+        confirmBody: t`The ${thing} stays as it was.`,
+        confirmLabel: t`Discard`,
         tone: "destructive",
         icon: "close",
       };

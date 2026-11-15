@@ -8,10 +8,11 @@
 import { MAP_TERRAIN } from "./mapTerrain.js";
 import { WAY_IMPORT } from "./ways.js";
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const MAP_LAYERS = {
   id: "map.layers",
-  title: "Map layers",
+  title: t`Map layers`,
   sections: [
     { key: "basemap" },
     { key: "terrain" },
@@ -19,17 +20,16 @@ export const MAP_LAYERS = {
     {
       key: "offline",
       on: "gps",
-      reason:
-        "Saved maps and 'use only saved maps' are phone features: Logjam Web is never used without a connection.",
+      reason: t`Saved maps and 'use only saved maps' are phone features: Logjam Web is never used without a connection.`,
     },
   ],
   copy: {
-    tabBasemap: "Map",
+    tabBasemap: t`Map`,
     tabTerrain: MAP_TERRAIN.title,
-    tabOverlays: "Overlays",
-    tabOffline: "Offline",
-    places: "Places",
-    ways: "Ways",
+    tabOverlays: t`Overlays`,
+    tabOffline: t`Offline`,
+    places: t`Places`,
+    ways: t`Ways`,
     // The overlays list ends with the way to add one, named the same on both
     // clients: GPX, KML and GeoJSON (`WAY_IMPORT`).
     importFile: WAY_IMPORT.file,
