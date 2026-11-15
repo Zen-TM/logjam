@@ -73,17 +73,20 @@ export function tileUrlFrom(
 }
 
 /**
- * Where the clips of one save queue: heights, contours, slope, then the
- * overlays.
+ * The place of each kind in a save's queue. `clipArchivesOf` lists slope before
+ * contours, but a save over NSW has always queued contours first, so the queue
+ * keeps that order. Guard: `regionTilePlanning.test.ts` ("gives an area over
+ * NSW the DEM archive, the contours, the slope, land, fire, coverage and the
+ * vector map"). A kind added to `SaveClipKind` fails the typecheck here.
  */
-const CLIP_ORDER: readonly SaveClipKind[] = [
-  "heights",
-  "contours",
-  "slope",
-  "land",
-  "fire",
-  "coverage",
-];
+const CLIP_ORDER: Record<SaveClipKind, number> = {
+  heights: 0,
+  contours: 1,
+  slope: 2,
+  land: 3,
+  fire: 4,
+  coverage: 5,
+};
 
 /**
  * The clips every saved area carries, whoever saves it: one of each archive of
@@ -113,7 +116,7 @@ export function regionClipSpecs(
   });
   return [
     ...[...clips]
-      .sort((a, b) => CLIP_ORDER.indexOf(a.kind) - CLIP_ORDER.indexOf(b.kind))
+      .sort((a, b) => CLIP_ORDER[a.kind] - CLIP_ORDER[b.kind])
       .map(({ archive }) => clip(archive.id, { archiveId: archive.id })),
     clip("protomaps"),
   ];
