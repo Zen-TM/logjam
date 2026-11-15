@@ -12,8 +12,8 @@ test("the master stub serves every simulated archive from its fixture", async ({
   const paths = simArchivePaths();
   // A floor: ten archives are built (scripts/sim-regions/boxes.json).
   expect(paths.length).toBeGreaterThanOrEqual(10);
-  // Mutation: drop "vector" from SIM_KINDS in stubMaster.ts, or drop
-  // `...sim` from `archiveByPath` there.
+  // Mutation: have `simArchivePaths` keep only paths under "master/dem/", or
+  // drop `...sim` from `archiveByPath` in stubMaster.ts.
   for (const path of paths) {
     const got = await page.evaluate(async (p) => {
       const r = await fetch(`/${p}`, { headers: { Range: "bytes=0-6" } });

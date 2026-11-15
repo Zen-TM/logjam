@@ -32,6 +32,14 @@ interface Built {
   fixture: { bbox: Box };
 }
 
+/** Every archive a region builds into master/, by kind: whatever object in the
+ *  region has a `path` there (the point cloud's lies under lidar/). */
+const archivesOf = (region: object) =>
+  Object.entries(region).filter(
+    (entry): entry is [string, Shape] =>
+      typeof entry[1]?.path === "string" && entry[1].path.startsWith("master/"),
+  );
+
 const boxes = JSON.parse(
   readFileSync(
     join(import.meta.dirname, "../../scripts/sim-regions/boxes.json"),
@@ -77,10 +85,10 @@ describe("scripts/sim-regions/boxes.json", () => {
       // A floor: a region with no archive to compare checks nothing.
       expect(checked.length).toBeGreaterThanOrEqual(2);
       // Every archive boxes.json builds is one the region declares.
-      const buildsPath = (k: string) =>
-        built[k] && typeof built[k].path === "string";
       expect(
-        ["heights", "slope", "contours", "vector"].filter(buildsPath).sort(),
+        archivesOf(built)
+          .map(([kind]) => kind)
+          .sort(),
       ).toEqual(checked.sort());
     },
   );
@@ -142,8 +150,8 @@ describe("scripts/sim-regions/boxes.json", () => {
     // One tile at every zoom it names: the box lies inside one tile of the
     // deepest zoom of any archive, and so inside one tile of each coarser.
     const deepest = Math.max(
-      ...(["heights", "slope", "contours", "vector"] as const).flatMap(
-        (kind) => boxes[id][kind]?.fixtureZooms.slice(1) ?? [],
+      ...archivesOf(boxes[id]).flatMap(([, { fixtureZooms }]) =>
+        fixtureZooms.slice(1),
       ),
     );
     const tileAt = (lon: number, lat: number) => {
@@ -155,11 +163,8 @@ describe("scripts/sim-regions/boxes.json", () => {
       ];
     };
     expect(tileAt(fw, fn), `${id} fixture box corners`).toEqual(tileAt(fe, fs));
-    for (const kind of ["heights", "slope", "contours", "vector"] as const) {
-      const zooms = boxes[id][kind]?.fixtureZooms;
-      if (zooms)
-        expect(zooms[0], `${id} ${kind}`).toBeLessThanOrEqual(zooms[1]);
-    }
+    for (const [kind, { fixtureZooms: zooms }] of archivesOf(boxes[id]))
+      expect(zooms[0], `${id} ${kind}`).toBeLessThanOrEqual(zooms[1]);
     expect(heights.fixtureZooms[1]).toBeLessThanOrEqual(heights.zmax);
     expect(heights.fixtureZooms[0]).toBeGreaterThanOrEqual(heights.zmin);
     expect(heights.credit.length).toBeGreaterThan(40);
@@ -185,10 +190,7 @@ describe("scripts/sim-regions/boxes.json", () => {
     // one, or overwrite one with text.
     const dir = join(import.meta.dirname, "__fixtures__/sim-regions");
     const wanted = Object.values(boxes).flatMap((region) =>
-      (["heights", "slope", "contours", "vector"] as const)
-        .map((kind) => region[kind]?.path)
-        .filter((path): path is string => path !== undefined)
-        .map((path) => path.split("/").pop() as string),
+      archivesOf(region).map(([, { path }]) => path.split("/").pop() as string),
     );
     // A floor: ten archives are built, so ten fixtures are expected.
     expect(wanted.length).toBeGreaterThanOrEqual(10);

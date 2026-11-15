@@ -67,10 +67,18 @@ bucket refuses a file.
 Logjam Web then reads the archives through `DEV_MASTER_URL` set to the bucket.
 With the default bucket it can instead use `http://127.0.0.1:4567` with
 `node scripts/dev-master.mjs` running, which serves that bucket's files ahead of
-the prod CDN (it reads no other bucket). A phone has only that route: after
+the prod CDN (it reads no other bucket).
+
+A phone reads the default bucket in either of two ways. Directly, over the 4566
+reverse that `npm run dev:android` sets up, with
+`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4566/logjam-topo-local` (as
+`mobile/.env.example` shows). Or through `node scripts/dev-master.mjs`, after
 `adb reverse tcp:4567 tcp:4567`, with
-`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4567`, so a phone sees only what
-is in the default bucket. Playwright's `stubMaster.ts` answers the same paths from the fixtures below, so a spec needs none of this.
+`EXPO_PUBLIC_TOPO_CDN_BASE_URL=http://127.0.0.1:4567`, which also takes from the
+prod CDN what the bucket lacks.
+
+Playwright's `stubMaster.ts` answers the same paths from the fixtures below, so
+a spec needs none of this.
 
 ## What is built
 

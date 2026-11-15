@@ -23,18 +23,19 @@ const SIM_FIXTURES = new URL(
   "../../../shared/src/__fixtures__/sim-regions/",
   import.meta.url,
 );
-export const SIM_KINDS = ["heights", "slope", "contours", "vector"] as const;
-
-/** Each simulated archive's served path, from the build's own declaration. */
+/** Each simulated archive's served path: every `path` in the build's own
+ *  declaration that lies under master/ (the point cloud's lies under lidar/). */
 export function simArchivePaths(): string[] {
   const { regions } = JSON.parse(readFileSync(SIM_BUILD, "utf8")) as {
-    regions: Record<
-      string,
-      Partial<Record<(typeof SIM_KINDS)[number], { path: string }>>
-    >;
+    regions: Record<string, Record<string, { path?: unknown } | unknown>>;
   };
   return Object.values(regions).flatMap((region) =>
-    SIM_KINDS.flatMap((kind) => region[kind]?.path ?? []),
+    Object.values(region).flatMap((entry) => {
+      const path = (entry as { path?: unknown } | null)?.path;
+      return typeof path === "string" && path.startsWith("master/")
+        ? [path]
+        : [];
+    }),
   );
 }
 
