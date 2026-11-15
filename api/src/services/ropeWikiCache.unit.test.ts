@@ -253,7 +253,7 @@ describe("getRopeWikiCanyons — one corpus per region", () => {
     mockS3Object(SAMPLE_CSV);
     mockS3Object(SAMPLE_CSV.split("\n").slice(0, 2).join("\n"));
     expect((await getRopeWikiCanyons(NSW, "french")).places).toHaveLength(3);
-    expect((await getRopeWikiCanyons(other)).places).toHaveLength(1);
+    expect((await getRopeWikiCanyons(other, "french")).places).toHaveLength(1);
     expect((await getRopeWikiCanyons(NSW, "french")).places).toHaveLength(3);
     expect(s3Send.mock.calls.map(([c]) => c.input.Key)).toEqual([
       "reference/ropewiki-nsw.csv",
