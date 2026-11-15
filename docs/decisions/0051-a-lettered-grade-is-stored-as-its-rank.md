@@ -69,7 +69,8 @@ and `max` (`invalidPlaceFields` in `shared/src/placeValidation.ts`).
   attributes of a type's attributes dialog"), `frontend/src/components/dialogs/UnifiedImportDialog.render.test.tsx`
   ("UnifiedImportDialog, the grade columns a canyon list maps onto") and, for Logjam
   GPS's lists, `shared/src/contracts/placePageClients.test.ts` ("the attribute lists").
-  Everything else above stands.
+  [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)
+  records the home region's reading as an Update there. Everything else above stands.
 
 ## Consequences
 

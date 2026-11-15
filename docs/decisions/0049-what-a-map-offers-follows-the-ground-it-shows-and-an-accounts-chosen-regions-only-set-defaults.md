@@ -30,6 +30,8 @@ The maintainer chose the map on 2026-11-14.
 shows. The regions an account chose only set defaults: where a map first
 opens, the first-run basemap and the canyon-list offers. They never decide
 what is offered at a location.**
+(updated 2026-11-15: the Updates below add the other places the home region is
+read, none of them a location.)
 
 - **The map asks one question.** `regionInView(view)` in
   `shared/src/regions.ts` returns the region holding the view's centre, else
@@ -93,6 +95,18 @@ what is offered at a location.**
   offered. What a map offers at
   a place still never reads the choice. Guard: `shared/src/units.test.ts`
   ("unitsOf", "offersUnitsChoice"). Everything else above stands.
+- **Update 2026-11-15: the account's home region also decides which grade
+  attributes the lists with no map position name.** Settings, Place attributes;
+  the Canyon type's built-in rows; Logjam GPS's attributes step and editor; and the
+  import dialog's column targets list the grade fields of the system of the home
+  region's `canyonGrades` (`listedAttributeDefs`, `shared/src/canyonGrade.ts`), plus,
+  in the import dialog only, any grade field a place of the user holds a value on.
+  The ACA four are not listed over NSW. This does not break "never decide what is
+  offered at a location": these lists have no location, they are not drawn over a
+  place, and a place's own form and the filter sheet still follow the ground
+  ([0051](0051-a-lettered-grade-is-stored-as-its-rank.md) holds the rule). Guard:
+  `shared/src/canyonGrade.test.ts` ("the definitions an attribute list shows").
+  Everything else above stands.
 
 ## Consequences
 
