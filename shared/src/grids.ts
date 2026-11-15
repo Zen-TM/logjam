@@ -134,7 +134,11 @@ export function gridZoneAt(
   lat: number,
   regions: readonly Region[] = REGIONS,
 ): GridZone {
-  const id = gridIdAt(lon, lat, regions);
+  return gridZoneOf(gridIdAt(lon, lat, regions), lon, lat);
+}
+
+/** The zone of grid `id` at a place: the grid is chosen by the caller, the zone by the place. */
+export function gridZoneOf(id: GridId, lon: number, lat: number): GridZone {
   if (id === "nztm2000") return NZTM_ZONE;
   if (id === "mga2020") return shifted(mgaZoneAt(wrapLon(lon)), copyShift(lon));
   return utmZone(Math.floor((lon + 180) / 6), lat < 0);

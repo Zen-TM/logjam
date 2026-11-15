@@ -28,6 +28,14 @@ function square(sideKm: number, lat = -33.7, lon = 150.3): AreaBbox {
   };
 }
 
+// A box of `half` degrees either side of a centre.
+const boxAround = (lon: number, lat: number, half: number): AreaBbox => ({
+  west: lon - half,
+  south: lat - half,
+  east: lon + half,
+  north: lat + half,
+});
+
 describe("areaSizeKm", () => {
   it("measures a box on the ground", () => {
     const { widthKm, heightKm } = areaSizeKm(square(20));
@@ -40,7 +48,7 @@ describe("areaExportEpsg", () => {
   // Mutation: return 7800 + the UTM zone of the centre for every region (the
   // old worker's rule), and a New Zealand box is warped to a code that is not
   // a grid there.
-  it("is the grid of the region at the box's centre", () => {
+  it("is the grid of the region the box is exported from", () => {
     expect(areaExportEpsg(square(10), REGIONS)).toBe(7856); // Katoomba
     expect(areaExportEpsg(square(10, -33.7, 147), REGIONS)).toBe(7855);
     expect(areaExportEpsg(square(10, -31.95, 141.45), REGIONS)).toBe(7854);
@@ -64,15 +72,39 @@ describe("areaExportEpsg", () => {
     expect(areaExportEpsg(square(10, -33.4, -70.6), SIM_REGIONS)).toBe(32719);
   });
 
+  // A box centred outside NSW's border that still overlaps it is admitted by
+  // `areaInTerrainRegion`, and is warped to MGA like the rest of the state.
+  // Mutation: read the grid at the centre alone (no fall back to the regions
+  // the box touches), and each of these gets UTM, a datum off by about 2 m.
+  it("stays in MGA for a box over NSW's edge whose centre is outside it", () => {
+    const nsw = (lon: number, lat: number, half: number) =>
+      areaExportEpsg(boxAround(lon, lat, half));
+    expect(nsw(153.1, -28.2, 0.1)).toBe(7856); // off the Queensland border
+    expect(nsw(140.8, -33, 0.3)).toBe(7854); // off the South Australian one
+    expect(nsw(154.6, -30, 0.5)).toBe(7856); // east of the border's 154.2 cut
+  });
+
   // The worker falls back to `7800 + zone` for a job an older API queued
-  // (topo/tests/test_area_export.py, `MgaZone`): the two agree across NSW,
-  // from the South Australian border to the coast.
+  // (topo/tests/test_area_export.py, `MgaZone`): the two agree for every box
+  // the API admits, whether its centre is inside NSW's border or just
+  // outside it on any side.
   // Mutation: shift the zone boundary in `MGA_ZONES` by a degree, and the
   // box either side of it is warped to the neighbour's zone.
-  it("agrees with the old rule across NSW", () => {
-    for (let lon = 141; lon <= 153.5; lon += 0.5) {
-      const old = 7800 + Math.floor((lon + 180) / 6) + 1;
-      expect(areaExportEpsg(square(1, -33, lon)), `${lon}`).toBe(old);
+  it("agrees with the old rule for every box admitted over NSW", () => {
+    const old = (lon: number) => 7800 + Math.floor((lon + 180) / 6) + 1;
+    const centres: [number, number, number][] = [];
+    for (let lon = 141; lon <= 153.5; lon += 0.5)
+      centres.push([lon, -33, 0.05]);
+    // Just outside the border on each side, boxes wide enough to reach it.
+    for (const lon of [141.5, 144.5, 147]) centres.push([lon, -28.6, 0.5]);
+    for (const lon of [149.9, 150.1, 153]) centres.push([lon, -38, 0.5]);
+    centres.push([147, -38, 1.2]);
+    for (const lat of [-30, -34]) centres.push([140.6, lat, 0.5]);
+    for (const lat of [-30, -34, -36]) centres.push([154.7, lat, 0.7]);
+    for (const [lon, lat, half] of centres) {
+      const box = boxAround(lon, lat, half);
+      expect(areaInTerrainRegion(box), `${lon} ${lat}`).toBe(true);
+      expect(areaExportEpsg(box), `${lon} ${lat}`).toBe(old(lon));
     }
   });
 });

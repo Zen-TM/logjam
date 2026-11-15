@@ -2,9 +2,16 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
-import { boxCentre, gridZoneAt } from "./grids.js";
+import { boxCentre, gridZoneOf } from "./grids.js";
 import { nswContourStyle } from "./nswContours.js";
-import { layerIn, REGIONS, regionTouchesBox, type Region } from "./regions.js";
+import {
+  layerIn,
+  regionAt,
+  REGIONS,
+  regionsTouching,
+  regionTouchesBox,
+  type Region,
+} from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
@@ -41,16 +48,23 @@ export type AreaBbox = {
 
 /**
  * The EPSG code of the grid the worker warps an export of this box to: the
- * grid of the ground at the box's centre, MGA in NSW, NZTM in New Zealand,
- * UTM anywhere else. The API stores it on the job beside the box, so the
- * worker needs no regions of its own. Guard: `areaExport.test.ts`.
+ * grid of the region the box is exported from, in the zone at the box's
+ * centre. That region is the one holding the centre, else the first touching
+ * the box that has heights (the regions `areaInTerrainRegion` admits a box
+ * by), so a box over the edge of NSW stays in MGA however its centre falls.
+ * UTM when no region touches the box. The API stores the code on the job
+ * beside the box, so the worker needs no regions of its own. Guard:
+ * `areaExport.test.ts`.
  */
 export function areaExportEpsg(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
 ): number {
   const { lon, lat } = boxCentre(bbox);
-  return gridZoneAt(lon, lat, regions).epsg;
+  const region =
+    regionAt(lon, lat, regions) ??
+    regionsTouching(bbox, regions).find((each) => layerIn(each, "heights"));
+  return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
 }
 
 /**

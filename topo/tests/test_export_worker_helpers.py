@@ -137,10 +137,6 @@ class TestSharpenedAreasInTheApisOrder(unittest.TestCase):
         self.assertEqual([a.id for a in areas], ["a", "b"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestAreaExportGrid(unittest.TestCase):
     ROW = {
         "bbox": {"west": 168.6, "south": -44.7, "east": 168.7, "north": -44.6},
@@ -169,3 +165,7 @@ class TestAreaExportGrid(unittest.TestCase):
     # Mutation: read `bbox["epsg"]`, and a job an older API queued fails.
     def test_a_job_queued_before_the_api_named_a_grid_passes_none(self):
         self.assertIsNone(self.epsg_passed(self.ROW["bbox"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

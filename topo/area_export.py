@@ -15,12 +15,12 @@ file holds the numbers the map, the slope readout and Logjam GPS read:
   every 10 m) run over the exported heights, so the lines match the map's and
   come out whole instead of cut at every tile edge.
 
-Rasters are warped once into the grid of the ground at the box's centre (the
-API names its EPSG on the job: MGA in NSW, NZTM in New Zealand, a UTM zone
-elsewhere), at 5 m: in web mercator a GIS computing slope from the heights
-would be off by 1/cos(latitude). The z15 tiles are first written into one
-tiled GeoTIFF on disk, so memory stays flat however large the box: GDAL warps
-it in chunks.
+Rasters are warped once into the grid of the region the box is exported from
+(the API names its EPSG on the job: MGA in NSW, NZTM in New Zealand, a UTM
+zone where no region is), at 5 m: in web mercator a GIS computing slope from
+the heights would be off by 1/cos(latitude). The z15 tiles are first written
+into one tiled GeoTIFF on disk, so memory stays flat however large the box:
+GDAL warps it in chunks.
 
 Inside a sharpened area the user may read (ADR 0040), the API names the area
 and its place in the router's order (`sourceJobIds`, decided at submit). A
@@ -1071,7 +1071,7 @@ def render_area(
     """`style` is the export's style snapshot, which only an MBTiles draws.
     `areas` are the sharpened areas the API chose, in the router's order,
     each with its archives. `epsg` is the grid the API chose for the box
-    (the zone of its centre when a job has none: `mga_epsg`)."""
+    (the MGA zone of its centre when a job has none: `mga_epsg`)."""
     allowed = LAYERS_BY_FORMAT.get(fmt)
     if allowed is None or not layers or any(l not in allowed for l in layers):
         raise AreaExportError(f"bad request: {fmt} {layers}")
