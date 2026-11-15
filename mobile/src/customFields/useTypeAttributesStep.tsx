@@ -4,12 +4,14 @@ import { StyleSheet, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   defsForType,
+  listedAttributeDefs,
   NEW_TYPE_ATTRIBUTES,
   placeAttributesTitle,
   SETTINGS_LIST,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
+import { useRegions } from "../regionsPreference";
 import { spacing } from "../theme";
 import { Button } from "../ui";
 import { CustomFieldList, useCustomFieldForm } from "./CustomFieldsEditor";
@@ -42,6 +44,7 @@ export function useTypeAttributesStep({
   onClose: () => void;
 } {
   const { defs, setDefs } = useFieldDefs("place");
+  const regionIds = useRegions();
   // null = the list; otherwise the form, adding (`editing: null`) or changing.
   const [form, setForm] = useState<{
     editing: ScopedCustomFieldDef | null;
@@ -80,7 +83,13 @@ export function useTypeAttributesStep({
     body: (
       <CustomFieldList
         entity="place"
-        defs={type ? defsForType(defs, type.id) : []}
+        defs={
+          type
+            ? listedAttributeDefs(defsForType(defs, type.id), {
+                regions: regionIds,
+              })
+            : []
+        }
         onEdit={(def) => setForm({ editing: def })}
         emptyHint={NEW_TYPE_ATTRIBUTES.hint}
       />

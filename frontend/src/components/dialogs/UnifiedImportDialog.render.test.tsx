@@ -8,8 +8,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   WAY_IMPORT,
+  type ScopedCustomFieldDef,
   type TPlace,
   type TUser,
 } from "@logjam/shared";
@@ -17,6 +19,12 @@ import {
 import UnifiedImportDialog from "./UnifiedImportDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
 import type { TPlaceType } from "../../placeUtils";
+
+// The simulated regions are declared when shared loads, so the flag is set
+// before any import runs. Utah is the simulated region that grades in ACA.
+vi.hoisted(() => {
+  (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS = true;
+});
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
 vi.stubGlobal(
@@ -60,11 +68,11 @@ const EXISTING: TPlace = {
   fieldValues: {},
 } as unknown as TPlace;
 
-function user(): TUser {
+function user(uiPreferences: unknown = null): TUser {
   return {
     id: "alice",
     username: "alice",
-    uiPreferences: null,
+    uiPreferences,
   } as unknown as TUser;
 }
 
@@ -78,16 +86,19 @@ const CAMPSITE: TPlaceType = {
   name: "Campsite",
 } as TPlaceType;
 
-function dialog(currentUser: TUser | null) {
+function dialog(
+  currentUser: TUser | null,
+  { defs = [] as ScopedCustomFieldDef[], places = [EXISTING] } = {},
+) {
   return (
     <ToastProvider>
       <UnifiedImportDialog
         open
         onClose={() => {}}
-        places={[EXISTING]}
+        places={places}
         customFieldDefs={[]}
         onCustomFieldDefsChange={() => {}}
-        placeCustomFieldDefs={[]}
+        placeCustomFieldDefs={defs}
         placeTypes={[CANYON, CAMPSITE]}
         currentUser={currentUser}
         onRefetchPlaces={() => {}}
@@ -230,5 +241,63 @@ describe("UnifiedImportDialog, confirm step", () => {
     const text = document.querySelector("dialog")!.textContent!;
     expect(text).toContain("1 row can't be read and will be skipped (row 3).");
     expect(text).not.toContain("Merge settings");
+  });
+});
+
+// The columns a Canyon list maps onto are the definitions of the Canyon type
+// as the server sends them: the French three and the ACA four.
+const BUILT_IN = SYSTEM_FIELD_DEFS.map((def) => ({
+  ...def,
+  ownerId: null,
+  appliesToAllTypes: false,
+  placeTypeIds: def.placeTypes.map((key) => SYSTEM_PLACE_TYPE_IDS[key]),
+  tripTypes: [],
+})) as unknown as ScopedCustomFieldDef[];
+
+describe("UnifiedImportDialog, the grade columns a canyon list maps onto", () => {
+  const ACA_CSV =
+    "name,latitude,longitude,ACA technical,Commitment\n" +
+    "Test Alpha Gorge,-33.7101,150.3102,3,2\n";
+  const choice = (header: string) =>
+    screen.getByRole("combobox", {
+      name: `What "${header}" is`,
+    }) as HTMLSelectElement;
+  const offers = (header: string, value: string) =>
+    [...choice(header).options].some((option) => option.value === value);
+
+  // Mutation: build `importDefsFor` in `UnifiedImportDialog` from `defsForType`
+  // alone, without `listedAttributeDefs`.
+  it("leave out the ACA ones over NSW, and keep the French ones", async () => {
+    render(dialog(user({ regions: ["nsw"] }), { defs: BUILT_IN }));
+    await loadCsv(ACA_CSV);
+    expect(offers("ACA technical", "attr:aca_technical")).toBe(false);
+    expect(choice("ACA technical").value).toBe("discard");
+    expect(choice("Commitment").value).toBe("commitment");
+  });
+
+  // Mutation: filter with the French system whatever the account, in
+  // `listedAttributeDefs` (`canyonGrade.ts`).
+  it("offer the ACA ones, and detect their column, for an account in Utah", async () => {
+    render(dialog(user({ regions: ["simutah"] }), { defs: BUILT_IN }));
+    await loadCsv(ACA_CSV);
+    expect(choice("ACA technical").value).toBe("attr:aca_technical");
+  });
+
+  // Mutation: drop the `places` argument from the `listedAttributeDefs` call
+  // in `importDefsFor`.
+  it("offer an ACA one over NSW when a place of the user's holds a value on it", async () => {
+    const graded = {
+      ...EXISTING,
+      fieldValues: { aca_technical: 2 },
+    } as unknown as TPlace;
+    render(
+      dialog(user({ regions: ["nsw"] }), {
+        defs: BUILT_IN,
+        places: [graded],
+      }),
+    );
+    await loadCsv(ACA_CSV);
+    expect(choice("ACA technical").value).toBe("attr:aca_technical");
+    expect(offers("ACA technical", "attr:aca_water")).toBe(false);
   });
 });
