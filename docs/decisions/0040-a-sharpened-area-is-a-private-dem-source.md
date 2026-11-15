@@ -59,8 +59,8 @@ found three problems:
   at z14, the statewide archive's deepest zoom, and are never absent. To make
   that hold, an area's archives hold every tile of the range: the footprint's
   bbox in z15 tiles, widened to whole z14 tiles, and every descendant. Where
-  the survey has no ground, the worker bakes in the statewide 5 m value when
-  the job runs.
+  the survey has no ground, the worker bakes in the heights of the area's
+  region when the job runs (updated 2026-11-15).
 - **A track's climb from any area is stored as `lidar`**
   (`SHARPENED_CLIMB_SOURCE`), first in `CLIMB_SOURCES`, so a stored label
   names no job.
