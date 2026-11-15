@@ -114,7 +114,8 @@ SLOPE = dataclasses.replace(dem.SLOPE, name="Sharpened slope", derived="")
 # Written before the survey's ground is found, so for a survey of any region
 # from any portal (tests/test_sharpen.py `TestRegion`,
 # `test_no_sentence_names_a_region_or_a_portal`). The form says ONLY_5M before
-# the upload (shared/src/elvisZip.ts, whose test holds the two word for word).
+# the upload (shared/src/elvisZip.ts, whose test holds the two word for word:
+# shared/src/elvisZip.test.ts, "refuses it in the worker's own words").
 EMPTY_GROUND = (
     "Logjam couldn't map any ground from this ZIP. Download the area again "
     "with its DEM, and make it again."
@@ -1115,7 +1116,7 @@ def contour_archive(work: Path, out: Path, attribution: str) -> bool:
         *["ogr2ogr", "-q", "-f", "MVT", str(mbtiles), str(lines)],
         *["-dsco", "FORMAT=MBTILES", "-dsco", f"MINZOOM={z}", "-dsco", f"MAXZOOM={z}"],
         *["-dsco", f"CONF={json.dumps(conf)}"],
-        *["-dsco", f"DESCRIPTION={attribution.replace('Elevation', 'Contours')}"],
+        *["-dsco", f"DESCRIPTION={re.sub('^Elevation', 'Contours', attribution)}"],
     )
     has_tiles = False
     if mbtiles.exists():

@@ -202,6 +202,19 @@ class TestSharpenEntry(unittest.TestCase):
                 self.assertEqual(r["terrain"]["heights"]["sampleZoom"], sharpen.ZMIN)
                 self.assertEqual(r["terrain"]["slope"]["maxzoom"], sharpen.ZMIN)
 
+    # Mutation: declare a region in shared/src/regions.ts with a `reason` that
+    # `NOT_SHARPENED` has no sentence for and regenerate: a survey of its ground
+    # then fails with a KeyError instead of a sentence for its owner.
+    def test_every_reason_a_region_gives_has_a_sentence(self):
+        import sharpen
+
+        every = load({**DEV, "SIM_REGIONS": "1"})
+        off = [r for r in every if r["sharpen"]["mode"] == "off"]
+        self.assertGreaterEqual(len(off), 1)
+        for r in off:
+            with self.subTest(r["id"]):
+                self.assertIn(r["sharpen"]["reason"], sharpen.NOT_SHARPENED)
+
 
 if __name__ == "__main__":
     unittest.main()

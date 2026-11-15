@@ -934,6 +934,33 @@ class TestContourArchive(unittest.TestCase):
             convert.assert_not_called()
             self.assertEqual(os.listdir(tmp), [])
 
+    # Mutation: `attribution.replace("Elevation", "Contours")` in
+    # `contour_archive` in place of renaming the leading label only: a line that
+    # holds the word twice ("3D Elevation Program") reads "3D Contours Program".
+    def test_only_the_leading_label_of_the_credit_becomes_contours(self):
+        from unittest import mock
+
+        import sharpen
+
+        commands = []
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                mock.patch.object(
+                    sharpen, "run", side_effect=lambda *c: commands.append(c) or ""
+                ),
+                mock.patch.object(sharpen.pipeline, "gdal"),
+            ):
+                contour_archive(Path(tmp), Path(tmp), credit(SIM_UTAH, None))
+        (ogr,) = [c for c in commands if "MVT" in c]
+        described = [a for a in ogr if a.startswith("DESCRIPTION=")]
+        self.assertEqual(
+            described,
+            [
+                "DESCRIPTION=Contours: derived from a LiDAR survey, U.S. Geological "
+                "Survey 3D Elevation Program."
+            ],
+        )
+
 
 class TestDiskFull(unittest.TestCase):
     """A failure on a full disk reads as "too big".
