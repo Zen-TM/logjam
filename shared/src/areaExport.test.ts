@@ -11,7 +11,7 @@ import {
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
-import { nswContourStyle } from "./nswContours.js";
+import { nswContourStyle } from "./contourRules.js";
 import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
@@ -52,9 +52,11 @@ describe("areaExportEpsg", () => {
     expect(areaExportEpsg(square(10), REGIONS)).toBe(7856); // Katoomba
     expect(areaExportEpsg(square(10, -33.7, 147), REGIONS)).toBe(7855);
     expect(areaExportEpsg(square(10, -31.95, 141.45), REGIONS)).toBe(7854);
-    expect(areaExportEpsg(square(10, -44.62, 169.1), SIM_REGIONS)).toBe(2193);
+    expect(areaExportEpsg(square(10, -44.055, 169.25), SIM_REGIONS)).toBe(2193);
     // Utah: UTM north, zone 12.
-    expect(areaExportEpsg(square(10, 38.27, -110.8), SIM_REGIONS)).toBe(32612);
+    expect(areaExportEpsg(square(10, 37.285, -112.945), SIM_REGIONS)).toBe(
+      32612,
+    );
   });
 
   // Mutation: pick the zone by a box's west edge instead of its centre, and

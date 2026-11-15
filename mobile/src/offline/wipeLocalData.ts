@@ -48,6 +48,11 @@ import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
+import {
+  lapsePlaceRegistries,
+  resumePlaceRegistryAfterWipe,
+  stopPlaceRegistryForWipe,
+} from "./placeRegistry";
 import { OFFLINE_TABLES } from "./wipedStores";
 
 /**
@@ -101,116 +106,139 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopGaugesForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
     stoppedInTime(stopPlansForWipe()),
+    // The place registry refresh is a producer too: held from here until the
+    // lapse below has finished (nothing fetched, nothing installed), or a copy
+    // of the departing account's region landing after the lapse would outlive it.
+    stoppedInTime(stopPlaceRegistryForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
 
-  // In-memory DEM tiles, which are the terrain around the departing user's
-  // saved areas. The files go with the region directory below; this is the copy
-  // that would otherwise outlive them in the process.
-  clearOfflineDemCache();
-
-  // The in-memory `/users/me` record (username, email, preferences). Cached for
-  // a minute to stop eight screens re-fetching it; a minute is long enough for
-  // the next account to read the departing one's name off a settings screen.
-  invalidateCurrentUser();
-
-  // A slope-band edit not yet sent belongs to the account that made it.
-  forgetSlopeBandsEdit();
-
-  // The chosen regions are the departing account's: the next one is offered
-  // the default until its own arrive.
-  forgetRegions();
-
-  // And the units they chose: the next account reads its own region's until
-  // its choice arrives.
-  forgetUnits();
-
-  // Recent map searches are place names in the device prefs store, which the
-  // wipe otherwise leaves alone.
-  clearRecentSearches();
-
-  // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
-  // previous user browsed is in there keyed by z/x/y — which IS the area they
-  // were looking at, at the zoom they were working at (confirmed on device:
-  // 13 tile rows survived a full sign-out byte-for-byte). `resetDatabase`
-  // deletes the whole mbgl store, ambient cache and any pack alike; this app
-  // keeps no MapLibre packs of its own (regions are our MBTiles files).
-  //
-  // A static import on purpose: in a dev build every `import()` is a fetch
-  // from Metro, so this step failed whenever the dev server was unreachable
-  // (release bundles resolve it in-process). Sign-out must not depend on it.
+  // The place registry refresh is held since its stop above: it resumes however
+  // this ends, or one step that throws would leave it held until the next wipe.
   try {
-    await OfflineManager.resetDatabase();
-  } catch (err) {
-    console.error(err);
-    failed.push("map tile cache");
-  }
+    // In-memory DEM tiles, which are the terrain around the departing user's
+    // saved areas. The files go with the region directory below; this is the copy
+    // that would otherwise outlive them in the process.
+    clearOfflineDemCache();
 
-  // Mirror + outbox + conflict shelf + notifications cache + sync bookkeeping.
-  try {
-    await wipeAllSyncData();
-  } catch (err) {
-    console.error(err);
-    failed.push("synced data");
-  }
+    // The in-memory `/users/me` record (username, email, preferences). Cached for
+    // a minute to stop eight screens re-fetching it; a minute is long enough for
+    // the next account to read the departing one's name off a settings screen.
+    invalidateCurrentUser();
 
-  try {
-    const db = await getOfflineDb();
-    await withSyncTransaction(db, async () => {
-      for (const table of OFFLINE_TABLES) {
-        await db.runAsync(`DELETE FROM ${table}`);
-      }
-      // Legacy waypoint leftovers on a device that never completed the
-      // promotion — coordinates, so they go with everything else. IF EXISTS,
-      // because the normal case is that the table is long gone.
-      await db.runAsync("DROP TABLE IF EXISTS waypoint");
-    });
-    notifyRegistryChanged();
-  } catch (err) {
-    console.error(err);
-    failed.push("offline maps and tracks");
-  }
+    // A slope-band edit not yet sent belongs to the account that made it.
+    forgetSlopeBandsEdit();
 
-  // Files last: the registry rows that point at them are already gone, so a
-  // failure here leaves orphaned blobs rather than rows pointing at nothing.
-  for (const dir of WIPED_DIRS) {
+    // The chosen regions are the departing account's: the next one is offered
+    // the default until its own arrive.
+    forgetRegions();
+
+    // And the units they chose: the next account reads its own region's until
+    // its choice arrives.
+    forgetUnits();
+
+    // Recent map searches are place names in the device prefs store, which the
+    // wipe otherwise leaves alone.
+    clearRecentSearches();
+
+    // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
+    // previous user browsed is in there keyed by z/x/y — which IS the area they
+    // were looking at, at the zoom they were working at (confirmed on device:
+    // 13 tile rows survived a full sign-out byte-for-byte). `resetDatabase`
+    // deletes the whole mbgl store, ambient cache and any pack alike; this app
+    // keeps no MapLibre packs of its own (regions are our MBTiles files).
+    //
+    // A static import on purpose: in a dev build every `import()` is a fetch
+    // from Metro, so this step failed whenever the dev server was unreachable
+    // (release bundles resolve it in-process). Sign-out must not depend on it.
     try {
-      await FileSystem.deleteAsync(dir, { idempotent: true });
+      await OfflineManager.resetDatabase();
     } catch (err) {
       console.error(err);
-      failed.push("downloaded files");
+      failed.push("map tile cache");
     }
-  }
 
-  // Then everything else in the app's cache directory. The OS pickers copy
-  // each attachment into a subdirectory of their own before handing us a URI;
-  // the attach path deletes its copy, but files left there by earlier builds
-  // outlive sign-out — confirmed on a handset after a full wipe.
-  //
-  // This is deliberately NOT a list of expo-image-picker's paths: those mirror
-  // a third-party native module's internals and drift on upgrade. "Empty the
-  // cache directory" names nothing that can drift and catches pre-existing
-  // files as well as future ones. It is safe by contract — on Android `cacheDir`
-  // is app-private scratch space the OS may delete at any moment to reclaim
-  // storage, so nothing durable is allowed to live there, and every store
-  // Logjam GPS keeps is under `documentDirectory` (localStores.ts).
-  //
-  // Last, and non-fatal: the privacy-critical stores above are already gone by
-  // the time this runs, so a cache that will not empty is reported like any
-  // other failed store rather than costing the rest of the wipe.
-  try {
-    if (!CACHE_ROOT) throw new Error("No cacheDirectory to empty");
-    for (const entry of await FileSystem.readDirectoryAsync(CACHE_ROOT)) {
-      await FileSystem.deleteAsync(`${CACHE_ROOT}${entry}`, {
-        idempotent: true,
+    // Mirror + outbox + conflict shelf + notifications cache + sync bookkeeping.
+    try {
+      await wipeAllSyncData();
+    } catch (err) {
+      console.error(err);
+      failed.push("synced data");
+    }
+
+    try {
+      const db = await getOfflineDb();
+      await withSyncTransaction(db, async () => {
+        for (const table of OFFLINE_TABLES) {
+          await db.runAsync(`DELETE FROM ${table}`);
+        }
+        // Legacy waypoint leftovers on a device that never completed the
+        // promotion — coordinates, so they go with everything else. IF EXISTS,
+        // because the normal case is that the table is long gone.
+        await db.runAsync("DROP TABLE IF EXISTS waypoint");
       });
+      notifyRegistryChanged();
+    } catch (err) {
+      console.error(err);
+      failed.push("offline maps and tracks");
     }
-  } catch (err) {
-    console.error(err);
-    failed.push("cached files");
-  }
 
-  return { failed };
+    // The place registries of the regions the departing account chose or saved a
+    // map over: with the chosen regions forgotten and the saved maps gone above,
+    // only the default region's copy is left, as it was for an account that never
+    // chose (placeRegistry.ts, WHICH COPIES). After the registry rows, because
+    // "saved a map over" is read from them, and after the downloads are
+    // cancelled, because a save still queued keeps its region.
+    try {
+      await lapsePlaceRegistries();
+    } catch (err) {
+      console.error(err);
+      failed.push("place names");
+    }
+
+    // Files last: the registry rows that point at them are already gone, so a
+    // failure here leaves orphaned blobs rather than rows pointing at nothing.
+    for (const dir of WIPED_DIRS) {
+      try {
+        await FileSystem.deleteAsync(dir, { idempotent: true });
+      } catch (err) {
+        console.error(err);
+        failed.push("downloaded files");
+      }
+    }
+
+    // Then everything else in the app's cache directory. The OS pickers copy
+    // each attachment into a subdirectory of their own before handing us a URI;
+    // the attach path deletes its copy, but files left there by earlier builds
+    // outlive sign-out — confirmed on a handset after a full wipe.
+    //
+    // This is deliberately NOT a list of expo-image-picker's paths: those mirror
+    // a third-party native module's internals and drift on upgrade. "Empty the
+    // cache directory" names nothing that can drift and catches pre-existing
+    // files as well as future ones. It is safe by contract — on Android `cacheDir`
+    // is app-private scratch space the OS may delete at any moment to reclaim
+    // storage, so nothing durable is allowed to live there, and every store
+    // Logjam GPS keeps is under `documentDirectory` (localStores.ts).
+    //
+    // Last, and non-fatal: the privacy-critical stores above are already gone by
+    // the time this runs, so a cache that will not empty is reported like any
+    // other failed store rather than costing the rest of the wipe.
+    try {
+      if (!CACHE_ROOT) throw new Error("No cacheDirectory to empty");
+      for (const entry of await FileSystem.readDirectoryAsync(CACHE_ROOT)) {
+        await FileSystem.deleteAsync(`${CACHE_ROOT}${entry}`, {
+          idempotent: true,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      failed.push("cached files");
+    }
+
+    return { failed };
+  } finally {
+    resumePlaceRegistryAfterWipe();
+  }
 }
 
 /** True when `work` finished on its own; false when the timeout beat it. */

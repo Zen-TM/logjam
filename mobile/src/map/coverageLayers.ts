@@ -21,7 +21,7 @@ import type { FillLayerSpecification } from "@maplibre/maplibre-react-native";
 type FillPaint = NonNullable<FillLayerSpecification["paint"]>;
 
 export function coverageLayerId(sourceKey: string): string {
-  return `nsw-coverage-${sourceKey}`;
+  return `terrain-coverage-${sourceKey}`;
 }
 
 /**

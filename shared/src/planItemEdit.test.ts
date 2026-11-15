@@ -115,7 +115,7 @@ describe("the attributes a plan place's edit form offers", () => {
   // Mutation: return every definition of the type, as before.
   it("are the French grades in NSW and the ACA ones in the simulated Utah", () => {
     expect(keys(canyonAt(-33.5, 150.25))).toEqual([...FRENCH, ...NON_GRADE]);
-    expect(keys(canyonAt(38.27, -110.8))).toEqual([...NON_GRADE, ...ACA]);
+    expect(keys(canyonAt(37.285, -112.945))).toEqual([...NON_GRADE, ...ACA]);
   });
 
   // Mutation: drop `place.fieldValues` from the `gradeFieldsAt` call.
@@ -140,7 +140,7 @@ describe("the attributes a plan place's edit form offers", () => {
 
   // Mutation: loop `itemFieldDefs(seen)` in `itemPatch` instead of `defs`.
   it("are the list the form drew when the plan has moved the place since", () => {
-    const opened = canyonAt(38.27, -110.8);
+    const opened = canyonAt(37.285, -112.945);
     const drawn = itemFieldDefs(opened, regions);
     expect(drawn.map((def) => def.key)).toContain("aca_water");
     // Another member moved it over NSW, where it has no ACA field.

@@ -14,6 +14,7 @@ import {
   geocode,
   GEOCODE_MIN_QUERY_LENGTH,
   PLACE_REGISTRY_ATTRIBUTION,
+  placeRegistryIn,
   PLACE_SEARCH_DEBOUNCE_MS,
   PLACE_SEARCH_MIN_QUERY_LENGTH,
   placeResultDetail,
@@ -50,9 +51,10 @@ type Option =
  *
  * Your own places match as you type, locally, and come first. Then river
  * gauges, also matched here, from the public file, fetched while the box has
- * focus whether or not the layer is on. Then the place registry, every named OpenStreetMap feature in NSW, through our API as you
- * type (ADR 0034). Street addresses come from the public geocoder, and ONLY
- * when asked for — the last option is "Search locations for …". A search box
+ * focus whether or not the layer is on. Then the place registry of the region
+ * the map shows, every named OpenStreetMap feature in it, through our API as
+ * you type (ADR 0034); over ground no registry covers there are no such rows.
+ * Street addresses come from the public geocoder, and ONLY when asked for — the last option is "Search locations for …". A search box
  * that geocoded every keystroke would send the name of every canyon a user
  * looks up to a third party, and the places on this list are exactly the ones
  * not to publicise (MapSearchBox.test.tsx).
@@ -101,6 +103,8 @@ export default function MapSearchBox({
   // answers, so a highlight on an old answer's row never lands on a new one.
   const [registry, setRegistry] = useState<{
     q: string;
+    /** The region it came from: an answer never shows over another's. */
+    region: string;
     n: number;
     results: PlaceResult[];
     failure: string | null;
@@ -127,24 +131,37 @@ export default function MapSearchBox({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [disabled]);
 
+  // The map's own view picks the registry, as it picks the geocoder's bias:
+  // none where the map shows no region that has one.
+  const registryRegion = placeRegistryIn(getView?.() ?? null)?.id ?? null;
   const registryQuery =
     trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH ? trimmed : null;
   // An answer still fits while the query only grows ("Kat" while typing
   // "Kato"); a query that is not an extension of it is a different search.
   const answer =
-    registry && registryQuery?.startsWith(registry.q) ? registry : null;
+    registry &&
+    registry.region === registryRegion &&
+    registryQuery?.startsWith(registry.q)
+      ? registry
+      : null;
   useEffect(() => {
-    if (registryQuery == null) return;
+    if (registryQuery == null || registryRegion === null) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       const settle = (results: PlaceResult[], failure: string | null) =>
         setRegistry({
           q: registryQuery,
+          region: registryRegion,
           n: ++answers.current,
           results,
           failure,
         });
-      searchPlaceRegistry(registryQuery, REGISTRY_RESULTS, controller.signal)
+      searchPlaceRegistry(
+        registryQuery,
+        REGISTRY_RESULTS,
+        controller.signal,
+        registryRegion,
+      )
         .then(({ results }) => settle(results, null))
         // A failure says so, in the API's own words; your places and the
         // geocoder row stay.
@@ -157,7 +174,7 @@ export default function MapSearchBox({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [registryQuery]);
+  }, [registryQuery, registryRegion]);
 
   useEffect(() => {
     if (locationQuery == null) return;

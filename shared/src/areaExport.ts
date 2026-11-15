@@ -3,7 +3,7 @@
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
 import { boxCentre, gridZoneOf } from "./grids.js";
-import { nswContourStyle } from "./nswContours.js";
+import { nswContourStyle } from "./contourRules.js";
 import {
   layerIn,
   regionInView,

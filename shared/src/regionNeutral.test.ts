@@ -23,28 +23,16 @@ const STILL_NAMING = [
   "api/src/routes/ropewiki.ts",
   "frontend/src/components/SignIn.tsx",
   "frontend/src/components/SignInTerrain.tsx",
-  "frontend/src/components/map/Map.tsx",
-  "frontend/src/components/map/terrainEntries.ts",
-  "frontend/src/components/map/terrainRouter.ts",
-  "frontend/src/components/map/terrainSource.ts",
-  "frontend/src/geoPdf/bench.ts",
-  "frontend/src/geoPdf/draw/land.ts",
-  "frontend/src/geoPdf/plan.ts",
-  "frontend/src/geoPdf/render.ts",
-  "mobile/src/map/MapScreen.tsx",
   "mobile/src/map/RegionDownloadScreen.tsx",
-  "mobile/src/map/sourceResolver.ts",
   "mobile/src/offline/regionDownloads.ts",
   "mobile/src/offline/regionTilePlanning.ts",
   "mobile/src/offline/regionUpdate.ts",
   "mobile/src/saved/SavedScreen.tsx",
-  "shared/src/demSources.ts",
+  "shared/src/contourRules.ts",
   "shared/src/geoPdfBaseLayers.ts",
-  "shared/src/nswContours.ts",
   "shared/src/overlayLegends.ts",
   "shared/src/overlayZoom.ts",
   "shared/src/profileSeries.ts",
-  "shared/src/terrain.ts",
 ];
 
 function sources(dir: string): string[] {
@@ -58,14 +46,18 @@ function sources(dir: string): string[] {
   });
 }
 
-const naming = PACKAGES.flatMap(sources)
+const scanned = PACKAGES.flatMap(sources);
+const naming = scanned
   .filter((path) => NAMES.test(readFileSync(join(repo, path), "utf8")))
   .sort();
 
 describe("files that name NSW's region constants", () => {
-  it("finds the declaration, so a pattern that stops matching fails", () => {
+  // Mutation: scan one package fewer, or let the pattern stop matching. The
+  // floor is on the files scanned, not the files naming a constant, which
+  // falls as each change clears one.
+  it("finds the declaration among the sources, so a scan that stops matching fails", () => {
     expect(naming).toEqual(expect.arrayContaining(DECLARES));
-    expect(naming.length).toBeGreaterThanOrEqual(25);
+    expect(scanned.length).toBeGreaterThanOrEqual(1000);
   });
 
   // Mutation: a new file reads NSW_REGION.view.

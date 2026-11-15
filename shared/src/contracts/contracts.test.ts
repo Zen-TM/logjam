@@ -1047,13 +1047,13 @@ describe("the map's overlays list", () => {
 
 describe("the grid row's title", () => {
   const sydney = { lon: 151.2, lat: -33.9 };
-  const wanaka = { lon: 169.1, lat: -44.63 };
+  const makarora = { lon: 169.25, lat: -44.055 };
   const bryce = { lon: -112.17, lat: 37.6 };
 
   // Mutation: return a fixed "MGA grid", or the first region's grid whatever
   // the view, and New Zealand reads "MGA grid".
   it("names the grid in view", () => {
-    expect(gridOverlayTitle(wanaka, SIM_REGIONS)).toBe("NZTM grid");
+    expect(gridOverlayTitle(makarora, SIM_REGIONS)).toBe("NZTM grid");
     expect(gridOverlayTitle(bryce, SIM_REGIONS)).toBe("UTM grid");
   });
 
@@ -1089,7 +1089,7 @@ describe("the grid row's title", () => {
 
   // Mutation: have the title read the grid by another rule than
   // `gridZonesFor` and a view can be titled NZTM while it draws UTM lines.
-  it.each([wanaka, bryce, sydney])(
+  it.each([makarora, bryce, sydney])(
     "is the name of the zone drawn at %j",
     (at) => {
       const box = {

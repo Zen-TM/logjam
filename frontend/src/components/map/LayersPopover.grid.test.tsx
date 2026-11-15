@@ -30,11 +30,11 @@ Object.assign(HTMLElement.prototype, {
 afterEach(cleanup);
 
 const SYDNEY = { lng: 151.2, lat: -33.87, zoom: 12 };
-const WANAKA = { west: 169.0, south: -44.7, east: 169.2, north: -44.5 };
+const MAKARORA = { west: 169.15, south: -44.155, east: 169.35, north: -43.955 };
 
 function popover(
   mapView: typeof SYDNEY | null,
-  mapBounds: typeof WANAKA | null,
+  mapBounds: typeof MAKARORA | null,
 ) {
   const noop = vi.fn();
   return (
@@ -91,7 +91,7 @@ const showOverlays = () =>
 // centred in Sydney reads "MGA grid" over New Zealand's ground.
 describe("the Layers popover's grid row", () => {
   it("is named for the grid of the ground the map's bounds cover", () => {
-    render(popover(SYDNEY, WANAKA));
+    render(popover(SYDNEY, MAKARORA));
     showOverlays();
     expect(screen.getByText("NZTM grid")).toBeTruthy();
     expect(screen.queryByText("MGA grid")).toBeNull();
@@ -100,7 +100,7 @@ describe("the Layers popover's grid row", () => {
   // Mutation: read `mapView` when there are no bounds, and "NZTM grid" names a
   // view nothing has reported yet.
   it("names the first region's grid until the map reports its bounds", () => {
-    render(popover({ ...SYDNEY, lng: 169.1, lat: -44.6 }, null));
+    render(popover({ ...SYDNEY, lng: 169.25, lat: -44.055 }, null));
     showOverlays();
     expect(screen.getByText("MGA grid")).toBeTruthy();
   });
