@@ -61,6 +61,15 @@ describe("the map's gauge layer", () => {
     expect(screen).toContain("const gaugesShown = showGauges && gaugesHere;");
     expect(screen).toContain("{gaugesShown && gaugeFile ? (");
   });
+  // Mutation: set `inert` in place of `disabled` on the gauges entry, or wrap
+  // the row in a dimming View again, and a screen reader is told nothing and
+  // can still switch it, or the reason dims with the title.
+  it("says why it is unavailable through the row's disabled state", () => {
+    expect(screen).toContain("disabled: !gaugesHere,");
+    const sheet = read("../map/MapLayersSheet.tsx");
+    expect(sheet).toContain("disabled={entry.disabled}");
+    expect(sheet).not.toContain("entry.inert");
+  });
   // Mutation: pass `showGauges` to `useGauges`, and the feed is fetched over a
   // region that has none.
   it("is fetched only while on, and only over a region with a feed", () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   layerIn,
@@ -188,5 +189,32 @@ describe("hasGauges", () => {
     expect(hasGauges(NSW_REGION)).toBe(true);
     expect(hasGauges(SIM_NZ)).toBe(false);
     expect(hasGauges(null)).toBe(false);
+  });
+});
+
+describe("the map's Coverage layer", () => {
+  const screen = readFileSync(
+    new URL("./MapScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Mutation: pass the stored `coverageCarrier` to `drawsCoverage`,
+  // `coverageLayerFilter` or `coverageAtTap`, and over a region that lists
+  // other carriers the layer fetches tiles for a network the row says is not
+  // chosen.
+  it("draws, filters and answers a tap with the carrier that counts here", () => {
+    expect(screen).toContain(
+      "const carrierHere = coverageCarrierHere(terrainRegion, coverageCarrier);",
+    );
+    expect(screen).toContain(
+      "drawsCoverage(terrainLayers.coverage, carrierHere)",
+    );
+    expect(screen).toContain(
+      "coverageLayerFilter(coverageArchive, carrierHere)",
+    );
+    expect(screen).toMatch(
+      /coverageLayerIdList,\s*carrierHere,\s*coverageArchive/,
+    );
+    expect(screen).not.toMatch(/coverageLayerFilter\([^)]*coverageCarrier\b/);
   });
 });

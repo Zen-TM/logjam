@@ -138,9 +138,9 @@ export type LayerToggleEntry = {
   note?: string;
   value: boolean;
   onChange: (next: boolean) => void;
-  /** Dimmed and untappable because something above it already decided. A row
-   *  whose switch moves while the map draws nothing is a lie. */
-  inert?: boolean;
+  /** Dimmed and untappable, with `note` as the reason (shared/DESIGN.md §5):
+   *  a row whose switch moves while the map draws nothing is a lie. */
+  disabled?: boolean;
   /**
    * Sub-rows under a master, for a layer whose contents are a vocabulary
    * rather than one thing — the place TYPES. Same master-plus-children shape
@@ -696,24 +696,20 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
   }
 
   return (
-    <View
-      style={entry.inert ? styles.inert : undefined}
-      pointerEvents={entry.inert ? "none" : "auto"}
-    >
-      <SwitchRow
-        icon={entry.icon}
-        hue={entry.hue}
-        title={entry.title}
-        description={entry.note}
-        badge={
-          entry.count === undefined ? undefined : (
-            <Text style={styles.count}>{entry.count}</Text>
-          )
-        }
-        checked={entry.value}
-        onChange={entry.onChange}
-      />
-    </View>
+    <SwitchRow
+      icon={entry.icon}
+      hue={entry.hue}
+      title={entry.title}
+      description={entry.note}
+      badge={
+        entry.count === undefined ? undefined : (
+          <Text style={styles.count}>{entry.count}</Text>
+        )
+      }
+      disabled={entry.disabled}
+      checked={entry.value}
+      onChange={entry.onChange}
+    />
   );
 }
 

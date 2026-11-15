@@ -269,7 +269,7 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
-import { hasGauges } from "./terrainSwitches";
+import { coverageCarrierHere, hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -1601,7 +1601,8 @@ export function MapScreen({
     () => regionShown(viewportBbox, camera),
     [viewportBbox, camera],
   );
-  // The Gauges row reads OFF where the region has no feed, and draws nothing.
+  // The Gauges row reads OFF where the region has no feed, and the map's gauge
+  // layer fetches and draws nothing (search and the place page still read gauges).
   const gaugesHere = hasGauges(terrainRegion);
   const gaugesShown = showGauges && gaugesHere;
   const {
@@ -1675,7 +1676,11 @@ export function MapScreen({
     () => (fireArchive ? fireLayerPaints(fireArchive, fireNow) : null),
     [fireArchive, fireNow],
   );
-  const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
+  // The carrier that counts here: the stored pick only where the region lists
+  // it, as the layers sheet reads it, so nothing is fetched or tapped for one
+  // the row says is not chosen.
+  const carrierHere = coverageCarrierHere(terrainRegion, coverageCarrier);
+  const coverageOn = drawsCoverage(terrainLayers.coverage, carrierHere);
   const coverageResolved = useMemo(
     () =>
       coverageOn
@@ -1704,10 +1709,10 @@ export function MapScreen({
   );
   const coverageFilterExpr = useMemo(
     () =>
-      coverageArchive && coverageCarrier
-        ? coverageLayerFilter(coverageArchive, coverageCarrier)
+      coverageArchive && carrierHere
+        ? coverageLayerFilter(coverageArchive, carrierHere)
         : undefined,
-    [coverageArchive, coverageCarrier],
+    [coverageArchive, carrierHere],
   );
   const slopeResolved = useMemo(
     () =>
@@ -2451,7 +2456,7 @@ export function MapScreen({
           event.nativeEvent.point,
           [lon, lat],
           coverageLayerIdList,
-          coverageCarrier,
+          carrierHere,
           coverageArchive,
         )
           .then((name) => {
@@ -2462,9 +2467,9 @@ export function MapScreen({
     [
       addToolPoint,
       anchorDeleteSideFor,
+      carrierHere,
       collectingPoints,
       coverageArchive,
-      coverageCarrier,
       coverageLayerIdList,
       fireArchive,
       fireLayerIdList,
@@ -4878,7 +4883,7 @@ export function MapScreen({
           ? GAUGES.copy.failed
           : undefined,
       value: gaugesShown,
-      inert: !gaugesHere,
+      disabled: !gaugesHere,
       onChange: setShowGauges,
     },
     {
