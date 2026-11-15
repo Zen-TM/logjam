@@ -22,7 +22,7 @@ export function runInLanguage<T>(lang: Language, fn: () => T): T {
   return storage.run(lang, fn);
 }
 
-/** The languages a request may name and a message may be written in: every language but the pseudo-language in a prod runtime, which is for development only. Deliberately wider than what a client shows (`offeredLanguages` in `@logjam/shared`): the API accepts what any client build may send, and each client decides what to offer. Reads `process.env`, as the other dev-only refusals do, because `getEnv()` drops the AWS variables `nonDevRuntime` reads. */
+/** The languages a request may name and a message may be written in: every language but the pseudo-language in a prod runtime, which is for development only. Deliberately wider than what a client shows (`offeredLanguages` in `@logjam/shared`): the API accepts what any client build may send, and each client decides what to offer. Reads `process.env`, as the other dev-only refusals do, because `getEnv()` drops the AWS variables `nonDevRuntime` reads (requestLanguage.unit.test.ts, "reads the running process's environment, as the other dev-only refusals do"). */
 export function acceptedLanguages(
   env: NodeJS.ProcessEnv = process.env,
 ): readonly Language[] {

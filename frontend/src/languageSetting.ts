@@ -17,7 +17,12 @@ import {
 import { updateUserPreferences } from "./placeUtils";
 import { LANGUAGE_KEY, readStoredLanguage } from "./language";
 
-/** Whether the choice was stored and reads back; a browser that cannot keep it must not reload into a start that finds nothing changed. */
+/**
+ * Whether the choice was stored and reads back. A browser that cannot keep it
+ * does not reload: it would start again in the same language and reload again.
+ * Guard: languageSetting.test.ts ("does not throw, or reload, when the browser
+ * refuses the read", "does not reload when the browser refuses the write").
+ */
 function store(lang: Language): boolean {
   try {
     localStorage.setItem(LANGUAGE_KEY, lang);
@@ -67,7 +72,10 @@ export function chooseLanguage(
  * the one recorded, for the messages sent with nobody asking (a push title, a
  * mail). Writes nothing in prod, where the source language is all there is,
  * and nothing before consent settles or while the sign-up region step shows:
- * `enabled` is `accountWriteSettled(…)` (frontend/src/consent.ts; frontend/AGENTS.md, Data).
+ * `enabled` is `accountWriteSettled(…)` (frontend/src/consent.ts; frontend/AGENTS.md,
+ * Data). Guards: languageSetting.test.ts ("writes nothing until the consent gate
+ * has settled", "writes nothing from the source language to an account with
+ * none"), consent.test.ts ("accountWriteSettled").
  */
 export function useRecordLanguage(
   currentUser: TUser | null,

@@ -48,7 +48,10 @@ const trackRecording = async (): Promise<boolean> =>
  * in, store it and restart once. Returns true when it did. Not while a track
  * records, nor when that cannot be read: the language then applies at the next
  * start. A phone that cannot store it does not restart, so it cannot restart on
- * every start.
+ * every start. Guards: languageSetting.test.ts ("does not restart, or store,
+ * while a track records: it applies at the next start", "does not restart when
+ * the track list cannot be read", "does not restart when the phone will not
+ * store it").
  */
 export async function reconcileLanguage({
   device = deviceLanguages(),

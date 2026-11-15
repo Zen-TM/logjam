@@ -124,7 +124,7 @@ export const LANGUAGE_SETTING = {
     web: t`Logjam Web reloads to apply this.`,
     gps: t`Logjam GPS restarts to apply this.`,
   },
-  /** Logjam GPS holds the row while a track records: the restart would interrupt it. */
+  /** Logjam GPS holds the row while a track records, and until the track list is read: the restart would interrupt a recording (`mobile/src/languageSetting.test.ts`, "is held while a track records, with the reason" and "is held until the track list has been read"). */
   held: t`Not while a track is recording: Logjam GPS restarts to change language.`,
   saveFailed: {
     web: t`This browser wouldn't store that language.`,

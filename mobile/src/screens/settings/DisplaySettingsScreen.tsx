@@ -165,8 +165,8 @@ export function DisplaySettingsScreen() {
 /**
  * The language choice. Its own component so that the track list it reads (to
  * hold the row while one records) is read only where the row is drawn: with one
- * language offered nothing here runs. Guard: languageSetting.test.ts ("the
- * Display screen reads no tracks itself").
+ * language offered nothing here runs. Guard: languageSetting.test.ts ("reads
+ * no tracks itself: only the language row does").
  */
 function LanguageRow({
   offered,

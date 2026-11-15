@@ -53,8 +53,10 @@ export const showsLanguageChoice = (offered: readonly Language[]): boolean =>
 /**
  * The language a client should run in: the stored one if it is still offered,
  * else the first device language that is, else the source. A stored language
- * that is no longer offered (a region unchosen, a dev build's pseudo-language
- * on a release) reads as absent. Guard: languageChoice.test.ts.
+ * that is no longer offered (a dev build's pseudo-language kept into a build
+ * where the simulated regions are off, a region dropped from the build) reads
+ * as absent. Guard: languageChoice.test.ts ("reads a stored language that is no
+ * longer offered as absent").
  */
 export function wantedLanguage(
   stored: string | null,
@@ -66,8 +68,8 @@ export function wantedLanguage(
 
 /**
  * The language to store and restart into, or null when `running` is already
- * the wanted one (so a client restarts at most once). Guard:
- * languageChoice.test.ts.
+ * the wanted one: a client in its language does not restart. Guard:
+ * languageChoice.test.ts ("is null when the running language is the wanted one").
  */
 export function languageToStart(
   running: Language,

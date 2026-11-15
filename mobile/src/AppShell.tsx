@@ -1105,7 +1105,8 @@ export function AppShell({
   // the one recorded, for the messages sent with nobody asking. Nothing in
   // prod (the source language is all there is), nothing for a guest, and
   // nothing behind the consent gate or the new-account region step
-  // (`languageToSend`).
+  // (`languageToSend`; guard: src/languageSetting.test.ts, the "languageToSend"
+  // tests).
   const accountUser = userQuery.data;
   useEffect(() => {
     const next = languageToSend({
