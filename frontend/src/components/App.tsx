@@ -35,6 +35,7 @@ import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { terrainKeyOf } from "./map/layerOrder";
+import { terrainDrawn } from "./map/terrainDrawn";
 import { terrainEntries } from "./map/terrainEntries";
 import { nextViewRegion } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
@@ -141,12 +142,9 @@ import {
   WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
-  drawsNswContours,
-  drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
   carriersOf,
-  drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -563,19 +561,35 @@ function App() {
   // holds that a pan inside one keeps the same object). Unknown until the map
   // reports its first view.
   const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // Only a region with a gauge feed has river gauges to draw.
+  const gaugesHere = viewRegion?.gauges != null;
+  // The layers drawn over the region in view, and the stored carrier where
+  // that region lists it (the Layers popover asks the same).
+  const { shown, carrier: carrierHere } = useMemo(
+    () =>
+      terrainDrawn(
+        { contours, coverage, fire, slope, land, hillshade },
+        activeLayerId,
+        viewRegion,
+        coverageCarrier,
+      ),
+    [
+      contours,
+      coverage,
+      fire,
+      slope,
+      land,
+      hillshade,
+      activeLayerId,
+      viewRegion,
+      coverageCarrier,
+    ],
+  );
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
     setRoutedAreas(sharpenedAreas);
     const entries = terrainEntries(viewRegion, sharpenedAreas);
-    const shown = {
-      contours: drawsNswContours(activeLayerId, contours),
-      coverage: drawsCoverage(coverage, coverageCarrier),
-      fire,
-      slope,
-      land,
-      hillshade: drawsNswHillshade(activeLayerId, hillshade),
-    };
     return [
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
@@ -583,19 +597,7 @@ function App() {
         .flatMap((key) => entries[key] ?? []),
       ...vegetationLayers,
     ];
-  }, [
-    activeLayerId,
-    contours,
-    coverage,
-    coverageCarrier,
-    fire,
-    slope,
-    land,
-    hillshade,
-    vegetationLayers,
-    sharpenedAreas,
-    viewRegion,
-  ]);
+  }, [shown, vegetationLayers, sharpenedAreas, viewRegion]);
 
   // A PMTiles source failed to load (Map already tore it down to stop the
   // retry spam). Tell the user once.
@@ -2095,7 +2097,7 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays || !!planOnMap}
-            showGauges={showGauges}
+            showGauges={showGauges && gaugesHere}
             onShowGauges={() => setShowGauges(true)}
             showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
@@ -2198,7 +2200,7 @@ function App() {
             region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
-            coverageCarrier={coverageCarrier}
+            coverageCarrier={carrierHere}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2267,6 +2269,7 @@ function App() {
           showWays={showWays}
           setShowWays={setShowWays}
           showGauges={showGauges}
+          gaugesHere={gaugesHere}
           setShowGauges={setShowGauges}
           showMgaGrid={showMgaGrid}
           setShowMgaGrid={setShowMgaGrid}
@@ -2285,6 +2288,7 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          region={viewRegion}
         />
 
         <PlanInviteLinkDialog

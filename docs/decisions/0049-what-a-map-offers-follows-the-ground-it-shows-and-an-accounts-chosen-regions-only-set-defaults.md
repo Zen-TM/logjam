@@ -40,7 +40,8 @@ what is offered at a location.**
   below.)
 - **A box that is saved, printed or exported** uses every region in
   `regionsTouching(box)`, not one, except a printed sheet's Terrain layers,
-  which come from the one region at the sheet's centre (updated 2026-11-15;
+  which come from the one region at the sheet's centre, else the first region
+  the sheet touches (updated 2026-11-15;
   see the Update below).
 - **A region has several rings** (`Region.borders`): one for each island, so
   a strait or a gap between rings is outside the region.

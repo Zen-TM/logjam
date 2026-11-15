@@ -127,9 +127,14 @@ const ARCHIVE_OF = {
 /**
  * Whether the region the sheet is in has no archive for a layer, so ticking it
  * could draw nothing. `terrain` is null while the area is not set, which
- * judges nothing, and a job's own layer is never missing. The planner reads
- * nothing for a layer this calls missing: `overlaysDrawn` gates hillshade and
- * contours, and slope and land are gated where `statewideReads` plans them.
+ * judges nothing, and a layer only a job draws (vegetation) is never judged. A
+ * job's hillshade, slope and contours share the statewide layers' wire names,
+ * so they are judged with them: over a sheet that touches no region, where
+ * every archive is null, they read missing even where the user's own LiDAR job
+ * lies, because the renderer plans an area's terrain only through its
+ * region's plan. The planner reads nothing for a layer this calls missing:
+ * `overlaysDrawn` gates hillshade and contours, and slope and land are gated
+ * where `statewideReads` plans them.
  * Guard: geoPdfOverlays.test.ts ("offers a layer only where the planner reads
  * its archive").
  */
