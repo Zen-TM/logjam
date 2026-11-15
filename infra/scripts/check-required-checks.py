@@ -80,6 +80,8 @@ NOT_REQUIRED = {
     "terraform-ci.yml:changes": "scope job",
     "terraform-plan.yml:scope": "scope job",
     "mobile-emulator.yml:emulator": "not required until #723 promotes it, after 14 green nightlies",
+    "ci.yml:web-pseudo": "a walk of every main screen against a live stack, with no "
+    "record of green runs to say a red one is the change's fault",
     "ota-plan.yml:plan": "part of the plan: the required `ota-plan` job reports its verdict",
     "ota-plan.yml:smoke": "as above",
     "ota-plan.yml:verdict": "as above",

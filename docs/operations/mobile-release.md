@@ -140,7 +140,7 @@ next release, or an OTA hotfix if the fix is JavaScript only.
 
 ## Release qualification
 
-A release is **qualified** when every Maestro flow in `mobile/e2e/` passes in
+A release is **qualified** when the four Maestro flows below (in `mobile/e2e/`) pass in
 one session, on a dev client built from the commit to be tagged (rebuild it
 if native code changed since the installed one), on an Android emulator or a
 real Android phone, against the local stack. Setup, and what each flow

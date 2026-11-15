@@ -1,11 +1,12 @@
 # Mobile Maestro flows
 
 UI flows run by hand on an Android emulator or a real Android phone. (The
-emulator smoke check in CI is separate: `../maestro/smoke.yaml`.) Passing all
-of them is what qualifies a Logjam GPS release
+emulator smoke check in CI is separate: `../maestro/smoke.yaml`.) Passing the
+four in the table below is what qualifies a Logjam GPS release
 ([docs/operations/mobile-release.md](../../docs/operations/mobile-release.md#release-qualification)).
+`pseudo.yaml` is not one of them: see [The pseudo-language walk](#the-pseudo-language-walk).
 
-Every flow opens Logjam GPS through the dev client
+Each of the four opens Logjam GPS through the dev client
 (`exp+logjam-mobile://expo-development-client/...`), so it runs against a dev
 client and Metro, not a Play or preview build. Prereqs:
 
@@ -30,3 +31,26 @@ flow's first assertion is that it does. `fake` auth mode won't work for it
 either — that mode boots straight to `authenticated`, past the chooser.
 After the clear, Android leaves Logjam GPS stopped and drops the flow's deep
 link: launch it once first (`npm run dev:android` does).
+
+## The pseudo-language walk
+
+`pseudo.yaml` switches Logjam GPS to the pseudo-language, in which every
+message that goes through the catalogue reads `⟦áççéñtéd~~~⟧`
+([ADR 0050](../../docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)),
+opens each main screen and saves a screenshot of it. It asserts nothing about
+the text: a person reads the screenshots for text without the brackets, which
+skipped the catalogue, and for a label that is cut short or spills. It ends by
+choosing English (Australia) again.
+
+It needs the same emulator or phone, local stack and Metro as the flows above,
+with two differences:
+
+- the dev variant of the dev client (`LOGJAM_APP_VARIANT=dev`, the build
+  `../maestro/smoke.yaml` runs on), which the flow opens by its own id and
+  link;
+- `EXPO_PUBLIC_AUTH_MODE=fake` and `EXPO_PUBLIC_SIM_REGIONS=1` in
+  `mobile/.env`: the pseudo-language is offered only where the simulated
+  regions are on.
+
+Run `maestro test e2e/pseudo.yaml` from `mobile/`; the screenshots
+(`pseudo-01-map.png` to `pseudo-12-display.png`) land in that directory.

@@ -40,6 +40,8 @@ const serve = (url: string, build: "fake" | "oidc", dev: string) =>
     ? `npx vite preview --outDir dist-e2e/${build} --port ${new URL(url).port} --strictPort`
     : dev;
 
+const PSEUDO_SPEC = /pseudo\.spec\.ts/;
+
 export default defineConfig({
   testDir: "./e2e",
   // Timeout: An axe walk is not a user interaction, and 30s (Playwright's default) is a
@@ -68,6 +70,7 @@ export default defineConfig({
     // shows up).
     {
       name: "chromium",
+      testIgnore: PSEUDO_SPEC,
       use: {
         ...devices["Desktop Chrome"],
         channel: "chrome",
@@ -83,6 +86,26 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         channel: "chrome",
         colorScheme: "light",
+      },
+    },
+    // Logjam Web started in the pseudo-language (e2e/pseudo.spec.ts): the
+    // language is fixed at start, read from this key (src/language.ts).
+    {
+      name: "pseudo",
+      testMatch: PSEUDO_SPEC,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "dark",
+        storageState: {
+          cookies: [],
+          origins: [
+            {
+              origin: baseURL,
+              localStorage: [{ name: "logjam.language", value: "en-XA" }],
+            },
+          ],
+        },
       },
     },
   ],
