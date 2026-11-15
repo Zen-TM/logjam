@@ -515,7 +515,7 @@ export function RegionDownloadScreen({
         ),
       ]);
       // The first region brings the place names for search (ADR 0034).
-      placeRegistryWithRegion(allowCellular);
+      placeRegistryWithRegion(allowCellular, bbox);
     },
     [bbox, job, sharpenedAreas],
   );

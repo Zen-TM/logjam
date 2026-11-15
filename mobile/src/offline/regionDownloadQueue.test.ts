@@ -62,6 +62,7 @@ const {
   enqueueRegionDownloads,
   onRegionDownloadToast,
   pauseRegionDownload,
+  pendingRegionBoxes,
   renameRegionGroup,
   stopRegionGroup,
 } = await import("./regionDownloadQueue");
@@ -277,5 +278,51 @@ describe("stopping an update", () => {
     await vi.advanceTimersByTimeAsync(0);
     stop();
     expect(toasts).toEqual([]);
+  });
+});
+
+describe("the boxes of saves still to be registered", () => {
+  const at = (id: string, west: number) => ({
+    ...job(id),
+    bbox: { west, south: -33.7, east: west + 0.1, north: -33.6 },
+  });
+
+  // The place registry keeps a copy for each region such a save touches, until
+  // its map is registered (placeRegistry.test.ts "keeps a copy for a region a
+  // queued save touches" mocks this function; this runs its body). Mutation:
+  // list every job, or drop the `ready` or the `failed` exclusion.
+  it("lists queued, downloading and paused jobs, and not ready or failed ones", async () => {
+    const stuck: { release: (outcome: unknown) => void } = {
+      release: () => {},
+    };
+    runRegionDownload
+      .mockResolvedValueOnce({
+        status: "ready",
+        artifact: { id: "a" },
+        gaps: 0,
+        failed: 0,
+      })
+      .mockResolvedValueOnce({ status: "failed", code: "unknown" })
+      .mockResolvedValueOnce({ status: "paused", reason: "connectivity" })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            stuck.release = resolve;
+          }),
+      );
+    enqueueRegionDownloads([
+      at("ready", 150.0),
+      at("failed", 150.1),
+      at("paused", 150.2),
+      at("downloading", 150.3),
+      at("queued", 150.4),
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pendingRegionBoxes().map((box) => box.west)).toEqual([
+      150.2, 150.3, 150.4,
+    ]);
+
+    stuck.release({ status: "cancelled" });
+    await vi.advanceTimersByTimeAsync(0);
   });
 });

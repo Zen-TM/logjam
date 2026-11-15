@@ -68,6 +68,15 @@ what is offered at a location.**
   (`basemapHere`). Guard: `shared/src/regions.test.ts` ("offeredBasemaps" block,
   "lists every region the view touches, in the catalogue's order"). Everything
   else above stands.
+- **Update 2026-11-15: the chosen regions also decide which offline
+  place-name copies Logjam GPS keeps.** A phone keeps a place registry for
+  each region the account chose or saved a map over, and no other
+  ([0034](0034-location-search-reads-a-public-osm-place-registry.md) holds the
+  rule). That is one more default the choice sets: what a search offers at a
+  location still follows the map's view, online and on the phone
+  (`placeRegistryIn`), and the chosen regions never decide it. Guard:
+  `mobile/src/offline/placeRegistry.test.ts` ("lets a copy lapse once its
+  region is neither chosen nor saved over"). Everything else above stands.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
