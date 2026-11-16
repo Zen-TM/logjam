@@ -34,6 +34,7 @@ import {
   coordinateNumber,
   PLACE_PAGE,
   displayUnits,
+  t,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -364,7 +365,7 @@ function PlaceDialog({
       .then((detail) => setMedia(detail.media))
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load place media."));
+        setError(messageFromError(err, t`Couldn't load place media.`));
       })
       .finally(() => setMediaLoading(false));
   }, [open, place?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -439,7 +440,7 @@ function PlaceDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(err, "Couldn't discard uploaded media. Try again."),
+          messageFromError(err, t`Couldn't discard uploaded media. Try again.`),
         );
         return;
       }
@@ -510,7 +511,7 @@ function PlaceDialog({
         (s) => s.url.trim() && !isHttpUrl(s.url.trim()),
       );
       if (invalidSourceUrl) {
-        setError("Source URLs must start with http:// or https://.");
+        setError(t`Source URLs must start with http:// or https://.`);
         setSaving(false);
         return;
       }
@@ -619,7 +620,7 @@ function PlaceDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save the attribute. Try again."),
+        messageFromError(err, t`Couldn't save the attribute. Try again.`),
       );
     } finally {
       setAddingField(false);
@@ -670,10 +671,9 @@ function PlaceDialog({
             onChange={setPlaceTypeId}
           />
           {retyped && (
-            <p className={classes.hint}>
-              Values this type has no field for are kept on the place, and can
-              be added to it later.
-            </p>
+            <p
+              className={classes.hint}
+            >{t`Values this type has no field for are kept on the place, and can be added to it later.`}</p>
           )}
         </div>
       </>
@@ -751,7 +751,7 @@ function PlaceDialog({
                 icon="place"
                 onClick={handlePickCoords}
                 disabled={saving}
-                disabledReason="Saving…"
+                disabledReason={t`Saving…`}
               >
                 {PLACE_FORM.copy.selectOnMap}
               </Button>
@@ -779,9 +779,9 @@ function PlaceDialog({
         <section className={classes.section}>
           <SectionHeader title={placeAttributesTitle(typeName)} />
           {typeFieldDefs.length === 0 && !showAddField && (
-            <p className={classes.muted}>
-              This type records nothing beyond a name and a place on the map.
-            </p>
+            <p
+              className={classes.muted}
+            >{t`This type records nothing beyond a name and a place on the map.`}</p>
           )}
           {typeFieldDefs.map((def) => (
             <div key={def.key} className={classes.attribute}>
@@ -800,7 +800,7 @@ function PlaceDialog({
                 <FieldBeside>
                   <IconButton
                     icon="delete"
-                    label={`Delete the attribute ${def.label}`}
+                    label={t`Delete the attribute ${def.label}`}
                     tone="danger"
                     onClick={() => setFieldToDelete(def)}
                   />
@@ -836,9 +836,7 @@ function PlaceDialog({
                 setAddFieldError(null);
                 setShowAddField(true);
               }}
-            >
-              Add an attribute
-            </Button>
+            >{t`Add an attribute`}</Button>
           )}
         </section>
       </>
@@ -850,7 +848,7 @@ function PlaceDialog({
           {sources.map((source, index) => (
             <div key={index} className={classes.source}>
               <TextField
-                label="Label"
+                label={t`Label`}
                 className={classes.grow}
                 value={source.label}
                 onChange={(event) => {
@@ -860,7 +858,7 @@ function PlaceDialog({
                 }}
               />
               <TextField
-                label="Link"
+                label={t`Link`}
                 className={classes.grow}
                 value={source.url}
                 placeholder="https://"
@@ -872,7 +870,7 @@ function PlaceDialog({
               />
               <IconButton
                 icon="delete"
-                label={`Delete the source ${source.label || index + 1}`}
+                label={t`Delete the source ${source.label || index + 1}`}
                 tone="danger"
                 onClick={() =>
                   setSources(sources.filter((_, other) => other !== index))
@@ -885,9 +883,7 @@ function PlaceDialog({
             icon="add"
             className={classes.addAttribute}
             onClick={() => setSources([...sources, { label: "", url: "" }])}
-          >
-            Add a source
-          </Button>
+          >{t`Add a source`}</Button>
         </section>
       </>
     ),
@@ -898,16 +894,14 @@ function PlaceDialog({
         <section className={classes.section}>
           <SectionHeader title={PLACE_FORM.copy.photos} />
           {mediaLoading ? (
-            <p className={classes.muted} role="status">
-              Loading files…
-            </p>
+            <p className={classes.muted} role="status">{t`Loading files…`}</p>
           ) : (
             <MediaGallery
               media={media}
               variant="visual"
               canDelete
               onDeleted={handleMediaDeleted}
-              emptyText="No photos or videos yet."
+              emptyText={t`No photos or videos yet.`}
             />
           )}
           <MediaUpload
@@ -946,7 +940,7 @@ function PlaceDialog({
             disabled={saving}
             disabledReason={
               media.some((m) => mediaCategory(m.mediaType) === "track")
-                ? "This place already has a route. Delete it to add another."
+                ? t`This place already has a route. Delete it to add another.`
                 : undefined
             }
           />
@@ -970,10 +964,8 @@ function PlaceDialog({
             <Button
               onClick={requestClose}
               disabled={saving || uploading > 0}
-              disabledReason={saving ? "Saving…" : "Uploading…"}
-            >
-              Cancel
-            </Button>
+              disabledReason={saving ? t`Saving…` : t`Uploading…`}
+            >{t`Cancel`}</Button>
             {/* type="submit" with no onClick — handleSubmit is the only save
                 path, so a click can't fire alongside the form's submit. */}
             <Button type="submit" form={formId} variant="filled" busy={saving}>

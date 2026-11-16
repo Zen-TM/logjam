@@ -8,7 +8,7 @@
 // with a sentence saying what it gets you, which is what a row carries and a
 // button does not (DESIGN.md). The recommended one is the accent tile.
 import { Fragment, useState } from "react";
-import { ROPEWIKI_OFFER, type Region } from "@logjam/shared";
+import { ROPEWIKI_OFFER, type Region, t } from "@logjam/shared";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -68,7 +68,7 @@ function OnboardingChoiceDialog({
         state: "error",
         error: messageFromError(
           err,
-          "Couldn't load the RopeWiki database. You can try again later from the sidebar.",
+          t`Couldn't load the RopeWiki database. You can try again later from the sidebar.`,
         ),
       });
     }
@@ -80,7 +80,7 @@ function OnboardingChoiceDialog({
   return (
     <Dialog
       open={open}
-      title="Welcome to Logjam"
+      title={t`Welcome to Logjam`}
       // Closing without choosing IS starting empty — the hub is not a question
       // that has to be answered, and nothing moves while the load runs.
       onClose={onStartEmpty}
@@ -90,16 +90,16 @@ function OnboardingChoiceDialog({
           variant={loaded ? "filled" : "plain"}
           onClick={onStartEmpty}
           disabled={loading}
-          disabledReason="Loading the place database…"
+          disabledReason={t`Loading the place database…`}
         >
-          {loaded ? "Done" : "Start empty"}
+          {loaded ? t`Done` : t`Start empty`}
         </Button>
       }
     >
       <div className={classes.body}>
-        <p className={classes.lede}>
-          How would you like to start? You can do any of these later, too.
-        </p>
+        <p
+          className={classes.lede}
+        >{t`How would you like to start? You can do any of these later, too.`}</p>
 
         {canyonRegions.map((region) => {
           const { state, summary, error } = loadOf(region);
@@ -111,7 +111,7 @@ function OnboardingChoiceDialog({
                   state === "done"
                     ? summary
                     : state === "loading"
-                      ? "Loading…"
+                      ? t`Loading…`
                       : ROPEWIKI_OFFER.hint(region)
                 }
                 leading={
@@ -153,8 +153,8 @@ function OnboardingChoiceDialog({
         })}
 
         <Row
-          title="Import my own files"
-          subtitle="A place list needs name, latitude and longitude. A trip list needs a place name and a date."
+          title={t`Import my own files`}
+          subtitle={t`A place list needs name, latitude and longitude. A trip list needs a place name and a date.`}
           leading={<IconTile icon="upload" hue="var(--color-neutral)" />}
           onOpen={onImportFiles}
           disabled={loading}

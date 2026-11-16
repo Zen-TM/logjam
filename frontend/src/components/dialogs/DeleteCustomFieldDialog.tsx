@@ -3,6 +3,7 @@ import {
   attributeDeleteConfirm,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
+  t,
 } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import {
@@ -68,7 +69,7 @@ function DeleteCustomFieldDialog({
     } catch (err) {
       console.error(err);
       setError(
-        messageFromError(err, "Couldn't delete the attribute. Try again."),
+        messageFromError(err, t`Couldn't delete the attribute. Try again.`),
       );
     } finally {
       setDeleting(false);
