@@ -208,13 +208,25 @@ describe("bareCopyIn", () => {
     ).toEqual(["<b>Open the file</b>", "<p>Saved … places</p>"]);
   });
 
-  // Mutation: delete the `DATA_LITERALS` test from `add` in `bareCopyIn`.
-  it("leaves a listed data literal alone, in any position", () => {
+  // Mutation: delete the `isData` test from `add` in `bareCopyIn`.
+  it("leaves a listed data literal alone in the file that lists it, in any position", () => {
     expect(
-      bare(
-        'const a = { source: "National Park" }; const b = <p>Less than</p>; const c = "Open the park";',
-      ),
+      bareCopyIn(
+        ts,
+        "regions.tsx",
+        'const a = { source: "National Park" }; const b = <p>National Park</p>; const c = "Open the park";',
+        { repoPath: "shared/src/regions.ts" },
+      ).map((found) => found.text),
     ).toEqual(["Open the park"]);
+  });
+
+  // Mutation: in `bareCopyIn`, look the entries up by text alone, whatever the file.
+  it("counts the same words in another file", () => {
+    expect(
+      bareCopyIn(ts, "other.ts", 'const a = { source: "National Park" };', {
+        repoPath: "mobile/src/other.ts",
+      }).map((found) => found.text),
+    ).toEqual(["National Park"]);
   });
 
   // Mutation: change the template case's `if (!copy) {` to `if (true) {`, so a

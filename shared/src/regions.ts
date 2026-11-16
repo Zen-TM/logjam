@@ -593,7 +593,7 @@ export const NSW_REGION = {
     licence: "cc-by-nc-sa",
     ropewikiRegion: "New South Wales",
     snapshotKey: "reference/ropewiki-nsw.csv",
-    extraLinks: { label: t`OzUltimate`, match: matchOzUltimateUrl },
+    extraLinks: { label: "OzUltimate", match: matchOzUltimateUrl },
   },
 } as const satisfies Region;
 

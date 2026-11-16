@@ -44,7 +44,7 @@ export function verifyIntro(email: string): string {
 
 /** "Send a new code (30s)": the resend button while it cannot be pressed. */
 export function resendCodeWaiting(seconds: number): string {
-  return `${SIGN_IN_COPY.resendCode} (${seconds}s)`;
+  return t`Send a new code (${seconds}s)`;
 }
 
 export const PASSWORD_HINT = t`At least 8 characters, with an upper and a lower case letter, a number and a symbol.`;

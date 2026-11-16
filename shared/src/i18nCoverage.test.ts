@@ -142,18 +142,24 @@ describe("the literals the scan leaves out", () => {
         for (const found of bareCopyIn(ts, path, readFileSync(path, "utf8"), {
           keepData: true,
         }))
-          held.add(found.text);
+          held.add(
+            `${relative(REPO, path).split("\\").join("/")}\0${found.text}`,
+          );
   }, 60_000);
 
-  // Mutation: add `"Open the file": "a test"` to `DATA_LITERALS`.
-  it("lists only literals that exist", () => {
+  // Mutation: add `"Open the file": "a test"` to the entries of
+  // `shared/src/regions.ts` in `DATA_LITERALS`, or move an entry to a file that
+  // does not hold it.
+  it("lists only literals that exist, in the file that holds them", () => {
     expect(
-      Object.keys(DATA_LITERALS)
-        .filter((literal) => !held.has(literal))
-        .map(
-          (literal) =>
-            `"${literal}" is in DATA_LITERALS (i18nSource.ts) but no source holds it: delete the entry (${I18N_ADR}).`,
-        ),
+      Object.entries(DATA_LITERALS).flatMap(([file, texts]) =>
+        Object.keys(texts)
+          .filter((literal) => !held.has(`${file}\0${literal}`))
+          .map(
+            (literal) =>
+              `"${literal}" is in DATA_LITERALS (i18nSource.ts) under ${file}, which does not hold it: delete the entry or move it to its file (${I18N_ADR}).`,
+          ),
+      ),
     ).toEqual([]);
   });
 });

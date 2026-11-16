@@ -59,23 +59,34 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
   ("give every form a message of its own") for two forms sharing a pattern.
   Everything else above stands.
 - **Update 2026-11-16: text the API sends is written per call, and a value that
-  code compares or stores stays English.** A `t` in a module-level constant
-  freezes the language known at import, which is English in the API, so text
-  the API sends to a user is a function read when it is called
-  (`placeKindLabel` in `shared/src/placeRegistry.ts`). A literal that reads as
-  words but is a value code matches, stores or sends as a code is not a
-  message and stays as written, named in `DATA_LITERALS` or `EXEMPT_FILES`
-  (`shared/src/i18nSource.ts`) with its reason: the sign-up cap sentence
-  matched against the pre-sign-up Lambda's text, the import failure codes, the
-  stored names and hints of the built-in place types, a data source's credit
-  in its publisher's wording (plain and HTML, so they agree in every language),
-  and developer detail given to `malformed` or logged. Guards:
-  `shared/src/placeRegistry.test.ts` ("follows the language in force when it is
-  called, which the API sends"), `shared/src/apiErrors.test.ts` ("still maps the
-  refusal when the page started in another language") and
-  `shared/src/i18nCoverage.test.ts` ("lists only literals that exist"). No test
-  holds that no other `api/src` reader takes a module-level message.
-  Everything else above stands.
+  code compares or stores stays English.** Four rules; each says what guards it, or that nothing does.
+  (1) A `t` in a module-level constant freezes the language known at import,
+  which is English in the API, so text the API sends to a user is a function or
+  a getter read when it is used (`placeKindLabel` in
+  `shared/src/placeRegistry.ts`). Guards: `api/src/sharedFrozenText.unit.test.ts`
+  ("holds no text frozen in the language the process started in") for every
+  value the API imports from `@logjam/shared`, and `shared/src/placeRegistry.test.ts`
+  ("follows the language in force when it is called, which the API sends") for
+  a function that reads a table. (2) A literal that reads as words but is a
+  value code matches, stores or sends as a code is not a message and stays as
+  written: the sign-up cap sentence matched against the pre-sign-up Lambda's
+  text, the import failure codes, the stored names and hints of the built-in
+  place types, a source's name that the API stores in a place's sources. Guard:
+  `shared/src/apiErrors.test.ts` ("still maps the refusal when the page started
+  in another language") for the first; none for the others, which a later
+  `t` would not turn red. (3) Developer detail, text given to `malformed` or
+  logged, stays bare; no test fails if one is wrapped in `t`. (4) A data
+  source's credit stays as its publisher wrote it, plain and HTML alike, so the
+  two agree in every language; no test holds that they agree. Rules 2 to 4 name
+  what they leave as written in `DATA_LITERALS` (by file, so the same words
+  elsewhere are still counted) or `EXEMPT_FILES` (`shared/src/i18nSource.ts`),
+  each with its reason; `shared/src/i18nCoverage.test.ts` ("lists only literals
+  that exist, in the file that holds them") fails on an entry its file does not
+  hold. The region declaration's vocabulary (tenure classes, fire types,
+  caveats, the world's name) is written when the module loads, so it follows
+  the language a client started in, and the API reads only ids and numbers from
+  it; the first guard lists `REGIONS` as safe on that ground, so no test holds
+  it. Everything else above stands.
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,

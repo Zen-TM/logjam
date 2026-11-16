@@ -220,7 +220,7 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
 
 const FORMATION =
   "a vegetation formation as the map data and the build script name it";
-/** A source's credit is its publisher's wording, in its plain and its HTML form, and so is the attribution a saved map stores. */
+/** A source's credit as its publisher wrote it, plain and HTML alike. */
 const CREDIT =
   "a source's credit, in its publisher's wording, plain and HTML alike";
 const STORED =
@@ -229,171 +229,195 @@ const CODE_ERROR = "an import failure code, matched with ===";
 const LAMBDA = "matched against the pre-signup Lambda's English message";
 const DETAIL =
   "developer detail: the API logs it (`malformed`), no client shows it";
-const HINT =
-  "the OSM query behind a layer, in the developer's words, shown under no switch";
 
 /**
- * Text that reads as words and is not words a user reads: an operator the
- * place filter stores, a land tenure class as the map data spells it,
- * RopeWiki's name for a region, the producer a PDF names, a noun in a
- * developer's error or detail, a vegetation formation, a source's credit, a
- * built-in's stored name, an import failure code. A literal equal to one is
- * never counted or converted.
- * `i18nCoverage.test.ts` ("lists only literals that exist") fails on an entry
- * no source file holds.
+ * Text that reads as words and is not words a user reads, per file that holds
+ * it: an operator the place filter stores, a land tenure class as the map data
+ * spells it, RopeWiki's name for a region, the producer a PDF names, a noun in
+ * a developer's error or detail, a vegetation formation, a source's credit, a
+ * built-in's stored name, an import failure code. A literal equal to an entry
+ * in its own file is never counted or converted; the same words in another
+ * file are. `i18nCoverage.test.ts` ("lists only literals that exist, in the file that holds them") fails on
+ * an entry its file does not hold.
  */
-export const DATA_LITERALS: Readonly<Record<string, string>> = {
-  "Not classified": FORMATION,
-  "Wet Sclerophyll Forests (Grassy sub-formation)": FORMATION,
-  "Wet Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
-  "Dry Sclerophyll Forests (Shrub/grass sub-formation)": FORMATION,
-  "Dry Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
-  "Grassy Woodlands": FORMATION,
-  "Forested Wetlands": FORMATION,
-  "Freshwater Wetlands": FORMATION,
-  "Saline Wetlands": FORMATION,
-  "Semi-arid Woodlands (Grassy sub-formation)": FORMATION,
-  "Semi-arid Woodlands (Shrubby sub-formation)": FORMATION,
-  "Arid Shrublands (Acacia sub-formation)": FORMATION,
-  "Arid Shrublands (Chenopod sub-formation)": FORMATION,
-  "Alpine Complex": FORMATION,
-  "API error …: … …": DETAIL,
-  "Logjam is not taking new accounts this month": LAMBDA,
-  "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.": CREDIT,
-  'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).':
-    CREDIT,
-  "© Department of Customer Service": CREDIT,
-  "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
-    CREDIT,
-  '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.':
-    CREDIT,
-  "Base map © OpenStreetMap contributors (Protomaps build)": CREDIT,
-  "Base map © OpenStreetMap contributors": CREDIT,
-  "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM":
-    CREDIT,
-  "Base map © CyclOSM, © OpenStreetMap contributors": CREDIT,
-  "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
-    CREDIT,
-  "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.":
-    CREDIT,
-  "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). …":
-    CREDIT,
-  "Features © OpenStreetMap contributors": CREDIT,
-  "© OpenStreetMap contributors": CREDIT,
-  "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.":
-    CREDIT,
-  'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.':
-    CREDIT,
-  'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
-    CREDIT,
-  'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)':
-    CREDIT,
-  'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
-    CREDIT,
-  "V grade": STORED,
-  "Vertical technical difficulty, on the French rating system.": STORED,
-  "A grade": STORED,
-  "Aquatic difficulty of the water sections, on the French rating system.":
-    STORED,
-  Commitment: STORED,
-  "How hard the canyon is to escape or retreat from once committed, on the French rating system.":
-    STORED,
-  Quality: STORED,
-  "Your own verdict. 1 is unremarkable, 5 is exceptional.": STORED,
-  Hours: STORED,
-  "How long it takes an average group, car to car.": STORED,
-  Pitches: STORED,
-  "How many abseils.": STORED,
-  "Longest pitch": STORED,
-  "The longest single abseil, measured along the rope.": STORED,
-  Capacity: STORED,
-  "Is a cave?": STORED,
-  "Has a water source?": STORED,
-  "ACA technical": STORED,
-  "Technical difficulty of the descent, on the American Canyoneering Association rating system.":
-    STORED,
-  "ACA water": STORED,
-  "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.":
-    STORED,
-  "ACA time": STORED,
-  "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.":
-    STORED,
-  "ACA risk": STORED,
-  "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.":
-    STORED,
-  "OSM waterway ways (rivers, streams, creeks, canals, drains)": HINT,
-  "OSM highway=track|path|footway|bridleway|steps": HINT,
-  "OSM highway=primary|secondary|tertiary|unclassified|residential|service":
-    HINT,
-  "OSM building=*": HINT,
-  "OSM natural=peak": HINT,
-  "OSM natural=spring": HINT,
-  "OSM bridge=yes ways": HINT,
-  "OSM ford=* (water crossings)": HINT,
-  "OSM waterway=waterfall": HINT,
-  "OSM information=guidepost and highway=trailhead": HINT,
-  "OSM tourism=viewpoint": HINT,
-  "root must be an object": DETAIL,
-  "labelScale must be …..…": DETAIL,
-  "hillshade must be an object": DETAIL,
-  "hillshade.enabled must be boolean": DETAIL,
-  "hillshade.colour must be #RRGGBBAA": DETAIL,
-  "hillshade.azimuth must be 0..360": DETAIL,
-  "hillshade.altitude must be 0..90": DETAIL,
-  "hillshade.zFactor must be 0.1..10": DETAIL,
-  "hillshade.multidirectional must be boolean": DETAIL,
-  "slope must be an object": DETAIL,
-  "slope.enabled must be boolean": DETAIL,
-  "slope.bands must be array": DETAIL,
-  "slope.bands max length is …": DETAIL,
-  "vegetation must be an object": DETAIL,
-  "vegetation.enabled must be boolean": DETAIL,
-  "vegetation.minRatio must be 0..1": DETAIL,
-  "vegetation.maxRatio must be 0..1": DETAIL,
-  "vegetation.minRatio must be < maxRatio": DETAIL,
-  "vegetation.sparseColour must be #RRGGBBAA": DETAIL,
-  "vegetation.denseColour must be #RRGGBBAA": DETAIL,
-  "vegetation.alphaMin must be 0..255": DETAIL,
-  "vegetation.alphaMax must be 0..255": DETAIL,
-  "vegetation.weightsEnabled must be boolean": DETAIL,
-  "vegetation.formationWeights must be an object": DETAIL,
-  "contours must be an object": DETAIL,
-  "contours.enabled must be boolean": DETAIL,
-  "contours.zoomBands must be array of length 3": DETAIL,
-  "features must be an object": DETAIL,
-  "features.enabled must be boolean": DETAIL,
-  "contours.majorColour must be #RRGGBBAA": DETAIL,
-  "contours.minorColour must be #RRGGBBAA": DETAIL,
-  "contours.majorWidthM must be 0..200": DETAIL,
-  "contours.minorWidthM must be 0..200": DETAIL,
-  "features.… must be an object": DETAIL,
-  "features.….enabled must be boolean": DETAIL,
-  "features.….colour must be #RRGGBBAA": DETAIL,
-  "features.….widthZ18 must be 0..100": DETAIL,
-  "a field value": DETAIL,
-  "File could not be parsed": CODE_ERROR,
-  "File contains invalid coordinates": CODE_ERROR,
-  "No mappable features found in the file": CODE_ERROR,
-  "File has too many points to import": CODE_ERROR,
-  "File is too large to import": CODE_ERROR,
-  "Unsupported file type — use GPX, KML, or GeoJSON": CODE_ERROR,
-  "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0":
-    CREDIT,
-  "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)":
-    CREDIT,
-  "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0":
-    CREDIT,
-  "Less than": "a stored operator of a number filter",
-  "More than": "a stored operator of a number filter",
-  "National Park": "a tenure class as the land map data spells it",
-  "State Forest": "a tenure class as the land map data spells it",
-  "Indigenous Owned": "a tenure class as the land map data spells it",
-  "Unresolved Tenure": "a tenure class as the land map data spells it",
-  "New South Wales": "RopeWiki's name for the region",
-  "gauge feed": "a noun in the error a region's declaration throws",
-  "place registry": "a noun in the error a region's declaration throws",
-  "Logjam GeoPDF Generator":
-    "the producer Logjam writes into a PDF and recognises on import",
+export const DATA_LITERALS: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  "shared/src/apiErrors.ts": {
+    "API error …: … …": DETAIL,
+    "Logjam is not taking new accounts this month": LAMBDA,
+  },
+  "shared/src/demSources.ts": {
+    "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.":
+      CREDIT,
+    'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).':
+      CREDIT,
+  },
+  "shared/src/geoPdfBaseLayers.ts": {
+    "© Department of Customer Service": CREDIT,
+    "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+      CREDIT,
+    '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.':
+      CREDIT,
+    "Base map © OpenStreetMap contributors (Protomaps build)": CREDIT,
+    "Base map © OpenStreetMap contributors": CREDIT,
+    "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM":
+      CREDIT,
+    "Base map © CyclOSM, © OpenStreetMap contributors": CREDIT,
+    "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+      CREDIT,
+    "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.":
+      CREDIT,
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). …":
+      CREDIT,
+    "Features © OpenStreetMap contributors": CREDIT,
+  },
+  "shared/src/geoPdfImport/parseGeoref.ts": {
+    "Logjam GeoPDF Generator":
+      "the producer Logjam writes into a PDF and recognises on import",
+  },
+  "shared/src/licences.ts": {
+    "gauge feed": "a noun in the error a region's declaration throws",
+    "place registry": "a noun in the error a region's declaration throws",
+  },
+  "shared/src/placeFilterOptions.ts": {
+    "Less than": "a stored operator of a number filter",
+    "More than": "a stored operator of a number filter",
+  },
+  "shared/src/placeRegistry.ts": {
+    "© OpenStreetMap contributors": CREDIT,
+  },
+  "shared/src/placeTypes.ts": {
+    "V grade": STORED,
+    "Vertical technical difficulty, on the French rating system.": STORED,
+    "A grade": STORED,
+    "Aquatic difficulty of the water sections, on the French rating system.":
+      STORED,
+    Commitment: STORED,
+    "How hard the canyon is to escape or retreat from once committed, on the French rating system.":
+      STORED,
+    Quality: STORED,
+    "Your own verdict. 1 is unremarkable, 5 is exceptional.": STORED,
+    Hours: STORED,
+    "How long it takes an average group, car to car.": STORED,
+    Pitches: STORED,
+    "How many abseils.": STORED,
+    "Longest pitch": STORED,
+    "The longest single abseil, measured along the rope.": STORED,
+    Capacity: STORED,
+    "Is a cave?": STORED,
+    "Has a water source?": STORED,
+    "ACA technical": STORED,
+    "Technical difficulty of the descent, on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA water": STORED,
+    "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA time": STORED,
+    "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA risk": STORED,
+    "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.":
+      STORED,
+  },
+  "shared/src/regions.ts": {
+    OzUltimate: "a source's name, which the API stores in a place's sources",
+    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.":
+      CREDIT,
+    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.':
+      CREDIT,
+    "National Park": "a tenure class as the land map data spells it",
+    "State Forest": "a tenure class as the land map data spells it",
+    "Indigenous Owned": "a tenure class as the land map data spells it",
+    "Unresolved Tenure": "a tenure class as the land map data spells it",
+    "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0":
+      CREDIT,
+    'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+      CREDIT,
+    "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)":
+      CREDIT,
+    'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)':
+      CREDIT,
+    "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0":
+      CREDIT,
+    'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+      CREDIT,
+    "New South Wales": "RopeWiki's name for the region",
+  },
+  "shared/src/topoSettings.ts": {
+    "Not classified": FORMATION,
+    "Wet Sclerophyll Forests (Grassy sub-formation)": FORMATION,
+    "Wet Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+    "Dry Sclerophyll Forests (Shrub/grass sub-formation)": FORMATION,
+    "Dry Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+    "Grassy Woodlands": FORMATION,
+    "Forested Wetlands": FORMATION,
+    "Freshwater Wetlands": FORMATION,
+    "Saline Wetlands": FORMATION,
+    "Semi-arid Woodlands (Grassy sub-formation)": FORMATION,
+    "Semi-arid Woodlands (Shrubby sub-formation)": FORMATION,
+    "Arid Shrublands (Acacia sub-formation)": FORMATION,
+    "Arid Shrublands (Chenopod sub-formation)": FORMATION,
+    "Alpine Complex": FORMATION,
+    "root must be an object": DETAIL,
+    "labelScale must be …..…": DETAIL,
+    "hillshade must be an object": DETAIL,
+    "hillshade.enabled must be boolean": DETAIL,
+    "hillshade.colour must be #RRGGBBAA": DETAIL,
+    "hillshade.azimuth must be 0..360": DETAIL,
+    "hillshade.altitude must be 0..90": DETAIL,
+    "hillshade.zFactor must be 0.1..10": DETAIL,
+    "hillshade.multidirectional must be boolean": DETAIL,
+    "slope must be an object": DETAIL,
+    "slope.enabled must be boolean": DETAIL,
+    "slope.bands must be array": DETAIL,
+    "slope.bands max length is …": DETAIL,
+    "vegetation must be an object": DETAIL,
+    "vegetation.enabled must be boolean": DETAIL,
+    "vegetation.minRatio must be 0..1": DETAIL,
+    "vegetation.maxRatio must be 0..1": DETAIL,
+    "vegetation.minRatio must be < maxRatio": DETAIL,
+    "vegetation.sparseColour must be #RRGGBBAA": DETAIL,
+    "vegetation.denseColour must be #RRGGBBAA": DETAIL,
+    "vegetation.alphaMin must be 0..255": DETAIL,
+    "vegetation.alphaMax must be 0..255": DETAIL,
+    "vegetation.weightsEnabled must be boolean": DETAIL,
+    "vegetation.formationWeights must be an object": DETAIL,
+    "contours must be an object": DETAIL,
+    "contours.enabled must be boolean": DETAIL,
+    "contours.zoomBands must be array of length 3": DETAIL,
+    "features must be an object": DETAIL,
+    "features.enabled must be boolean": DETAIL,
+    "contours.majorColour must be #RRGGBBAA": DETAIL,
+    "contours.minorColour must be #RRGGBBAA": DETAIL,
+    "contours.majorWidthM must be 0..200": DETAIL,
+    "contours.minorWidthM must be 0..200": DETAIL,
+    "features.… must be an object": DETAIL,
+    "features.….enabled must be boolean": DETAIL,
+    "features.….colour must be #RRGGBBAA": DETAIL,
+    "features.….widthZ18 must be 0..100": DETAIL,
+  },
+  "shared/src/tripPlans.ts": {
+    "a field value": DETAIL,
+  },
+  "shared/src/vectorImport.ts": {
+    "File could not be parsed": CODE_ERROR,
+    "File contains invalid coordinates": CODE_ERROR,
+    "No mappable features found in the file": CODE_ERROR,
+    "File has too many points to import": CODE_ERROR,
+    "File is too large to import": CODE_ERROR,
+    "Unsupported file type — use GPX, KML, or GeoJSON": CODE_ERROR,
+  },
+  "frontend/src/geoPdf/pdf.ts": {
+    "Logjam GeoPDF Generator":
+      "the producer Logjam writes into a PDF and recognises on import",
+  },
+  "frontend/src/ui/AttributeFilter.tsx": {
+    "Less than": "a stored operator of a number filter",
+  },
+  "mobile/src/ui/AttributeFilter.tsx": {
+    "Less than": "a stored operator of a number filter",
+  },
 };
 
 export type BareLiteral = {
@@ -416,8 +440,9 @@ const LABEL = /^\p{Lu}\p{Ll}+$/u;
  * an import, a type, a comparison, a log, `console`, an error's message, SQL,
  * a property's name, a styling or wiring attribute.
  *
- * `keepData` reports the literals `DATA_LITERALS` lists too, which
- * `i18nCoverage.test.ts` asks for to find an entry no source holds.
+ * `repoPath` is the file's path from the repo root: the literals
+ * `DATA_LITERALS` lists for that file are left out. `keepData` reports them too,
+ * which `i18nCoverage.test.ts` asks for to find an entry its file does not hold.
  *
  * `words` also reports a capitalised single word in those other positions
  * (`why: "word"`). The ratchet does not count them (a word there is as often an
@@ -427,19 +452,21 @@ export function bareCopyIn(
   tsModule: unknown,
   fileName: string,
   source: string,
-  options: { words?: boolean; keepData?: boolean } = {},
+  options: { words?: boolean; keepData?: boolean; repoPath?: string } = {},
 ): BareLiteral[] {
   const ts = tsModule as typeof TypeScript;
   const sf = loadFile(ts, fileName, source);
   const found: BareLiteral[] = [];
   const plurals = pluralNames(ts, sf);
+  const data = options.repoPath ? DATA_LITERALS[options.repoPath] : undefined;
+  const isData = (text: string) =>
+    !!data && Object.prototype.hasOwnProperty.call(data, text);
   const add = (node: TypeScript.Node, text: string, copy: boolean) => {
     if (
       !/\p{L}/u.test(text) ||
       SQL.test(text) ||
       HEX.test(text) ||
-      (!options.keepData &&
-        Object.prototype.hasOwnProperty.call(DATA_LITERALS, text))
+      (!options.keepData && isData(text))
     )
       return;
     const prose = PROSE.test(text) && !CODE.test(text) && !isMarkup(text);
@@ -465,8 +492,7 @@ export function bareCopyIn(
       !PROSE.test(words) ||
       CODE.test(words) ||
       isMarkup(written) ||
-      (!options.keepData &&
-        Object.prototype.hasOwnProperty.call(DATA_LITERALS, written))
+      (!options.keepData && isData(written))
     )
       return;
     found.push({
@@ -796,7 +822,9 @@ export function scanSources(
     if (`${pkg}/src/${path}` in EXEMPT_FILES || CATALOGUE_FILE.test(path))
       continue;
     const dir = directoryOf(path);
-    for (const bare of bareCopyIn(tsModule, path, source)) {
+    for (const bare of bareCopyIn(tsModule, path, source, {
+      repoPath: `${pkg}/src/${path}`,
+    })) {
       scan.bare.push({ ...bare, file: path, dir });
       scan.counts[dir] = (scan.counts[dir] ?? 0) + 1;
     }

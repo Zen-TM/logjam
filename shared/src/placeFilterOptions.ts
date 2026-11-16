@@ -87,5 +87,5 @@ export function formatThreshold(
   length = false,
 ): string {
   const number = length ? lengthInputText(filter[1]) : filter[1];
-  return `${THRESHOLD_OPERATOR_LABELS[filter[0]]} ${number}`;
+  return t`${THRESHOLD_OPERATOR_LABELS[filter[0]]} ${number}`;
 }

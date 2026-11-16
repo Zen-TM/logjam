@@ -125,19 +125,28 @@ const TRAILING_NEWLINE = /[\r\n][ \t]*$/;
  * file (a sentence in a data table, a returned string), each held to the same
  * leave-and-list rules.
  *
- * `importFrom` is where the file reads `t` from (`importFor`). The output is not
+ * `importFrom` is where the file reads `t` from (`importFor`); `repoPath` is its
+ * path from the repo root, which `DATA_LITERALS` is keyed by. The output is not
  * formatted; run `make format`.
  */
 export function extractMessages(
   tsModule: unknown,
   fileName: string,
   source: string,
-  options: { words?: boolean; prose?: boolean; importFrom?: string } = {},
+  options: {
+    words?: boolean;
+    prose?: boolean;
+    importFrom?: string;
+    repoPath?: string;
+  } = {},
 ): Extraction {
   const ts = tsModule as typeof TypeScript;
   const importFrom = options.importFrom ?? "@logjam/shared";
   const wanted = new Set(
-    bareCopyIn(ts, fileName, source, { words: options.words })
+    bareCopyIn(ts, fileName, source, {
+      words: options.words,
+      repoPath: options.repoPath,
+    })
       .filter((found) => options.prose || found.why !== "prose")
       .map((found) => found.start),
   );
