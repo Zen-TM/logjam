@@ -2,11 +2,13 @@ import { t } from "./i18n.js";
 import type { LicenceId } from "./licences.js";
 import type { TopoLayerName } from "./topoSettings.js";
 import {
-  NSW_REGION,
+  layerIn,
   REGIONS,
   regionInView,
   regionsOf,
   regionsTouching,
+  vectorIn,
+  WORLD,
   type LonLatBox,
   type Region,
   type TileBytes,
@@ -42,20 +44,6 @@ type BasemapCatalogBase = {
   name: string;
   /** The label on a chip in a row of maps, where `name` would run to a second line. */
   chipName?: string;
-  /**
-   * "raster" = XYZ tile provider (urlTemplate is a {z}/{x}/{y} template).
-   * "vector" = self-hosted PMTiles archive (urlTemplate is the CDN-relative
-   * archive path; the mobile resolver prefixes the CDN base URL). Web
-   * BASE_LAYERS keeps both; the GeoPDF renderer draws a vector entry from
-   * its archive with `frontend/src/geoPdf/draw/basemap.ts`.
-   */
-  kind: "raster" | "vector";
-  urlTemplate: string;
-  /**
-   * Deepest zoom the provider's tile cache actually serves — the GeoPDF
-   * renderer fetches at this zoom for print resolution.
-   */
-  maxNativeZoom: number;
   /**
    * Cap for interactive map tile requests. Differs from maxNativeZoom where
    * deep-cache tiles are patchy (six-imagery serves z20 in metro only — the
@@ -117,14 +105,36 @@ type BasemapOffline =
   | { offlineCapable: true; kind: "vector"; tileBytes?: undefined }
   | { offlineCapable: true; kind: "raster"; tileBytes: TileBytes };
 
-export type BasemapCatalogEntry = BasemapCatalogBase & BasemapOffline;
+/**
+ * "raster" = XYZ tile provider. "vector" = self-hosted PMTiles, read from the
+ * archive of the region in view (`vectorIn`; the mobile resolver prefixes the
+ * CDN base URL), so the entry names no file of its own. Web BASE_LAYERS keeps
+ * both; the GeoPDF renderer draws a vector entry from its archive with
+ * `frontend/src/geoPdf/draw/basemap.ts`.
+ */
+type BasemapSource =
+  | { kind: "vector" }
+  | {
+      kind: "raster";
+      /** A {z}/{x}/{y} template. */
+      urlTemplate: string;
+      /**
+       * Deepest zoom the provider's tile cache actually serves — the GeoPDF
+       * renderer fetches at this zoom for print resolution.
+       */
+      maxNativeZoom: number;
+    };
+
+export type BasemapCatalogEntry = BasemapCatalogBase &
+  BasemapSource &
+  BasemapOffline;
 
 // Order is the pickers' order: the OSM family, then the SIX sheets.
 export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     // Self-hosted Protomaps vector basemap (the mobile offline-region source).
-    // urlTemplate is the CDN-relative archive path —
-    // the mobile resolver builds pmtiles://<cdnBaseUrl>/<urlTemplate>.
+    // Each region declares its own cut (`Region.vector`); the mobile resolver
+    // builds pmtiles://<cdnBaseUrl>/<archivePath> from the one in view.
     // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
     // planet builds the extract comes from.
     id: "protomaps",
@@ -136,9 +146,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // fetched and downloadable, so the name says which rendering it is.
     name: t`OSM Vector`,
     kind: "vector",
-    urlTemplate: NSW_REGION.vector.archivePath,
-    maxNativeZoom: NSW_REGION.vector.maxzoom,
-    licence: NSW_REGION.vector.licence,
+    // ODbL: the licence of the OpenStreetMap data every region's cut is drawn from.
+    licence: "odbl",
     displayMaxZoom: 15,
     attribution: t`Base map © OpenStreetMap contributors (Protomaps build)`,
     attributionHtml:
@@ -311,29 +320,39 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
 export const LISTED_BASEMAPS: readonly BasemapCatalogEntry[] =
   BASEMAP_CATALOG.filter((entry) => entry.offered !== false);
 
-/** The listed entries, minus those a region owns unless `covering` has them. */
+/**
+ * The listed entries, minus those a region owns unless `covering` has them. The
+ * vector entry is no region's to own: `vector` says whether it is offered.
+ */
 function listed(
   regions: readonly Region[],
   covering: ReadonlySet<string>,
+  vector: boolean,
 ): BasemapCatalogEntry[] {
   const owned = new Set(regions.flatMap((r) => r.basemaps));
-  return LISTED_BASEMAPS.filter(
-    (entry) => !owned.has(entry.id) || covering.has(entry.id),
+  return LISTED_BASEMAPS.filter((entry) =>
+    entry.kind === "vector"
+      ? vector
+      : !owned.has(entry.id) || covering.has(entry.id),
   );
 }
 
 /**
  * The basemaps a picker lists for the ground a map shows, in the catalogue's
- * order: the worldwide ones and those of every region the view touches. The
- * regions an account chose play no part (ADR 0049). Guard: `regions.test.ts`.
+ * order: the worldwide ones and those of every region the view touches, and the
+ * vector map where the region in view declares an archive of it (the one it is
+ * drawn from, `regionInView`). The regions an account chose play no part
+ * (ADR 0049). Guard: `regions.test.ts`.
  */
 export function offeredBasemaps(
   view: LonLatBox,
   regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
 ): BasemapCatalogEntry[] {
   return listed(
     regions,
     new Set(regionsTouching(view, regions).flatMap((r) => r.basemaps)),
+    vectorIn(regionInView(view, regions, world)) !== null,
   );
 }
 
@@ -348,11 +367,14 @@ export function basemapHere(
   picked: string,
   view: LonLatBox,
   regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
 ): string {
-  const offered = offeredBasemaps(view, regions).map((entry) => entry.id);
+  const offered = offeredBasemaps(view, regions, world).map(
+    (entry) => entry.id,
+  );
   return offered.includes(picked)
     ? picked
-    : (regionInView(view, regions)?.defaultBasemap ?? offered[0]!);
+    : (regionInView(view, regions, world)?.defaultBasemap ?? offered[0]!);
 }
 
 /**
@@ -378,7 +400,7 @@ export function defaultBasemapFor(
 ): string {
   return (
     regionsOf(regionIds, regions)[0]?.defaultBasemap ??
-    listed(regions, new Set())[0]!.id
+    listed(regions, new Set(), false)[0]!.id
   );
 }
 
@@ -438,9 +460,15 @@ export function extractionCreditLine(
 export type OverlaySource = "elevation" | "vegetation" | "features";
 
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
-  elevation: t`Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.`,
-  vegetation: t`Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). ${NSW_REGION.terrain.fire.credit}`,
-  features: t`Features © OpenStreetMap contributors`,
+  elevation:
+    "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
+  // The credit for the fire marking is the home region's (the first in
+  // `REGIONS`, NSW): `apply_fire_history` in topo/pipeline.py marks with NSW's
+  // NPWS history.
+  vegetation:
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
+    (layerIn(REGIONS[0], "fire")?.credit ?? ""),
+  features: "Features © OpenStreetMap contributors",
 };
 
 // Maps each selectable overlay layer name to its underlying data source(s).

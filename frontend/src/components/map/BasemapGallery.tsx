@@ -20,7 +20,8 @@ export type BaseLayer = TileLayer & { id: string; name: string };
 // server, not our archive).
 const OSM_LOOKALIKE = (() => {
   const osm = BASEMAP_CATALOG.find((entry) => entry.id === "osm");
-  if (!osm) throw new Error("osm missing from BASEMAP_CATALOG");
+  if (osm?.kind !== "raster")
+    throw new Error("osm missing from BASEMAP_CATALOG");
   return { tiles: [osm.urlTemplate], maxzoom: osm.displayMaxZoom };
 })();
 

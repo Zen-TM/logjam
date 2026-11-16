@@ -293,7 +293,8 @@ describe("storedClimbCaption", () => {
 
   // Mutation: name only NSW's heights (a table with its id), and a region's
   // own heights read "terrain data" beside its stored climb's name; or stop
-  // reading the archive's `name`.
+  // reading the archive's `name`; or leave `WORLD` out of the lookup in
+  // `regionHeightsName`, and the world's archive is nameless.
   it("names each region's own heights by the archive's name", async () => {
     const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
     expect(storedClimbCaption("simnz-heights")).toBe(
@@ -309,6 +310,15 @@ describe("storedClimbCaption", () => {
       expect(two.storedClimbCaption("simnz-heights")).toBe(
         "Ascent and descent from New Zealand (simulated) terrain data",
       );
+      const sources = await import("./demSources.js");
+      expect(two.storedClimbCaption("simworld-heights")).toBe(
+        "Ascent and descent from the world (simulated) terrain data",
+      );
+      // Every source a climb can be stored from under the flag, the
+      // Terrarium tiles beside the world's archive, still has its own name.
+      const captions = sources.CLIMB_SOURCES.map(two.storedClimbCaption);
+      expect(new Set(captions).size).toBe(sources.CLIMB_SOURCES.length);
+      expect(captions).not.toContain("Ascent and descent from terrain data");
     } finally {
       delete flag.LOGJAM_SIM_REGIONS;
       vi.resetModules();

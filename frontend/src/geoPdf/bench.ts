@@ -84,6 +84,14 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
     baseLayer: "protomaps",
     overlays: ["hillshade", "slope", "contours"],
   }),
+  // The vector base over ground no region declares an archive of it for, where
+  // the render has to refuse rather than print without a base.
+  vectorElsewhere: config(
+    { baseLayer: "protomaps", overlays: [] },
+    25000,
+    { paperSize: "A5", orientation: "portrait" },
+    { lat: -40, lon: 160 },
+  ),
   // Several megapixels more than the others, for timings.
   big: config(
     { baseLayer: "six-base", overlays: ["hillshade", "slope"] },

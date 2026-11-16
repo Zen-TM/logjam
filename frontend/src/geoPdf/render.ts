@@ -51,6 +51,7 @@ import {
 import { sheetTerrain } from "./sheetTerrain";
 import type { TileCache } from "./cache";
 import {
+  isVectorBase,
   planTerrainBlocks,
   printGeometry,
   rasterBaseTiles,
@@ -414,7 +415,13 @@ async function renderInner(
     Record<TerrainArchiveLayer | "land", string | null>
   > = {};
 
-  const vectorBase = vectorBasemap(config, geometry);
+  const vectorBase = vectorBasemap(config, geometry, sheet.vector);
+  // A vector base the sheet's region has no archive of is a failure, as a base
+  // whose tiles will not load is, not a sheet printed without a base map.
+  // Guard: e2e/geopdf-render.spec.ts ("a vector base over ground with no
+  // vector archive is a failure, not a bare sheet").
+  if (!vectorBase && isVectorBase(config))
+    throw new Error("no base tile loaded");
   const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
 
   const fontsReady = loadMapFonts(signal);

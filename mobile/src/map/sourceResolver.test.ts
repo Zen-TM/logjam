@@ -1,17 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   lonLatToTile,
   NSW_REGION,
   SIM_NZ,
   SIM_REGIONS,
   SIM_UTAH,
+  type Region,
   type SharpenedOverlay,
 } from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
+  holdsBasemap,
   resolveMapSource,
   hashKey,
+  drawsTerrain,
   holdsContours,
   holdsHillshade,
   holdsSlope,
@@ -52,7 +55,7 @@ function artifact(overrides: Partial<MapArtifact>): MapArtifact {
 describe("basemap resolution", () => {
   it("online: catalog raster resolves to remote XYZ tiles with display cap", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx(),
     );
     expect(r.status).toBe("ok");
@@ -65,7 +68,7 @@ describe("basemap resolution", () => {
 
   it("offline: OSM-family is online-only by policy", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -76,7 +79,7 @@ describe("basemap resolution", () => {
 
   it("offline: offline-capable basemap without downloads is unavailable (no silent remote fallback)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -89,17 +92,102 @@ describe("basemap resolution", () => {
   // draws on top. The registry lists the newest first.
   it("offline: lists saved regions oldest first, so the newest mounts on top", () => {
     const save = (id: string, path: string) =>
-      artifact({ id, kind: "basemap-region", logicalKey: "protomaps", path });
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath: NSW_REGION.vector!.archivePath,
+        path,
+      });
     const newest = save("new", "/files/maps/new.pmtiles");
     const oldest = save("old", "/files/maps/old.pmtiles");
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "protomaps" },
+      { kind: "basemap", basemapId: "protomaps", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: [newest, oldest] }),
     );
     expect(resolved.map((r) => (r.status === "ok" ? r.url : null))).toEqual([
       "pmtiles://file:///files/maps/old.pmtiles",
       "pmtiles://file:///files/maps/new.pmtiles",
     ]);
+  });
+
+  // Mutation: read the archive from the catalogue entry (a fixed NSW path), and
+  // the vector map in simulated New Zealand draws NSW's tiles; build the
+  // URL differently over NSW, and every NSW map remounts on a new key.
+  it("online: the vector basemap is read from the archive of the region shown", () => {
+    const vector = (region: Region | null) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx(),
+      );
+    const nsw = `pmtiles://${CDN}/master/basemap/protomaps-nsw.pmtiles`;
+    expect(vector(NSW_REGION)).toEqual([
+      {
+        status: "ok",
+        key: `basemap:protomaps:remote:${hashKey(nsw)}`,
+        sourceType: "vector",
+        url: nsw,
+        attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+        origin: "remote",
+      },
+    ]);
+    expect(vector(SIM_NZ)).toMatchObject([
+      {
+        status: "ok",
+        url: `pmtiles://${CDN}/${SIM_NZ.vector!.archivePath}`,
+      },
+    ]);
+  });
+
+  // Mutation: fall back to the first region's archive where the region shown
+  // has none, and the map outside every region draws NSW's.
+  it("the vector basemap is unavailable where the region shown has no archive of it", () => {
+    for (const region of [null, { ...SIM_UTAH, vector: null }]) {
+      for (const connectivity of ["online", "offline"] as const) {
+        expect(
+          resolveMapSource(
+            { kind: "basemap", basemapId: "protomaps", region },
+            ctx({ connectivity }),
+          ),
+        ).toEqual([
+          {
+            status: "unavailable",
+            key: "basemap:protomaps",
+            reason: "not-available-here",
+          },
+        ]);
+      }
+    }
+  });
+
+  // Mutation: drop the `archivePath` test, and the map over New Zealand draws a
+  // clip of NSW's archive (which holds nothing there) beside its own; match a
+  // clip with no archive, and one saved before clips kept theirs is drawn as
+  // whichever region the map is over.
+  it("offline: draws only the clips cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        path: `/files/maps/${id}.pmtiles`,
+        archivePath,
+      });
+    const artifacts = [
+      clip("nsw", NSW_REGION.vector!.archivePath),
+      clip("nz", SIM_NZ.vector!.archivePath),
+      clip("legacy", null),
+    ];
+    const drawn = (region: Region) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx({ connectivity: "offline", artifacts }),
+      ).map((r) => (r.status === "ok" ? r.url : r.reason));
+    expect(drawn(NSW_REGION)).toEqual([
+      "pmtiles://file:///files/maps/nsw.pmtiles",
+    ]);
+    expect(drawn(SIM_NZ)).toEqual(["pmtiles://file:///files/maps/nz.pmtiles"]);
+    expect(drawn(SIM_UTAH)).toEqual(["offline-not-downloaded"]);
   });
 
   it("offline: resolves to ALL downloaded regions with bounds and zoom clamps", () => {
@@ -124,7 +212,7 @@ describe("basemap resolution", () => {
       }),
     ];
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline", artifacts: regions }),
     );
     expect(resolved).toHaveLength(2);
@@ -141,7 +229,7 @@ describe("basemap resolution", () => {
 
   it("forced-offline behaves like offline (user override)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "forced-offline" }),
     );
     expect(r.status).toBe("unavailable");
@@ -149,7 +237,7 @@ describe("basemap resolution", () => {
 
   it("online: subset-coverage basemaps prefer remote even when a region is downloaded", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({
         artifacts: [
           artifact({
@@ -167,7 +255,10 @@ describe("basemap resolution", () => {
 
   it("throws loudly on an unknown basemap id", () => {
     expect(() =>
-      resolveMapSource({ kind: "basemap", basemapId: "bogus" as never }, ctx()),
+      resolveMapSource(
+        { kind: "basemap", basemapId: "bogus" as never, region: null },
+        ctx(),
+      ),
     ).toThrow(/Unknown basemap id/);
   });
 });
@@ -301,6 +392,7 @@ describe("basemapsCoveringViewport", () => {
       id: "r2",
       kind: "basemap-region",
       logicalKey: "protomaps",
+      archivePath: NSW_REGION.vector!.archivePath,
       bbox: [150.4, -33.6, 150.6, -33.4],
     }),
   ];
@@ -317,6 +409,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.45, -33.55, 150.55, -33.45),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["protomaps", "six-topo"]);
   });
@@ -330,13 +423,19 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.05, -33.95, 150.15, -33.85),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
 
   it("is empty when the viewport is nowhere near anything saved", () => {
     expect(
-      basemapsCoveringViewport(saved, view(145, -31, 146, -30), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(145, -31, 146, -30),
+        CANDIDATES,
+        NSW_REGION,
+      ),
     ).toEqual([]);
   });
 
@@ -348,6 +447,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.9, -33.1, 151.5, -32.5),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
@@ -365,8 +465,81 @@ describe("basemapsCoveringViewport", () => {
         overlay,
         view(150.4, -33.6, 150.6, -33.4),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual([]);
+  });
+
+  // Mutation: count a vector clip by its `logicalKey` alone (`holdsBasemap`),
+  // and a clip with no archive, or one cut from another region's, reads as
+  // saved map on screen: offline the map is blank and the "No saved map here"
+  // notice stays silent; also read no region, and no vector clip counts.
+  it("counts a vector clip only where it was cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath,
+        bbox: [150.4, -33.6, 150.6, -33.4],
+      });
+    const here = view(150.45, -33.55, 150.55, -33.45);
+    const covering = (clips: MapArtifact[], region: Region | null) =>
+      basemapsCoveringViewport(clips, here, ["protomaps"], region);
+    expect(
+      covering([clip("a", NSW_REGION.vector!.archivePath)], NSW_REGION),
+    ).toEqual(["protomaps"]);
+    expect(covering([clip("none", null)], NSW_REGION)).toEqual([]);
+    expect(
+      covering([clip("nz", SIM_NZ.vector!.archivePath)], NSW_REGION),
+    ).toEqual([]);
+    expect(covering([clip("a", NSW_REGION.vector!.archivePath)], null)).toEqual(
+      [],
+    );
+  });
+});
+
+describe("holdsBasemap", () => {
+  const file = (over: Partial<MapArtifact>) => ({
+    kind: "basemap-region" as const,
+    logicalKey: "protomaps",
+    archivePath: null as string | null,
+    ...over,
+  });
+
+  // Mutation: drop the `kind` test, and a topo overlay filed under a basemap's
+  // key counts; drop the `logicalKey` test, and every saved map holds every
+  // basemap.
+  it("holds a raster basemap by its key, whatever the region", () => {
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-topo", null),
+    ).toBe(true);
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-base", null),
+    ).toBe(false);
+    expect(
+      holdsBasemap(
+        file({ kind: "topo-overlay" as never, logicalKey: "six-topo" }),
+        "six-topo",
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  // Mutation: return true for any "protomaps" file, and the coverage row, the
+  // offline notice and the resolver count a clip no map draws.
+  it("holds the vector map only by a clip of the archive of the region", () => {
+    const nsw = NSW_REGION.vector!.archivePath;
+    expect(
+      holdsBasemap(file({ archivePath: nsw }), "protomaps", NSW_REGION),
+    ).toBe(true);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", SIM_NZ)).toBe(
+      false,
+    );
+    expect(holdsBasemap(file({}), "protomaps", NSW_REGION)).toBe(false);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", null)).toBe(
+      false,
+    );
   });
 });
 
@@ -402,9 +575,9 @@ describe("saved regions across the date line", () => {
   ])(
     "names the basemaps with saved tiles on a view %s",
     (_n, w, e, expected) => {
-      expect(basemapsCoveringViewport(saved, view(w, e), ["six-topo"])).toEqual(
-        expected,
-      );
+      expect(
+        basemapsCoveringViewport(saved, view(w, e), ["six-topo"], null),
+      ).toEqual(expected);
     },
   );
 
@@ -413,10 +586,10 @@ describe("saved regions across the date line", () => {
   // the line, reads as off it.
   it("counts a view that only touches the region's edge", () => {
     expect(
-      basemapsCoveringViewport(saved, view(182, 183), ["six-topo"]),
+      basemapsCoveringViewport(saved, view(182, 183), ["six-topo"], null),
     ).toEqual(["six-topo"]);
     expect(
-      basemapsCoveringViewport(saved, view(-178, -177), ["six-topo"]),
+      basemapsCoveringViewport(saved, view(-178, -177), ["six-topo"], null),
     ).toEqual(["six-topo"]);
   });
 
@@ -443,7 +616,7 @@ describe("saved regions across the date line", () => {
       [0.1 + 150.2, 151.7],
     ])
       expect(
-        basemapsCoveringViewport([box], at(west!, east!), ["six-topo"]),
+        basemapsCoveringViewport([box], at(west!, east!), ["six-topo"], null),
       ).toEqual(["six-topo"]);
   });
 
@@ -640,6 +813,30 @@ describe("statewide slope and hillshade", () => {
     expect(holdsHillshade({ ...clip, minzoom: null })).toBe(false);
     expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
     expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
+  });
+  // Mutation: leave `WORLD` out of the default `regions` of `holdsHillshade`
+  // or of `drawsTerrain`, and a saved world clip enables no Hillshade switch
+  // and leaves the offline mask over the ground it shades.
+  it("holdsHillshade and drawsTerrain: the world's clip, where the world declares an archive", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    const clip = {
+      kind: "dem-region",
+      logicalKey: "simworld-heights",
+      minzoom: 8,
+    } as const;
+    expect(holdsHillshade(clip)).toBe(false);
+    expect(drawsTerrain(clip)).toBe(false);
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const on = await import("./sourceResolver");
+      expect(on.holdsHillshade(clip)).toBe(true);
+      expect(on.holdsHillshade({ ...clip, minzoom: 15 })).toBe(false);
+      expect(on.drawsTerrain(clip)).toBe(true);
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
   });
   // Mutation: resolve Land with no `mainRegion`, and two saved areas that
   // share a low-zoom tile paint its translucent tint twice, with a seam.

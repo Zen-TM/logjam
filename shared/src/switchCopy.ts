@@ -63,6 +63,7 @@ export function measureSwitchCopy(
         : [];
 
   const MAX_DEPTH = 12;
+  /** Array methods whose callback is handed each item: the name a switch's words are read through (`LIST.map(({ label }) => …)`). */
   const ARRAY_WALKS = new Set([
     "map",
     "filter",
@@ -71,6 +72,15 @@ export function measureSwitchCopy(
     "some",
     "every",
     "find",
+  ]);
+  /** Array methods that return the same items, fewer or reordered: a walk over the result is a walk over the original. Not `map`, `flatMap` or `find`, whose result is something else. */
+  const KEEPS_ITEMS = new Set([
+    "filter",
+    "slice",
+    "sort",
+    "toSorted",
+    "reverse",
+    "toReversed",
   ]);
   /** What an expression holds at run time, one value per way it may be reached; `undefined` where it is not one this can follow. */
   const valuesOf = (
@@ -123,11 +133,11 @@ export function measureSwitchCopy(
           )
         : undefined;
     }
-    // A call that keeps the array's items: the walk over it is read by `bound`.
+    // A call that returns some of the same items: `LIST.filter(…)` holds what `LIST` does.
     if (
       ts.isCallExpression(expr) &&
       ts.isPropertyAccessExpression(expr.expression) &&
-      ARRAY_WALKS.has(expr.expression.name.text)
+      KEEPS_ITEMS.has(expr.expression.name.text)
     )
       return next(expr.expression.expression);
     return undefined;

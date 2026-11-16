@@ -18,7 +18,8 @@ const {
 // A switch's label and hint keep to `SWITCH_COPY_MAX` (shared/DESIGN.md),
 // including Settings' `PreferenceRow`.
 //
-// Mutations that turn it red: lengthen `LEADERBOARD_SETTING.label` in
+// Mutations that turn it red: make `texts` in `measureSwitchCopy` return `[]`
+// (the floor); lengthen `LEADERBOARD_SETTING.label` in
 // shared/src/contracts/leaderboard.ts past 20 characters; build a
 // notification switch's label at run time instead of reading
 // `NOTIFICATION_PREFERENCES`; in `measureSwitchCopy`
@@ -46,6 +47,11 @@ describe("switch copy", () => {
       SWITCHES,
       shared,
     );
+
+    // A floor: `measured` is every label and hint of a switch row whose words
+    // are known before run time (54 today), so a reader that stops finding
+    // them fails here and not by passing over nothing.
+    expect(measured.length).toBeGreaterThanOrEqual(54);
 
     // Contract copy is read from @logjam/shared's exports at run time: if the
     // name stops resolving, a switch drawn from it would pass unmeasured.

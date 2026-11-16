@@ -5,11 +5,11 @@
 // and what they credit. Guard: `topoRegions.test.ts` ("is what the script
 // writes").
 import {
+  isSimulatedRegion,
   REGIONS_WITH_SIMULATED,
   type Region,
   type RegionTerrain,
 } from "./regions.js";
-import { SIM_REGIONS } from "./simRegions.js";
 
 type TopoArchive = {
   id: string;
@@ -64,7 +64,7 @@ export function topoRegionsFile(): string {
   const entry = (region: Region) => ({
     id: region.id,
     name: region.name,
-    ...(SIM_REGIONS.includes(region) ? { sim: true } : {}),
+    ...(isSimulatedRegion(region) ? { sim: true } : {}),
     borders: region.borders,
     terrain: Object.fromEntries(
       (Object.keys(region.terrain) as (keyof RegionTerrain)[]).flatMap(

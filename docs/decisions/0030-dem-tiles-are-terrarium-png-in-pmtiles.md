@@ -78,8 +78,10 @@ clients' formula, and checks the no-data value and the rounding.
   source's own digits: on dead-flat ground it adds about 0.6° of slope noise at
   zoom 15.
 - **Neutral:** the worldwide source stays a public XYZ tile set that Logjam
-  does not build, so a phone holds two kinds of saved DEM file: an MBTiles
-  pyramid for it, a PMTiles clip for a source built here.
+  does not build (updated 2026-11-16: until the world entry declares an
+  archive of its own, [0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)),
+  so a phone holds two kinds of saved DEM file: an MBTiles pyramid for it, a
+  PMTiles clip for a source built here.
 
 ## Alternatives considered
 

@@ -11,6 +11,7 @@ import { readEffectiveBasemap } from "../map/basemapPreference";
 import { Row } from "../ui";
 import {
   coveredByOfflineMaps,
+  heldBasemapIn,
   routeCoveredByOfflineMaps,
 } from "./coveredByOfflineMaps";
 import { coverageSubtitle } from "./coverageSubtitle";
@@ -38,7 +39,7 @@ export function MapCoverageRow({
   // is no help to a map open on Topo.
   const basemapId = readEffectiveBasemap(boundsView(bbox));
   const basemapName = BASEMAP_CATALOG.find((e) => e.id === basemapId)?.name;
-  const held = artifacts.filter((a) => a.logicalKey === basemapId);
+  const held = heldBasemapIn(artifacts, basemapId, bbox);
   const covered = route
     ? routeCoveredByOfflineMaps(route, held)
     : coveredByOfflineMaps(bbox, held);
