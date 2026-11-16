@@ -6,6 +6,8 @@ import {
   SIGN_OUT_EVERYWHERE_BODY,
   SIGN_OUT_EVERYWHERE_FAILED,
   type SectionKeysOn,
+  formatDayMonth,
+  localDay,
 } from "@logjam/shared";
 
 import {
@@ -134,10 +136,7 @@ function AccountPanel({
   }
 
   const creditsResetLabel = currentUser?.monthlyComputeResetAt
-    ? new Date(currentUser.monthlyComputeResetAt).toLocaleDateString("en-AU", {
-        month: "short",
-        day: "numeric",
-      })
+    ? formatDayMonth(localDay(new Date(currentUser.monthlyComputeResetAt)))
     : null;
 
   // Exhaustive by type: a section the contract names and this panel does not

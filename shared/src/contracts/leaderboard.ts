@@ -4,7 +4,7 @@
 // hero that wears their rank; for anyone else nothing on Friends mentions it,
 // and the one way in is the switch in Settings (`LEADERBOARD_SETTING`). Every number is
 // `computeLeaderboard` on the server (shared/src/leaderboard.ts).
-import { LONG_MONTHS } from "../dateNames.js";
+import { formatDayLongMonth } from "../dateFormat.js";
 import { t } from "../i18n.js";
 import { seasonOpening, type SeasonRegion } from "../leaderboard.js";
 import { pluralCount } from "../logbook.js";
@@ -124,7 +124,9 @@ export function leaderboardNudge(notJoined: readonly string[]): string {
 /** "How it works", a line each: the season's dates are the region's own (`seasonOpening`). */
 export function leaderboardRules(region: SeasonRegion): string {
   const { month, day } = seasonOpening(region);
-  const season = t`A season runs from ${`${day} ${LONG_MONTHS[month - 1]}`} to ${`${day - 1} ${LONG_MONTHS[month - 1]}`}.`;
+  const from = formatDayLongMonth({ day, month: month - 1 });
+  const to = formatDayLongMonth({ day: day - 1, month: month - 1 });
+  const season = t`A season runs from ${from} to ${to}.`;
   return [
     LEADERBOARD.copy.rulesBeforeSeason,
     season,

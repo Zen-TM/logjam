@@ -18,9 +18,9 @@
 - **Every user-data hook and boot effect takes the consent gate's `settled`**
   (`src/consent.ts`) as its `enabled` argument, never `authenticated`, or data
   loads behind the gate. Guard: `src/consent.test.ts`.
-- **A date-only value** (stored UTC midnight) formats with `timeZone: "UTC"`:
-  `vitest.config.ts` runs the suite west of UTC, so one formatted without it
-  shows the day before.
+- **A date-only value** (stored UTC midnight) is read with `utcDay` or
+  `dayOfKey` (`@logjam/shared`), never `localDay`: `vitest.config.ts` runs the
+  suite west of UTC, so one read as local shows the day before.
 - **Sign-out clears what the browser kept of a user's work.** The trip draft
   clears on the two explicit paths, `endSession` (`useAuth.ts`) and
   `RootErrorBoundary`'s sign-out, and records its writer's id: another user,

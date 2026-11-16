@@ -26,6 +26,7 @@
 // PRIVACY: row titles are user text and routinely name places. They reach the
 // screen and the confirms — a user cannot act on "3 things" without knowing
 // which — and nothing here is logged.
+import { formatDayMonth, localDay } from "./dateFormat.js";
 import {
   SHARE_KIND_LABEL,
   shareRowTitle,
@@ -83,10 +84,7 @@ export function shareCardItem(card: FriendShareCard): BulkShareItem {
 
 /** "12 Aug" — the same short day the Saved screen uses. */
 function formatShareDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
+  return formatDayMonth(localDay(new Date(iso)));
 }
 
 function capitalise(word: string): string {

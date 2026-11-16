@@ -20,6 +20,7 @@ import {
   type WeatherHour,
 } from "../weather.js";
 import type { ScreenContract } from "./types.js";
+import { dayOfKey, formatWeekdayDay } from "../dateFormat.js";
 import { plural, t } from "../i18n.js";
 
 export const WEATHER = {
@@ -91,8 +92,6 @@ export function weatherCondition(code: number): WeatherCondition {
   );
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 /** YYYY-MM-DD on this device's calendar. */
 export function localDate(now: number): string {
   const d = new Date(now);
@@ -146,8 +145,7 @@ export type WeatherDayFacts = {
 
 /** "Mon 20". */
 function weekdayLabel(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d}`;
+  return formatWeekdayDay(dayOfKey(date));
 }
 
 /** "Today", or "Mon 20". */

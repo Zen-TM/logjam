@@ -85,6 +85,7 @@ export * from "./demSources.js";
 export * from "./contourRules.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";
+export * from "./dateFormat.js";
 export * from "./regions.js";
 export * from "./simRegions.js";
 export * from "./overlayLegends.js";
