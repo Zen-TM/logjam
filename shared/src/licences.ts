@@ -47,9 +47,12 @@ export const LICENCES = {
     url: "https://creativecommons.org/licenses/by-sa/3.0/",
     commercialUse: true,
   },
+  // RopeWiki's licence and its version were not verified at the source (the
+  // site refuses automated reads): the name and URL are the family's, with no
+  // version, until someone reads its copyright page.
   "cc-by-nc-sa": {
     name: "CC BY-NC-SA",
-    url: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+    url: "https://creativecommons.org/licenses/",
     commercialUse: false,
   },
   // Made-up data, such as the simulated regions', which Logjam releases as it likes.

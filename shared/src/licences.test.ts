@@ -31,7 +31,10 @@ describe("dataSources", () => {
   // Mutation: stop adding one kind of source: the geocoder, or a region's
   // vector cut.
   it("flattens every declared source of the production declaration, once each", () => {
-    expect(ids(NSW_ONLY)).toEqual([
+    expect(
+      ids(NSW_ONLY),
+      "A declared source was added or lost. Every source carries a `LicenceId` and joins `dataSources` in shared/src/licences.ts; a new kind of source gets its own `add` there, and its test here.",
+    ).toEqual([
       "basemap:protomaps",
       "basemap:osm",
       "basemap:osm-topo",

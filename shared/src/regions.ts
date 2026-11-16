@@ -510,6 +510,8 @@ export const NSW_REGION = {
   units: "metric",
   canyons: {
     kind: "ropewiki",
+    // The licence and its version were not verified at RopeWiki's own page
+    // (`licences.ts`, `cc-by-nc-sa`).
     licence: "cc-by-nc-sa",
     ropewikiRegion: "New South Wales",
     snapshotKey: "reference/ropewiki-nsw.csv",

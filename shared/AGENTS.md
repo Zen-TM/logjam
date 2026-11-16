@@ -8,10 +8,6 @@ Pure TypeScript that `api`, `frontend` and `mobile` all import.
 - **A declaration here is the only copy.** A client builds from it and never
   re-lists its values; a client that needs something shaped differently
   derives it here, with a test.
-- **A data source is declared with its licence:** a basemap, height source,
-  Terrain archive, vector cut, canyon list, gauge feed, place registry, the
-  geocoder or the forecast carries a `LicenceId` from `src/licences.ts`, and a
-  new kind of source joins `dataSources`. Guard: `src/licences.test.ts`.
 - **A distance, height, speed, area or rain figure is written by `src/units.ts`
   alone, here and in `frontend/src` and `mobile/src`:** never a hand-written `${n} m`.
   Guard: `src/figureUnits.test.ts`.
