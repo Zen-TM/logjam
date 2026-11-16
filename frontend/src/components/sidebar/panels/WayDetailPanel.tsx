@@ -45,6 +45,7 @@ import {
   wayVerbIcon,
   MAP_MEASURE,
   sharedWayNote,
+  plural,
   t,
 } from "@logjam/shared";
 import {
@@ -373,7 +374,9 @@ export default function WayDetailPanel({
       if (alsoRemove) await unshareEntityWith("route", route.id, "me");
       toast.done(
         alsoRemove
-          ? `"${copy.name}" is yours now, and ${ownerName ?? "their"} share is removed.`
+          ? ownerName
+            ? t`"${copy.name}" is yours now, and ${ownerName} share is removed.`
+            : t`"${copy.name}" is yours now, and their share is removed.`
           : t`"${copy.name}" is yours now.`,
       );
       onCopied(copy);
@@ -737,7 +740,7 @@ export default function WayDetailPanel({
           <section className={classes.section}>
             <p className={classes.note}>
               {sharedWayNote(
-                way.viaPlace ? (sharingPlace?.name ?? "a place") : null,
+                way.viaPlace ? (sharingPlace?.name ?? t`a place`) : null,
               )}
             </p>
           </section>
@@ -766,9 +769,12 @@ export default function WayDetailPanel({
             const { filename } = await sendCopyOfMedia(file.id, recipientIds);
             setShowSendCopy(false);
             toast.done(
-              recipientIds.length === 1
-                ? `Sent ${filename}.`
-                : `Sent ${filename} to ${recipientIds.length} friends.`,
+              plural(
+                recipientIds.length,
+                "Sent {0}.",
+                "Sent {0} to # friends.",
+                filename,
+              ),
             );
           }}
         />
@@ -834,9 +840,9 @@ export default function WayDetailPanel({
         open={ending === "copyAndRemove"}
         copy={{
           confirmTitle: t`Save a copy and remove?`,
-          confirmBody: `A copy of "${way.title}" is saved to your Ways first, then ${
-            ownerName ? `${ownerName}'s` : "the owner's"
-          } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,
+          confirmBody: ownerName
+            ? t`A copy of "${way.title}" is saved to your Ways first, then ${ownerName}'s share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`
+            : t`A copy of "${way.title}" is saved to your Ways first, then the owner's share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,
           confirmLabel: t`Save and remove`,
           tone: "filled",
         }}
@@ -887,7 +893,9 @@ function RenameWayDialog({
   function save() {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      setError(`${label} is required`);
+      setError(
+        noun === "route" ? t`Route name is required` : t`File name is required`,
+      );
       return;
     }
     if (trimmed === current) {
@@ -900,7 +908,7 @@ function RenameWayDialog({
   return (
     <Dialog
       open
-      title={`Rename this ${noun}`}
+      title={noun === "route" ? t`Rename this route` : t`Rename this file`}
       onClose={onClose}
       dismissible={!busy}
       footer={

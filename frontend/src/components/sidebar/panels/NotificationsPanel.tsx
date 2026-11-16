@@ -46,6 +46,7 @@ import {
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationKind,
+  plural,
   t,
 } from "@logjam/shared";
 import type { TNotification } from "../../../placeUtils";
@@ -473,9 +474,7 @@ function NotificationsPanel({
     try {
       await Promise.all(ids.map((id) => deleteNotification(id)));
       toast.done(
-        ids.length === 1
-          ? "Notification deleted."
-          : `Deleted ${ids.length} notifications.`,
+        plural(ids.length, "Notification deleted.", "Deleted # notifications."),
       );
     } catch (err) {
       console.error(err);
@@ -799,7 +798,7 @@ function NotificationsPanel({
       const pending = batchPendingFileSends(batch);
       title = batchLabel(batch);
       subtitle = [
-        batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
+        batch.unreadCount > 0 ? t`${batch.unreadCount} unread` : null,
         // Named, because a partly answered batch otherwise hides what is left.
         batch.group === "files" && pending.length !== batch.items.length
           ? t`${pending.length} still to answer`
