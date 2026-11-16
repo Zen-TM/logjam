@@ -3,6 +3,7 @@ import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { setDisplayUnits } from "../units.js";
 import { gridZonesFor } from "../grids.js";
+import { setLanguageResolver } from "../i18n.js";
 import { REGIONS } from "../regions.js";
 import { SIM_REGIONS } from "../simRegions.js";
 import { formatFieldValue, type AttributeRow } from "../logbook.js";
@@ -1088,6 +1089,19 @@ describe("the grid row's title", () => {
   it("names the grid in view", () => {
     expect(gridOverlayTitle(makarora, SIM_REGIONS)).toBe("NZTM grid");
     expect(gridOverlayTitle(bryce, SIM_REGIONS)).toBe("UTM grid");
+  });
+
+  // Mutation: write the title as a plain template, `${GRID_NAMES[…]} grid`
+  // without `t`, and the pseudo-language leaves it as plain English.
+  it("is written through the catalogue, round the grid's own name", () => {
+    setLanguageResolver(() => "en-XA");
+    try {
+      const title = gridOverlayTitle(makarora, SIM_REGIONS);
+      expect(title).toContain("⟦");
+      expect(title).toContain("NZTM");
+    } finally {
+      setLanguageResolver(() => undefined);
+    }
   });
 
   // Mutation: drop the one-region rule (name a centre outside every region

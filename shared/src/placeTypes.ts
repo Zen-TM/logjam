@@ -19,6 +19,7 @@
 // cannot import TypeScript. `api/src/lib/systemRowMigration.unit.test.ts` reads
 // the migration and fails if the two ever disagree.
 
+import { t } from "./i18n.js";
 import { isUuidV4 } from "./sync.js";
 import { quote, say, type UserSentence } from "./userSentence.js";
 import type { TripLogCustomFieldType } from "./tripLogFields.js";
@@ -484,44 +485,44 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   {
     id: "a0000000-0000-4000-8000-000000000011",
     key: "aca_technical",
-    label: "ACA technical",
+    label: t`ACA technical`,
     type: "integer",
     min: 1,
     max: 4,
-    hint: "Technical difficulty of the descent, on the American Canyoneering Association rating system.",
+    hint: t`Technical difficulty of the descent, on the American Canyoneering Association rating system.`,
     placeTypes: ["canyon"],
     labels: ["1", "2", "3", "4"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000012",
     key: "aca_water",
-    label: "ACA water",
+    label: t`ACA water`,
     type: "integer",
     min: 1,
     max: 7,
-    hint: "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.",
+    hint: t`Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.`,
     placeTypes: ["canyon"],
     labels: ["A", "B", "C", "C1", "C2", "C3", "C4"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000013",
     key: "aca_time",
-    label: "ACA time",
+    label: t`ACA time`,
     type: "integer",
     min: 1,
     max: 6,
-    hint: "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.",
+    hint: t`How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.`,
     placeTypes: ["canyon"],
     labels: ["I", "II", "III", "IV", "V", "VI"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000014",
     key: "aca_risk",
-    label: "ACA risk",
+    label: t`ACA risk`,
     type: "integer",
     min: 1,
     max: 5,
-    hint: "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.",
+    hint: t`How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.`,
     placeTypes: ["canyon"],
     labels: ["PG", "PG13", "R", "X", "XX"],
   },

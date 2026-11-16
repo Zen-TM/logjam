@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 import type { LicenceId } from "./licences.js";
 import type { TopoLayerName } from "./topoSettings.js";
 import {
@@ -210,7 +211,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-topo",
     printsContours: true,
     name: "SIX Maps Topo",
-    chipName: "Topo",
+    chipName: t`Topo`,
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
@@ -250,7 +251,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-base",
     printsContours: true,
     name: "SIX Maps Base Map",
-    chipName: "Base Map",
+    chipName: t`Base Map`,
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
@@ -277,7 +278,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-imagery",
     photo: true,
     name: "SIX Maps Imagery",
-    chipName: "Imagery",
+    chipName: t`Imagery`,
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",

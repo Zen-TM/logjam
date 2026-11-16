@@ -67,7 +67,7 @@ export function gridOverlayTitle(
   at: { lon: number; lat: number } | null,
   regions: readonly Region[] = REGIONS,
 ): string {
-  return `${GRID_NAMES[gridNamedAt(at, regions)]} grid`;
+  return t`${GRID_NAMES[gridNamedAt(at, regions)]} grid`;
 }
 
 /**

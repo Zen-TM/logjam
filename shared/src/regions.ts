@@ -295,7 +295,7 @@ const derived = (layer: string) => ({
 export const NSW_REGION = {
   id: "nsw",
   name: "NSW",
-  fullName: "New South Wales",
+  fullName: t`New South Wales`,
   // The Blue Mountains.
   view: { center: [150.31, -33.7], zoom: 9 },
   timeZone: SYDNEY_TZ,
@@ -624,7 +624,7 @@ export const REGIONS: readonly Region[] = simRegionsOn()
 const EMPTY_WORLD: Region = {
   id: "world",
   name: "The world",
-  fullName: "The world",
+  fullName: t`The world`,
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",
   borders: [],
