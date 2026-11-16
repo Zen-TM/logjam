@@ -7,7 +7,8 @@
 //
 // The archive holds the fire's year and month, never how long ago that was:
 // each client works that out from today, so the map doesn't age between builds.
-import { SHORT_MONTHS } from "./dateNames.js";
+import { formatMonthYear } from "./dateFormat.js";
+import { t } from "./i18n.js";
 import type { FireArchive } from "./regions.js";
 
 /** What a fire reads as when its type code is not in the region's `types`: a new code still shows its date. */
@@ -146,5 +147,5 @@ export function fireNameOf(
   const type =
     (typeof best.type === "number" ? fire.types[best.type] : undefined) ??
     FIRE_UNKNOWN_TYPE;
-  return `${type}, ${SHORT_MONTHS[best.month - 1]} ${best.year}`;
+  return t`${type}, ${formatMonthYear({ month: best.month - 1, year: best.year })}`;
 }
