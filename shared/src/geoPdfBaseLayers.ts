@@ -1,6 +1,6 @@
 import type { TopoLayerName } from "./topoSettings.js";
 import {
-  NSW_REGION,
+  layerIn,
   REGIONS,
   regionInWrappedView,
   regionsOf,
@@ -454,9 +454,12 @@ export type OverlaySource = "elevation" | "vegetation" | "features";
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
     "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
+  // The credit for the fire marking is the home region's (the first in
+  // `REGIONS`, NSW): `apply_fire_history` in topo/pipeline.py marks with NSW's
+  // NPWS history.
   vegetation:
     "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
-    NSW_REGION.terrain.fire.credit,
+    (layerIn(REGIONS[0], "fire")?.credit ?? ""),
   features: "Features © OpenStreetMap contributors",
 };
 

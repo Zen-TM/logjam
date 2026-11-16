@@ -150,7 +150,12 @@ export type Region = {
   vector: VectorArchive | null;
   /** Height sources, finest first. `DEM_SOURCES` is every region's, then the worldwide one. */
   dem: readonly DemSource[];
-  /** The Terrain group's archives; `{}` where a region has none. */
+  /**
+   * The Terrain group's archives; `{}` where a region has none. A saved clip is
+   * filed by its archive's `id` and a save does not dedupe by it, so no two
+   * archives of any region share one. Guard: `regions.test.ts` ("share no id or
+   * archive path with each other or with NSW").
+   */
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */
   placeSearch: string | null;

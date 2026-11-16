@@ -12,5 +12,8 @@ Pure TypeScript that `api`, `frontend` and `mobile` all import.
   read `DESIGN.md` here.**
 - **Consumers import `shared/dist/`, not `src/`:** after editing, `make shared`
   (or `npm run build` here) before `api`, `frontend` or Metro see the change.
+- **A region is declared once, in `src/regions.ts`.** Nothing else names NSW's
+  region constants or a simulated region (guard: `src/regionNeutral.test.ts`):
+  read the region in view. Adding one: `docs/operations/adding-a-region.md`.
 - **Tests:** `npm test` (vitest), colocated `*.test.ts`; canned inputs in
   `src/__fixtures__/`.
