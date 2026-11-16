@@ -11,8 +11,19 @@ import {
   SHARPENED_SOURCE_PREFIX,
   type DemSource,
 } from "./demSources.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { escapeXml } from "./escapeXml.js";
+import type { LicenceId } from "./licences.js";
 import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
+import { t } from "./i18n.js";
+import {
+  REGIONS,
+  WORLD,
+  regionOfArea,
+  type LonLatBox,
+  type Region,
+  type RegionSharpen,
+} from "./regions.js";
 
 /**
  * What a new LiDAR job is called wherever one is offered or made: declared
@@ -27,6 +38,80 @@ export const LIDAR_JOB_COPY = {
   unnamed: "Your area",
   beingMade: "is being sharpened",
 } as const;
+
+type SharpenUpload = Extract<RegionSharpen, { mode: "upload" }>;
+/** Where a region's users get a survey, and the steps the dialog walks them through. */
+export type SharpenPortal = SharpenUpload["portal"];
+type SharpenOffReason = Extract<RegionSharpen, { mode: "off" }>["reason"];
+
+/**
+ * Why sharpening is off where a region says so, as a sentence. Held beside
+ * the worker's own refusals (topo/sharpen.py `NOT_SHARPENED`), which say it
+ * after an upload; these say it before one.
+ */
+export const SHARPEN_OFF_REASON: Record<SharpenOffReason, string> = {
+  "no-lidar": t`There is no LiDAR survey to sharpen from here.`,
+  "already-fine": t`Logjam's terrain here is already at 1 m, so there is nothing to sharpen.`,
+};
+
+/** What Logjam Web offers for sharpening over some ground. */
+export type SharpenOffer =
+  | {
+      mode: "upload";
+      portal: SharpenPortal;
+      /** Whether the vegetation layer can be asked for here. */
+      vegetation: boolean;
+    }
+  | { mode: "off"; reason: string };
+
+/**
+ * What sharpening offers where `region` is. Over ground no region declares
+ * (`null`) it is the world's entry, which has no LiDAR to sharpen from: the
+ * worker refuses a survey of that ground up front (topo/sharpen.py
+ * `upload_region`). Guard: `sharpen.test.ts` ("sharpenOffer").
+ */
+export function sharpenOffer(region: Region | null): SharpenOffer {
+  const entry: RegionSharpen = (region ?? WORLD).sharpen;
+  return entry.mode === "upload"
+    ? {
+        mode: "upload",
+        portal: entry.portal,
+        vegetation: entry.vegetation,
+      }
+    : { mode: "off", reason: SHARPEN_OFF_REASON[entry.reason] };
+}
+
+/**
+ * What an entry point to sharpening says where it is off: the Terrain layers'
+ * "Not available here" beside it, and the region's reason for a tooltip or a
+ * screen reader. Null where sharpening is on. Guard: `sharpen.test.ts`
+ * ("sharpenUnavailable").
+ */
+export function sharpenUnavailable(
+  offer: SharpenOffer,
+): { state: string; reason: string } | null {
+  return offer.mode === "off"
+    ? { state: MAP_TERRAIN.copy.notHere, reason: offer.reason }
+    : null;
+}
+
+/**
+ * The offer for an action about `box`, else about what the map shows. A box
+ * is judged by the region holding its centre, which is how the worker picks
+ * the one that fills the area (`regionOfArea`): a box in no region is off,
+ * and never falls back to `view`. Only a `null` box reads the map's region.
+ * Guard: `sharpen.test.ts` ("sharpenOfferFor").
+ */
+export function sharpenOfferFor(
+  box: LonLatBox | null,
+  view: Region | null,
+  regions: readonly Region[] = REGIONS,
+): SharpenOffer {
+  if (!box) return sharpenOffer(view);
+  return sharpenOffer(
+    regionOfArea([box.west, box.south, box.east, box.north], regions),
+  );
+}
 
 /** A completed sharpened job, as a client and the API's sampler need it. */
 export type SharpenedArea = {
@@ -112,6 +197,13 @@ export function compareSharpenedAreas(
 }
 
 /**
+ * What a sharpened area's heights are licensed under: the LiDAR is ELVIS's,
+ * and NSW's sharpen credit (`sharpen.credit` in `regions.ts`) names this licence.
+ * Guard: `licences.test.ts` ("names the sharpened heights' licence in the region's sharpen credit").
+ */
+export const SHARPENED_LICENCE = "cc-by-3-au" as const satisfies LicenceId;
+
+/**
  * An area as a DEM source. It ranks above every statewide source
  * (ADR 0028), and its archive is private: each runtime opens it itself,
  * after it has checked the caller may read the area (the API's check:
@@ -125,6 +217,7 @@ export function sharpenedDemSource(area: SharpenedArea): DemSource {
     urlTemplate: null,
     archivePath: null,
     areaId: area.id,
+    licence: SHARPENED_LICENCE,
     credit: area.credit,
     creditHtml: escapeXml(area.credit),
   };
@@ -154,12 +247,15 @@ const holds = (
 
 /**
  * The one archive a terrain tile is read from, so no pixel is drawn by two.
+ * `statewideMax` is the deepest zoom of the region's own archive (the
+ * entry's `maxzoom`: z15 for New South Wales's).
  *
  * Heights and slope: statewide below z15. From z15 the first area (in
  * `compareSharpenedAreas` order) whose range holds the tile's z15 ancestor
- * answers down to its zmax; past it, or past z15 where no area holds the
- * tile, the tile is absent and the renderer draws its parent. A z15 tile in
- * an area's range has every descendant, and one outside has none, so a
+ * answers down to its zmax; past it, the tile is absent and the renderer
+ * draws its parent. Where no area holds the tile, the region's archive
+ * answers down to `statewideMax` and the tile is absent past it. A z15 tile
+ * in an area's range has every descendant, and one outside has none, so a
  * parent never draws beside its own children.
  *
  * Contours: statewide below z14 (the statewide archive's deepest zoom); at
@@ -174,6 +270,7 @@ export function terrainTileArchive<A extends RoutedTerrain>(
   z: number,
   x: number,
   y: number,
+  statewideMax: number,
 ): TerrainTileAnswer<A> {
   const ordered = [...areas].sort(compareSharpenedAreas);
   const from = TERRAIN_ROUTED_FROM[layer];
@@ -196,7 +293,7 @@ export function terrainTileArchive<A extends RoutedTerrain>(
   );
   if (layer === "contours") return area ?? "statewide";
   if (area) return z <= area.zmax ? area : "absent";
-  return z === from ? "statewide" : "absent";
+  return z <= Math.max(from, statewideMax) ? "statewide" : "absent";
 }
 
 /**

@@ -1,24 +1,29 @@
 """
 area_export.py
 --------------
-An export of an area: the statewide terrain over a box, as raw data for a GIS
+An export of an area: a region's terrain over a box, as raw data for a GIS
 (GeoTIFF, a zip of one file per layer with CREDITS.txt, or one GeoPackage), or
 as a styled map for an offline map app (one MBTiles, `render_mbtiles`).
 
 Everything is read from the published archives, never the source sheets, so a
-file holds the numbers the map, the slope readout and Logjam GPS read:
+file holds the numbers the map, the slope readout and Logjam GPS read. The
+archives are the ones of the region the box is exported from
+(`regions.export_region`; the worker names them with `region_keys`):
 
-- heights: `nsw-5m.pmtiles` at z15, Float32 metres;
-- slope: `nsw-5m-slope.pmtiles` at z15, whole degrees (ADR 0039);
+- heights: the region's heights archive at its deepest zoom (z15 in NSW),
+  Float32 metres;
+- slope: its slope archive at the same zoom, whole degrees (ADR 0039);
 - hillshade: `gdaldem hillshade` over the exported heights;
 - contours: the statewide build's own recipe (heights averaged to 10 m, a line
   every 10 m) run over the exported heights, so the lines match the map's and
   come out whole instead of cut at every tile edge.
 
-Rasters are warped once into GDA2020 / MGA, the zone of the box's centre, at
-5 m: in web mercator a GIS computing slope from the heights would be off by
-1/cos(latitude). The z15 tiles are first written into one tiled GeoTIFF on
-disk, so memory stays flat however large the box: GDAL warps it in chunks.
+Rasters are warped once into the grid of that region (the API names its EPSG
+on the job: MGA in NSW, NZTM in New Zealand, a UTM zone where no region is), at
+the cell `export_zoom` picks, 5 m wherever the archive ends at z15: in web
+mercator a GIS computing slope from the heights would be off by
+1/cos(latitude). The tiles are first written into one tiled GeoTIFF on disk,
+so memory stays flat however large the box: GDAL warps it in chunks.
 
 Inside a sharpened area the user may read (ADR 0040), the API names the area
 and its place in the router's order (`sourceJobIds`, decided at submit). A
@@ -65,19 +70,17 @@ from pmtiles.tile import (
 from build_nsw_dem import (
     CONTOUR_CELL_M,
     CONTOUR_INTERVAL_M,
-    CONTOUR_KEY,
     CONTOUR_LAYER,
     CONTOUR_MAJOR_M,
     CONTOUR_ZOOMS,
+    FETCH_THREADS,
     HALF_WORLD_M,
-    HEIGHT_KEY,
     NODATA,
-    SLOPE_KEY,
+    SLOPE_NODATA,
     ZMAX,
-    decode_terrarium,
-    lonlat_to_tile,
-    tile_bounds_3857,
+    tile_range,
 )
+from build_nsw_dem import write_mosaic as _write_mosaic
 from pipeline import (
     COMPOSITE_LAYER_ORDER,
     HILLSHADE_DEFAULTS,
@@ -90,6 +93,7 @@ from pipeline import (
     tile_to_bbox,
     tiles_for_bbox,
 )
+from regions import EXPORT_ARCHIVES
 from renderers.tile_compose import (
     _composite_workers,
     _vector_style_to_render_settings,
@@ -113,33 +117,32 @@ LAYERS_BY_FORMAT = {
 MBTILES_ZOOMS = (11, 16)
 CONTOUR_ZMAX = max(zmax for _, zmax in CONTOUR_ZOOMS.values())
 CELL_M = 5
-SLOPE_NODATA = 255
-# An area's cell at its deepest zoom: ~2 m at z16 and ~1 m at z17 at NSW's
-# latitudes, the cells topo/sharpen.py `zoom_for_cell` makes each zoom from
-# (tests/test_area_export.py `AreaCells`).
+# The cell of a zoom finer than z15: ~2 m at z16 and ~1 m at z17 at the
+# latitudes of the regions, the cells topo/sharpen.py `zoom_for_cell` makes each
+# zoom from (tests/test_area_export.py `AreaCells`). An area's own, and a
+# region's when its archives go deeper than z15.
 AREA_CELL_M = {16: 2, 17: 1}
+# The longest side of a box, in km, shared/src/areaExport.ts
+# AREA_EXPORT_MAX_SIDE_KM (tests/test_area_export.py `SyncWithShared`).
+MAX_SIDE_KM = 100
+# The most cells a grid finer than 5 m may hold: those of the longest box at 5 m
+# (`export_zoom`).
+MAX_CELLS = (MAX_SIDE_KM * 1000 // CELL_M) ** 2
 # shared/src/sharpen.ts TERRAIN_ROUTED_FROM (tests/test_area_export.py).
 ROUTED_FROM = {"heights": 15, "slope": 15, "contours": 14}
-# Tiles fetched and decoded at once, and how many are handed out together: a
-# decoded tile is 256 KB of floats, so at most a chunk of them is ever held.
-FETCH_THREADS = 16
-FETCH_CHUNK = 256
 
 
 class AreaExportError(Exception):
     """An area export that failed; the message is for the log only."""
 
 
-class AreaOutsideNsw(AreaExportError):
-    """No statewide tiles in the box: the API checks the box against NSW's
-    border, drawn a little outside the real one, so a box just over it gets
-    this far. `SENTENCE` is what the owner reads, the API's
-    areaExportOutsideTerrain() (tests/test_area_export.py)."""
+class AreaOutsideTerrain(AreaExportError):
+    """No tiles of the region's archives in the box: the API checks the box
+    against the regions' borders, drawn a little outside the real ones, so a
+    box just over one gets this far. `SENTENCE` is what the owner reads, the
+    API's areaExportOutsideTerrain() (tests/test_area_export.py)."""
 
-    SENTENCE = (
-        "That area is outside NSW, where the statewide terrain is. Choose an "
-        "area in NSW."
-    )
+    SENTENCE = "Terrain isn't available for that area. Choose an area where it is."
 
 
 Bbox = Tuple[float, float, float, float]  # west, south, east, north (degrees)
@@ -147,7 +150,8 @@ GetBytes = Callable[[int, int], bytes]
 
 
 def mga_epsg(lon: float) -> int:
-    """GDA2020 / MGA for the zone a longitude falls in (zone 55 is EPSG:7855)."""
+    """GDA2020 / MGA for the zone a longitude falls in (zone 55 is EPSG:7855).
+    A job an older API queued names no grid and falls back to this."""
     return 7800 + int((lon + 180) // 6) + 1
 
 
@@ -245,12 +249,18 @@ def area_from(row: dict) -> Optional[Area]:
 
 
 def tile_archive(
-    areas: Sequence[Area], layer: str, z: int, x: int, y: int
+    areas: Sequence[Area],
+    layer: str,
+    z: int,
+    x: int,
+    y: int,
+    statewide_max: int,
 ) -> Union[str, Area]:
     """`terrainTileArchive` (shared/src/sharpen.ts) over areas already in the
     router's order, which the API gave them: the one archive a tile is read
-    from, "statewide", or "absent" (tests/test_area_export.py `TileArchive`
-    holds the same edges as sharpen.test.ts)."""
+    from, "statewide", or "absent". `statewide_max` is the deepest zoom of the
+    region's own archive (`region_top_zoom`). It holds the same edges as
+    sharpen.test.ts (tests/test_area_export.py `TileArchive`)."""
     start = ROUTED_FROM[layer]
     if z < start:
         return "statewide"
@@ -265,28 +275,52 @@ def tile_archive(
             return area if z <= area.zmax else "absent"
     if layer == "contours":
         return "statewide"
-    return "statewide" if z == start else "absent"
+    return "statewide" if z <= max(start, statewide_max) else "absent"
 
 
-def tile_range(bbox: Bbox, zoom: int) -> Tuple[int, int, int, int]:
-    """(x0, y0, x1, y1), inclusive, of the tiles covering a box."""
+def region_keys(region: dict) -> Dict[str, str]:
+    """The archive keys an export reads from a region `export_region` picked."""
+    return {layer: region["terrain"][layer]["archivePath"] for layer in EXPORT_ARCHIVES}
+
+
+def region_top_zoom(region: dict) -> int:
+    """The deepest zoom the region's heights and slope archives share."""
+    terrain = region["terrain"]
+    return min(terrain["heights"]["sampleZoom"], terrain["slope"]["maxzoom"])
+
+
+def export_zoom(top: int, bbox: Bbox) -> Tuple[int, int]:
+    """The zoom an export reads the region's heights and slope at, and its
+    cell: the deepest of the region's own (z16 and z17 are ~2 m and ~1 m)
+    whose grid over the box holds no more cells than the longest box does at
+    5 m, else z15 and 5 m. A box of 100 km at 1 m would be 25 times the file
+    the export task is sized for. An archive that ends at z15 always gives
+    z15 and 5 m (tests/test_area_export.py `NswExportUnchanged`)."""
     west, south, east, north = bbox
-    x0, y0 = lonlat_to_tile(west, north, zoom)
-    x1, y1 = lonlat_to_tile(east, south, zoom)
-    return x0, y0, x1, y1
+    area_m2 = (
+        (east - west)
+        * 111320
+        * math.cos(math.radians((south + north) / 2))
+        * (north - south)
+        * 110570
+    )
+    for zoom in sorted(AREA_CELL_M, reverse=True):
+        if zoom <= top and area_m2 / AREA_CELL_M[zoom] ** 2 <= MAX_CELLS:
+            return zoom, AREA_CELL_M[zoom]
+    return min(top, ZMAX), CELL_M
 
 
-def mga_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
-    """The MGA rectangle a box is warped to, on the cell's grid, and that
-    rectangle's own lon/lat bounds. The box is rotated in MGA, so the rectangle
-    reaches past it at the corners: the mosaic covers the lon/lat bounds, or
-    those corners come out no-data."""
-    wgs84, mga = osr.SpatialReference(), osr.SpatialReference()
+def grid_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
+    """The rectangle in the grid `epsg` that a box is warped to, on the cell's
+    grid, and that rectangle's own lon/lat bounds. The box is rotated in the
+    grid, so the rectangle reaches past it at the corners: the mosaic covers
+    the lon/lat bounds, or those corners come out no-data."""
+    wgs84, grid = osr.SpatialReference(), osr.SpatialReference()
     wgs84.ImportFromEPSG(4326)
-    mga.ImportFromEPSG(epsg)
-    for srs in (wgs84, mga):
+    grid.ImportFromEPSG(epsg)
+    for srs in (wgs84, grid):
         srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    xmin, ymin, xmax, ymax = osr.CoordinateTransformation(wgs84, mga).TransformBounds(
+    xmin, ymin, xmax, ymax = osr.CoordinateTransformation(wgs84, grid).TransformBounds(
         *bbox, 21
     )
     rect = (
@@ -295,7 +329,7 @@ def mga_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
         math.ceil(xmax / cell) * cell,
         math.ceil(ymax / cell) * cell,
     )
-    around = osr.CoordinateTransformation(mga, wgs84).TransformBounds(*rect, 21)
+    around = osr.CoordinateTransformation(grid, wgs84).TransformBounds(*rect, 21)
     return rect, tuple(around)
 
 
@@ -349,72 +383,14 @@ def write_mosaic(
     attribution: str,
     zoom: int = ZMAX,
 ) -> None:
-    """The archive's tiles at `zoom` (z15 statewide, an area's zmax) over the
-    box as one tiled web-mercator GeoTIFF:
-    heights as Float32 (no-data NODATA), slope as Byte degrees (no-data 255).
-    Tiles are fetched and decoded in threads and written by this one, a chunk
-    at a time."""
-    x0, y0, x1, y1 = tile_range(bbox, zoom)
-    cols, rows = x1 - x0 + 1, y1 - y0 + 1
-    west, _, _, north = tile_bounds_3857(zoom, x0, y0)
-    span = tile_bounds_3857(zoom, x0, y0)[2] - west
-    heights = kind == "heights"
-    dataset = gdal.GetDriverByName("GTiff").Create(
-        str(path),
-        cols * 256,
-        rows * 256,
-        1,
-        gdal.GDT_Float32 if heights else gdal.GDT_Byte,
-        options=[
-            "TILED=YES",
-            "BLOCKXSIZE=256",
-            "BLOCKYSIZE=256",
-            "COMPRESS=DEFLATE",
-            "PREDICTOR=3" if heights else "PREDICTOR=2",
-            "BIGTIFF=IF_SAFER",
-            "SPARSE_OK=TRUE",
-        ],
-    )
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(3857)
-    dataset.SetProjection(srs.ExportToWkt())
-    dataset.SetGeoTransform((west, span / 256, 0, north, 0, -span / 256))
-    # gdalwarp carries a source's metadata to what it writes.
-    dataset.SetMetadataItem("TIFFTAG_COPYRIGHT", attribution)
-    band = dataset.GetRasterBand(1)
-    band.SetNoDataValue(NODATA if heights else SLOPE_NODATA)
-    band.Fill(NODATA if heights else SLOPE_NODATA)
-
-    def fetch(xy: Tuple[int, int]):
-        x, y = xy
-        png = reader.get(zoom, x, y)
-        if not png:
-            return xy, None
-        rgb = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"))
-        values = decode_terrarium(rgb)
-        if heights:
-            return xy, np.where(np.isnan(values), NODATA, values).astype(np.float32)
-        return xy, np.where(np.isnan(values), SLOPE_NODATA, values).astype(np.uint8)
-
-    tiles = [(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
-    found = 0
-    with ThreadPoolExecutor(FETCH_THREADS) as pool:
-        for start in range(0, len(tiles), FETCH_CHUNK):
-            chunk = tiles[start : start + FETCH_CHUNK]
-            for (x, y), values in pool.map(fetch, chunk):
-                if values is None:
-                    continue
-                band.WriteArray(values, (x - x0) * 256, (y - y0) * 256)
-                found += 1
-    band.FlushCache()
-    dataset = None
-    if found == 0:
-        raise AreaOutsideNsw(f"no {kind} tiles in the box")
+    """`build_nsw_dem.write_mosaic`, refusing a box the archive has no tiles in."""
+    if _write_mosaic(reader, bbox, path, kind, attribution, zoom) == 0:
+        raise AreaOutsideTerrain(f"no {kind} tiles in the box")
 
 
 def run(*command: str, stderr_in_error: bool = True) -> None:
     """Raises with GDAL's stderr for the log. A warp with a cutline drops it
-    (`warp_to_mga` passes `stderr_in_error=False`): GDAL quotes a bad
+    (`warp_to_grid` passes `stderr_in_error=False`): GDAL quotes a bad
     geometry's coordinates there, and the log never carries a place
     (tests/test_area_export.py `CutlineErrors`)."""
     result = subprocess.run(command, capture_output=True, text=True)
@@ -423,7 +399,7 @@ def run(*command: str, stderr_in_error: bool = True) -> None:
         raise AreaExportError(f"{command[0]} failed{detail}")
 
 
-def warp_to_mga(
+def warp_to_grid(
     source: Path,
     out: Path,
     rect: Bbox,
@@ -476,8 +452,9 @@ def make_layers(
     cutline: Optional[Path] = None,
     credit: Optional[str] = None,
 ) -> Made:
-    """Every requested layer as a file in MGA, in `work`: the statewide 5 m
-    ones by default, or an area's at its zoom and cell, cut to its survey."""
+    """Every requested layer as a file in the grid `epsg`, in `work`: the
+    region's, at `zoom` and `cell` (z15 and 5 m by default), or an area's at its
+    own, cut to its survey."""
     steps = plan(layers)
     if epsg is None:
         epsg = mga_epsg((bbox[0] + bbox[2]) / 2)
@@ -487,20 +464,20 @@ def make_layers(
         if not attribution:
             raise AreaExportError("the heights archive carries no attribution")
         credit = credit_line(layers, attribution)
-    rect, around = mga_extent(bbox, epsg, cell)
+    rect, around = grid_extent(bbox, epsg, cell)
     rasters: Dict[str, Path] = {}
 
     if steps["heights"]:
         mosaic = work / "heights-3857.tif"
         write_mosaic(heights_reader, around, mosaic, "heights", credit, zoom)
         rasters["heights"] = work / "heights.tif"
-        warp_to_mga(mosaic, rasters["heights"], rect, epsg, "bilinear", cell, cutline)
+        warp_to_grid(mosaic, rasters["heights"], rect, epsg, "bilinear", cell, cutline)
         mosaic.unlink()
     if steps["slope"]:
         mosaic = work / "slope-3857.tif"
         write_mosaic(Archive(archives["slope"]), around, mosaic, "slope", credit, zoom)
         rasters["slope"] = work / "slope.tif"
-        warp_to_mga(mosaic, rasters["slope"], rect, epsg, "near", cell, cutline)
+        warp_to_grid(mosaic, rasters["slope"], rect, epsg, "near", cell, cutline)
         mosaic.unlink()
     if steps["hillshade"]:
         shade = work / "hillshade-raw.tif"
@@ -686,12 +663,12 @@ def mbtiles_settings(style: dict) -> dict:
     return settings
 
 
-def covers(heights: Archive, bbox: Bbox) -> bool:
-    """Whether the statewide heights have a tile in the box: a box with
-    none is outside NSW."""
-    x0, y0, x1, y1 = tile_range(bbox, ZMAX)
+def covers(heights: Archive, bbox: Bbox, zoom: int = ZMAX) -> bool:
+    """Whether the region's heights have a tile in the box at `zoom`: a box
+    with none is outside its terrain."""
+    x0, y0, x1, y1 = tile_range(bbox, zoom)
     return any(
-        heights.get(ZMAX, x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)
+        heights.get(zoom, x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)
     )
 
 
@@ -825,7 +802,7 @@ def area_made(
             epsg=epsg, zoom=area.zmax, cell=AREA_CELL_M[area.zmax],
             cutline=cutline, credit=credit,
         )  # fmt: skip
-    except AreaOutsideNsw:  # no tile of the area's archive in the box
+    except AreaOutsideTerrain:  # no tile of the area's archive in the box
         shutil.rmtree(sub)  # so the next area takes this name
         return None
     made.name = name
@@ -862,26 +839,33 @@ def render_mbtiles(
     style: dict,
     work: Path,
     areas: Sequence[AreaSource] = (),
+    top_zoom: int = ZMAX,
 ) -> Path:
     """The box as one MBTiles, drawn with the export's style snapshot. Each
-    tile reads the one archive the map would (`tile_archive`): statewide, or
-    an area down to its zmax, with z17 tiles inside a 1 m area."""
+    tile reads the one archive the map would (`tile_archive`): the region's,
+    or an area down to its zmax, with z17 tiles inside a 1 m area. `top_zoom`
+    is the deepest zoom of the region's archives; the mosaics under the tiles
+    are read at the zoom `export_zoom` picks from it, to z16 at most."""
     heights_reader = Archive(archives["heights"])
     attribution = heights_reader.metadata().get("attribution")
     if not attribution:
         raise AreaExportError("the heights archive carries no attribution")
-    # With slope or hillshade, write_mosaic finds a box outside NSW. With
-    # contours alone the heights decide, because flat ground in NSW has no
+    # The tiles end at MBTILES_ZOOMS[1], so a deeper mosaic is never drawn from.
+    zoom = min(export_zoom(top_zoom, bbox)[0], MBTILES_ZOOMS[1])
+    # With slope or hillshade, write_mosaic finds a box outside the region.
+    # With contours alone the heights decide, because flat ground has no
     # contour tiles either (tests/test_area_export.py `ContoursAlone`).
-    if not {"slope", "hillshade"} & set(layers) and not covers(heights_reader, bbox):
-        raise AreaOutsideNsw("no heights tiles in the box")
+    if not {"slope", "hillshade"} & set(layers) and not covers(
+        heights_reader, bbox, zoom
+    ):
+        raise AreaOutsideTerrain("no heights tiles in the box")
     settings = mbtiles_settings(style)
     # Each raster layer's COG and its colour table.
     rasters: Dict[str, Tuple[Path, np.ndarray]] = {}
     if "hillshade" in layers:
         mosaic = work / "heights-3857.tif"
         shade = work / "hillshade-3857.tif"
-        write_mosaic(heights_reader, bbox, mosaic, "heights", attribution)
+        write_mosaic(heights_reader, bbox, mosaic, "heights", attribution, zoom)
         gdal.DEMProcessing(
             str(shade), str(mosaic), "hillshade",
             azimuth=HILLSHADE_DEFAULTS["azimuth"],
@@ -901,7 +885,9 @@ def render_mbtiles(
         shade.unlink()
     if "slope" in layers:
         mosaic = work / "slope-3857.tif"
-        write_mosaic(Archive(archives["slope"]), bbox, mosaic, "slope", attribution)
+        write_mosaic(
+            Archive(archives["slope"]), bbox, mosaic, "slope", attribution, zoom
+        )
         rasters["slope"] = (
             work / "slope.tif",
             np.array(slope_colours(settings["slope"]["bands"]), np.uint8),
@@ -955,7 +941,7 @@ def render_mbtiles(
                 )  # fmt: skip
                 own["slope"] = (work / f"a{i}-slope.tif", rasters["slope"][1])
                 value_cog(mosaic, own["slope"][0], SLOPE_NODATA)
-        except AreaOutsideNsw:
+        except AreaOutsideTerrain:
             for path in [*made, *(cog for cog, _ in own.values())]:
                 path.unlink(missing_ok=True)
             continue
@@ -976,7 +962,7 @@ def render_mbtiles(
         or its z14 parent from z15 up, from the archive it routes to."""
         cz = min(z, CONTOUR_ZMAX)
         parent = (cz, x >> (z - cz), y >> (z - cz))
-        answer = tile_archive(routed, "contours", z, x, y)
+        answer = tile_archive(routed, "contours", z, x, y, top_zoom)
         files = (
             area_contours.get(answer.id, {})
             if isinstance(answer, Area)
@@ -993,8 +979,9 @@ def render_mbtiles(
         chosen = {}
         for layer, cog in rasters.items():
             answer = tile_archive(
-                routed, "heights" if layer == "hillshade" else "slope", z, x, y
-            )
+                routed, "heights" if layer == "hillshade" else "slope", z, x, y,
+                top_zoom,
+            )  # fmt: skip
             if isinstance(answer, Area):
                 chosen[layer] = area_rasters[answer.id][layer]
                 drew[answer.id].add(layer)
@@ -1013,7 +1000,7 @@ def render_mbtiles(
                 for x, y in tiles_for_bbox(
                     *intersect(bbox, tiles15_bounds(area)), area.zmax
                 )
-                if tile_archive(routed, "slope", area.zmax, x, y) is area
+                if tile_archive(routed, "slope", area.zmax, x, y, top_zoom) is area
             ]
     zmax = max(t[0] for t in tiles)
     # Siblings under one z14 parent in a row, so a worker's line cache hits.
@@ -1062,17 +1049,26 @@ def render_area(
     work: Path,
     style: Optional[dict] = None,
     areas: Sequence[AreaSource] = (),
+    epsg: Optional[int] = None,
+    top_zoom: int = ZMAX,
 ) -> Path:
     """`style` is the export's style snapshot, which only an MBTiles draws.
     `areas` are the sharpened areas the API chose, in the router's order,
-    each with its archives."""
+    each with its archives. `epsg` is the grid the API chose for the box
+    (the MGA zone of its centre when a job has none: `mga_epsg`). `top_zoom`
+    is the deepest zoom of the region's archives (`region_top_zoom`)."""
     allowed = LAYERS_BY_FORMAT.get(fmt)
     if allowed is None or not layers or any(l not in allowed for l in layers):
         raise AreaExportError(f"bad request: {fmt} {layers}")
     if fmt == "mbtiles":
-        return render_mbtiles(archives, bbox, layers, style or {}, work, areas)
-    statewide = make_layers(archives, bbox, layers, work)
-    epsg = mga_epsg((bbox[0] + bbox[2]) / 2)
+        return render_mbtiles(
+            archives, bbox, layers, style or {}, work, areas, top_zoom
+        )
+    epsg = epsg or mga_epsg((bbox[0] + bbox[2]) / 2)
+    zoom, cell = export_zoom(top_zoom, bbox)
+    statewide = make_layers(
+        archives, bbox, layers, work, epsg=epsg, zoom=zoom, cell=cell
+    )
     mades = [statewide]
     for area, arch in areas:
         made = area_made(
@@ -1084,11 +1080,10 @@ def render_area(
     return package(mades, fmt, work)
 
 
-def s3_archives(s3, bucket: str) -> Dict[str, GetBytes]:
+def s3_archives(s3, bucket: str, region: dict) -> Dict[str, GetBytes]:
+    """The region's archives, by layer (`region_keys`)."""
     return {
-        "heights": s3_ranges(s3, bucket, HEIGHT_KEY),
-        "slope": s3_ranges(s3, bucket, SLOPE_KEY),
-        "contours": s3_ranges(s3, bucket, CONTOUR_KEY),
+        layer: s3_ranges(s3, bucket, key) for layer, key in region_keys(region).items()
     }
 
 

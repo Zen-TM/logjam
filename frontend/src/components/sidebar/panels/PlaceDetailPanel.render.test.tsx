@@ -8,7 +8,14 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ADD_WAY, PLACE_PAGE, type MediaItem } from "@logjam/shared";
+import {
+  ADD_WAY,
+  NSW_REGION,
+  PLACE_PAGE,
+  SIM_NZ,
+  sharpenOffer,
+  type MediaItem,
+} from "@logjam/shared";
 import type { TPlace, TRoute } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
@@ -105,6 +112,7 @@ function renderPanel(
       onBack={noop}
       onOpenTrip={noop}
       onMakeMap={noop}
+      sharpenFor={() => sharpenOffer(NSW_REGION)}
       onExportPlace={noop}
       onWaysChanged={noop}
       verbRequest={null}
@@ -142,6 +150,62 @@ describe("the place panel's coordinates", () => {
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
     expect(toast.done).toHaveBeenCalledWith(PLACE_PAGE.copy.copyPosition);
+  });
+});
+
+// jsdom has no Popover API, which the actions menu opens with.
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement) {
+    this.removeAttribute("popover");
+  },
+  hidePopover() {},
+  togglePopover() {},
+});
+
+describe("the place page's Sharpen an area here", () => {
+  const verb = () =>
+    fireEvent.click(
+      screen.getByRole("button", { name: `Actions for ${place.name}` }),
+    );
+
+  // Mutation: leave the unavailable argument out of `placeVerbEntries` in
+  // PlaceDetailPanel.tsx, and the verb runs over ground with no sharpening.
+  it("says Not available here where the place's region cannot sharpen", () => {
+    const onMakeMap = vi.fn();
+    renderPanel({ sharpenFor: () => sharpenOffer(SIM_NZ), onMakeMap });
+    verb();
+    const item = screen.getByRole("menuitem", {
+      name: /^Sharpen an area here, Not available here\. /,
+    });
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain("Not available here");
+    fireEvent.click(item);
+    expect(onMakeMap).not.toHaveBeenCalled();
+  });
+
+  // Mutation: mark the verb unavailable whatever the offer says, and New
+  // South Wales, the only region in prod, loses it.
+  it("is the verb it was where the region can", () => {
+    const onMakeMap = vi.fn();
+    renderPanel({ sharpenFor: () => sharpenOffer(NSW_REGION), onMakeMap });
+    verb();
+    const item = screen.getByRole("menuitem", { name: "Sharpen an area here" });
+    expect(item.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(item);
+    expect(onMakeMap).toHaveBeenCalledWith(place, "topo");
+  });
+});
+
+describe("the place panel's river gauge", () => {
+  // Mutation: draw the gauge section whatever `gaugeFeedAt` says, and a place
+  // in no region with a gauge feed offers gauges from another region's.
+  it("is offered to the owner where the place's region has a feed, and nowhere else", () => {
+    const { unmount } = renderPanel();
+    expect(screen.queryByText(PLACE_PAGE.copy.chooseGauge)).not.toBeNull();
+    unmount();
+    const elsewhere = { ...place, latitude: -45.1, longitude: 169.2 };
+    renderPanel({ place: elsewhere, places: [elsewhere] });
+    expect(screen.queryByText(PLACE_PAGE.copy.chooseGauge)).toBeNull();
   });
 });
 

@@ -8,6 +8,7 @@ import {
   defsForType,
   drawsYoursHeading,
   isSystemFieldDef,
+  listedAttributeDefs,
   NEW_TYPE_ATTRIBUTES,
   placeAttributesTitle,
   SETTINGS_LIST,
@@ -68,6 +69,7 @@ function CustomFieldSection({
   defs,
   onDefsChange,
   placeTypes,
+  uiPreferences,
   onBack,
 }: {
   entity: CustomFieldEntityKind;
@@ -85,6 +87,9 @@ function CustomFieldSection({
    *  changed. Absent for trip attributes, which are scoped by the places a trip
    *  links rather than chosen. */
   placeTypes?: TPlaceType[];
+  /** The account's preferences: which grade system the built-in list names
+   *  (`listedAttributeDefs`). */
+  uiPreferences: unknown;
   onBack: () => void;
 }) {
   /** The dialog's subject: an existing attribute, or a new one. */
@@ -95,8 +100,9 @@ function CustomFieldSection({
     null,
   );
 
-  const own = defs.filter((def) => !isSystemFieldDef(def));
-  const system = defs.filter(isSystemFieldDef);
+  const listed = listedAttributeDefs(defs, uiPreferences);
+  const own = listed.filter((def) => !isSystemFieldDef(def));
+  const system = listed.filter(isSystemFieldDef);
 
   return (
     <div className={classes.root}>
@@ -427,6 +433,7 @@ export function TypeAttributesDialog({
   placeTypes,
   defs,
   onDefsChange,
+  uiPreferences,
   onClose,
 }: {
   type: TPlaceType;
@@ -435,6 +442,8 @@ export function TypeAttributesDialog({
    *  against all of them. */
   defs: ScopedCustomFieldDef[];
   onDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** As on `CustomFieldSection`. */
+  uiPreferences: unknown;
   onClose: () => void;
 }) {
   const [editing, setEditing] = useState<ScopedCustomFieldDef | "new" | null>(
@@ -458,7 +467,7 @@ export function TypeAttributesDialog({
     );
   }
 
-  const shown = defsForType(defs, type.id);
+  const shown = listedAttributeDefs(defsForType(defs, type.id), uiPreferences);
   const own = shown.filter((def) => !isSystemFieldDef(def));
   const system = shown.filter(isSystemFieldDef);
   return (

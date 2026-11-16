@@ -1,0 +1,35 @@
+{
+  "_comment": "Which region a sharpened area is filled from and credited to: the one holding the centre of its coverage box [west, south, east, north], or null. Made-up boxes over NSW and the simulated regions. Read by shared/src/regions.test.ts (regionOfArea) and topo/tests/test_regions.py (TestRegionOfArea), so the worker that fills an area and the clients that credit it cannot pick differently.",
+  "cases": [
+    {
+      "why": "inside NSW",
+      "coverage": [150.3, -33.7, 150.32, -33.68],
+      "region": "nsw"
+    },
+    {
+      "why": "touches NSW's coast, centre in the sea",
+      "coverage": [154.0, -33.9, 155.0, -33.5],
+      "region": null
+    },
+    {
+      "why": "crosses simulated Utah's east edge, centre inside",
+      "coverage": [-112.9, 37.28, -112.86, 37.3],
+      "region": "simutah"
+    },
+    {
+      "why": "crosses simulated Utah's east edge, centre outside",
+      "coverage": [-112.89, 37.28, -112.83, 37.3],
+      "region": null
+    },
+    {
+      "why": "simulated New Zealand's first ring",
+      "coverage": [169.22, -44.08, 169.24, -44.06],
+      "region": "simnz"
+    },
+    {
+      "why": "simulated New Zealand's second ring",
+      "coverage": [175.6, -37.12, 175.62, -37.1],
+      "region": "simnz"
+    }
+  ]
+}

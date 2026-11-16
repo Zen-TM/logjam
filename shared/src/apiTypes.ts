@@ -13,6 +13,7 @@ import type { Language } from "./i18n.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 import type { SlopeBand } from "./topoSettings.js";
+import type { Units } from "./units.js";
 
 export type TPlace = {
   id: string;
@@ -92,6 +93,7 @@ export type TUser = {
     slopeBands?: SlopeBand[];
     regions?: string[];
     language?: Language;
+    units?: Units;
   } | null;
 };
 

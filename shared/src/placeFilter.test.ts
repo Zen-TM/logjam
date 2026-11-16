@@ -320,6 +320,37 @@ describe("isPlaceInArea", () => {
   });
 });
 
+describe("passesFilters — area across 180°", () => {
+  // Made-up positions either side of the date line.
+  const east = place({ latitude: -17, longitude: 179.5 });
+  const west = place({ latitude: -17, longitude: -179.5 });
+  const far = place({ latitude: -17, longitude: 170 });
+  const bands = { south: -18, north: -16 };
+
+  // Mutation: in `lonWidth` return `east - west` for a wrapped box too (the
+  // wrapped case), or make the last line of `lonBoxWithin` a plain
+  // `innerWest >= west && innerEast <= east` (the unwrapped case), or put a
+  // plain comparison back in `isPlaceInArea`.
+  it.each([
+    ["unwrapped, east above 180", { west: 178, east: 182 }],
+    ["wrapped, west above east", { west: 178, east: -178 }],
+  ])("keeps places on both sides of the line (%s)", (_name, lon) => {
+    const f = filters({ area: { ...bands, ...lon } });
+    expect(passesFilters(east, f, true)).toBe(true);
+    expect(passesFilters(west, f, true)).toBe(true);
+    expect(passesFilters(far, f, true)).toBe(false);
+  });
+
+  // Mutation: put the plain `place.longitude >= area.west && place.longitude <= area.east`
+  // back in `isPlaceInArea`.
+  it("keeps the places of a box wholly in another world copy", () => {
+    const f = filters({ area: { ...bands, west: 538, east: 542 } });
+    expect(passesFilters(east, f, true)).toBe(true);
+    expect(passesFilters(west, f, true)).toBe(true);
+    expect(passesFilters(far, f, true)).toBe(false);
+  });
+});
+
 describe("passesFilters — date range", () => {
   it("created_at start bound excludes earlier places", () => {
     const f = filters({ created_at: ["2026-02-01", null] });
@@ -627,6 +658,23 @@ describe("comparePlaces", () => {
       placeWith({ v_grade: 3, a_grade: 5 }, { name: "SameVWetA" }),
     ];
     expect(sorted(rows, "grade")).toEqual(["EasyV", "SameVWetA", "HardV"]);
+  });
+
+  // Mutation: ignore the `gradeSystem` argument in `comparePlaces`, and the
+  // ACA-only canyons sort as ungraded, after the French one.
+  it("sorts a canyon graded only in ACA among the graded ones", () => {
+    const rows = [
+      placeWith({}, { name: "Ungraded" }),
+      placeWith({ v_grade: 2 }, { name: "French" }),
+      placeWith({ aca_technical: 4 }, { name: "AcaHard" }),
+      placeWith({ aca_technical: 2, aca_water: 3 }, { name: "AcaEasy" }),
+    ];
+    const by = (system: "french" | "aca") =>
+      [...rows]
+        .sort((a, b) => comparePlaces(a, b, "grade", system))
+        .map((c) => c.name);
+    expect(by("french")).toEqual(["French", "AcaEasy", "AcaHard", "Ungraded"]);
+    expect(by("aca")).toEqual(["AcaEasy", "AcaHard", "French", "Ungraded"]);
   });
 
   it("sorts quality best first and puts an unrated place last, not first", () => {

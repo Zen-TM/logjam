@@ -7,6 +7,7 @@ import {
   normalizeThemeSchemeId,
   normalizeUserUiPreferencesKeepingNoPick,
   MAX_SLOPE_BANDS,
+  isUnits,
   normalizeRegionIds,
   REGIONS,
   parseSlopeBands,
@@ -366,6 +367,7 @@ router.patch(
       slopeBands,
       regions,
       language,
+      units,
       consentVersion,
     } = req.body as {
       username?: unknown;
@@ -377,6 +379,7 @@ router.patch(
       slopeBands?: unknown;
       regions?: unknown;
       language?: unknown;
+      units?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -429,7 +432,8 @@ router.patch(
       leaderboardOptIn !== undefined ||
       slopeBands !== undefined ||
       regions !== undefined ||
-      language !== undefined
+      language !== undefined ||
+      units !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -486,6 +490,9 @@ router.patch(
           throw malformed("No known region in regions");
         }
       }
+      if (units !== undefined && !isUnits(units)) {
+        throw malformed("Invalid units");
+      }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
         if (!normalized) {
@@ -518,6 +525,7 @@ router.patch(
         ...(regions !== undefined
           ? { regions: normalizeRegionIds(regions) }
           : {}),
+        ...(units !== undefined ? { units } : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),

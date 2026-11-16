@@ -22,7 +22,9 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
-import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
+import type { LicenceId } from "./licences.js";
+import { lonWithin } from "./placeGeo.js";
+import { layerIn, regionOfArea, REGIONS, type Region } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -35,8 +37,10 @@ export type DemSource = {
   sampleZoom: number;
   /**
    * [west, south, east, north] the source can answer in, or null for
-   * worldwide. Inside it a missing tile or a no-data pixel still means "not
-   * here", and the position falls through to the next source.
+   * worldwide. A box across the date line is wrapped or unwrapped
+   * (`lonWithin`; guard: `demSources.test.ts`, the describe
+   * "demSourceCovers"). Inside it a missing tile or a no-data pixel still
+   * means "not here", and the position falls through to the next source.
    */
   coverage: readonly [number, number, number, number] | null;
   /**
@@ -55,6 +59,8 @@ export type DemSource = {
    * the area (`sharpenedDemSource`; the API's check: `api/src/__tests__/sharpenedAreas.test.ts`).
    */
   areaId?: string;
+  /** What the source is licensed under (`licences.ts`). */
+  licence: LicenceId;
   /** Required by the source's terms wherever a height from it is shown. */
   credit: string;
   /** The same credit for MapLibre, which renders HTML in `attribution`. */
@@ -73,6 +79,7 @@ export const TERRARIUM = {
   archivePath: null,
   urlTemplate:
     "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+  licence: "terrain-tiles",
   credit: "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.",
   creditHtml:
     'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',
@@ -160,8 +167,10 @@ export function demTileUrl(
 
 /**
  * The credit lines for the sources a result was read from, each once. A
- * sharpened area's carries the heights credit of the region it lies in too:
- * where its survey has no ground, its archive holds that region's heights.
+ * sharpened area's carries the heights credit of the region it was filled
+ * from too (`regionOfArea`): where its survey has no ground, its archive holds
+ * that region's heights. Guard: `demSources.test.ts` ("credits a sharpened
+ * area with the region that filled it").
  */
 export function demCredits(
   sourceIds: readonly string[] = DEM_SOURCES.map((source) => source.id),
@@ -173,11 +182,7 @@ export function demCredits(
     .flatMap((source) => {
       const { areaId, coverage } = source;
       if (!areaId || !coverage) return [source.credit];
-      // The first region the area's box shares ground with: the same test a
-      // map and a save use to say which areas belong to a region.
-      const region =
-        regions.find((r) => areasInRegion(r, [{ coverage }]).length > 0) ??
-        null;
+      const region = regionOfArea(coverage, regions);
       return [source.credit, layerIn(region, "heights")?.credit ?? null];
     })
     .filter((line): line is string => line !== null);
@@ -290,8 +295,7 @@ export function demSourceCovers(
   if (!source.coverage) return true;
   const [west, south, east, north] = source.coverage;
   return (
-    position.lon >= west &&
-    position.lon <= east &&
+    lonWithin(position.lon, west, east) &&
     position.lat >= south &&
     position.lat <= north
   );

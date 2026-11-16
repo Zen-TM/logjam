@@ -137,9 +137,9 @@ describe("the credit block's upper bound", () => {
 
 describe("Land's credit", () => {
   // Mutation: drop `input.landCredit` from the lines in attributionLines, and
-  // a print of Land carries no credit for its CC BY data; print
-  // overlayAttributionLines(["land"]) in its place and a print in another
-  // region credits NSW's tenure data.
+  // a print of Land carries no credit for its CC BY data; or print
+  // `NSW_REGION.terrain.land.credit` there in its place, and a print in
+  // another region credits NSW's tenure data.
   it("is the credit of the archive that drew, and prints only then", () => {
     const text = (landCredit: string | null) =>
       attributionLines(ctx, WIDTH, DPI, {

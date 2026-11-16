@@ -3,13 +3,19 @@
 // all derive from the same deterministic plan so they can never disagree.
 
 import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
-import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
+import {
+  BASEMAP_CATALOG,
+  offeredBasemaps,
+  type BasemapCatalogEntry,
+} from "./geoPdfBaseLayers.js";
 import { landClip } from "./land.js";
 import {
   REGIONS,
   regionsTouching,
   type HeightsArchive,
+  type LonLatBox,
   type Region,
+  type RegionTerrain,
   type TerrainArchive,
   type TileBytes,
 } from "./regions.js";
@@ -186,16 +192,20 @@ const TERRARIUM_TILE_BYTES: TileBytes = {
 };
 
 /**
- * The basemaps a save offers as a tile pyramid: every `offlineCapable` raster
- * entry of `BASEMAP_CATALOG`, listed so a client can type its chips by them.
- * Guard: `mapRegionEstimate.test.ts` ("lists every offline-capable raster
- * basemap, and only those").
+ * The basemaps a save of the ground in `view` offers as a tile pyramid: the
+ * `offlineCapable` raster entries the view offers (`offeredBasemaps`), in the
+ * catalogue's order. A provider that serves one region is not offered for a box
+ * outside it. Guard: `mapRegionEstimate.test.ts` ("offers a save the
+ * downloadable basemaps of the ground it frames").
  */
-export const DOWNLOADABLE_BASEMAP_IDS = [
-  "six-topo",
-  "six-base",
-  "six-imagery",
-] as const;
+export function downloadableBasemaps(
+  view: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+): BasemapCatalogEntry[] {
+  return offeredBasemaps(view, regions).filter(
+    (entry) => entry.offlineCapable && entry.kind === "raster",
+  );
+}
 
 /** Anything the tile-pyramid downloader can fetch: basemaps plus the DEM. */
 export type DownloadableTileSourceId = string;
@@ -337,6 +347,71 @@ export type SaveClip = {
   size: RegionSizeEstimate;
 };
 
+/** An archive a save clips, with the zooms the clip is cut at. */
+export type SaveClipArchive = {
+  zooms: { minzoom: number; maxzoom: number };
+} & (
+  | { kind: "heights"; archive: HeightsArchive }
+  | { kind: Exclude<SaveClipKind, "heights">; archive: TerrainArchive }
+);
+
+/**
+ * The archives of a region's Terrain group that a save clips, in the order of
+ * `SaveClipKind`, each with the zooms it is cut at: a height archive's from the
+ * zoom its region's hillshade is drawn from to its `sampleZoom`, Land's from the
+ * zoom a map draws it, the others' their own.
+ */
+function clipArchivesOf(
+  terrain: RegionTerrain,
+  regions: readonly Region[],
+): SaveClipArchive[] {
+  const clips: SaveClipArchive[] = [];
+  const add = (
+    kind: Exclude<SaveClipKind, "heights">,
+    archive: TerrainArchive,
+    zooms: { minzoom: number; maxzoom: number },
+  ) =>
+    clips.push({
+      kind,
+      archive,
+      zooms: { minzoom: zooms.minzoom, maxzoom: zooms.maxzoom },
+    });
+  const { heights, slope, contours, land, fire, coverage } = terrain;
+  if (heights)
+    clips.push({
+      kind: "heights",
+      archive: heights,
+      zooms: {
+        minzoom: demClipMinZoom(heights, regions),
+        maxzoom: heights.sampleZoom,
+      },
+    });
+  if (slope) add("slope", slope, slope);
+  if (contours) add("contours", contours, contours);
+  if (land) add("land", land, landClip(land));
+  if (fire) add("fire", fire, fire);
+  if (coverage) add("coverage", coverage, coverage);
+  return clips;
+}
+
+/**
+ * The archive a saved clip was cut from, by the id the clip is filed under, in
+ * whichever region declares it, or null: no region does. Guard:
+ * `mapRegionEstimate.test.ts` ("finds the archive a clip is filed under").
+ */
+export function saveClipArchive(
+  id: string,
+  regions: readonly Region[] = REGIONS,
+): SaveClipArchive | null {
+  for (const { terrain } of regions) {
+    const found = clipArchivesOf(terrain, regions).find(
+      (clip) => clip.archive.id === id,
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * What a clip costs: the plan's own tile count at each zoom times that zoom's
  * measured size. A clip is whole tiles, so a small area costs far more per
@@ -370,31 +445,18 @@ function saveClipsFor(
   bbox: RegionBbox,
   regions: readonly Region[],
 ): SaveClip[] {
-  return regionsTouching(bbox, regions).flatMap(({ terrain }) => {
-    const clips: SaveClip[] = [];
-    const add = (
-      kind: SaveClipKind,
-      archive: TerrainArchive | HeightsArchive,
-      zooms: { minzoom: number; maxzoom: number },
-    ) =>
-      clips.push({
+  return regionsTouching(bbox, regions).flatMap(({ terrain }) =>
+    clipArchivesOf(terrain, regions)
+      .filter(
+        ({ kind, archive }) =>
+          kind !== "heights" || planDemDownload(bbox, [archive]).length > 0,
+      )
+      .map(({ kind, archive, zooms }) => ({
         kind,
         archive,
         size: estimateClip(bbox, zooms, archive.tileBytes),
-      });
-    const { heights, slope, contours, land, fire, coverage } = terrain;
-    if (heights && planDemDownload(bbox, [heights]).length > 0)
-      add("heights", heights, {
-        minzoom: demClipMinZoom(heights, regions),
-        maxzoom: heights.sampleZoom,
-      });
-    if (slope) add("slope", slope, slope);
-    if (contours) add("contours", contours, contours);
-    if (land) add("land", land, landClip(land));
-    if (fire) add("fire", fire, fire);
-    if (coverage) add("coverage", coverage, coverage);
-    return clips;
-  });
+      })),
+  );
 }
 
 export interface MultiSourceRegionPlan {

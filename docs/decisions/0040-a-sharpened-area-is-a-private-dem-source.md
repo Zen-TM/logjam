@@ -54,22 +54,25 @@ found three problems:
   - A stranger gets the statewide answer, worded as anywhere else.
 - **Each map tile comes from exactly one archive.** `terrainTileArchive`
   routes heights and slope from z15 to the first area whose z15 range holds
-  the tile, down to that area's zmax. Past it, or past z15 outside every
-  area, the tile is absent and the renderer draws its parent. Contours route
+  the tile, down to that area's zmax. Past it, or past the region's own
+  archive's deepest zoom (z15 for New South Wales's) outside every area, the
+  tile is absent and the renderer draws its parent (updated 2026-11-15).
+  Contours route
   at z14, the statewide archive's deepest zoom, and are never absent. To make
   that hold, an area's archives hold every tile of the range: the footprint's
   bbox in z15 tiles, widened to whole z14 tiles, and every descendant. Where
-  the survey has no ground, the worker bakes in the statewide 5 m value when
-  the job runs.
+  the survey has no ground, the worker bakes in the heights of the area's
+  region when the job runs (updated 2026-11-15).
 - **A track's climb from any area is stored as `lidar`**
   (`SHARPENED_CLIMB_SOURCE`), first in `CLIMB_SOURCES`, so a stored label
   names no job.
 - **The credit is declared once, by the worker.** `credit` in
-  `topo/sharpen.py` writes it into the job's result, and the API passes it
+  `topo/sharpen.py` completes the line of the area's region and writes it
+  into the job's result (updated 2026-11-15), and the API passes it
   on. Every result read from an area also carries the heights credit of
-  the region the area lies in (`demCredits`; the NSW 5 m credit in NSW),
-  because the area's edge tiles hold that region's heights (updated
-  2026-11-14).
+  the region the area was filled from (`demCredits`; the NSW 5 m credit in
+  NSW), because the area's edge tiles hold that region's heights (updated
+  2026-11-15).
 - **Update 2026-10-24: a file made from an area can leave that circle.** An
   export of an area (GeoTIFF, GeoPackage, MBTiles) or a GeoPDF made by
   someone who may read a sharpened area carries the area's terrain. Which
@@ -107,6 +110,46 @@ found three problems:
   `shared/src/regions.test.ts` ("areasInRegion") and
   `frontend/src/components/map/terrainRouter.test.ts` ("routes an area only
   inside the region that holds it"). Everything else above stands.
+- **Update 2026-11-15: an area belongs to the region that holds its centre,
+  and is filled and credited by it.** The worker takes the region from the
+  centre of the survey's box (`upload_region` in `topo/sharpen.py`). That
+  region's heights and slope are the fill; its `sharpen.credit`
+  (`shared/src/regions.ts`, which the worker reads through
+  `topo/regions.json`) is the line `credit` completes with the extraction
+  month; and ground in a region that takes no uploads, or in none, is refused
+  with a sentence for the owner. `demCredits` pairs an area with that same
+  region (`regionOfArea`), not with the first region its box touches, which
+  stays the routing test (the update above). The worker still writes the
+  credit into the result once and every client shows what is stored. Guards:
+  `topo/tests/test_sharpen.py` (`TestRegion`), `topo/tests/test_regions.py`
+  (`TestRegionOfArea`, `TestSharpenEntry`) and `shared/src/demSources.test.ts`
+  ("credits a sharpened area with the region that filled it"). Everything
+  else above stands.
+- **Update 2026-11-15: outside every area, a region's own archive answers to
+  its own deepest zoom.** Routing starts at z15 whatever the region, but
+  where no area holds a tile the region's archive answers it down to the
+  `maxzoom` of its entry (`terrainTileArchive`'s `statewideMax`), and the
+  tile is absent only past that. New South Wales's archives stop at z15, so
+  nothing changes there; a region whose archives hold z17 is read at z17 by
+  the map, by 3D terrain and by a GeoPDF (updated 2026-11-16: and by an area
+  export, under the last Update). An area's own zmax still ends its
+  tiles. Guards: `shared/src/sharpen.test.ts` ("reads statewide to the
+  region's own deepest zoom outside an area") and
+  `frontend/src/components/map/terrainRouter.test.ts` ("reads the region's
+  archive to its own top zoom beside an area"). Everything else above stands.
+- **Update 2026-11-16: an area export reads a deeper region at a cell its box
+  can afford.** An area export (`topo/area_export.py`) is one more reader past
+  z15. A GeoTIFF or GeoPackage reads the region's heights and slope at the
+  region's own top zoom, warped to 2 m (z16) or 1 m (z17), only while the box
+  has no more cells than a 100 km box (the API's longest side) has at 5 m, and
+  falls back a zoom, to z15 and 5 m at last, when it would have more
+  (`export_zoom`): a 100 km box at 1 m is 25 times the file the export task is
+  sized for (its 100 km, 5 m figures are in `AREA_EXPORT_MAX_SIDE_KM`'s
+  comment). An MBTiles reads its mosaics no deeper than its own last zoom,
+  z16. A region whose archives end at z15 is read at z15 and 5 m for every
+  box, as before. Guards: `topo/tests/test_area_export.py` (`ExportZoom`,
+  `TileArchive`, `NswExportUnchanged`, `RegionExportFiles`). Everything else
+  above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of
@@ -182,7 +225,9 @@ Guards:
   label, and a phone could not rank an id it has never seen.
 - **The survey credit as a constant in `shared/`.** It would need a parity
   test against the worker's copy, and the extraction month differs for each
-  area.
+  area. The wording is now a region's declaration in `shared/`, which the
+  worker reads instead of copying; the month is still the worker's to add
+  (updated 2026-11-15, the update above).
 - **Refuse to share a GeoPDF onward in Logjam once it drew a shared area.**
   It would keep a sharee's print inside Logjam's circle, at the cost of a
   column on `geo_pdf_jobs` the worker writes and a refusal on the GeoPDF's

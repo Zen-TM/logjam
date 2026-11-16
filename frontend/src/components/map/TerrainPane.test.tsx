@@ -13,7 +13,9 @@ import {
   NSW_REGION,
   OVERLAY_LEGENDS,
   RASTER_TEMPLATE_DEFAULTS,
+  SIM_WORLD,
   TERRAIN_LAYER_DEFAULTS,
+  type Region,
 } from "@logjam/shared";
 import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
 
@@ -49,9 +51,11 @@ function draw(
   activeLayerId = "protomaps",
   layers: typeof TERRAIN_LAYER_DEFAULTS = TERRAIN_LAYER_DEFAULTS,
   hasVegetation = false,
+  region: Region | null = NSW_REGION,
 ) {
   const props = {
     layers,
+    region,
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
@@ -223,6 +227,51 @@ describe("the Terrain group on Logjam Web", () => {
     draw("protomaps", stored);
     expect(on("Show contours")).toBe("true");
     expect(on("Show hillshade")).toBe("true");
+  });
+});
+
+describe("the Terrain group where the map's region lacks a layer", () => {
+  const stored = { ...TERRAIN_LAYER_DEFAULTS, contours: true, slope: true };
+  const row = (name: string) =>
+    screen.getByRole("switch", { name }) as HTMLButtonElement;
+
+  // Mutation: set `absent` to false in the row, and a map over ground with no contours or slope
+  // offers switches that draw nothing, on.
+  it("says so on each layer the region has no archive for, and keeps the others", () => {
+    // The worldwide tier draws hillshade alone.
+    draw("protomaps", stored, false, SIM_WORLD);
+    for (const name of ["Show contours", "Show slope"]) {
+      expect(row(name).disabled, name).toBe(true);
+      expect(row(name).getAttribute("aria-checked"), name).toBe("false");
+    }
+    expect(screen.getAllByText(copy.notHere)).toHaveLength(2);
+    expect(row("Show hillshade").disabled).toBe(false);
+    cleanup();
+    draw("protomaps", stored, false, null);
+    expect(screen.getAllByText(copy.notHere)).toHaveLength(3);
+    for (const name of ["Show contours", "Show slope", "Show hillshade"])
+      expect(row(name).disabled, name).toBe(true);
+  });
+
+  // Mutation: test `printed` or `shadowed` before `absent` in the row's
+  // reason, and over a topographic sheet with no contours here the row blames
+  // the sheet, and the stored choice never says the region is the cause.
+  it("puts the region's missing layer ahead of the basemap's reason", () => {
+    draw("six-topo", stored, false, SIM_WORLD);
+    expect(screen.queryByText(copy.contoursPrinted)).toBeNull();
+    expect(screen.getAllByText(copy.notHere)).toHaveLength(2);
+    cleanup();
+    draw("six-imagery", stored, false, null);
+    expect(screen.queryByText(copy.hillshadeImagery)).toBeNull();
+  });
+
+  // Mutation: let the row's `onPress` ignore `absent` (test `printed` and
+  // `shadowed` alone), and a press on a layer the region lacks rewrites the
+  // stored choice, which panning back would have returned.
+  it("never changes a stored choice", () => {
+    const props = draw("protomaps", stored, false, null);
+    fireEvent.click(screen.getByText(copy.contours));
+    expect(props.onChange).not.toHaveBeenCalled();
   });
 });
 

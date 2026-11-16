@@ -1,5 +1,7 @@
 // Whether saved map regions already hold a place's or a way's ground, for the
 // coverage line on their pages and the plan's "Map downloaded" pill.
+import { lonBoxWithin, lonMid, lonNear, lonWithin } from "@logjam/shared";
+
 import type { MapArtifact } from "../map/sourceResolver";
 
 type Bbox = [number, number, number, number];
@@ -9,8 +11,10 @@ type Point = [lon: number, lat: number];
 /** The longest stretch of a way checked in one step, in degrees (~1 km). */
 const LEG_STEP_DEGREES = 0.01;
 
+// A saved region's box may run past 180° (it was framed on a map panned past
+// the line); a point's longitude is always in [-180, 180].
 const holds = (region: Bbox, [lon, lat]: Point) =>
-  region[0] <= lon && region[1] <= lat && region[2] >= lon && region[3] >= lat;
+  lonWithin(lon, region[0], region[2]) && region[1] <= lat && region[3] >= lat;
 
 function savedBoxes(regions: readonly Region[]): Bbox[] {
   return regions.flatMap(({ kind, bbox }) =>
@@ -31,7 +35,9 @@ export function coveredByOfflineMaps(
   if (
     boxes.some(
       (box) =>
-        box[0] <= west && box[1] <= south && box[2] >= east && box[3] >= north,
+        lonBoxWithin(box[0], box[2], west, east) &&
+        box[1] <= south &&
+        box[3] >= north,
     )
   )
     return true;
@@ -40,7 +46,7 @@ export function coveredByOfflineMaps(
     [west, north],
     [east, south],
     [east, north],
-    [(west + east) / 2, (south + north) / 2],
+    [lonMid(west, east), (south + north) / 2],
   ];
   return samples.every((point) => boxes.some((box) => holds(box, point)));
 }
@@ -58,7 +64,10 @@ export function routeCoveredByOfflineMaps(
     if (!covered(points[i])) return false;
     if (i === 0) continue;
     const [lon0, lat0] = points[i - 1];
-    const [lon1, lat1] = points[i];
+    // The leg runs the short way round: this vertex in the world copy nearest
+    // the last, so a leg over the date line is not read as 360 degrees long.
+    const lon1 = lonNear(points[i][0], lon0);
+    const lat1 = points[i][1];
     const parts = Math.ceil(
       Math.max(Math.abs(lon1 - lon0), Math.abs(lat1 - lat0)) / LEG_STEP_DEGREES,
     );

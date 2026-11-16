@@ -25,6 +25,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_REGION.terrain.coverage.credit` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
+| **Mapterhorn** elevation tiles (a new region's heights, `build_region_dem.py`) | heights | each source's own, in Mapterhorn's `attribution.json` | the sources the box draws on, written into the build's `--credit` |
 
 > **SVTM licence — unconfirmed.** NSW open data on the SEED portal
 > (<https://datasets.seed.nsw.gov.au/>) is typically CC BY 4.0, but the exact
@@ -137,7 +138,7 @@ in one PMTiles file. It is a one-off build, separate from the LiDAR pipeline
 above, and needs GDAL with its Python bindings (installed separately, as in
 [Running without Docker](#running-without-docker-linux)), and NumPy, Pillow and
 the [`pmtiles`](https://pypi.org/project/pmtiles/) Python package (in
-`requirements.txt`). Only `contours` and the `pmtiles show` check below need the
+`requirements.txt`). Only `contours`, `contours-archive` and the `pmtiles show` check below need the
 [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary.
 
 `pack` and `slope` write PMTiles with the Python package, which spools the
@@ -231,7 +232,7 @@ that has the archive:
 python3 build_nsw_dem.py slope dem/nsw-5m.pmtiles dem/nsw-5m-slope.pmtiles --jobs 8
 ```
 
-The archive's credit takes the month from the height archive's own credit. The
+The archive's credit is the height archive's own, so its month follows. The
 work files go in `dem/nsw-5m-slope.work/` (`--work` moves them), one per block,
 and a stopped run on the same disk carries on from the blocks it finished. A
 block that fails stops the run at once with its traceback, and a child killed
@@ -245,6 +246,39 @@ state's 1.03 M tiles that is about 13 core-hours, or under two hours on 8 vCPU,
 and 11 to 13 GB out. The statewide archive's directories are bigger than this
 sheet's and every tile read decodes one, which could add a fifth: allow three
 hours. It has not been run statewide.
+
+#### Another height archive
+
+`slope` and `contours-archive` read any [ADR 0030](../docs/decisions/0030-dem-tiles-are-terrarium-png-in-pmtiles.md)
+height archive, not only `nsw-5m`: a 1 m archive to z17, say. The deepest and
+coarsest zoom come from the archive's header; the slope archive's name is the
+archive's name and "slope", and its credit is the archive's credit after "Slope
+derived from" (a credit that does not start "Derived from" follows a colon). A
+block is 32 × 32 tiles of the deepest zoom, so a z17 archive's blocks are z12
+tiles and take the same memory as NSW's.
+
+```bash
+python3 build_nsw_dem.py slope dem/zion-1m.pmtiles dem/zion-1m-slope.pmtiles --jobs 4
+python3 build_nsw_dem.py contours-archive dem/zion-1m.pmtiles dem/zion-contours-work \
+  dem/zion-contours.pmtiles --interval 10
+```
+
+`contours-archive` makes the same vector tiles `contours` does (one `contours`
+layer, `elev` in metres, a major line every 50 m, z11 to z14), from the archive's
+deepest tiles. Each block plus a tile around it is averaged to a cell, contoured,
+and clipped to the block, so the lines of two blocks line up at the edge. The
+cell is a power-of-two number of pixels, the one whose cell is nearest 10 m of
+ground as a ratio, worked out once from the archive's centre latitude so every block uses
+the same grid: a z17 pixel at 37° is 0.95 m, so 8 of them (a 7.6 m cell); at 44°
+it is 0.86 m, so 16 (13.8 m). It needs the `pmtiles` binary, and resumes like
+`slope`: a finished block's lines are kept in the work directory whatever
+interval or archive made them, so a changed `--interval` or a different archive
+needs a fresh work directory. `--interval` is a whole number of metres. A major
+line is a line on a multiple of 50 m, which is what the clients style, so an
+interval that does not divide 50 gives fewer of them (20 m: every 100 m; 12 m:
+every 300 m), and as minor lines draw only at the deepest styled zoom, the mid
+zooms get sparse. A region shown in feet gets metric lines too; the label is the
+clients' to convert.
 
 #### Building it in AWS
 
@@ -360,20 +394,94 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/
 
 ---
 
+## Building a region's heights from Mapterhorn
+
+`build_region_dem.py` cuts a box out of [Mapterhorn](https://mapterhorn.com)'s
+elevation tiles and writes it as a height archive in the form of the NSW one:
+terrarium PNG, 256 px, in one PMTiles file. Mapterhorn's tiles are 512 px WebP,
+so each becomes four 256 px PNG tiles one zoom deeper; the heights are not
+resampled. Why this and not a pipeline per country, and why not reading
+Mapterhorn from the apps:
+[ADR 0052](../docs/decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md).
+NSW does not use it.
+
+Run it in the worker image (`make build-workers` builds it), which has NumPy,
+Pillow, the `pmtiles` Python package and the GDAL bindings it shares with
+`build_nsw_dem.py`. It reads Mapterhorn by byte range, fetching only the tiles
+over the box, and writes the archive and a temporary MBTiles beside it, so
+mount an output directory with room for both. The `pmtiles show` check below
+needs the [`pmtiles`](https://github.com/protomaps/go-pmtiles) binary, on the
+host.
+
+```bash
+# W,S,E,N in degrees. --zmax 17 reads Mapterhorn's zoom 16, where its files
+# for New Zealand and Utah stop.
+mkdir -p out
+docker run --rm -v "$PWD/out:/out" logjam-topo-worker:latest \
+  python3 /app/build_region_dem.py heights --bbox 169.20,-44.20,169.32,-44.11 \
+  --zmax 17 --zmin 8 --jobs 3 \
+  --credit "Elevation data: …" --name "Example heights" /out/example.pmtiles
+pmtiles show out/example.pmtiles
+```
+
+A west edge below zero (the Americas) is written with an equals sign,
+`--bbox=-112.2,40.5,-111.6,41`: the image's Python reads `--bbox -112.2,…` as
+a missing value.
+
+The box above took 6 minutes 38 seconds in the image on a 4-thread machine (3
+jobs) and wrote 77 MB, byte for byte what the same command gave on a laptop. It
+is mostly coarse ground; a box of 1 m ground would be larger (an estimate from
+the tile sizes, not measured).
+`--source` replaces the files it would read (a URL or a path to a PMTiles file,
+as often as needed, tried in order); without it they are the ones in
+Mapterhorn's `download_urls.json` that hold the zoom over the box. In
+`pmtiles show`, `bounds` is the box's tiles and `attribution` is the credit
+given.
+
+**The credit is yours to write.** Name the sources you can show the box draws
+on, from Mapterhorn's `attribution.json` and its coverage, with each licence.
+Mapterhorn keeps no mark of where a fine survey ends: a tile over ground with no
+survey is made from a coarser source and has the same zoom. Say in the credit
+that the finest heights exist only where the survey covers, and do not claim
+the finest resolution for the whole box. A pixel Mapterhorn marks as no height
+is written as no-data.
+
+Do not run it from CI: Mapterhorn states no terms we found for ranged reads of
+its download host, and the build is the only thing that should make them.
+
+[`scripts/sim-regions/`](../scripts/sim-regions/README.md) runs it, and the
+slope and contour builds after it, for the simulated regions.
+
+---
+
 ## Sharpening an area
 
 Every job is marked to sharpen at `/start` (`topo_jobs.sharpen`), and the
 worker runs `sharpen.py` on it. It writes the statewide terrain formats at the
 survey's own cell: `heights.pmtiles` and `slope.pmtiles` (terrarium PNG,
 z15 to z16 for 2 m ground or z17 for 1 m) and `contours.pmtiles` (10 m
-lines at z14). Where the survey has no ground, each tile holds the statewide
-5 m data, so a client takes every tile from one archive. Ground is the ZIP's
+lines at z14). Where the survey has no ground, each tile holds the region's
+heights, so a client takes every tile from one archive. Ground is the ZIP's
 ELVIS DEM, or a TIN of the survey's class 2 when it has none, or of
 SMRF's ground for a survey with no class 2 at all; a ZIP with only 5 m DEMs
-fails with a sentence for its owner.
+fails with a sentence for its owner. A survey in feet or in degrees is made
+metric first: its grid is warped to the UTM zone of its centre and its heights
+scaled to metres (a point cloud is reprojected and scaled as its class 2 is
+cut); a unit Logjam does not know fails with a sentence. A file with no
+coordinate system is read as metres, so a survey in feet that carries none is
+not told apart.
 
-To run it by hand, put the two statewide archives in `./output/statewide`,
-or a clip of them over the area (the [NSW 5 m DEM
+The area belongs to the region that holds the centre of the survey's ground
+(`regions.json`, written from `shared/src/regions.ts`). That region's heights
+and slope archives are the fill, and its `sharpen.credit` is the credit the
+area carries, with the month the ZIP was packed. Ground in a region that takes
+no uploads (its own heights are already as fine, or it has no LiDAR to offer),
+or in no region, fails with a sentence for its owner. The vegetation layer is
+made only in a region that declares it (`sharpen.vegetation`): elsewhere a
+ticked job finishes without it and records `vegetationLeftOut`.
+
+To run it by hand, put the region's two archives in `./output/statewide`,
+or a clip of them over the area (for NSW, the [NSW 5 m DEM
 archive](#building-the-nsw-5-m-dem-archive) and [the statewide slope
 archive](#the-statewide-slope-archive) say how they are built), then:
 
@@ -383,13 +491,21 @@ docker compose run topo python3 /app/sharpen.py /input/elvis.zip /output/sharpen
   --statewide-slope /output/statewide/nsw-5m-slope.pmtiles
 ```
 
+For a survey in a simulated region, build that region's archives with
+[`scripts/sim-regions/`](../scripts/sim-regions/README.md), put its
+`simutah-heights.pmtiles` and `simutah-slope.pmtiles` (from `out/master/dem/`)
+in `./output/statewide`, name them in the two flags, and add `-e SIM_REGIONS=1`
+after `run`: the worker takes the switch from its own environment only, and
+refuses it where it sees a prod runtime. A worker the dev stack starts does not
+get the switch, so a job over simulated ground made through the stack is refused.
+
 ---
 
 ## Building the place registry
 
-`build_place_registry.py` turns Geofabrik's NSW OpenStreetMap extract into the
-place registry Logjam's location search reads: every named feature, one row
-each, in one gzipped JSON file. Why, and what it leaves out:
+`build_place_registry.py` turns Geofabrik's OpenStreetMap extract of a region
+into the place registry Logjam's location search reads: every named feature, one
+row each, in one gzipped JSON file. Why, and what it leaves out:
 [ADR 0034](../docs/decisions/0034-location-search-reads-a-public-osm-place-registry.md).
 A scheduled ECS task runs `publish` monthly; these commands are for trying a
 change by hand. They need Python 3 and `pip install osmium boto3` (boto3 and AWS
@@ -402,12 +518,17 @@ python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 ```
 
 `build` writes `places-<extract date>-<hash>.json.gz` and its pointer `latest.json`:
-about 4.5 MB, in under two minutes at a 1.3 GB peak. `measure` prints how much
-each class of feature (roads, shops, creeks…) adds to the file, which is how
-to judge a change to `EXCLUDED`.
+about 4.5 MB, in under two minutes at a 1.3 GB peak. `build --bbox=W,S,E,N`
+keeps only the features inside a box (write `--bbox=…` when W is negative), to
+cut a small registry from a large extract. `measure` prints how much each class
+of feature (roads, shops, creeks…) adds to the file, which is how to judge a
+change to `EXCLUDED`.
 
-`publish` downloads the extract, builds, and uploads the file then the pointer
-to `master/places/v1/` in the topo bucket. The file goes up as
+`publish` downloads the extract of one region (`--region`, `nsw` by default, and
+what the monthly task runs), builds, and uploads the file then the pointer under
+the prefix the region declares as `placeSearch` in `regions.json`
+(`master/places/v1/` for NSW) in the topo bucket. A region is listed in
+`EXTRACTS` with its extract's URL when it declares a prefix. The file goes up as
 `places-<extract date>-<hash>.json`, still gzipped, with `Content-Encoding:
 gzip`, so clients' HTTP stacks decompress it. It refuses a build much smaller than
 the one it replaces. Publishing is a prod change and the maintainer's to make:

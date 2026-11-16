@@ -1,4 +1,5 @@
 import {
+  layerIn,
   NSW_REGION,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
@@ -68,17 +69,38 @@ describe("terrainEntries", () => {
   // Mutation: build an entry's id from anything but `terrainEntryId`, or put a
   // dash in it, and Map.tsx cannot tell which layer a source is, or splits the
   // id at the dash into the wrong layers.
+  // Also return no entries at all, and the floor on layers checked fails
+  // where a loop that skips an absent entry would pass.
   it("names each entry so its layer is read back from the id", () => {
+    let checked = 0;
     for (const region of [NSW_REGION, SIM_NZ, SIM_UTAH]) {
       const entries = terrainEntries(region, [area]);
       for (const key of TERRAIN_LAYER_KEYS) {
+        if (!layerIn(region, key)) continue;
         const entry = entries[key];
-        if (!entry) continue;
-        expect(entry.id).toBe(terrainEntryId(region, key));
-        expect(entry.id).not.toContain("-");
-        expect(terrainKeyOf(entry.id)).toBe(key);
+        expect(entry, `${region.id} ${key}`).toBeDefined();
+        expect(entry!.id).toBe(terrainEntryId(region, key));
+        expect(entry!.id).not.toContain("-");
+        expect(terrainKeyOf(entry!.id)).toBe(key);
+        checked++;
       }
     }
+    // Every layer of NSW and SIM_NZ, and SIM_UTAH's five: a loop that found
+    // nothing to check would pass.
+    expect(checked).toBe(6 + 6 + 5);
+  });
+
+  // Mutation: credit Land from NSW's archive whatever the region (the entry's
+  // `attribution` read from `NSW_REGION.terrain.land`), and a map over another
+  // region credits New South Wales's tenure data on its own data.
+  it("credits each region's Land with its own credit", () => {
+    for (const region of [NSW_REGION, SIM_NZ]) {
+      const credit = region.terrain.land!.creditHtml;
+      expect(terrainEntries(region, [])["land"]?.attribution).toBe(credit);
+    }
+    expect(SIM_NZ.terrain.land!.creditHtml).not.toBe(
+      NSW_REGION.terrain.land.creditHtml,
+    );
   });
 
   // Mutation: share one id across regions, and crossing into another region
@@ -95,6 +117,21 @@ describe("terrainEntries", () => {
   it("reads no tile through the router for a user with no area", () => {
     for (const entry of Object.values(terrainEntries(NSW_REGION, [])))
       expect(entry.tiles).toBeUndefined();
+  });
+
+  // Mutation: take `deepest` alone for the routed zoom (drop the
+  // `archive.maxzoom` floor), and a region whose archive holds z17 beside an
+  // area that stops at z16 is never asked for its z17 tiles.
+  it("routes to the region's own top zoom where an area stops shallower", () => {
+    const nzArea = {
+      ...area,
+      coverage: [169.22, -44.08, 169.24, -44.06] as const,
+    };
+    const entries = terrainEntries(SIM_NZ, [nzArea]);
+    expect(SIM_NZ.terrain.slope!.maxzoom).toBe(17);
+    expect(entries.slope?.tiles?.maxzoom).toBe(17);
+    expect(entries.hillshade?.tiles?.maxzoom).toBe(17);
+    expect(entries.contours?.tiles?.maxzoom).toBe(14);
   });
 
   // Mutations: a routed source that stops at z15 (the area's z16 is never

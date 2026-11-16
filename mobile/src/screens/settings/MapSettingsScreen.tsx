@@ -16,6 +16,7 @@
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
+import { formatHeight } from "@logjam/shared";
 
 import {
   isCompassEnabled,
@@ -167,7 +168,7 @@ const FIX_RATE_HINTS: Record<FixRate, string> = {
 };
 
 function accuracyLabel(limit: AccuracyLimitM): string {
-  return limit === 0 ? "Keep all" : `${limit} m`;
+  return limit === 0 ? "Keep all" : formatHeight(limit);
 }
 
 export function MapSettingsScreen() {

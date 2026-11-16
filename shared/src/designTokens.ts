@@ -37,7 +37,7 @@ export const MAP_INK = {
   ring: "#FFFFFF",
   /** A river gauge's drop: one colour for every gauge, never scaled by reading. */
   gauge: "#3B82C4",
-  /** The MGA grid's lines: a mid tone that reads on light and dark basemaps. */
+  /** The map grid's lines: a mid tone that reads on light and dark basemaps. */
   grid: "#8C8279",
   /** The light halo behind a LiDAR topo's own label colour. */
   labelHalo: "rgba(255,255,255,0.8)",

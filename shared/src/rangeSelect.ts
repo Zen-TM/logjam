@@ -34,12 +34,17 @@ export function isFullRange(
   return range[0] <= bounds[0] && range[1] >= bounds[1];
 }
 
+/** A range as text: "Any" for the whole axis, else "2–4". `word` writes each
+ *  end (a labelled field's words, "A–C1"); the number by default. */
 export function formatRange(
   range: NumberRange | null,
   bounds: readonly [number, number],
   prefix = "",
+  word: (stop: number) => string = String,
 ): string {
   if (isFullRange(range, bounds)) return "Any";
   const [low, high] = range as NumberRange;
-  return low === high ? `${prefix}${low}` : `${prefix}${low}–${prefix}${high}`;
+  return low === high
+    ? `${prefix}${word(low)}`
+    : `${prefix}${word(low)}–${prefix}${word(high)}`;
 }

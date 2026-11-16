@@ -8,6 +8,8 @@
 // ropewiki-synthetic-shapes.csv holds them, made up row by row (names, ids
 // and values are invented, in the export's column layout), so its golden pins
 // the parser's reading of a shape, not anything RopeWiki publishes.
+// ropewiki-aca-synthetic.csv is the same kind of made-up file for a region that
+// grades in the ACA system: ratings written the ACA way, in the export's column layout.
 //
 // The goldens are plain-text JSON (extension .golden) so the formatter leaves them alone.
 // Regenerate the golden after an intended parser change with
@@ -35,21 +37,43 @@ const golden = (name: string) => join(__dirname, "__fixtures__", name);
 
 describe("parseRopeWikiCsv corpus", () => {
   it("parses the tricky rows as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-nsw-tricky.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-nsw-tricky.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-nsw-tricky.golden"),
     );
   });
 
   it("parses the synthetic shapes as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-synthetic-shapes.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-synthetic-shapes.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-synthetic-shapes.golden"),
     );
   });
 
+  // Mutation: drop the tag strip in `parseAcaRating`: "Split Tags" loses its
+  // grade; or read the French grade for an ACA source in `parseRopeWikiCsv`:
+  // every row with a rating in parentheses gains a `vGrade`.
+  it("parses the synthetic ACA ratings as the golden says", async () => {
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-aca-synthetic.csv"),
+      "aca",
+    );
+    await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
+      golden("ropewiki-aca-synthetic.golden"),
+    );
+  });
+
   it("parses the real export sample as the golden says", async () => {
-    const result = parseRopeWikiCsv(fixture("ropewiki-nsw-sample.csv"));
+    const result = parseRopeWikiCsv(
+      fixture("ropewiki-nsw-sample.csv"),
+      "french",
+    );
     await expect(JSON.stringify(result, null, 2) + "\n").toMatchFileSnapshot(
       golden("ropewiki-nsw-sample.golden"),
     );

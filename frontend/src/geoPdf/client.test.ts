@@ -1,3 +1,4 @@
+import { setDisplayUnits } from "@logjam/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GeoPdfRenderInput } from "./types";
 import { prefetchGeoPdf, runGeoPdfRender, WATCHDOG_MS } from "./client";
@@ -38,6 +39,7 @@ function stubWorker(opts: { construct?: Error; post?: Error } = {}) {
 }
 
 afterEach(() => {
+  setDisplayUnits("metric");
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -75,6 +77,19 @@ describe("runGeoPdfRender", () => {
     ctl.abort();
     await expect(result).resolves.toEqual({ ok: false, reason: "cancelled" });
     expect(made[0]!.terminate).toHaveBeenCalled();
+  });
+
+  // Mutation: drop `units: displayUnits()` from the client's request, and the
+  // worker (which cannot read the page's units) prints a metric scale bar.
+  it("posts the page's display units with the render request", () => {
+    stubWorker();
+    void runGeoPdfRender(input, {});
+    setDisplayUnits("imperial");
+    void runGeoPdfRender(input, {});
+    expect(made.map((w) => w.postMessage.mock.calls[0][0].units)).toEqual([
+      "metric",
+      "imperial",
+    ]);
   });
 
   // Mutation: drop `input.fileName ??` from the client, and the download is

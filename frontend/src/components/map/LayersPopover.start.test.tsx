@@ -1,7 +1,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import {
+  MAP_TERRAIN,
+  NSW_REGION,
+  SIM_NZ,
+  SIM_UTAH,
+  TERRAIN_LAYER_DEFAULTS,
+  type Region,
+} from "@logjam/shared";
 import { ToastProvider } from "../feedback/ToastProvider";
 import LayersPopover from "./LayersPopover";
 
@@ -29,6 +36,13 @@ function popover(
   open: boolean,
   startView: Start,
   onClose: () => void = vi.fn(),
+  shown: {
+    region?: Region | null;
+    coverageCarrier?: string | null;
+    showGauges?: boolean;
+    gaugesHere?: boolean;
+    terrainLayers?: typeof TERRAIN_LAYER_DEFAULTS;
+  } = {},
 ) {
   const noop = vi.fn();
   return (
@@ -41,7 +55,8 @@ function popover(
         setShowPlaces={noop}
         showWays
         setShowWays={noop}
-        showGauges={false}
+        showGauges={shown.showGauges ?? false}
+        gaugesHere={shown.gaugesHere ?? false}
         setShowGauges={noop}
         showMgaGrid={false}
         setShowMgaGrid={noop}
@@ -51,13 +66,19 @@ function popover(
         baseLayers={[]}
         activeLayerId="protomaps"
         onActiveLayerChange={noop}
-        terrainLayers={TERRAIN_LAYER_DEFAULTS}
+        terrainLayers={shown.terrainLayers ?? TERRAIN_LAYER_DEFAULTS}
         onTerrainLayerChange={noop}
-        coverageCarrier="telstra"
+        coverageCarrier={
+          shown.coverageCarrier === undefined
+            ? "telstra"
+            : shown.coverageCarrier
+        }
         onCoverageCarrierChange={noop}
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}
+        mapBounds={null}
+        region={shown.region === undefined ? NSW_REGION : shown.region}
         onImportFile={noop}
         startView={startView}
         sharpenedLoaded
@@ -166,5 +187,81 @@ describe("the Layers popover's overlays", () => {
       .map((s) => s.getAttribute("aria-label"))
       .filter((n) => n === "Show land tenure" || n === "Show fire history");
     expect(names).toEqual(["Show land tenure", "Show fire history"]);
+  });
+});
+
+describe("the Overlays tab where the map's region lacks a layer", () => {
+  const on = {
+    ...TERRAIN_LAYER_DEFAULTS,
+    land: true,
+    fire: true,
+    coverage: true,
+  };
+  const overlays = (shown: Parameters<typeof popover>[3]) => {
+    render(popover(true, null, vi.fn(), { terrainLayers: on, ...shown }));
+    fireEvent.click(chip("Overlays"));
+  };
+  const toggle = (name: string) =>
+    screen.getByRole("switch", { name }) as HTMLButtonElement;
+
+  // Mutation: pass `NSW_REGION` to `overlayLegends` in place of `region`, and a map over a region with no coverage offers
+  // Coverage, and the legends credit NSW's data.
+  it("says so on the one overlay a region lacks, and keeps the rest", () => {
+    overlays({ region: SIM_UTAH, showGauges: true, gaugesHere: false });
+    expect(toggle("Show coverage").disabled).toBe(true);
+    expect(toggle("Show coverage").getAttribute("aria-checked")).toBe("false");
+    expect(toggle("Show land tenure").disabled).toBe(false);
+    expect(toggle("Show fire history").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    // Utah has no gauge feed either.
+    expect(screen.getAllByText(MAP_TERRAIN.copy.notHere)).toHaveLength(2);
+  });
+
+  // Mutation: read the row's checked and disabled state from `showGauges`
+  // alone, ignoring `gaugesHere`, and a map outside every region offers river
+  // gauges its feed does not cover.
+  it("says so on every overlay over no region, and offers gauges over NSW", () => {
+    overlays({ region: null, showGauges: true, gaugesHere: false });
+    for (const name of [
+      "Show land tenure",
+      "Show fire history",
+      "Show coverage",
+      "Show river gauges",
+    ]) {
+      expect(toggle(name).disabled, name).toBe(true);
+      expect(toggle(name).getAttribute("aria-checked"), name).toBe("false");
+    }
+    expect(screen.getAllByText(MAP_TERRAIN.copy.notHere)).toHaveLength(4);
+    cleanup();
+    overlays({ region: NSW_REGION, showGauges: true, gaugesHere: true });
+    expect(toggle("Show river gauges").disabled).toBe(false);
+    expect(toggle("Show river gauges").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(screen.queryByText(MAP_TERRAIN.copy.notHere)).toBeNull();
+  });
+
+  // Mutation: count `terrainLayers.land` and the others without the region's
+  // legends, and the tab's badge counts layers the rows show off.
+  it("counts only the overlays on offer in the badge", () => {
+    overlays({ region: null, showGauges: true, gaugesHere: false });
+    // Places and Ways are on; the MGA grid is off.
+    expect(chip("Overlays").textContent).toContain("2");
+  });
+
+  // Mutation: pass the stored carrier to the Coverage row whatever the region
+  // lists, and over a region whose carriers differ the row shows a switch on
+  // for a network it does not list instead of asking again.
+  it("asks for a carrier again where the region does not list the stored one", () => {
+    overlays({ region: SIM_NZ, coverageCarrier: "telstra" });
+    expect(
+      screen.getByRole("button", {
+        name: MAP_TERRAIN.copy.coverageChooseCarrier,
+      }),
+    ).toBeTruthy();
+    cleanup();
+    overlays({ region: NSW_REGION, coverageCarrier: "telstra" });
+    expect(toggle("Show coverage").disabled).toBe(false);
   });
 });

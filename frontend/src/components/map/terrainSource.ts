@@ -3,7 +3,7 @@
 // MapLibre takes ONE raster-dem source, so terrain cannot walk the list in
 // shared/src/demSources.ts the way a height lookup does. The choice is made
 // when 3D is switched on, and again when the user's sharpened areas change:
-// the heights of the region the map shows (the one `regionInWrappedView`
+// the heights of the region the map shows (the one `regionInView`
 // names, as for the Terrain group) when it has them and the archive opens,
 // otherwise the worldwide tiles. With sharpened areas the region's source
 // reads the terrain router (terrainRouter.ts), so a tile inside an area comes
@@ -13,7 +13,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   areasInRegion,
   layerIn,
-  regionInWrappedView,
+  regionInView,
   REGIONS,
   type Region,
   type SharpenedOverlay,
@@ -64,9 +64,9 @@ export async function terrainSourceFor(
   world: Region = WORLD,
 ): Promise<string> {
   // Raw longitudes: a map panned round the world reports them past ±180,
-  // which `regionInWrappedView` reads back into a region's range.
+  // which `regionInView` reads back into a region's range.
   const bounds = map.getBounds();
-  const region = regionInWrappedView(
+  const region = regionInView(
     {
       west: bounds.getWest(),
       south: bounds.getSouth(),
@@ -104,10 +104,11 @@ export async function terrainSourceFor(
       ? {
           type: "raster-dem",
           tiles: [terrainTileTemplate(region, "hillshade", held)],
-          // An absent tile (past an area's zmax, or past z15 outside every
-          // area) is overzoomed from its parent by MapLibre, as in 2D.
+          // An absent tile (past an area's zmax, or past the region's archive
+          // outside every area) is overzoomed from its parent by MapLibre, as
+          // in 2D.
           minzoom: shade.minzoom,
-          maxzoom: Math.max(...held.map((a) => a.zmax)),
+          maxzoom: Math.max(shade.maxzoom, ...held.map((a) => a.zmax)),
           bounds: [...heights.coverage],
           tileSize: 256,
           encoding: "terrarium",

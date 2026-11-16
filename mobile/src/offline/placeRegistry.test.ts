@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  DEFAULT_REGION_IDS,
   indexPlaceRegistry,
+  NSW_REGION,
   searchPlaces,
+  type LonLatBox,
   type PlaceRegistryFile,
+  type Region,
 } from "@logjam/shared";
 import { gzipSync, strFromU8, strToU8 } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +19,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const DIR = "file:///docs/place-registry/";
 const CDN = "https://cdn.test";
 const POINTER_URL = `${CDN}/master/places/v1/latest.json`;
+const NSW = DEFAULT_REGION_IDS[0];
+
+// A second region with a registry of its own, and the map over each.
+const OTHER = vi.hoisted(() => ({
+  id: "other",
+  placeSearch: "master/places/other/v1/",
+  // A square a long way from NSW.
+  borders: [
+    [
+      [10, 10],
+      [11, 10],
+      [11, 11],
+      [10, 11],
+    ],
+  ],
+}));
+vi.mock("@logjam/shared", async (original) => {
+  const real = await original<typeof import("@logjam/shared")>();
+  const other = { ...real.NSW_REGION, ...OTHER } as unknown as Region;
+  // And one that declares no registry, as a simulated region does today.
+  const bare = { ...real.NSW_REGION, id: "bare", placeSearch: null } as Region;
+  return { ...real, REGIONS: [...real.REGIONS, other, bare] };
+});
+const [OTHER_LON, OTHER_LAT] = [10.5, 10.5];
+const around = (lon: number, lat: number): LonLatBox => ({
+  west: lon - 0.05,
+  south: lat - 0.05,
+  east: lon + 0.05,
+  north: lat + 0.05,
+});
+const OVER_NSW = around(...NSW_REGION.view.center);
+const OVER_OTHER = around(OTHER_LON, OTHER_LAT);
+const OTHER_POINTER_URL = `${CDN}/${OTHER.placeSearch}latest.json`;
+/** The regions the user chose, as `regionsPreference` keeps them. */
+const chosen = { ids: [NSW] };
 
 const files = new Map<string, Uint8Array | string>();
 /** What lands on the phone for a URL: the pointer as JSON, a data file as
@@ -23,7 +62,10 @@ const served = new Map<string, unknown>();
 const prefs = new Map<string, string>();
 /** Every file read whole into memory, as "text" or "bytes", and its URI. */
 const reads: string[] = [];
-const artifacts = { kinds: [] as string[] };
+const artifacts = {
+  kinds: [] as string[],
+  bbox: null as [number, number, number, number] | null,
+};
 const network = { expensive: false, connected: true };
 const disk = { free: 1e12 };
 /** A filesystem call to fail once, by name. */
@@ -31,18 +73,35 @@ const failing = new Set<string>();
 /** Reads held until their promise settles, by URI. */
 const held = new Map<string, Promise<void>>();
 const offlineOnly = { on: false };
+/** A download that waits for this promise before it answers. */
+const downloadGate = { current: Promise.resolve() };
+/** Hold the next downloads until the returned function is called. */
+function gateDownload() {
+  let release = () => {};
+  downloadGate.current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return release;
+}
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock("../api/presignedTransfer", () => ({
   downloadFromPresignedUrl: download,
 }));
+/** Every folder made and not yet deleted, as the slash-ended URI. */
+const dirs = new Set<string>();
 vi.mock("expo-file-system/legacy", () => ({
-  makeDirectoryAsync: async () => {},
+  makeDirectoryAsync: async (uri: string) => {
+    dirs.add(uri.endsWith("/") ? uri : `${uri}/`);
+  },
+  // A folder goes with what is in it, named with or without its slash.
   deleteAsync: async (uri: string) => {
+    const folder = uri.endsWith("/") ? uri : `${uri}/`;
     for (const key of [...files.keys()]) {
-      if (key === uri || (uri.endsWith("/") && key.startsWith(uri))) {
-        files.delete(key);
-      }
+      if (key === uri || key.startsWith(folder)) files.delete(key);
+    }
+    for (const dir of [...dirs]) {
+      if (dir.startsWith(folder)) dirs.delete(dir);
     }
   },
   getFreeDiskStorageAsync: async () => disk.free,
@@ -74,9 +133,11 @@ vi.mock("expo-file-system/legacy", () => ({
   },
   readDirectoryAsync: async (dir: string) => {
     if (failing.delete("readdir")) throw new Error("readdir failed");
-    return [...files.keys()]
+    // The names directly in `dir`: a folder's files are listed as the folder.
+    const names = [...files.keys()]
       .filter((key) => key.startsWith(dir))
-      .map((key) => key.slice(dir.length));
+      .map((key) => key.slice(dir.length).split("/")[0]);
+    return [...new Set(names)];
   },
 }));
 vi.mock("expo-file-system", () => ({
@@ -108,8 +169,27 @@ vi.mock("expo-file-system", () => ({
     }
   },
 }));
+/** The app's state, and the callbacks it registered (`active` returns, signal regained). */
+const app = {
+  state: "active",
+  changes: [] as ((state: string) => void)[],
+  reconnects: [] as (() => void)[],
+};
 vi.mock("react-native", () => ({
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    get currentState() {
+      return app.state;
+    },
+    addEventListener: (_: string, listener: (state: string) => void) => {
+      app.changes.push(listener);
+      return { remove: () => {} };
+    },
+  },
+}));
+/** The boxes of the saves still queued, downloading or paused. */
+const queued = { boxes: [] as LonLatBox[] };
+vi.mock("./regionDownloadQueue", () => ({
+  pendingRegionBoxes: () => queued.boxes,
 }));
 // React Native 0.88 removed InteractionManager; the module waits on the
 // runtime's requestIdleCallback instead. jsdom has none, so run it inline.
@@ -137,15 +217,37 @@ vi.mock("../prefsDb", () => ({
 vi.mock("./localStores", () => ({ PLACE_REGISTRY_DIR: DIR }));
 vi.mock("./offlineOnlyMode", () => ({ isOfflineOnly: () => offlineOnly.on }));
 vi.mock("../config", () => ({ config: { topoCdnBaseUrl: CDN } }));
-vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
-vi.mock("./registryDb", () => ({
-  listArtifacts: async () => artifacts.kinds.map((kind) => ({ kind })),
+vi.mock("../map/connectivity", () => ({
+  subscribeReconnect: (listener: () => void) => {
+    app.reconnects.push(listener);
+    return () => {};
+  },
 }));
+vi.mock("./registryDb", () => ({
+  listArtifacts: async () =>
+    artifacts.kinds.map((kind) => ({ kind, bbox: artifacts.bbox })),
+}));
+vi.mock("../regionsPreference", () => ({ readRegions: () => chosen.ids }));
 
-const fetchMock = vi.fn(async (url: string) => {
-  const body = served.get(url);
-  return { ok: body !== undefined, json: async () => body };
-});
+/** A pointer read that waits for this promise, or for its signal to abort. */
+const pointerGate = { current: null as Promise<void> | null };
+const fetchMock = vi.fn(
+  async (url: string, init?: { signal?: AbortSignal }) => {
+    if (pointerGate.current) {
+      const gate = pointerGate.current;
+      await new Promise<void>((resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new Error("pointer request aborted")),
+          { once: true },
+        );
+        void gate.then(resolve);
+      });
+    }
+    const body = served.get(url);
+    return { ok: body !== undefined, json: async () => body };
+  },
+);
 vi.stubGlobal("fetch", fetchMock);
 
 function build(version: string, names = ["Mount Solitary"], format = 1) {
@@ -184,6 +286,18 @@ function publish(
   served.set(`${CDN}/master/places/v1/${built.pointer.path}`, data);
 }
 
+/** The same for the other region, under its own prefix. */
+function publishOther(built: ReturnType<typeof build>) {
+  served.set(OTHER_POINTER_URL, built.pointer);
+  served.set(`${CDN}/${OTHER.placeSearch}${built.pointer.path}`, built.plain);
+}
+
+/** Put the other region's build on the phone, in its own folder. */
+function holdOtherOnPhone(built: ReturnType<typeof build>) {
+  files.set(`${DIR}other/pointer.json`, JSON.stringify(built.pointer));
+  files.set(`${DIR}other/${built.pointer.path}`, built.plain);
+}
+
 /** Put a build on the phone, as an earlier session left it. */
 function holdOnPhone(
   built: ReturnType<typeof build>,
@@ -209,6 +323,12 @@ beforeEach(() => {
   prefs.clear();
   reads.length = 0;
   artifacts.kinds = [];
+  artifacts.bbox = null;
+  chosen.ids = [NSW];
+  queued.boxes = [];
+  app.state = "active";
+  app.changes.length = 0;
+  app.reconnects.length = 0;
   network.expensive = false;
   network.connected = true;
   offlineOnly.on = false;
@@ -216,12 +336,32 @@ beforeEach(() => {
   failing.clear();
   held.clear();
   fetchMock.mockClear();
-  download.mockReset().mockImplementation(async (url: string, to: string) => {
-    const body = served.get(url);
-    if (!(body instanceof Uint8Array)) return { status: 404 };
-    files.set(to, body);
-    return { status: 200 };
-  });
+  downloadGate.current = Promise.resolve();
+  pointerGate.current = null;
+  dirs.clear();
+  // A download waits for its gate, and is cancelled by its signal as the real
+  // transfer is (`presignedTransfer.test.ts`).
+  download
+    .mockReset()
+    .mockImplementation(
+      async (
+        url: string,
+        to: string,
+        _onBytes?: unknown,
+        signal?: AbortSignal,
+      ) => {
+        await new Promise<void>((resolve, reject) => {
+          const cancelled = () => reject(new Error("download cancelled"));
+          if (signal?.aborted) return cancelled();
+          signal?.addEventListener("abort", cancelled, { once: true });
+          void downloadGate.current.then(resolve);
+        });
+        const body = served.get(url);
+        if (!(body instanceof Uint8Array)) return { status: 404 };
+        files.set(to, body);
+        return { status: 200 };
+      },
+    );
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -232,12 +372,12 @@ describe("the first download", () => {
     const built = build("2026-10-15");
     publish(built);
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(fetchMock.mock.calls).toEqual([
       [POINTER_URL, { signal: expect.any(AbortSignal) }],
     ]);
-    expect(download.mock.calls).toEqual([
+    expect(download.mock.calls.map(([url, to]) => [url, to])).toEqual([
       [`${CDN}/master/places/v1/${built.pointer.path}`, `${DIR}download.tmp`],
     ]);
   });
@@ -248,8 +388,8 @@ describe("the first download", () => {
     idleOptions.length = 0;
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(idleOptions).toEqual([{ timeout: expect.any(Number) }]);
   });
 
@@ -258,8 +398,8 @@ describe("the first download", () => {
     network.expensive = true;
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(true);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(true, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
   });
 });
 
@@ -270,7 +410,7 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -284,7 +424,7 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -305,8 +445,8 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     prefs.set("placeRegistryWanted", "off");
     publish(build("2026-10-15"));
     const registry = await load();
-    registry.placeRegistryWithRegion(false);
-    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
@@ -326,8 +466,8 @@ describe("the saved file", () => {
   it("is read as the plain JSON the platform saved", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
-    await registry.fetchPlaceRegistry({ allowMetered: true });
-    await registry.loadPlaceIndex();
+    await registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await registry.loadPlaceIndex(NSW);
     expect(reads).toEqual([
       `text ${DIR}download.tmp`,
       `text ${DIR}places-2026-10-15.json`,
@@ -339,10 +479,12 @@ describe("the saved file", () => {
     const built = build("2026-10-15", ["Wollangambe"]);
     publish(built, built.gzipped);
     const registry = await load();
-    expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
+    expect(await registry.fetchPlaceRegistry(NSW, { allowMetered: true })).toBe(
       "updated",
     );
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 });
 
@@ -351,7 +493,7 @@ describe("the refresh", () => {
   it("fetches nothing for a phone that never asked for the file", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -362,11 +504,11 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(fetchMock).not.toHaveBeenCalled();
 
     network.expensive = false;
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
     expect(files.has(`${DIR}places-2026-10-15.json`)).toBe(true);
     expect(files.has(`${DIR}places-2026-09-15.json`)).toBe(false);
   });
@@ -378,7 +520,7 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
   });
 
   // Mutation: drop the `isOfflineOnly()` check.
@@ -387,7 +529,7 @@ describe("the refresh", () => {
     publish(build("2026-10-15"));
     offlineOnly.on = true;
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("offline-only");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("offline-only");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -397,7 +539,7 @@ describe("the refresh", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(current);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("current");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("current");
     expect(download).not.toHaveBeenCalled();
   });
 });
@@ -415,11 +557,11 @@ describe("a bad download never replaces a good file", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"), data);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     expect([...files.keys()].sort()).toEqual(
       [`${DIR}places-2026-09-15.json`, `${DIR}pointer.json`].sort(),
     );
-    const index = await registry.loadPlaceIndex();
+    const index = await registry.loadPlaceIndex(NSW);
     expect(index?.names).toEqual(["Mount Solitary", "Narrow Neck"]);
   });
 
@@ -429,7 +571,7 @@ describe("a bad download never replaces a good file", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"), half(build("2026-10-15").gzipped));
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     expect(reads).not.toContain(`bytes ${DIR}download.tmp`);
   });
 
@@ -444,8 +586,8 @@ describe("a bad download never replaces a good file", () => {
       bytes: 1,
     });
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
-    expect(registry.hasPlaceRegistry()).toBe(true);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
+    expect(registry.hasPlaceRegistry(NSW)).toBe(true);
   });
 });
 
@@ -457,9 +599,9 @@ describe("a failed swap", () => {
     publish(build("2026-10-15"));
     failing.add("move");
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("failed");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("failed");
     const next = await load();
-    expect((await next.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect((await next.loadPlaceIndex(NSW))?.names).toEqual(["Narrow Neck"]);
   });
 });
 
@@ -471,8 +613,10 @@ describe("the sweep after a swap", () => {
     publish(build("2026-10-15", ["Wollangambe"]));
     failing.add("readdir");
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 });
 
@@ -487,7 +631,7 @@ describe("free space", () => {
     disk.free = needs(built);
     const registry = await load();
     await expect(
-      registry.fetchPlaceRegistry({ allowMetered: true }),
+      registry.fetchPlaceRegistry(NSW, { allowMetered: true }),
     ).rejects.toThrow(/^Needs about/);
     expect(download).not.toHaveBeenCalled();
   });
@@ -499,9 +643,9 @@ describe("free space", () => {
     disk.free = needs(built);
     const registry = await load();
     const asked = registry
-      .fetchPlaceRegistry({ allowMetered: true })
+      .fetchPlaceRegistry(NSW, { allowMetered: true })
       .catch((err: unknown) => err);
-    const refresh = registry.refreshPlaceRegistry();
+    const refresh = registry.refreshPlaceRegistry(NSW);
     expect(await refresh).toBe("skipped");
     expect(await asked).toBeInstanceOf(Error);
   });
@@ -513,7 +657,7 @@ describe("free space", () => {
     publish(built);
     disk.free = needs(built);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("skipped");
     expect(download).not.toHaveBeenCalled();
   });
 });
@@ -525,8 +669,8 @@ describe("one fetch at a time", () => {
     publish(build("2026-10-15"));
     network.expensive = true;
     const registry = await load();
-    const refresh = registry.refreshPlaceRegistry();
-    const asked = registry.fetchPlaceRegistry({ allowMetered: true });
+    const refresh = registry.refreshPlaceRegistry(NSW);
+    const asked = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
     expect(await refresh).toBe("skipped");
     expect(await asked).toBe("updated");
   });
@@ -538,13 +682,13 @@ describe("a load that fails", () => {
     holdOnPhone(build("2026-09-15", ["Narrow Neck"]));
     failing.add("read");
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(true);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(true);
     // Mutation: publish nothing when the file is kept (the search box would
     // show "Loading place names…" for good), or never clear it.
-    expect(registry.placeRegistryStatus().loadFailed).toBe(true);
-    const retried = registry.loadPlaceIndex();
-    expect(registry.placeRegistryStatus().loadFailed).toBe(false);
+    expect(registry.placeRegistryStatus(NSW).loadFailed).toBe(true);
+    const retried = registry.loadPlaceIndex(NSW);
+    expect(registry.placeRegistryStatus(NSW).loadFailed).toBe(false);
     expect((await retried)?.names).toEqual(["Narrow Neck"]);
   });
 
@@ -556,10 +700,12 @@ describe("a load that fails", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(built);
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Narrow Neck",
+    ]);
   });
 
   // Mutation: keep a file that does not match its pointer.
@@ -567,32 +713,34 @@ describe("a load that fails", () => {
     const built = build("2026-09-15");
     holdOnPhone(built, half(built.plain));
     const registry = await load();
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
     expect(files.has(`${DIR}pointer.json`)).toBe(false);
   });
 
-  // Mutation: drop the `UNREADABLE_PREF_KEY` check in `runFetch`, or key it
+  // Mutation: drop the `unreadableKey(region)` check in `runFetch`, or key it
   // by the version rather than the path.
   it("never fetches again a build that would not index, but fetches its fixed rebuild", async () => {
     const unindexable = build("2026-10-15", ["Narrow Neck"], 2);
     prefs.set("placeRegistryWanted", "on");
     publish(unindexable);
     const registry = await load();
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect(await registry.loadPlaceIndex()).toBeNull();
-    expect(registry.hasPlaceRegistry()).toBe(false);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(await registry.loadPlaceIndex(NSW)).toBeNull();
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
     // Mutation: drop the data file's delete in `buildIndex`.
     expect(files.has(`${DIR}${unindexable.pointer.path}`)).toBe(false);
     download.mockClear();
-    expect(await registry.refreshPlaceRegistry()).toBe("unreadable");
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("unreadable");
     expect(download).not.toHaveBeenCalled();
     // Rebuilt from the same extract: same version, a new content hash.
     const fixed = build("2026-10-15", ["Narrow Neck"]);
     fixed.pointer.path = "places-2026-10-15-fixed.json";
     publish(fixed);
-    expect(await registry.refreshPlaceRegistry()).toBe("updated");
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Narrow Neck"]);
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Narrow Neck",
+    ]);
   });
 });
 
@@ -610,13 +758,13 @@ describe("the index in memory", () => {
       }),
     );
     const registry = await load();
-    const old = registry.loadPlaceIndex();
-    await registry.refreshPlaceRegistry();
-    const fresh = registry.loadPlaceIndex();
+    const old = registry.loadPlaceIndex(NSW);
+    await registry.refreshPlaceRegistry(NSW);
+    const fresh = registry.loadPlaceIndex(NSW);
     release();
     expect(await old).toBeNull();
     expect((await fresh)?.names).toEqual(["Wollangambe"]);
-    expect(registry.placeIndex()?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex(NSW)?.names).toEqual(["Wollangambe"]);
   });
 
   it("is dropped by a refresh, and the next search builds the new one", async () => {
@@ -624,11 +772,13 @@ describe("the index in memory", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15", ["Wollangambe"]));
     const registry = await load();
-    expect(registry.placeIndex()).toBeNull();
-    await registry.loadPlaceIndex();
-    await registry.refreshPlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
-    expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
+    expect(registry.placeIndex(NSW)).toBeNull();
+    await registry.loadPlaceIndex(NSW);
+    await registry.refreshPlaceRegistry(NSW);
+    expect(registry.placeIndex(NSW)).toBeNull();
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
   });
 
   // Mutation: build it with `indexPlaceRegistry`, in one block.
@@ -637,7 +787,7 @@ describe("the index in memory", () => {
     holdOnPhone(build("2026-10-15", names));
     const registry = await load();
     const timer = vi.spyOn(globalThis, "setTimeout");
-    const index = await registry.loadPlaceIndex();
+    const index = await registry.loadPlaceIndex(NSW);
     expect(index?.names).toHaveLength(60_000);
     expect(
       timer.mock.calls.filter(([, ms]) => ms === 0).length,
@@ -650,8 +800,8 @@ describe("the index in memory", () => {
     prefs.set("placeRegistryWanted", "on");
     publish(build("2026-10-15"));
     const registry = await load();
-    await registry.refreshPlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
+    await registry.refreshPlaceRegistry(NSW);
+    expect(registry.placeIndex(NSW)).toBeNull();
   });
 });
 
@@ -676,14 +826,584 @@ describe("one ranking, on the phone and on the API", () => {
         strToU8(JSON.stringify(fixture)),
       );
       const registry = await load();
-      expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
-        "updated",
-      );
-      const index = await registry.loadPlaceIndex();
+      expect(
+        await registry.fetchPlaceRegistry(NSW, { allowMetered: true }),
+      ).toBe("updated");
+      const index = await registry.loadPlaceIndex(NSW);
       if (!index) throw new Error("the fixture did not load");
       const expected = searchPlaces(indexPlaceRegistry(fixture), query, 8);
       expect(expected.length).toBeGreaterThan(0);
       expect(searchPlaces(index, query, 8)).toEqual(expected);
     },
   );
+});
+
+describe("one copy for each region", () => {
+  // Mutation: save every region's copy in PLACE_REGISTRY_DIR itself, and the
+  // other region's files land beside NSW's, and its sweep deletes them; drop
+  // the folder test from the sweep in `installBuild`, and NSW's sweep deletes
+  // the other region's folder.
+  it("keeps each region's copy apart", async () => {
+    publish(build("2026-10-15", ["Wollangambe"]));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    chosen.ids = [NSW, OTHER.id];
+    prefs.set("placeRegistryWanted", "on");
+    const registry = await load();
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(await registry.refreshPlaceRegistry(OTHER.id)).toBe("updated");
+    expect([...files.keys()].sort()).toEqual([
+      `${DIR}other/places-2026-10-15.json`,
+      `${DIR}other/pointer.json`,
+      `${DIR}places-2026-10-15.json`,
+      `${DIR}pointer.json`,
+    ]);
+
+    // A new NSW build sweeps NSW's folder, and only that.
+    publish(build("2026-11-15", ["Wollangambe"]));
+    expect(await registry.refreshPlaceRegistry(NSW)).toBe("updated");
+    expect(files.has(`${DIR}places-2026-11-15.json`)).toBe(true);
+    expect(files.has(`${DIR}places-2026-10-15.json`)).toBe(false);
+    expect(files.has(`${DIR}other/pointer.json`)).toBe(true);
+    expect(files.has(`${DIR}other/places-2026-10-15.json`)).toBe(true);
+
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+    expect((await registry.loadPlaceIndex(OTHER.id))?.names).toEqual([
+      "Makarora",
+    ]);
+    expect(registry.placeIndex(OTHER.id)?.names).toEqual(["Makarora"]);
+  });
+
+  // Mutation: read `PLACE_REGISTRY_PREFIX`'s pointer for every region, and the
+  // other region's copy is NSW's file.
+  it("fetches each region's pointer and file from the prefix it declares", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-16", ["Makarora"]));
+    const registry = await load();
+    await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      OTHER_POINTER_URL,
+    ]);
+    expect(download.mock.calls.map(([url]) => url)).toEqual([
+      `${CDN}/${OTHER.placeSearch}places-2026-10-16.json`,
+    ]);
+  });
+
+  // Mutation: look the region up with `REGIONS.find` on its id in the copy's
+  // lookups, without `regionWithRegistry`, or answer an id it does not know
+  // with NSW's copy.
+  it("has no copy for a region that is unknown or declares no registry", async () => {
+    publish(build("2026-10-15"));
+    const registry = await load();
+    for (const id of ["nowhere", "bare", null]) {
+      expect(registry.hasPlaceRegistry(id)).toBe(false);
+      expect(registry.placeRegistryStatus(id)).toEqual({
+        stored: null,
+        loadFailed: false,
+      });
+      expect(await registry.loadPlaceIndex(id)).toBeNull();
+    }
+    expect(await registry.fetchPlaceRegistry("bare", {})).toBe("failed");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mutation: key the unreadable build by one preference for every region,
+  // and a build that would not index in one region stops another region's
+  // build of the same name from being fetched.
+  it("remembers an unreadable build for its own region only", async () => {
+    publishOther(build("2026-10-15", ["Makarora"], 2));
+    publish(build("2026-10-15", ["Wollangambe"]));
+    const registry = await load();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("updated");
+    expect(await registry.loadPlaceIndex(OTHER.id)).toBeNull();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("unreadable");
+    expect(await registry.fetchPlaceRegistry(NSW, { allowMetered: true })).toBe(
+      "updated",
+    );
+  });
+});
+
+describe("the regions a phone fetches for", () => {
+  const SEA = around(156, -33);
+
+  // Mutation: drop `regionsTouching(box, REGIONS)` from `placeRegistryWithRegion`,
+  // and a save in another region brings only NSW's names.
+  it("includes each region the first saved box touches", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, OVER_OTHER);
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    // And the one the user chose, which the box does not touch.
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // Mutation: drop `regionsOf(readRegions(), REGIONS)` from
+  // `placeRegistryWithRegion`, and a save over the sea brings nothing.
+  it("includes each region the user chose, whatever the box touches", async () => {
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    chosen.ids = [OTHER.id];
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, SEA);
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // Mutation: drop the `hasPlaceRegistry` skip, and a second save downloads
+  // the files again.
+  it("fetches nothing for a region it already holds", async () => {
+    const held = build("2026-10-15");
+    holdOnPhone(held);
+    publish(held);
+    const registry = await load();
+    registry.placeRegistryWithRegion(false, OVER_NSW);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the saved-map part of `regionsToKeep`, and a phone that
+  // saved a map over the other region never refreshes its names.
+  it("keeps current a region a saved map touches", async () => {
+    artifacts.kinds = ["basemap-region"];
+    artifacts.bbox = [10.4, 10.4, 10.6, 10.6];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // Mutation: drop the chosen part of `regionsToKeep`.
+  it("keeps current a region the user chose", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // Mutation: add the regions the phone already holds to `regionsToKeep`, and a
+  // copy of a region that is neither chosen nor saved over is refreshed for ever
+  // and shows where the last user was interested.
+  it("lets a copy lapse once its region is neither chosen nor saved over", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW];
+    holdOnPhone(build("2026-09-15"));
+    holdOtherOnPhone(build("2026-09-15", ["Old"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false),
+    );
+    expect(
+      [...files.keys()].filter((key) => key.startsWith(`${DIR}other`)),
+    ).toEqual([]);
+    // NSW's, chosen, was refreshed; the other's was never fetched.
+    await vi.waitFor(() =>
+      expect(registry.placeRegistryStatus(NSW).stored?.version).toBe(
+        "2026-10-15",
+      ),
+    );
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+  });
+
+  // Mutation: drop the `saved` part of `regionsToKeep` from the lapse's keep
+  // list, and a region only a saved map touches loses its copy.
+  it("keeps a copy for a region only a saved map touches", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    artifacts.kinds = ["basemap-region"];
+    artifacts.bbox = [10.4, 10.4, 10.6, 10.6];
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+    expect((await registry.loadPlaceIndex(OTHER.id))?.names).toEqual([
+      "Makarora",
+    ]);
+  });
+
+  // A wipe, at sign-out or when a different account signs in: it has forgotten the chosen regions (the default
+  // returns) and deleted the saved maps. Mutation: leave the copies of regions
+  // not chosen in `lapsePlaceRegistries`' keep list (e.g. keep every region held).
+  it("leaves only the default region's copy after a wipe, at sign-out or when a different account signs in", async () => {
+    chosen.ids = [NSW];
+    artifacts.kinds = [];
+    holdOnPhone(build("2026-10-15", ["Wollangambe"]));
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect([...files.keys()].sort()).toEqual([
+      `${DIR}places-2026-10-15.json`,
+      `${DIR}pointer.json`,
+    ]);
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+  });
+
+  // With one region nothing changes. Mutation: leave `regionsOf(readRegions(),
+  // REGIONS)` out of `regionsToKeep`, and the only region's copy is deleted.
+  it("leaves the only region's copy alone, whatever the account has saved", async () => {
+    chosen.ids = [NSW];
+    artifacts.kinds = [];
+    const only = build("2026-10-15", ["Wollangambe"]);
+    holdOnPhone(only);
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(files.has(`${DIR}pointer.json`)).toBe(true);
+    expect(files.has(`${DIR}${only.pointer.path}`)).toBe(true);
+    expect((await registry.loadPlaceIndex(NSW))?.names).toEqual([
+      "Wollangambe",
+    ]);
+  });
+
+  // A search that is loading the copy and a refresh that is fetching it when it
+  // lapses. Mutation: drop `copy.fetching?.stop.abort()` from `forgetCopy`, and
+  // the fetch runs on and installs its build after the files went; drop the
+  // `publish(region, { stored: null` from it, and the copy still reads as
+  // stored, with a build whose files are gone.
+  it("deletes a copy that a search is loading and a refresh is fetching", async () => {
+    const old = build("2026-09-15", ["Old"]);
+    holdOtherOnPhone(old);
+    publishOther(build("2026-10-15", ["Makarora"]));
+    let releaseLoad = () => {};
+    held.set(
+      `${DIR}other/${old.pointer.path}`,
+      new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+      }),
+    );
+    gateDownload();
+    const registry = await load();
+    const loading = registry.loadPlaceIndex(OTHER.id);
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const lapsing = registry.lapsePlaceRegistries();
+    // The lapse cancels the transfer; the gate is never opened.
+    expect(await fetching).toBe("stopped");
+    await lapsing;
+    // The load was still reading when the files went.
+    releaseLoad();
+    expect(await loading).toBeNull();
+    expect(
+      [...files.keys()].filter((key) => key.startsWith(`${DIR}other`)),
+    ).toEqual([]);
+    expect(registry.placeRegistryStatus(OTHER.id)).toEqual({
+      stored: null,
+      loadFailed: false,
+    });
+    expect(registry.placeIndex(OTHER.id)).toBeNull();
+  });
+});
+
+describe("the lapse and the wipe, around a fetch", () => {
+  const outsideNsw = () =>
+    [...files.keys()].filter((key) => key.startsWith(`${DIR}other`));
+
+  // Mutation: leave `...saving` out of `regionsToKeep`, and the copy fetched at
+  // the start of a save over a region not chosen lapses while the save still
+  // downloads, and is refetched only on Wi-Fi.
+  it("keeps a copy for a region a queued save touches", async () => {
+    chosen.ids = [NSW];
+    holdOtherOnPhone(build("2026-10-15", ["Makarora"]));
+    queued.boxes = [OVER_OTHER];
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+    queued.boxes = [];
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+  });
+
+  // The unreadable-build preference names a region the phone held. Mutation:
+  // skip the emptying in `lapseExcept`, or do it for every region, kept ones
+  // too.
+  it("forgets which builds would not index for a region it does not keep", async () => {
+    chosen.ids = [NSW];
+    prefs.set("placeRegistryUnreadable:other", "places-x.json");
+    prefs.set("placeRegistryUnreadable:nsw", "places-y.json");
+    const registry = await load();
+    await registry.lapsePlaceRegistries();
+    expect(prefs.get("placeRegistryUnreadable:other")).toBe("");
+    expect(prefs.get("placeRegistryUnreadable:nsw")).toBe("places-y.json");
+  });
+
+  // Mutation: drop the `AppState.currentState === "background"` return from
+  // `requestCheck`, and a regained signal fetches in the background (ADR 0013).
+  it("does not check while the app is in the background", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    app.state = "background";
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    for (const regained of app.reconnects) regained();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    app.state = "active";
+    for (const change of app.changes) change("active");
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  // A check that began in the foreground stops at the next region once the
+  // screen goes dark: a fetch in flight finishes. Mutation: drop the
+  // `AppState.currentState === "background"` return from `refreshAll`'s loop,
+  // and a chain of automatic downloads runs behind a dark screen.
+  it("stops a check at the next region once the app goes to the background", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW, OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const releaseRead = holdInstall();
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
+    app.state = "background";
+    releaseRead();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+
+    // The next foreground check fetches it.
+    app.state = "active";
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    for (const change of app.changes) change("active");
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    vi.mocked(Date.now).mockRestore();
+  });
+
+  // Android reports "unknown" until the first AppState event, and the check at
+  // launch runs inside that window. Mutation: return unless the state is
+  // "active" in `requestCheck`, and the check at launch is dropped.
+  it("still checks while the app's state is not yet known", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    publish(build("2026-10-15"));
+    app.state = "unknown";
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+  });
+
+  /** Hold the read of the downloaded file, so a fetch waits just before its install. */
+  function holdInstall() {
+    let release = () => {};
+    held.set(
+      `${DIR}download.tmp`,
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    return release;
+  }
+  const nonDefaultDirs = () => [...dirs].filter((dir) => dir !== DIR);
+
+  // Mutation: drop `if (stop.aborted) throw new StoppedError()` from
+  // `installBuild`, or the `abort()` loop from `stopPlaceRegistryForWipe`, and
+  // a fetch that has its file and is about to install does so after the wipe.
+  it("installs nothing once a wipe has stopped the refresh", async () => {
+    publish(build("2026-10-15"));
+    const releaseRead = holdInstall();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
+    const stopping = registry.stopPlaceRegistryForWipe();
+    releaseRead();
+    await stopping;
+    expect(await fetching).toBe("stopped");
+    expect([...files.keys()]).toEqual([]);
+    expect(registry.hasPlaceRegistry(NSW)).toBe(false);
+  });
+
+  // The transfer is cancelled, so the stop (and the wipe, which gives its
+  // producers ten seconds) never waits for bytes. Mutation: drop the `abort()`
+  // loop from `stopPlaceRegistryForWipe`, or the `signal` argument from the
+  // `downloadFromPresignedUrl` call in `installBuild`, and the stop waits for a
+  // download that never finishes.
+  it("stops a download without waiting for its bytes", async () => {
+    publish(build("2026-10-15"));
+    gateDownload();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const outcome = await Promise.race([
+      registry.stopPlaceRegistryForWipe().then(() => "stopped"),
+      new Promise((resolve) => setTimeout(() => resolve("still waiting"), 500)),
+    ]);
+    expect(outcome).toBe("stopped");
+    expect(await fetching).toBe("stopped");
+    expect([...files.keys()]).toEqual([]);
+  });
+
+  // The wipe gives its producers ten seconds and a pointer request has fifteen.
+  // Mutation: drop the `stop` listener from `fetchPointer`, and the stop waits
+  // for a pointer read that never answers.
+  it("stops a pointer read without waiting for its answer", async () => {
+    publish(build("2026-10-15"));
+    pointerGate.current = new Promise<void>(() => {});
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(NSW, { allowMetered: true });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const outcome = await Promise.race([
+      registry.stopPlaceRegistryForWipe().then(() => "stopped"),
+      new Promise((resolve) => setTimeout(() => resolve("still waiting"), 500)),
+    ]);
+    expect(outcome).toBe("stopped");
+    expect(await fetching).toBe("stopped");
+    expect(download).not.toHaveBeenCalled();
+    expect([...files.keys()]).toEqual([]);
+  });
+
+  // The wipe's stop, then the rest of the wipe, then its lapse: a check that
+  // begins in between does nothing, and after the wipe the refresh runs again.
+  // Mutation: drop `if (wiping) return` from `refreshAll`, or
+  // `if (wiping) return "stopped"` from `runFetch`, or the `wiping = false` from
+  // `resumePlaceRegistryAfterWipe`.
+  it("starts no check between a wipe's stop and its lapse, and runs again after", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW];
+    // A copy no account keeps: a check that began would lapse it.
+    holdOtherOnPhone(build("2026-09-15", ["Old"]));
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const registry = await load();
+    await registry.stopPlaceRegistryForWipe();
+    registry.registerPlaceRegistryRefresh();
+    expect(await registry.fetchPlaceRegistry(NSW, {})).toBe("stopped");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true);
+
+    await registry.lapsePlaceRegistries();
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+    registry.resumePlaceRegistryAfterWipe();
+    // The next account chose both, and the gap between checks has passed.
+    chosen.ids = [NSW, OTHER.id];
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    for (const regained of app.reconnects) regained();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry(NSW)).toBe(true));
+    await vi.waitFor(() =>
+      expect(registry.hasPlaceRegistry(OTHER.id)).toBe(true),
+    );
+    vi.mocked(Date.now).mockRestore();
+  });
+
+  // The wipe resumes the refresh before the old check has finished with its
+  // stopped fetch. Mutation: drop `if (epoch.aborted) return` from `refreshAll`,
+  // and that old check goes on to fetch and install the next region for the
+  // account that has just signed in.
+  it("fetches no further region once a wipe has stopped a check in progress", async () => {
+    prefs.set("placeRegistryWanted", "on");
+    chosen.ids = [NSW, OTHER.id];
+    publish(build("2026-10-15"));
+    publishOther(build("2026-10-15", ["Makarora"]));
+    const releaseRead = holdInstall();
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(reads).toContain(`text ${DIR}download.tmp`));
+    const stopping = registry.stopPlaceRegistryForWipe();
+    registry.resumePlaceRegistryAfterWipe();
+    releaseRead();
+    await stopping;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(
+      OTHER_POINTER_URL,
+    );
+    expect([...files.keys()]).toEqual([]);
+  });
+
+  // `installBuild` makes the region's folder before it downloads. Mutation:
+  // drop the `deleteFolder` call from `runFetch`'s `finally`, and a failed or
+  // stopped first fetch leaves the folder; drop the `else` branch of
+  // `lapseExcept`, and a folder a crash left stays after the wipe.
+  it("leaves no folder for a region after a failed or stopped first fetch, or a lapse", async () => {
+    chosen.ids = [NSW];
+    // Failed: the pointer is served and the file is not.
+    served.set(OTHER_POINTER_URL, build("2026-10-15").pointer);
+    const registry = await load();
+    expect(
+      await registry.fetchPlaceRegistry(OTHER.id, { allowMetered: true }),
+    ).toBe("failed");
+    expect(download).toHaveBeenCalled();
+    expect(nonDefaultDirs()).toEqual([]);
+
+    // Stopped.
+    publishOther(build("2026-10-15", ["Makarora"]));
+    gateDownload();
+    download.mockClear();
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    expect(nonDefaultDirs()).toEqual([`${DIR}other/`]);
+    await registry.stopPlaceRegistryForWipe();
+    registry.resumePlaceRegistryAfterWipe();
+    expect(await fetching).toBe("stopped");
+    expect(nonDefaultDirs()).toEqual([]);
+
+    // A folder a crash left, with no pointer in it.
+    dirs.add(`${DIR}other/`);
+    await registry.lapsePlaceRegistries();
+    expect(nonDefaultDirs()).toEqual([]);
+  });
+
+  // Mutation: test only `hasPlaceRegistry(region.id)` in `lapseExcept`, not
+  // `|| copies.get(region.id)?.fetching`, and a region's first fetch, with
+  // nothing stored yet, is left running by the lapse (its gated download never
+  // ends, so the race below answers "still fetching").
+  it("deletes the first copy of a region that is still being fetched when it lapses", async () => {
+    chosen.ids = [NSW];
+    publishOther(build("2026-10-15", ["Makarora"]));
+    gateDownload();
+    const registry = await load();
+    const fetching = registry.fetchPlaceRegistry(OTHER.id, {
+      allowMetered: true,
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalled());
+    const lapsing = registry.lapsePlaceRegistries();
+    // The lapse cancels the transfer; the gate is never opened.
+    expect(
+      await Promise.race([
+        fetching,
+        new Promise((resolve) =>
+          setTimeout(() => resolve("still fetching"), 500),
+        ),
+      ]),
+    ).toBe("stopped");
+    await lapsing;
+    expect(outsideNsw()).toEqual([]);
+    expect(registry.hasPlaceRegistry(OTHER.id)).toBe(false);
+  });
 });

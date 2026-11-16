@@ -27,6 +27,8 @@ import {
   formatBytes,
   formatDistanceM,
   formatElevationM,
+  formatHeight,
+  formatHeightRange,
   routeLengthM,
   exportFilename,
   mediaDisplayName,
@@ -301,11 +303,11 @@ export default function WayDetailPanel({
         },
         {
           label: PAIRED_STAT_LABELS.ascent,
-          value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+          value: profile ? `↑ ${formatHeight(profile.gainM)}` : "—",
         },
         {
           label: PAIRED_STAT_LABELS.descent,
-          value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+          value: profile ? `↓ ${formatHeight(profile.lossM)}` : "—",
         },
       ]
     : [
@@ -322,7 +324,7 @@ export default function WayDetailPanel({
           ? [
               {
                 label: PAIRED_STAT_LABELS.ascent,
-                value: `↑ ${Math.round(file.metadata.elevationGainM)} m`,
+                value: `↑ ${formatHeight(file.metadata.elevationGainM)}`,
               },
             ]
           : []),
@@ -330,7 +332,7 @@ export default function WayDetailPanel({
           ? [
               {
                 label: PAIRED_STAT_LABELS.descent,
-                value: `↓ ${Math.round(file.metadata.elevationLossM)} m`,
+                value: `↓ ${formatHeight(file.metadata.elevationLossM)}`,
               },
             ]
           : []),
@@ -638,8 +640,8 @@ export default function WayDetailPanel({
               <>
                 {profile.minM != null && profile.maxM != null && (
                   <p className={classes.band}>
-                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
-                    above sea level
+                    {formatHeightRange(profile.minM, profile.maxM)} above sea
+                    level
                   </p>
                 )}
                 {/* The chart's axes named: an unlabelled height profile reads as

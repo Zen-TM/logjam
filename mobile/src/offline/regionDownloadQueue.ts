@@ -12,7 +12,7 @@
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import { type OfflineBasemapId } from "@logjam/shared";
+import { type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
 import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
@@ -153,6 +153,16 @@ export function onRegionDownloadToast(
 
 /** Groups already announced, so a later publish doesn't repeat the toast. */
 const announcedGroups = new Set<string>();
+/**
+ * The boxes of the saves still queued, downloading or paused: their maps are
+ * registered only when each job ends. Not a hook: a plain read of the queue.
+ */
+export function pendingRegionBoxes(): RegionBbox[] {
+  return jobs
+    .filter((job) => job.state.kind !== "ready" && job.state.kind !== "failed")
+    .map((job) => job.spec.bbox);
+}
+
 /** Runs the user stopped: what they leave is not news, and "updated" would be
  * false of an update that was cut short. */
 const userStopped = new Set<string>();

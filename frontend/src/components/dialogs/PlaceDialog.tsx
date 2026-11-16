@@ -3,7 +3,6 @@ import {
   useState,
   useEffect,
   useId,
-  useMemo,
   useRef,
   type ReactNode,
 } from "react";
@@ -14,7 +13,8 @@ import type {
 } from "@logjam/shared";
 import {
   abandonConfirm,
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   contractSectionKeys,
   placeAttributesTitle,
   PLACE_FORM,
@@ -25,7 +25,7 @@ import {
   setFieldValues as withFieldValues,
   SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
-  defsForType,
+  placeFormDefs,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
   isSystemFieldDef,
@@ -33,6 +33,7 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
+  displayUnits,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -69,6 +70,9 @@ import classes from "./PlaceDialog.module.css";
 
 type Source = { label: string; url: string };
 
+/** A typed coordinate that parses, else null: the position is not known yet. */
+const finiteOrNull = (value: number) => (Number.isFinite(value) ? value : null);
+
 const LAT_CONSTRAINTS: NumericFieldConstraints = {
   min: LATITUDE_RANGE.min,
   max: LATITUDE_RANGE.max,
@@ -82,7 +86,7 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
  * A place: what it is, where it is, and what this type of place records.
  *
  * Every attribute is drawn from its definition. Canyon grades and custom
- * fields render generically through CustomFieldInput/railStops matching Logjam GPS,
+ * fields render generically through CustomFieldInput/railChoices matching Logjam GPS,
  * with descriptions drawn from hints on the definitions (SYSTEM_FIELD_DEFS).
  */
 function PlaceDialog({
@@ -137,13 +141,21 @@ function PlaceDialog({
   );
 
   /**
-   * The fields this type has. `defsForType` is the shared rule (a definition
-   * appears on a type it is scoped to, or on every type when it is flagged),
-   * ensuring Logjam GPS and Logjam Web agree on which fields each place type has.
+   * The fields this type has here. `placeFormDefs` is the shared rule (a
+   * definition appears on a type it is scoped to, or on every type when it is
+   * flagged, and a canyon's grade fields are those of the system used where
+   * it stands), ensuring Logjam GPS and Logjam Web agree on which fields each
+   * place has. The values held count as a field's reason to stay: those
+   * stored on the place, even once cleared in the form (the field stays under
+   * the cursor), and those typed. Guard: `PlaceDialog.grades.render.test.tsx`.
    */
-  const typeFieldDefs = useMemo(
-    () => defsForType(customFieldDefs, placeTypeId),
-    [customFieldDefs, placeTypeId],
+  const typeFieldDefs = placeFormDefs(
+    customFieldDefs,
+    placeTypeId,
+    finiteOrNull(coordinateNumber(longitude)),
+    finiteOrNull(coordinateNumber(latitude)),
+    place?.fieldValues,
+    fieldValues,
   );
 
   const [saving, setSaving] = useState(false);
@@ -205,12 +217,22 @@ function PlaceDialog({
   // for the same place and must not replace what the user has typed.
   const placeId = place?.id ?? null;
   const [populatedFor, setPopulatedFor] = useState({ open: false, placeId });
+  // The units the form's text was written in, set by `populateForm` alone: the
+  // length text and its conversion are always in one unit. A change of units
+  // while the form is open, or closed for a pick on the map, writes the text
+  // again from the stored values (dropping what was typed) rather than saving
+  // feet as metres. Guards: `PlaceDialog.units.render.test.tsx` and
+  // `lengthFieldClients.test.ts` ("every form of a length field converts it").
+  const units = displayUnits();
+  const [seededUnits, setSeededUnits] = useState(units);
   if (open !== populatedFor.open || placeId !== populatedFor.placeId) {
     setPopulatedFor({ open, placeId });
     if (open) {
       if (picking) setPicking(false);
       else populateForm();
     }
+  } else if (open && seededUnits !== units) {
+    populateForm({ unitsOnly: true });
   }
 
   // An existing place's media is refetched on each open (fresh presigned
@@ -222,7 +244,11 @@ function PlaceDialog({
     if (mediaFor !== null) setMediaLoading(true);
   }
 
-  function populateForm() {
+  // `unitsOnly` writes the fields again in the new units and leaves the rest of
+  // the session as it is: the media shown, the draft place and the uploads made
+  // so far, which Cancel and Save still have to account for.
+  function populateForm({ unitsOnly = false } = {}) {
+    setSeededUnits(displayUnits());
     let initialName: string;
     let initialAltNames: string;
     let initialLatitude: string;
@@ -253,7 +279,7 @@ function PlaceDialog({
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = fieldValue(place.fieldValues, def.key);
-        vals[def.key] = raw != null ? String(raw) : "";
+        vals[def.key] = fieldInputText(def.key, raw);
       }
       initialFieldValues = vals;
     } else {
@@ -296,6 +322,7 @@ function PlaceDialog({
     setNewFieldMin("");
     setNewFieldMax("");
     setAddFieldError(null);
+    if (unitsOnly) return;
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
@@ -502,9 +529,11 @@ function PlaceDialog({
       // "has a value" filter.
       const attributes: Record<string, unknown> = {};
       for (const def of typeFieldDefs) {
-        attributes[def.key] = coerceFieldValue(
+        attributes[def.key] = coerceFieldInput(
+          def.key,
           getFieldValue(def.key),
           def.type,
+          fieldValue(place?.fieldValues, def.key),
         );
       }
 

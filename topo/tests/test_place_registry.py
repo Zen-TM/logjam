@@ -11,19 +11,28 @@ the format on both sides.
 Pure Python: no osmium, which only read_extract needs.
 """
 
+import argparse
+import contextlib
+import gzip
+import io
 import json
 import os
 import re
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import build_place_registry as reg  # noqa: E402
+import regions  # noqa: E402
 
 _HERE = os.path.dirname(__file__)
 _FIXTURES = os.path.join(_HERE, "..", "..", "shared", "src", "__fixtures__")
 _FIXTURE = os.path.join(_FIXTURES, "place-registry.json")
 _POINTER_FIXTURE = os.path.join(_FIXTURES, "place-registry-pointer.json")
+PREFIX = "master/places/v1/"
 _SHARED_TS = os.path.join(_HERE, "..", "..", "shared", "src", "placeRegistry.ts")
 
 # Published OpenStreetMap names around Katoomba, at rounded positions.
@@ -90,8 +99,10 @@ class TestFixture(unittest.TestCase):
         self.assertIsNotNone(fmt)
         self.assertEqual(int(fmt.group(1)), reg.FORMAT)
         self.assertIn("`master/places/v${PLACE_REGISTRY_FORMAT}/`", ts)
-        self.assertEqual(reg.S3_PREFIX, f"master/places/v{reg.FORMAT}/")
-        self.assertIn("${PLACE_REGISTRY_PREFIX}latest.json", ts)
+        self.assertEqual(
+            regions.region("nsw")["placeSearch"], f"master/places/v{reg.FORMAT}/"
+        )
+        self.assertIn("`${prefix}latest.json`", ts)
 
 
 class TestKindOf(unittest.TestCase):
@@ -257,7 +268,7 @@ class TestUpload(unittest.TestCase):
     def test_data_file_goes_up_before_the_pointer(self):
         # Mutation: swap the two uploads → red.
         s3 = FakeS3()
-        reg.upload(s3, "bucket", self.data, self.pointer)
+        reg.upload(s3, "bucket", PREFIX, self.data, self.pointer)
         keys = [key for key, _ in s3.uploads]
         self.assertRegex(
             keys[0], r"^master/places/v1/places-2026-10-01-[0-9a-f]{8}\.json$"
@@ -277,13 +288,13 @@ class TestUpload(unittest.TestCase):
         size = self.data.stat().st_size
         s3 = FakeS3({"bytes": size * 2})
         with self.assertRaises(SystemExit):
-            reg.upload(s3, "bucket", self.data, self.pointer)
+            reg.upload(s3, "bucket", PREFIX, self.data, self.pointer)
         self.assertEqual(s3.uploads, [])
 
     def test_refuses_over_an_unreadable_pointer(self):
         s3 = FakeS3({"size": 1})
         with self.assertRaises(SystemExit):
-            reg.upload(s3, "bucket", self.data, self.pointer)
+            reg.upload(s3, "bucket", PREFIX, self.data, self.pointer)
         self.assertEqual(s3.uploads, [])
 
     def test_a_rebuild_with_other_bytes_gets_another_name(self):
@@ -298,8 +309,136 @@ class TestUpload(unittest.TestCase):
 
     def test_a_similar_size_replaces_the_current_one(self):
         s3 = FakeS3({"bytes": self.data.stat().st_size})
-        reg.upload(s3, "bucket", self.data, self.pointer)
+        reg.upload(s3, "bucket", PREFIX, self.data, self.pointer)
         self.assertEqual(len(s3.uploads), 2)
+
+
+NSW_EXTRACT = (
+    "https://download.geofabrik.de/australia-oceania/australia/"
+    "new-south-wales-latest.osm.pbf"
+)
+
+
+class TestPublish(unittest.TestCase):
+    """What `publish` downloads and where it uploads, with the network and S3
+    faked: nothing here reaches a real bucket."""
+
+    def run_publish(self, argv, extracts=None, regions=None):
+        s3 = FakeS3()
+        boto3 = mock.Mock()
+        boto3.client.return_value = s3
+        downloads = []
+
+        def build(pbf, out_dir, bbox=None):
+            return reg.build_files(fixture_registry(), Path(out_dir))
+
+        patches = [
+            mock.patch.dict(sys.modules, {"boto3": boto3}),
+            mock.patch.object(
+                reg.urllib.request,
+                "urlretrieve",
+                lambda url, path: downloads.append(url),
+            ),
+            mock.patch.object(reg, "build", build),
+        ]
+        if extracts is not None:
+            patches.append(mock.patch.dict(reg.EXTRACTS, extracts))
+        if regions is not None:
+            patches.append(mock.patch.object(reg, "region", regions.__getitem__))
+        with contextlib.ExitStack() as stack:
+            for patch in patches:
+                stack.enter_context(patch)
+            with contextlib.redirect_stdout(io.StringIO()):
+                reg.main(argv)
+        return downloads, s3
+
+    # Mutation: change DEFAULT_REGION or the `nsw` entry of EXTRACTS and the
+    # monthly task, which passes no region, publishes another region's
+    # registry under NSW's pointer.
+    def test_with_no_region_it_publishes_new_south_wales_as_the_schedule_does(self):
+        downloads, s3 = self.run_publish(["publish", "--bucket", "bucket"])
+        self.assertEqual(downloads, [NSW_EXTRACT])
+        keys = [key for key, _ in s3.uploads]
+        self.assertRegex(
+            keys[0], r"^master/places/v1/places-2026-10-01-[0-9a-f]{8}\.json$"
+        )
+        self.assertEqual(keys[1], "master/places/v1/latest.json")
+
+    # Mutation: upload under a fixed prefix in `publish` instead of the one the
+    # region declares → red; a second region would overwrite NSW's registry.
+    def test_a_region_publishes_under_the_prefix_it_declares(self):
+        downloads, s3 = self.run_publish(
+            ["publish", "--bucket", "bucket", "--region", "elsewhere"],
+            extracts={"elsewhere": "https://example.test/elsewhere.osm.pbf"},
+            regions={"elsewhere": {"placeSearch": "master/places/v1/elsewhere/"}},
+        )
+        self.assertEqual(downloads, ["https://example.test/elsewhere.osm.pbf"])
+        keys = [key for key, _ in s3.uploads]
+        self.assertTrue(
+            all(key.startswith("master/places/v1/elsewhere/") for key in keys), keys
+        )
+        self.assertEqual(keys[1], "master/places/v1/elsewhere/latest.json")
+
+    # Mutation: drop `choices=sorted(EXTRACTS)` from `--region` → red; a region
+    # with no extract would fail on a KeyError after the argument parsed.
+    def test_a_region_with_no_extract_is_refused_before_anything_is_fetched(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            self.run_publish(["publish", "--bucket", "bucket", "--region", "simnz"])
+
+    # Mutation: drop a region from EXTRACTS, or declare `placeSearch` on a
+    # region in regions.json without adding its extract → red.
+    def test_extracts_are_the_regions_that_declare_a_registry(self):
+        with open(regions.REGIONS_FILE, encoding="utf-8") as fh:
+            declared = {
+                r["id"]: r["placeSearch"]
+                for r in json.load(fh)["regions"]
+                if r["placeSearch"]
+            }
+        self.assertGreaterEqual(len(declared), 1)
+        self.assertEqual(set(reg.EXTRACTS), set(declared))
+        for prefix in declared.values():
+            self.assertTrue(prefix.endswith(f"/v{reg.FORMAT}/"), prefix)
+
+
+class TestBbox(unittest.TestCase):
+    RAWS = [
+        reg.Raw("In", "place=town", 150.0, -33.0, []),
+        reg.Raw("East Edge", "place=town", 151.0, -33.0, []),
+        reg.Raw("North Of It", "place=town", 150.5, -32.0, []),
+        reg.Raw("West Of It", "place=town", 149.0, -33.0, []),
+    ]
+
+    def build(self, bbox):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(reg, "read_extract", return_value=iter(self.RAWS)),
+            mock.patch.object(reg, "extract_version", return_value="2026-10-01"),
+        ):
+            data, _ = reg.build("extract.osm.pbf", tmp, bbox)
+            return json.loads(gzip.decompress(data.read_bytes()))
+
+    # Mutation: leave `inside` out of `build` → red; a registry cut for a small
+    # region would hold the whole extract.
+    def test_build_keeps_what_lies_in_the_box_edges_included(self):
+        doc = self.build((149.5, -33.5, 151.0, -32.5))
+        self.assertEqual(sorted(doc["names"]), ["East Edge", "In"])
+
+    # Mutation: filter with a fixed box in `build` when none is given → red.
+    def test_build_without_a_box_keeps_everything(self):
+        self.assertEqual(len(self.build(None)["names"]), 4)
+
+    # Mutation: drop the empty check in `build` → red; a box with its lon and
+    # lat swapped would publish an empty registry.
+    def test_build_refuses_an_empty_registry(self):
+        with self.assertRaises(SystemExit):
+            self.build((10.0, 10.0, 11.0, 11.0))
+
+    # Mutation: drop the order check in `parse_bbox` → red.
+    def test_parse_bbox_wants_four_numbers_west_of_east_south_of_north(self):
+        self.assertEqual(reg.parse_bbox("-1.5,2,3,4"), (-1.5, 2.0, 3.0, 4.0))
+        for bad in ("1,2,3", "a,b,c,d", "3,2,1,4", "1,4,3,2"):
+            with self.assertRaises(argparse.ArgumentTypeError, msg=bad):
+                reg.parse_bbox(bad)
 
 
 class TestAlternates(unittest.TestCase):

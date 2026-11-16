@@ -5,8 +5,9 @@
 // PRIVACY: nothing here touches the network or a log. Recents hold place
 // names, so each client keeps them on the device only and clears them when the
 // account leaves (frontend useAuth.ts, mobile wipeLocalData.ts).
-import { fromEastingNorthing } from "./geoPdfExtent.js";
-import { REGIONS, wrapView, type LonLatBox } from "./regions.js";
+import { boxCentre, parseGridReference } from "./grids.js";
+import { wrapBox } from "./placeGeo.js";
+import { REGIONS, type LonLatBox } from "./regions.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
 /** What the search box says while it works, finds nothing or fails: one set of
@@ -27,12 +28,6 @@ export interface SearchPoint {
   /** What the result row and the recents list show for this point. */
   label: string;
 }
-
-// Australia's MGA zones 54-56: where a grid reference can be read.
-const LAT_MAG = [10, 44] as const;
-const LON_MAG = [112, 154] as const;
-const within = (v: number, [lo, hi]: readonly [number, number]) =>
-  v >= lo && v <= hi;
 
 // One coordinate: optional hemisphere letter either side, a degree with
 // optional minutes and seconds. A trailing letter must touch its number
@@ -62,6 +57,13 @@ function part(g: (string | undefined)[], at: number): Part | null {
     value: hemi === "S" || hemi === "W" ? -magnitude : magnitude,
     axis: hemi === "N" || hemi === "S" ? "lat" : "lon",
   };
+}
+
+/** Where the map is looking, in [-180, 180]: the view's centre, else the first region's. */
+function mapCentre(view?: LonLatBox | null): { lon: number; lat: number } {
+  if (view) return boxCentre(wrapBox(view));
+  const [lon, lat] = REGIONS[0].view.center;
+  return { lon, lat };
 }
 
 const fmt = (lat: number, lon: number) =>
@@ -105,10 +107,7 @@ function parseLatLon(
     if (am <= 90 && bm <= 180) [latPart, lonPart] = [a, b];
     else if (bm <= 90 && am <= 180) [latPart, lonPart] = [b, a];
     else return null;
-    const wrapped = view && wrapView(view);
-    const [centreLon, centreLat] = wrapped
-      ? [(wrapped.west + wrapped.east) / 2, (wrapped.south + wrapped.north) / 2]
-      : REGIONS[0].view.center;
+    const { lon: centreLon, lat: centreLat } = mapCentre(view);
     const typed = (p: Part) => p.value < 0 || Object.is(p.value, -0);
     const explicit = typed(a) || typed(b);
     const sign = (p: Part, centre: number) =>
@@ -119,29 +118,17 @@ function parseLatLon(
   return { lat, lon, label: fmt(lat, lon) };
 }
 
-// "56 245000 6264000", "56H 245000E 6264000N", "MGA zone 56 245000mE ...".
-// The zone is required: an easting alone fits every zone, so inferring one
-// would fly somewhere plausible and wrong.
-const MGA =
-  /^(?:MGA\s*)?(?:zone\s*)?(5[456])\s*[C-HJ-NP-X]?\s*[,;]?\s*(\d{6}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{7}(?:\.\d+)?)\s*(?:m?N)?$/i;
-
-function parseMga(text: string): SearchPoint | null {
-  const g = MGA.exec(text);
-  if (!g) return null;
-  const zone = Number(g[1]) as 54 | 55 | 56;
-  const [easting, northing] = [Number(g[2]), Number(g[3])];
-  const { lat, lon } = fromEastingNorthing(easting, northing, zone);
-  if (!within(-lat, LAT_MAG) || !within(lon, LON_MAG)) return null;
-  return { lat, lon, label: `MGA ${zone} ${easting} ${northing}` };
-}
-
-/** The point a typed string names, or null when it is not a coordinate. */
+/**
+ * The point a typed string names, or null when it is not a coordinate: a grid
+ * reference (grids.ts `parseGridReference`) or a latitude and longitude, both
+ * read against where the map is looking (`view`).
+ */
 export function parseCoordinates(
   input: string,
   view?: LonLatBox | null,
 ): SearchPoint | null {
   const text = input.trim();
-  return parseMga(text) ?? parseLatLon(text, view);
+  return parseGridReference(text, mapCentre(view)) ?? parseLatLon(text, view);
 }
 
 export const MAX_RECENT_SEARCHES = 6;

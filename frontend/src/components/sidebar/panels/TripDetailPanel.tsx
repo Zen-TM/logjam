@@ -10,7 +10,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   attributeRows,
   contractSectionKeys,
-  distinctGaugeIds,
+  tripGaugeIdsByFeed,
   formatFieldValue,
   formatTripDate,
   mediaCategory,
@@ -164,8 +164,8 @@ function TripDetailPanel({
   const trackCount = media.length - photoCount;
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
-  const gaugeIds = distinctGaugeIds(
-    trip.places.map((p) => places.find((x) => x.id === p.id)?.gaugeId),
+  const gaugeFeeds = tripGaugeIdsByFeed(
+    trip.places.flatMap((p) => places.find((x) => x.id === p.id) ?? []),
   );
 
   // A VERB is in the ⋯ (DESIGN.md), and which verbs, in what order and
@@ -242,14 +242,21 @@ function TripDetailPanel({
       </section>
     ),
 
+    // One reading per feed the trip's gauges are in, each with its own credit.
     gauge: () => (
-      <TripGaugeReading
-        className={classes.section}
-        title={copy.gauge}
-        gaugeIds={gaugeIds}
-        dates={[trip.date]}
-        when="trip"
-      />
+      <>
+        {gaugeFeeds.map(({ feed, gaugeIds }) => (
+          <TripGaugeReading
+            key={feed}
+            className={classes.section}
+            title={copy.gauge}
+            feed={feed}
+            gaugeIds={gaugeIds}
+            dates={[trip.date]}
+            when="trip"
+          />
+        ))}
+      </>
     ),
 
     photos: () => (

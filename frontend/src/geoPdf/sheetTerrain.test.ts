@@ -23,7 +23,7 @@ const ALL = [NSW_REGION, ...SIM_REGIONS];
 
 describe("sheetTerrain", () => {
   // Mutation: take `regions[0]` in sheetTerrain in place of the region
-  // `regionInWrappedView` picks, and a sheet in another region reads NSW's archives.
+  // `regionInView` picks, and a sheet in another region reads NSW's archives.
   it("is the archives of the region the sheet is in", () => {
     const nsw = sheetTerrain(KATOOMBA, ALL);
     expect(nsw.heights).toBe(NSW_REGION.terrain.hillshade);
@@ -41,9 +41,10 @@ describe("sheetTerrain", () => {
     expect(nz.credit).not.toBe(nsw.credit);
   });
 
-  // Mutation: call `regionInView` in place of `regionInWrappedView` in
-  // sheetTerrain, and a sheet picked in another world copy (longitude shifted
-  // by a whole turn) finds no region, so the dialog disables every layer.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a sheet picked
+  // in another world copy (longitude shifted by a whole turn) finds no region,
+  // so the dialog disables every layer.
   it("finds the region of a sheet picked in another world copy", () => {
     const turn = (box: typeof KATOOMBA, by: number) => ({
       ...box,
@@ -58,7 +59,7 @@ describe("sheetTerrain", () => {
   });
 
   // Mutation: take `regionsTouching(extent, regions)[0]` in sheetTerrain in
-  // place of `regionInWrappedView`, and a sheet whose centre is in one region
+  // place of `regionInView`, and a sheet whose centre is in one region
   // but that touches an earlier one reads that earlier region's archives.
   it("takes all its Terrain from the one region at its centre, though another touches the sheet", () => {
     const square = (west: number, east: number) =>
@@ -80,7 +81,7 @@ describe("sheetTerrain", () => {
     expect(sheet.credit).toBe(SIM_UTAH.terrain.heights!.credit);
   });
 
-  // Mutation: add `?? regions[0]` after `regionInWrappedView` in sheetTerrain, and a
+  // Mutation: add `?? regions[0]` after `regionInView` in sheetTerrain, and a
   // print over the ocean asks for NSW's archives.
   it("has nothing where no region holds the sheet and the world declares nothing", () => {
     const none = sheetTerrain(OCEAN, ALL);
@@ -93,7 +94,7 @@ describe("sheetTerrain", () => {
     });
   });
 
-  // Mutation: drop the `world` argument from the `regionInWrappedView` call in
+  // Mutation: drop the `world` argument from the `regionInView` call in
   // sheetTerrain, and a sheet in no region never reads the world's archives,
   // which a planet-wide build declares.
   it("falls to the world's archives where it declares some", () => {

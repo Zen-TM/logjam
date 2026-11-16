@@ -1,3 +1,4 @@
+import { setDisplayUnits } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { parkedError } from "../sync/parkedError";
@@ -404,14 +405,66 @@ describe("opChanges", () => {
     expect(changes.every((change) => !change.rejected)).toBe(true);
   });
 
+  // A real parked place edit carries a length inside `fieldValues`, under its
+  // field key; a top-level `longestAbseil` is no column.
+  const longest = (metres: number) =>
+    opChanges(parked({ fields: { fieldValues: { longest_abseil: metres } } }));
+
+  // Mutation: test the field's key as `longestAbseil` in `fieldValueText`
+  // (no real op has one), or drop `trimNumber` there (metric 12.345 reads
+  // "12.345 m").
+  it("writes a length in the display units, rounded as the place summary rounds it", () => {
+    expect(longest(12.345)[0]).toMatchObject({
+      label: "Longest abseil",
+      value: "12.3 m",
+    });
+    setDisplayUnits("imperial");
+    try {
+      expect(longest(35)[0].value).toBe("114.8 ft");
+    } finally {
+      setDisplayUnits("metric");
+    }
+  });
+
+  // Mutation: drop `lengthUnitLabel()` from the line `fieldValueText` writes
+  // for a length, and a parked edit reads a bare "35".
   it("carries the unit where the bare number would be a riddle", () => {
     expect(opChanges(parked({ fields: { hours: 1 } }))[0].value).toBe("1 hour");
-    expect(opChanges(parked({ fields: { longestAbseil: 35 } }))[0].value).toBe(
-      "35 m",
-    );
+    expect(longest(35)[0].value).toBe("35 m");
     expect(opChanges(parked({ fields: { quality: 4 } }))[0].value).toBe("4/5");
     // A count is a count.
     expect(opChanges(parked({ fields: { numAbseils: 5 } }))[0].value).toBe("5");
+  });
+
+  // Mutation: drop the `fieldValueLabel` lookup in `fieldValueText`, and the
+  // line reads "ACA water grade: 5".
+  it("names an ACA grade and writes its rank as its letters", () => {
+    const changes = opChanges(
+      parked({
+        fields: {
+          fieldValues: {
+            aca_water: 5,
+            aca_risk: 3,
+            aca_technical: 3,
+            aca_time: 2,
+          },
+        },
+      }),
+    );
+    expect(changes.map((change) => [change.label, change.value])).toEqual([
+      ["ACA water grade", "C2"],
+      ["ACA risk rating", "R"],
+      ["ACA technical grade", "3"],
+      ["ACA time grade", "II"],
+    ]);
+  });
+
+  // Mutation: delete the `aca_water` entry of `FIELD_LABEL`, and a shelved
+  // conflict is titled with the raw key.
+  it("titles a conflict on an ACA field in words", () => {
+    expect(shelfTitle(shelved({ field: "aca_water" }))).toBe(
+      "ACA water grade for “Claustral” changed on two devices",
+    );
   });
 
   it("shows a media op's filename and nothing else", () => {

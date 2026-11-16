@@ -31,6 +31,7 @@ import {
   setSlopeBandsAccount,
 } from "./map/slopeBandsPreference";
 import { keepAccountRegions } from "./regionsPreference";
+import { keepAccountUnits, useDisplayUnits } from "./unitsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -1036,6 +1037,7 @@ export function AppShell({
   const stackScreenOptions = useStackScreenOptions();
 
   const isGuest = accountState === "guest";
+  useDisplayUnits();
   const userQuery = useApiQuery(
     fetchCurrentUser,
     "Couldn't load your account.",
@@ -1119,6 +1121,13 @@ export function AppShell({
     });
     if (next) recordLanguage(next).catch(console.error);
   }, [accountUser, accountState, consented, newAccount]);
+
+  // The account's units, kept the same way. Absent is its own state: the
+  // account never chose, so its home region's units apply.
+  const accountUnits = userQuery.data?.uiPreferences?.units;
+  useEffect(() => {
+    if (!isGuest && accountLoaded) keepAccountUnits(accountUnits);
+  }, [accountUnits, accountLoaded, isGuest]);
 
   useEffect(() => {
     // A guest registers no token (it checks). The tap listener still mounts —

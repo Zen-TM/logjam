@@ -79,6 +79,47 @@ service.**
   client instead would be tens of megabytes to hide which one was opened, a
   poor trade on a phone. Opening a gauge's panel is not tied to a place:
   anyone can open any gauge.
+- **Update 2026-11-14: `latest.json` states its units and its day.** It carries
+  `units` (`{ "level": "m", "flow": "ML/d" }`) and `dayOffsetMinutes` (600),
+  written by `topo/build_gauges.py`, and a client prints readings in the
+  file's units, never converted, and cuts history days and a trip's day at
+  its offset (`gaugeDay` in `shared/src/gauges.ts`). A feed in other
+  units or another day needs no change to the readers, which take both
+  from the file they hold. A gauge id is the one rule `isValidGaugeId`,
+  letters and digits, so a provider prefix fits. The fields are additive
+  and a file without them reads as metres, ML/d and 600, so the format stays
+  version 1 and the feed in the field is read unchanged. A file whose units
+  are not on the shared allowlist is refused, not printed in the wrong ones. No fetcher
+  for a second provider is built; no `provider` field, since the id's prefix
+  and `attribution` already say whose reading it is. Guards:
+  `shared/src/gauges.test.ts` ("a feed that is not New South Wales's"),
+  `topo/tests/test_gauges.py` ("the feed states the units and day it is cut
+  in"). Everything else above stands.
+- **Update 2026-11-16: a client reads the feed of the region it shows.** A
+  region's `gauges` (`shared/src/regions.ts`) is the CDN prefix of its feed,
+  or null where it has none, and `latest.json` and `history/<id>.json` are
+  read under that prefix, never under a fixed one. The map and its search
+  read the feed of the region the map shows (`gaugeFeedIn`, `gaugeFeedOf` in
+  `shared/src/gaugeFeeds.ts`); a place's gauge, and a trip's, the feed of the
+  region the place's coordinates fall in (`gaugeFeedAt`). Where there is no
+  feed nothing is fetched, and a place or trip page draws no gauge section. A client
+  holds a feed's file with the feed it came from and never reads it as
+  another's, and Logjam GPS keeps each feed's files under its own prefix. The
+  CDN's logs show which feed a client read, so the region its map showed, as a
+  history's path already names its gauge. Guards:
+  - the map and search read the region the map shows:
+    `frontend/src/components/gauges/gauges.test.tsx` ("reads the feed of the
+    region the map shows, only while the layer is on"), the `MapSearchBox`
+    test, `mobile/src/gauges/gauges.test.ts` (the same title);
+  - no gauge section where the feed is null: the `PlaceDetailPanel` and
+    `TripDetailPanel` render tests, and `mobile/src/gauges/gauges.test.ts`
+    for the place screen;
+  - a file only for its own feed: `gauges.test.tsx` ("never shows one feed's
+    file as another's"), `gaugeStorage.test.ts` ("keeps each feed's file
+    apart"), `gaugeFeed.test.ts` ("fetches the feed it is given, and each
+    feed has its own five minutes"), `shared/src/gaugeFeeds.test.ts`.
+
+  Everything else above stands.
 
 ## Consequences
 
@@ -108,5 +149,8 @@ service.**
 - **History from WaterNSW.** Its Hourly and Instantaneous data reach back 168
   hours only; BoM serves the daily series since the 1970s under CC BY with no
   key.
+- **A `provider` field and a unit conversion in the clients (for the update
+  above).** Nothing would read the field, and a converted number is not the
+  one the provider published.
 - **The nearest gauge chosen automatically.** It gives a confident answer
   about the wrong river; a person picks, from a list.

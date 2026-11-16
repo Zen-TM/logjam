@@ -33,6 +33,7 @@ _ENTRYPOINTS = (
     "build_fire_history.py",
     "build_coverage.py",
     "build_nsw_dem.py",
+    "build_region_dem.py",
 )
 
 
@@ -184,6 +185,12 @@ class TestDockerImageFiles(unittest.TestCase):
             "image — a fresh build raises ModuleNotFoundError at runtime: "
             f"{missing}. Add a COPY line to topo/Dockerfile.",
         )
+
+    # Mutation: delete the `COPY regions.json` line from the Dockerfile:
+    # regions.py is copied (the import walk above sees it) and reads a file the
+    # image lacks, so every worker stops at import.
+    def test_the_region_file_regions_py_reads_is_copied(self):
+        self.assertIn("regions.json", _copied_sources())
 
     # Mutation: turn the last line back into `ENTRYPOINT [...]` and a RunTask
     # command override (the slope build) or `docker compose run topo python3 ...`

@@ -35,8 +35,9 @@ import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { terrainKeyOf } from "./map/layerOrder";
+import { terrainDrawn } from "./map/terrainDrawn";
 import { terrainEntries } from "./map/terrainEntries";
-import { nextViewRegion } from "./map/viewRegion";
+import { nextViewRegion, startingView } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
@@ -142,12 +143,9 @@ import {
   WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
-  drawsNswContours,
-  drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
   carriersOf,
-  drawsCoverage,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -161,12 +159,15 @@ import {
   type TripPlanItemKind,
   type TripPlanPageView,
   accountRegion,
-  pointBox,
+  sharpenOfferFor,
+  sharpenUnavailable,
+  gaugeFeedOf,
   type LonLatBox,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
+import { applyDisplayUnits } from "../displayUnits";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useRecordLanguage } from "../languageSetting";
 import { useThemePreferences } from "../themePreferences";
@@ -410,6 +411,9 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
+  // Set while rendering, so every formatter below reads the account's units on
+  // this render; a choice in Settings replaces `currentUser` and re-renders from here.
+  applyDisplayUnits(currentUser?.uiPreferences);
   // Map view state — persisted for session restore and used for GeoPDF initialisation
   const [mapCenter, setMapCenter] = useStoredState<{
     lat: number;
@@ -422,11 +426,10 @@ function App() {
   // The ground the map shows decides the gallery, not the regions the account
   // chose (ADR 0049). The state keeps its old value for a pan that offers the
   // same basemaps (`viewForBasemaps`), so the list below is stable.
-  const [basemapView, setBasemapView] = useState<LonLatBox>(() =>
-    mapCenter
-      ? pointBox(mapCenter.lng, mapCenter.lat)
-      : pointBox(...accountRegion(currentUser?.uiPreferences).view.center),
+  const [start] = useState(() =>
+    startingView(mapCenter, currentUser?.uiPreferences),
   );
+  const [basemapView, setBasemapView] = useState<LonLatBox>(start.box);
   const baseLayers = useMemo(() => baseLayersFor(basemapView), [basemapView]);
   // A pick the map's ground does not offer shows `basemapPicked`'s, with no way
   // to switch off it otherwise; the pick stays and returns with the ground.
@@ -570,22 +573,45 @@ function App() {
   );
   // The one region the map draws its Terrain group from: the one in view,
   // changed only when the map moves into another (ADR 0049; `viewRegion.test.ts`
-  // holds that a pan inside one keeps the same object). Unknown until the map
-  // reports its first view.
-  const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // holds that a pan inside one keeps the same object). It starts as the
+  // region of the starting view (`startingView`), not unknown, so the first
+  // render already offers what that ground does.
+  const [viewRegion, setViewRegion] = useState<Region | null>(start.region);
+  // What sharpening offers for an action about `box`, else about the ground the
+  // map shows (`sharpenOfferFor`).
+  const sharpenFor = (box: LonLatBox | null) =>
+    sharpenOfferFor(box, viewRegion);
+  // Only a region with a gauge feed has river gauges to draw: the question the
+  // map and Logjam GPS ask through `gaugeFeedOf` (guard: `gauges.test.tsx`,
+  // "asks whether the region in view has a feed the way the map does").
+  const gaugesHere = gaugeFeedOf(viewRegion) !== null;
+  // The layers drawn over the region in view, and the stored carrier where
+  // that region lists it (the Layers popover asks the same).
+  const { shown, carrier: carrierHere } = useMemo(
+    () =>
+      terrainDrawn(
+        { contours, coverage, fire, slope, land, hillshade },
+        activeLayerId,
+        viewRegion,
+        coverageCarrier,
+      ),
+    [
+      contours,
+      coverage,
+      fire,
+      slope,
+      land,
+      hillshade,
+      activeLayerId,
+      viewRegion,
+      coverageCarrier,
+    ],
+  );
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
     setRoutedAreas(sharpenedAreas);
     const entries = terrainEntries(viewRegion, sharpenedAreas);
-    const shown = {
-      contours: drawsNswContours(activeLayerId, contours),
-      coverage: drawsCoverage(coverage, coverageCarrier),
-      fire,
-      slope,
-      land,
-      hillshade: drawsNswHillshade(activeLayerId, hillshade),
-    };
     return [
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
@@ -593,19 +619,7 @@ function App() {
         .flatMap((key) => entries[key] ?? []),
       ...vegetationLayers,
     ];
-  }, [
-    activeLayerId,
-    contours,
-    coverage,
-    coverageCarrier,
-    fire,
-    slope,
-    land,
-    hillshade,
-    vegetationLayers,
-    sharpenedAreas,
-    viewRegion,
-  ]);
+  }, [shown, vegetationLayers, sharpenedAreas, viewRegion]);
 
   // A PMTiles source failed to load (Map already tore it down to stop the
   // retry spam). Tell the user once.
@@ -651,12 +665,15 @@ function App() {
   }, []);
 
   /**
-   * The map's visible bounds, kept in a ref rather than in state: "Filter to
-   * the current view" reads them once, when the button is pressed, and putting
-   * them in state would re-render App on every pan for a value nothing
-   * renders.
+   * The map's visible bounds, in a ref as well as in state: "Filter to the
+   * current view" reads them once, when the button is pressed, from a callback
+   * that must not see a stale render.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
+  // The Layers popover names the grid row for these bounds, which the grid
+  // lines are drawn from. `mapCenter` already re-renders App after every pan,
+  // so this costs no extra render.
+  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -1719,7 +1736,10 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => setShowTopo(true),
+      unavailable: sharpenUnavailable(sharpenFor(null)) ?? undefined,
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -1766,6 +1786,7 @@ function App() {
           }}
           awaitingBbox={selectingTopoBbox}
           pendingBbox={pendingTopoBbox}
+          offer={sharpenFor(pendingTopoBbox)}
           onJobCreated={handleTopoJobCreated}
           existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
             .map((j) => j.name)
@@ -2033,6 +2054,7 @@ function App() {
             onSharePlaces={(ids) => openSelection(ids, "share")}
             onExportPlaces={(ids) => openSelection(ids, "export")}
             onMakeMap={makeMap}
+            sharpenFor={sharpenFor}
             onHoverPlace={placeHighlight.set}
             onFiltersOpenChange={setSidebarSheetOpen}
             onRefetch={refetch}
@@ -2050,6 +2072,7 @@ function App() {
               refetchStandaloneFiles();
               refetchPlaceTracks();
             }}
+            mapCenter={mapCenter}
             currentUser={currentUser}
             currentUserError={currentUserError}
             onRetryCurrentUser={refetchCurrentUser}
@@ -2105,7 +2128,7 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays || !!planOnMap}
-            showGauges={showGauges}
+            showGauges={showGauges && gaugesHere}
             onShowGauges={() => setShowGauges(true)}
             showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
@@ -2180,6 +2203,7 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setMapBounds(bounds);
               setBasemapView((prev) => viewForBasemaps(prev, bounds));
               setViewRegion((previous) => nextViewRegion(previous, bounds));
             }}
@@ -2208,7 +2232,7 @@ function App() {
             region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
-            coverageCarrier={coverageCarrier}
+            coverageCarrier={carrierHere}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2277,6 +2301,7 @@ function App() {
           showWays={showWays}
           setShowWays={setShowWays}
           showGauges={showGauges}
+          gaugesHere={gaugesHere}
           setShowGauges={setShowGauges}
           showMgaGrid={showMgaGrid}
           setShowMgaGrid={setShowMgaGrid}
@@ -2295,6 +2320,8 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          mapBounds={mapBounds}
+          region={viewRegion}
         />
 
         <PlanInviteLinkDialog
