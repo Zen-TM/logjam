@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointBox } from "@logjam/shared";
+import { NSW_REGION, pointBox } from "@logjam/shared";
 
 import {
   defaultBasemap,
@@ -35,14 +35,14 @@ describe("the basemaps Logjam GPS offers", () => {
     expect(mobileBasemaps(atSea)).toEqual(["osm-topo", "osm-cycle"]);
   });
 
-  // Mutation: add a catalogue entry to a region without teaching the
-  // resolver the id, and resolveMapSource throws on it.
+  // Mutation: have `knownBasemaps()` return an id the catalogue lacks (append
+  // "ghost"), and resolveMapSource throws `Unknown basemap id` on it.
   it("are all ids the resolver draws", () => {
     const ids = knownBasemaps();
     expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) {
       const [source] = resolveMapSource(
-        { kind: "basemap", basemapId: id },
+        { kind: "basemap", basemapId: id, region: NSW_REGION },
         { connectivity: "online", artifacts: [], cdnBaseUrl: "https://cdn" },
       );
       expect(source?.status, id).toBe("ok");

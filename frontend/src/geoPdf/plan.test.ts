@@ -268,15 +268,15 @@ describe("rasterBaseTiles", () => {
 });
 
 describe("vectorBasemap", () => {
-  const print = (baseLayer: string, scale: number) => {
-    const { config } = input({ baseLayer, overlays: [] });
+  const print = (baseLayer: string, scale: number, centre = CENTRE) => {
+    const { config } = input({ baseLayer, overlays: [] }, [], centre);
     const scaled = { ...config, scale };
     return { config: scaled, geometry: printGeometry(scaled) };
   };
 
   it("is nothing for a raster base", () => {
     const { config, geometry } = print("six-base", 25000);
-    expect(vectorBasemap(config, geometry)).toBeNull();
+    expect(vectorBasemap(config, geometry, NSW_REGION.vector)).toBeNull();
   });
 
   // Mutation: read at the print's own zoom, and a 1:25 000 print asks for
@@ -284,12 +284,36 @@ describe("vectorBasemap", () => {
   it("reads at the style's zoom, up to the archive's deepest", () => {
     const coarse = print("protomaps", 25000);
     expect(
-      vectorBasemap(coarse.config, coarse.geometry)!.transform.tiles[0]!.z,
+      vectorBasemap(coarse.config, coarse.geometry, NSW_REGION.vector)!
+        .transform.tiles[0]!.z,
     ).toBe(14);
     const fine = print("protomaps", 2000);
     expect(
-      vectorBasemap(fine.config, fine.geometry)!.transform.tiles[0]!.z,
+      vectorBasemap(fine.config, fine.geometry, NSW_REGION.vector)!.transform
+        .tiles[0]!.z,
     ).toBe(15);
+  });
+
+  // Mutation: read the deepest zoom from anywhere but the archive it is given
+  // (a constant 15), and a print from an archive that stops at z12 asks for
+  // tiles it does not hold.
+  it("reads the archive it is given, to that archive's own deepest zoom", () => {
+    const fine = print("protomaps", 2000);
+    const shallow = {
+      archivePath: "master/basemap/shallow.pmtiles",
+      maxzoom: 12,
+      licence: "odbl" as const,
+    };
+    const drawn = vectorBasemap(fine.config, fine.geometry, shallow)!;
+    expect(drawn.path).toBe(shallow.archivePath);
+    expect(drawn.transform.tiles[0]!.z).toBe(12);
+  });
+
+  // Mutation: fall back to an archive when the sheet's region has none, and a
+  // print outside every region reads tiles of a region it is not in.
+  it("is nothing where the sheet's region has no vector archive", () => {
+    const { config, geometry } = print("protomaps", 25000);
+    expect(vectorBasemap(config, geometry, null)).toBeNull();
   });
 
   it("is warmed by the dialog's prefetch", () => {
@@ -297,5 +321,19 @@ describe("vectorBasemap", () => {
     expect(statewideReads(vector).map((r) => r.path)).toContain(
       "master/basemap/protomaps-nsw.pmtiles",
     );
+  });
+
+  // Mutation: read `NSW_REGION.vector` in place of the sheet's region's, and a
+  // sheet in simulated New Zealand is warmed from NSW's archive.
+  it("warms the archive of the region the sheet is in", () => {
+    const sheet = input(
+      { baseLayer: "protomaps", overlays: [] },
+      [],
+      NZ_CENTRE,
+    );
+    const terrain = sheetTerrain(sheet.config.extent, SIM_REGIONS);
+    expect(paths(statewideReads(sheet, terrain))).toEqual([
+      SIM_NZ.vector!.archivePath,
+    ]);
   });
 });

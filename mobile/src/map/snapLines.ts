@@ -17,11 +17,12 @@
 // and is never sent as a query. Nothing logs.
 import * as FileSystem from "expo-file-system/legacy";
 import {
-  BASEMAP_CATALOG,
   fetchSnapLines,
+  snapArchiveFor,
   type SnapArchive,
   type SnapLine,
   type SnapMode,
+  type VectorArchive,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -29,15 +30,12 @@ import type { MapArtifact } from "./sourceResolver";
 import { regionCovering } from "./snapRegion";
 
 /**
- * The remote archive. Same host the vector basemap itself streams from, so
- * snapping needs no new network permission or endpoint.
+ * The remote archive of the region the segment is in. Same host the vector
+ * basemap itself streams from, so snapping needs no new network permission or
+ * endpoint.
  */
-function archiveUrl(): string {
-  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
-  // Fail loudly — a missing catalog entry is a programming error.
-  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
-  return `${config.topoCdnBaseUrl}/${entry.urlTemplate}`;
-}
+const archiveUrl = (archive: VectorArchive) =>
+  `${config.topoCdnBaseUrl}/${archive.archivePath}`;
 
 /**
  * A pmtiles `Source` over a local file.
@@ -78,7 +76,14 @@ export function collectSnapLines(
   /** Downloaded artifacts, so a saved region can serve this with no signal. */
   artifacts: readonly MapArtifact[] = [],
 ): Promise<SnapLine[]> {
-  const region = regionCovering(artifacts, from, to);
-  const archive = region ? fileSource(region.path) : archiveUrl();
-  return fetchSnapLines(archive, mode, from, to);
+  // The archive of the region the segment is in; with none, a straight line.
+  const archive = snapArchiveFor(from, to);
+  if (!archive) return Promise.resolve([]);
+  const saved = regionCovering(artifacts, from, to, archive.archivePath);
+  return fetchSnapLines(
+    saved ? fileSource(saved.path) : archiveUrl(archive),
+    mode,
+    from,
+    to,
+  );
 }

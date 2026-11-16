@@ -1,4 +1,4 @@
-// The statewide contour lines (`NSW_REGION.terrain.contours`, regions.ts), and
+// The statewide contour lines (a region's `terrain.contours`, regions.ts), and
 // when a map draws them.
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import {
