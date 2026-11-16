@@ -12,7 +12,7 @@ Only the maintainer sees the report, and the fix is worked on in the same
 private advisory.
 
 If you cannot use GitHub, email
-[zentmarcos@gmail.com](mailto:zentmarcos@gmail.com?subject=Logjam%20security)
+[support@logjam.earth](mailto:support@logjam.earth?subject=Logjam%20security)
 with "Logjam security" in the subject.
 
 Do not open a public issue, pull request or discussion about it, and do not
