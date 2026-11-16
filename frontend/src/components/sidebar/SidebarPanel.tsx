@@ -25,6 +25,7 @@ import type {
 } from "../../placeUtils";
 import type {
   RegionBbox,
+  SharpenOffer,
   StandaloneFile,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -98,6 +99,7 @@ function SidebarPanel({
   onFiltersOpenChange,
   onHoverPlace,
   onMakeMap,
+  sharpenFor,
   onSharePlaces,
   onExportPlaces,
   // LiDAR
@@ -198,6 +200,8 @@ function SidebarPanel({
   onFiltersOpenChange: (open: boolean) => void;
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
+  /** What sharpening offers for a box, else for the ground the map shows. */
+  sharpenFor: (box: RegionBbox | null) => SharpenOffer;
   onSharePlaces: (ids: string[]) => void;
   onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
@@ -419,6 +423,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
+            sharpenFor={sharpenFor}
             onSharePlaces={onSharePlaces}
             onExportPlaces={onExportPlaces}
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
@@ -541,6 +546,7 @@ function SidebarPanel({
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
+            sharpenFor={sharpenFor}
             onExportPlace={(id) => onExportPlaces([id])}
             verbRequest={placeVerbRequest}
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}

@@ -127,6 +127,14 @@ export type RegionSharpen =
   | {
       mode: "upload";
       /**
+       * Where a user gets the survey. `steps` is what Logjam Web's sharpen
+       * dialog walks them through: `elvis` is the errand ELVIS needs (draw the
+       * area, take its shapefile there, order the tiles); `link` is only the
+       * portal's address and the reminder that an upload is one ZIP. Guard:
+       * `sharpen.test.ts` ("gives every upload region a portal").
+       */
+      portal: { name: string; url: string; steps: "elvis" | "link" };
+      /**
        * What the survey's publisher asks a derived product to show.
        * `{extracted}` is where topo/sharpen.py `credit` puts ", extracted
        * <month>", or nothing when the upload does not say.
@@ -504,6 +512,11 @@ export const NSW_REGION = {
   units: "metric",
   sharpen: {
     mode: "upload",
+    portal: {
+      name: "ELVIS",
+      url: "https://elevation.fsdf.org.au/",
+      steps: "elvis",
+    },
     // What ELVIS's metadata asks of a derived product (CC BY 3.0 AU).
     credit:
       "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",

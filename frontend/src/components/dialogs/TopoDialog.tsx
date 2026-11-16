@@ -1,12 +1,14 @@
 // Sharpens an area: the question is "what do I want covered, and what am I
 // giving it to work from?".
 //
-// The data itself comes from ELVIS, the federal elevation portal — Logjam never
-// holds the state's LiDAR, the user orders the tiles they want and uploads the
-// ZIP that arrives. That errand is several steps long and is needed once, so it
-// lives in a sub-view of this dialog rather than above the thing it explains
-// (DESIGN.md: a picker inside a dialog swaps the body and backs out to the
-// form).
+// The data itself comes from the region's portal (`Region.sharpen.portal`:
+// ELVIS, the federal elevation portal, in New South Wales) — Logjam never holds
+// the survey, the user gets the tiles they want and uploads the ZIP. ELVIS's
+// errand is several steps long and is needed once, so it lives in a sub-view of
+// this dialog rather than above the thing it explains (DESIGN.md: a picker
+// inside a dialog swaps the body and backs out to the form); a portal with no
+// errand of its own gets a short sub-view. Where the region has no sharpening
+// the dialog says so and offers nothing.
 import { useState, useRef, Fragment, useEffect } from "react";
 import {
   apiFetch,
@@ -26,7 +28,11 @@ import {
   formatMinutes,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
+  MAP_TERRAIN,
+  t,
   type ElvisStats,
+  type SharpenOffer,
+  type SharpenPortal,
   formatFixedMetres,
 } from "@logjam/shared";
 import {
@@ -110,6 +116,7 @@ export default function TopoDialog({
   pendingBbox,
   onJobCreated,
   existingTopoNames,
+  offer,
 }: {
   open: boolean;
   onClose: () => void;
@@ -120,6 +127,9 @@ export default function TopoDialog({
   pendingBbox: TBbox | null;
   onJobCreated: (job: TopoJob) => void;
   existingTopoNames: string[];
+  /** What sharpening offers where the area is (`sharpenOfferFor`): the portal
+   *  to name, or why there is none. */
+  offer: SharpenOffer;
 }) {
   const [file, setFile] = useState<File | null>(null);
   // Submission lifecycle: form → uploading (determinate PUT) → finalizing
@@ -206,7 +216,8 @@ export default function TopoDialog({
   // warning appears before the user goes off to download gigabytes from ELVIS.
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
   const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
-  const activeTileCount = stats?.tileCount ?? estimatedTiles;
+  const activeTileCount =
+    offer.mode === "upload" ? (stats?.tileCount ?? estimatedTiles) : null;
 
   // Credits are not derivable client-side: the tiles-to-seconds rate is fitted
   // server-side from recent real runtimes, so the projection has to be asked
@@ -329,6 +340,7 @@ export default function TopoDialog({
   }
 
   async function handleSubmit() {
+    if (offer.mode !== "upload") return;
     if (!file || !stats) {
       setError("Choose your LiDAR ZIP first.");
       return;
@@ -374,7 +386,7 @@ export default function TopoDialog({
           tileCount: stats.tileCount || null,
           jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
-          ...sharpenJobRequest(vegetation, stats.lazCount),
+          ...sharpenJobRequest(vegetation && offer.vegetation, stats.lazCount),
         },
         {
           progress: (sent, total) => {
@@ -421,6 +433,8 @@ export default function TopoDialog({
   const backToForm = () => setMode("form");
 
   const jobCopy = LIDAR_JOB_COPY;
+  const portal = offer.mode === "upload" ? offer.portal : null;
+  const off = phase === "form" && offer.mode === "off";
   const title =
     phase === "uploading"
       ? "Uploading"
@@ -428,8 +442,8 @@ export default function TopoDialog({
         ? "Almost there"
         : phase === "done"
           ? "On its way"
-          : mode === "instructions"
-            ? "Getting LiDAR from ELVIS"
+          : mode === "instructions" && portal
+            ? t`Getting LiDAR from ${portal.name}`
             : jobCopy.make;
 
   return (
@@ -441,16 +455,20 @@ export default function TopoDialog({
         dismissible={!uploading}
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
-        onClose={mode === "form" ? performClose : backToForm}
+        onClose={mode === "form" || off ? performClose : backToForm}
         discard={
-          isDirty && mode === "form" ? abandonConfirm("request", true) : null
+          isDirty && mode === "form" && !off
+            ? abandonConfirm("request", true)
+            : null
         }
+        // Where sharpening is off the dialog has nothing to send or go back
+        // to: the header's Close is its way out.
         footer={(requestClose) =>
           uploading ? undefined : phase === "done" ? (
             <Button variant="filled" onClick={onClose}>
               Done
             </Button>
-          ) : mode !== "form" ? (
+          ) : off ? undefined : mode !== "form" && portal ? (
             <Button variant="filled" onClick={backToForm}>
               Back to the form
             </Button>
@@ -504,13 +522,21 @@ export default function TopoDialog({
               We'll let you know when it's ready. You can close this.
             </p>
           </div>
-        ) : mode === "instructions" ? (
+        ) : offer.mode === "off" ? (
+          <div className={classes.form}>
+            <SectionHeader title={MAP_TERRAIN.copy.notHere} />
+            <p className={classes.stepLine}>{offer.reason}</p>
+          </div>
+        ) : mode === "instructions" && portal?.steps === "elvis" ? (
           <ElvisInstructions
+            portal={portal}
             pendingBbox={pendingBbox}
             area={area}
             onSelectBbox={onSelectBbox}
             warnCredits={jobWouldExceed && stats === null}
           />
+        ) : mode === "instructions" && portal ? (
+          <LinkInstructions portal={portal} />
         ) : (
           <div className={classes.form}>
             <p className={classes.wideHint}>
@@ -560,10 +586,14 @@ export default function TopoDialog({
               <span className={classes.dropLine}>
                 {file
                   ? file.name
-                  : "Drop your ELVIS ZIP here, or select it in your file system."}
+                  : t`Drop your ${offer.portal.name} ZIP here, or select it in your file system.`}
               </span>
               <span className={classes.dropHint}>
-                {file ? "Choose a different file" : "No need to unzip it."}
+                {file
+                  ? "Choose a different file"
+                  : offer.portal.steps === "elvis"
+                    ? "No need to unzip it."
+                    : t`Put all the files in one ZIP.`}
               </span>
               <input
                 ref={fileInputRef}
@@ -585,7 +615,9 @@ export default function TopoDialog({
                 variant="outline"
                 onClick={() => setMode("instructions")}
               >
-                Haven't got one? Order LiDAR from ELVIS
+                {offer.portal.steps === "elvis"
+                  ? t`Haven't got one? Order LiDAR from ${offer.portal.name}`
+                  : t`Haven't got one? Get LiDAR from ${offer.portal.name}`}
               </Button>
             </div>
 
@@ -621,7 +653,7 @@ export default function TopoDialog({
               </p>
             )}
 
-            {stats && stats.lazCount > 0 && (
+            {offer.vegetation && stats && stats.lazCount > 0 && (
               <Checkbox
                 label="Vegetation (experimental)"
                 description="Also draws how thick the scrub is from the point clouds, which takes longer."
@@ -718,11 +750,13 @@ function ZipSummary({
  * Numbered, because it is done in order and in another tab.
  */
 function ElvisInstructions({
+  portal,
   pendingBbox,
   area,
   onSelectBbox,
   warnCredits,
 }: {
+  portal: SharpenPortal;
   pendingBbox: TBbox | null;
   area: number | null;
   onSelectBbox: () => void;
@@ -775,11 +809,7 @@ function ElvisInstructions({
               compact
               variant="outline"
               onClick={() =>
-                window.open(
-                  "https://elevation.fsdf.org.au/",
-                  "_blank",
-                  "noopener,noreferrer",
-                )
+                window.open(portal.url, "_blank", "noopener,noreferrer")
               }
             >
               Open the ELVIS portal
@@ -810,6 +840,47 @@ function ElvisInstructions({
             Under <strong>Industry</strong>, choose <strong>Recreation</strong>.
             Enter your email and press <strong>Order datasets</strong>. ELVIS
             emails you a link to the ZIP — that ZIP is what you bring back here.
+          </p>
+        </div>
+      </li>
+    </ol>
+  );
+}
+
+/**
+ * A portal with no errand of its own: where to get the survey, and that what
+ * comes back here is one ZIP (the upload reads a ZIP's directory, and some
+ * portals serve loose point-cloud files).
+ */
+function LinkInstructions({ portal }: { portal: SharpenPortal }) {
+  return (
+    <ol className={classes.steps}>
+      <li className={classes.step}>
+        <div className={classes.stepBody}>
+          <SectionHeader title={t`Get the LiDAR from ${portal.name}`} />
+          <p className={classes.stepLine}>
+            {t`Find the survey of the ground you want covered and download it.`}
+          </p>
+          <div className={classes.stepControls}>
+            <Button
+              icon="openExternal"
+              compact
+              variant="outline"
+              onClick={() =>
+                window.open(portal.url, "_blank", "noopener,noreferrer")
+              }
+            >
+              {t`Open the ${portal.name} portal`}
+            </Button>
+          </div>
+        </div>
+      </li>
+
+      <li className={classes.step}>
+        <div className={classes.stepBody}>
+          <SectionHeader title={t`Put the files in one ZIP`} />
+          <p className={classes.stepLine}>
+            {t`Logjam reads one ZIP. If the files came loose, put them all in a ZIP, then bring it back here.`}
           </p>
         </div>
       </li>

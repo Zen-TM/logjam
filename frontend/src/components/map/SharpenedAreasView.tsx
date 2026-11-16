@@ -7,6 +7,7 @@ import {
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
+  t,
   type SharePromiseKind,
 } from "@logjam/shared";
 import {
@@ -49,6 +50,7 @@ export default function SharpenedAreasView({
   friends,
   loaded,
   onSharpen,
+  sharpenOff,
   onExportArea,
   onFlyTo,
   onRefetchCompletedTopoJobs,
@@ -65,6 +67,8 @@ export default function SharpenedAreasView({
   loaded: boolean;
   /** Opens the dialog for a new area, as the tray's Sharpen an area does. */
   onSharpen: () => void;
+  /** Set where the region in view has no sharpening: the button says why. */
+  sharpenOff: { state: string; reason: string } | null;
   /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyTo: (footprint: GeoJsonPolygonal) => void;
@@ -203,7 +207,16 @@ export default function SharpenedAreasView({
             </span>
           )}
         </div>
-        <Button compact variant="filled" icon="lidar" onClick={onSharpen}>
+        <Button
+          compact
+          variant="filled"
+          icon="lidar"
+          onClick={onSharpen}
+          disabled={sharpenOff !== null}
+          disabledReason={
+            sharpenOff ? t`${sharpenOff.state}. ${sharpenOff.reason}` : ""
+          }
+        >
           {LIDAR_JOB_COPY.make}
         </Button>
         <IconButton icon="close" label="Close" onClick={onClose} />

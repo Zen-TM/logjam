@@ -37,7 +37,7 @@ import type { TBbox } from "./map/Map";
 import { terrainKeyOf } from "./map/layerOrder";
 import { terrainDrawn } from "./map/terrainDrawn";
 import { terrainEntries } from "./map/terrainEntries";
-import { nextViewRegion } from "./map/viewRegion";
+import { nextViewRegion, startingView } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
@@ -158,7 +158,8 @@ import {
   type TripPlanItemKind,
   type TripPlanPageView,
   accountRegion,
-  pointBox,
+  sharpenOfferFor,
+  sharpenUnavailable,
   type LonLatBox,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -422,11 +423,10 @@ function App() {
   // The ground the map shows decides the gallery, not the regions the account
   // chose (ADR 0049). The state keeps its old value for a pan that offers the
   // same basemaps (`viewForBasemaps`), so the list below is stable.
-  const [basemapView, setBasemapView] = useState<LonLatBox>(() =>
-    mapCenter
-      ? pointBox(mapCenter.lng, mapCenter.lat)
-      : pointBox(...accountRegion(currentUser?.uiPreferences).view.center),
+  const [start] = useState(() =>
+    startingView(mapCenter, currentUser?.uiPreferences),
   );
+  const [basemapView, setBasemapView] = useState<LonLatBox>(start.box);
   const baseLayers = useMemo(() => baseLayersFor(basemapView), [basemapView]);
   // A pick the map's ground does not offer shows `basemapPicked`'s, with no way
   // to switch off it otherwise; the pick stays and returns with the ground.
@@ -562,9 +562,14 @@ function App() {
   );
   // The one region the map draws its Terrain group from: the one in view,
   // changed only when the map moves into another (ADR 0049; `viewRegion.test.ts`
-  // holds that a pan inside one keeps the same object). Unknown until the map
-  // reports its first view.
-  const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // holds that a pan inside one keeps the same object). It starts as the
+  // region of the starting view (`startingView`), not unknown, so the first
+  // render already offers what that ground does.
+  const [viewRegion, setViewRegion] = useState<Region | null>(start.region);
+  // What sharpening offers for an action about `box`, else about the ground the
+  // map shows (`sharpenOfferFor`).
+  const sharpenFor = (box: LonLatBox | null) =>
+    sharpenOfferFor(box, viewRegion);
   // Only a region with a gauge feed has river gauges to draw.
   const gaugesHere = viewRegion?.gauges != null;
   // The layers drawn over the region in view, and the stored carrier where
@@ -1718,7 +1723,10 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => setShowTopo(true),
+      unavailable: sharpenUnavailable(sharpenFor(null)) ?? undefined,
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -1765,6 +1773,7 @@ function App() {
           }}
           awaitingBbox={selectingTopoBbox}
           pendingBbox={pendingTopoBbox}
+          offer={sharpenFor(pendingTopoBbox)}
           onJobCreated={handleTopoJobCreated}
           existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
             .map((j) => j.name)
@@ -2032,6 +2041,7 @@ function App() {
             onSharePlaces={(ids) => openSelection(ids, "share")}
             onExportPlaces={(ids) => openSelection(ids, "export")}
             onMakeMap={makeMap}
+            sharpenFor={sharpenFor}
             onHoverPlace={placeHighlight.set}
             onFiltersOpenChange={setSidebarSheetOpen}
             onRefetch={refetch}

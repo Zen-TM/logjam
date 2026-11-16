@@ -111,6 +111,23 @@ read, none of them a location.)
   ([0051](0051-a-lettered-grade-is-stored-as-its-rank.md) holds the rule). Guard:
   `shared/src/canyonGrade.test.ts` ("the definitions an attribute list shows").
   Everything else above stands.
+- **Update 2026-11-16: Sharpen an area is offered where the region sharpens.**
+  The Tools tray's tool, the Sharpened areas view's button, a place's
+  "Sharpen an area here" and the dialog read `Region.sharpen` through
+  `sharpenOfferFor` (`shared/src/sharpen.ts`). Where it is `off` they read "Not
+  available here" with the region's reason; where it is `upload` the dialog
+  names the region's portal. An action about a box (a place's verb, an area
+  already drawn) asks the region holding the box's centre, which is how the
+  worker picks the region that fills the area, and a box in no region is `off`
+  with "no LiDAR", as the worker refuses it. A map's own entry points (no box)
+  ask the region in view; over ground no region declares, that is "no LiDAR"
+  too, so with one region in prod the entries read "Not available here" when
+  the map is wholly outside New South Wales, where they used to open a dialog
+  whose job was refused. A map not yet placed starts from the stored or
+  default camera's region, so a New South Wales user never sees the off state
+  flash. Guard: `shared/src/sharpen.test.ts` ("sharpenOffer",
+  "sharpenOfferFor"), `frontend/src/components/map/viewRegion.test.ts`
+  ("startingView") and `frontend/e2e/sharpen-region.spec.ts`. Everything else above stands.
 - **Update 2026-11-16: an area export's rasters come from one region.** An
   area export (GeoTIFF, GeoPackage, MBTiles) reads its heights, slope and
   contours from the one region `areaExportRegion` (`shared/src/areaExport.ts`)

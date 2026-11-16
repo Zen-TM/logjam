@@ -271,7 +271,8 @@ the task ARN saved on the row.
 
 ### Topo jobs
 
-A user uploads an ELVIS LiDAR ZIP straight to S3, then starts the job
+A user uploads a LiDAR survey's ZIP (from ELVIS, in New South Wales; the
+region's `sharpen.portal` names where elsewhere) straight to S3, then starts the job
 (`api/src/routes/topoJobs.ts`, `topo/worker.py`). The ZIP goes as an S3
 multipart upload: the API signs URLs for its parts (`/parts`), Logjam Web
 sends them a few at a time, and the API joins them (`/complete`). After a

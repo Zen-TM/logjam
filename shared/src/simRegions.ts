@@ -235,6 +235,11 @@ export const SIM_UTAH: Region = {
   // simulated region a survey can be sharpened in. No vegetation model.
   sharpen: {
     mode: "upload",
+    portal: {
+      name: "USGS",
+      url: "https://apps.nationalmap.gov/lidar-explorer/",
+      steps: "link",
+    },
     credit:
       "Elevation: derived from a LiDAR survey, U.S. Geological Survey 3D Elevation Program{extracted}.",
     vegetation: false,
