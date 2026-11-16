@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ConfirmCopy } from "@logjam/shared";
 import { Button, Dialog } from "../../ui";
+import { t } from "@logjam/shared";
 
 /**
  * The confirm every destructive or irreversible verb raises, on the kit
@@ -42,9 +43,11 @@ function ConfirmDialog({
       alert
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Working…">
-            Cancel
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={t`Working…`}
+          >{t`Cancel`}</Button>
           {copy?.tone === "filled" ? (
             <Button variant="filled" busy={busy} onClick={onConfirm} {...hold}>
               {copy.confirmLabel}

@@ -3,6 +3,7 @@ import {
   ACCOUNT_DELETE_BODY,
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
+  t,
 } from "@logjam/shared";
 import { useId, useState } from "react";
 import { deleteAccount } from "../../placeUtils";
@@ -66,7 +67,7 @@ function DeleteAccountForm({
       onDeleted();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete account. Try again."));
+      setError(messageFromError(err, t`Couldn't delete account. Try again.`));
       setDeleting(false);
     }
   }
@@ -83,10 +84,8 @@ function DeleteAccountForm({
           <Button
             onClick={onClose}
             disabled={deleting}
-            disabledReason="Deleting…"
-          >
-            Cancel
-          </Button>
+            disabledReason={t`Deleting…`}
+          >{t`Cancel`}</Button>
           <Button
             type="submit"
             form={formId}
@@ -94,7 +93,7 @@ function DeleteAccountForm({
             icon="delete"
             busy={deleting}
             disabled={!inputMatches}
-            disabledReason="Type the phrase above to confirm"
+            disabledReason={t`Type the phrase above to confirm`}
           >
             {ACCOUNT.copy.deleteAccount}
           </Button>
