@@ -73,6 +73,8 @@ export const enUS: Catalogue = {
     "Check the box to agree to the updated terms.",
   "Ties share a rank: two people level on most are both first.":
     "Ties share a rank: two people tied on most are both first.",
+  "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgement or rescue planning.":
+    "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgment or rescue planning.",
   "Who can drive, who needs a lift, and from where.":
     "Who can drive, who needs a ride, and from where.",
   "You cancelled this.": "You canceled this.",
