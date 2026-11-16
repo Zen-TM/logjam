@@ -7,7 +7,13 @@ import {
   sourcesNeedingReplacement,
   type DataSource,
 } from "./licences.js";
-import { NSW_REGION, REGIONS, WORLD, type Region } from "./regions.js";
+import {
+  NSW_REGION,
+  REGIONS,
+  REGIONS_WITH_SIMULATED,
+  WORLD,
+  type Region,
+} from "./regions.js";
 import {
   SHARPENED_LICENCE,
   sharpenedDemSource,
@@ -17,6 +23,10 @@ import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 
 const NSW_ONLY = dataSources([NSW_REGION], WORLD);
 const WITH_SIM = dataSources([NSW_REGION, ...SIM_REGIONS], SIM_WORLD);
+// Every source of every declared region, real or simulated: the guards that
+// read it cover a region added to `REGIONS_WITH_SIMULATED`. `NSW_ONLY` and
+// `WITH_SIM` are exact expectations and are extended by hand.
+const EVERY_DECLARED = dataSources(REGIONS_WITH_SIMULATED, SIM_WORLD);
 const ids = (sources: readonly DataSource[]) => sources.map((s) => s.id);
 
 describe("LICENCES", () => {
@@ -173,7 +183,7 @@ describe("dataSources", () => {
 
   // Mutation: tag the land layer `cc-by-3-au`, whose name its credit does not hold.
   it("tags a height source or archive with the licence its credit names", () => {
-    const named = WITH_SIM.filter(
+    const named = EVERY_DECLARED.filter(
       (source) => source.credit?.match(/CC BY \d\.\d(?: AU)?/) != null,
     );
     expect(named.length).toBeGreaterThanOrEqual(7);

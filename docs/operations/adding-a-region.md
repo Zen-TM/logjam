@@ -83,6 +83,18 @@ falls back to when the simulated regions are off. The type is `Region`; the
 tables below take it field by field. "No test" means nothing goes red when the
 value is wrong: check it by hand.
 
+Declare with provisional values first, build the archives in section 4, then come
+back and fill in what only a built archive gives: `minzoom`, `maxzoom`,
+`coverage`, `tileBytes` and `credit`. A `placeSearch` prefix has to be declared
+before the registry is built, because the build reads it from `topo/regions.json`.
+
+The guards in the tables read `REGIONS_WITH_SIMULATED` (or `REGIONS`), so a
+region added there is in them. Three lists name regions by hand and need the new
+one added to them in the same change: `UPLOADING` and its id list in
+`sharpen.test.ts`, and `NSW_ONLY` and `WITH_SIM` in `licences.test.ts` (exact
+expectations, by design). "keep each archive under its own region's path" covers
+the simulated regions only.
+
 ### The region
 
 | Field | What it is, and where the value comes from | Guard |
@@ -93,7 +105,7 @@ value is wrong: check it by hand.
 | `timeZone` | IANA name. A leaderboard season and a trip plan's day read it. | `regions.test.ts`: "names a time zone the runtime knows" |
 | `borders` | One ring of `[lon, lat]` for each island or separate piece, simplified and drawn a little outside the real border so it never cuts off ground the archives cover. A box would overlap a neighbour's. Longitudes are in [-180, 180]; a region across the date line has a ring each side. | `regions.test.ts`: "keeps every border longitude in [-180, 180]". Nothing checks the rings against the archives' `coverage`. |
 | `basemaps`, `defaultBasemap` | Ids in `BASEMAP_CATALOG`, each listed by one region at most; the default is one of them. A region with none lists `[]` and defaults to `"osm-topo"`, as the simulated ones do. The vector basemap is never listed: `vector` declares it. Section 8. | `regions.test.ts`: "puts each basemap in one region at most, and only real ones", "opens each region on one of its own basemaps", "leaves the vector basemap out of every region's basemaps" |
-| `vector` | The region's cut of the vector basemap, or null: `archivePath`, `maxzoom` and `licence` (a cut of OpenStreetMap is `odbl`). | `licences.test.ts` ("flattens every declared source of the production declaration, once each"). Nothing checks `maxzoom` against the built archive. |
+| `vector` | The region's cut of the vector basemap, or null: `archivePath`, `maxzoom` and `licence` (a cut of OpenStreetMap is `odbl`). | The type requires a `LicenceId`; nothing checks it is the right one. Nothing checks `maxzoom` against the built archive. |
 | `dem` | The height sources, finest first. For a region with its own heights it is `[heights]`. | `regions.test.ts`: "derives DEM_SOURCES: every region's, finest first, then the worldwide one", "cuts each region's terrain from one of its own height sources" |
 | `terrain` | The archives below; `{}` where there are none. | `regions.test.ts`: "gives every terrain archive an id no other has, across every region" |
 | `grid` | The map grid coordinates are given in: one of `GridId` (`shared/src/grids.ts`): `mga2020`, `nztm2000` or `utm`. A region on another grid needs the type, a zone rule, `GRID_NAMES` and the typed-reference reader widened first. | `grids.test.ts` checks each grid's projection against the survey agencies' published values. No test checks that a region's `grid` suits where it is. |
@@ -112,7 +124,7 @@ these fields (`TerrainArchive`):
 | `minzoom`, `maxzoom` | The zooms the built archive holds (`pmtiles show`). | No test against a built file for a real archive |
 | `coverage` | `[west, south, east, north]` of the archive's tiles. A position outside a heights archive's box skips the source. | No test |
 | `credit`, `creditHtml` | The attribution the source's licence asks for, plain and as HTML. | `licences.test.ts`: "tags a height source or archive with the licence its credit names" (only when the credit names a CC BY licence) |
-| `licence` | A `LicenceId` from `shared/src/licences.ts`: the licence of the source data (section 5). | `licences.test.ts` |
+| `licence` | A `LicenceId` from `shared/src/licences.ts`: the licence of the source data (section 5). | The type requires one; `licences.test.ts` ("tags a height source or archive with the licence its credit names") checks only a credit that names a CC BY licence |
 | `tileBytes` | The mean and 90th percentile bytes of a stored tile at every zoom a save clips; an offline save is priced from them (section 4). | `mapRegionEstimate.test.ts`: "holds figures for every zoom a save clips" checks every zoom has a figure, not that the figures are right |
 
 `heights` is a `DemSource` rather than a `TerrainArchive`: it has `sampleZoom`
@@ -134,7 +146,7 @@ region's. A region's builder needs the same test for its own declaration.
 
 | Field | What it is | Guard |
 |---|---|---|
-| `placeSearch`, `placeSearchLicence` | The CDN prefix of the place registry, `master/places/v1/<region>/`, and its licence (OpenStreetMap's is `odbl`): both or neither. Add the region's Geofabrik extract to `EXTRACTS` in `topo/build_place_registry.py`. The scheduled task that runs `publish` takes no region, so a second region's registry needs a schedule of its own in `infra/terraform/envs/prod/ecs.tf`: the maintainer's. A phone keeps a registry for each region it chose or saved a map over ([0034](../decisions/0034-location-search-reads-a-public-osm-place-registry.md)). | `regions.test.ts`: "carries the current registry format, for every declared and simulated region"; `licences.test.ts`: "has a licence for a feed or a registry exactly where it has one"; `topo/tests/test_place_registry.py`: `test_extracts_are_the_regions_that_declare_a_registry` |
+| `placeSearch`, `placeSearchLicence` | The CDN prefix of the place registry, `master/places/<region>/v1/` (NSW's `master/places/v1/` is the one legacy exception), and its licence (OpenStreetMap's is `odbl`): both or neither. Add the region's Geofabrik extract to `EXTRACTS` in `topo/build_place_registry.py`. The scheduled task that runs `publish` takes no region, so a second region's registry needs a schedule of its own in `infra/terraform/envs/prod/ecs.tf`: the maintainer's. A phone keeps a registry for each region it chose or saved a map over ([0034](../decisions/0034-location-search-reads-a-public-osm-place-registry.md)). | `regions.test.ts`: "carries the current registry format, for every declared and simulated region"; `licences.test.ts`: "has a licence for a feed or a registry exactly where it has one"; `topo/tests/test_place_registry.py`: `test_extracts_are_the_regions_that_declare_a_registry` |
 | `gauges`, `gaugesLicence` | The CDN prefix of the gauge feed, ending in "/", and its licence: both or neither ([0044](../decisions/0044-river-gauges-are-public-files-from-waternsw-and-bom.md)). Another region's feed is a builder and a schedule of its own writing the same files; `GaugeFeedFormat` in `shared/src/gauges.ts` is how a feed states its units and the minute offset its days are cut at. A gauge licence that forbids charging is listed by `sourcesNeedingReplacement`. | `regions.test.ts`: "every gauge feed prefix ends in a slash"; `licences.test.ts`; `gauges.test.ts`, against the builder's fixtures |
 | `canyons` | The canyon-list import: `kind: "ropewiki"`, `ropewikiRegion` (RopeWiki's own name, as its "Located in regions" holds it), `snapshotKey` (`reference/ropewiki-<region>.csv`: a snapshot the maintainer exports by hand and uploads to the media bucket, because the site refuses automated reads) and `licence`. `extraLinks` is optional. Null where there is no list. | `regions.test.ts`: "give each region its own RopeWiki region and snapshot" |
 
@@ -169,14 +181,15 @@ credit names it, so it does not catch a second region's mismatched credit.
 ### Then run the declaration's tests
 
 ```
-cd shared && npm test -- src/regions.test.ts src/regionNeutral.test.ts src/demSources.test.ts src/mapRegionEstimate.test.ts src/licences.test.ts src/topoRegions.test.ts src/grids.test.ts src/units.test.ts src/canyonGrade.test.ts src/sharpen.test.ts src/areaExport.test.ts
+cd shared && npm test -- src/regions.test.ts src/regionNeutral.test.ts src/demSources.test.ts src/mapRegionEstimate.test.ts src/licences.test.ts src/grids.test.ts src/units.test.ts src/canyonGrade.test.ts src/sharpen.test.ts src/areaExport.test.ts
 ```
 
-A few of these assert that prod has NSW alone (for example `regions.test.ts`:
-"declares only NSW unless the simulated-regions flag is set"; `grids.test.ts`:
-"is NSW's alone in prod"; `licences.test.ts`: `sourcesNeedingReplacement` lists
-exactly the sources it names). They go red on purpose; update each to the new
-list in the same change.
+A few of these assert that prod has NSW alone: `regions.test.ts` ("declares only
+NSW unless the simulated-regions flag is set", "puts the simulated regions and
+their world in the declaration at load") and `grids.test.ts` ("is NSW's alone in
+prod"). They go red on purpose; update each to the new list in the same change.
+`src/topoRegions.test.ts` stays red until section 6 has regenerated
+`topo/regions.json`.
 
 ## 4. Build, measure and publish the archives
 
@@ -223,9 +236,13 @@ permission for are a list a test holds (`sourcesNeedingReplacement`).
   region's cut. That holds while each cut is an OpenStreetMap extract. A vector
   cut from any other source needs the licence and the attribution made per
   region first.
-- Guard: `licences.test.ts`. Every declared source is tagged, a feed or registry
-  has its licence, and `sourcesNeedingReplacement` is exactly the list it names,
-  so a region that adds a non-commercial source changes it on purpose.
+- Guard: `licences.test.ts` ("has a licence for a feed or a registry exactly
+  where it has one", "lists, by default, every source of every region that is
+  declared") reads every region. Its `sourcesNeedingReplacement` and
+  "flattens every declared source of the production declaration" cases are
+  exact expectations over NSW and the simulated regions (`NSW_ONLY`,
+  `WITH_SIM`), so a new region's non-commercial source is not asserted until
+  you add a case for it there by hand.
 
 ## 6. Generate what the worker reads
 
@@ -250,7 +267,10 @@ public Terrarium tiles. It has two optional parts:
 
 - **`terrain.heights`** (and `hillshade`): an archive of Logjam's own for the
   rest of the world. `worldwideSource` then reads it, with no `coverage`, in
-  place of Terrarium, and a save clips it. Declare it in `EMPTY_WORLD`. The
+  place of Terrarium, and a save clips it. Declare it in `EMPTY_WORLD`, and list
+  the same source in `dem: [heights]`, as `SIM_WORLD` does: `dataSources` takes
+  the world's height licence from `dem`, and `regions.test.ts` ("cuts each
+  region's terrain from one of its own height sources") fails without it. The
   public tiles drop out of `dataSources`, and the privacy policy's "Terrain and
   elevation" paragraph, which names them, must change with it (section 9).
   Guards: `demSources.test.ts` (the describe "the worldwide source") and
@@ -259,6 +279,11 @@ public Terrarium tiles. It has two optional parts:
 - **`vector`**: the cut a map draws where no region is in view (`vectorsTouching`;
   guard: `regions.test.ts`, "falls to the world's archive only where no region is
   in view").
+
+Declaring `terrain` or `vector` in `EMPTY_WORLD` turns `regions.test.ts`
+"declares only NSW unless the simulated-regions flag is set" red on purpose (it
+asserts the world's `terrain` is `{}` and its `vector` null). Update it in the
+same change.
 
 ## 8. Basemaps
 
@@ -270,8 +295,11 @@ is worldwide).
   licence: say in the entry's comment which clause allows it.
 - A raster entry that can be saved needs measured `tileBytes`.
   `shared/scripts/calibrate-basemap-tile-sizes.mjs` samples live tiles and prints
-  them, but its two sample areas are in the Blue Mountains: change them to the new
-  region's before running it.
+  them, but it measures only the sources in its `SOURCES` list (the three SIX
+  services and Terrarium: an id, a URL builder and a zoom range each), so a new
+  provider needs an entry there. Its sample areas, `BBOXES`, are in the Blue
+  Mountains: change them to the new region's. It takes a source id as an argument,
+  to measure one source.
 - `printsContours` and `photo` stop the map drawing contours or a hillshade over
   a sheet that has its own (`contourRules.test.ts`).
 
