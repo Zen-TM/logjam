@@ -210,8 +210,8 @@ class Walk {
     rest = rest
       .replace(this.names, "{}")
       .replace(/\d+(?:[.,:]\d+)*/g, "0")
-      // A clock time is written by the browser's locale, not the catalogue.
-      .replace(/\b[AP]M\b/g, "AM");
+      // A clock time is written by the browser's locale, not the catalogue: `AM` in en-US, `am` in en-AU.
+      .replace(/\b[ap]m\b/gi, "AM");
     rest = rest.replace(/\s+/g, " ").trim();
     return /\p{L}/u.test(rest.replace(/\{\}/g, "")) ? rest : null;
   }
