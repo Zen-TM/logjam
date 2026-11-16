@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as dateFormat from "./dateFormat.js";
 import { dayOfKey, localDay, utcDay } from "./dateFormat.js";
+import { inTimeZone } from "./timeZone.testHelper.js";
 
 // en-US is empty in source; this is the order the reorder test needs.
 vi.mock("./i18nCatalogues/en-US.js", () => ({
@@ -29,16 +30,6 @@ afterEach(() => {
   delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
 });
 
-function inTimeZone<T>(timeZone: string, run: () => T): T {
-  const previous = process.env.TZ;
-  process.env.TZ = timeZone;
-  try {
-    return run();
-  } finally {
-    process.env.TZ = previous;
-  }
-}
-
 describe("the day forms", () => {
   // Mutation: swap the day and the month in `<day> <month> <year>`.
   it("write each form the way Logjam has always written it", () => {
@@ -52,8 +43,9 @@ describe("the day forms", () => {
   });
 
   // Mutation: add an exported function whose name starts with "format" that the fixture lacks.
+  // Mutation: add an exported function whose name starts with "format" that the fixture lacks.
   it("are all in the fixture, so Logjam Web and Logjam GPS pin every one", () => {
-    expect(FORMS.length).toBeGreaterThanOrEqual(11);
+    expect(FORMS.length).toBeGreaterThanOrEqual(12);
     for (const [key, forms] of Object.entries(FIXTURE)) {
       expect(Object.keys(forms).sort(), key).toEqual(
         FORMS.map(([name]) => name).sort(),
@@ -61,11 +53,12 @@ describe("the day forms", () => {
     }
   });
 
-  // Mutation: give two forms the same pattern, as the holes {0} {1} {2} would be for "Sat 8 Nov" and "15 Mar 2026".
+  // Mutation: give two forms the same pattern, as the holes {0} {1} {2} would be for "Sat 8 Nov" and "15 Mar 2026", or change one form's `fill(t` to `fill( t`, so the scan of patterns misses it.
   it("give every form a message of its own", () => {
     const source = readFileSync(join(HERE, "dateFormat.ts"), "utf8");
     const patterns = [...source.matchAll(/fill\(t`([^`]+)`/g)].map((m) => m[1]);
-    expect(patterns.length).toBeGreaterThanOrEqual(11);
+    // One pattern per form: a form whose pattern the regex stops matching fails here.
+    expect(patterns).toHaveLength(FORMS.length);
     expect(new Set(patterns).size).toBe(patterns.length);
   });
 

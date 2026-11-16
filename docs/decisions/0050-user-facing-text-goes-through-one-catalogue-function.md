@@ -47,6 +47,17 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
   request's language from `AsyncLocalStorage`, and text evaluated at import
   stays English.
 - **No library.** The mechanism is `shared/src/i18n.ts`.
+- **Update 2026-11-16: a message may be a pattern with named parts.** Two forms
+  whose holes are numbered alike share one key and could not be translated
+  apart (the day forms: "Sat 8 Nov" and "15 Mar 2026" are both `{0} {1} {2}`).
+  Each is written as a pattern, `` t`<weekday> <day> <month>` ``, which `fill`
+  in `shared/src/dateFormat.ts` completes after the lookup. A catalogue entry
+  for it rewrites the order and punctuation and keeps the same part names,
+  each once; a misspelt part stays in the text as written. Guard:
+  `shared/src/dateCatalogues.test.ts` ("keep the part names of the English")
+  for every catalogue and the pseudo-language, and `shared/src/dateFormat.test.ts`
+  ("give every form a message of its own") for two forms sharing a pattern.
+  Everything else above stands.
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
