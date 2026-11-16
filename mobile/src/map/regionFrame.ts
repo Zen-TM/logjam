@@ -14,7 +14,9 @@ import { tileMetersPerPixel } from "./scaleBar";
 import {
   downloadableBasemaps,
   pointBox,
+  vectorIn,
   type LonLatBox,
+  type Region,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -209,6 +211,19 @@ export function startBox(
   if (!area) return pointBox(center[0], center[1]);
   const [west, south, east, north] = area;
   return { west, south, east, north };
+}
+
+/**
+ * The map the save screen previews when none is chosen: the vector map where
+ * the region shown has an archive of it, else the first map the ground offers
+ * to save (`downloadable`), else the vector map, which previews nothing.
+ * Guard: `regionFrame.test.ts` ("the map previewed by default").
+ */
+export function defaultPreviewFor(
+  region: Region | null,
+  downloadable: readonly { id: string }[],
+): string {
+  return vectorIn(region) ? "protomaps" : (downloadable[0]?.id ?? "protomaps");
 }
 
 /**

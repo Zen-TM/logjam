@@ -71,6 +71,10 @@ export function rasterBaseTiles(
   );
 }
 
+/** Whether the sheet's base layer is a vector catalogue entry, read from an archive. */
+export const isVectorBase = (config: GeoPdfRenderInput["config"]): boolean =>
+  BASEMAP_CATALOG.some((e) => e.id === config.baseLayer && e.kind === "vector");
+
 /**
  * The archive and tiles a vector base is read from, or null for a raster base
  * or where `archive` is null (the sheet's region has none).
@@ -82,10 +86,7 @@ export function vectorBasemap(
   g: PrintGeometry,
   archive: VectorArchive | null,
 ) {
-  const entry = BASEMAP_CATALOG.find(
-    (e) => e.id === config.baseLayer && e.kind === "vector",
-  );
-  if (!entry || !archive) return null;
+  if (!isVectorBase(config) || !archive) return null;
   const { north, south, east, west } = config.extent;
   const styleZoom = displayZoomForScale(config.scale, g.centreLat);
   const zoom = Math.floor(Math.min(styleZoom, archive.maxzoom));

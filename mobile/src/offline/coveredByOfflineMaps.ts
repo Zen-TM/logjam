@@ -2,6 +2,7 @@
 // coverage line on their pages and the plan's "Map downloaded" pill.
 import { regionInWrappedView } from "@logjam/shared";
 
+import { boundsView } from "../map/basemapMeta";
 import { holdsBasemap, type MapArtifact } from "../map/sourceResolver";
 
 type Bbox = [number, number, number, number];
@@ -31,8 +32,7 @@ export function heldBasemapIn(
   basemapId: string,
   bbox: Bbox,
 ): MapArtifact[] {
-  const [west, south, east, north] = bbox;
-  const region = regionInWrappedView({ west, south, east, north });
+  const region = regionInWrappedView(boundsView(bbox));
   return artifacts.filter((a) => holdsBasemap(a, basemapId, region));
 }
 

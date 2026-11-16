@@ -47,7 +47,6 @@ import {
   downloadableBasemaps,
   planRegionForBasemaps,
   regionInWrappedView,
-  vectorIn,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -102,6 +101,7 @@ import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   bboxToFrame,
   defaultFrameInsets,
+  defaultPreviewFor,
   startingArea,
   startBox,
   startPicks,
@@ -294,9 +294,10 @@ export function RegionDownloadScreen({
   // there saves it. Elsewhere it would preview nothing, so it is the first map
   // the ground offers to save; with none of those either, a blank preview is
   // all there is to show.
-  const defaultPreview: BasemapId = vectorIn(previewRegion)
-    ? "protomaps"
-    : (pyramidIds[0] ?? "protomaps");
+  const defaultPreview: BasemapId = defaultPreviewFor(
+    previewRegion,
+    downloadable,
+  );
   const [preview, setPreview] = useState<BasemapId>(() =>
     selected.includes(startBasemapId) ? startBasemapId : defaultPreview,
   );

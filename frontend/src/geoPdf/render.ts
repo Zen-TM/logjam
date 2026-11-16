@@ -19,7 +19,6 @@
 //
 // PRIVACY: nothing here logs. See tiles.ts.
 import {
-  BASEMAP_CATALOG,
   computeTileToMapTransform,
   GEOPDF_BASE_LAYER_CONFIG,
   GEOPDF_MAX_CANVAS_BYTES,
@@ -52,6 +51,7 @@ import {
 import { sheetTerrain } from "./sheetTerrain";
 import type { TileCache } from "./cache";
 import {
+  isVectorBase,
   planTerrainBlocks,
   printGeometry,
   rasterBaseTiles,
@@ -420,12 +420,7 @@ async function renderInner(
   // whose tiles will not load is, not a sheet printed without a base map.
   // Guard: e2e/geopdf-render.spec.ts ("a vector base over ground with no
   // vector archive is a failure, not a bare sheet").
-  if (
-    !vectorBase &&
-    BASEMAP_CATALOG.some(
-      (entry) => entry.id === config.baseLayer && entry.kind === "vector",
-    )
-  )
+  if (!vectorBase && isVectorBase(config))
     throw new Error("no base tile loaded");
   const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
 

@@ -326,10 +326,9 @@ test.describe("the in-browser GeoPDF renderer", () => {
     expect(r.pdfBase64).toBeUndefined();
   });
 
-  // Mutation: in render.ts, change `entry.kind === "vector"` to
-  // `entry.kind === "raster"` in the `BASEMAP_CATALOG.some` test, and a sheet
-  // outside every region printed with the Vector base renders with no base map
-  // and no error.
+  // Mutation: in render.ts, change `!vectorBase && isVectorBase(config)` to
+  // `vectorBase && isVectorBase(config)`, and a sheet outside every region
+  // printed with the Vector base renders with no base map and no error.
   test("a vector base over ground with no vector archive is a failure, not a bare sheet", async ({
     page,
   }) => {
