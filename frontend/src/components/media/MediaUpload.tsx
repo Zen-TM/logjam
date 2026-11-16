@@ -124,7 +124,7 @@ export default function MediaUpload({
         } catch (err) {
           console.error(err);
           failures.push(
-            `${file.name}: ${messageFromError(err, t`upload failed`)}`,
+            `${file.name}: ${messageFromError(err, "upload failed")}`,
           );
         }
       }

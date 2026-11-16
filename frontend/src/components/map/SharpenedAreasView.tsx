@@ -158,7 +158,7 @@ export default function SharpenedAreasView({
     // visibility from — so a shared row always has a share of its own to drop
     // (api/src/lib/shareAccess.unit.test.ts).
     const confirm = removeShareConfirm({
-      kindLabel: t`sharpened area`,
+      kindLabel: "sharpened area",
       itemName: label,
     });
     return [

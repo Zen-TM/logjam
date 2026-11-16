@@ -834,7 +834,7 @@ function Map({
   // copy in the map-pick banners. Pointer capability, not
   // viewport width: a touch laptop at desktop width still gets "Tap".
   const isTouchInput = useMediaQuery("(pointer: coarse)");
-  const pickVerb = isTouchInput ? t`Tap` : t`Click`;
+  const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
 
   const slopeBandsRef = useRef(slopeBands);
