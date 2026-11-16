@@ -114,7 +114,8 @@ read, none of them a location.)
 - **Update 2026-11-16: Sharpen an area is offered where the region sharpens.**
   The Tools tray's tool, the Sharpened areas view's button, a place's
   "Sharpen an area here" and the dialog read `Region.sharpen` through
-  `sharpenOfferFor` (`shared/src/sharpen.ts`). Where it is `off` they read "Not
+  `sharpenOfferFor` (`shared/src/sharpen.ts`) (updated 2026-11-16: the dialog
+  a link to an existing job opens is the exception; see the next Update). Where it is `off` they read "Not
   available here" with the region's reason; where it is `upload` the dialog
   names the region's portal. An action about a box (a place's verb, an area
   already drawn) asks the region holding the box's centre, which is how the
@@ -128,6 +129,24 @@ read, none of them a location.)
   flash. Guard: `shared/src/sharpen.test.ts` ("sharpenOffer",
   "sharpenOfferFor"), `frontend/src/components/map/viewRegion.test.ts`
   ("startingView") and `frontend/e2e/sharpen-region.spec.ts`. Everything else above stands.
+- **Update 2026-11-16: a link to an existing job is judged by the job.** The
+  `?topoJob=<id>` link in the completion and failure emails opens the sharpen
+  dialog through `sharpenOfferForJob` (`shared/src/sharpen.ts`), not
+  `sharpenOfferFor`: the job exists, so sharpening was offered where it ran,
+  whatever ground the map shows, and "Not available here" belongs to starting a
+  new sharpen. It is the job's own offer when the footprint's centre is in a
+  region that takes an upload. A job with no footprint (a failed job writes
+  none), or a footprint centred in a region with no sharpening or in none,
+  reads as the first upload region's, and is off only where no region takes an
+  upload: the fetched job carries no requested area to judge by. The offer
+  is dropped when the dialog closes and when the user goes off to draw an
+  area, so a later open is judged by the map or the drawn box. Guards:
+  `shared/src/sharpen.test.ts` ("sharpenOfferForJob") and
+  `frontend/e2e/sharpen-region.spec.ts` ("a completion link opens the dialog
+  over ground the map's region cannot sharpen", "a failure link, whose job has
+  no footprint, opens the dialog the same way", "a link's job does not decide
+  the dialog once the user goes off to draw an area"). Everything else above
+  stands.
 - **Update 2026-11-16: an area export's rasters come from one region.** An
   area export (GeoTIFF, GeoPackage, MBTiles) reads its heights, slope and
   contours from the one region `areaExportRegion` (`shared/src/areaExport.ts`)
@@ -167,6 +186,12 @@ read, none of them a location.)
   holds for the place on screen. It keeps one place to look for what an account
   can see, which the map-first rule gives up: what is offered now depends on
   where the camera is.
+- **Judging a job's link by the map, like every other entry point** (the
+  sharpen rule above, without the link's exception). A user whose camera sits
+  outside every upload region, following the link in an email about a job they
+  made, would read "Not available here" for a job that exists. Rejected: the
+  off state is about starting a new sharpen, and the email's link is about an
+  existing job.
 - **A source for each region on screen at once.** No gap at a border and no
   ceiling. Rejected for now: it multiplies sources and layer ids in both
   clients for a case no planned region has. Revisit when two regions are

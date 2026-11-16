@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../feedback/ToastProvider";
+import type { SharpenUnavailable } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import SharpenedAreasView from "./SharpenedAreasView";
 import type { TopoJob } from "../dialogs/TopoDialog";
@@ -63,7 +64,7 @@ function draw(
   jobs: CompletedTopoJob[],
   loaded = true,
   activeTopoJobs: TopoJob[] = [],
-  sharpenOff: { state: string; reason: string } | null = null,
+  sharpenOff: SharpenUnavailable | null = null,
 ) {
   const props = {
     onBack: vi.fn(),

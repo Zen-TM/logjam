@@ -159,7 +159,9 @@ import {
   type TripPlanPageView,
   accountRegion,
   sharpenOfferFor,
+  sharpenOfferForJob,
   sharpenUnavailable,
+  type SharpenOffer,
   gaugeFeedOf,
   type LonLatBox,
 } from "@logjam/shared";
@@ -381,6 +383,10 @@ function App() {
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
+  // What a link to an existing job (the completion or failure email's) opened
+  // the dialog with: judged by that job (`sharpenOfferForJob`), not by what the
+  // map shows. Cleared when the dialog closes or the user goes off to draw.
+  const [topoJobOffer, setTopoJobOffer] = useState<SharpenOffer | null>(null);
   // The box tool, drawing a topo's area or a print or GIS map's (`boxPick.ts`).
   const [boxPick, setBoxPick] = useState<BoxPick>(NO_BOX_PICK);
   const selectingTopoBbox = isPicking(boxPick, "topo");
@@ -1233,6 +1239,9 @@ function App() {
           setActiveTopoJobs((prev) =>
             prev.some((j) => j.id === job.id) ? prev : [job, ...prev],
           );
+          setTopoJobOffer(
+            sharpenOfferForJob(job.footprint && footprintBounds(job.footprint)),
+          );
           setShowTopo(true);
         })
         .catch((err) => {
@@ -1764,6 +1773,7 @@ function App() {
           open={showTopo}
           onClose={() => {
             setShowTopo(false);
+            setTopoJobOffer(null);
             setBoxPick((pick) => endBox(pick, "topo"));
             // The dialog empties itself on a real close; the drawn area is held
             // out here (going off to draw closes the dialog), so it has to be
@@ -1772,11 +1782,16 @@ function App() {
           }}
           onSelectBbox={() => {
             setShowTopo(false);
+            setTopoJobOffer(null);
             setBoxPick((pick) => armBox(pick, "topo"));
           }}
           awaitingBbox={selectingTopoBbox}
           pendingBbox={pendingTopoBbox}
-          offer={sharpenFor(pendingTopoBbox)}
+          offer={
+            pendingTopoBbox
+              ? sharpenFor(pendingTopoBbox)
+              : (topoJobOffer ?? sharpenFor(null))
+          }
           onJobCreated={handleTopoJobCreated}
           existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
             .map((j) => j.name)
