@@ -550,7 +550,7 @@ describe("the catalogue against the messages", () => {
     ]);
   });
 
-  // Mutation: drop the `hasOwnProperty` clause of `missingEntries`.
+  // Mutation: drop the `!has(catalogue, key)` clause of `missingEntries`.
   it("finds a message with a listed word and no entry", () => {
     expect(missingEntries({}, keys, ["abseil"])).toEqual(["Abseil down {0}"]);
     expect(
@@ -559,5 +559,28 @@ describe("the catalogue against the messages", () => {
       ]),
     ).toEqual([]);
     expect(missingEntries({}, keys, [])).toEqual([]);
+  });
+
+  // Mutation: drop the `!has(leftAsWritten, key)` clause of `missingEntries`, or
+  // make `has` look at `catalogue` alone.
+  it("lets a message with a listed word stay as written when its reason is given", () => {
+    expect(
+      missingEntries({}, keys, ["abseil"], {
+        "Abseil down {0}": "a rope brand",
+      }),
+    ).toEqual([]);
+    expect(
+      missingEntries({}, keys, ["abseil"], { "Open the file": "not it" }),
+    ).toEqual(["Abseil down {0}"]);
+  });
+
+  // Mutation: drop the `\\b` before `${word}` in `missingEntries`.
+  it("matches a listed word from the start of a word, in any case", () => {
+    const some = new Set(["The Rabseil", "ABSEILING down", "Open the file"]);
+    expect(missingEntries({}, some, ["abseil"])).toEqual(["ABSEILING down"]);
+    // A word is a regular expression.
+    expect(missingEntries({}, some, ["absei(?:l|ling)\\b"])).toEqual([
+      "ABSEILING down",
+    ]);
   });
 });

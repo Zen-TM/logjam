@@ -3,7 +3,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as I18n from "./i18n";
 
-// en-US is empty in source; these are the differences the tests need.
+// A stand-in catalogue, so this file tests the mechanism and not US English
+// (`usEnglish.test.ts` holds that).
 vi.mock("./i18nCatalogues/en-US.js", () => ({
   enUS: {
     "{0} {1} {2}": "{1} {0}, {2}",
