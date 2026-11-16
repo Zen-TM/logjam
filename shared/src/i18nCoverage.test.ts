@@ -103,7 +103,9 @@ const AUSTRALIAN_WORDS: readonly string[] = [
   "neighbour",
   "behaviour",
   "centre",
+  "centimetre",
   "kilometre",
+  "millimetre",
   "metre",
   "litre",
   "licence",
@@ -111,11 +113,11 @@ const AUSTRALIAN_WORDS: readonly string[] = [
   "offence",
   // -ise, -ised, -ising, -isation, written from the stems that are no US word
   // already (a bare "is" prefix would catch "optimistic", "exercise", "promise")
-  "(?:organ|recogn|summar|custom|initial|author|synchron|personal|optim|minim|maxim|normal|real|categor|prioriti|final|util|apolog)is(?:e|ed|es|ing|ation|ations)\\b",
-  "analyse",
+  "(?:organ|recogn|summar|custom|initial|author|synchron|personal|optim|minim|maxim|normal|real|categor|priorit|final|util|apolog)is(?:e|ed|es|ing|ation|ations)\\b",
+  "analys(?:e|ed|ing)\\b",
   // a doubled consonant before -ed, -ing, -er
   "travell",
-  "cancell",
+  "cancell(?:ed|ing|er)\\b",
   "modell",
   "labell",
   "signall",
@@ -137,8 +139,8 @@ const AUSTRALIAN_WORDS: readonly string[] = [
   "aluminium",
   "jewellery",
   "storey",
-  "fulfil\\b",
-  "enrol\\b",
+  "fulfil(?:ment)?\\b",
+  "enrol(?:ment)?\\b",
   "practise",
   "burnt",
   "learnt",
@@ -231,6 +233,35 @@ describe("the en-US catalogue", () => {
         found.some((key) => new RegExp(`\\b${word}`, "i").test(key)),
         word,
       ).toBe(true);
+  });
+
+  // Mutation: change `priorit` in the -ise stems to `prioriti`, `cancell(?:ed|ing|er)\\b`
+  // to `cancell`, or `analys(?:e|ed|ing)\\b` to `analyse`, in `AUSTRALIAN_WORDS`.
+  it.each([
+    ["Prioritise this", true],
+    ["They prioritised it", true],
+    ["Prioritisation", true],
+    ["Invite cancelled.", true],
+    ["Still cancelling", true],
+    ["Analyse the track", true],
+    ["It was analysed", true],
+    ["Analysing…", true],
+    ["Fulfilment", true],
+    ["Enrolment", true],
+    ["5 centimetres", true],
+    ["2 millimetres", true],
+    ["Cancellation policy", false],
+    ["Two analyses", false],
+    ["Top priority", false],
+    ["Cancel", false],
+    ["Invite canceled.", false],
+    ["An optimistic guess", false],
+    ["Exercise caution", false],
+    ["Your ticket", false],
+    ["Fulfillment", false],
+    ["You enrolled", false],
+  ])("reads %j as a message with an Australian word: %s", (text, holds) => {
+    expect(holdsAustralianWord(text)).toBe(holds);
   });
 
   // Mutation: add `"Open the file": "Open the file"` to `enUS`, or leave "colour" in an entry's text.

@@ -7,7 +7,7 @@ import type { Catalogue } from "../i18n.js";
  *
  * What is left as the source writes it, and why, is `LEFT_AS_WRITTEN` in
  * `shared/src/i18nCoverage.test.ts`. A unit follows the region and the
- * account, not the language, so no entry spells one.
+ * account, not the language.
  */
 export const enUS: Catalogue = {
   // The day forms (dateFormat.ts): the month before the day, the year after a comma.
