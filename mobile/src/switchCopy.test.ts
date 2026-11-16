@@ -50,7 +50,9 @@ describe("switch copy", () => {
 
     // A floor: `measured` is every label and hint of a switch row whose words
     // are known before run time (54 today), so a reader that stops finding
-    // them fails here and not by passing over nothing.
+    // them fails here and not by passing over nothing. A filtered list is read
+    // whole, so the four notification labels count once at each of the two
+    // sites that filter `NOTIFICATION_PREFERENCES` (eight in all).
     expect(measured.length).toBeGreaterThanOrEqual(54);
 
     // Contract copy is read from @logjam/shared's exports at run time: if the
