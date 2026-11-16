@@ -9,6 +9,7 @@ import {
   placeTypeDeleteConfirm,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
+  plural,
   SETTINGS_LIST,
   stepAfterPlaceTypeSave,
   type ScopedCustomFieldDef,
@@ -318,12 +319,12 @@ function PlaceTypeSection({
         open={mergingFrom !== null}
         copy={
           mergingFrom && {
-            confirmTitle: `Merge "${mergingFrom.name}" into ${
-              mergeTarget ? `"${mergeTarget.name}"` : "another type"
-            }?`,
-            confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
-              mergeTarget ? `"${mergeTarget.name}"` : "the new type"
-            } has no attribute for are kept on each place, and can be added to it later.`,
+            confirmTitle: mergeTarget
+              ? t`Merge "${mergingFrom.name}" into "${mergeTarget.name}"?`
+              : t`Merge "${mergingFrom.name}" into another type?`,
+            confirmBody: mergeTarget
+              ? t`"${mergingFrom.name}" is then deleted. Values "${mergeTarget.name}" has no attribute for are kept on each place, and can be added to it later.`
+              : t`"${mergingFrom.name}" is then deleted. Values the new type has no attribute for are kept on each place, and can be added to it later.`,
             confirmLabel: t`Merge`,
             tone: "destructive",
             icon: "merge",
@@ -336,14 +337,20 @@ function PlaceTypeSection({
         onConfirm={async () => {
           const type = mergingFrom;
           if (!type || !mergeTargetId) return;
-          const moved = placeCountLabel(type.placeCount);
           const ok = await run(async () => {
             await reassignPlaceType(type.id, mergeTargetId);
             await deletePlaceType(type.id);
           }, t`Couldn't merge those types.`);
           if (ok) {
             setMergingFrom(null);
-            toast.done(`${moved} moved to ${mergeTarget?.name}`);
+            toast.done(
+              plural(
+                type.placeCount,
+                "# place moved to {0}",
+                "# places moved to {0}",
+                mergeTarget?.name ?? "",
+              ),
+            );
           }
         }}
         onClose={() => {
@@ -351,7 +358,11 @@ function PlaceTypeSection({
         }}
       >
         <Select
-          label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+          label={plural(
+            mergingFrom?.placeCount ?? 0,
+            "Move its # place to",
+            "Move its # places to",
+          )}
           value={mergeTargetId}
           onChange={(event) => setMergeTargetId(event.target.value)}
         >

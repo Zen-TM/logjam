@@ -172,8 +172,7 @@ function AccountPanel({
             )}
           />
           <p className={classes.meterLabel}>
-            {formatBytes(currentUser.storageUsedBytes)} of{" "}
-            {formatBytes(currentUser.storageQuotaBytes)}
+            {t`${formatBytes(currentUser.storageUsedBytes)} of ${formatBytes(currentUser.storageQuotaBytes)}`}
             <span className={classes.meterHint}> · {copy.storageHint}</span>
           </p>
         </>

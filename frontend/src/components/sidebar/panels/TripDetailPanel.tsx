@@ -14,7 +14,6 @@ import {
   formatFieldValue,
   formatTripDate,
   mediaCategory,
-  navLabel,
   TRIP_PAGE,
   tripDeleteConfirm,
   tripDeleteDone,
@@ -142,16 +141,12 @@ function TripDetailPanel({
   if (!tripLog) {
     return (
       <div className={classes.root}>
-        <Hero
-          title={t`Trip`}
-          onBack={onBack}
-          backLabel={`Back to ${navLabel("logs")}`}
-        />
+        <Hero title={t`Trip`} onBack={onBack} backLabel={t`Back to Trips`} />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
             title={t`No trip selected`}
-            body={`Pick one from ${navLabel("logs")}, or from the place it visited.`}
+            body={t`Pick one from Trips, or from the place it visited.`}
           />
         </div>
       </div>
@@ -325,7 +320,7 @@ function TripDetailPanel({
         <Hero
           title={title}
           onBack={onBack}
-          backLabel={`Back to ${navLabel("logs")}`}
+          backLabel={t`Back to Trips`}
           actions={
             <>
               <Menu

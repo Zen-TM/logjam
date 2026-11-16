@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
-  ATTRIBUTE_NOUN,
   attributesHint,
   buildCustomFieldDef,
-  CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
   defsForType,
   drawsYoursHeading,
@@ -11,6 +9,7 @@ import {
   listedAttributeDefs,
   NEW_TYPE_ATTRIBUTES,
   placeAttributesTitle,
+  plural,
   SETTINGS_LIST,
   tripTypeLabel,
   type ScopedCustomFieldDef,
@@ -44,11 +43,32 @@ import classes from "./ListPage.module.css";
 
 const listCopy = SETTINGS_LIST.copy;
 
-function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
-  return (
-    CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type
-  );
-}
+const ALL_TYPES_LABEL: Record<TripLogCustomFieldType, string> = {
+  string: t`Text · all types`,
+  integer: t`Integer · all types`,
+  float: t`Decimal · all types`,
+  date: t`Date · all types`,
+  boolean: t`Yes / No · all types`,
+};
+
+const NO_TYPES_LABEL: Record<TripLogCustomFieldType, string> = {
+  string: t`Text · no types`,
+  integer: t`Integer · no types`,
+  float: t`Decimal · no types`,
+  date: t`Date · no types`,
+  boolean: t`Yes / No · no types`,
+};
+
+const WITH_TYPES_LABEL: Record<
+  TripLogCustomFieldType,
+  (list: string) => string
+> = {
+  string: (list) => t`Text · ${list}`,
+  integer: (list) => t`Integer · ${list}`,
+  float: (list) => t`Decimal · ${list}`,
+  date: (list) => t`Date · ${list}`,
+  boolean: (list) => t`Yes / No · ${list}`,
+};
 
 /**
  * One family of the user's own attributes — trip or place — as a page inside
@@ -76,7 +96,7 @@ function CustomFieldSection({
   entity: CustomFieldEntityKind;
   title: string;
   /** What one ROW of this entity is called, for the impact sentence. */
-  rowNoun: string;
+  rowNoun: "place" | "trip";
   // Owning user not yet loaded — show a loading state instead of the list.
   loading: boolean;
   // Scoped for places, plain for trip logs — the page only reads the label and
@@ -143,7 +163,7 @@ function CustomFieldSection({
                 leading={<IconTile icon="tag" hue="var(--color-accent)" />}
                 title={customFieldDisplayLabel(def)}
                 subtitle={rowSubtitle(def, placeTypes)}
-                description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
+                description={t`Opens this attribute for editing`}
                 onOpen={() => setEditing(def)}
                 trailing={
                   /* The destructive verb lives in the ⋯: warning as TEXT on a
@@ -239,18 +259,17 @@ function rowSubtitle(
   def: ScopedCustomFieldDef,
   placeTypes?: TPlaceType[],
 ): string {
-  const type = customFieldTypeName(def.type);
-  if (def.appliesToAllTypes) return `${type} · all types`;
+  if (def.appliesToAllTypes) return ALL_TYPES_LABEL[def.type];
   if (!placeTypes) {
     return def.tripTypes.length > 0
-      ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}`
-      : `${type} · no types`;
+      ? WITH_TYPES_LABEL[def.type](def.tripTypes.map(tripTypeLabel).join(", "))
+      : NO_TYPES_LABEL[def.type];
   }
   const names = placeTypes
     .filter((placeType) => def.placeTypeIds.includes(placeType.id))
     .map((placeType) => placeType.name);
-  if (names.length === 0) return `${type} · no types`;
-  return `${type} · ${names.join(", ")}`;
+  if (names.length === 0) return NO_TYPES_LABEL[def.type];
+  return WITH_TYPES_LABEL[def.type](names.join(", "));
 }
 
 /**
@@ -274,7 +293,7 @@ function AttributeDialog({
   onClose,
 }: {
   entity: CustomFieldEntityKind;
-  rowNoun: string;
+  rowNoun: "place" | "trip";
   /** null = making a new one. */
   def: ScopedCustomFieldDef | null;
   defs: ScopedCustomFieldDef[];
@@ -343,9 +362,7 @@ function AttributeDialog({
       onSaved(updated);
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, `Couldn't save that ${ATTRIBUTE_NOUN.one}.`),
-      );
+      setError(messageFromError(err, t`Couldn't save that attribute.`));
     } finally {
       setSaving(false);
     }
@@ -355,7 +372,11 @@ function AttributeDialog({
     <Dialog
       open
       title={
-        def ? t`Edit "${def.label}"` : `New ${rowNoun} ${ATTRIBUTE_NOUN.one}`
+        def
+          ? t`Edit "${def.label}"`
+          : rowNoun === "trip"
+            ? t`New trip attribute`
+            : t`New place attribute`
       }
       onClose={onClose}
       dismissible={!saving}
@@ -367,7 +388,7 @@ function AttributeDialog({
             disabledReason={t`Saving…`}
           >{t`Cancel`}</Button>
           <Button variant="filled" busy={saving} onClick={handleSave}>
-            {def ? t`Save` : `Add ${ATTRIBUTE_NOUN.one}`}
+            {def ? t`Save` : t`Add attribute`}
           </Button>
         </>
       }
@@ -500,7 +521,7 @@ export function TypeAttributesDialog({
             leading={<IconTile icon="tag" hue="var(--color-accent)" />}
             title={customFieldDisplayLabel(def)}
             subtitle={rowSubtitle(def, placeTypes)}
-            description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
+            description={t`Opens this attribute for editing`}
             onOpen={() => setEditing(def)}
           />
         ))}
@@ -523,13 +544,31 @@ export function TypeAttributesDialog({
 /** How much of the user's own data already answers this. A statement, not a
  *  warning: the values are keyed by something no edit here moves, so nothing
  *  this dialog can do will lose them. */
-function impactSentence(count: number | null, rowNoun: string): string {
-  if (count === null) return `Checking how many ${rowNoun}s use it…`;
-  if (count === 0)
-    return `No ${rowNoun} has a value for this ${ATTRIBUTE_NOUN.one} yet.`;
-  return `${count} ${count === 1 ? rowNoun : `${rowNoun}s`} ${
-    count === 1 ? "has" : "have"
-  } a value for this ${ATTRIBUTE_NOUN.one}.`;
+function impactSentence(
+  count: number | null,
+  rowNoun: "place" | "trip",
+): string {
+  if (count === null) {
+    return rowNoun === "trip"
+      ? t`Checking how many trips use it…`
+      : t`Checking how many places use it…`;
+  }
+  if (count === 0) {
+    return rowNoun === "trip"
+      ? t`No trip has a value for this attribute yet.`
+      : t`No place has a value for this attribute yet.`;
+  }
+  return rowNoun === "trip"
+    ? plural(
+        count,
+        "# trip has a value for this attribute.",
+        "# trips have a value for this attribute.",
+      )
+    : plural(
+        count,
+        "# place has a value for this attribute.",
+        "# places have a value for this attribute.",
+      );
 }
 
 export default CustomFieldSection;

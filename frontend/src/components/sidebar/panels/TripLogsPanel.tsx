@@ -41,6 +41,7 @@ import {
   type TripSortKey,
   type TripVerbId,
   tripTitle,
+  plural,
   t,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
@@ -81,9 +82,6 @@ import classes from "./TripLogsPanel.module.css";
 const ALL_TYPES = "";
 
 const { copy } = TRIPS_LIST;
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Logs: "what have I done?" (Logjam GPS's `LogsScreen`). The hero answers with
@@ -399,8 +397,8 @@ function TripLogsPanel({
         messageFromError(
           err,
           ids.length === 1
-            ? "Couldn't delete that trip."
-            : "Couldn't delete those trips.",
+            ? t`Couldn't delete that trip.`
+            : t`Couldn't delete those trips.`,
         ),
       );
     } finally {
@@ -449,7 +447,11 @@ function TripLogsPanel({
       icon="filter"
       label={
         sheetFilterCount > 0
-          ? `${TRIPS_FILTER_SHEET.title}, ${plural(sheetFilterCount, "filter")} active`
+          ? plural(
+              sheetFilterCount,
+              "Sort and filter, # filter active",
+              "Sort and filter, # filters active",
+            )
           : TRIPS_FILTER_SHEET.title
       }
       tone={sheetFilterCount > 0 || sheetOpen ? "filled" : "default"}
@@ -537,7 +539,9 @@ function TripLogsPanel({
         title={title}
         subtitle={[
           formatTripDate(trip.date),
-          trip.places.length > 1 ? plural(trip.places.length, "place") : null,
+          trip.places.length > 1
+            ? plural(trip.places.length, "# place", "# places")
+            : null,
         ]
           .filter(Boolean)
           .join(" · ")}
