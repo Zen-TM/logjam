@@ -5,9 +5,10 @@
 // live in the card rather than in a dialog raised from it. They are native
 // radios in a real `radiogroup` labelled by the incoming name so a screen
 // reader announces which place each option refers to.
-import { formatDistanceM, t } from "@logjam/shared";
+import { formatDistanceM, rich, t } from "@logjam/shared";
 import { useId } from "react";
 import { Button, StatusPill } from "../../ui";
+import { Rich } from "../../ui/rich";
 import classes from "./MatchReview.module.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -163,7 +164,10 @@ function MatchReview({
                       }
                     />
                     <span className={classes.optionLabel}>
-                      Link to <strong>{option.label}</strong>
+                      <Rich
+                        parts={rich`Link to <strong>${option.label}</strong>`}
+                        tags={{ strong: (text) => <strong>{text}</strong> }}
+                      />
                     </span>
                     {option.distanceMeters !== undefined && (
                       <span className={classes.optionMeta}>

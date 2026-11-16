@@ -48,6 +48,7 @@ import {
   coordinateEntry,
   coordinateNumber,
   displayUnits,
+  plural,
   t,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
@@ -694,14 +695,14 @@ function TripLogDialog({
   // inline place (if any) first and appending it last.
   async function resolvePlaceIds(): Promise<string[]> {
     if (!creating) return selectedPlaceIds;
-    if (!creating.name.trim()) throw new Error("Place name is required.");
+    if (!creating.name.trim()) throw new Error(t`Place name is required.`);
     const lat = coordinateNumber(creating.latitude);
     const lng = coordinateNumber(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
-      throw new Error("Valid latitude and longitude are required.");
+      throw new Error(t`Valid latitude and longitude are required.`);
     if (!isValidLatitude(lat) || !isValidLongitude(lng))
       throw new Error(
-        "Latitude must be between -90 and 90, and longitude between -180 and 180.",
+        t`Latitude must be between -90 and 90, and longitude between -180 and 180.`,
       );
     const c = await createPlace({
       name: creating.name.trim(),
@@ -770,7 +771,7 @@ function TripLogDialog({
   // the recording it copies, where it copies one.
   async function addTrackFile(file: File, sourceMediaId?: string) {
     const resolved = resolveMediaType(file);
-    if (!resolved) throw new Error("Unsupported track file.");
+    if (!resolved) throw new Error(t`Unsupported track file.`);
     const tripId = await ensureLinkedTripId();
     const item = await uploadMedia({
       linkedType: "tripLog",
@@ -870,10 +871,7 @@ function TripLogDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded files. Please try again.",
-          ),
+          messageFromError(err, t`Couldn't discard uploaded files. Try again.`),
         );
         return;
       }
@@ -1229,9 +1227,7 @@ function TripLogDialog({
           <Row
             className={classes.row}
             title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
-            subtitle={
-              selectedCount === 1 ? "1 place" : `${selectedCount} places`
-            }
+            subtitle={plural(selectedCount, "# place", "# places")}
             description={t`Places on this trip. Press to choose.`}
             leading={<IconTile icon="place" hue="var(--color-accent)" />}
             trailing={
@@ -1260,8 +1256,9 @@ function TripLogDialog({
           {creating && (
             <div className={classes.createPlace}>
               <p className={classes.muted}>
-                Where is{" "}
-                {creating.name ? `“${creating.name}”` : "the new place"}?
+                {creating.name
+                  ? t`Where is “${creating.name}”?`
+                  : t`Where is the new place?`}
               </p>
               <div className={classes.coordinates}>
                 <TextField
@@ -1659,8 +1656,8 @@ function TripLogDialog({
               {matches.length === 0 ? (
                 <p className={classes.muted}>
                   {places.length === 0
-                    ? "No places yet. You can log the trip now and link a place later."
-                    : "Nothing matches that name."}
+                    ? t`No places yet. You can log the trip now and link a place later.`
+                    : t`Nothing matches that name.`}
                 </p>
               ) : (
                 matches.map((place) => (
@@ -1697,8 +1694,7 @@ function TripLogDialog({
           {restorableDraft && (
             <div role="status" className={classes.draft}>
               <p className={classes.draftText}>
-                You have an unsaved trip from{" "}
-                {formatDraftSavedAt(restorableDraft.savedAt)}.
+                {t`You have an unsaved trip from ${formatDraftSavedAt(restorableDraft.savedAt)}.`}
               </p>
               <div className={classes.draftActions}>
                 <Button

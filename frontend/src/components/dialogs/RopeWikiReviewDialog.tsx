@@ -10,7 +10,7 @@ import MatchReview from "./MatchReview";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import { Button, Dialog, ErrorBanner } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
-import { t } from "@logjam/shared";
+import { plural, t } from "@logjam/shared";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
 
@@ -90,13 +90,17 @@ function RopeWikiReviewDialog({
 
   const autoParts = [
     autoImported && autoImported.added > 0
-      ? `${autoImported.added} added`
+      ? plural(autoImported.added, "# added", "# added")
       : null,
     autoImported && autoImported.autoLinked > 0
-      ? `${autoImported.autoLinked} linked to existing`
+      ? plural(
+          autoImported.autoLinked,
+          "# linked to existing",
+          "# linked to existing",
+        )
       : null,
     autoImported && autoImported.updated > 0
-      ? `${autoImported.updated} updated`
+      ? plural(autoImported.updated, "# updated", "# updated")
       : null,
   ].filter(Boolean);
 
@@ -130,14 +134,20 @@ function RopeWikiReviewDialog({
       );
       const result = await applyRopeWikiImport(regionId, payload);
       const parts = [
-        result.created > 0 ? `${result.created} created` : null,
-        result.linked > 0 ? `${result.linked} linked` : null,
-        result.skipped > 0 ? `${result.skipped} skipped` : null,
+        result.created > 0
+          ? plural(result.created, "# created", "# created")
+          : null,
+        result.linked > 0
+          ? plural(result.linked, "# linked", "# linked")
+          : null,
+        result.skipped > 0
+          ? plural(result.skipped, "# skipped", "# skipped")
+          : null,
       ].filter(Boolean);
       toast.done(
         parts.length > 0
-          ? `Review applied: ${parts.join(", ")}.`
-          : "Review applied.",
+          ? t`Review applied: ${parts.join(", ")}.`
+          : t`Review applied.`,
       );
       onApplied();
       onClose();
@@ -182,9 +192,7 @@ function RopeWikiReviewDialog({
             first thing to account for. */}
         {autoParts.length > 0 && (
           <p className={classes.intro}>
-            Already imported automatically: {autoParts.join(", ")}. The{" "}
-            {review.length} below looked like places you may already have, so
-            they were left alone.
+            {t`Already imported automatically: ${autoParts.join(", ")}. The ${review.length} below looked like places you may already have, so they were left alone.`}
           </p>
         )}
         <p

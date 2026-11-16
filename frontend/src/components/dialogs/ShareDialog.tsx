@@ -127,7 +127,7 @@ function ShareDialog({
       refresh();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't share. Please try again."));
+      toast.error(messageFromError(err, t`Couldn't share. Try again.`));
     } finally {
       setBusyId(null);
     }
@@ -143,9 +143,7 @@ function ShareDialog({
       refresh();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't remove share. Please try again."),
-      );
+      toast.error(messageFromError(err, t`Couldn't remove share. Try again.`));
     } finally {
       setBusyId(null);
     }

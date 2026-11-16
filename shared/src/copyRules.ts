@@ -233,6 +233,7 @@ export const COPY_PROPS = new Set([
   "confirmTitle",
   "confirmBody",
   "caption",
+  "en",
 ]);
 
 /** Calls whose first argument is the words of a toast (Logjam Web's `toast`,

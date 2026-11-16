@@ -408,6 +408,9 @@ export const DATA_LITERALS: Readonly<
     "File is too large to import": CODE_ERROR,
     "Unsupported file type — use GPX, KML, or GeoJSON": CODE_ERROR,
   },
+  "frontend/src/components/dialogs/PlaceDialog.tsx": {
+    "https://": "the start of the address a user types after it, not words",
+  },
   "frontend/src/geoPdf/pdf.ts": {
     "Logjam GeoPDF Generator":
       "the producer Logjam writes into a PDF and recognises on import",

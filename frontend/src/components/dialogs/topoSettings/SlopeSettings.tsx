@@ -34,9 +34,7 @@ interface Props {
   onChange: (next: SlopeSettingsValue) => void;
 }
 
-const ANGLE_TOOLTIP =
-  "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or " +
-  "more. Each band starts where the one below it ends, so its neighbour follows what you set here.";
+const ANGLE_TOOLTIP = t`Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbour follows what you set here.`;
 
 /**
  * Terrain coloured by steepness: a table of bands, its columns headed once
@@ -148,7 +146,8 @@ export default function SlopeSettings({ value, onChange }: Props) {
             the band below's upper, shown rather than asked for. */}
         <span className={styles.head}>{t`From °`}</span>
         <span className={styles.head}>
-          To °<InfoTip label={t`an angle`} content={ANGLE_TOOLTIP} />
+          {t`To °`}
+          <InfoTip label={t`an angle`} content={ANGLE_TOOLTIP} />
         </span>
         <span className={styles.head}>{t`Colour`}</span>
         <span />
