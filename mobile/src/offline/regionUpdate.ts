@@ -13,6 +13,7 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   SHARPENED_SOURCE_PREFIX,
   saveClipArchive,
+  vectorArchiveAt,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -74,8 +75,25 @@ export function regionUpdateSpecs(
     // the switch off) stays as saved: with no archive to read, it would be cut
     // as the vector map and filed under that key. Guard: `regionUpdate.test.ts`
     // ("leaves a clip of an archive no region declares as it was saved").
+    // Nor is a vector clip cut again whose archive is not declared, or that
+    // was saved before clips kept theirs: nothing says which archive it came
+    // from. Guard: `regionUpdate.test.ts` ("leaves a vector clip with no
+    // declared archive as it was saved").
+    if (a.logicalKey === "protomaps") {
+      const vector = a.archivePath && vectorArchiveAt(a.archivePath);
+      return vector
+        ? [
+            {
+              taskKind: "clip",
+              ...base,
+              basemapId: a.logicalKey,
+              vectorPath: vector.archivePath,
+            },
+          ]
+        : [];
+    }
     const archiveId = saveClipArchive(a.logicalKey) ? a.logicalKey : undefined;
-    if (!archiveId && a.logicalKey !== "protomaps") return [];
+    if (!archiveId) return [];
     return [{ taskKind: "clip", ...base, basemapId: a.logicalKey, archiveId }];
   });
   return specs.length > 0 ? specs : null;

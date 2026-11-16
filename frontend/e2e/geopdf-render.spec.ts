@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { BASEMAP_CATALOG, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 // Deliberate subpath imports: the import parser is kept out of the shared
 // barrel so pdf-lib never rides into the web bundle.
 import {
@@ -36,9 +36,7 @@ test.skip(
 );
 
 const archives = statewideArchives();
-const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
-  (entry) => entry.id === "protomaps",
-)!.urlTemplate;
+const PROTOMAPS_ARCHIVE = NSW_REGION.vector!.archivePath;
 const ARCHIVE_PATHS: Record<string, Buffer> = {
   [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
   [NSW_REGION.terrain.slope.archivePath]: archives.slope,
@@ -326,6 +324,22 @@ test.describe("the in-browser GeoPDF renderer", () => {
     );
     expect(r).toMatchObject({ ok: false, reason: "failed" });
     expect(r.pdfBase64).toBeUndefined();
+  });
+
+  // Mutation: in render.ts, change `!vectorBase && isVectorBase(config)` to
+  // `vectorBase && isVectorBase(config)`, and a sheet outside every region
+  // printed with the Vector base renders with no base map and no error.
+  test("a vector base over ground with no vector archive is a failure, not a bare sheet", async ({
+    page,
+  }) => {
+    const seen = await stubNetwork(page);
+    await openBench(page);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.run("vectorElsewhere", { returnPdf: true }),
+    );
+    expect(r).toMatchObject({ ok: false, reason: "failed" });
+    expect(r.pdfBase64).toBeUndefined();
+    expect(seen).toMatchObject({ tiles: 0, archives: 0 });
   });
 
   // Mutation: draw the base from the map image's zoom in render.ts instead of

@@ -48,6 +48,7 @@ describe("regionUpdateSpecs", () => {
       logicalKey: "protomaps",
       format: "pmtiles",
       sourceType: "vector",
+      archivePath: "master/basemap/protomaps-nsw.pmtiles",
       minzoom: 0,
       maxzoom: 15,
     }),
@@ -113,11 +114,44 @@ describe("regionUpdateSpecs", () => {
       taskKind: "clip",
       basemapId: "protomaps",
     });
-    expect(specs?.[1]).toMatchObject({ archiveId: undefined });
+    // Cut again from the archive it was saved from.
+    expect(specs?.[1]).toMatchObject({
+      vectorPath: "master/basemap/protomaps-nsw.pmtiles",
+    });
+    expect(specs?.[1]).not.toHaveProperty("archiveId");
     expect(specs?.[2]).toMatchObject({ archiveId: "nsw-5m" });
     expect(specs?.[3]).toMatchObject({ archiveId: "nsw-contours" });
     expect(specs?.[4]).toMatchObject({ archiveId: "nsw-fire" });
     expect(specs?.[5]).toMatchObject({ archiveId: "nsw-coverage" });
+  });
+
+  // Mutation: build a vector spec for a clip whatever its archive, and a clip
+  // saved before clips kept theirs is cut from nothing (it fails every update),
+  // and a clip of an archive no region declares now is cut from a path no one
+  // serves.
+  it("leaves a vector clip with no declared archive as it was saved", () => {
+    const vector = (id: string, archivePath: string | null) =>
+      member({
+        id,
+        logicalKey: "protomaps",
+        format: "pmtiles",
+        sourceType: "vector",
+        archivePath,
+      });
+    for (const archivePath of [null, "master/basemap/protomaps-gone.pmtiles"]) {
+      const old = [member({ id: "a" }), vector("v", archivePath)];
+      const specs = regionUpdateSpecs(old, "Claustral", false, newId);
+      expect(specs).toHaveLength(1);
+      expect(specs?.[0]).toMatchObject({ taskKind: "tile-pyramid" });
+      expect(
+        regionUpdateSpecs(
+          [vector("v", archivePath)],
+          "Claustral",
+          false,
+          newId,
+        ),
+      ).toBeNull();
+    }
   });
 
   // Mutation: build a spec for every file that is not a tile pyramid, and a

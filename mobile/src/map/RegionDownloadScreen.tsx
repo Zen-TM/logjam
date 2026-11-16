@@ -46,6 +46,7 @@ import {
   DEM_SOURCE_ID,
   downloadableBasemaps,
   planRegionForBasemaps,
+  regionInView,
   type RegionBbox,
   formatGroundStep,
 } from "@logjam/shared";
@@ -101,6 +102,7 @@ import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   bboxToFrame,
   defaultFrameInsets,
+  defaultPreviewFor,
   startingArea,
   startBox,
   startPicks,
@@ -259,8 +261,9 @@ export function RegionDownloadScreen({
   // three SIX rasters, whose CC licence permits redistribution
   // (operator-verified); the OSM-family sources are NOT, and are absent rather
   // than disabled. Over ground with none, the row is not shown. `protomaps`,
-  // our own vector basemap, is not a choice: it comes with every area
-  // (`regionClipSpecs`), and the route and measure tools snap to it. A pick the
+  // our own vector basemap, is not a choice: an area in a region that has a
+  // vector archive saves it (`regionClipSpecs`), and the route and measure
+  // tools snap to it. A pick the
   // frame has moved off stays picked, and comes back when the frame returns,
   // but is not saved from here.
   const framed = bbox ?? startBox(startArea, startCenter);
@@ -282,9 +285,20 @@ export function RegionDownloadScreen({
   // is the one the tap was about. Deselecting the previewed map falls back to
   // the default rather than to whatever happens to be left in the list.
   //
-  // The default is the vector basemap: it is the detailed one, it is what the
-  // map screen draws, and every area saves it.
-  const defaultPreview: BasemapId = "protomaps";
+  // The vector basemap is read from the archive of the region the map shows.
+  const previewRegion = useMemo(
+    () => regionInView(viewport ?? framed),
+    [viewport, framed],
+  );
+  // The default is the vector basemap where the region shown has an archive of
+  // it: it is the detailed one, it is what the map screen draws, and an area
+  // there saves it. Elsewhere it would preview nothing, so it is the first map
+  // the ground offers to save; with none of those either, a blank preview is
+  // all there is to show.
+  const defaultPreview: BasemapId = defaultPreviewFor(
+    previewRegion,
+    downloadable,
+  );
   const [preview, setPreview] = useState<BasemapId>(() =>
     selected.includes(startBasemapId) ? startBasemapId : defaultPreview,
   );
@@ -294,7 +308,7 @@ export function RegionDownloadScreen({
   const previewResolved = useMemo(
     () =>
       resolveMapSource(
-        { kind: "basemap", basemapId: previewBasemap },
+        { kind: "basemap", basemapId: previewBasemap, region: previewRegion },
         // `artifacts: []` on purpose: the preview is the ONLINE map, not
         // whatever this phone already holds. `cdnBaseUrl` builds the vector
         // source's pmtiles:// URL — without it, it would resolve to an
@@ -305,7 +319,7 @@ export function RegionDownloadScreen({
           cdnBaseUrl: config.topoCdnBaseUrl,
         },
       ),
-    [previewBasemap],
+    [previewBasemap, previewRegion],
   );
 
   // Stable identity: the frame's gesture handlers are rebuilt whenever this
@@ -488,6 +502,7 @@ export function RegionDownloadScreen({
         ...regionClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
           job.clips,
+          job.vectors,
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
       ]);
