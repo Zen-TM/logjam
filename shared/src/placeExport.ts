@@ -125,11 +125,10 @@ function descriptionText(c: TPlace, defs: ExportFieldLabel[]): string {
   if (c.notes) parts.push(t`Notes: ${c.notes}`);
   const sources = placeSources(c);
   if (sources.length > 0) {
-    parts.push(
-      `Sources: ${sources
-        .map(([label, url]) => (url ? `${label} (${url})` : label))
-        .join(", ")}`,
-    );
+    const list = sources
+      .map(([label, url]) => (url ? `${label} (${url})` : label))
+      .join(", ");
+    parts.push(t`Sources: ${list}`);
   }
   return parts.join("\n");
 }

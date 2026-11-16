@@ -86,7 +86,7 @@ export const TERRARIUM = {
   urlTemplate:
     "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
   licence: "terrain-tiles",
-  credit: t`Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.`,
+  credit: "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.",
   creditHtml:
     'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',
 } as const satisfies DemSource;

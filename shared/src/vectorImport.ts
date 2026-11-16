@@ -55,14 +55,14 @@ export type VectorImportResult = {
 export const MAX_IMPORT_POSITIONS = 500_000;
 
 export const IMPORT_ERRORS = {
-  unparseable: t`File could not be parsed`,
-  invalidCoordinates: t`File contains invalid coordinates`,
-  noFeatures: t`No mappable features found in the file`,
-  tooManyPositions: t`File has too many points to import`,
+  unparseable: "File could not be parsed",
+  invalidCoordinates: "File contains invalid coordinates",
+  noFeatures: "No mappable features found in the file",
+  tooManyPositions: "File has too many points to import",
   // Checked before the file is read, not after: the whole file goes into one JS
   // string, so "too big" has to be answerable from a stat.
-  tooLarge: t`File is too large to import`,
-  unsupportedExtension: t`Unsupported file type — use GPX, KML, or GeoJSON`,
+  tooLarge: "File is too large to import",
+  unsupportedExtension: "Unsupported file type — use GPX, KML, or GeoJSON",
 } as const;
 
 /**

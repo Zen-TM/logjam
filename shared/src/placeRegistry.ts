@@ -10,9 +10,10 @@
 // PRIVACY: the typed query is the sensitive part, often the name of a place
 // the user would rather not publish.
 
+import { t } from "./i18n.js";
+
 /** Bumped when the file's shape changes. Each format has its own prefix, so
  *  an older client keeps reading builds in the format it knows. */
-import { t } from "./i18n.js";
 export const PLACE_REGISTRY_FORMAT = 1;
 
 /** NSW's path under the topo CDN base URL (TOPO_CDN_BASE_URL). Another
@@ -30,7 +31,7 @@ export const PLACE_REGISTRY_POINTER_PATH = placeRegistryPointerPath(
 );
 
 /** Shown wherever registry results are, as the ODbL asks. */
-export const PLACE_REGISTRY_ATTRIBUTION = t`© OpenStreetMap contributors`;
+export const PLACE_REGISTRY_ATTRIBUTION = "© OpenStreetMap contributors";
 
 /** Shorter than this, a query matches too much to rank usefully. */
 export const PLACE_SEARCH_MIN_QUERY_LENGTH = 2;
@@ -81,7 +82,7 @@ export interface PlaceResult {
  *  A town is not near itself. */
 export function placeResultDetail(result: PlaceResult): string {
   return result.near && result.near !== result.name
-    ? `${result.kind} near ${result.near}`
+    ? t`${result.kind} near ${result.near}`
     : result.kind;
 }
 
@@ -139,7 +140,8 @@ export function placeRegistryUrl(
 
 // Words for the kinds whose OSM value reads wrong to a walker ("residential"
 // for a street). Every other kind reads as its value: camp_site → "Camp site".
-const KIND_LABELS: Record<string, string> = {
+// A function, because the API sends these words in the request's language.
+const kindLabels = (): Record<string, string> => ({
   "boundary=protected_area": t`Reserve`,
   "boundary=national_park": t`National park`,
   "leisure=nature_reserve": t`Nature reserve`,
@@ -161,17 +163,17 @@ const KIND_LABELS: Record<string, string> = {
   "highway=trailhead": t`Trailhead`,
   "tourism=viewpoint": t`Lookout`,
   "place=isolated_dwelling": t`Homestead`,
-};
+});
 
 // `key=yes` says only which key it is: `natural=yes` is a natural feature.
-const YES_LABELS: Record<string, string> = {
+const yesLabels = (): Record<string, string> => ({
   natural: t`Natural feature`,
   tourism: t`Attraction`,
   historic: t`Historic site`,
   man_made: t`Structure`,
   landuse: t`Area`,
   leisure: t`Leisure area`,
-};
+});
 
 function capitalised(text: string): string {
   const spaced = text.replace(/_/g, " ");
@@ -179,10 +181,10 @@ function capitalised(text: string): string {
 }
 
 export function placeKindLabel(kind: string): string {
-  const label = KIND_LABELS[kind];
+  const label = kindLabels()[kind];
   if (label) return label;
   const [key, value] = kind.split("=");
-  if (value === "yes") return YES_LABELS[key] ?? capitalised(key);
+  if (value === "yes") return yesLabels()[key] ?? capitalised(key);
   return capitalised(value);
 }
 

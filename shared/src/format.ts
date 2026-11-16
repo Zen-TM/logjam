@@ -3,6 +3,8 @@
 // Shared by Logjam GPS and Logjam Web so both clients present identical
 // figures without drift.
 
+import { t } from "./i18n.js";
+
 /**
  * Bytes as a size a person can act on: GB with one decimal, whole MB, whole KB.
  *
@@ -11,7 +13,6 @@
  * a GB matters for that; a tenth of a MB does not. Anything non-zero reads as at
  * least 1 KB rather than "0 KB", which looks like a failed measurement.
  */
-import { t } from "./i18n.js";
 export function formatBytes(bytes: number): string {
   const gb = bytes / 1024 ** 3;
   if (gb >= 1) return `${gb.toFixed(1)} GB`;

@@ -13,13 +13,14 @@
  * allowance lands in the low thousands rather than the low millions.
  */
 
+import { plural, t } from "./i18n.js";
+
 /**
  * Per-worker Fargate sizing. These MUST match the `cpu` / `memory` on the task
  * definitions in infra/terraform/envs/prod/ecs.tf — that is a hand-kept
  * parallel list, so `computeCredits.terraform.test.ts` parses the Terraform and
  * fails if the two ever drift. Change one, change the other.
  */
-import { plural, t } from "./i18n.js";
 export const WORKER_SPECS = {
   /** logjam-topo-worker — LiDAR topo generation. The expensive one. */
   topo: { vcpus: 8, memoryGiB: 16, label: t`Sharpen an area` },

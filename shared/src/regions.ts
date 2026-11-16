@@ -262,12 +262,6 @@ export type Region = {
   } | null;
 };
 
-const heightsCredit = (layer: string) =>
-  t`${layer}: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.`;
-
-const heightsCreditHtml = (layer: string) =>
-  `${layer}: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.`;
-
 /**
  * NSW Spatial Services' 5 m DEM: bare earth, from LiDAR in the east and
  * photogrammetry in the west, built by `topo/build_nsw_dem.py`. A z15 pixel is
@@ -303,16 +297,18 @@ const NSW_HEIGHTS = {
   },
   // The licence asks for the credit, the licence's name, a note that this is
   // derived, and the date it was extracted from Spatial Services.
-  credit: heightsCredit(t`Elevation`),
-  creditHtml: heightsCreditHtml(t`Elevation`),
+  credit:
+    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
+  creditHtml:
+    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
 } as const satisfies DemSource & { name: string; tileBytes: TileBytes };
 
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({
   coverage: NSW_HEIGHTS.coverage,
   licence: NSW_HEIGHTS.licence,
-  credit: heightsCredit(layer),
-  creditHtml: heightsCreditHtml(layer),
+  credit: NSW_HEIGHTS.credit.replace(/^Elevation/, layer),
+  creditHtml: NSW_HEIGHTS.creditHtml.replace(/^Elevation/, layer),
 });
 
 export const NSW_REGION = {
@@ -392,7 +388,7 @@ export const NSW_REGION = {
         14: { meanBytes: 36_000, p90Bytes: 45_000 },
         15: { meanBytes: 28_000, p90Bytes: 33_000 },
       },
-      ...derived(t`Slope`),
+      ...derived("Slope"),
     },
     // MapLibre's own `hillshade` layer on the height archive itself, at the
     // zooms it was built at, so it needs no pipeline at all.
@@ -404,7 +400,7 @@ export const NSW_REGION = {
       // Shaded from the height archive itself, so a save clips it once, as the
       // heights.
       tileBytes: NSW_HEIGHTS.tileBytes,
-      ...derived(t`Hillshade`),
+      ...derived("Hillshade"),
     },
     // 10 m contours cut from the heights by `topo/build_nsw_dem.py contours`,
     // in the schema a topo area's own contour layer has, so both clients
@@ -427,7 +423,7 @@ export const NSW_REGION = {
         13: { meanBytes: 15_000, p90Bytes: 18_000 },
         14: { meanBytes: 24_000, p90Bytes: 28_000 },
       },
-      ...derived(t`Contours`),
+      ...derived("Contours"),
     },
     // Who holds the land, from the NSW Land Tenure layer, built by
     // `topo/build_land_tenure.py` (land.ts draws it).

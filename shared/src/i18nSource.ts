@@ -139,9 +139,9 @@ export function messagesIn(
 const NOT_COPY_ATTRS =
   /^(?:className|class|style|id|key|ref|testID|nativeID|role|type|name|href|src|to|target|rel|htmlFor|for|value|defaultValue|autoComplete|inputMode|pointerEvents|resizeMode|source|d|viewBox|fill|stroke|transform|data-.*|aria-(?!label).*)$/;
 
-/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads (`super` passes an error's message up to `Error`). */
+/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads. */
 const NOT_COPY_CALLS =
-  /^(?:console\.\w+|logger\.\w+|log\.\w+|require|super|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
+  /^(?:console\.\w+|logger\.\w+|log\.\w+|require|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
 
 /** An all-capitals SQL keyword: a string holding one is a query, and so is every part of a template that does. */
 const SQL =
@@ -174,11 +174,15 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
 /**
  * Code that reads as words: a bracket or underscore (a selector, a path), a
  * media query `(hover: none)`, a CSS value, a selector list `input, textarea`,
- * an HTTP header value, a line of XML or HTML (a tag that opens or closes, or
- * the `<?xml` declaration).
+ * an HTTP header value.
  */
 const CODE =
-  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx|<[?!/]?[A-Za-z][^>]*>/;
+  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx/;
+
+/** A literal that is only markup: a tag, an XML declaration, a GPX element, with no word outside the tags (a hole's stand-in is not one). A tag with words between its tags is copy. */
+const isMarkup = (text: string): boolean =>
+  /<[?!/]?[A-Za-z][^>]*>/.test(text) &&
+  !new RegExp(WORD, "u").test(text.replace(/<[^>]*>/g, " "));
 
 /** A map style property ("text-font", "icon-image"): its value is a font, an expression or an id. Another hyphenated key ("six-base") names a thing, and its value may be words. */
 const MAP_STYLE_KEY =
@@ -201,6 +205,10 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
   "shared/src/announcementMarkdown.ts":
     "the Markdown an announcement lost, listed for the maintainer who wrote it",
   "shared/src/topoRegions.ts": "the header of a generated file",
+  "shared/src/routeValidation.ts":
+    "what the API logs about a route it refuses (`malformed`), which no client shows",
+  "shared/src/elevation.ts":
+    "what the API logs about an elevation point it refuses (`malformed`), which no client shows",
   "shared/src/kit.ts":
     "notes on each kit component, read by the people who build it",
   "shared/src/webTokens.ts": "the CSS generated from the design tokens",
@@ -212,14 +220,25 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
 
 const FORMATION =
   "a vegetation formation as the map data and the build script name it";
-const CREDIT = "a credit the build script writes too, as its source asks";
+/** A source's credit is its publisher's wording, in its plain and its HTML form, and so is the attribution a saved map stores. */
+const CREDIT =
+  "a source's credit, in its publisher's wording, plain and HTML alike";
+const STORED =
+  "a built-in's name or hint, which the seed and the migration write to rows";
+const CODE_ERROR = "an import failure code, matched with ===";
+const LAMBDA = "matched against the pre-signup Lambda's English message";
+const DETAIL =
+  "developer detail: the API logs it (`malformed`), no client shows it";
+const HINT =
+  "the OSM query behind a layer, in the developer's words, shown under no switch";
 
 /**
  * Text that reads as words and is not words a user reads: an operator the
  * place filter stores, a land tenure class as the map data spells it,
  * RopeWiki's name for a region, the producer a PDF names, a noun in a
- * developer's error, a vegetation formation, a credit the build script writes
- * too. A literal equal to one is never counted or converted.
+ * developer's error or detail, a vegetation formation, a source's credit, a
+ * built-in's stored name, an import failure code. A literal equal to one is
+ * never counted or converted.
  * `i18nCoverage.test.ts` ("lists only literals that exist") fails on an entry
  * no source file holds.
  */
@@ -238,6 +257,126 @@ export const DATA_LITERALS: Readonly<Record<string, string>> = {
   "Arid Shrublands (Acacia sub-formation)": FORMATION,
   "Arid Shrublands (Chenopod sub-formation)": FORMATION,
   "Alpine Complex": FORMATION,
+  "API error …: … …": DETAIL,
+  "Logjam is not taking new accounts this month": LAMBDA,
+  "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.": CREDIT,
+  'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).':
+    CREDIT,
+  "© Department of Customer Service": CREDIT,
+  "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+    CREDIT,
+  '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.':
+    CREDIT,
+  "Base map © OpenStreetMap contributors (Protomaps build)": CREDIT,
+  "Base map © OpenStreetMap contributors": CREDIT,
+  "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM":
+    CREDIT,
+  "Base map © CyclOSM, © OpenStreetMap contributors": CREDIT,
+  "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+    CREDIT,
+  "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.":
+    CREDIT,
+  "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). …":
+    CREDIT,
+  "Features © OpenStreetMap contributors": CREDIT,
+  "© OpenStreetMap contributors": CREDIT,
+  "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.":
+    CREDIT,
+  'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.':
+    CREDIT,
+  'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+    CREDIT,
+  'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)':
+    CREDIT,
+  'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+    CREDIT,
+  "V grade": STORED,
+  "Vertical technical difficulty, on the French rating system.": STORED,
+  "A grade": STORED,
+  "Aquatic difficulty of the water sections, on the French rating system.":
+    STORED,
+  Commitment: STORED,
+  "How hard the canyon is to escape or retreat from once committed, on the French rating system.":
+    STORED,
+  Quality: STORED,
+  "Your own verdict. 1 is unremarkable, 5 is exceptional.": STORED,
+  Hours: STORED,
+  "How long it takes an average group, car to car.": STORED,
+  Pitches: STORED,
+  "How many abseils.": STORED,
+  "Longest pitch": STORED,
+  "The longest single abseil, measured along the rope.": STORED,
+  Capacity: STORED,
+  "Is a cave?": STORED,
+  "Has a water source?": STORED,
+  "ACA technical": STORED,
+  "Technical difficulty of the descent, on the American Canyoneering Association rating system.":
+    STORED,
+  "ACA water": STORED,
+  "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.":
+    STORED,
+  "ACA time": STORED,
+  "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.":
+    STORED,
+  "ACA risk": STORED,
+  "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.":
+    STORED,
+  "OSM waterway ways (rivers, streams, creeks, canals, drains)": HINT,
+  "OSM highway=track|path|footway|bridleway|steps": HINT,
+  "OSM highway=primary|secondary|tertiary|unclassified|residential|service":
+    HINT,
+  "OSM building=*": HINT,
+  "OSM natural=peak": HINT,
+  "OSM natural=spring": HINT,
+  "OSM bridge=yes ways": HINT,
+  "OSM ford=* (water crossings)": HINT,
+  "OSM waterway=waterfall": HINT,
+  "OSM information=guidepost and highway=trailhead": HINT,
+  "OSM tourism=viewpoint": HINT,
+  "root must be an object": DETAIL,
+  "labelScale must be …..…": DETAIL,
+  "hillshade must be an object": DETAIL,
+  "hillshade.enabled must be boolean": DETAIL,
+  "hillshade.colour must be #RRGGBBAA": DETAIL,
+  "hillshade.azimuth must be 0..360": DETAIL,
+  "hillshade.altitude must be 0..90": DETAIL,
+  "hillshade.zFactor must be 0.1..10": DETAIL,
+  "hillshade.multidirectional must be boolean": DETAIL,
+  "slope must be an object": DETAIL,
+  "slope.enabled must be boolean": DETAIL,
+  "slope.bands must be array": DETAIL,
+  "slope.bands max length is …": DETAIL,
+  "vegetation must be an object": DETAIL,
+  "vegetation.enabled must be boolean": DETAIL,
+  "vegetation.minRatio must be 0..1": DETAIL,
+  "vegetation.maxRatio must be 0..1": DETAIL,
+  "vegetation.minRatio must be < maxRatio": DETAIL,
+  "vegetation.sparseColour must be #RRGGBBAA": DETAIL,
+  "vegetation.denseColour must be #RRGGBBAA": DETAIL,
+  "vegetation.alphaMin must be 0..255": DETAIL,
+  "vegetation.alphaMax must be 0..255": DETAIL,
+  "vegetation.weightsEnabled must be boolean": DETAIL,
+  "vegetation.formationWeights must be an object": DETAIL,
+  "contours must be an object": DETAIL,
+  "contours.enabled must be boolean": DETAIL,
+  "contours.zoomBands must be array of length 3": DETAIL,
+  "features must be an object": DETAIL,
+  "features.enabled must be boolean": DETAIL,
+  "contours.majorColour must be #RRGGBBAA": DETAIL,
+  "contours.minorColour must be #RRGGBBAA": DETAIL,
+  "contours.majorWidthM must be 0..200": DETAIL,
+  "contours.minorWidthM must be 0..200": DETAIL,
+  "features.… must be an object": DETAIL,
+  "features.….enabled must be boolean": DETAIL,
+  "features.….colour must be #RRGGBBAA": DETAIL,
+  "features.….widthZ18 must be 0..100": DETAIL,
+  "a field value": DETAIL,
+  "File could not be parsed": CODE_ERROR,
+  "File contains invalid coordinates": CODE_ERROR,
+  "No mappable features found in the file": CODE_ERROR,
+  "File has too many points to import": CODE_ERROR,
+  "File is too large to import": CODE_ERROR,
+  "Unsupported file type — use GPX, KML, or GeoJSON": CODE_ERROR,
   "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0":
     CREDIT,
   "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)":
@@ -277,6 +416,9 @@ const LABEL = /^\p{Lu}\p{Ll}+$/u;
  * an import, a type, a comparison, a log, `console`, an error's message, SQL,
  * a property's name, a styling or wiring attribute.
  *
+ * `keepData` reports the literals `DATA_LITERALS` lists too, which
+ * `i18nCoverage.test.ts` asks for to find an entry no source holds.
+ *
  * `words` also reports a capitalised single word in those other positions
  * (`why: "word"`). The ratchet does not count them (a word there is as often an
  * id as a label), so only the codemod asks.
@@ -285,7 +427,7 @@ export function bareCopyIn(
   tsModule: unknown,
   fileName: string,
   source: string,
-  options: { words?: boolean } = {},
+  options: { words?: boolean; keepData?: boolean } = {},
 ): BareLiteral[] {
   const ts = tsModule as typeof TypeScript;
   const sf = loadFile(ts, fileName, source);
@@ -296,10 +438,11 @@ export function bareCopyIn(
       !/\p{L}/u.test(text) ||
       SQL.test(text) ||
       HEX.test(text) ||
-      Object.prototype.hasOwnProperty.call(DATA_LITERALS, text)
+      (!options.keepData &&
+        Object.prototype.hasOwnProperty.call(DATA_LITERALS, text))
     )
       return;
-    const prose = PROSE.test(text) && !CODE.test(text);
+    const prose = PROSE.test(text) && !CODE.test(text) && !isMarkup(text);
     const word = !!options.words && LABEL.test(text);
     if (!copy && !prose && !word) return;
     found.push({
@@ -320,7 +463,10 @@ export function bareCopyIn(
       (joined.split(HOLE).join(" ").match(WORDS_IN) ?? []).length < 2 ||
       SQL.test(written) ||
       !PROSE.test(words) ||
-      CODE.test(words)
+      CODE.test(words) ||
+      isMarkup(written) ||
+      (!options.keepData &&
+        Object.prototype.hasOwnProperty.call(DATA_LITERALS, written))
     )
       return;
     found.push({

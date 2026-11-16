@@ -1310,7 +1310,7 @@ export function parseTripPlanPlacePatch(
       patch.fieldValues = Object.fromEntries(
         Object.entries(values).map(([key, pair]) => [
           key,
-          cas(pair, t`a field value`),
+          cas(pair, "a field value"),
         ]),
       );
     }

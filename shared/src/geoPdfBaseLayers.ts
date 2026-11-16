@@ -21,14 +21,15 @@ import {
 // tiles are actually fetched — so layers set `requiresExtractionDate` and the
 // renderer appends the dated line at draw time.
 // Terms: https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions
-export const SIX_EXTRACTION_CREDIT_PREFIX = t`© Department of Customer Service`;
+export const SIX_EXTRACTION_CREDIT_PREFIX = "© Department of Customer Service";
 
 // ── Basemap catalog ───────────────────────────────────────────────────────────
 // Canonical catalog of raster basemap providers, shared by the web map
 // (frontend BASE_LAYERS derives from it), the GeoPDF renderer (via
 // GEOPDF_BASE_LAYER_CONFIG below), and the mobile map. One list, no third copy.
 
-const SIX_ATTRIBUTION = t`Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.`;
+const SIX_ATTRIBUTION =
+  "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.";
 const SIX_ATTRIBUTION_HTML =
   '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.';
 
@@ -149,7 +150,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // ODbL: the licence of the OpenStreetMap data every region's cut is drawn from.
     licence: "odbl",
     displayMaxZoom: 15,
-    attribution: t`Base map © OpenStreetMap contributors (Protomaps build)`,
+    attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
     offlineCapable: true,
@@ -164,7 +165,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 19,
     displayMaxZoom: 19,
     licence: "osmf-tiles",
-    attribution: t`Base map © OpenStreetMap contributors`,
+    attribution: "Base map © OpenStreetMap contributors",
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -186,7 +187,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 17,
     displayMaxZoom: 17,
     licence: "cc-by-sa-3",
-    attribution: t`Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM`,
+    attribution:
+      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM",
     attributionHtml:
       '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -206,7 +208,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 20,
     displayMaxZoom: 20,
     licence: "osmf-tiles",
-    attribution: t`Base map © CyclOSM, © OpenStreetMap contributors`,
+    attribution: "Base map © CyclOSM, © OpenStreetMap contributors",
     attributionHtml:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -292,7 +294,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 20,
     displayMaxZoom: 18,
     licence: "six-web-services",
-    attribution: t`Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.`,
+    attribution:
+      "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
     // `six-imagery` returns 404 for some z18 tiles, where advertised LOD differs

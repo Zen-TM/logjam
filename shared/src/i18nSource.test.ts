@@ -199,6 +199,15 @@ describe("bareCopyIn", () => {
     expect(bare("const a = `Enter a ${what}`;")).toEqual(["Enter a …"]);
   });
 
+  // Mutation: in `isMarkup`, drop the check for a word outside the tags.
+  it("reads the words between tags", () => {
+    expect(
+      bare(
+        'const a = "<b>Open the file</b>"; const b = `<p>Saved ${n} places</p>`;',
+      ),
+    ).toEqual(["<b>Open the file</b>", "<p>Saved … places</p>"]);
+  });
+
   // Mutation: delete the `DATA_LITERALS` test from `add` in `bareCopyIn`.
   it("leaves a listed data literal alone, in any position", () => {
     expect(
@@ -279,8 +288,8 @@ describe("bareCopyIn", () => {
 
   // One position per row, each a string that reads as prose and must not be flagged.
   // Mutation: remove the matching branch of `bareCopyIn` (or the pattern) in
-  // turn: the markup alternative of `CODE`, the `BarBarToken` case of `isText`,
-  // `super` from `NOT_COPY_CALLS`.
+  // turn: `isMarkup` from `add` and from `addJoined`, the `BarBarToken` case of
+  // `isText`, the `QuestionQuestionToken` case of `isText`.
   it.each([
     ["an import", 'import x from "some module name";'],
     ["a type", 'type A = "an open file"; const b = c as "an open file";'],
@@ -295,14 +304,21 @@ describe("bareCopyIn", () => {
       'throw new Error(m || "Could not open the file");',
     ],
     [
-      "a super call",
-      "class E extends Error { constructor(s) { super(`API error ${s}: could not open the file`); } }",
-    ],
-    [
       "a line of XML",
       'const a = `<name>${n}</name>`; const b = "<?xml version=1.0?>";',
     ],
-    ["a line of HTML", 'const a = "<a href=x>open the file</a>";'],
+    [
+      "an error's default message, written with ??",
+      'throw new Error(m ?? "Could not open the file");',
+    ],
+    [
+      "a template of elements",
+      "const a = `<?xml version=1.0?>\n<rte>\n<name>${n}</name>\n${rest}\n</rte>`;",
+    ],
+    [
+      "an element with no words",
+      'const a = "<a href=x></a>"; const b = `<p class="x">${n}</p>`;',
+    ],
     ["a property's name", 'const a = { "open the file": 1 };'],
     ["an element access", 'const a = b["open the file"];'],
     ["a styling attribute", 'const a = <p className="flex items-center" />;'],

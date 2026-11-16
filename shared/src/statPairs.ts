@@ -4,8 +4,9 @@
 // surface takes the full width, so a pair is never split across two rows and a
 // lone figure never hangs off the end of one.
 
-/** The words both clients put on these stats. */
 import { t } from "./i18n.js";
+
+/** The words both clients put on these stats. */
 export const PAIRED_STAT_LABELS = {
   time: t`Time`,
   distance: t`Distance`,

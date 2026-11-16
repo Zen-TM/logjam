@@ -69,6 +69,6 @@ export function selectionCountLabel(selected: { read: boolean }[]): string {
   const unread = selected.filter((notification) => !notification.read).length;
   // "N selected" in both forms — the tally is an addition to the count, not a
   // replacement for it; keeping "selected" ensures consistent phrasing.
-  const base = t`${selected.length} selected`;
-  return unread === 0 ? base : `${base} · ${t`${unread} unread`}`;
+  const n = selected.length;
+  return unread === 0 ? t`${n} selected` : t`${n} selected · ${unread} unread`;
 }

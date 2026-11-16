@@ -138,14 +138,12 @@ describe("the literals the scan leaves out", () => {
   beforeAll(() => {
     const REPO = join(SRC, "../..");
     for (const pkg of ["shared", "frontend", "mobile", "api"])
-      for (const path of sources(join(REPO, pkg, "src"))) {
-        // The list itself holds every entry.
-        if (path.endsWith("i18nSource.ts")) continue;
-        const text = readFileSync(path, "utf8");
-        for (const literal of Object.keys(DATA_LITERALS))
-          if (text.includes(`"${literal}"`)) held.add(literal);
-      }
-  }, 30_000);
+      for (const path of sources(join(REPO, pkg, "src")))
+        for (const found of bareCopyIn(ts, path, readFileSync(path, "utf8"), {
+          keepData: true,
+        }))
+          held.add(found.text);
+  }, 60_000);
 
   // Mutation: add `"Open the file": "a test"` to `DATA_LITERALS`.
   it("lists only literals that exist", () => {

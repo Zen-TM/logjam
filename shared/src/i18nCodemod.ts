@@ -429,7 +429,7 @@ export function extractMessages(
   };
 }
 
-/** The edit that makes `t` available: added to an import already there from `importFrom`, else a new import after the last. */
+/** The edit that makes `t` available: added to an import already there from `importFrom`, else a new import after the last, or above the first statement and the comment that documents it. */
 function importEdit(
   ts: typeof TypeScript,
   sf: TypeScript.SourceFile,
@@ -455,8 +455,19 @@ function importEdit(
   const line = `import { t } from "${importFrom}";`;
   const last = imports[imports.length - 1];
   if (last) return { start: last.end, end: last.end, text: `\n${line}` };
-  const start = sf.statements[0]?.getStart() ?? 0;
-  return { start, end: start, text: `${line}\n` };
+  const first = sf.statements[0];
+  if (!first) return { start: 0, end: 0, text: `${line}\n` };
+  // A comment joined to the first statement by one line break documents it:
+  // the import goes above that comment, not between it and the declaration.
+  let start = first.getStart();
+  const comments =
+    ts.getLeadingCommentRanges(sf.text, first.getFullStart()) ?? [];
+  for (let i = comments.length - 1; i >= 0; i--) {
+    if (/\n\s*\n/.test(sf.text.slice(comments[i].end, start))) break;
+    start = comments[i].pos;
+  }
+  const documented = start !== first.getStart();
+  return { start, end: start, text: `${line}\n${documented ? "\n" : ""}` };
 }
 
 /**

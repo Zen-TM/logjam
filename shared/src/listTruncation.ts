@@ -1,8 +1,9 @@
 // The one sentence both clients say when a capped list left rows out, so a
 // list that ends early is never mistaken for a complete one.
 
-/** Null when nothing was cut: the caller renders no row at all then. */
 import { t } from "./i18n.js";
+
+/** Null when nothing was cut: the caller renders no row at all then. */
 export function truncationHint(
   visibleCount: number,
   hiddenCount: number,

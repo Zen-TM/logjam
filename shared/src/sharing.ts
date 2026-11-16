@@ -15,6 +15,8 @@
 // A UI that words these the same way teaches users that a sent file can be
 // taken back, which it cannot. Keep the two verbs distinct everywhere.
 
+import { plural, t } from "./i18n.js";
+
 /**
  * What a `Share` row may point at.
  *
@@ -23,7 +25,6 @@
  * `api/src/lib/shareAccess.ts` unions them, and nothing else re-derives the
  * decision.
  */
-import { plural, t } from "./i18n.js";
 export const SHARABLE_ENTITY_TYPES = [
   // A place is shared through a `PlaceShare` row, not a polymorphic `Share`
   // one, and admitting "place" here would silently widen /shares to a table

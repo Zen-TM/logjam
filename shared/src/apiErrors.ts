@@ -48,9 +48,11 @@ export const AUTH_ERROR_CODES: Record<string, string> = {
 // Cognito wraps a pre sign-up Lambda's error as "PreSignUp failed with error
 // <text>" under UserLambdaValidationException, a name other triggers share, so
 // the cap is recognised by the sentence the Lambda throws, which must match
-// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. Guard:
-// apiErrors.test.ts.
-export const SIGNUP_CAP_SENTENCE = t`Logjam is not taking new accounts this month`;
+// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. It is that
+// English text, not a message: a language entry for it would stop it matching.
+// Guard: apiErrors.test.ts.
+export const SIGNUP_CAP_SENTENCE =
+  "Logjam is not taking new accounts this month";
 export const SIGNUP_CAP_MESSAGE = t`Logjam isn't taking new accounts right now. Try again next month.`;
 
 export function mapAuthError(err: unknown): string | null {

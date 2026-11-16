@@ -58,6 +58,24 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
   for every catalogue and the pseudo-language, and `shared/src/dateFormat.test.ts`
   ("give every form a message of its own") for two forms sharing a pattern.
   Everything else above stands.
+- **Update 2026-11-16: text the API sends is written per call, and a value that
+  code compares or stores stays English.** A `t` in a module-level constant
+  freezes the language known at import, which is English in the API, so text
+  the API sends to a user is a function read when it is called
+  (`placeKindLabel` in `shared/src/placeRegistry.ts`). A literal that reads as
+  words but is a value code matches, stores or sends as a code is not a
+  message and stays as written, named in `DATA_LITERALS` or `EXEMPT_FILES`
+  (`shared/src/i18nSource.ts`) with its reason: the sign-up cap sentence
+  matched against the pre-sign-up Lambda's text, the import failure codes, the
+  stored names and hints of the built-in place types, a data source's credit
+  in its publisher's wording (plain and HTML, so they agree in every language),
+  and developer detail given to `malformed` or logged. Guards:
+  `shared/src/placeRegistry.test.ts` ("follows the language in force when it is
+  called, which the API sends"), `shared/src/apiErrors.test.ts` ("still maps the
+  refusal when the page started in another language") and
+  `shared/src/i18nCoverage.test.ts` ("lists only literals that exist"). No test
+  holds that no other `api/src` reader takes a module-level message.
+  Everything else above stands.
 
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
@@ -122,6 +140,12 @@ form builder's locked-visibility sentence, which the clients read, so that no
 - **Live switching.** It would make the 1,075 import-time strings lazy: a proxy
   over every contract object, or descriptors and a changed type at every use.
   A reload costs a setting people touch once.
+- **Wrap every literal in `shared`, values code compares included.** The
+  count would reach zero without a list, but a value matched against another
+  program's English (the sign-up cap, an import failure code, a credit the
+  topo build writes too) stops matching in any other language, and a built-in
+  place type's name is written to a row, so the row would hold the language the
+  seed ran in.
 - **Reason codes from the API, with the clients writing the sentence.** Already
   rejected by [0033](0033-the-api-writes-the-sentence-a-user-reads.md): two
   sentence lists and a code list that must agree.

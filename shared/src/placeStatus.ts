@@ -12,7 +12,7 @@
 import { formatCanyonGrade } from "./canyonGrade.js";
 import { numericFieldValue } from "./fieldValues.js";
 import { lengthToInput, lengthUnitLabel } from "./units.js";
-import { plural, t } from "./i18n.js";
+import { t } from "./i18n.js";
 
 export type PlaceStatus = "done" | "todo" | "shared";
 
@@ -31,7 +31,7 @@ export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
  * "Shared", which a row on the owner's side also says of what they gave away.
  */
 export function incomingLabel(owner: string | null | undefined): string {
-  return owner ? `From ${owner}` : t`Shared with you`;
+  return owner ? t`From ${owner}` : t`Shared with you`;
 }
 
 /** Rail order: the question the list answers, then the friend's places. */
@@ -88,7 +88,7 @@ export function placeSummary(place: PlaceSummaryFields): string {
     longest != null
       ? t`${trimNumber(lengthToInput(longest))} ${lengthUnitLabel()} max`
       : null,
-    abseils != null ? plural(abseils, "# abseil", "# abseils") : null,
+    abseils != null ? t`${abseils} abseils` : null,
   ]
     .filter((part): part is string => Boolean(part))
     .slice(0, SUMMARY_FACTS)

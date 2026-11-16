@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 /**
  * Range selection by tapping numbered pills (a 7-stop slider inside a scrolling
  * sheet is a gesture fight with the sheet's own drag, and its thumbs are smaller
@@ -11,7 +13,6 @@
  * - Tapping inside a wider range → collapses to just that value, so narrowing
  *   never needs two taps in a row that both widen.
  */
-import { t } from "./i18n.js";
 export type NumberRange = [number, number];
 
 export function nextRange(
