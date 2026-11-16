@@ -60,8 +60,7 @@ type Phase = "form" | "uploading" | "finalizing" | "done";
 type Mode = "form" | "instructions";
 
 const HELD_REASON_ID = "topo-held-reason";
-const KEPT_FOR_RESUME =
-  "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
+const KEPT_FOR_RESUME = t`Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.`;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -306,7 +305,7 @@ export default function TopoDialog({
           setValidationError(
             e instanceof ElvisZipError
               ? e.sentence
-              : "Could not read this ZIP file.",
+              : t`Could not read this ZIP file.`,
           );
         }
       } finally {
@@ -332,7 +331,7 @@ export default function TopoDialog({
 
   function onFilePicked(picked: File) {
     if (!picked.name.toLowerCase().endsWith(".zip")) {
-      setValidationError("Select a .zip file.");
+      setValidationError(t`Select a .zip file.`);
       return;
     }
     // A new ZIP is a new job: the stopped one is let go, and with it the lock
@@ -345,7 +344,7 @@ export default function TopoDialog({
   async function handleSubmit() {
     if (offer.mode !== "upload") return;
     if (!file || !stats) {
-      setError("Choose your LiDAR ZIP first.");
+      setError(t`Choose your LiDAR ZIP first.`);
       return;
     }
     // validationError is already in the banner above the form.
@@ -370,7 +369,7 @@ export default function TopoDialog({
           ? ` Allowance resets ${formatDayMonth(localDay(new Date(creditsResetAt)))}.`
           : "";
         setError(
-          `Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,
+          t`Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,
         );
         return;
       }
@@ -440,11 +439,11 @@ export default function TopoDialog({
   const off = phase === "form" && offer.mode === "off";
   const title =
     phase === "uploading"
-      ? "Uploading"
+      ? t`Uploading`
       : phase === "finalizing"
-        ? "Almost there"
+        ? t`Almost there`
         : phase === "done"
-          ? "On its way"
+          ? t`On its way`
           : mode === "instructions" && portal
             ? t`Getting LiDAR from ${portal.name}`
             : jobCopy.make;
@@ -468,19 +467,20 @@ export default function TopoDialog({
         // to: the header's Close is its way out.
         footer={(requestClose) =>
           uploading ? undefined : phase === "done" ? (
-            <Button variant="filled" onClick={onClose}>
-              Done
-            </Button>
+            <Button variant="filled" onClick={onClose}>{t`Done`}</Button>
           ) : off ? undefined : mode !== "form" && portal ? (
-            <Button variant="filled" onClick={backToForm}>
-              Back to the form
-            </Button>
+            <Button
+              variant="filled"
+              onClick={backToForm}
+            >{t`Back to the form`}</Button>
           ) : (
             <>
-              <Button onClick={requestClose}>Cancel</Button>
-              <Button variant="filled" onClick={handleSubmit} busy={validating}>
-                Make it
-              </Button>
+              <Button onClick={requestClose}>{t`Cancel`}</Button>
+              <Button
+                variant="filled"
+                onClick={handleSubmit}
+                busy={validating}
+              >{t`Make it`}</Button>
             </>
           )
         }
@@ -489,12 +489,12 @@ export default function TopoDialog({
           <div className={classes.working}>
             <p className={classes.workingLine}>
               {phase === "uploading"
-                ? "Uploading your LiDAR. Keep this window open until it finishes."
+                ? t`Uploading your LiDAR. Keep this window open until it finishes.`
                 : jobCopy.startingLine}
             </p>
             <ProgressBar
               label={
-                phase === "uploading" ? "Upload progress" : jobCopy.starting
+                phase === "uploading" ? t`Upload progress` : jobCopy.starting
               }
               value={phase === "uploading" ? uploadPct : undefined}
             />
@@ -522,7 +522,7 @@ export default function TopoDialog({
                 ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
               {jobSeconds ? `It takes ${formatMinutes(jobSeconds)}. ` : ""}
-              We'll let you know when it's ready. You can close this.
+              {t`We'll let you know when it's ready. You can close this.`}
             </p>
           </div>
         ) : offer.mode === "off" ? (
@@ -542,9 +542,9 @@ export default function TopoDialog({
           <LinkInstructions portal={portal} />
         ) : (
           <div className={classes.form}>
-            <p className={classes.wideHint}>
-              This is easier on a bigger screen.
-            </p>
+            <p
+              className={classes.wideHint}
+            >{t`This is easier on a bigger screen.`}</p>
 
             {(validationError || error) && (
               <ErrorBanner message={validationError ?? error!} />
@@ -593,9 +593,9 @@ export default function TopoDialog({
               </span>
               <span className={classes.dropHint}>
                 {file
-                  ? "Choose a different file"
+                  ? t`Choose a different file`
                   : offer.portal.steps === "elvis"
-                    ? "No need to unzip it."
+                    ? t`No need to unzip it.`
                     : t`Put all the files in one ZIP.`}
               </span>
               <input
@@ -625,9 +625,10 @@ export default function TopoDialog({
             </div>
 
             {validating && (
-              <p className={classes.workingDetail} role="status">
-                Reading your ZIP…
-              </p>
+              <p
+                className={classes.workingDetail}
+                role="status"
+              >{t`Reading your ZIP…`}</p>
             )}
 
             {stats && !validating && (
@@ -640,8 +641,8 @@ export default function TopoDialog({
             )}
 
             <TextField
-              label="Name"
-              placeholder="Name this area"
+              label={t`Name`}
+              placeholder={t`Name this area`}
               disabled={upload.held}
               aria-describedby={upload.held ? HELD_REASON_ID : undefined}
               value={topoName}
@@ -658,8 +659,8 @@ export default function TopoDialog({
 
             {offer.vegetation && stats && stats.lazCount > 0 && (
               <Checkbox
-                label="Vegetation (experimental)"
-                description="Also draws how thick the scrub is from the point clouds, which takes longer."
+                label={t`Vegetation (experimental)`}
+                description={t`Also draws how thick the scrub is from the point clouds, which takes longer.`}
                 checked={vegetation}
                 disabled={upload.held}
                 describedBy={upload.held ? HELD_REASON_ID : undefined}
@@ -686,12 +687,12 @@ function ZipSummary({
   jobCredits: number | null;
 }) {
   const rows: ([string, string] | null)[] = [
-    ["Survey", stats.surveyNames.join(", ") || "—"],
-    ["Mode", stats.modeLabel],
-    ["Areas", String(stats.tileCount)],
+    [t`Survey`, stats.surveyNames.join(", ") || "—"],
+    [t`Mode`, stats.modeLabel],
+    [t`Areas`, String(stats.tileCount)],
     stats.lazCount > 0
       ? [
-          "Point clouds",
+          t`Point clouds`,
           stats.overlappingSurveys
             ? `${stats.lazCount}× .laz over ${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""}`
             : `${stats.lazCount}× .laz`,
@@ -703,17 +704,17 @@ function ZipSummary({
           `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${formatFixedMetres(stats.demResolutionMeters)}` : ""}`,
         ]
       : null,
-    ["Size", formatBytes(stats.uncompressedBytes)],
+    [t`Size`, formatBytes(stats.uncompressedBytes)],
     // Unambiguous quota copy: creditsUsed already includes any queued/running
     // jobs (the server sums non-failed jobs this month), so show the current
     // figure and the projection side by side instead of a bare "N / Q after
     // this job".
     creditsUsed !== null && creditsQuota !== null
       ? [
-          "Credits",
+          t`Credits`,
           jobCredits !== null
-            ? `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCreditsLike(jobCredits, creditsQuota)} for this one`
-            : `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · we can't tell yet what this one will cost`,
+            ? t`${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCreditsLike(jobCredits, creditsQuota)} for this one`
+            : t`${formatCreditsOf(creditsUsed, creditsQuota)} used this month · we can't tell yet what this one will cost`,
         ]
       : null,
   ];
@@ -738,11 +739,9 @@ function ZipSummary({
         </p>
       )}
       {stats.overlappingSurveys && (
-        <p className={classes.summaryNote}>
-          More than one survey covers this ground. The best of them is used for
-          each layer — the densest for terrain, the most recent for vegetation —
-          at no extra cost.
-        </p>
+        <p
+          className={classes.summaryNote}
+        >{t`More than one survey covers this ground. The best of them is used for each layer — the densest for terrain, the most recent for vegetation — at no extra cost.`}</p>
       )}
     </div>
   );
@@ -769,7 +768,7 @@ function ElvisInstructions({
     <ol className={classes.steps}>
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Mark out what you want covered" />
+          <SectionHeader title={t`Mark out what you want covered`} />
           <div className={classes.stepControls}>
             <Button
               icon="pickArea"
@@ -777,7 +776,7 @@ function ElvisInstructions({
               variant="outline"
               onClick={onSelectBbox}
             >
-              {pendingBbox ? "Draw it again" : "Draw the area"}
+              {pendingBbox ? t`Draw it again` : t`Draw the area`}
             </Button>
             {pendingBbox && area != null && (
               <StatusPill label={formatArea(area)} />
@@ -787,20 +786,20 @@ function ElvisInstructions({
                 compact
                 variant="outline"
                 onClick={() => downloadBboxShapefile(pendingBbox)}
-              >
-                Download its shapefile
-              </Button>
+              >{t`Download its shapefile`}</Button>
             )}
           </div>
           {warnCredits && (
-            <FieldError message="An area this size may cost more credits than you have left this month. Try a smaller one." />
+            <FieldError
+              message={t`An area this size may cost more credits than you have left this month. Try a smaller one.`}
+            />
           )}
         </div>
       </li>
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Order the data from ELVIS" />
+          <SectionHeader title={t`Order the data from ELVIS`} />
           <p className={classes.stepLine}>
             In ELVIS, choose <strong>Order Data</strong>, then{" "}
             <strong>Load File</strong> and give it the shapefile. Then press{" "}
@@ -814,23 +813,21 @@ function ElvisInstructions({
               onClick={() =>
                 window.open(portal.url, "_blank", "noopener,noreferrer")
               }
-            >
-              Open the ELVIS portal
-            </Button>
+            >{t`Open the ELVIS portal`}</Button>
           </div>
         </div>
       </li>
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Take the 1 m or 2 m DEM" />
+          <SectionHeader title={t`Take the 1 m or 2 m DEM`} />
           <p className={classes.stepLine}>
-            Under <strong>NSW Government — Spatial Services</strong> →{" "}
-            <strong>Digital Elevation Model</strong>, select the 1 m or 2 m DEM,
-            not the 5 m one: Logjam already has that for all of NSW.
+            Under <strong>{t`NSW Government — Spatial Services`}</strong> →{" "}
+            <strong>{t`Digital Elevation Model`}</strong>, select the 1 m or 2 m
+            DEM, not the 5 m one: Logjam already has that for all of NSW.
           </p>
           <p className={classes.stepLine}>
-            Take the <strong>Point Clouds</strong> too if you want the
+            Take the <strong>{t`Point Clouds`}</strong> too if you want the
             vegetation layer, which is drawn from them.
           </p>
         </div>
@@ -838,7 +835,7 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Have it sent to you" />
+          <SectionHeader title={t`Have it sent to you`} />
           <p className={classes.stepLine}>
             Under <strong>Industry</strong>, choose <strong>Recreation</strong>.
             Enter your email and press <strong>Order datasets</strong>. ELVIS
