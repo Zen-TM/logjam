@@ -1874,7 +1874,7 @@ function UnifiedImportDialog({
               usingIncoming === 0
                 ? t`A row that matches an existing place keeps every value it already has`
                 : // "fields" in both forms: a type with one mergeable field reads
-                  // "of 1 fields", as it always has.
+                  // "of 1 fields".
                   plural(
                     mergeableFields.length,
                     "Uses the value from your file for {0} of # fields",
