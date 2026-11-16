@@ -8,6 +8,7 @@ import {
 } from "@playwright/test";
 import { pseudo } from "@logjam/shared";
 import { stubMaster } from "./__fixtures__/stubMaster";
+import { isWrite } from "./__fixtures__/writes";
 import { statewideArchives } from "./__fixtures__/geoPdfTiles";
 import { SEED_NAMES } from "../../api/prisma/seedNames";
 
@@ -32,6 +33,8 @@ const API_URL = process.env.VITE_API_URL ?? "http://localhost:8080";
  * change with the seed's rows or the day of the run.
  */
 const LIST = new URL("./pseudo-unwrapped.json", import.meta.url);
+/** Labels the walk found wider than their control when the list was last written, as `Screen at 360px: “label”`: known, so the walk is green while they are fixed. Every number is `0` in it. */
+const OVERFLOWS = new URL("./pseudo-overflows.json", import.meta.url);
 const WRITE_LIST = !!process.env.PSEUDO_WRITE_LIST;
 const REWRITE =
   "PSEUDO_WRITE_LIST=1 npx playwright test --project=pseudo (in frontend/, the stack up)";
@@ -121,7 +124,8 @@ class Walk {
   private names: RegExp | null = null;
   readonly wrapped = new Set<string>();
   readonly unwrapped = new Set<string>();
-  readonly spills: string[] = [];
+  /** `Screen at 360px: “label”` for each label that leaves its control, with by how many pixels. */
+  readonly spills = new Map<string, number>();
   readonly writes: string[] = [];
   private asked = new Set<Request>();
 
@@ -142,11 +146,7 @@ class Walk {
       if (frame === page.mainFrame()) this.asked.clear();
     });
     page.on("request", (request) => {
-      if (
-        !["GET", "HEAD", "OPTIONS"].includes(request.method()) &&
-        // A POST that only reads: presigned urls for a place's photos.
-        new URL(request.url()).pathname !== "/media/download-urls"
-      )
+      if (isWrite(request))
         this.writes.push(`${request.method()} ${request.url()}`);
     });
     page.on("response", async (response) => {
@@ -234,9 +234,11 @@ class Walk {
       if (rest !== null) this.unwrapped.add(rest);
     }
     for (const spill of found.spills) {
-      if (this.rest(spill.text) === null) continue;
-      this.spills.push(
-        `${screen} at ${width}px: “${spill.text}” leaves its control by ${spill.by}px`,
+      // The account's own words are not Logjam's to translate, whatever their length.
+      if (this.data.has(spill.text)) continue;
+      this.spills.set(
+        `${screen} at ${width}px: “${spill.text.replace(/\d+/g, "0")}”`,
+        spill.by,
       );
     }
     await this.testInfo.attach(`${screen} at ${width}px`, {
@@ -290,7 +292,10 @@ test.beforeEach(async ({ page }) => {
 // list, set `en-AU` for the key in the `pseudo` project of playwright.config.ts
 // and for `language` in the `/users/me` stub in `beforeEach` (no message met:
 // red on the floor); or take the messages out of `rest` once, not until none
-// is left (a date's month name is a message inside a message: red on the list).
+// is left (a date's month name is a message inside a message: red on the list);
+// or add a line no screen produces to `pseudo-unwrapped.json` or
+// `pseudo-overflows.json` (red on the stale-entry check); or have the walk
+// `fetch` the API with `POST` (red on the write guard).
 test("every main screen reads in the pseudo-language, bar the listed text", async ({
   page,
 }, testInfo) => {
@@ -361,14 +366,31 @@ test("every main screen reads in the pseudo-language, bar the listed text", asyn
     }
   }
 
-  const listed: string[] = JSON.parse(readFileSync(LIST, "utf8"));
+  const read = (file: URL): string[] =>
+    JSON.parse(readFileSync(file, "utf8")) as string[];
   const seen = [...walk.unwrapped].sort();
+  const overflowing = [...walk.spills.keys()].sort();
   if (WRITE_LIST) {
     writeFileSync(LIST, `${JSON.stringify(seen, null, 2)}\n`);
+    writeFileSync(OVERFLOWS, `${JSON.stringify(overflowing, null, 2)}\n`);
   } else {
+    const listed = read(LIST);
     expect(
       seen.filter((text) => !listed.includes(text)),
       `text on screen that did not go through the catalogue: write it with t, plural, rich or say (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md). Only if it is no message (a proper noun, a credit), add it to the list: ${REWRITE}`,
+    ).toEqual([]);
+    expect(
+      listed.filter((text) => !seen.includes(text)),
+      `text on the list that no screen shows any more: remove it, or rewrite the list: ${REWRITE}`,
+    ).toEqual([]);
+    const known = read(OVERFLOWS);
+    expect(
+      overflowing.filter((label) => !known.includes(label)),
+      `a label is wider than its control in the pseudo-language, so a translation would be too: shorten it or let its control grow. Only a label that is fixed by a later change belongs on the list: ${REWRITE}`,
+    ).toEqual([]);
+    expect(
+      known.filter((label) => !overflowing.includes(label)),
+      `a label on the list of known overflows fits now: remove it, or rewrite the list: ${REWRITE}`,
     ).toEqual([]);
   }
   expect(
@@ -379,27 +401,29 @@ test("every main screen reads in the pseudo-language, bar the listed text", asyn
     walk.wrapped.size,
     `the walk met ${walk.wrapped.size} messages in ⟦ ⟧: did Logjam Web start in the pseudo-language?`,
   ).toBeGreaterThanOrEqual(WRAPPED_FLOOR);
-  expect(
-    walk.spills,
-    "a label is wider than its control in the pseudo-language, so a translation would be too",
-  ).toEqual([]);
 });
 
-// Mutation: have `scan` skip the `rect.right - box.right` term.
-test("a label wider than its button is found", async ({ page }) => {
+// Mutation: have `Walk.see` skip a spill whose text `rest` reduces to null (as
+// it did for every label that is a message), or have `scan` skip the
+// `rect.right - box.right` term.
+test("a message wider than its button is reported by the walk", async ({
+  page,
+}, testInfo) => {
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
     timeout: 15_000,
   });
-  await page.evaluate(() => {
+  const label = pseudo("A label far too long for forty pixels");
+  await page.evaluate((text) => {
     const button = document.createElement("button");
     button.style.cssText =
       "position:fixed;top:0;left:0;width:40px;white-space:nowrap;z-index:9999";
-    button.textContent = "A label far too long for forty pixels";
+    button.textContent = text;
     document.body.append(button);
-  });
-  const { spills } = await page.evaluate(scan);
-  expect(spills.map((spill) => spill.text)).toContain(
-    "A label far too long for forty pixels",
+  }, label);
+  const walk = new Walk(page, testInfo);
+  await walk.see("Injected");
+  expect([...walk.spills.keys()]).toContain(
+    `Injected at ${page.viewportSize()!.width}px: “${label}”`,
   );
 });

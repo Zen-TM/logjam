@@ -40,7 +40,8 @@ message that goes through the catalogue reads `⟦áççéñtéd~~~⟧`
 opens each main screen and saves a screenshot of it. It asserts nothing about
 the text: a person reads the screenshots for text without the brackets, which
 skipped the catalogue, and for a label that is cut short or spills. It ends by
-choosing English (Australia) again.
+choosing English (Australia) and starting Logjam GPS once more, so the account
+records English again.
 
 It needs the same emulator or phone, local stack and Metro as the flows above,
 with two differences:
@@ -52,5 +53,12 @@ with two differences:
   `mobile/.env`: the pseudo-language is offered only where the simulated
   regions are on.
 
-Run `maestro test e2e/pseudo.yaml` from `mobile/`; the screenshots
-(`pseudo-01-map.png` to `pseudo-12-display.png`) land in that directory.
+Run it from `mobile/`, with the screenshots written outside the tree (they
+show a phone that may hold real data):
+
+```sh
+maestro test e2e/pseudo.yaml --test-output-dir /tmp/pseudo-walk
+```
+
+The screenshots (`pseudo-01-map.png` to `pseudo-12-display.png`) land in
+`/tmp/pseudo-walk/takeScreenshot/`.

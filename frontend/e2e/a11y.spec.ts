@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { stubMaster } from "./__fixtures__/stubMaster";
+import { isWrite } from "./__fixtures__/writes";
 import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // Automated accessibility checks for the redesigned surfaces of Logjam Web: the
@@ -37,23 +38,10 @@ const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 // Mutation that turns it red: have a case click a confirming button (Delete
 // account, Save a copy), or `fetch(url, { method: "POST" })` from the page.
 const writes: string[] = [];
-// POSTs that only read: they carry a body too big or too long for a query
-// string (presigned GET urls, elevations along a line, a job's price quote).
-const READ_ONLY_POSTS = [
-  "/media/download-urls",
-  "/elevation/point",
-  "/elevation/profile",
-  "/compute-estimate",
-];
-
 test.beforeEach(async ({ page, context }) => {
   writes.length = 0;
   context.on("request", (request) => {
-    if (
-      !["GET", "HEAD", "OPTIONS"].includes(request.method()) &&
-      !READ_ONLY_POSTS.includes(new URL(request.url()).pathname)
-    )
-      writes.push(`${request.method()} ${request.url()}`);
+    if (isWrite(request)) writes.push(`${request.method()} ${request.url()}`);
   });
   await stubMaster(page);
 });
@@ -61,7 +49,7 @@ test.beforeEach(async ({ page, context }) => {
 test.afterEach(() => {
   expect(
     writes,
-    "an accessibility case sent a request that is not a read: stop before the confirming click, or, if the endpoint only reads, add its path to READ_ONLY_POSTS (frontend/AGENTS.md, Testing)",
+    "an accessibility case sent a request that is not a read: stop before the confirming click, or, if the endpoint only reads, add its path to READ_ONLY_POSTS in __fixtures__/writes.ts (frontend/AGENTS.md, Testing)",
   ).toEqual([]);
 });
 

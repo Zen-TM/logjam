@@ -68,7 +68,9 @@ tests hold each message to its hygiene rules (no leading or trailing space, no
 literal `{0}`, a `#` in a plural, only tags `rich` can consume). On Logjam
 Web's main screens, started in the pseudo-language, text that is outside ⟦ ⟧
 and not in `frontend/e2e/pseudo-unwrapped.json` fails
-`frontend/e2e/pseudo.spec.ts`, as does a label wider than its control. No test yet
+`frontend/e2e/pseudo.spec.ts`, as does a label wider than its control that is not
+in `frontend/e2e/pseudo-overflows.json`, and so does a listed entry no screen shows
+any more. No test yet
 holds that every call site uses it, since existing literals are not converted,
 or that the API's resolver is installed from `AsyncLocalStorage` for every
 path that writes text; a later change adds it. Each client's entry file sets

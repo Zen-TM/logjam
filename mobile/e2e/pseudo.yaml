@@ -6,8 +6,9 @@
 # Needs the dev variant (as maestro/smoke.yaml) under fake auth with
 # EXPO_PUBLIC_SIM_REGIONS=1 in mobile/.env, which is what offers the
 # pseudo-language, and the seeded local API (alice). Not a release
-# qualification flow: see README.md. Run: maestro test e2e/pseudo.yaml; the
-# screenshots land in the directory it runs from.
+# qualification flow: see README.md, which has the command. The screenshots
+# land in the directory that command names, outside the tree: they show a
+# phone that may hold real data.
 #
 # Each label is matched in English or in its pseudo form, so the flow reads
 # the same before and after a label goes through the catalogue.
@@ -81,6 +82,14 @@ appId: earth.logjam.gps.dev
     element: "English \\(Australia\\)|⟦Éñglíšh \\(Áúštrálíá\\)~+⟧"
     direction: DOWN
 - takeScreenshot: pseudo-12-display
-# Leave the phone in the source language, read at its next start.
+# Leave the phone in the source language, read at its next start. Logjam GPS
+# records the language it runs in to the account, so start it once more in
+# English: otherwise the seeded account keeps the pseudo-language, and the next
+# Logjam Web run would write the language back.
 - tapOn: "English \\(Australia\\)|⟦Éñglíšh \\(Áúštrálíá\\)~+⟧"
+- stopApp
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Places"
+    timeout: 120000
 - stopApp

@@ -11,6 +11,11 @@ web-build/
 # Local Expo modules: source is committed, Gradle build output is not
 modules/*/android/build/
 
+# The pseudo-language flow's screenshots (e2e/README.md) show a phone that may
+# hold real data; the README's command writes them outside the tree, and this
+# keeps a run from the wrong directory out of a commit.
+pseudo-*.png
+
 # Maestro E2E credentials (operator-provided test user)
 e2e/.env.maestro
 
