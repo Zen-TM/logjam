@@ -86,7 +86,7 @@ value is wrong: check it by hand.
 Declare with provisional values first, build the archives in section 4, then come
 back and fill in what only a built archive gives: `minzoom`, `maxzoom`,
 `coverage`, `tileBytes` and `credit`. A `placeSearch` prefix has to be declared
-before the registry is built, because the build reads it from `topo/regions.json`.
+before the registry is published, because `publish` reads it from `topo/regions.json`.
 
 The guards in the tables read `REGIONS_WITH_SIMULATED` (or `REGIONS`), so a
 region added there is in them. Three lists name regions by hand and need the new
@@ -188,8 +188,8 @@ A few of these assert that prod has NSW alone: `regions.test.ts` ("declares only
 NSW unless the simulated-regions flag is set", "puts the simulated regions and
 their world in the declaration at load") and `grids.test.ts` ("is NSW's alone in
 prod"). They go red on purpose; update each to the new list in the same change.
-`src/topoRegions.test.ts` stays red until section 6 has regenerated
-`topo/regions.json`.
+`src/topoRegions.test.ts` stays red until `topo/regions.json` is regenerated
+(section 6).
 
 ## 4. Build, measure and publish the archives
 
@@ -199,6 +199,13 @@ they are, because phones hold them (`shared/src/regions.ts`' header; guard:
 `regions.test.ts`, "keeps NSW's stored ids and paths"). Each layer's section of
 [topo/README.md](../../topo/README.md) says how to build it and ends with its
 publish command. Publishing is a prod change and the maintainer's to make.
+
+Before any publish, regenerate `topo/regions.json` from the declaration (section
+6: `cd shared && npm run build && npm run topo-regions`). `build_place_registry.py
+publish` reads the region's `placeSearch` from it and fails with a `KeyError` for
+a region the file does not list. The other builders named here do not read it for
+a new region: `build_nsw_dem.py` reads NSW's entry only, and the rest take their
+paths on the command line.
 
 - **Heights, slope and contours.** [ADR 0052](../decisions/0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md)
   makes a region's heights a Mapterhorn extract that Logjam hosts: the clients
