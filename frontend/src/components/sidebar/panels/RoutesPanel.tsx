@@ -23,6 +23,7 @@ import {
   WAY_KIND_WORDS,
   WAY_KINDS,
   wayVerbIcon,
+  t,
 } from "@logjam/shared";
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import { ownerUsername } from "../../../placeUtils";
@@ -276,15 +277,15 @@ export default function RoutesPanel({
 
   const hero = (
     <Hero
-      title="Ways"
+      title={t`Ways`}
       actions={
         <Menu
-          label="Add a way"
+          label={t`Add a way`}
           placement="bottom-end"
           entries={[
             {
               id: "draw",
-              label: "Draw a route",
+              label: t`Draw a route`,
               icon: "draw",
               onSelect: onStartDrawingRoute,
             },
@@ -302,9 +303,7 @@ export default function RoutesPanel({
               variant="filled"
               icon="add"
               trailingIcon="expand"
-            >
-              Add
-            </Button>
+            >{t`Add`}</Button>
           )}
         />
       }
@@ -314,9 +313,9 @@ export default function RoutesPanel({
   const rails = (
     <div className={classes.rails}>
       <ChipRail
-        label="Kind"
+        label={t`Kind`}
         options={[
-          { value: ANY_KIND, label: "All", count: counts.all },
+          { value: ANY_KIND, label: t`All`, count: counts.all },
           ...WAY_KINDS.map((each) => ({
             value: each,
             label: WAY_KIND_WORDS[each].plural,
@@ -331,7 +330,7 @@ export default function RoutesPanel({
       />
       {ways.length > 0 && (
         <SearchField
-          label="Search ways"
+          label={t`Search ways`}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -352,9 +351,7 @@ export default function RoutesPanel({
         variant="filled"
         icon="draw"
         onClick={onStartDrawingRoute}
-      >
-        Draw a route
-      </Button>
+      >{t`Draw a route`}</Button>
       <Button compact variant="outline" icon="upload" onClick={onImportWay}>
         {WAY_IMPORT.file}
       </Button>
@@ -363,14 +360,14 @@ export default function RoutesPanel({
 
   const list = !waysLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <LoadingState label="Loading your ways…" />
+      <LoadingState label={t`Loading your ways…`} />
     </div>
   ) : ways.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
         icon="route"
-        title="No ways yet"
-        body="Draw a route on the map. Tracks you record in Logjam GPS appear here too."
+        title={t`No ways yet`}
+        body={t`Draw a route on the map. Tracks you record in Logjam GPS appear here too.`}
         actions={addWayButtons}
       />
     </div>
@@ -378,8 +375,8 @@ export default function RoutesPanel({
     <div className={classes.emptyArea}>
       <EmptyState
         icon="filter"
-        title="No ways match"
-        body="Nothing matches your search and the kind you picked."
+        title={t`No ways match`}
+        body={t`Nothing matches your search and the kind you picked.`}
         actions={
           <Button
             compact
@@ -388,9 +385,7 @@ export default function RoutesPanel({
               setQuery("");
               setKind(ANY_KIND);
             }}
-          >
-            Clear filters
-          </Button>
+          >{t`Clear filters`}</Button>
         }
       />
     </div>
@@ -432,7 +427,7 @@ export default function RoutesPanel({
                   />
                 )}
                 <Menu
-                  label={`Actions for ${way.title}`}
+                  label={t`Actions for ${way.title}`}
                   title={way.title}
                   placement="right-start"
                   entries={entriesFor(way)}
@@ -440,7 +435,7 @@ export default function RoutesPanel({
                     <IconButton
                       {...props}
                       icon="overflow"
-                      label={`Actions for ${way.title}`}
+                      label={t`Actions for ${way.title}`}
                     />
                   )}
                 />

@@ -46,6 +46,7 @@ import {
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationKind,
+  t,
 } from "@logjam/shared";
 import type { TNotification } from "../../../placeUtils";
 import {
@@ -359,8 +360,8 @@ function NotificationsPanel({
           messageFromError(
             err,
             read
-              ? "Couldn't mark that as read."
-              : "Couldn't mark that as unread.",
+              ? t`Couldn't mark that as read.`
+              : t`Couldn't mark that as unread.`,
           ),
         );
         onOverrideRead(ids, null);
@@ -433,7 +434,7 @@ function NotificationsPanel({
         },
         (err) => {
           console.error(err);
-          toast.error(messageFromError(err, "Couldn't open that route."));
+          toast.error(messageFromError(err, t`Couldn't open that route.`));
         },
       );
       return;
@@ -478,7 +479,7 @@ function NotificationsPanel({
       );
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete that."));
+      toast.error(messageFromError(err, t`Couldn't delete that.`));
       // The refetch says which went; show the rest again.
       unhide(ids);
     } finally {
@@ -490,7 +491,7 @@ function NotificationsPanel({
     setPendingConfirm({
       copy: {
         ...notificationDeleteConfirm(ids.length),
-        confirmLabel: "Delete",
+        confirmLabel: t`Delete`,
         tone: "destructive",
       },
       run: async () => {
@@ -516,7 +517,7 @@ function NotificationsPanel({
       toast.done(INBOX.copy.markedAllRead);
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't mark notifications read."));
+      toast.error(messageFromError(err, t`Couldn't mark notifications read.`));
       onOverrideRead(unreadIds, null);
     } finally {
       onRefetchNotifications();
@@ -581,7 +582,7 @@ function NotificationsPanel({
           triggerDownload(downloadUrl);
           // Logjam Web has no Saved: accepting a copy here IS the download, so
           // the phone's "find it in Saved" would send the user looking for nothing.
-          toast.done(`Downloading ${filename}.`);
+          toast.done(t`Downloading ${filename}.`);
         } else {
           await declineFileSend(target.targetId);
         }
@@ -673,13 +674,13 @@ function NotificationsPanel({
       n.read
         ? {
             id: "unread",
-            label: "Mark as unread",
+            label: t`Mark as unread`,
             icon: "hide",
             onSelect: () => void setRead([n.id], false),
           }
         : {
             id: "read",
-            label: "Mark as read",
+            label: t`Mark as read`,
             icon: "show",
             onSelect: () => void setRead([n.id], true),
           },
@@ -715,7 +716,7 @@ function NotificationsPanel({
                 : "filled"
           }
           disabled={selecting || busyId !== null}
-          disabledReason={selecting ? "Not while selecting" : "Working…"}
+          disabledReason={selecting ? t`Not while selecting` : t`Working…`}
           onClick={() => answer(n, target, action)}
         >
           {action.label}
@@ -734,17 +735,15 @@ function NotificationsPanel({
           variant="outline"
           icon="download"
           disabled={selecting}
-          disabledReason="Not while selecting"
+          disabledReason={t`Not while selecting`}
           onClick={() =>
             void downloadJobFile(
               n,
               async () => (await getTopoExport(exportJobId)).downloadUrl,
-              "Couldn't download the map.",
+              t`Couldn't download the map.`,
             )
           }
-        >
-          Download
-        </Button>
+        >{t`Download`}</Button>
       );
     }
     // A failed export has no support to contact; the bug form is the way on,
@@ -760,13 +759,11 @@ function NotificationsPanel({
           compact
           variant="outline"
           disabled={selecting}
-          disabledReason="Not while selecting"
+          disabledReason={t`Not while selecting`}
           onClick={() =>
             window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer")
           }
-        >
-          Report a bug
-        </Button>
+        >{t`Report a bug`}</Button>
       );
     }
     // A button, not only the row: nothing else says a row opens a message.
@@ -776,7 +773,7 @@ function NotificationsPanel({
           compact
           variant="outline"
           disabled={selecting}
-          disabledReason="Not while selecting"
+          disabledReason={t`Not while selecting`}
           onClick={() => openNotification(n)}
         >
           {notificationVerb("readMessage").label}
@@ -805,7 +802,7 @@ function NotificationsPanel({
         batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
         // Named, because a partly answered batch otherwise hides what is left.
         batch.group === "files" && pending.length !== batch.items.length
-          ? `${pending.length} still to answer`
+          ? t`${pending.length} still to answer`
           : null,
         formatTime(batch.representative.createdAt),
       ]
@@ -837,7 +834,7 @@ function NotificationsPanel({
         leading={
           <TileCheckbox
             tile={<IconTile icon={KIND_GLYPH[kind]} hue={KIND_HUE[kind]} />}
-            label={`Select ${title}`}
+            label={t`Select ${title}`}
             checked={isSelected}
             selecting={selecting}
             onToggle={(extendRange) => toggleSelected(row.id, extendRange)}
@@ -855,7 +852,7 @@ function NotificationsPanel({
             />
           ) : selecting ? undefined : (
             <Menu
-              label={`Actions for ${title}`}
+              label={t`Actions for ${title}`}
               title={title}
               placement="right-start"
               entries={rowEntries(row)}
@@ -863,7 +860,7 @@ function NotificationsPanel({
                 <IconButton
                   {...props}
                   icon="overflow"
-                  label={`Actions for ${title}`}
+                  label={t`Actions for ${title}`}
                 />
               )}
             />
@@ -879,7 +876,7 @@ function NotificationsPanel({
       title={INBOX.title}
       actions={
         <Menu
-          label="Inbox actions"
+          label={t`Inbox actions`}
           placement="bottom-end"
           entries={[
             {
@@ -899,7 +896,7 @@ function NotificationsPanel({
             },
           ]}
           trigger={(props) => (
-            <IconButton {...props} icon="overflow" label="Inbox actions" />
+            <IconButton {...props} icon="overflow" label={t`Inbox actions`} />
           )}
         />
       }
@@ -1011,13 +1008,11 @@ function NotificationsPanel({
                 <SelectionVerb
                   danger
                   onClick={() => confirmDelete(selected.map((n) => n.id))}
-                >
-                  Delete
-                </SelectionVerb>
+                >{t`Delete`}</SelectionVerb>
               </SelectionBar>
             ) : (
               <ChipRail
-                label="Show"
+                label={t`Show`}
                 options={[
                   {
                     value: "all",

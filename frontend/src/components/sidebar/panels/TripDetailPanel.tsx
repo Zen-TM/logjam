@@ -25,6 +25,7 @@ import {
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type TripVerbId,
+  t,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { deleteTripLog, getTripLog } from "../../../placeUtils";
@@ -108,7 +109,7 @@ function TripDetailPanel({
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't load trip files."));
+        toast.error(messageFromError(err, t`Couldn't load trip files.`));
       })
       .finally(() => setMediaLoading(false));
   }, [tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -131,7 +132,7 @@ function TripDetailPanel({
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete this trip. Try again."),
+        messageFromError(err, t`Couldn't delete this trip. Try again.`),
       );
     } finally {
       setDeleting(false);
@@ -142,14 +143,14 @@ function TripDetailPanel({
     return (
       <div className={classes.root}>
         <Hero
-          title="Trip"
+          title={t`Trip`}
           onBack={onBack}
           backLabel={`Back to ${navLabel("logs")}`}
         />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
-            title="No trip selected"
+            title={t`No trip selected`}
             body={`Pick one from ${navLabel("logs")}, or from the place it visited.`}
           />
         </div>
@@ -263,9 +264,7 @@ function TripDetailPanel({
       <section className={classes.section}>
         <SectionHeader title={copy.photos} count={photoCount || undefined} />
         {mediaLoading ? (
-          <p className={classes.muted} role="status">
-            Loading files…
-          </p>
+          <p className={classes.muted} role="status">{t`Loading files…`}</p>
         ) : (
           <MediaGallery
             media={media}
@@ -330,7 +329,7 @@ function TripDetailPanel({
           actions={
             <>
               <Menu
-                label={`Actions for ${title}`}
+                label={t`Actions for ${title}`}
                 title={title}
                 placement="bottom-end"
                 entries={entries}
@@ -338,7 +337,7 @@ function TripDetailPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${title}`}
+                    label={t`Actions for ${title}`}
                   />
                 )}
               />
@@ -375,7 +374,7 @@ function TripDetailPanel({
 
       <ConfirmDialog
         open={confirmingDelete}
-        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
+        copy={{ ...deleteCopy, confirmLabel: t`Delete`, tone: "destructive" }}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onClose={() => setConfirmingDelete(false)}

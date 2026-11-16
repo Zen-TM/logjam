@@ -8,6 +8,7 @@ import {
   type SectionKeysOn,
   formatDayMonth,
   localDay,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -123,12 +124,12 @@ function AccountPanel({
       link.remove();
       URL.revokeObjectURL(url);
       toast.done(
-        "Your data was downloaded as a JSON file. Photos and videos aren't in it.",
+        t`Your data was downloaded as a JSON file. Photos and videos aren't in it.`,
       );
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't download your data. Try again."),
+        messageFromError(err, t`Couldn't download your data. Try again.`),
       );
     } finally {
       setExporting(false);
@@ -147,7 +148,7 @@ function AccountPanel({
   > = {
     hero: () => (
       <Hero
-        title={username ?? "Account"}
+        title={username ?? t`Account`}
         actions={
           username !== null && (
             <IconButton
@@ -164,7 +165,7 @@ function AccountPanel({
         <>
           <SectionHeader title={copy.storage} />
           <ProgressBar
-            label="Storage used"
+            label={t`Storage used`}
             value={percentUsed(
               currentUser.storageUsedBytes,
               currentUser.storageQuotaBytes,
@@ -182,7 +183,7 @@ function AccountPanel({
         <>
           <SectionHeader title={copy.credits} />
           <ProgressBar
-            label="Processing credits used"
+            label={t`Processing credits used`}
             value={percentUsed(
               currentUser.monthlyComputeUsage,
               currentUser.monthlyComputeCredits,
@@ -196,7 +197,7 @@ function AccountPanel({
             {creditsResetLabel && (
               <span className={classes.meterHint}>
                 {" "}
-                · resets {creditsResetLabel}
+                {t`· resets ${creditsResetLabel}`}
               </span>
             )}
             <span className={classes.meterHint}> · {copy.creditsHint}</span>
@@ -238,13 +239,10 @@ function AccountPanel({
             icon="download"
             busy={exporting}
             onClick={handleExport}
-          >
-            Download my data
-          </Button>
-          <p className={classes.state}>
-            A JSON file of your places, trips and shares for this account.
-            Photos and videos aren't in it, so it isn't a full backup.
-          </p>
+          >{t`Download my data`}</Button>
+          <p
+            className={classes.state}
+          >{t`A JSON file of your places, trips and shares for this account. Photos and videos aren't in it, so it isn't a full backup.`}</p>
         </>
       ) : null,
     leaving: () =>
@@ -322,10 +320,8 @@ function AccountPanel({
             <Button
               onClick={() => setSignOutEverywhereOpen(false)}
               disabled={signingOutEverywhere}
-              disabledReason="Signing out…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Signing out…`}
+            >{t`Cancel`}</Button>
             <Button
               variant="filled"
               busy={signingOutEverywhere}
@@ -386,7 +382,7 @@ function UsernameForm({
     // Empty is a requirement, reported on submit (shared/DESIGN.md §11); unchanged is
     // not an error at all, just nothing to do.
     if (!trimmed) {
-      setError("Enter a username.");
+      setError(t`Enter a username.`);
       return;
     }
     if (trimmed === current) {
@@ -402,7 +398,7 @@ function UsernameForm({
       console.error(err);
       // The server's own 409 text ("Username already taken") is worth showing,
       // which is what messageFromError prefers when the API supplies one.
-      setError(messageFromError(err, "Couldn't save that username."));
+      setError(messageFromError(err, t`Couldn't save that username.`));
     } finally {
       setSaving(false);
     }
@@ -411,17 +407,22 @@ function UsernameForm({
   return (
     <Dialog
       open
-      title="Change username"
+      title={t`Change username`}
       onClose={onClose}
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
-            Cancel
-          </Button>
-          <Button type="submit" form={formId} variant="filled" busy={saving}>
-            Save
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={saving}
+            disabledReason={t`Saving…`}
+          >{t`Cancel`}</Button>
+          <Button
+            type="submit"
+            form={formId}
+            variant="filled"
+            busy={saving}
+          >{t`Save`}</Button>
         </>
       }
     >
@@ -434,13 +435,13 @@ function UsernameForm({
         }}
       >
         <TextField
-          label="Username"
+          label={t`Username`}
           value={value}
           onChange={(event) => {
             setValue(event.target.value);
             if (error) setError(null);
           }}
-          hint="Friends search this name when they share a place with you."
+          hint={t`Friends search this name when they share a place with you.`}
           maxLength={32}
           disabled={saving}
           data-autofocus

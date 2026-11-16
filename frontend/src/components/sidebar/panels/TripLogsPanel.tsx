@@ -41,6 +41,7 @@ import {
   type TripSortKey,
   type TripVerbId,
   tripTitle,
+  t,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { bulkDeleteTripLogs, deleteTripLog } from "../../../placeUtils";
@@ -252,7 +253,7 @@ function TripLogsPanel({
       (trip) => trip.types.length === 0,
     ).length;
     return [
-      { value: ALL_TYPES, label: "All", count: withoutType.length },
+      { value: ALL_TYPES, label: t`All`, count: withoutType.length },
       // Busiest activity first; ties alphabetical so the order is stable.
       ...distinctTypes
         .map((type) => ({
@@ -276,7 +277,7 @@ function TripLogsPanel({
         ? [
             {
               value: NO_TYPE_FILTER_VALUE,
-              label: "No type",
+              label: t`No type`,
               icon: tripTypeLook(null).icon,
               hue: tripTypeLook(null).hue,
               count: untyped,
@@ -511,9 +512,7 @@ function TripLogsPanel({
           <SelectionVerb
             danger
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
-          >
-            Delete
-          </SelectionVerb>
+          >{t`Delete`}</SelectionVerb>
         </SelectionBar>
       ) : (
         tripLogs.length > 0 && (
@@ -553,7 +552,7 @@ function TripLogsPanel({
         leading={
           <TileCheckbox
             tile={<IconTile icon={look.icon} hue={look.hue} />}
-            label={`Select ${title}`}
+            label={t`Select ${title}`}
             checked={isSelected}
             selecting={selecting}
             onToggle={(extendRange) => toggleSelected(trip.id, extendRange)}
@@ -573,7 +572,7 @@ function TripLogsPanel({
             )}
             {!selecting && (
               <Menu
-                label={`Actions for ${title}`}
+                label={t`Actions for ${title}`}
                 title={title}
                 placement="right-start"
                 entries={rowEntries(trip)}
@@ -581,7 +580,7 @@ function TripLogsPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${title}`}
+                    label={t`Actions for ${title}`}
                   />
                 )}
               />
@@ -748,10 +747,9 @@ function TripLogsPanel({
     // The server caps the trip list; say when this is a truncated view so the
     // oldest trips aren't silently hidden.
     truncated: tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
-      <p className={classes.note}>
-        Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
-        Older ones aren't loaded.
-      </p>
+      <p
+        className={classes.note}
+      >{t`Showing your ${tripLogs.length} most recent trips of ${tripLogsTotal}. Older ones aren't loaded.`}</p>
     ),
     list,
   };

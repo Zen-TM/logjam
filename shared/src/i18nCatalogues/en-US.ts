@@ -38,6 +38,7 @@ export const enUS: Catalogue = {
     "Color terrain based on how steep it is.",
   Colour: "Color",
   "Coloured by steepness": "Colored by steepness",
+  "Couldn't change the colour.": "Couldn't change the color.",
   "Band {0} colour, taken from the scale":
     "Band {0} color, taken from the scale",
   "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbour follows what you set here.":

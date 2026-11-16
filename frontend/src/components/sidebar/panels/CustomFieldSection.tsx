@@ -16,6 +16,7 @@ import {
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -109,7 +110,7 @@ function CustomFieldSection({
       <Hero
         title={title}
         onBack={onBack}
-        backLabel="Back to Settings"
+        backLabel={t`Back to Settings`}
         actions={
           <Button
             compact
@@ -149,7 +150,7 @@ function CustomFieldSection({
                      card measures 3.8:1 (Basalt), and the menu's surface is
                      where it clears 4.5 (`scripts/wcag-contrast.mjs`). */
                   <Menu
-                    label={`Actions for ${def.label}`}
+                    label={t`Actions for ${def.label}`}
                     title={def.label}
                     placement="bottom-end"
                     entries={[
@@ -174,7 +175,7 @@ function CustomFieldSection({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${def.label}`}
+                        label={t`Actions for ${def.label}`}
                       />
                     )}
                   />
@@ -239,7 +240,7 @@ function rowSubtitle(
   placeTypes?: TPlaceType[],
 ): string {
   const type = customFieldTypeName(def.type);
-  if (def.appliesToAllTypes) return `${type} · all types`;
+  if (def.appliesToAllTypes) return t`${type} · all types`;
   if (!placeTypes) {
     return def.tripTypes.length > 0
       ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}`
@@ -248,7 +249,7 @@ function rowSubtitle(
   const names = placeTypes
     .filter((placeType) => def.placeTypeIds.includes(placeType.id))
     .map((placeType) => placeType.name);
-  if (names.length === 0) return `${type} · no types`;
+  if (names.length === 0) return t`${type} · no types`;
   return `${type} · ${names.join(", ")}`;
 }
 
@@ -354,17 +355,19 @@ function AttributeDialog({
     <Dialog
       open
       title={
-        def ? `Edit "${def.label}"` : `New ${rowNoun} ${ATTRIBUTE_NOUN.one}`
+        def ? t`Edit "${def.label}"` : `New ${rowNoun} ${ATTRIBUTE_NOUN.one}`
       }
       onClose={onClose}
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
-            Cancel
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={saving}
+            disabledReason={t`Saving…`}
+          >{t`Cancel`}</Button>
           <Button variant="filled" busy={saving} onClick={handleSave}>
-            {def ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+            {def ? t`Save` : `Add ${ATTRIBUTE_NOUN.one}`}
           </Button>
         </>
       }

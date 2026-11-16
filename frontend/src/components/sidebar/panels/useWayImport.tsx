@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { importFailureMessage, WAY_IMPORT } from "@logjam/shared";
+import { importFailureMessage, WAY_IMPORT, t } from "@logjam/shared";
 import { useToast } from "../../feedback/ToastProvider";
 import { importWayFile, WAY_IMPORT_ACCEPT } from "./wayImport";
 
@@ -25,7 +25,7 @@ export function useWayImport(onImported: () => void) {
         event.target.value = "";
         if (!file || busy.current) return;
         busy.current = true;
-        toast.done("Importing…");
+        toast.done(t`Importing…`);
         importWayFile(file)
           .then((name) => {
             toast.done(WAY_IMPORT.saved(name));
@@ -42,7 +42,7 @@ export function useWayImport(onImported: () => void) {
   );
   return {
     openPicker: () => {
-      if (busy.current) toast.done("Importing…");
+      if (busy.current) toast.done(t`Importing…`);
       else inputRef.current?.click();
     },
     input,

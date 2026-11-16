@@ -45,6 +45,7 @@ import {
   wayVerbIcon,
   MAP_MEASURE,
   sharedWayNote,
+  t,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -337,10 +338,10 @@ export default function WayDetailPanel({
             ]
           : []),
         ...(file?.metadata.featureCount != null
-          ? [{ label: "Features", value: String(file.metadata.featureCount) }]
+          ? [{ label: t`Features`, value: String(file.metadata.featureCount) }]
           : []),
         ...(file != null
-          ? [{ label: "Size", value: formatBytes(file.fileSizeBytes) }]
+          ? [{ label: t`Size`, value: formatBytes(file.fileSizeBytes) }]
           : []),
       ];
 
@@ -373,10 +374,10 @@ export default function WayDetailPanel({
       toast.done(
         alsoRemove
           ? `"${copy.name}" is yours now, and ${ownerName ?? "their"} share is removed.`
-          : `"${copy.name}" is yours now.`,
+          : t`"${copy.name}" is yours now.`,
       );
       onCopied(copy);
-    }, "Couldn't save that route to your Ways.");
+    }, t`Couldn't save that route to your Ways.`);
   };
 
   /**
@@ -403,7 +404,7 @@ export default function WayDetailPanel({
         anchor.click();
       } catch (err) {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't download that file."));
+        toast.error(messageFromError(err, t`Couldn't download that file.`));
       } finally {
         setBusy(false);
       }
@@ -415,9 +416,9 @@ export default function WayDetailPanel({
     setEnding(null);
     void run(async () => {
       await unshareEntityWith("route", route.id, "me");
-      toast.done(`${way.title} removed.`);
+      toast.done(t`${way.title} removed.`);
       onBack();
-    }, "Couldn't remove that route.");
+    }, t`Couldn't remove that route.`);
   };
 
   const runVerb = (id: WayVerbId) => {
@@ -513,8 +514,8 @@ export default function WayDetailPanel({
     const from = linkedPlace?.name;
     void run(async () => {
       await updateRoute(route.id, { placeId: null });
-      toast.done(from ? `Unlinked from ${from}.` : "Unlinked.");
-    }, "Couldn't unlink the route.");
+      toast.done(from ? t`Unlinked from ${from}.` : t`Unlinked.`);
+    }, t`Couldn't unlink the route.`);
   };
 
   const linkNow = (targetPlaceId: string) => {
@@ -525,13 +526,13 @@ export default function WayDetailPanel({
       // Say it worked. The panel showing the place afterwards is the real
       // confirmation, but it was silent even once that started working, and a
       // write with no acknowledgement reads as a write that did not happen.
-      toast.done(name ? `Linked to ${name}.` : "Linked to a place.");
+      toast.done(name ? t`Linked to ${name}.` : t`Linked to a place.`);
       if (result.displacedRoute) {
         toast.done(
-          `"${result.displacedRoute.name}" was unlinked and kept as a standalone route.`,
+          t`"${result.displacedRoute.name}" was unlinked and kept as a standalone route.`,
         );
       }
-    }, "Couldn't link the route.");
+    }, t`Couldn't link the route.`);
   };
 
   // A place holds at most one way. Linking to an occupied one displaces the
@@ -550,7 +551,7 @@ export default function WayDetailPanel({
       placeId: targetPlaceId,
       placeName:
         ownedPlaces.find((place) => place.id === targetPlaceId)?.name ??
-        "That place",
+        t`That place`,
       incumbentName: incumbent.name,
     });
   };
@@ -560,7 +561,7 @@ export default function WayDetailPanel({
       void run(async () => {
         await deleteRoute(route.id);
         onBack();
-      }, "Couldn't delete the route.");
+      }, t`Couldn't delete the route.`);
       return;
     }
     if (file) {
@@ -576,11 +577,11 @@ export default function WayDetailPanel({
       <Hero
         title={way.title}
         onBack={onBack}
-        backLabel="Back to Ways"
+        backLabel={t`Back to Ways`}
         actions={
           <>
             <Menu
-              label={`Actions for ${way.title}`}
+              label={t`Actions for ${way.title}`}
               title={way.title}
               placement="bottom-end"
               entries={entries}
@@ -588,7 +589,7 @@ export default function WayDetailPanel({
                 <IconButton
                   {...props}
                   icon="overflow"
-                  label={`Actions for ${way.title}`}
+                  label={t`Actions for ${way.title}`}
                 />
               )}
             />
@@ -639,16 +640,15 @@ export default function WayDetailPanel({
             {profile && (
               <>
                 {profile.minM != null && profile.maxM != null && (
-                  <p className={classes.band}>
-                    {formatHeightRange(profile.minM, profile.maxM)} above sea
-                    level
-                  </p>
+                  <p
+                    className={classes.band}
+                  >{t`${formatHeightRange(profile.minM, profile.maxM)} above sea level`}</p>
                 )}
                 {/* The chart's axes named: an unlabelled height profile reads as
                     height over time to anyone not told otherwise.
                     This is the section's heading — a second "Elevation" above it
                     would say the same thing twice. */}
-                <SectionHeader title="Elevation vs distance" />
+                <SectionHeader title={t`Elevation vs distance`} />
                 <ProfileChart
                   series={elevationSeries(profile)}
                   formatValue={formatElevationM}
@@ -667,7 +667,7 @@ export default function WayDetailPanel({
         {properties.colour && (route || file) && (
           <section className={classes.section}>
             <ColourField
-              label="Colour"
+              label={t`Colour`}
               palette={TRACK_COLORS}
               value={shownColour ?? undefined}
               nameOf={trackColorName}
@@ -681,7 +681,7 @@ export default function WayDetailPanel({
                     route
                       ? updateRoute(route.id, { color: next })
                       : recolourMedia(file!.id, next),
-                  "Couldn't change the colour.",
+                  t`Couldn't change the colour.`,
                 );
               }}
             />
@@ -689,7 +689,7 @@ export default function WayDetailPanel({
         )}
 
         <section className={classes.section}>
-          <SectionHeader title="Place" />
+          <SectionHeader title={t`Place`} />
           {linkedPlace ? (
             <div className={classes.linkRow}>
               <span className={classes.linkName}>{linkedPlace.name}</span>
@@ -698,11 +698,9 @@ export default function WayDetailPanel({
                   compact
                   icon="unlink"
                   disabled={busy}
-                  disabledReason="Working…"
+                  disabledReason={t`Working…`}
                   onClick={handleUnlink}
-                >
-                  Unlink
-                </Button>
+                >{t`Unlink`}</Button>
               )}
             </div>
           ) : owned && route ? (
@@ -711,7 +709,7 @@ export default function WayDetailPanel({
             // matches the START of the primary name only — so a place known by
             // an alternative name would be unreachable.
             <PlacePicker
-              label="Link to a place"
+              label={t`Link to a place`}
               places={ownedPlaces}
               disabled={busy}
               onSelect={(place) => handleLinkSelected(place.id)}
@@ -725,12 +723,10 @@ export default function WayDetailPanel({
                 compact
                 icon="place"
                 onClick={() => onOpenPlace(sharingPlace.id)}
-              >
-                Open
-              </Button>
+              >{t`Open`}</Button>
             </div>
           ) : (
-            <p className={classes.note}>Not linked to a place.</p>
+            <p className={classes.note}>{t`Not linked to a place.`}</p>
           )}
         </section>
 
@@ -750,7 +746,7 @@ export default function WayDetailPanel({
 
       {owned && route && (
         <ShareDialog
-          title={`Share ${way.title}`}
+          title={t`Share ${way.title}`}
           kind="route"
           friends={friends}
           open={showShare}
@@ -762,7 +758,7 @@ export default function WayDetailPanel({
       )}
       {file && (
         <SendCopyDialog
-          title={`Send a copy of ${way.title}`}
+          title={t`Send a copy of ${way.title}`}
           friends={friends}
           open={showSendCopy}
           onClose={() => setShowSendCopy(false)}
@@ -791,8 +787,8 @@ export default function WayDetailPanel({
                   ? updateRoute(route.id, { name })
                   : renameMedia(file!.id, name),
               route
-                ? "Couldn't rename that route."
-                : "Couldn't rename that file.",
+                ? t`Couldn't rename that route.`
+                : t`Couldn't rename that file.`,
             );
           }}
           onClose={() => setRenaming(false)}
@@ -803,9 +799,9 @@ export default function WayDetailPanel({
         open={pendingLink !== null}
         copy={
           pendingLink && {
-            confirmTitle: "Replace this place's route?",
-            confirmBody: `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`,
-            confirmLabel: "Replace",
+            confirmTitle: t`Replace this place's route?`,
+            confirmBody: t`${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`,
+            confirmLabel: t`Replace`,
             tone: "filled",
           }
         }
@@ -826,7 +822,7 @@ export default function WayDetailPanel({
         copy={{
           confirmTitle: removeShare.title,
           confirmBody: removeShare.body,
-          confirmLabel: "Remove",
+          confirmLabel: t`Remove`,
           tone: "filled",
         }}
         busy={busy}
@@ -837,11 +833,11 @@ export default function WayDetailPanel({
       <ConfirmDialog
         open={ending === "copyAndRemove"}
         copy={{
-          confirmTitle: "Save a copy and remove?",
+          confirmTitle: t`Save a copy and remove?`,
           confirmBody: `A copy of "${way.title}" is saved to your Ways first, then ${
             ownerName ? `${ownerName}'s` : "the owner's"
           } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,
-          confirmLabel: "Save and remove",
+          confirmLabel: t`Save and remove`,
           tone: "filled",
         }}
         busy={busy}
@@ -852,10 +848,9 @@ export default function WayDetailPanel({
       <ConfirmDialog
         open={confirmDelete}
         copy={{
-          confirmTitle: `Delete ${way.title}?`,
-          confirmBody:
-            "It is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.",
-          confirmLabel: "Delete",
+          confirmTitle: t`Delete ${way.title}?`,
+          confirmBody: t`It is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.`,
+          confirmLabel: t`Delete`,
           tone: "destructive",
         }}
         busy={busy}
@@ -885,7 +880,7 @@ function RenameWayDialog({
   onClose: () => void;
 }) {
   const current = currentName;
-  const label = noun === "route" ? "Route name" : "File name";
+  const label = noun === "route" ? t`Route name` : t`File name`;
   const [name, setName] = useState(current);
   const [error, setError] = useState<string | null>(null);
 
@@ -910,12 +905,12 @@ function RenameWayDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
-            Cancel
-          </Button>
-          <Button variant="filled" busy={busy} onClick={save}>
-            Save
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={t`Saving…`}
+          >{t`Cancel`}</Button>
+          <Button variant="filled" busy={busy} onClick={save}>{t`Save`}</Button>
         </>
       }
     >
