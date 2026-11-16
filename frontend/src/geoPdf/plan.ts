@@ -14,6 +14,7 @@ import {
   type TerrainArchive,
   type TileCoord,
   type TileToMapTransform,
+  type VectorArchive,
 } from "@logjam/shared";
 import {
   areasOnPage,
@@ -70,24 +71,27 @@ export function rasterBaseTiles(
   );
 }
 
+/** Whether the sheet's base layer is a vector catalogue entry, read from an archive. */
+export const isVectorBase = (config: GeoPdfRenderInput["config"]): boolean =>
+  BASEMAP_CATALOG.some((e) => e.id === config.baseLayer && e.kind === "vector");
+
 /**
- * The archive and tiles a vector base is read from, or null for a raster base.
+ * The archive and tiles a vector base is read from, or null for a raster base
+ * or where `archive` is null (the sheet's region has none).
  * The tile zoom follows the style zoom it is drawn at, not the print's: more
  * pixels on the page do not put more features in a tile.
  */
 export function vectorBasemap(
   config: GeoPdfRenderInput["config"],
   g: PrintGeometry,
+  archive: VectorArchive | null,
 ) {
-  const entry = BASEMAP_CATALOG.find(
-    (e) => e.id === config.baseLayer && e.kind === "vector",
-  );
-  if (!entry) return null;
+  if (!isVectorBase(config) || !archive) return null;
   const { north, south, east, west } = config.extent;
   const styleZoom = displayZoomForScale(config.scale, g.centreLat);
-  const zoom = Math.floor(Math.min(styleZoom, entry.maxNativeZoom));
+  const zoom = Math.floor(Math.min(styleZoom, archive.maxzoom));
   return {
-    path: entry.urlTemplate,
+    path: archive.archivePath,
     styleZoom,
     transform: computeTileToMapTransform(
       Math.max(zoom, 0),
@@ -186,7 +190,7 @@ export function statewideReads(
   const out = new Map<string, StatewideRead>();
   const add = (path: string, r: TileCoord) =>
     out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
-  const basemap = vectorBasemap(config, g);
+  const basemap = vectorBasemap(config, g, terrain.vector);
   if (basemap)
     for (const tile of basemap.transform.tiles) add(basemap.path, tile);
   const whole = [{ from: 0, to: g.nativeH }];

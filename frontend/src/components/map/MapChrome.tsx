@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type * as maplibregl from "maplibre-gl";
+import type { SharpenUnavailable } from "@logjam/shared";
 import {
   MapButton,
   MapButtonGroup,
@@ -25,14 +26,12 @@ import classes from "./MapChrome.module.css";
 /** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
 const TRAY_CLOSE_MS = 100;
 
-/** A tool that cannot run where the map is: `state` is drawn beside its label, `reason` is the tooltip. */
-export type MapToolUnavailable = { state: string; reason: string };
-
 type MapToolBase = {
   id: string;
   label: string;
   icon: Glyph;
-  unavailable?: MapToolUnavailable;
+  /** Where the map is the tool cannot run: `state` is drawn beside its label, `reason` is the tooltip. */
+  unavailable?: SharpenUnavailable;
 };
 export type MapTool =
   | (MapToolBase & { onSelect: () => void })

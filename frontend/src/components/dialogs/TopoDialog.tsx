@@ -129,8 +129,9 @@ export default function TopoDialog({
   pendingBbox: TBbox | null;
   onJobCreated: (job: TopoJob) => void;
   existingTopoNames: string[];
-  /** What sharpening offers where the area is (`sharpenOfferFor`): the portal
-   *  to name, or why there is none. */
+  /** What sharpening offers here: the portal to name, or why there is none.
+   *  The offer for a drawn area or the map (`sharpenOfferFor`), or the one a
+   *  link to an existing job computed (`sharpenOfferForJob`). */
   offer: SharpenOffer;
 }) {
   const [file, setFile] = useState<File | null>(null);

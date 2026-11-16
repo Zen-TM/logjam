@@ -6,13 +6,11 @@ import {
   t,
   type PlaceVerbIdOn,
   type PlaceVerbSurface,
+  type SharpenUnavailable,
 } from "@logjam/shared";
 import type { MenuEntry, MenuItem } from "../../../ui";
 
 export type WebPlaceVerbId = PlaceVerbIdOn<"web">;
-
-/** A verb that cannot run for this place, and what to say beside it. */
-export type VerbUnavailable = { state: string; reason: string };
 
 /**
  * What a menu item gains where its action cannot run: `state` beside its
@@ -21,7 +19,7 @@ export type VerbUnavailable = { state: string; reason: string };
  */
 export function unavailableItem(
   label: string,
-  { state, reason }: VerbUnavailable,
+  { state, reason }: SharpenUnavailable,
 ): Pick<MenuItem, "disabledReason" | "accessibleLabel"> {
   return {
     disabledReason: state,
@@ -40,7 +38,7 @@ export function placeVerbEntries(
   owned: boolean,
   run: (id: WebPlaceVerbId) => void,
   disabled = false,
-  unavailable: Partial<Record<WebPlaceVerbId, VerbUnavailable>> = {},
+  unavailable: Partial<Record<WebPlaceVerbId, SharpenUnavailable>> = {},
 ): MenuEntry[] {
   return placeVerbs("web", surface, owned).flatMap((verb, index, all) => {
     const item: MenuEntry = {

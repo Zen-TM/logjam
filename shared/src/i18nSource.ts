@@ -156,8 +156,8 @@ const NOT_COPY_NEW = /^(?:\w*Error|RegExp|URL|URLSearchParams|Set|Map)$/;
 /** A word: two or more letters, or letters round an inner apostrophe ("You're"). */
 const WORD = String.raw`(?:\p{L}{2,}|\p{L}+['\u2019]\p{L}+)`;
 
-/** The one-letter words English writes on their own: "Find a route", "Can I help". Any other lone letter is a symbol or an id, so `x or y` is not prose. */
-const ONE_LETTER_WORD = String.raw`(?<![\p{L}'\u2019])[aAI](?![\p{L}'\u2019])`;
+/** The one-letter words English writes on their own: "Find a route", "Can I help". Any other lone letter is a symbol or an id, so `x or y` is not prose; the `a` of a tag (`<a href>`, `</a>`) is not a word either. */
+const ONE_LETTER_WORD = String.raw`(?<![\p{L}'\u2019</])[aAI](?![\p{L}'\u2019])`;
 
 /** Two words with a space between (one of them may be "a" or "I"), or a one-word sentence: what reads as prose. */
 const PROSE = new RegExp(

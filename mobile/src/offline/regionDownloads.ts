@@ -19,7 +19,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import { AppState } from "react-native";
 import {
-  BASEMAP_CATALOG,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   fetchExtractRequest,
@@ -58,8 +57,13 @@ import {
 export type RegionClipSpec = {
   /** uuid: the job, the file and, once saved, the artifact. */
   id: string;
-  /** The vector basemap, a region archive's id (`archiveId`) or a sharpened area's source id. */
+  /** The vector basemap (`vectorPath`), a region archive's id (`archiveId`) or a sharpened area's source id. */
   basemapId: string;
+  /**
+   * Set when the clip is of a region's vector archive: its CDN path, which the
+   * clip is cut from and filed against (`MapArtifact.archivePath`).
+   */
+  vectorPath?: string;
   /**
    * Set when the clip is of an archive of a region's Terrain group (heights,
    * slope, contours, land, fire history or coverage): its `id`, which
@@ -119,9 +123,8 @@ function clipArchiveFor(spec: RegionClipSpec): {
     if (!clip) throw new Error("Unknown map archive");
     return cdn({ archivePath: clip.archive.archivePath, ...clip.zooms });
   }
-  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
-  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
-  return cdn({ archivePath: entry.urlTemplate });
+  if (!spec.vectorPath) throw new Error("Unknown map archive");
+  return cdn({ archivePath: spec.vectorPath });
 }
 
 /** The CDN answered, and not with the bytes asked for. */
@@ -470,6 +473,7 @@ export async function runRegionClip(
       logicalKey: spec.area
         ? `${SHARPENED_SOURCE_PREFIX}${spec.area.id}`
         : (spec.archiveId ?? "protomaps"),
+      archivePath: spec.vectorPath ?? null,
       format: "pmtiles",
       sourceType: clipSourceType(spec),
       // Registry stores the scheme-less absolute path; the resolver prefixes

@@ -185,6 +185,15 @@ describe("bareCopyIn", () => {
     ).toEqual(["Find a route", "Can I help", "A new day"]);
   });
 
+  // Mutation: in `ONE_LETTER_WORD`, take `<` and `/` out of the lookbehind.
+  it("does not read the a of a tag as a word", () => {
+    expect(
+      bare(
+        `const a = '<a href="x">go</a>'; const b = '</a> end'; const c = "Find a route";`,
+      ),
+    ).toEqual(["Find a route"]);
+  });
+
   // Mutation: in `WORDS_IN`, drop `ONE_LETTER_WORD`.
   it("counts a or I as a word of a pieced sentence", () => {
     expect(bare("const a = `Enter a ${what}`;")).toEqual(["Enter a …"]);

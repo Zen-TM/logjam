@@ -127,6 +127,7 @@ const BBOX = { west: 150.2, south: -33.8, east: 150.6, north: -33.4 };
 const SPEC = {
   id: "c1",
   basemapId: "protomaps",
+  vectorPath: "master/basemap/protomaps-nsw.pmtiles",
   label: "Vector map region",
   groupId: "g1",
   groupLabel: "Area",
@@ -474,9 +475,11 @@ describe("runRegionClip", () => {
   // Mutation: file the slope clip as a `dem-region` (`CLIP_KIND`), or cut
   // every archive from one fixed path in `clipArchiveFor`, and a row goes red.
   it("cuts each clip of a save over NSW from its archive and files it under its key", async () => {
+    const plan = planRegionForBasemaps(BBOX, [], 15, () => 16);
     const specs = regionClipSpecs(
       { bbox: BBOX, groupId: "g", groupLabel: "Area", allowCellular: false },
-      planRegionForBasemaps(BBOX, [], 15, () => 16).clips,
+      plan.clips,
+      plan.vectors,
       (basemapId) => ({ id: `clip-${basemapId}`, label: basemapId }),
     );
     const filed: unknown[] = [];
@@ -552,6 +555,40 @@ describe("runRegionClip", () => {
         0,
       ],
     ]);
+  });
+
+  // A vector clip is filed under the one logical basemap, "protomaps", with the
+  // archive it was cut from, so the map draws it only while it shows that
+  // region. A clip with no archive to cut from is no clip.
+  // Mutation: leave `archivePath` off the filed artifact, and the map never
+  // draws a saved vector clip; cut every vector clip from NSW's archive, and a
+  // clip of simulated New Zealand's holds NSW's tiles.
+  it("files a vector clip under protomaps with the archive it was cut from", async () => {
+    expect((await run()).status).toBe("ready");
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath: "master/basemap/protomaps-nsw.pmtiles",
+      }),
+    );
+    cdn.calls = [];
+    insertArtifact.mockClear();
+    const nz = { vectorPath: "master/basemap/protomaps-simnz.pmtiles" };
+    expect((await run(nz)).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/basemap/protomaps-simnz.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logicalKey: "protomaps",
+        archivePath: "master/basemap/protomaps-simnz.pmtiles",
+      }),
+    );
+    cdn.calls = [];
+    insertArtifact.mockClear();
+    expect((await run({ vectorPath: undefined })).status).toBe("failed");
+    expect(cdn.calls).toEqual([]);
+    expect(insertArtifact).not.toHaveBeenCalled();
   });
 
   // A save over a simulated region cuts that region's archive and files the

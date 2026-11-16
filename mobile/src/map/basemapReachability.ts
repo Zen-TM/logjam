@@ -28,7 +28,7 @@ export const probedBasemaps = (view: LonLatBox): BasemapId[] =>
 
 function probeUrl(id: BasemapId): string {
   const entry = BASEMAP_CATALOG.find((e) => e.id === id);
-  if (!entry) throw new Error(`Unknown basemap id: ${id}`);
+  if (entry?.kind !== "raster") throw new Error(`Unknown basemap id: ${id}`);
   return entry.urlTemplate
     .replace("{z}", String(PROBE_TILE.z))
     .replace("{x}", String(PROBE_TILE.x))
