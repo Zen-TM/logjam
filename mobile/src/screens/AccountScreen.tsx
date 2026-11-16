@@ -33,6 +33,8 @@ import {
   requestEmailChange,
   hasCognitoAccount,
   type SectionKeysOn,
+  formatDayMonth,
+  localDay,
 } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
@@ -245,10 +247,7 @@ function LinkedAccountScreen({
   const user = query.data;
 
   const creditsResetLabel = user.monthlyComputeResetAt
-    ? new Date(user.monthlyComputeResetAt).toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-      })
+    ? formatDayMonth(localDay(new Date(user.monthlyComputeResetAt)))
     : null;
 
   // Exhaustive by type: a section the contract names and this screen does not

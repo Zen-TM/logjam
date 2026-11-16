@@ -65,6 +65,8 @@ import {
   type TopoLayerName,
   MAP_TERRAIN,
   type ToastAction,
+  formatDayMonth,
+  localDay,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -214,10 +216,7 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
 }
 
 function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
+  return formatDayMonth(localDay(new Date(iso)));
 }
 
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */

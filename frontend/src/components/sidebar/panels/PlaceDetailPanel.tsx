@@ -53,6 +53,8 @@ import {
   type MediaItem,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
+  formatDayLongMonthYear,
+  utcDay,
 } from "@logjam/shared";
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
@@ -149,12 +151,7 @@ function formatCustomFieldValue(
   if (type === "date" && typeof value === "string") {
     // Date-typed attributes are stored as UTC-midnight (date-only); format in
     // UTC so a zone behind UTC (the Americas) doesn't render the prior day.
-    return new Date(value).toLocaleDateString("en-AU", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      timeZone: "UTC",
-    });
+    return formatDayLongMonthYear(utcDay(new Date(value)));
   }
   return String(value);
 }

@@ -34,6 +34,7 @@ import {
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type StatsSpark,
+  formatLongMonthYear,
 } from "@logjam/shared";
 
 const copy = STATS.copy;
@@ -64,14 +65,7 @@ function namedBuckets(spark: StatsSpark): SparkBucket[] {
     name:
       spark.axis === "year"
         ? `${spark.firstYear + index}`
-        : new Date(Date.UTC(spark.year, index, 1)).toLocaleDateString(
-            undefined,
-            {
-              month: "long",
-              year: "numeric",
-              timeZone: "UTC",
-            },
-          ),
+        : formatLongMonthYear({ month: index, year: spark.year }),
   }));
 }
 

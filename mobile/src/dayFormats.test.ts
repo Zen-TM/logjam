@@ -1,0 +1,92 @@
+// Logjam GPS's half of the day-forms pair; Logjam Web's is frontend/src/dayFormats.test.ts.
+// Both read shared/src/__fixtures__/day-formats.json, which holds what each form of
+// `@logjam/shared`'s dateFormat.ts writes, and check the sites that draw one.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  dayOfKey,
+  formatDayLongMonth,
+  formatDayLongMonthYear,
+  formatDayMonth,
+  formatDayMonthYear,
+  formatFullDay,
+  formatLongMonthYear,
+  formatMonthYear,
+  formatNumericDay,
+  formatWeekdayDay,
+  formatWeekdayDayMonth,
+  formatWeekdayDayMonthYear,
+  formatWeekdayDayMonthYearComma,
+} from "@logjam/shared";
+import { describe, expect, it } from "vitest";
+import { formatMonthLabel } from "./ui/monthGrid";
+import { syncAgeLabel } from "./ui/syncAge";
+
+const FIXTURE = JSON.parse(
+  readFileSync(
+    join(__dirname, "../../shared/src/__fixtures__/day-formats.json"),
+    "utf8",
+  ),
+) as Record<string, Record<string, string>>;
+
+function inTimeZone<T>(timeZone: string, run: () => T): T {
+  const previous = process.env.TZ;
+  process.env.TZ = timeZone;
+  try {
+    return run();
+  } finally {
+    process.env.TZ = previous;
+  }
+}
+
+const FORMS = {
+  formatWeekdayDayMonthYear,
+  formatWeekdayDayMonthYearComma,
+  formatWeekdayDayMonth,
+  formatWeekdayDay,
+  formatDayMonthYear,
+  formatDayMonth,
+  formatMonthYear,
+  formatDayLongMonth,
+  formatDayLongMonthYear,
+  formatLongMonthYear,
+  formatFullDay,
+  formatNumericDay,
+};
+
+describe("the day forms in Logjam GPS", () => {
+  // Mutation: give `formatDayMonthYear` the pattern `<month> <day> <year>`, and the fixture reads wrong here and in Logjam Web.
+  it("write what the fixture holds, as they do in Logjam Web", () => {
+    expect(Object.keys(FIXTURE)).toHaveLength(2);
+    for (const [key, forms] of Object.entries(FIXTURE)) {
+      for (const [name, text] of Object.entries(forms)) {
+        expect(FORMS[name as keyof typeof FORMS](dayOfKey(key)), name).toBe(
+          text,
+        );
+      }
+    }
+  });
+
+  // Mutation: write `formatMonthLabel` (ui/monthGrid.ts) with the short month for the long one.
+  it("draw the date picker's month as the long month and year", () => {
+    expect(formatMonthLabel({ year: 2026, month: 2 })).toBe(
+      FIXTURE["2026-03-15"].formatLongMonthYear,
+    );
+    expect(formatMonthLabel({ year: 2025, month: 8 })).toBe(
+      FIXTURE["2025-09-08"].formatLongMonthYear,
+    );
+  });
+
+  // Mutation: write `syncAgeLabel` (ui/syncAge.ts) with `utcDay` for `localDay`, and 07:00 on the 15th in Sydney reads as the 14th.
+  it("draw the Offline pill's day as the short day and month", () => {
+    const now = new Date("2026-12-01T00:00:00.000Z").getTime();
+    inTimeZone("Australia/Sydney", () => {
+      expect(syncAgeLabel("2026-03-14T20:00:00.000Z", now)).toBe(
+        `synced ${FIXTURE["2026-03-15"].formatDayMonth}`,
+      );
+      expect(syncAgeLabel("2025-09-07T20:00:00.000Z", now)).toBe(
+        `synced ${FIXTURE["2025-09-08"].formatDayMonth}`,
+      );
+    });
+  });
+});

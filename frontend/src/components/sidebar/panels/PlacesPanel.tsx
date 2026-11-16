@@ -41,6 +41,8 @@ import {
   type SectionKeysOn,
   LIDAR_JOB_COPY,
   type LoadState,
+  formatNumericDay,
+  localDay,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -501,7 +503,7 @@ function PlacesPanel({
           ? ` · ${plural(result.review.length, "possible duplicate")} to review`
           : "";
       const source = result.sourceUpdatedAt
-        ? ` · source ${new Date(result.sourceUpdatedAt).toLocaleDateString()}`
+        ? ` · source ${formatNumericDay(localDay(new Date(result.sourceUpdatedAt)))}`
         : "";
       toast.done(
         `RopeWiki import: ${done.length > 0 ? done.join(", ") : "no new places"}${review}${source}`,

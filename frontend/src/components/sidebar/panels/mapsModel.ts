@@ -7,7 +7,13 @@
 // of row, newest first, with the words for where it has got to. The tile's glyph
 // and hue already say which kind a row is, and a list that scrolls has no
 // reason to hide its fourth item.
-import { formatBytes, formatMinutes, LIDAR_JOB_COPY } from "@logjam/shared";
+import {
+  formatBytes,
+  formatMinutes,
+  LIDAR_JOB_COPY,
+  formatDayMonthYear,
+  localDay,
+} from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
 
@@ -66,11 +72,7 @@ export type MakingItem = {
 
 /** "8 Sept 2026". A true timestamp, so local time is right; only a date-only value is UTC (frontend/AGENTS.md). */
 export function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDayMonthYear(localDay(new Date(iso)));
 }
 
 /** A topo's name: what the user called it, or the day it was made. */
