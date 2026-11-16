@@ -3,6 +3,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
+import type { Catalogue } from "./i18n.js";
 import { enUS } from "./i18nCatalogues/en-US.js";
 import {
   bareCopyIn,
@@ -87,15 +88,99 @@ describe("@logjam/shared i18n coverage", () => {
   });
 });
 
-// Spellings the Australian source writes and US English does not: a message
-// holding one has an entry in `i18nCatalogues/en-US.ts`. The list is empty
-// because no entry is wanted yet; a word added to it needs an entry for every
-// message that holds it.
-const AUSTRALIAN_WORDS: readonly string[] = [];
+// What a US reader finds foreign in the Australian source: a spelling, or a
+// word (rappel for abseil, check for tick). Each is a regular expression
+// matched from the start of a word, any case. A message in source that holds
+// one has an entry in `i18nCatalogues/en-US.ts`, or is in `LEFT_AS_WRITTEN`
+// with its reason, so a message written later with "colour" in it fails until
+// it has a US entry. A word that matches no message yet is here for the
+// messages still to come: "bushwalk" is in no converted message today.
+const AUSTRALIAN_WORDS: readonly string[] = [
+  // -our, -re, -ce, -ae
+  "colour",
+  "favour",
+  "honour",
+  "neighbour",
+  "behaviour",
+  "centre",
+  "kilometre",
+  "metre",
+  "litre",
+  "licence",
+  "defence",
+  "offence",
+  // -ise, -ised, -ising, -isation, written from the stems that are no US word
+  // already (a bare "is" prefix would catch "optimistic", "exercise", "promise")
+  "(?:organ|recogn|summar|custom|initial|author|synchron|personal|optim|minim|maxim|normal|real|categor|prioriti|final|util|apolog)is(?:e|ed|es|ing|ation|ations)\\b",
+  "analyse",
+  // a doubled consonant before -ed, -ing, -er
+  "travell",
+  "cancell",
+  "modell",
+  "labell",
+  "signall",
+  "levell",
+  "fuell",
+  // other spellings
+  "grey",
+  "programme",
+  "whilst",
+  "tyre",
+  "kerb",
+  "cheque",
+  "artefact",
+  "ageing",
+  "judgement",
+  "sceptic",
+  "mould",
+  "plough",
+  "aluminium",
+  "jewellery",
+  "storey",
+  "fulfil\\b",
+  "enrol\\b",
+  "practise",
+  "burnt",
+  "learnt",
+  "ochre",
+  // words
+  "abseil",
+  "bushwalk",
+  "bushbash",
+  "bushland",
+  "canyoning",
+  "carpark",
+  "footpath",
+  "level on\\b",
+  "mobile (?:reception|coverage|signal|phone|network|data)",
+  "mum\\b",
+  "need(?:s)? a lift",
+  "petrol",
+  "rubbish",
+  "suburb",
+  "tenure",
+  "tick(?:s|ed|ing)?\\b",
+  "torch",
+];
+
+// A message that holds a listed word and stays as the source writes it, and why.
+// Each must still exist and still hold a word, and none may also have an entry
+// ("keeps nothing both translated and left as written").
+const LEFT_AS_WRITTEN: Readonly<Record<string, string>> = {
+  "Copernicus DEM licence":
+    "the name of the licence a data source is published under, which stays as its publisher names it (ADR 0050, rule 4)",
+  "Tenure unresolved":
+    "a New South Wales land class, named as its data source names it",
+  "Trips with a linked canyon are always tagged canyoning.":
+    "names the stored trip tag `canyoning` (`CANYONING_TRIP_TYPE`, shared/src/tripName.ts), which a US reader sees as it is stored",
+};
+
+const holdsAustralianWord = (text: string) =>
+  AUSTRALIAN_WORDS.some((word) => new RegExp(`\\b${word}`, "i").test(text));
 
 describe("the en-US catalogue", () => {
   const REPO = join(SRC, "../..");
-  // Every message in the four packages (about 200 distinct today): the catalogue is shared, so a key
+  // Every message in the four packages (about 1,900 distinct today): the catalogue is shared, so a key
   // belongs to a message in any of them.
   const keys = new Set<string>();
   beforeAll(() => {
@@ -125,11 +210,55 @@ describe("the en-US catalogue", () => {
     ).toEqual([]);
   });
 
-  // Mutation: put a word in `AUSTRALIAN_WORDS` that a message in source holds,
-  // such as "cancell" (say`You cancelled this.` in api/src/routes/topoJobs.ts),
-  // without an entry for that message.
+  // Mutation: delete the entry for "Invite cancelled." from `enUS`, or add
+  // ``export const zz = say`Your colour is saved.`;`` to any source file.
   it("has an entry for every message that holds an Australian spelling", () => {
-    expect(missingEntries(enUS, keys, AUSTRALIAN_WORDS)).toEqual([]);
+    expect(
+      missingEntries(enUS, keys, AUSTRALIAN_WORDS, LEFT_AS_WRITTEN).map(
+        (key) =>
+          `"${key}" holds a word a US reader finds foreign and has no US entry. Add one to i18nCatalogues/en-US.ts, or name it in LEFT_AS_WRITTEN with its reason (${I18N_ADR}).`,
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: empty `AUSTRALIAN_WORDS`, or write `\\bX${word}` in `holdsAustralianWord`.
+  it("finds the messages with an Australian word — a list that stopped matching would pass forever", () => {
+    const found = [...keys].filter(holdsAustralianWord);
+    // 42 today: 39 with an entry and the 3 in `LEFT_AS_WRITTEN`.
+    expect(found.length).toBeGreaterThanOrEqual(40);
+    for (const word of ["colour", "abseil", "cancell", "tick", "mobile"])
+      expect(
+        found.some((key) => new RegExp(`\\b${word}`, "i").test(key)),
+        word,
+      ).toBe(true);
+  });
+
+  // Mutation: add `"Open the file": "Open the file"` to `enUS`, or leave "colour" in an entry's text.
+  it("has no entry that is its own message or still holds an Australian word", () => {
+    const texts = (entry: Catalogue[string]) =>
+      typeof entry === "string" ? [entry] : Object.values(entry);
+    expect(
+      Object.entries(enUS)
+        .filter(([key, entry]) =>
+          texts(entry).some(
+            (text) => text === key || holdsAustralianWord(text),
+          ),
+        )
+        .map(([key]) => key),
+    ).toEqual([]);
+  });
+
+  // Mutation: add "No such message." to `LEFT_AS_WRITTEN`, or an entry in
+  // `enUS` for "Tenure unresolved".
+  it("keeps nothing both translated and left as written, or left although it holds no listed word", () => {
+    expect(
+      Object.keys(LEFT_AS_WRITTEN).filter(
+        (key) =>
+          !keys.has(key) ||
+          !holdsAustralianWord(key) ||
+          Object.prototype.hasOwnProperty.call(enUS, key),
+      ),
+    ).toEqual([]);
   });
 });
 

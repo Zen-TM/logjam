@@ -840,16 +840,25 @@ export function orphanKeys(
   return Object.keys(catalogue).filter((key) => !keys.has(key));
 }
 
-/** The messages in `keys` that hold one of `words` but have no catalogue entry: a spelling the language writes differently, left as the source has it. */
+/**
+ * The messages in `keys` that hold one of `words` (each a regular expression
+ * matched from the start of a word, any case) but have no catalogue entry and
+ * are not in `leftAsWritten` (message, then why): a spelling the language
+ * writes differently, left as the source has it.
+ */
 export function missingEntries(
   catalogue: Catalogue,
   keys: ReadonlySet<string>,
   words: readonly string[],
+  leftAsWritten: Readonly<Record<string, string>> = {},
 ): string[] {
   const wanted = words.map((word) => new RegExp(`\\b${word}`, "i"));
+  const has = (table: object, key: string) =>
+    Object.prototype.hasOwnProperty.call(table, key);
   return [...keys].filter(
     (key) =>
       wanted.some((re) => re.test(key)) &&
-      !Object.prototype.hasOwnProperty.call(catalogue, key),
+      !has(catalogue, key) &&
+      !has(leftAsWritten, key),
   );
 }
