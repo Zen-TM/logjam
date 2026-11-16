@@ -390,7 +390,7 @@ jobs:
         env:
           E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/sim-regions-stub.spec.ts e2e/not-available-here.spec.ts e2e/us-english.spec.ts e2e/sharpen-region.spec.ts --workers=2 --reporter=list,github,html
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/sim-regions-stub.spec.ts e2e/not-available-here.spec.ts e2e/us-english.spec.ts e2e/sharpen-region.spec.ts e2e/makeamap-region.spec.ts --workers=2 --reporter=list,github,html
       # These write to the seeded account and take it back, which leaves sync
       # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
       # later integration run): after the integration suite, never before it.

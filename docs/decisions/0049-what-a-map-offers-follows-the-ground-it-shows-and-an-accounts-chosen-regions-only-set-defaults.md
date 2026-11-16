@@ -94,6 +94,15 @@ read, none of them a location.)
   Guard: `shared/src/regions.test.ts` ("the vector basemap" block, "is offered
   where the region in view declares an archive of it"). Everything else above
   stands.
+- **Update 2026-11-16: a printed sheet's base layers are the gallery's.** Make
+  a map lists the basemaps `offeredBasemaps` gives for the sheet's box (the
+  point the form opens over until the area is set) whose provider's terms allow
+  a print, and prints from the pick where the sheet's ground offers it, else
+  from the default `basemapHere` names for that ground. A SIX map is no longer
+  listed for a sheet outside New South Wales, where it has no tiles. Guards:
+  `frontend/src/components/dialogs/geoPdfBaseLayer.test.ts` ("lists no SIX map
+  outside New South Wales, and the same set inside") and
+  `frontend/e2e/makeamap-region.spec.ts`. Everything else above stands.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file other than `regions.ts` and `simRegions.ts` that names
