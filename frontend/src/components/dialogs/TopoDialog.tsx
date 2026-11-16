@@ -29,6 +29,8 @@ import {
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   MAP_TERRAIN,
+  plural,
+  rich,
   t,
   type ElvisStats,
   formatDayMonth,
@@ -49,6 +51,7 @@ import {
   FieldError,
   Checkbox,
 } from "../../ui";
+import { Rich } from "../../ui/rich";
 import { nextTopoName } from "./jobName";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
 import { submitFailureMessage, useTopoUpload } from "./topoUpload";
@@ -60,6 +63,7 @@ type Phase = "form" | "uploading" | "finalizing" | "done";
 type Mode = "form" | "instructions";
 
 const HELD_REASON_ID = "topo-held-reason";
+const STRONG = { strong: (text: string) => <strong>{text}</strong> };
 const KEPT_FOR_RESUME = t`Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.`;
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -357,7 +361,7 @@ export default function TopoDialog({
       storageUsed >= storageQuota
     ) {
       setError(
-        "Storage quota is full. Free space by deleting old topo jobs before submitting a new one.",
+        t`Storage quota is full. Free space by deleting old LiDAR maps before submitting a new one.`,
       );
       return;
     }
@@ -365,11 +369,12 @@ export default function TopoDialog({
     if (creditsUsed !== null && creditsQuota !== null && jobCredits !== null) {
       if (creditsUsed + jobCredits > creditsQuota) {
         const remaining = Math.max(0, creditsQuota - creditsUsed);
-        const resetStr = creditsResetAt
-          ? ` Allowance resets ${formatDayMonth(localDay(new Date(creditsResetAt)))}.`
-          : "";
+        const needs = formatCreditsLike(jobCredits, creditsQuota);
+        const left = formatCreditsLike(remaining, creditsQuota);
         setError(
-          t`Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,
+          creditsResetAt
+            ? t`Not enough processing credits. This job needs about ${needs} but only ${left} remain. Allowance resets ${formatDayMonth(localDay(new Date(creditsResetAt)))}.`
+            : t`Not enough processing credits. This job needs about ${needs} but only ${left} remain.`,
         );
         return;
       }
@@ -500,9 +505,9 @@ export default function TopoDialog({
             />
             {phase === "uploading" && (
               <p className={classes.workingDetail}>
-                {(uploadedBytes / 1e6).toFixed(1)} of{" "}
-                {(totalBytes / 1e6).toFixed(1)} MB
-                {totalBytes > 0 ? ` · ${uploadPct}%` : ""}
+                {totalBytes > 0
+                  ? t`${(uploadedBytes / 1e6).toFixed(1)} of ${(totalBytes / 1e6).toFixed(1)} MB · ${uploadPct}%`
+                  : t`${(uploadedBytes / 1e6).toFixed(1)} of ${(totalBytes / 1e6).toFixed(1)} MB`}
               </p>
             )}
           </div>
@@ -518,11 +523,15 @@ export default function TopoDialog({
               {submittedJob?.name ?? jobCopy.unnamed} {jobCopy.beingMade}
             </p>
             <p className={classes.workingDetail}>
-              {stats?.tileCount
-                ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
-                : ""}
-              {jobSeconds ? `It takes ${formatMinutes(jobSeconds)}. ` : ""}
-              {t`We'll let you know when it's ready. You can close this.`}
+              {[
+                stats?.tileCount
+                  ? plural(stats.tileCount, "# area queued.", "# areas queued.")
+                  : "",
+                jobSeconds ? t`It takes ${formatMinutes(jobSeconds)}.` : "",
+                t`We'll let you know when it's ready. You can close this.`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             </p>
           </div>
         ) : offer.mode === "off" ? (
@@ -694,13 +703,18 @@ function ZipSummary({
       ? [
           t`Point clouds`,
           stats.overlappingSurveys
-            ? `${stats.lazCount}× .laz over ${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""}`
+            ? plural(
+                stats.tileCount,
+                "{0}× .laz over # area",
+                "{0}× .laz over # areas",
+                stats.lazCount,
+              )
             : `${stats.lazCount}× .laz`,
         ]
       : null,
     stats.demCount > 0
       ? [
-          "DEM",
+          t`DEM`,
           `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${formatFixedMetres(stats.demResolutionMeters)}` : ""}`,
         ]
       : null,
@@ -733,9 +747,11 @@ function ZipSummary({
       </dl>
       {stats.derivativeTifCount > 0 && (
         <p className={classes.summaryNote}>
-          {stats.derivativeTifCount} ready-made raster
-          {stats.derivativeTifCount > 1 ? "s" : ""} in here (hillshade and the
-          like) will be ignored — yours are drawn from the survey itself.
+          {plural(
+            stats.derivativeTifCount,
+            "# ready-made raster in here (hillshade and the like) will be ignored — yours are drawn from the survey itself.",
+            "# ready-made rasters in here (hillshade and the like) will be ignored — yours are drawn from the survey itself.",
+          )}
         </p>
       )}
       {stats.overlappingSurveys && (
@@ -801,9 +817,10 @@ function ElvisInstructions({
         <div className={classes.stepBody}>
           <SectionHeader title={t`Order the data from ELVIS`} />
           <p className={classes.stepLine}>
-            In ELVIS, choose <strong>Order Data</strong>, then{" "}
-            <strong>Load File</strong> and give it the shapefile. Then press{" "}
-            <strong>Search</strong>.
+            <Rich
+              parts={rich`In ELVIS, choose <strong>Order Data</strong>, then <strong>Load File</strong> and give it the shapefile. Then press <strong>Search</strong>.`}
+              tags={STRONG}
+            />
           </p>
           <div className={classes.stepControls}>
             <Button
@@ -822,13 +839,16 @@ function ElvisInstructions({
         <div className={classes.stepBody}>
           <SectionHeader title={t`Take the 1 m or 2 m DEM`} />
           <p className={classes.stepLine}>
-            Under <strong>{t`NSW Government — Spatial Services`}</strong> →{" "}
-            <strong>{t`Digital Elevation Model`}</strong>, select the 1 m or 2 m
-            DEM, not the 5 m one: Logjam already has that for all of NSW.
+            <Rich
+              parts={rich`Under <strong>NSW Government — Spatial Services</strong> → <strong>Digital Elevation Model</strong>, select the 1 m or 2 m DEM, not the 5 m one: Logjam already has that for all of NSW.`}
+              tags={STRONG}
+            />
           </p>
           <p className={classes.stepLine}>
-            Take the <strong>{t`Point Clouds`}</strong> too if you want the
-            vegetation layer, which is drawn from them.
+            <Rich
+              parts={rich`Take the <strong>Point Clouds</strong> too if you want the vegetation layer, which is drawn from them.`}
+              tags={STRONG}
+            />
           </p>
         </div>
       </li>
@@ -837,9 +857,10 @@ function ElvisInstructions({
         <div className={classes.stepBody}>
           <SectionHeader title={t`Have it sent to you`} />
           <p className={classes.stepLine}>
-            Under <strong>Industry</strong>, choose <strong>Recreation</strong>.
-            Enter your email and press <strong>Order datasets</strong>. ELVIS
-            emails you a link to the ZIP — that ZIP is what you bring back here.
+            <Rich
+              parts={rich`Under <strong>Industry</strong>, choose <strong>Recreation</strong>. Enter your email and press <strong>Order datasets</strong>. ELVIS emails you a link to the ZIP — that ZIP is what you bring back here.`}
+              tags={STRONG}
+            />
           </p>
         </div>
       </li>

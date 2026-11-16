@@ -8,7 +8,7 @@
 // with a sentence saying what it gets you, which is what a row carries and a
 // button does not (DESIGN.md). The recommended one is the accent tile.
 import { Fragment, useState } from "react";
-import { ROPEWIKI_OFFER, type Region, t } from "@logjam/shared";
+import { plural, ROPEWIKI_OFFER, type Region, t } from "@logjam/shared";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -58,8 +58,14 @@ function OnboardingChoiceDialog({
         ...IDLE,
         state: "done",
         summary:
-          `${res.imported} place${res.imported !== 1 ? "s" : ""} loaded` +
-          (skipped > 0 ? `, ${skipped} skipped` : ""),
+          skipped > 0
+            ? plural(
+                res.imported,
+                "# place loaded, {0} skipped",
+                "# places loaded, {0} skipped",
+                skipped,
+              )
+            : plural(res.imported, "# place loaded", "# places loaded"),
       });
     } catch (err) {
       console.error(err);
@@ -136,8 +142,8 @@ function OnboardingChoiceDialog({
                 <ProgressBar
                   label={
                     canyonRegions.length > 1
-                      ? `Loading the ${region.name} RopeWiki database`
-                      : "Loading the RopeWiki database"
+                      ? t`Loading the ${region.name} RopeWiki database`
+                      : t`Loading the RopeWiki database`
                   }
                 />
               )}

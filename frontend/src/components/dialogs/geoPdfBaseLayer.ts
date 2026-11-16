@@ -3,6 +3,7 @@ import {
   pointBox,
   VALID_GEOPDF_BASE_LAYERS,
   offeredBasemaps,
+  t,
   wrapLon,
   type LonLatBox,
 } from "@logjam/shared";
@@ -60,7 +61,9 @@ export const UNPRINTABLE_NOTE = (() => {
   ).map((layer) => layer.name);
   return names.length === 0
     ? null
-    : `${names.join(" and ")} can't be printed: ${names.length === 1 ? "its" : "their"} tile server's policy forbids it.`;
+    : names.length === 1
+      ? t`${names[0]} can't be printed: its map server's policy forbids it.`
+      : t`${names.join(" and ")} can't be printed: their map server's policy forbids it.`;
 })();
 
 /**

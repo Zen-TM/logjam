@@ -445,20 +445,22 @@ function importEdit(
   importFrom: string,
 ): Edit | undefined {
   const imports = sf.statements.filter(ts.isImportDeclaration);
-  for (const statement of imports) {
+  // Every import from the module counts: a file may have two, with `t` in either.
+  const fromModule = imports.flatMap((statement) => {
     const bindings = statement.importClause?.namedBindings;
-    if (
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== importFrom ||
-      statement.importClause?.isTypeOnly ||
-      !bindings ||
-      !ts.isNamedImports(bindings) ||
-      !bindings.elements.length
-    )
-      continue;
-    if (bindings.elements.some((element) => element.name.text === "t"))
-      return undefined;
-    const end = bindings.elements[bindings.elements.length - 1].end;
+    return ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === importFrom &&
+      !statement.importClause?.isTypeOnly &&
+      bindings &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.length
+      ? [bindings.elements]
+      : [];
+  });
+  if (fromModule.some((elements) => elements.some((e) => e.name.text === "t")))
+    return undefined;
+  if (fromModule.length) {
+    const end = fromModule[0][fromModule[0].length - 1].end;
     return { start: end, end, text: ", t" };
   }
   const line = `import { t } from "${importFrom}";`;

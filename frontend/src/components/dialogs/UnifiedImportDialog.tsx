@@ -38,6 +38,7 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
   type ScopedCustomFieldDef,
+  plural,
   t,
 } from "@logjam/shared";
 import {
@@ -554,7 +555,12 @@ function UnifiedImportDialog({
     // from here on, so flag it rather than staying silent.
     if (parsed.parseErrors.length > 0) {
       toast.done(
-        `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} — some fields may be misaligned. Check the column mapping before importing.`,
+        plural(
+          parsed.parseErrors.length,
+          `"{0}" had # parsing issue — some fields may be misaligned. Check the column mapping before importing.`,
+          `"{0}" had # parsing issues — some fields may be misaligned. Check the column mapping before importing.`,
+          file.name,
+        ),
       );
       console.error("CSV parse issues in", file.name, parsed.parseErrors);
     }
@@ -1032,7 +1038,7 @@ function UnifiedImportDialog({
     return errs.map((e) => {
       const prepared = preparedPlaceRows[e.rowIndex];
       const line = prepared ? prepared.rowIndex + 2 : e.rowIndex + 1;
-      return `Row ${line}: ${e.message}`;
+      return t`Row ${line}: ${e.message}`;
     });
   }
 
@@ -1164,7 +1170,7 @@ function UnifiedImportDialog({
             const label =
               rejected?.form.name.trim() ||
               rejected?.key ||
-              `row ${e.rowIndex + 1}`;
+              t`row ${e.rowIndex + 1}`;
             errors.push(t`Couldn't create place "${label}": ${e.message}`);
           }
           // Resolve ids from the freshly-fetched place list.
@@ -1253,7 +1259,8 @@ function UnifiedImportDialog({
         errors: [
           ...errors,
           ...result.errors.map(
-            (e) => `Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
+            (e) =>
+              t`Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
           ),
         ],
         warnings: tripWarnings,
@@ -1300,24 +1307,23 @@ function UnifiedImportDialog({
 
   // When both a place list and a logbook are queued, label which stage we're in.
   const bothFiles = !!placeFile && !!tripFile;
-  const stageSuffix =
-    bothFiles && !outcome
-      ? activeKind === "triplog"
-        ? " — trips (2 of 2)"
-        : " — places (1 of 2)"
-      : "";
-
+  const stepTitle =
+    step === "map"
+      ? t`Import from CSV`
+      : step === "review"
+        ? t`Review matches`
+        : t`Confirm import`;
   const title = showingMergeSettings
     ? t`Merge settings`
     : outcome
       ? t`Import complete`
       : importing
         ? t`Importing…`
-        : (step === "map"
-            ? t`Import from CSV`
-            : step === "review"
-              ? t`Review matches`
-              : t`Confirm import`) + stageSuffix;
+        : bothFiles
+          ? activeKind === "triplog"
+            ? t`${stepTitle} — trips (2 of 2)`
+            : t`${stepTitle} — places (1 of 2)`
+          : stepTitle;
 
   /** The file, and which kind the importer is treating it as. The kind is a
    *  two-option rail rather than a pair of toggle buttons: it is one value
@@ -1398,9 +1404,7 @@ function UnifiedImportDialog({
           <ErrorBanner message={error} onDismiss={() => setError(null)} />
         )}
         <p className={classes.note}>
-          A place list needs a name, latitude and longitude (grades and notes
-          are optional). A trip list needs a place name and a date (notes
-          optional). Need a starting point?{" "}
+          {t`A place list needs a name, latitude and longitude (grades and notes are optional). A trip list needs a place name and a date (notes optional). Need a starting point?`}{" "}
           {/* GENERATED from the chosen type's own definitions, not a static
               file: a static template promises what a place has, and that
               promise stopped being true the moment a place could be a
@@ -1708,8 +1712,18 @@ function UnifiedImportDialog({
         {autoResolvedCount > 0 && (
           <p className={classes.note}>
             {activeKind === "place"
-              ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "place" : "places"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
-              : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a place confidently (or have no place) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
+              ? plural(
+                  autoResolvedCount,
+                  "Plus # more place matched confidently (new or existing) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  "Plus # more places matched confidently (new or existing) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  surfacedKeys.length,
+                )
+              : plural(
+                  autoResolvedCount,
+                  "Plus # more trip matched a place confidently (or have no place) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  "Plus # more trips matched a place confidently (or have no place) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  surfacedKeys.length,
+                )}
           </p>
         )}
         <MatchReview
@@ -1785,9 +1799,11 @@ function UnifiedImportDialog({
         details.push({
           items: outcome.merges.map((m) => `${m.sourceName} → ${m.targetName}`),
         });
-        detailsLabel = `${outcome.merges.length} ${
-          outcome.merges.length === 1 ? "place" : "places"
-        } merged into existing entries`;
+        detailsLabel = plural(
+          outcome.merges.length,
+          "# place merged into existing entries",
+          "# places merged into existing entries",
+        );
       }
       const { skipped: skippedRows, leftEmpty } = splitSkippedRows(
         outcome.warnings,
@@ -1818,13 +1834,21 @@ function UnifiedImportDialog({
     // Pre-import preview
     const ready =
       activeKind === "place"
-        ? `${preparedPlaceRows.length} place row${preparedPlaceRows.length !== 1 ? "s" : ""} ready to import.`
-        : `${preparedTripRows.length} trip${preparedTripRows.length !== 1 ? "s" : ""} ready to import.`;
+        ? plural(
+            preparedPlaceRows.length,
+            "# place row ready to import.",
+            "# place rows ready to import.",
+          )
+        : plural(
+            preparedTripRows.length,
+            "# trip ready to import.",
+            "# trips ready to import.",
+          );
     const skippedNote = skippedRowsNote(
       splitSkippedRows(activeKind === "place" ? placeWarnings : tripWarnings)
         .skipped,
     );
-    const preview = skippedNote ? `${ready} ${skippedNote}` : ready;
+    const preview = [ready, skippedNote].filter(Boolean).join(" ");
 
     // Merge settings only mean something when a row folds into a place.
     const willMerge =
@@ -1848,8 +1872,15 @@ function UnifiedImportDialog({
             title={t`Merge settings`}
             subtitle={
               usingIncoming === 0
-                ? "A row that matches an existing place keeps every value it already has"
-                : `Uses the value from your file for ${usingIncoming} of ${mergeableFields.length} fields`
+                ? t`A row that matches an existing place keeps every value it already has`
+                : // "fields" in both forms: a type with one mergeable field reads
+                  // "of 1 fields".
+                  plural(
+                    mergeableFields.length,
+                    "Uses the value from your file for {0} of # fields",
+                    "Uses the value from your file for {0} of # fields",
+                    usingIncoming,
+                  )
             }
             onOpen={() => setShowingMergeSettings(true)}
             trailing={

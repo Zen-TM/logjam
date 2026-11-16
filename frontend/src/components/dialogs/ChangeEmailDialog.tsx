@@ -2,6 +2,7 @@ import {
   ACCOUNT,
   confirmEmailChange,
   requestEmailChange,
+  rich,
   SIGN_IN_COPY,
   t,
 } from "@logjam/shared";
@@ -9,7 +10,8 @@ import { useId, useState } from "react";
 import { accessToken, issuerUrl } from "../../auth/oidc";
 import { messageFromError } from "../../errors/messageFromError";
 import { isValidEmailFormat } from "../../emailValidation";
-import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
+import { Button, Dialog, ErrorBanner, TextField } from "../../ui";
+import { Rich } from "../../ui/rich";
 import classes from "./ChangeEmailDialog.module.css";
 
 type Stage = "input" | "verify" | "done";
@@ -207,8 +209,12 @@ function ChangeEmailForm({
         {stage === "verify" && (
           <>
             <p className={classes.note}>
-              A code went to <b className={classes.address}>{pendingEmail}</b>.
-              Check the spam folder if it hasn't arrived.
+              <Rich
+                parts={rich`A code went to <b>${pendingEmail}</b>. Check the spam folder if it hasn't arrived.`}
+                tags={{
+                  b: (text) => <b className={classes.address}>{text}</b>,
+                }}
+              />
             </p>
             <TextField
               label={ACCOUNT.copy.verificationCode}
@@ -229,8 +235,10 @@ function ChangeEmailForm({
 
         {stage === "done" && (
           <p className={classes.note}>
-            Your email is now <b className={classes.address}>{pendingEmail}</b>.
-            Sign in with it next time.
+            <Rich
+              parts={rich`Your email is now <b>${pendingEmail}</b>. Sign in with it next time.`}
+              tags={{ b: (text) => <b className={classes.address}>{text}</b> }}
+            />
           </p>
         )}
 

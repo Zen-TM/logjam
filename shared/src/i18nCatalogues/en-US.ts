@@ -40,6 +40,8 @@ export const enUS: Catalogue = {
   "Coloured by steepness": "Colored by steepness",
   "Band {0} colour, taken from the scale":
     "Band {0} color, taken from the scale",
+  "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbour follows what you set here.":
+    "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbor follows what you set here.",
   "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.":
     "Each area is colored by how long since it last burned: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no color.",
   "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.":

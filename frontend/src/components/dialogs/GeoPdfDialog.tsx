@@ -91,6 +91,7 @@ import {
   type AreaExportFormat,
   type AreaExportLayer,
   type GridId,
+  plural,
   t,
   type SharpenedArea,
   TERRAIN_LAYER_KEYS,
@@ -223,8 +224,7 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-const RENDER_FAILED =
-  "Couldn't make the GeoPDF. Check your connection, or try another base map.";
+const RENDER_FAILED = t`Couldn't make the GeoPDF. Check your connection, or try another map.`;
 
 const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
   preparing: t`Getting the map ready.`,
@@ -1718,10 +1718,10 @@ const EDGE_FIELDS: {
   latlon: string;
   en: string;
 }[] = [
-  { which: "n", cell: "extentNorth", latlon: t`North`, en: "N (northing)" },
-  { which: "w", cell: "extentWest", latlon: t`West`, en: "W (easting)" },
-  { which: "e", cell: "extentEast", latlon: t`East`, en: "E (easting)" },
-  { which: "s", cell: "extentSouth", latlon: t`South`, en: "S (northing)" },
+  { which: "n", cell: "extentNorth", latlon: t`North`, en: t`N (northing)` },
+  { which: "w", cell: "extentWest", latlon: t`West`, en: t`W (easting)` },
+  { which: "e", cell: "extentEast", latlon: t`East`, en: t`E (easting)` },
+  { which: "s", cell: "extentSouth", latlon: t`South`, en: t`S (northing)` },
 ];
 
 const NO_EDGES_TYPED: ExtentFieldValues = { n: "", s: "", e: "", w: "" };
@@ -1861,9 +1861,11 @@ function AreaExportFields({
         />
         {sharpenedInside > 0 && (
           <p className={classes.note}>
-            {sharpenedInside === 1
-              ? "1 sharpened area inside is included, at its own detail."
-              : `${sharpenedInside} sharpened areas inside are included, at their own detail.`}
+            {plural(
+              sharpenedInside,
+              "# sharpened area inside is included, at its own detail.",
+              "# sharpened areas inside are included, at their own detail.",
+            )}
           </p>
         )}
         {/* No number until computeEstimate has an area-export kind. */}

@@ -149,7 +149,7 @@ describe("extractMessages: what it rewrites", () => {
 });
 
 describe("extractMessages: the import", () => {
-  // Mutation: make `importEdit`'s loop `continue` before it looks at `statement`.
+  // Mutation: make `fromModule` in `importEdit` always empty.
   it("extends the import from the same module", () => {
     expect(
       rewritten(
@@ -160,13 +160,22 @@ describe("extractMessages: the import", () => {
     );
   });
 
-  // Mutation: delete the `element.name.text === "t"` test in `importEdit`.
+  // Mutation: delete the `e.name.text === "t"` test in `importEdit`.
   it("leaves an import that already has t", () => {
     const out = rewritten(
       'import { t } from "@logjam/shared";\nconst x = <p>Hello world</p>;',
     );
     expect(out).toBe(
       'import { t } from "@logjam/shared";\nconst x = <p>{t`Hello world`}</p>;',
+    );
+  });
+
+  // Mutation: in `importEdit`, look for `t` in `fromModule[0]` only, not in each import.
+  it("leaves two imports from the module alone when the second has t", () => {
+    const source =
+      'import { a } from "@logjam/shared";\nimport { b, t } from "@logjam/shared";\nconst x = <p>Hello world</p>;';
+    expect(rewritten(source)).toBe(
+      source.replace("<p>Hello world</p>", "<p>{t`Hello world`}</p>"),
     );
   });
 

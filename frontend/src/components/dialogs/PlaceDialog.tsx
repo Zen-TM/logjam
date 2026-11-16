@@ -451,10 +451,7 @@ function PlaceDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded files. Please try again.",
-          ),
+          messageFromError(err, t`Couldn't discard uploaded files. Try again.`),
         );
         return;
       }

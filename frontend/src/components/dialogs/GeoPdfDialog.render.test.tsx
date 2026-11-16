@@ -1444,7 +1444,7 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(
       await screen.findByText(
-        "Couldn't make the GeoPDF. Check your connection, or try another base map.",
+        "Couldn't make the GeoPDF. Check your connection, or try another map.",
       ),
     ).toBeTruthy();
   });

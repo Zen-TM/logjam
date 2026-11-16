@@ -4,6 +4,7 @@ import {
   noFriendsMatch,
   noFriendsMessage,
   PLACE_EXPORT_FORMATS,
+  plural,
   sharePromise,
   type TripLogCustomFieldDef,
   t,
@@ -28,9 +29,6 @@ import {
   Icon,
 } from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Take the places just picked out as a file, or hand them to friends. One verb
@@ -131,14 +129,14 @@ function SelectedPlacesDialog({
       onClose();
       toast.done(
         result.granted > 0
-          ? `Shared ${plural(ownedPlaces.length, "place")} with ${plural(shareFriendIds.length, "friend")}.`
-          : "They already have these.",
+          ? t`Shared ${plural(ownedPlaces.length, "# place", "# places")} with ${plural(shareFriendIds.length, "# friend", "# friends")}.`
+          : t`They already have these.`,
       );
     } catch (err) {
       // The dialog stays open with the picks intact, so a retry is one press.
       console.error(err);
       setShareError(
-        messageFromError(err, "Couldn't share places. Please try again."),
+        messageFromError(err, t`Couldn't share places. Try again.`),
       );
     } finally {
       setSharing(false);
@@ -163,7 +161,11 @@ function SelectedPlacesDialog({
   return (
     <Dialog
       open={open}
-      title={`${mode === "share" ? "Share" : "Export"} ${plural(selectedPlaces.length, "place")}`}
+      title={
+        mode === "share"
+          ? plural(selectedPlaces.length, "Share # place", "Share # places")
+          : plural(selectedPlaces.length, "Export # place", "Export # places")
+      }
       size="large"
       dismissible={!busy}
       onClose={onClose}
@@ -183,7 +185,11 @@ function SelectedPlacesDialog({
           />
           {mode === "share" && sharedCount > 0 && (
             <p className={classes.note}>
-              {plural(sharedCount, "place")} shared with you can't be shared on.
+              {plural(
+                sharedCount,
+                "# place shared with you can't be shared on.",
+                "# places shared with you can't be shared on.",
+              )}
             </p>
           )}
           {selectedPlaces.map((place) => (
@@ -363,8 +369,12 @@ function SelectedPlacesDialog({
                   onClick={handleShare}
                 >
                   {shareFriendIds.length === 0
-                    ? "Share"
-                    : `Share with ${plural(shareFriendIds.length, "friend")}`}
+                    ? t`Share`
+                    : plural(
+                        shareFriendIds.length,
+                        "Share with # friend",
+                        "Share with # friends",
+                      )}
                 </Button>
               </>
             )}

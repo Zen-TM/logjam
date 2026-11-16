@@ -123,6 +123,13 @@ describe("bareCopyIn", () => {
     ]);
   });
 
+  // Mutation: delete `"en"` from `COPY_PROPS` in copyRules.ts.
+  it("flags the English of an en property, which a screen shows as a label", () => {
+    expect(bare('const a = { latlon: x, en: "N (northing)" };')).toEqual([
+      "N (northing)",
+    ]);
+  });
+
   // Mutation: stop treating a JSX child expression as copy.
   it("flags a string in a JSX child expression, even one word", () => {
     expect(bare('const a = <p>{open ? "Hide" : "Show"}</p>;')).toEqual([
