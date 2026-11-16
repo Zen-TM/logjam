@@ -413,6 +413,18 @@ describe("extractMessages: prose literals", () => {
     expect(out).toContain("const n = t`Saved ${x} places`;");
   });
 
+  // Mutation: in `PROSE` (i18nSource.ts), drop the `ONE_LETTER_WORD` alternatives.
+  it("writes prose that holds the word a, and the English stays", () => {
+    const out = rewritten(
+      "const m = 'Find a route';\nconst n = `Enter a ${x}`;",
+      {
+        prose: true,
+      },
+    );
+    expect(out).toContain("const m = t`Find a route`;");
+    expect(out).toContain("const n = t`Enter a ${x}`;");
+  });
+
   // Mutation: delete the `+` check from `placement`.
   it("still leaves a prose + chain, and lists it", () => {
     const out = run("const a = 'Try again' + suffix + ' or give up';", {

@@ -154,13 +154,19 @@ const NOT_COPY_TAGS = /^(?:sql|Prisma\.sql|css|glsl|html)$/;
 const NOT_COPY_NEW = /^(?:\w*Error|RegExp|URL|URLSearchParams|Set|Map)$/;
 
 /** A word: two or more letters, or letters round an inner apostrophe ("You're"). */
-const WORD = String.raw`(?:\p{L}{2,}|\p{L}+['’]\p{L}+)`;
+const WORD = String.raw`(?:\p{L}{2,}|\p{L}+['\u2019]\p{L}+)`;
 
-/** Two words with a space between, or a one-word sentence: what reads as prose. */
+/** The one-letter words English writes on their own: "Find a route", "Can I help". Any other lone letter is a symbol or an id, so `x or y` is not prose; the `a` of a tag (`<a href>`, `</a>`) is not a word either. */
+const ONE_LETTER_WORD = String.raw`(?<![\p{L}'\u2019</])[aAI](?![\p{L}'\u2019])`;
+
+/** Two words with a space between (one of them may be "a" or "I"), or a one-word sentence: what reads as prose. */
 const PROSE = new RegExp(
-  String.raw`${WORD}\W*\s\W*${WORD}|^\p{Lu}\p{Ll}+[.!?…]$`,
+  String.raw`${WORD}\W*\s\W*(?:${WORD}|${ONE_LETTER_WORD})|${ONE_LETTER_WORD}\W*\s\W*${WORD}|^\p{Lu}\p{Ll}+[.!?\u2026]$`,
   "u",
 );
+
+/** How many words a string has, counting "a" and "I": what `addJoined` asks two of. */
+const WORDS_IN = new RegExp(`${WORD}|${ONE_LETTER_WORD}`, "gu");
 
 /** A colour such as `#F7F3EC`: it has letters but no words. */
 const HEX = /^#[0-9a-f]{3,8}$/i;
@@ -250,8 +256,7 @@ export function bareCopyIn(
     const words = joined.split(HOLE).join("xx");
     const written = joined.split(HOLE).join("…");
     if (
-      (joined.split(HOLE).join(" ").match(new RegExp(WORD, "gu")) ?? [])
-        .length < 2 ||
+      (joined.split(HOLE).join(" ").match(WORDS_IN) ?? []).length < 2 ||
       SQL.test(written) ||
       !PROSE.test(words) ||
       CODE.test(words)

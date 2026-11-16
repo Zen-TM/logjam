@@ -176,6 +176,29 @@ describe("bareCopyIn", () => {
     ).toEqual(["Can't undo", "You’re in"]);
   });
 
+  // Mutation: in `PROSE`, drop the `ONE_LETTER_WORD` alternatives.
+  it("flags prose that holds the one-letter word a or I, and not a lone letter", () => {
+    expect(
+      bare(
+        'const a = "Find a route"; const b = "Can I help"; const c = "A new day"; const d = "x or y"; const e = "a b"; const f = "Plan B";',
+      ),
+    ).toEqual(["Find a route", "Can I help", "A new day"]);
+  });
+
+  // Mutation: in `ONE_LETTER_WORD`, take `<` and `/` out of the lookbehind.
+  it("does not read the a of a tag as a word", () => {
+    expect(
+      bare(
+        `const a = '<a href="x">go</a>'; const b = '</a> end'; const c = "Find a route";`,
+      ),
+    ).toEqual(["Find a route"]);
+  });
+
+  // Mutation: in `WORDS_IN`, drop `ONE_LETTER_WORD`.
+  it("counts a or I as a word of a pieced sentence", () => {
+    expect(bare("const a = `Enter a ${what}`;")).toEqual(["Enter a …"]);
+  });
+
   // Mutation: change the template case's `if (!copy) {` to `if (true) {`, so a
   // template in a copy position is judged as one unit too.
   it("flags each part of a template in a copy position", () => {
