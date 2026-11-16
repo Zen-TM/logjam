@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { setDisplayUnits } from "../units.js";
 import { gridZonesFor } from "../grids.js";
 import { REGIONS } from "../regions.js";
 import { SIM_REGIONS } from "../simRegions.js";
@@ -537,6 +538,25 @@ describe("a place's page", () => {
     } finally {
       if (zone === undefined) delete process.env.TZ;
       else process.env.TZ = zone;
+    }
+  });
+
+  // Mutation: drop the `endsWith` check from `withFieldUnit`, and a row that
+  // has its unit takes it again ("15 m m").
+  it("withRowUnit applied twice is applied once", () => {
+    const row: AttributeRow = ["longest_abseil", "Longest pitch", 15, "float"];
+    try {
+      for (const [units, shown] of [
+        ["metric", "15 m"],
+        ["imperial", "49.2 ft"],
+      ] as const) {
+        setDisplayUnits(units);
+        expect(withRowUnit(row)[2]).toBe(shown);
+        expect(withRowUnit(withRowUnit(row))).toEqual(withRowUnit(row));
+        expect(withFieldUnit("longest_abseil", shown)).toBe(shown);
+      }
+    } finally {
+      setDisplayUnits("metric");
     }
   });
 

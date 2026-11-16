@@ -26,12 +26,10 @@ import {
   flowOnDate,
   gaugeHistoryUrl,
   gaugeSeries,
-  GAUGE_LATEST_PATH,
   GAUGE_PREFIX,
   gaugeDay,
   GAUGE_DAY_OFFSET_DEFAULT,
   GAUGE_UNITS_DEFAULT,
-  distinctGaugeIds,
   gaugeReadingOnDay,
   levelOnDate,
   tripDatesFor,
@@ -103,16 +101,23 @@ describe("gauge files", () => {
   });
 
   it("builds URLs only for gauge ids", () => {
-    // Mutation: build the URL without the id check → red.
-    expect(gaugeHistoryUrl("https://cdn", "usgs09380000")).toBe(
+    // Mutation: build the URL without the id check, or from `GAUGE_PREFIX`
+    // whatever the feed it is handed → red.
+    expect(gaugeHistoryUrl("https://cdn", GAUGE_PREFIX, "usgs09380000")).toBe(
       `https://cdn/${GAUGE_PREFIX}history/usgs09380000.json`,
     );
-    expect(gaugeHistoryUrl("https://cdn", "a".repeat(21))).toBeNull();
-    expect(gaugeHistoryUrl("https://cdn", "900001")).toBe(
+    expect(
+      gaugeHistoryUrl("https://cdn", GAUGE_PREFIX, "a".repeat(21)),
+    ).toBeNull();
+    expect(gaugeHistoryUrl("https://cdn", GAUGE_PREFIX, "900001")).toBe(
       `https://cdn/${GAUGE_PREFIX}history/900001.json`,
     );
-    expect(gaugeHistoryUrl("https://cdn", "../latest")).toBeNull();
-    expect(GAUGE_LATEST_PATH).toBe("master/gauges/v1/latest.json");
+    expect(
+      gaugeHistoryUrl("https://cdn", GAUGE_PREFIX, "../latest"),
+    ).toBeNull();
+    expect(gaugeHistoryUrl("https://cdn", "master/gauges/other/v1/", "7")).toBe(
+      "https://cdn/master/gauges/other/v1/history/7.json",
+    );
   });
 });
 
@@ -195,12 +200,6 @@ describe("a gauge on a trip's date", () => {
       gaugeReadingOnDay(gauge, history, "2026-10-31", now, AEST),
     ).toBeNull();
     expect(gaugeReadingOnDay(gauge, null, "2026-10-20", now, AEST)).toBeNull();
-  });
-
-  it("keeps a few distinct gauges", () => {
-    expect(
-      distinctGaugeIds([null, "1", "2", "1", undefined, "3", "4"]),
-    ).toEqual(["1", "2", "3"]);
   });
 
   it("puts the trip's reading beside the current one, flow only where the gauge has it", () => {

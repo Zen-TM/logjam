@@ -18,6 +18,7 @@ import {
   type TripPlanItem,
   type TripPlanPlace,
   type TripPlanView,
+  displayUnits,
 } from "@logjam/shared";
 import {
   Button,
@@ -263,6 +264,11 @@ export default function PlanItems({
       />
       {editing && (
         <PlanItemEditDialog
+          // The units are in the key: the form's length text is in one unit, so
+          // a change of units opens it afresh rather than saving feet as
+          // metres. Guard: `lengthFieldClients.test.ts` ("every form of a
+          // length field converts it").
+          key={displayUnits()}
           planId={plan.id}
           opened={editing}
           // Follows the refetched plan, so a 409's re-read reaches the form.

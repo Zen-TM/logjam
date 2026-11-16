@@ -113,7 +113,7 @@ export const COPY_MEDIA_SETTING = {
  */
 export const REGION_CHOICE = {
   title: "Where do you canyon?",
-  hint: "Logjam offers the maps and canyon list of each region you choose.",
+  hint: t`Logjam opens on your regions and offers their canyon lists.`,
   continue: "Continue",
   saveFailed: "Couldn't save your regions.",
 } as const;

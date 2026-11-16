@@ -6,7 +6,8 @@
 // names, so each client keeps them on the device only and clears them when the
 // account leaves (frontend useAuth.ts, mobile wipeLocalData.ts).
 import { boxCentre, parseGridReference } from "./grids.js";
-import { REGIONS, wrapView, type LonLatBox } from "./regions.js";
+import { wrapBox } from "./placeGeo.js";
+import { REGIONS, type LonLatBox } from "./regions.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
 /** What the search box says while it works, finds nothing or fails: one set of
@@ -60,7 +61,7 @@ function part(g: (string | undefined)[], at: number): Part | null {
 
 /** Where the map is looking, in [-180, 180]: the view's centre, else the first region's. */
 function mapCentre(view?: LonLatBox | null): { lon: number; lat: number } {
-  if (view) return boxCentre(wrapView(view));
+  if (view) return boxCentre(wrapBox(view));
   const [lon, lat] = REGIONS[0].view.center;
   return { lon, lat };
 }

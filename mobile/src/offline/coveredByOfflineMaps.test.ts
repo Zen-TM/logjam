@@ -5,6 +5,7 @@ import {
   routeCoveredByOfflineMaps,
 } from "./coveredByOfflineMaps";
 
+type Point = [lon: number, lat: number];
 const region = (bbox: [number, number, number, number] | null) => ({
   kind: "basemap-region" as const,
   bbox,
@@ -120,8 +121,9 @@ describe("a saved region that runs past 180°", () => {
   // Made-up ground either side of the line.
   const across = region([178, -18, 182, -16]);
 
-  // Mutation: compare the point's longitude with the region's edges directly
-  // (`region[0] <= lon && region[2] >= lon`). The -179.5 point reads uncovered.
+  // Mutation: compare plain in both `holds` (`region[0] <= lon && region[2] >=
+  // lon`) and the whole-box test (`box[0] <= west && box[2] >= east`). The
+  // -179.5 box reads uncovered.
   it("holds a place's box on either side of the line", () => {
     expect(coveredByOfflineMaps([179.4, -17.1, 179.6, -16.9], [across])).toBe(
       true,
@@ -163,5 +165,75 @@ describe("a saved region that runs past 180°", () => {
         [across],
       ),
     ).toBe(false);
+  });
+
+  // Mutation: in `routeCoveredByOfflineMaps`, take the leg's end as
+  // `points[i][0]` and not `lonNear(points[i][0], lon0)`, and a way whose
+  // consecutive vertices straddle 180 is walked the long way round, through
+  // ground no region holds.
+  it("holds a way whose consecutive vertices straddle the line", () => {
+    const vertices: Point[] = [
+      [179.9, -17],
+      [-179.9, -17],
+      [-179.5, -17.2],
+    ];
+    expect(routeCoveredByOfflineMaps(vertices, [across])).toBe(true);
+    expect(routeCoveredByOfflineMaps([...vertices].reverse(), [across])).toBe(
+      true,
+    );
+  });
+
+  // Mutation: check only a leg's vertices in `routeCoveredByOfflineMaps` (set
+  // `parts` to 1), and the hole at the line itself is stepped over.
+  it("does not hold a way across the line where the ground between is missing", () => {
+    const eastSide = region([178, -18, 179.99, -16]);
+    const westSide = region([-179.99, -18, -178, -16]);
+    expect(
+      routeCoveredByOfflineMaps(
+        [
+          [179.9, -17],
+          [-179.9, -17],
+        ],
+        [eastSide, westSide],
+      ),
+    ).toBe(false);
+    expect(
+      routeCoveredByOfflineMaps(
+        [
+          [179.5, -17],
+          [179.9, -17],
+        ],
+        [eastSide, westSide],
+      ),
+    ).toBe(true);
+  });
+
+  // Mutation: in `coveredByOfflineMaps` compare the whole box as plain numbers
+  // (`box[0] <= west && box[2] >= east`), and a box saved wrapped (west above
+  // east) is held by any region west of it, 150 to 151 included.
+  it("does not hold a box across the line over ground no region holds there", () => {
+    const elsewhere = region([150, -18, 151, -16]);
+    expect(
+      coveredByOfflineMaps([179.4, -17.1, -179.4, -16.9], [elsewhere]),
+    ).toBe(false);
+    expect(
+      coveredByOfflineMaps([179.4, -17.1, 180.6, -16.9], [elsewhere]),
+    ).toBe(false);
+    expect(
+      coveredByOfflineMaps([539.4, -17.1, 540.6, -16.9], [elsewhere]),
+    ).toBe(false);
+  });
+
+  // Mutation: take the centre sample as `(west + east) / 2` in
+  // `coveredByOfflineMaps` (in place of `lonMid`), and a box saved wrapped, held by two regions that
+  // meet at the line, has its centre at 0 and is not held.
+  it("holds a box that two regions meeting at the line cover between them", () => {
+    const eastSide = region([178, -18, 180, -16]);
+    const westSide = region([-180, -18, -178, -16]);
+    for (const box of [
+      [179.4, -17.1, 180.6, -16.9],
+      [179.4, -17.1, -179.4, -16.9],
+    ] as const)
+      expect(coveredByOfflineMaps([...box], [eastSide, westSide])).toBe(true);
   });
 });

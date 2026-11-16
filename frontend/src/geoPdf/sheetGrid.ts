@@ -2,6 +2,7 @@ import {
   boxCentre,
   fromGrid,
   gridZoneAt,
+  lonNear,
   REGIONS,
   toGrid,
   type GridZone,
@@ -28,8 +29,7 @@ export function sheetGrid(extent: Edges, regions: readonly Region[] = REGIONS) {
     toGrid: (lat: number, lon: number) => toGrid(lat, lon, zone),
     fromGrid: (easting: number, northing: number) => {
       const point = fromGrid(easting, northing, zone);
-      const copies = Math.round((centre.lon - point.lon) / 360);
-      return { lat: point.lat, lon: point.lon + 360 * copies };
+      return { lat: point.lat, lon: lonNear(point.lon, centre.lon) };
     },
   };
 }

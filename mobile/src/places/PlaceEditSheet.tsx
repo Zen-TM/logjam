@@ -26,6 +26,7 @@ import {
   validatePlacePayload,
   type ScopedCustomFieldDef,
   coordinateEntry,
+  displayUnits,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -234,19 +235,46 @@ export function PlaceEditSheet({
   // `resuming` is NOT in the key: it and `visible` flip in the same commit, and
   // keying on it would re-run the seed the moment the parent cleared the flag
   // afterwards — which is the wipe this exists to stop.
-  const seedKey = { placeId: place?.id, initialCoords, visible };
+  //
+  // The units are in the key: the form's length text and its conversion are in
+  // one unit, so a change of units reseeds it (dropping what was typed) rather
+  // than saving feet as metres. Only the fields: the photos and way staged so
+  // far stay (`seed({ unitsOnly: true })`), as Logjam Web's dialog keeps its
+  // media. Guards: `lengthFieldClients.test.ts` ("every form of a length field
+  // converts it").
+  const seedKey = {
+    placeId: place?.id,
+    initialCoords,
+    visible,
+    units: displayUnits(),
+  };
   const [seededFor, setSeededFor] = useState<typeof seedKey | null>(null);
+  // The units `seed` wrote the form's text in (a `seededFor` that skipped a
+  // resume does not know them).
+  const [seededUnits, setSeededUnits] = useState(seedKey.units);
   if (
     seededFor === null ||
     seededFor.placeId !== seedKey.placeId ||
     seededFor.initialCoords !== seedKey.initialCoords ||
-    seededFor.visible !== seedKey.visible
+    seededFor.visible !== seedKey.visible ||
+    seededFor.units !== seedKey.units
   ) {
     setSeededFor(seedKey);
-    if (visible && !resuming) seed();
+    // A return from the map picker keeps the form (`resuming`), unless the
+    // units changed while it was away: the typed length is in the old ones.
+    // A return from the picker, or a flip of units under the open form, keeps
+    // the media; opening a sheet starts it afresh.
+    const onlyUnits =
+      seededFor !== null &&
+      seededFor.placeId === seedKey.placeId &&
+      seededFor.initialCoords === seedKey.initialCoords &&
+      seededFor.visible === seedKey.visible;
+    if (visible && (!resuming || seededUnits !== seedKey.units))
+      seed({ unitsOnly: resuming || onlyUnits });
   }
 
-  function seed() {
+  function seed({ unitsOnly = false } = {}) {
+    setSeededUnits(displayUnits());
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
@@ -287,7 +315,7 @@ export function PlaceEditSheet({
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    media.reset();
+    if (!unitsOnly) media.reset();
   }
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -399,6 +427,7 @@ export function PlaceEditSheet({
     const effectiveCustomFields = coerceCustomFields(
       fieldValues,
       typeFieldDefs,
+      place?.fieldValues,
     );
     // Every check runs, so one press lights every bad field. The coordinates
     // are required on an edit too, as on Logjam Web.

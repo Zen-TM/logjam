@@ -4,7 +4,7 @@
 // Mutations that turn it red: add `{ key: "wind" }` to `GAUGES.sections`;
 // delete `credit` from `GAUGE_SECTIONS`; drop `stopSourcePress(event)` from
 // `handleGaugePress`; mount `GaugesLayer` on `showGauges` alone; give the
-// layer a `useGauges(true)`; gate `openGauge` on `gaugesShown`.
+// layer a `useGauges(GAUGE_PREFIX)`.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { contractSectionKeys, GAUGES } from "@logjam/shared";
@@ -55,9 +55,10 @@ describe("the map's gauge layer", () => {
     );
     expect(screen).toContain("Date.now() - pinPressedAt.current < 250");
   });
-  // Mutation: mount on `showGauges` alone, and the layer draws over a region
-  // that has no feed, though its row reads OFF.
+  // Mutation: mount on `showGauges` alone, or set `gaugesHere = true`, and the
+  // layer draws over a region that has no feed, though its row reads OFF.
   it("mounts only while the layer is on and the region has a feed", () => {
+    expect(screen).toContain("const gaugesHere = gaugeFeed !== null;");
     expect(screen).toContain("const gaugesShown = showGauges && gaugesHere;");
     expect(screen).toContain("{gaugesShown && gaugeFile ? (");
   });
@@ -70,19 +71,28 @@ describe("the map's gauge layer", () => {
     expect(sheet).toContain("disabled={entry.disabled}");
     expect(sheet).not.toContain("entry.inert");
   });
-  // Mutation: pass `showGauges` to `useGauges`, and the feed is fetched over a
-  // region that has none.
-  it("is fetched only while on, over a region with a feed or for a picked gauge", () => {
-    expect(read("./useGauges.ts")).toContain("if (!enabled) return;");
-    expect(screen).toContain("} = useGauges(gaugesShown || gaugeWanted);");
-    expect(screen).toContain(
-      "const gaugeWanted = showGauges && gaugeId !== null;",
+  // Mutation: pass `gaugeFeedOf(terrainRegion)` whatever the layer's state, or
+  // `GAUGE_PREFIX` in its place, and the feed is fetched while the layer is
+  // off or over a region that has none.
+  it("reads the feed of the region the map shows, only while the layer is on", () => {
+    expect(read("./useGauges.ts")).toContain("if (feed === null) return;");
+    expect(screen).toContain("const gaugeFeed = gaugeFeedOf(terrainRegion);");
+    expect(screen).toContain("} = useGauges(showGauges ? gaugeFeed : null);");
+    expect(read("../map/MapSearchBar.tsx")).toContain(
+      "useGauges(expanded ? gaugeFeedIn(view) : null)",
     );
   });
-  // Mutation: gate `openGauge` on `gaugesShown`, and a gauge picked in search
-  // from outside New South Wales does not open its sheet at the pick.
-  it("opens a picked gauge's sheet whatever the region", () => {
-    expect(screen).toMatch(/const openGauge = showGauges\s*\?/);
+  // Mutation: drop `setShowGauges(true)` from `onSelectSaved`, and a gauge
+  // picked in search has no feed loaded for its sheet (the layer is off).
+  it("turns the gauges layer on when a gauge is picked in search", () => {
+    expect(screen).toMatch(/if \(item\.gaugeId\) \{\s*setShowGauges\(true\);/);
+  });
+  // Mutation: return `held.file` whatever feed it came from, and a map that
+  // moves into another region draws the last region's gauges for it.
+  it("never reads one feed's file as another's", () => {
+    expect(read("./useGauges.ts")).toContain(
+      "file: held?.feed === feed ? held.file : null",
+    );
   });
 });
 
@@ -96,8 +106,13 @@ describe("a place's gauge section", () => {
     expect(section).toContain("{owned && (");
     expect(section).toContain("{owned && gaugeId && (");
   });
-  it("loads the file only for the owner or a place that has a gauge", () => {
-    expect(section).toContain("useGauges(owned || !!gaugeId)");
+  // Mutation: read `GAUGE_PREFIX` here in place of the `feed` prop, or ask for
+  // the file when neither the owner nor a gauge is there.
+  it("loads the feed of the place's region only for the owner or a place that has a gauge", () => {
+    expect(section).toContain("useGauges(owned || !!gaugeId ? feed : null)");
+    expect(read("../places/PlaceDetailScreen.tsx")).toContain(
+      "gaugeFeed !== null && (place.gaugeId || isOwner)",
+    );
   });
 });
 
@@ -108,6 +123,14 @@ describe("the trip reading's wiring", () => {
     expect(read("./PlaceGaugeSection.tsx")).toContain(
       "dates={tripDatesFor(owned, tripDates)}",
     );
+  });
+  // Mutation: pass a fixed prefix to `TripGaugeReading` on the trip screen in
+  // place of the groups `tripGaugeIdsByFeed` returns, and a trip's gauges are
+  // read from one feed whatever region their places are in.
+  it("reads each of the trip screen's gauges from the feed of its place", () => {
+    const trip = read("../logs/TripDetailScreen.tsx");
+    expect(trip).toContain("tripGaugeIdsByFeed(");
+    expect(trip).toContain("feed={feed}");
   });
   it("draws it on both pages", () => {
     expect(read("../logs/TripDetailScreen.tsx")).toContain("<TripGaugeReading");

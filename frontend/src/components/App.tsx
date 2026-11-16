@@ -162,6 +162,7 @@ import {
   sharpenOfferForJob,
   sharpenUnavailable,
   type SharpenOffer,
+  gaugeFeedOf,
   type LonLatBox,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -576,8 +577,10 @@ function App() {
   // map shows (`sharpenOfferFor`).
   const sharpenFor = (box: LonLatBox | null) =>
     sharpenOfferFor(box, viewRegion);
-  // Only a region with a gauge feed has river gauges to draw.
-  const gaugesHere = viewRegion?.gauges != null;
+  // Only a region with a gauge feed has river gauges to draw: the question the
+  // map and Logjam GPS ask through `gaugeFeedOf` (guard: `gauges.test.tsx`,
+  // "asks whether the region in view has a feed the way the map does").
+  const gaugesHere = gaugeFeedOf(viewRegion) !== null;
   // The layers drawn over the region in view, and the stored carrier where
   // that region lists it (the Layers popover asks the same).
   const { shown, carrier: carrierHere } = useMemo(

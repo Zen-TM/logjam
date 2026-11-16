@@ -327,9 +327,10 @@ describe("passesFilters — area across 180°", () => {
   const far = place({ latitude: -17, longitude: 170 });
   const bands = { south: -18, north: -16 };
 
-  // Mutation: delete the `if (west > east)` line of `lonWithin` (the wrapped
-  // case), or make its last line a plain `lon >= west && lon <= east` (the
-  // unwrapped case), or put that plain comparison back in `isPlaceInArea`.
+  // Mutation: in `lonWidth` return `east - west` for a wrapped box too (the
+  // wrapped case), or make the last line of `lonBoxWithin` a plain
+  // `innerWest >= west && innerEast <= east` (the unwrapped case), or put a
+  // plain comparison back in `isPlaceInArea`.
   it.each([
     ["unwrapped, east above 180", { west: 178, east: 182 }],
     ["wrapped, west above east", { west: 178, east: -178 }],

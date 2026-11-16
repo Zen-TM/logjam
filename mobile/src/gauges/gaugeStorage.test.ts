@@ -10,6 +10,7 @@ import {
   readCachedGauges,
   stopGaugesForWipe,
 } from "./gaugeStorage";
+import { GAUGE_PREFIX } from "@logjam/shared";
 import { gaugeFixture } from "./gaugeFixture";
 
 const fs = vi.hoisted(() => ({ files: new Map<string, string>(), dirs: 0 }));
@@ -39,19 +40,43 @@ beforeEach(() => {
 
 describe("the kept gauge file", () => {
   it("reads back what was cached", async () => {
-    await cacheGauges(JSON.stringify(gaugeFixture), gaugesEpoch());
-    expect(await readCachedGauges()).toEqual(gaugeFixture);
+    await cacheGauges(
+      GAUGE_PREFIX,
+      JSON.stringify(gaugeFixture),
+      gaugesEpoch(),
+    );
+    expect(await readCachedGauges(GAUGE_PREFIX)).toEqual(gaugeFixture);
+  });
+
+  // Mutation: build the path without the feed → red.
+  it("keeps each feed's file apart", async () => {
+    await cacheGauges(
+      GAUGE_PREFIX,
+      JSON.stringify(gaugeFixture),
+      gaugesEpoch(),
+    );
+    expect(await readCachedGauges("master/gauges/other/v1/")).toBeNull();
+    await cacheGaugeHistory(
+      "master/gauges/other/v1/",
+      "900001",
+      "{}",
+      gaugesEpoch(),
+    );
+    expect(await readCachedGaugeHistory(GAUGE_PREFIX, "900001")).toBeNull();
+    expect(
+      fs.files.has("file:///g/master/gauges/other/v1/history/900001.json"),
+    ).toBe(true);
   });
 
   it("reads null for a file that is not a gauge file", async () => {
-    fs.files.set("file:///g/latest.json", '{"version":9}');
-    expect(await readCachedGauges()).toBeNull();
+    fs.files.set(`file:///g/${GAUGE_PREFIX}latest.json`, '{"version":9}');
+    expect(await readCachedGauges(GAUGE_PREFIX)).toBeNull();
   });
 
   it("writes nothing for a fetch begun before a wipe", async () => {
     const begun = gaugesEpoch();
     await stopGaugesForWipe();
-    await cacheGauges(JSON.stringify(gaugeFixture), begun);
+    await cacheGauges(GAUGE_PREFIX, JSON.stringify(gaugeFixture), begun);
     expect(fs.files.size).toBe(0);
     expect(fs.dirs).toBe(0);
   });
@@ -69,25 +94,30 @@ describe("the kept gauge histories", () => {
   });
 
   it("reads back what was kept, with its age", async () => {
-    await cacheGaugeHistory("900001", text, gaugesEpoch());
-    const kept = await readCachedGaugeHistory("900001");
+    await cacheGaugeHistory(GAUGE_PREFIX, "900001", text, gaugesEpoch());
+    const kept = await readCachedGaugeHistory(GAUGE_PREFIX, "900001");
     expect(kept?.file.level).toEqual([0.9]);
     expect(kept?.ageMs).toBeGreaterThan(100_000);
-    expect(fs.files.has("file:///g/history/900001.json")).toBe(true);
+    expect(fs.files.has(`file:///g/${GAUGE_PREFIX}history/900001.json`)).toBe(
+      true,
+    );
   });
 
   it("reads nothing for a missing file, a bad one or an id that is not a station", async () => {
-    expect(await readCachedGaugeHistory("900009")).toBeNull();
-    fs.files.set("file:///g/history/900002.json", '{"version":9}');
-    expect(await readCachedGaugeHistory("900002")).toBeNull();
-    await cacheGaugeHistory("../latest", text, gaugesEpoch());
+    expect(await readCachedGaugeHistory(GAUGE_PREFIX, "900009")).toBeNull();
+    fs.files.set(
+      `file:///g/${GAUGE_PREFIX}history/900002.json`,
+      '{"version":9}',
+    );
+    expect(await readCachedGaugeHistory(GAUGE_PREFIX, "900002")).toBeNull();
+    await cacheGaugeHistory(GAUGE_PREFIX, "../latest", text, gaugesEpoch());
     expect(fs.files.size).toBe(1);
   });
 
   it("writes nothing for a fetch begun before a wipe", async () => {
     const begun = gaugesEpoch();
     await stopGaugesForWipe();
-    await cacheGaugeHistory("900001", text, begun);
+    await cacheGaugeHistory(GAUGE_PREFIX, "900001", text, begun);
     expect(fs.files.size).toBe(0);
   });
 });

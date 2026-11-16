@@ -10,6 +10,7 @@
 import {
   fieldValueLabel,
   invalidPlaceFields,
+  isLengthField,
   isTransientSyncError,
   lengthToInput,
   lengthUnitLabel,
@@ -322,7 +323,7 @@ function fieldValueText(field: string, value: unknown): string {
     const word = fieldValueLabel(field, value);
     if (word !== undefined) return word;
     if (field === "hours") return `${value} ${value === 1 ? "hour" : "hours"}`;
-    if (field === "longestAbseil")
+    if (isLengthField(field))
       return `${trimNumber(lengthToInput(value))} ${lengthUnitLabel()}`;
     if (field === "quality") return `${value}/5`;
   }

@@ -1,9 +1,11 @@
-// The last river gauge file on this phone (ADR 0044). It is public and the
-// same for everyone; it is wiped anyway because every on-device store joins
-// the wipe (ADR 0006).
+// The last river gauge file of each feed on this phone (ADR 0044), under the
+// feed's own prefix (a region's `gauges`) so one feed's file is never read as
+// another's (guard: `gaugeStorage.test.ts`, "keeps each feed's file apart"). It is public and the same for everyone; it is wiped anyway
+// because every on-device store joins the wipe (ADR 0006).
 import * as FileSystem from "expo-file-system/legacy";
 import {
   gaugeHistoryUrl,
+  gaugeLatestPath,
   parseGaugeHistory,
   parseGaugeLatest,
   type GaugeHistoryFile,
@@ -12,18 +14,20 @@ import {
 
 import { GAUGES_DIR } from "../offline/localStores";
 
-const FILE = `${GAUGES_DIR}latest.json`;
-const HISTORY_DIR = `${GAUGES_DIR}history/`;
+const latestPath = (feed: string): string =>
+  `${GAUGES_DIR}${gaugeLatestPath(feed)}`;
 
-/** A gauge's history path, or null for an id that is not a gauge id. */
-const historyPath = (id: string): string | null =>
-  gaugeHistoryUrl("", id) && `${HISTORY_DIR}${id}.json`;
+/** A gauge's history path in the feed, or null for an id that is not a gauge id. */
+const historyPath = (feed: string, id: string): string | null =>
+  gaugeHistoryUrl("", feed, id) && `${GAUGES_DIR}${feed}history/${id}.json`;
 
-/** Sends nothing: it only reads the phone's own file. */
-export async function readCachedGauges(): Promise<GaugeLatestFile | null> {
+/** Sends nothing: it only reads the phone's own file of the feed. */
+export async function readCachedGauges(
+  feed: string,
+): Promise<GaugeLatestFile | null> {
   try {
     return parseGaugeLatest(
-      JSON.parse(await FileSystem.readAsStringAsync(FILE)),
+      JSON.parse(await FileSystem.readAsStringAsync(latestPath(feed))),
     );
   } catch {
     return null;
@@ -33,9 +37,10 @@ export async function readCachedGauges(): Promise<GaugeLatestFile | null> {
 /** Sends nothing: a gauge's kept history and how long ago it was written,
  *  or null when there is none. */
 export async function readCachedGaugeHistory(
+  feed: string,
   id: string,
 ): Promise<{ file: GaugeHistoryFile; ageMs: number } | null> {
-  const path = historyPath(id);
+  const path = historyPath(feed, id);
   if (!path) return null;
   try {
     const file = parseGaugeHistory(
@@ -68,17 +73,22 @@ export function stopGaugesForWipe(): Promise<void> {
 
 /** Keeps an already parsed file. A kill mid-write loses only this public
  *  cache, which the next fetch restores. */
-export function cacheGauges(text: string, fetchEpoch: number): Promise<void> {
-  return keep(FILE, text, fetchEpoch);
+export function cacheGauges(
+  feed: string,
+  text: string,
+  fetchEpoch: number,
+): Promise<void> {
+  return keep(latestPath(feed), text, fetchEpoch);
 }
 
 /** Keeps an already parsed history file for the gauge. */
 export function cacheGaugeHistory(
+  feed: string,
   id: string,
   text: string,
   fetchEpoch: number,
 ): Promise<void> {
-  const path = historyPath(id);
+  const path = historyPath(feed, id);
   return path ? keep(path, text, fetchEpoch) : Promise.resolve();
 }
 

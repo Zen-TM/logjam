@@ -5,7 +5,7 @@
 // summing raw fix-to-fix hops integrates the error circle as travel. On a real
 // 3.4 km walk that gap was 14%, and the chart ran to 4.0 km beside a stat card
 // reading 3.4 — which reads as one of them being broken.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CLIMB_SOURCES } from "./demSources.js";
 import type { ElevationProfile } from "./elevation.js";
 import type { TrackDetail } from "./trackStats.js";
@@ -261,7 +261,7 @@ describe("trackStatRows", () => {
 });
 
 describe("storedClimbCaption", () => {
-  // Mutation: delete an entry of HEIGHT_SOURCE_NAMES.
+  // Mutation: delete an entry of `HEIGHT_SOURCE_NAMES`, or make `regionHeightsName` return nothing.
   it("names every source a climb can be stored from", () => {
     const captions = CLIMB_SOURCES.map(storedClimbCaption);
     expect(new Set(captions).size).toBe(CLIMB_SOURCES.length);
@@ -289,6 +289,30 @@ describe("storedClimbCaption", () => {
     expect(trackHeights(detail, mixed, false).note).toBe(
       "Heights from terrain data",
     );
+  });
+
+  // Mutation: name only NSW's heights (a table with its id), and a region's
+  // own heights read "terrain data" beside its stored climb's name; or stop
+  // reading the archive's `name`.
+  it("names each region's own heights by the archive's name", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    expect(storedClimbCaption("simnz-heights")).toBe(
+      "Ascent and descent from terrain data",
+    );
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const two = await import("./profileSeries.js");
+      expect(two.storedClimbCaption("nsw-5m")).toBe(
+        "Ascent and descent from NSW 5 m terrain data",
+      );
+      expect(two.storedClimbCaption("simnz-heights")).toBe(
+        "Ascent and descent from New Zealand (simulated) terrain data",
+      );
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
   });
 
   // Mutation: look the chart's name up by the source id itself, and a line
