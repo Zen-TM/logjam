@@ -19,6 +19,7 @@
 //
 // PRIVACY: nothing here logs. See tiles.ts.
 import {
+  BASEMAP_CATALOG,
   computeTileToMapTransform,
   GEOPDF_BASE_LAYER_CONFIG,
   GEOPDF_MAX_CANVAS_BYTES,
@@ -415,6 +416,17 @@ async function renderInner(
   > = {};
 
   const vectorBase = vectorBasemap(config, geometry, sheet.vector);
+  // A vector base the sheet's region has no archive of is a failure, as a base
+  // whose tiles will not load is, not a sheet printed without a base map.
+  // Guard: e2e/geopdf-render.spec.ts ("a vector base over ground with no
+  // vector archive is a failure, not a bare sheet").
+  if (
+    !vectorBase &&
+    BASEMAP_CATALOG.some(
+      (entry) => entry.id === config.baseLayer && entry.kind === "vector",
+    )
+  )
+    throw new Error("no base tile loaded");
   const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
 
   const fontsReady = loadMapFonts(signal);

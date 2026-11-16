@@ -169,8 +169,9 @@ export interface MapArtifact {
   groupLabel?: string | null;
   /**
    * The CDN path of the archive a vector basemap clip was cut from: the vector
-   * map draws only the clips cut from the archive of the region it shows. Null
-   * on every other artifact, and on a vector clip saved before it was kept.
+   * map draws only the clips cut from the archive of the region it shows
+   * (`holdsBasemap`). Null on every other artifact, and on a vector clip saved
+   * before it was kept.
    */
   archivePath?: string | null;
 }
@@ -243,6 +244,27 @@ function localArtifactSource(
   };
 }
 
+/**
+ * Whether a saved file is a clip of `basemapId`'s map as it is drawn over
+ * `region`. For the vector map that is a clip cut from the archive of that
+ * region: one of another region's, or saved before clips kept their archive,
+ * is not drawn there. The resolver, the offline notice and the place page's
+ * coverage row all ask this one question. Guard: `sourceResolver.test.ts`
+ * ("holdsBasemap").
+ */
+export function holdsBasemap(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "archivePath">,
+  basemapId: string,
+  region: Region | null,
+): boolean {
+  if (artifact.kind !== "basemap-region" || artifact.logicalKey !== basemapId) {
+    return false;
+  }
+  if (basemapId !== "protomaps") return true;
+  const archive = vectorIn(region);
+  return archive !== null && artifact.archivePath === archive.archivePath;
+}
+
 function resolveBasemap(
   basemapId: BasemapId,
   ctx: ResolveContext,
@@ -254,14 +276,16 @@ function resolveBasemap(
   // registry lists the newest first. Where saves overlap, the newest wins
   // until a style reload (`BAND_MARKERS`).
   const regions = ctx.artifacts
-    .filter((a) => a.kind === "basemap-region" && a.logicalKey === basemapId)
+    .filter((a) => holdsBasemap(a, basemapId, region))
     .reverse();
 
   if (basemapId === "protomaps") {
     // Self-hosted vector basemap, read from the archive of the region the map
     // shows: remote online, and offline the clips saved from that archive. A
     // clip of another region's archive is never drawn here, nor one saved
-    // before clips named their archive.
+    // before clips named their archive (`holdsBasemap`). Guard:
+    // `sourceResolver.test.ts` ("offline: draws only the clips cut from the
+    // archive of the region shown").
     const archive = vectorIn(region);
     const protomapsEntry = catalogEntry("protomaps");
     if (!protomapsEntry) {
@@ -285,9 +309,8 @@ function resolveBasemap(
         },
       ];
     }
-    const here = regions.filter((r) => r.archivePath === archive.archivePath);
-    if (here.length > 0) {
-      return here.map((r) =>
+    if (regions.length > 0) {
+      return regions.map((r) =>
         localArtifactSource(r, logicalId, protomapsEntry.attribution),
       );
     }
@@ -755,12 +778,12 @@ export function basemapsCoveringViewport(
   artifacts: readonly MapArtifact[],
   viewport: Viewport,
   candidates: readonly BasemapId[],
+  region: Region | null,
 ): BasemapId[] {
   return candidates.filter((candidate) =>
     artifacts.some(
       (artifact) =>
-        artifact.kind === "basemap-region" &&
-        artifact.logicalKey === candidate &&
+        holdsBasemap(artifact, candidate, region) &&
         bboxOnScreen(artifact.bbox, viewport),
     ),
   );

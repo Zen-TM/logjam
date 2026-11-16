@@ -72,7 +72,8 @@ export function rasterBaseTiles(
 }
 
 /**
- * The archive and tiles a vector base is read from, or null for a raster base.
+ * The archive and tiles a vector base is read from, or null for a raster base
+ * or where `archive` is null (the sheet's region has none).
  * The tile zoom follows the style zoom it is drawn at, not the print's: more
  * pixels on the page do not put more features in a tile.
  */

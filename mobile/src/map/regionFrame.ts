@@ -214,7 +214,8 @@ export function startBox(
 /**
  * The maps picked when the screen opens: the one it was opened from if the
  * ground offers it to save, else the first it does offer. Nothing when it was
- * opened from the vector map, which every save brings anyway. Guard:
+ * opened from the vector map, which a save brings anyway where the region has
+ * a vector archive (`regionClipSpecs`). Guard:
  * `regionFrame.test.ts` ("the ground a save starts on").
  */
 export function startPicks(box: LonLatBox, startBasemapId: string): string[] {

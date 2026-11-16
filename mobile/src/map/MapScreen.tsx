@@ -1797,12 +1797,13 @@ export function MapScreen({
       artifacts,
       viewportBbox,
       mobileBasemaps(viewportBbox),
+      terrainRegion,
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, terrainRegion]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is

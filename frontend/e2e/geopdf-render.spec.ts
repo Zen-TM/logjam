@@ -326,6 +326,23 @@ test.describe("the in-browser GeoPDF renderer", () => {
     expect(r.pdfBase64).toBeUndefined();
   });
 
+  // Mutation: in render.ts, change `entry.kind === "vector"` to
+  // `entry.kind === "raster"` in the `BASEMAP_CATALOG.some` test, and a sheet
+  // outside every region printed with the Vector base renders with no base map
+  // and no error.
+  test("a vector base over ground with no vector archive is a failure, not a bare sheet", async ({
+    page,
+  }) => {
+    const seen = await stubNetwork(page);
+    await openBench(page);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.run("vectorElsewhere", { returnPdf: true }),
+    );
+    expect(r).toMatchObject({ ok: false, reason: "failed" });
+    expect(r.pdfBase64).toBeUndefined();
+    expect(seen).toMatchObject({ tiles: 0, archives: 0 });
+  });
+
   // Mutation: draw the base from the map image's zoom in render.ts instead of
   // `rasterBaseTiles`, and the base's labels shrink to half with its tiles' reads
   // up fourfold, with every planning test still green.

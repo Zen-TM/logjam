@@ -144,8 +144,8 @@ export type Region = {
    * The region's cut of the vector basemap, or null where it has none. The one
    * catalogue entry "protomaps" is drawn, snapped to and saved from it, so the
    * entry is offered where the region in view declares one (`vectorIn`) and is
-   * never listed in `basemaps`. Guards: `regions.test.ts` ("offeredBasemaps"
-   * block, "puts each basemap in one region at most, and only real ones").
+   * never listed in `basemaps`. Guard: `regions.test.ts` ("leaves the vector
+   * basemap out of every region's basemaps").
    */
   vector: VectorArchive | null;
   /** Height sources, finest first. `DEM_SOURCES` is every region's, then the worldwide one. */

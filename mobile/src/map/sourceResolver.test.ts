@@ -11,6 +11,7 @@ import {
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
+  holdsBasemap,
   resolveMapSource,
   hashKey,
   holdsContours,
@@ -390,6 +391,7 @@ describe("basemapsCoveringViewport", () => {
       id: "r2",
       kind: "basemap-region",
       logicalKey: "protomaps",
+      archivePath: NSW_REGION.vector!.archivePath,
       bbox: [150.4, -33.6, 150.6, -33.4],
     }),
   ];
@@ -406,6 +408,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.45, -33.55, 150.55, -33.45),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["protomaps", "six-topo"]);
   });
@@ -419,13 +422,19 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.05, -33.95, 150.15, -33.85),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
 
   it("is empty when the viewport is nowhere near anything saved", () => {
     expect(
-      basemapsCoveringViewport(saved, view(145, -31, 146, -30), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(145, -31, 146, -30),
+        CANDIDATES,
+        NSW_REGION,
+      ),
     ).toEqual([]);
   });
 
@@ -437,6 +446,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.9, -33.1, 151.5, -32.5),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
@@ -454,8 +464,81 @@ describe("basemapsCoveringViewport", () => {
         overlay,
         view(150.4, -33.6, 150.6, -33.4),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual([]);
+  });
+
+  // Mutation: count a vector clip by its `logicalKey` alone (`holdsBasemap`),
+  // and a clip with no archive, or one cut from another region's, reads as
+  // saved map on screen: offline the map is blank and the "No saved map here"
+  // notice stays silent; also read no region, and no vector clip counts.
+  it("counts a vector clip only where it was cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath,
+        bbox: [150.4, -33.6, 150.6, -33.4],
+      });
+    const here = view(150.45, -33.55, 150.55, -33.45);
+    const covering = (clips: MapArtifact[], region: Region | null) =>
+      basemapsCoveringViewport(clips, here, ["protomaps"], region);
+    expect(
+      covering([clip("a", NSW_REGION.vector!.archivePath)], NSW_REGION),
+    ).toEqual(["protomaps"]);
+    expect(covering([clip("none", null)], NSW_REGION)).toEqual([]);
+    expect(
+      covering([clip("nz", SIM_NZ.vector!.archivePath)], NSW_REGION),
+    ).toEqual([]);
+    expect(covering([clip("a", NSW_REGION.vector!.archivePath)], null)).toEqual(
+      [],
+    );
+  });
+});
+
+describe("holdsBasemap", () => {
+  const file = (over: Partial<MapArtifact>) => ({
+    kind: "basemap-region" as const,
+    logicalKey: "protomaps",
+    archivePath: null as string | null,
+    ...over,
+  });
+
+  // Mutation: drop the `kind` test, and a topo overlay filed under a basemap's
+  // key counts; drop the `logicalKey` test, and every saved map holds every
+  // basemap.
+  it("holds a raster basemap by its key, whatever the region", () => {
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-topo", null),
+    ).toBe(true);
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-base", null),
+    ).toBe(false);
+    expect(
+      holdsBasemap(
+        file({ kind: "topo-overlay" as never, logicalKey: "six-topo" }),
+        "six-topo",
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  // Mutation: return true for any "protomaps" file, and the coverage row, the
+  // offline notice and the resolver count a clip no map draws.
+  it("holds the vector map only by a clip of the archive of the region", () => {
+    const nsw = NSW_REGION.vector!.archivePath;
+    expect(
+      holdsBasemap(file({ archivePath: nsw }), "protomaps", NSW_REGION),
+    ).toBe(true);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", SIM_NZ)).toBe(
+      false,
+    );
+    expect(holdsBasemap(file({}), "protomaps", NSW_REGION)).toBe(false);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", null)).toBe(
+      false,
+    );
   });
 });
 
