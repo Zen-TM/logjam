@@ -67,7 +67,8 @@ the mask under one of them and it renders half the screen.
 
 **Every region download also saves the DEM, and that is not optional.** The plan
 in `shared/src/mapRegionEstimate.ts` appends a `terrarium` source
-(`DEM_SOURCE_ID`) to every run: one flat level at `TERRARIUM.sampleZoom`, priced
+(`DEM_SOURCE_ID`; updated 2026-11-16: where the world declares an archive, see
+the update of that date below) to every run: one flat level at `TERRARIUM.sampleZoom`, priced
 into the same size estimate, tile cap and free-space check as the basemaps, and
 enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
 `dem-region` artifact — same group id as the run, so Saved shows it inside the
@@ -88,6 +89,18 @@ the API path never could.
 - **Update 2026-10-18: a guest's run saves those clips too**, cut on the phone
   from the public archives with no call to the API ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide
   tiles are still saved with every area. Everything else above stands.
+- **Update 2026-11-16: where the world has a heights archive of its own, the
+  worldwide DEM is saved as a clip, not a tile pyramid.** `planRegionForBasemaps`
+  adds the world entry's clips (`WORLD.terrain`, `shared/src/regions.ts`) after
+  the regions' for every area, and leaves out the `terrarium` pyramid job when
+  the world declares `terrain.heights`; `DEM_SOURCE_ID` is then that archive's
+  id, so the card's missing-elevation line reads its clip. Prod declares none,
+  so it still saves the Terrarium tiles. The DEM is still saved with every
+  area. Guard: `shared/src/mapRegionEstimate.test.ts` ("clips the world's
+  heights with every save, after the regions' own", "saves no Terrarium
+  pyramid where the world declares an archive of its own", "saves the public
+  Terrarium tiles, and no world clip, while the world declares nothing").
+  Everything else above stands.
 
 **Size estimates are measured, not guessed.** Each downloadable raster's entry in
 `shared/src/geoPdfBaseLayers.ts` holds its per-zoom tile sizes (`tileBytes`), and

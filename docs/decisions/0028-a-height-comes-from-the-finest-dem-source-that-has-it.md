@@ -133,6 +133,22 @@ Proposal: #359.
   the rule that no client or other file names a source all still hold.
   Guard: `shared/src/demSources.test.ts`, which checks the sources with the
   flag on as well as off. Everything else above stands.
+- **Update 2026-11-16: the worldwide source may be Logjam's own archive.**
+  The last source in `DEM_SOURCES` is `worldwideSource` in
+  `shared/src/demSources.ts`: the world entry's heights archive
+  (`WORLD.terrain.heights`, `shared/src/regions.ts`) where it declares one,
+  otherwise the public Terrarium tiles, which is all prod declares. It is
+  read with no `coverage` box, so it is still the worldwide source that the
+  slope reading skips (the update above) and that ends the walk. A track's
+  stored climb still carries the id `terrarium` where one was read from the
+  tiles, so `CLIMB_SOURCES` keeps it, and `climbRank` ranks it with the
+  archive: neither replaces the other for the same ground. A phone saves the
+  archive as a clip with every area, in place of the tile pyramid
+  ([0005](0005-offline-region-downloads.md)). The one sampler, the
+  precedence and the rule that no other file names a source all still hold.
+  Guard: `shared/src/demSources.test.ts` (the describe "the worldwide
+  source"; "climb sources", "rank the Terrarium tiles with the world's
+  archive"). Everything else above stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS

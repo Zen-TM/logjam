@@ -4,6 +4,7 @@ import {
   NSW_REGION,
   SIM_REGIONS,
   SIM_UTAH,
+  SIM_WORLD,
   planRegionForBasemaps,
   planRegionTiles,
   type Region,
@@ -129,11 +130,12 @@ describe("regionClipSpecs", () => {
   const specsFor = (
     box: typeof BBOX,
     regions?: readonly Region[],
+    world?: Region,
   ): ReturnType<typeof regionClipSpecs> => {
     let n = 0;
     return regionClipSpecs(
       { ...run, bbox: box },
-      planRegionForBasemaps(box, [], 15, () => 16, regions).clips,
+      planRegionForBasemaps(box, [], 15, () => 16, regions, world).clips,
       (basemapId) => ({ id: `id${n++}`, label: basemapId }),
     );
   };
@@ -185,6 +187,23 @@ describe("regionClipSpecs", () => {
     expect(archives(specsFor(sea, [NSW_REGION, ...SIM_REGIONS]))).toEqual([
       ["protomaps", undefined],
     ]);
+  });
+
+  // Mutation: leave `world.terrain` out of the clips `saveClipsFor` lists (in
+  // shared/src/mapRegionEstimate.ts), and a save queues no worldwide heights
+  // where the world declares an archive: offline it has none beyond the
+  // regions' own, and a save in the sea has no heights at all.
+  it("gives every area the world's heights clip too, where the world declares an archive", () => {
+    const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
+    expect(archives(specsFor(sea, [NSW_REGION], SIM_WORLD))).toEqual([
+      ["simworld-heights", "simworld-heights"],
+      ["protomaps", undefined],
+    ]);
+    expect(
+      archives(specsFor(BBOX, [NSW_REGION], SIM_WORLD))
+        .map(([id]) => id)
+        .slice(0, 3),
+    ).toEqual(["nsw-5m", "simworld-heights", "nsw-contours"]);
   });
 
   // Mutation: stop at the first region a box touches, and the second region's

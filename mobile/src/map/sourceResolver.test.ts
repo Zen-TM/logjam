@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   lonLatToTile,
   NSW_REGION,
@@ -12,6 +12,7 @@ import {
   basemapsCoveringViewport,
   resolveMapSource,
   hashKey,
+  drawsTerrain,
   holdsContours,
   holdsHillshade,
   holdsSlope,
@@ -640,6 +641,30 @@ describe("statewide slope and hillshade", () => {
     expect(holdsHillshade({ ...clip, minzoom: null })).toBe(false);
     expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
     expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
+  });
+  // Mutation: leave `WORLD` out of the default `regions` of `holdsHillshade`
+  // or of `drawsTerrain`, and a saved world clip enables no Hillshade switch
+  // and leaves the offline mask over the ground it shades.
+  it("holdsHillshade and drawsTerrain: the world's clip, where the world declares an archive", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    const clip = {
+      kind: "dem-region",
+      logicalKey: "simworld-heights",
+      minzoom: 8,
+    } as const;
+    expect(holdsHillshade(clip)).toBe(false);
+    expect(drawsTerrain(clip)).toBe(false);
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const on = await import("./sourceResolver");
+      expect(on.holdsHillshade(clip)).toBe(true);
+      expect(on.holdsHillshade({ ...clip, minzoom: 15 })).toBe(false);
+      expect(on.drawsTerrain(clip)).toBe(true);
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
   });
   // Mutation: resolve Land with no `mainRegion`, and two saved areas that
   // share a low-zoom tile paint its translucent tint twice, with a seam.

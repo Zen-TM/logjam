@@ -23,7 +23,7 @@ import {
   type SpeedProfile,
   type TrackDetail,
 } from "./trackStats.js";
-import { REGIONS } from "./regions.js";
+import { REGIONS, WORLD } from "./regions.js";
 import { t } from "./i18n.js";
 import { formatHeight } from "./units.js";
 
@@ -156,7 +156,7 @@ const HEIGHT_SOURCE_NAMES: Record<string, string> = {
 
 /** A region's own heights, named by the archive's `name`: "NSW 5 m terrain data". */
 function regionHeightsName(id: string): string | undefined {
-  for (const region of REGIONS) {
+  for (const region of [...REGIONS, WORLD]) {
     const heights = region.terrain.heights;
     if (heights?.id === id) return t`${heights.name} terrain data`;
   }

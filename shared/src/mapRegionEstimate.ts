@@ -2,7 +2,12 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import {
+  DEM_SOURCES,
+  TERRARIUM,
+  worldwideSource,
+  type DemSource,
+} from "./demSources.js";
 import {
   BASEMAP_CATALOG,
   offeredBasemaps,
@@ -10,8 +15,10 @@ import {
 } from "./geoPdfBaseLayers.js";
 import { landClip } from "./land.js";
 import {
+  layerIn,
   REGIONS,
   regionsTouching,
+  WORLD,
   type HeightsArchive,
   type LonLatBox,
   type Region,
@@ -170,18 +177,22 @@ export function checkRegionCaps(
 export type OfflineBasemapId = string;
 
 /**
- * The DEM saved alongside every region, so elevation profiles, point heights
- * and route gain/loss survive going offline. NOT a basemap: nothing draws it,
- * it never appears in the layer picker, and it is deliberately outside the
- * catalogue, so it cannot leak into a basemap's list.
+ * The id of the worldwide DEM saved alongside every region, so elevation
+ * profiles, point heights and route gain/loss survive going offline. NOT a
+ * basemap: it never appears in the layer picker, and it is deliberately
+ * outside the catalogue, so it cannot leak into a basemap's list. The public
+ * Terrarium tiles are saved as a tile pyramid (`planRegionForBasemaps`); where
+ * the world declares an archive of its own, that is saved as a clip, under the
+ * archive's id, which is this. Guard: `mapRegionEstimate.test.ts` ("names the
+ * world's archive as the DEM a save carries, where the world declares one").
  */
-export const DEM_SOURCE_ID = TERRARIUM.id;
+export const DEM_SOURCE_ID = worldwideSource().id;
 
-/** The only zoom the DEM is saved at: the one the sampler reads. */
+/** The only zoom the public Terrarium tiles are saved at: the one the sampler reads. */
 const DEM_ZOOM = TERRARIUM.sampleZoom;
 
 /**
- * MEASURED bytes of one worldwide DEM tile, by the same script as the SIX
+ * MEASURED bytes of one public worldwide DEM tile, by the same script as the SIX
  * basemaps' (`shared/scripts/calibrate-basemap-tile-sizes.mjs`), 14 tiles over
  * the same two bboxes. ONE zoom, because a source's `sampleZoom` is the only
  * level anything reads (shared/src/demSources.ts): terrarium PNGs are noise-like
@@ -229,7 +240,7 @@ const CONTAINER_OVERHEAD = 1.071;
 
 /** The tile sizes of a downloadable source, or an error: never a guess. */
 function pyramidTileBytes(sourceId: DownloadableTileSourceId): TileBytes {
-  if (sourceId === DEM_SOURCE_ID) return TERRARIUM_TILE_BYTES;
+  if (sourceId === TERRARIUM.id) return TERRARIUM_TILE_BYTES;
   const entry = BASEMAP_CATALOG.find((e) => e.id === sourceId);
   if (!entry?.offlineCapable || entry.kind !== "raster")
     throw new Error(`Unknown offline tile source id: ${sourceId}`);
@@ -290,13 +301,13 @@ export function estimateRegionSeconds(totalTiles: number): number {
 
 /**
  * The zoom a saved clip of a height archive starts at: the one its region's
- * hillshade is drawn from, which would vanish below z15 without the shallower
- * zooms. The sampler reads only the `sampleZoom`. A source no region owns
- * starts at its `sampleZoom`.
+ * (or the world entry's) hillshade is drawn from, which would vanish below
+ * z15 without the shallower zooms. The sampler reads only the `sampleZoom`. A
+ * source no region owns starts at its `sampleZoom`.
  */
 export function demClipMinZoom(
   source: DemSource,
-  regions: readonly Region[] = REGIONS,
+  regions: readonly Region[] = [...REGIONS, WORLD],
 ): number {
   const owner = regions.find((r) => r.terrain.heights?.id === source.id);
   return owner?.terrain.hillshade?.minzoom ?? source.sampleZoom;
@@ -306,8 +317,9 @@ export function demClipMinZoom(
  * The DEM archives an offline area saves a clip of: every one whose coverage
  * the area touches. All of them, not just the finest, because a finer source
  * has holes and edges, and a line that crosses one is measured in the source
- * underneath (`sampleDem`). The worldwide tile set is saved with every area
- * regardless, by the tile engine (`DEM_SOURCE_ID`).
+ * underneath (`sampleDem`). The worldwide source is saved with every area
+ * regardless: the public tile set by the tile engine, the world's own archive
+ * as a clip (`DEM_SOURCE_ID`).
  */
 export function planDemDownload(
   bbox: RegionBbox,
@@ -396,15 +408,19 @@ function clipArchivesOf(
 
 /**
  * The archive a saved clip was cut from, by the id the clip is filed under, in
- * whichever region declares it, or null: no region does. Guard:
- * `mapRegionEstimate.test.ts` ("finds the archive a clip is filed under").
+ * whichever region (or the world entry) declares it, or null: none does.
+ * Guards: `mapRegionEstimate.test.ts` ("finds the archive a clip is filed
+ * under, with the zooms it is cut at", "finds the world's heights clip under
+ * its id, with the zooms it is cut at").
  */
 export function saveClipArchive(
   id: string,
   regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
 ): SaveClipArchive | null {
-  for (const { terrain } of regions) {
-    const found = clipArchivesOf(terrain, regions).find(
+  const owners = [...regions, world];
+  for (const { terrain } of owners) {
+    const found = clipArchivesOf(terrain, owners).find(
       (clip) => clip.archive.id === id,
     );
     if (found) return found;
@@ -434,19 +450,26 @@ function estimateClip(
 
 /**
  * The clips a save of `bbox` cuts: for each region whose border touches it, the
- * archives of that region's Terrain group, in the order of `SaveClipKind`. A box
- * outside every region cuts none. A height archive is left out where the box is
- * outside its coverage (`planDemDownload`); the others are priced for any box
- * the border touches, inside their coverage or not. Guard:
- * `mapRegionEstimate.test.ts` ("what a save costs, by the archives that cover
- * its box").
+ * archives of that region's Terrain group, in the order of `SaveClipKind`, then
+ * the world entry's, which has no border and so is cut for every box. A box
+ * outside every region cuts only the world's, which is none where it declares
+ * no archive. A height archive is left out where the box is outside its
+ * coverage (`planDemDownload`); the others are priced for any box the border
+ * touches, inside their coverage or not. Guards: `mapRegionEstimate.test.ts`
+ * ("what a save costs, by the archives that cover its box", "clips the world's
+ * heights with every save, after the regions' own").
  */
 function saveClipsFor(
   bbox: RegionBbox,
   regions: readonly Region[],
+  world: Region,
 ): SaveClip[] {
-  return regionsTouching(bbox, regions).flatMap(({ terrain }) =>
-    clipArchivesOf(terrain, regions)
+  const owners = [...regions, world];
+  return [
+    ...regionsTouching(bbox, regions).map(({ terrain }) => terrain),
+    world.terrain,
+  ].flatMap((terrain) =>
+    clipArchivesOf(terrain, owners)
       .filter(
         ({ kind, archive }) =>
           kind !== "heights" || planDemDownload(bbox, [archive]).length > 0,
@@ -483,14 +506,18 @@ export interface MultiSourceRegionPlan {
  * caps and the estimator UI both read. Selecting three sources at z16 is three
  * downloads and three times the bytes — the figure has to say so.
  *
- * The DEM rides along with EVERY region, unasked. It is a single flat level and
- * a few percent of one basemap's bytes, and without it a saved area loses its
- * elevation profiles, point heights and route gain/loss the moment the phone
- * goes offline — which is the trip the download exists for. Costing it into
- * these totals (rather than adding it silently later) is what keeps the size
- * estimate, the tile cap and the free-space check honest. So are the clips of
- * the archives of each region the area touches (`saveClipsFor`), which every
- * area saves too: an area outside every region costs only its basemaps and the
+ * The worldwide DEM rides along with EVERY region, unasked. The public
+ * Terrarium tiles are a single flat level and a few percent of one basemap's
+ * bytes; where the world declares an archive of its own, that is one more
+ * clip instead (`saveClipsFor`), and no tile pyramid (guard:
+ * `mapRegionEstimate.test.ts`, "saves no Terrarium pyramid where the world
+ * declares an archive of its own"). Without it a saved area
+ * loses its elevation profiles, point heights and route gain/loss the moment
+ * the phone goes offline — which is the trip the download exists for. Costing
+ * it into these totals (rather than adding it silently later) is what keeps
+ * the size estimate, the tile cap and the free-space check honest. So are the
+ * clips of the archives of each region the area touches, which every area
+ * saves too: an area outside every region costs only its basemaps and the
  * worldwide DEM.
  */
 export function planRegionForBasemaps(
@@ -499,8 +526,9 @@ export function planRegionForBasemaps(
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
   regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
 ): MultiSourceRegionPlan {
-  const clips = saveClipsFor(bbox, regions);
+  const clips = saveClipsFor(bbox, regions, world);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
 
   const perSource = [
@@ -515,13 +543,17 @@ export function planRegionForBasemaps(
         size: estimateRegionSize(plan, basemapId),
       };
     }),
-    {
-      basemapId: DEM_SOURCE_ID,
-      zMin: DEM_ZOOM,
-      zMax: DEM_ZOOM,
-      plan: demPlan,
-      size: estimateRegionSize(demPlan, DEM_SOURCE_ID),
-    },
+    ...(layerIn(world, "heights")
+      ? []
+      : [
+          {
+            basemapId: TERRARIUM.id,
+            zMin: DEM_ZOOM,
+            zMax: DEM_ZOOM,
+            plan: demPlan,
+            size: estimateRegionSize(demPlan, TERRARIUM.id),
+          },
+        ]),
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>

@@ -5,11 +5,14 @@
 // when 3D is switched on, and again when the user's sharpened areas change:
 // the heights of the region the map shows (the one `regionInView`
 // names, as for the Terrain group) when it has them and the archive opens,
-// otherwise the worldwide tiles. With sharpened areas the region's source
-// reads the terrain router (terrainRouter.ts), so a tile inside an area comes
-// from that area and the rest from the region's own archive, with one
-// precedence for 2D and 3D.
-import type { Map as MapLibreMap } from "maplibre-gl";
+// otherwise the worldwide source (`worldwideTerrainSpec`). With sharpened
+// areas the region's source reads the terrain router (terrainRouter.ts), so a
+// tile inside an area comes from that area and the rest from the region's own
+// archive, with one precedence for 2D and 3D.
+import type {
+  Map as MapLibreMap,
+  RasterDEMSourceSpecification,
+} from "maplibre-gl";
 import {
   areasInRegion,
   layerIn,
@@ -17,6 +20,7 @@ import {
   REGIONS,
   type Region,
   type SharpenedOverlay,
+  TERRARIUM,
   WORLD,
 } from "@logjam/shared";
 import {
@@ -26,6 +30,33 @@ import {
 } from "./terrainRouter";
 
 export const WORLDWIDE_TERRAIN_SOURCE = "3d-terrain-dem";
+
+/**
+ * The worldwide raster-dem source `WORLDWIDE_TERRAIN_SOURCE` holds: the world
+ * entry's heights archive where it declares one (same-origin, like a region's
+ * below), else the public Terrarium tiles. Guard: `terrainSource.test.ts`
+ * ("worldwideTerrainSpec").
+ */
+export function worldwideTerrainSpec(
+  origin: string,
+  world: Region = WORLD,
+): RasterDEMSourceSpecification {
+  const heights = layerIn(world, "heights");
+  return heights
+    ? {
+        type: "raster-dem",
+        url: `pmtiles://${origin}/${heights.archivePath}`,
+        tileSize: 256,
+        encoding: "terrarium",
+        attribution: heights.creditHtml,
+      }
+    : {
+        type: "raster-dem",
+        tiles: [TERRARIUM.urlTemplate],
+        encoding: "terrarium",
+        attribution: TERRARIUM.creditHtml,
+      };
+}
 /**
  * A region's source is this and its id, then `-` and the areas' key when areas
  * are routed. Region ids are lower-case letters and digits, so one region's

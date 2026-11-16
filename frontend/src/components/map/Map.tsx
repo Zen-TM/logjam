@@ -61,6 +61,7 @@ import {
 } from "@logjam/shared";
 import {
   WORLDWIDE_TERRAIN_SOURCE,
+  worldwideTerrainSpec,
   applyTerrain,
   terrainReapplyKey,
 } from "./terrainSource";
@@ -213,7 +214,6 @@ import {
   gaugeFeedOf,
   rgbaCssFromHex,
   contourWidthStops,
-  TERRARIUM,
   slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
@@ -1231,14 +1231,12 @@ function Map({
         });
       });
 
-      map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
-        type: "raster-dem",
-        // The worldwide source in shared/src/demSources.ts. A region's own is
-        // added when 3D is switched on over it: see terrainSource.ts.
-        tiles: [TERRARIUM.urlTemplate],
-        encoding: "terrarium",
-        attribution: TERRARIUM.creditHtml,
-      });
+      // The worldwide source in shared/src/demSources.ts. A region's own is
+      // added when 3D is switched on over it: see terrainSource.ts.
+      map.addSource(
+        WORLDWIDE_TERRAIN_SOURCE,
+        worldwideTerrainSpec(window.location.origin),
+      );
 
       map.addSource("places", {
         type: "geojson",

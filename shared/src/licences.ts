@@ -14,7 +14,7 @@
 // commercial app may call under a fair-use policy is true, though its owner can
 // withdraw access.
 import { GEOCODER_LICENCE } from "./geocode.js";
-import { TERRARIUM } from "./demSources.js";
+import { TERRARIUM, worldwideSource } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { REGIONS, WORLD, type Region } from "./regions.js";
 import { SHARPENED_LICENCE } from "./sharpen.js";
@@ -145,9 +145,9 @@ function unlicensed(
 
 /**
  * Every source of data the app reads, once each: the catalogue's basemaps, the
- * worldwide height tiles, the geocoder and the forecast, the sharpened heights
- * of a user's own survey (one entry for the kind), then each region's (and the
- * world entry's) own. A height source that is also a Terrain archive counts
+ * worldwide height tiles (while the world has no archive of its own), the
+ * geocoder and the forecast, the sharpened heights of a user's own survey (one
+ * entry for the kind), then each region's (and the world entry's) own. A height source that is also a Terrain archive counts
  * once. Throws for a region with a gauge feed or place registry and no licence
  * for it, which the type allows. Guard: `licences.test.ts` ("refuses a feed or
  * a registry with no licence").
@@ -162,7 +162,12 @@ export function dataSources(
 
   for (const entry of BASEMAP_CATALOG)
     add(`basemap:${entry.id}`, entry.licence);
-  add(`dem:${TERRARIUM.id}`, TERRARIUM.licence, TERRARIUM.credit);
+  // The public Terrarium tiles are read only while the world declares no
+  // heights of its own (`worldwideSource`). Guard: `licences.test.ts` ("lists
+  // the public worldwide height tiles only while the world has no archive of
+  // its own").
+  if (worldwideSource(world) === TERRARIUM)
+    add(`dem:${TERRARIUM.id}`, TERRARIUM.licence, TERRARIUM.credit);
   add("geocoder", GEOCODER_LICENCE);
   add("weather", WEATHER_LICENCE);
   add("dem:sharpened", SHARPENED_LICENCE);

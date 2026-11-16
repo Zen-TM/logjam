@@ -88,6 +88,14 @@ describe("dataSources", () => {
     expect(WITH_SIM.length).toBeGreaterThan(NSW_ONLY.length + 15);
   });
 
+  // Mutation: add the Terrarium tiles whatever the world declares, and a
+  // world with an archive of its own lists tiles the app no longer reads.
+  it("lists the public worldwide height tiles only while the world has no archive of its own", () => {
+    expect(ids(NSW_ONLY)).toContain("dem:terrarium");
+    expect(ids(WITH_SIM)).not.toContain("dem:terrarium");
+    expect(ids(WITH_SIM)).toContain("dem:simworld-heights");
+  });
+
   // Mutation: set NSW's `gaugesLicence` to null, or give a simulated region
   // a `placeSearchLicence` with no `placeSearch`.
   it("has a licence for a feed or a registry exactly where it has one", () => {
