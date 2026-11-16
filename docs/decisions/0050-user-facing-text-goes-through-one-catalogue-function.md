@@ -74,7 +74,7 @@ getter, so it is written when read, not when its module loads. So is the plan
 form builder's locked-visibility sentence, which the clients read, so that no
 `say` sentence function is called at import
 (`shared/src/contracts/contractLanguage.test.ts`).
-(updated 2026-11-15)
+(updated 2026-11-16)
 
 ## Consequences
 
