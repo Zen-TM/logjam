@@ -859,7 +859,8 @@ describe("placeRegistryIn", () => {
 
   // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
   // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
-  // once round the world matches no region.
+  // once round the world matches no region. Either change alone stays green:
+  // `regionsTouching` answers.
   it("reads a map panned round the world", () => {
     const [lon, lat] = nz.view.center;
     expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
