@@ -4,6 +4,7 @@ import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { canyonOffersFor } from "./contracts/placesList.js";
 import {
+  REGION_CHOICE,
   regionChoiceProblem,
   regionOffRefusal,
   toggleRegion,
@@ -37,6 +38,7 @@ import {
   regionsTouching,
   regionTouchesBox,
   simRegionsOn,
+  soleRegion,
   vectorArchiveAt,
   vectorsTouching,
   WORLD,
@@ -235,6 +237,26 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("soleRegion", () => {
+  // Mutation: return `regions[0]` whatever the length, and a list of two
+  // regions is read as the first one.
+  it("is the region of a list of one, and null for none or several", () => {
+    expect(soleRegion([NSW_REGION])).toBe(NSW_REGION);
+    expect(soleRegion([])).toBeNull();
+    expect(soleRegion([NSW_REGION, SIM_NZ])).toBeNull();
+  });
+});
+
+describe("REGION_CHOICE.hint", () => {
+  // Mutation: restore the old sentence, which says the choice decides what the
+  // maps offer (ADR 0049: the map decides, the choice sets defaults).
+  it("says what a chosen region sets", () => {
+    expect(REGION_CHOICE.hint).toBe(
+      "Logjam opens on your regions and offers their canyon lists.",
+    );
   });
 });
 

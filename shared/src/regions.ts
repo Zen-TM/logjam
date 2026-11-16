@@ -123,6 +123,8 @@ export type Region = {
   id: string;
   /** What user copy calls it: "That area is outside NSW". */
   name: string;
+  /** What a sentence with room for it calls it: "canyoning in New South Wales". */
+  fullName: string;
   /** Where a map opens before the user has moved it. */
   view: { center: readonly [lon: number, lat: number]; zoom: number };
   /** IANA. The leaderboard's season and a trip plan's day read it; gauge days still read `SYDNEY_TZ`. */
@@ -221,6 +223,7 @@ const derived = (layer: string) => ({
 export const NSW_REGION = {
   id: "nsw",
   name: "NSW",
+  fullName: "New South Wales",
   // The Blue Mountains.
   view: { center: [150.31, -33.7], zoom: 9 },
   timeZone: SYDNEY_TZ,
@@ -507,6 +510,7 @@ export const REGIONS: readonly Region[] = simRegionsOn()
 const EMPTY_WORLD: Region = {
   id: "world",
   name: "The world",
+  fullName: "The world",
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",
   borders: [],
@@ -558,6 +562,15 @@ export function accountRegion(
   return (
     regionsOf(normalizeRegionIds(chosen, regions), regions)[0] ?? regions[0]!
   );
+}
+
+/**
+ * The one region of a list, or null for none or several. Copy that names a
+ * region names it only while there is one to mean. Guard: `regions.test.ts`
+ * ("soleRegion").
+ */
+export function soleRegion(regions: readonly Region[]): Region | null {
+  return regions.length === 1 ? regions[0]! : null;
 }
 
 /** The regions behind a choice, in `REGIONS` order. */

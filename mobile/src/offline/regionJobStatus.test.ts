@@ -1,3 +1,4 @@
+import { NSW_REGION, SIM_NZ } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import type { RegionJob } from "./regionDownloadQueue";
@@ -76,8 +77,23 @@ describe("regionRejectedLine", () => {
 
   it("still reads a job that failed before the sentence was kept", () => {
     expect(regionRejectedLine("too-large")).toMatch(/smaller area/);
-    expect(regionRejectedLine("outside-nsw")).toMatch(/inside NSW/);
-    expect(regionRejectedLine(undefined)).toMatch(/inside NSW/);
+    expect(regionRejectedLine("outside-nsw")).toBe("Pick an area inside NSW.");
+    expect(regionRejectedLine(undefined)).toBe("Pick an area inside NSW.");
+  });
+
+  // Mutation: name `regions[0]` whatever the length, and a build with a second
+  // region tells a user in Utah to pick an area inside NSW; or count a region
+  // with no heights, and a region with only a vector map is named as covered.
+  it("names the region while one has terrain, and no region with several", () => {
+    expect(regionRejectedLine("outside-nsw", [NSW_REGION])).toBe(
+      "Pick an area inside NSW.",
+    );
+    expect(regionRejectedLine(undefined, [NSW_REGION, SIM_NZ])).toBe(
+      "Pick an area inside a region Logjam covers.",
+    );
+    expect(
+      regionRejectedLine(undefined, [NSW_REGION, { ...SIM_NZ, terrain: {} }]),
+    ).toBe("Pick an area inside NSW.");
   });
 });
 
