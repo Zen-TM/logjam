@@ -34,8 +34,8 @@ vi.mock("../../../languageSetting", async (importOriginal) => ({
   chooseLanguage: vi.fn(),
 }));
 
-// jsdom has no ResizeObserver, which the chip rail of the units row measures
-// with. Assigned, not stubbed: `unstubAllGlobals` runs after every test.
+// jsdom has no ResizeObserver, which the chip rails of the language and units
+// rows measure with. Assigned, not stubbed: `unstubAllGlobals` runs after every test.
 globalThis.ResizeObserver = class {
   observe() {}
   unobserve() {}
@@ -45,16 +45,6 @@ vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   updateUserPreferences: vi.fn(),
 }));
-
-// The language chips are a ChipRail, which watches its own size.
-vi.stubGlobal(
-  "ResizeObserver",
-  class {
-    observe() {}
-    disconnect() {}
-    unobserve() {}
-  },
-);
 
 afterEach(() => {
   cleanup();
