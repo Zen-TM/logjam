@@ -230,7 +230,15 @@ describe("GeoPdfDialog, remembers the last settings", () => {
 
   it("opens on them after a GeoPDF is made", async () => {
     await makeOne();
-    render(dialog({ open: true, activeLayerId: "osm-cycle" }));
+    // Over New South Wales, where the mocked SIX layers print: stored paper and
+    // scale re-centre a sheet with no map centre on the origin, in the ocean.
+    render(
+      dialog({
+        open: true,
+        activeLayerId: "osm-cycle",
+        mapCenter: { lat: -33.65, lng: 150.25, zoom: 12 },
+      }),
+    );
     expect(paper("A3").ariaChecked).toBe("true");
     expect(paper("Landscape").ariaChecked).toBe("true");
     expect(paper("Imagery").ariaChecked).toBe("true");
