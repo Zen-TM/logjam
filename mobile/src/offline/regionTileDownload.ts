@@ -229,9 +229,9 @@ function tileSourceFor(sourceId: DownloadableTileSourceId): {
   }
   const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === sourceId);
   if (!entry) throw new Error(`Unknown basemap id: ${sourceId}`);
-  if (!entry.offlineCapable) {
+  if (!entry.offlineCapable || entry.kind !== "raster") {
     // A programming error: the picker must never offer a source the catalog
-    // marks online-only.
+    // marks online-only, nor the vector map, which is saved as clips.
     throw new Error(`Basemap ${sourceId} is not offline-capable`);
   }
   return {

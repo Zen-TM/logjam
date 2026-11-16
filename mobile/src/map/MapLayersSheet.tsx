@@ -735,8 +735,8 @@ function LayersTab({
 
   const overlayRow = (key: OverlayTerrainKey) => {
     const here = legends[key];
-    // A layer this region lacks keeps its row, named and tinted as NSW's
-    // legend has it, with no help button: there is no legend to open.
+    // A layer this region lacks keeps its row, named and tinted as the home
+    // region's legend has it, with no help button: there is no legend to open.
     const legend = here ?? OVERLAY_LEGENDS[key];
     const state = overlays[key];
     const openLegend = () => onOpenOverlayLegend(key);

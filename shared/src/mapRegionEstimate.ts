@@ -18,6 +18,7 @@ import {
   layerIn,
   REGIONS,
   regionsTouching,
+  vectorsTouching,
   WORLD,
   type HeightsArchive,
   type LonLatBox,
@@ -25,6 +26,7 @@ import {
   type RegionTerrain,
   type TerrainArchive,
   type TileBytes,
+  type VectorArchive,
 } from "./regions.js";
 
 export type RegionBbox = {
@@ -485,6 +487,11 @@ function saveClipsFor(
 export interface MultiSourceRegionPlan {
   /** The archives of every region the area touches, which the save clips. */
   clips: SaveClip[];
+  /**
+   * The vector archives the save clips (`vectorsTouching`): unpriced, like the
+   * vector clip always was.
+   */
+  vectors: VectorArchive[];
   perSource: {
     basemapId: DownloadableTileSourceId;
     /** Shallowest level of this source's pyramid. Flat sources set it to zMax. */
@@ -560,6 +567,7 @@ export function planRegionForBasemaps(
     [...perSource, ...clips].reduce((sum, s) => sum + s.size[key], 0);
   return {
     clips,
+    vectors: vectorsTouching(bbox, regions, world),
     perSource,
     totalTiles,
     meanBytes: bytes("meanBytes"),

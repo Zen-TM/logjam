@@ -9,6 +9,7 @@ import {
   removeShareConfirm,
   t,
   type SharePromiseKind,
+  type SharpenUnavailable,
 } from "@logjam/shared";
 import {
   apiFetch,
@@ -68,7 +69,7 @@ export default function SharpenedAreasView({
   /** Opens the dialog for a new area, as the tray's Sharpen an area does. */
   onSharpen: () => void;
   /** Set where the region in view has no sharpening: the button says why. */
-  sharpenOff: { state: string; reason: string } | null;
+  sharpenOff: SharpenUnavailable | null;
   /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyTo: (footprint: GeoJsonPolygonal) => void;

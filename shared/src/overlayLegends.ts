@@ -7,7 +7,7 @@ import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { MAP_INK } from "./designTokens.js";
 import { COVERAGE_HATCH_IMAGE, COVERAGE_HATCH_URIS } from "./coverage.js";
 import { FIRE_RAMP, fireLegendRows } from "./fireHistory.js";
-import { NSW_REGION, layerIn, type Region } from "./regions.js";
+import { REGIONS, layerIn, type Region } from "./regions.js";
 import type { OverlayTerrainKey } from "./terrain.js";
 
 export type OverlayLegend = {
@@ -108,8 +108,11 @@ export function overlayLegends(
   };
 }
 
-/** NSW's legends, for the screens that do not yet ask the region in view. */
-export const OVERLAY_LEGENDS = overlayLegends(NSW_REGION) as Readonly<
+/**
+ * The home region's legends (the first in `REGIONS`), for a row whose layer the
+ * region in view lacks and for the screens that do not ask the region in view.
+ */
+export const OVERLAY_LEGENDS = overlayLegends(REGIONS[0]) as Readonly<
   Record<OverlayTerrainKey, OverlayLegend>
 >;
 

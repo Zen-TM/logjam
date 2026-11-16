@@ -129,7 +129,9 @@
   }
 }
 
-/* Only a tool that can run answers a pointer (shared/DESIGN.md §4). */
+/* Only a tool that can run answers a pointer (shared/DESIGN.md §4). Guard:
+   e2e/sharpen-region.spec.ts, which expects `cursor: default` on the tool
+   over Makarora and `pointer` over New South Wales. */
 .trayItem:not([aria-disabled="true"]) {
   cursor: pointer;
 }
@@ -146,8 +148,9 @@
   color: var(--color-accent);
 }
 
-/* A tool the map's region cannot run: its words dim, its reason stays at full
-   strength (shared/DESIGN.md §5). */
+/* A tool the map's region cannot run dims its glyph and label; its state
+   (`.trayState`) is left at full strength so the reason stays readable
+   (shared/DESIGN.md §5). */
 .trayUnavailable .trayGlyph,
 .trayUnavailable .trayLabel {
   opacity: var(--opacity-disabled);

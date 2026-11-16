@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAP_TERRAIN,
   NSW_REGION,
+  SIM_NZ,
   SIM_REGIONS,
   SIM_UTAH,
   SIM_WORLD,
@@ -133,14 +134,18 @@ describe("regionClipSpecs", () => {
     world?: Region,
   ): ReturnType<typeof regionClipSpecs> => {
     let n = 0;
+    const plan = planRegionForBasemaps(box, [], 15, () => 16, regions, world);
     return regionClipSpecs(
       { ...run, bbox: box },
-      planRegionForBasemaps(box, [], 15, () => 16, regions, world).clips,
+      plan.clips,
+      plan.vectors,
       (basemapId) => ({ id: `id${n++}`, label: basemapId }),
     );
   };
   const archives = (specs: ReturnType<typeof regionClipSpecs>) =>
     specs.map((s) => [s.basemapId, s.archiveId]);
+  const vectorPaths = (specs: ReturnType<typeof regionClipSpecs>) =>
+    specs.flatMap((s) => (s.vectorPath ? [s.vectorPath] : []));
 
   // A save over NSW queues one clip per archive of NSW's Terrain group, heights
   // first, then the vector map.
@@ -163,18 +168,23 @@ describe("regionClipSpecs", () => {
       expect(spec).toMatchObject({ taskKind: "clip", ...run });
     }
     expect(new Set(specs.map((s) => s.id)).size).toBe(7);
+    // The vector clip is NSW's own archive, as it always was.
+    expect(vectorPaths(specs)).toEqual([
+      "master/basemap/protomaps-nsw.pmtiles",
+    ]);
   });
 
   // Mutation: queue NSW's archives for every box, and a save in New Zealand
   // cuts clips from archives that do not cover it, or one in the sea cuts any.
-  it("gives an area the archives of the region it lies in, and one in the sea only the vector map", () => {
+  it("gives an area the archives of the region it lies in, and one in the sea none", () => {
     const makarora = {
       west: 169.22,
       south: -44.08,
       east: 169.28,
       north: -44.03,
     };
-    expect(archives(specsFor(makarora, SIM_REGIONS))).toEqual([
+    const nz = specsFor(makarora, SIM_REGIONS);
+    expect(archives(nz)).toEqual([
       ["simnz-heights", "simnz-heights"],
       ["simnz-contours", "simnz-contours"],
       ["simnz-slope", "simnz-slope"],
@@ -183,9 +193,28 @@ describe("regionClipSpecs", () => {
       ["simnz-coverage", "simnz-coverage"],
       ["protomaps", undefined],
     ]);
+    expect(vectorPaths(nz)).toEqual([SIM_NZ.vector!.archivePath]);
     const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
-    expect(archives(specsFor(sea, [NSW_REGION, ...SIM_REGIONS]))).toEqual([
-      ["protomaps", undefined],
+    expect(archives(specsFor(sea, [NSW_REGION, ...SIM_REGIONS]))).toEqual([]);
+  });
+
+  // Mutation: clip NSW's vector archive for every box, and a save in the sea
+  // cuts a clip of ground the archive does not hold; ignore the world, and a
+  // build that declares a planet vector archive never saves one.
+  it("gives an area outside every region the world's vector map, where it has one", () => {
+    const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
+    const specs = specsFor(sea, [NSW_REGION, ...SIM_REGIONS], SIM_WORLD);
+    expect(archives(specs)).toEqual([["protomaps", undefined]]);
+    expect(vectorPaths(specs)).toEqual([SIM_WORLD.vector!.archivePath]);
+  });
+
+  // Mutation: queue one vector clip for the first region a box touches, and a
+  // save over two regions has no vector map for the second.
+  it("gives an area over two regions a vector clip of each", () => {
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    expect(vectorPaths(specsFor(BBOX, [NSW_REGION, overlap]))).toEqual([
+      NSW_REGION.vector!.archivePath,
+      SIM_UTAH.vector!.archivePath,
     ]);
   });
 
