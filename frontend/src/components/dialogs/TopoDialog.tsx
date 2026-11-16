@@ -26,6 +26,8 @@ import {
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
+  formatDayMonth,
+  localDay,
 } from "@logjam/shared";
 import {
   Button,
@@ -351,7 +353,7 @@ export default function TopoDialog({
       if (creditsUsed + jobCredits > creditsQuota) {
         const remaining = Math.max(0, creditsQuota - creditsUsed);
         const resetStr = creditsResetAt
-          ? ` Allowance resets ${new Date(creditsResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
+          ? ` Allowance resets ${formatDayMonth(localDay(new Date(creditsResetAt)))}.`
           : "";
         setError(
           `Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,

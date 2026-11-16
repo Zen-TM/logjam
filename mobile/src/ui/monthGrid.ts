@@ -5,7 +5,7 @@
  * so a picker that built its grid in local time would hand back the previous
  * day for every AEST user.
  */
-import type { DayRange } from "@logjam/shared";
+import { formatLongMonthYear, type DayRange } from "@logjam/shared";
 
 /** "YYYY-MM-DD" for a Date, read in UTC. */
 export function toDateKey(date: Date): string {
@@ -84,11 +84,7 @@ export function yearBlockStart(year: number, size: number): number {
 export const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
 export function formatMonthLabel({ year, month }: YearMonth): string {
-  return new Date(Date.UTC(year, month, 1)).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatLongMonthYear({ year, month });
 }
 
 export type DateRange = DayRange;

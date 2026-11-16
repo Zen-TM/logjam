@@ -1,6 +1,7 @@
 // Dates are written by one function family (dateFormat.ts). The expected text is in
-// __fixtures__/day-formats.json, which a client's tests can read too, so a form
-// cannot read one way in a browser and another on a phone.
+// __fixtures__/day-formats.json, which frontend/src/dayFormats.test.ts and
+// mobile/src/dayFormats.test.ts read too, so a form cannot read one way in a
+// browser and another on a phone.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +43,8 @@ describe("the day forms", () => {
   });
 
   // Mutation: add an exported function whose name starts with "format" that the fixture lacks.
-  it("are all in the fixture, so a client test can pin every one", () => {
+  // Mutation: add an exported function whose name starts with "format" that the fixture lacks.
+  it("are all in the fixture, so Logjam Web and Logjam GPS pin every one", () => {
     expect(FORMS.length).toBeGreaterThanOrEqual(12);
     for (const [key, forms] of Object.entries(FIXTURE)) {
       expect(Object.keys(forms).sort(), key).toEqual(

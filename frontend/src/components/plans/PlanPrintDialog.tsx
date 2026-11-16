@@ -15,6 +15,8 @@ import {
   tripTypeLabel,
   type TripPlanFormPresetId,
   type TripPlanView,
+  formatDayMonthYear,
+  localDay,
 } from "@logjam/shared";
 import { Button, Checkbox, Dialog } from "../../ui";
 import { planSummary, summaryForms, type SummaryParts } from "./plansModel";
@@ -151,11 +153,7 @@ function PlanSummary({
   parts: SummaryParts;
 }) {
   const summary = planSummary(plan, parts);
-  const printed = new Date().toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const printed = formatDayMonthYear(localDay(new Date()));
   return createPortal(
     <div id="plan-print" className={classes.summary}>
       <h1>{summary.name}</h1>

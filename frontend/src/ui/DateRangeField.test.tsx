@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { dayOfKey, formatFullDay } from "@logjam/shared";
 import { DateRangeField } from "./DateRangeField";
 
 const labels = {
@@ -10,10 +11,7 @@ const labels = {
 };
 const day = (key: string) =>
   screen.getByRole("button", {
-    name: new Date(`${key}T00:00:00Z`).toLocaleDateString(undefined, {
-      dateStyle: "full",
-      timeZone: "UTC",
-    }),
+    name: formatFullDay(dayOfKey(key)),
   });
 
 afterEach(cleanup);

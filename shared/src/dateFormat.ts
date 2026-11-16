@@ -5,7 +5,9 @@
 // names, not `{0}` holes, because two forms with the same holes would share a
 // catalogue key and could not be ordered apart: "Sat 8 Nov" and "15 Mar 2026"
 // are both `{0} {1} {2}`. `dateFormat.test.ts` ("give every form a message of
-// its own") holds that.
+// its own") holds that. Nothing calls `toLocaleDateString`, whose output
+// follows the device and not Logjam's language: `dateSites.test.ts` fails when
+// a source file does.
 import {
   longMonth,
   longWeekday,
