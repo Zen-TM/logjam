@@ -100,6 +100,17 @@ describe("the declaration", () => {
     for (const region of ALL) expect(region.id).toMatch(/^[a-z0-9]+$/);
   });
 
+  // Mutation: add a second entry to `REGIONS` whose heights reuse NSW's id
+  // (`nsw-5m`), or give a simulated slope another region's id, and a save
+  // queues two clips under one key and prices the archive twice.
+  it("gives every terrain archive an id no other has, across every region", () => {
+    const archiveIds = [...new Set([...REGIONS, ...ALL])].flatMap((region) =>
+      Object.values(region.terrain).map((archive) => archive.id),
+    );
+    expect(archiveIds.length).toBeGreaterThanOrEqual(15);
+    expect(new Set(archiveIds).size).toBe(archiveIds.length);
+  });
+
   // Mutation: add a DEM source with a coverage box to DEM_SOURCES by hand, or
   // drop a region's `dem`, and heights come from a source no region owns.
   it("derives DEM_SOURCES: every region's, finest first, then the worldwide one", () => {
@@ -603,25 +614,18 @@ describe("toggleRegion and regionOffRefusal", () => {
 });
 
 describe("the simulated regions", () => {
-  // Mutation: reuse an id or an archive path across two, and a clip or a map
-  // layer of one answers for another.
-  it("share no id or archive path with each other or with NSW", () => {
-    const declared = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD];
-    const archives = declared.flatMap((r) => [
-      ...Object.values(r.terrain).map((a) => a.id),
-      ...Object.values(r.terrain).map((a) => a.archivePath),
-    ]);
-    // A hillshade shares its archive with the heights, so count the ids.
-    const idsOnly = declared.flatMap((r) =>
-      Object.values(r.terrain).map((a) => a.id),
-    );
-    expect(new Set(idsOnly).size).toBe(idsOnly.length);
-    expect(archives.length).toBeGreaterThan(15);
+  // Mutation: name a simulated archive's path without its region's id, and a
+  // clip of one region's data could be taken for another's.
+  it("keep each archive under its own region's path", () => {
+    let checked = 0;
     for (const sim of [...SIM_REGIONS, SIM_WORLD])
-      for (const archive of Object.values(sim.terrain))
+      for (const archive of Object.values(sim.terrain)) {
+        checked++;
         expect(archive.archivePath).toContain(
           sim === SIM_WORLD ? "simworld" : sim.id,
         );
+      }
+    expect(checked).toBeGreaterThanOrEqual(15);
   });
 
   // Mutation: duplicate a `source` or `name` in a simulated region's land

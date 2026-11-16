@@ -35,8 +35,8 @@ describe("the basemaps Logjam GPS offers", () => {
     expect(mobileBasemaps(atSea)).toEqual(["osm-topo", "osm-cycle"]);
   });
 
-  // Mutation: add a catalogue entry to a region without teaching the
-  // resolver the id, and resolveMapSource throws on it.
+  // Mutation: have `knownBasemaps()` return an id the catalogue lacks (append
+  // "ghost"), and resolveMapSource throws `Unknown basemap id` on it.
   it("are all ids the resolver draws", () => {
     const ids = knownBasemaps();
     expect(ids.length).toBeGreaterThan(0);
