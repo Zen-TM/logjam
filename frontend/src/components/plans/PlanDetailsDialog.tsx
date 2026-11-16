@@ -19,6 +19,7 @@ import {
   tripTypeLabel,
   type TripPlanPatch,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -161,10 +162,8 @@ function PlanDetailsForm({
             <Button
               onClick={requestClose}
               disabled={busy}
-              disabledReason="Saving…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Saving…`}
+            >{t`Cancel`}</Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
               {plan ? copy.save : copy.make}
             </Button>

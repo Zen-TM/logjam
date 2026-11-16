@@ -12,6 +12,7 @@ import {
   latestGaugeReading,
   type Gauge,
   type GaugeUnits,
+  t,
 } from "@logjam/shared";
 import { IconButton, ProfileChart, StatGrid } from "../../ui";
 import classes from "./GaugeView.module.css";
@@ -98,7 +99,9 @@ export function GaugeView({
     <div className={classes.view}>
       <div className={classes.head}>
         <h2 className={classes.name}>{gaugeDisplayName(gauge.name)}</h2>
-        {onClose && <IconButton icon="close" label="Close" onClick={onClose} />}
+        {onClose && (
+          <IconButton icon="close" label={t`Close`} onClick={onClose} />
+        )}
       </div>
       {contractSectionKeys(GAUGES, "web").map((key) => (
         <div key={key}>{sections[key]()}</div>

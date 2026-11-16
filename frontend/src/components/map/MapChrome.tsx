@@ -22,6 +22,7 @@ import {
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
+import { t } from "@logjam/shared";
 
 /** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
 const TRAY_CLOSE_MS = 100;
@@ -146,7 +147,7 @@ export default function MapChrome({
     observer.observe(button, { attributes: true, attributeFilter: ["class"] });
     const onError = () =>
       toast.error(
-        "Couldn't find your location. Check that this site may use it.",
+        t`Couldn't find your location. Check that this site may use it.`,
       );
     geolocate.on("error", onError);
     return () => {
@@ -190,7 +191,7 @@ export default function MapChrome({
             <div
               id={trayId}
               role="group"
-              aria-label="Tools"
+              aria-label={t`Tools`}
               inert={!toolsOpen}
               className={`${classes.tray} ${toolsOpen ? "" : classes.trayClosing}`}
             >
@@ -271,7 +272,7 @@ export default function MapChrome({
             // Logjam GPS's glyphs for the same button; the ruler is the measure
             // tool's alone (one idea, one icon).
             icon={toolsOpen ? "close" : "add"}
-            label="Tools"
+            label={t`Tools`}
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
             disabled={selectingArea}
@@ -280,29 +281,29 @@ export default function MapChrome({
         </div>
         <MapButton
           icon="lidar"
-          label="3D terrain"
+          label={t`3D terrain`}
           pressed={is3D}
           onClick={onToggle3D}
           disabled={!map || selectingArea}
         />
         <MapButton
           icon="locate"
-          label="Show my location"
+          label={t`Show my location`}
           pressed={locate === "on" || locate === "waiting"}
           aria-busy={locate === "waiting"}
           disabled={!geolocate}
           onClick={() => geolocate?.trigger()}
         />
-        <MapButtonGroup label="Zoom">
+        <MapButtonGroup label={t`Zoom`}>
           <MapButton
             icon="zoomIn"
-            label="Zoom in"
+            label={t`Zoom in`}
             disabled={!map || zoom.atMax}
             onClick={() => map?.zoomIn()}
           />
           <MapButton
             icon="zoomOut"
-            label="Zoom out"
+            label={t`Zoom out`}
             disabled={!map || zoom.atMin}
             onClick={() => map?.zoomOut()}
           />
@@ -312,7 +313,7 @@ export default function MapChrome({
       <div className={classes.instruments}>
         <MapButton
           icon={NorthNeedle}
-          label="Reset north"
+          label={t`Reset north`}
           disabled={!map || selectingArea}
           className={classes.compass}
           style={{ "--bearing": `${bearing}deg` } as CSSProperties}

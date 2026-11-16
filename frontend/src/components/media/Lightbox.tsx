@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { mediaCategory, type MediaItem } from "@logjam/shared";
+import { mediaCategory, type MediaItem, t } from "@logjam/shared";
 import classes from "./Lightbox.module.css";
 import { Icon } from "../../ui";
 
@@ -79,14 +79,14 @@ export default function Lightbox({
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Media preview"
+      aria-label={t`Media preview`}
       tabIndex={-1}
     >
       <button
         ref={closeRef}
         className={classes.lightboxClose}
         onClick={onClose}
-        aria-label="Close"
+        aria-label={t`Close`}
       >
         <Icon idea="close" size={22} />
       </button>
@@ -94,7 +94,7 @@ export default function Lightbox({
         {failed ? (
           <div className={classes.lightboxFallback}>
             <Icon idea="missingMedia" size={32} />
-            <span>Couldn't load {item.filename}.</span>
+            <span>{t`Couldn't load ${item.filename}.`}</span>
           </div>
         ) : mediaCategory(item.mediaType) === "video" ? (
           <video

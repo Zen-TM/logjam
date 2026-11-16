@@ -18,6 +18,7 @@ import {
   toElevationLine,
   type TrackDetail,
   type TrackSeriesPoint,
+  t,
 } from "@logjam/shared";
 import { fetchTrackText } from "./trackGeo";
 
@@ -109,7 +110,7 @@ export function useTrackFileDetail(source: TrackFileSource | null): {
           detail: null,
           line: NO_LINE,
           series: NO_SERIES,
-          error: "Couldn't read that file.",
+          error: t`Couldn't read that file.`,
         });
       });
     return () => {

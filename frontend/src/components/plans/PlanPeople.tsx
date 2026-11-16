@@ -22,6 +22,7 @@ import {
   type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 import {
   Avatar,
@@ -202,7 +203,7 @@ export default function PlanPeople({
                       variant="outline"
                       icon="ignore"
                       disabled={busy.isBusy(member.user.id)}
-                      disabledReason="Replying…"
+                      disabledReason={t`Replying…`}
                       onClick={() => setTurningDown(member)}
                     >
                       {copy.turnDown}
@@ -231,7 +232,7 @@ export default function PlanPeople({
                 {word && <StatusPill label={word} tone="outline" />}
                 {verbs.length > 0 && (
                   <Menu
-                    label={`Actions for ${member.user.username}`}
+                    label={t`Actions for ${member.user.username}`}
                     title={member.user.username}
                     placement="right-start"
                     entries={menuEntries(verbs, (id) => act(member, id))}
@@ -239,7 +240,7 @@ export default function PlanPeople({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${member.user.username}`}
+                        label={t`Actions for ${member.user.username}`}
                       />
                     )}
                   />
@@ -293,7 +294,7 @@ export default function PlanPeople({
         open={personView != null}
         title={personView?.name}
         onClose={() => setPersonId(null)}
-        footer={<Button onClick={() => setPersonId(null)}>Close</Button>}
+        footer={<Button onClick={() => setPersonId(null)}>{t`Close`}</Button>}
       >
         {person && personView && (
           <div className={classes.list}>
@@ -318,7 +319,7 @@ export default function PlanPeople({
                 variant={action.danger ? "danger" : "outline"}
                 icon={action.icon}
                 disabled={busy.isBusy(person.user.id)}
-                disabledReason="Replying…"
+                disabledReason={t`Replying…`}
                 onClick={() => act(person, action.id)}
               >
                 {action.label}

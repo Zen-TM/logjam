@@ -58,6 +58,7 @@ import {
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
+  t,
 } from "@logjam/shared";
 import {
   WORLDWIDE_TERRAIN_SOURCE,
@@ -2041,7 +2042,7 @@ function Map({
           displayUrl: track.displayUrl,
           stamp: { placeId: track.placeId, mediaId: track.mediaId },
         })),
-        "Couldn't load a place track file.",
+        t`Couldn't load a place track file.`,
       );
       if (cancelled) return;
       const source = mapRef.current?.getSource("place-tracks") as
@@ -2070,7 +2071,7 @@ function Map({
           displayUrl: track.displayUrl,
           stamp: { mediaId: track.mediaId },
         })),
-        "Couldn't load one of your files.",
+        t`Couldn't load one of your files.`,
       );
       if (cancelled) return;
       const source = mapRef.current?.getSource("standalone-tracks") as
@@ -2463,7 +2464,7 @@ function Map({
       if (!point) return;
       const el = document.createElement("div");
       el.className = classes.routeVertexHandle;
-      el.title = "Drag to move · click to remove";
+      el.title = t`Drag to move · click to remove`;
       const marker = new maplibregl.Marker({ element: el, draggable: true })
         .setLngLat(point)
         .addTo(map);
@@ -3695,10 +3696,10 @@ function Map({
       if (quiet) {
         // Coming back after an area selection: they have seen it.
       } else if (window.matchMedia("(pointer: coarse)").matches) {
-        toast.done("Use two fingers to pan and pinch to zoom in 3D mode.");
+        toast.done(t`Use two fingers to pan and pinch to zoom in 3D mode.`);
       } else {
         toast.done(
-          "Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.",
+          t`Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.`,
         );
       }
       map.setMaxPitch(60);
@@ -3838,7 +3839,7 @@ function Map({
             <Notice>{pickVerb} the map to select a location</Notice>
           </div>
           <div className={classes.geoPdfConfirmBar}>
-            <Button onClick={onCancelPickCoords}>Cancel</Button>
+            <Button onClick={onCancelPickCoords}>{t`Cancel`}</Button>
           </div>
         </>
       )}
@@ -3852,7 +3853,7 @@ function Map({
       )}
       {selectingBbox && onBboxCancelled && (
         <div className={classes.geoPdfConfirmBar}>
-          <Button onClick={onBboxCancelled}>Cancel</Button>
+          <Button onClick={onBboxCancelled}>{t`Cancel`}</Button>
         </div>
       )}
       {selectingGeoPdfExtent && (
@@ -3860,8 +3861,8 @@ function Map({
           <div className={classes.pickBanner}>
             <Notice>
               {geoPdfKeptScale !== null
-                ? "Drag the map to place the area"
-                : "Pan and zoom the map to fit the area"}
+                ? t`Drag the map to place the area`
+                : t`Pan and zoom the map to fit the area`}
             </Notice>
           </div>
           <div
@@ -3874,17 +3875,18 @@ function Map({
               card
               label={
                 <>
-                  Keep 1:
+                  {t`Keep 1:`}
                   <span ref={geoPdfScaleTextRef} />
                 </>
               }
               checked={geoPdfKeptScale !== null}
               onChange={setGeoPdfKeepScale}
             />
-            <Button variant="filled" onClick={handleConfirmGeoPdfExtent}>
-              Confirm area
-            </Button>
-            <Button onClick={onGeoPdfExtentCancelled}>Cancel</Button>
+            <Button
+              variant="filled"
+              onClick={handleConfirmGeoPdfExtent}
+            >{t`Confirm area`}</Button>
+            <Button onClick={onGeoPdfExtentCancelled}>{t`Cancel`}</Button>
           </div>
         </>
       )}

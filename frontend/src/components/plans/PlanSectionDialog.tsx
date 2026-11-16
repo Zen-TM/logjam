@@ -17,6 +17,7 @@ import {
   tripPlanInPlanNow,
   type TripPlanSectionPatch,
   type TripPlanSectionView,
+  t,
 } from "@logjam/shared";
 import { Button, Dialog, ErrorBanner, TextArea, TextField } from "../../ui";
 import { messageFromError } from "../../errors/messageFromError";
@@ -135,10 +136,8 @@ function SectionForm({
             <Button
               onClick={requestClose}
               disabled={busy}
-              disabledReason="Saving…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Saving…`}
+            >{t`Cancel`}</Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
               {editing ? copy.sectionSave : planAddVerbLabel("section")}
             </Button>

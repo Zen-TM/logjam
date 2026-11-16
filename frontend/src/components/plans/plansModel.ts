@@ -9,6 +9,7 @@ import {
   TRIP_PLAN_PRINTED_PRESETS,
   tripPlanAnswerText,
   tripPlanRoleWord,
+  t,
 } from "@logjam/shared";
 import { placesBounds } from "../sidebar/panels/placesModel";
 import type {
@@ -73,7 +74,7 @@ function answerTable(
     {
       preset: form.preset,
       caption: preset.title,
-      head: ["Name", ...columns.map((each) => each.label)],
+      head: [t`Name`, ...columns.map((each) => each.label)],
       rows,
     },
   ];

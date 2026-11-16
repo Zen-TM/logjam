@@ -10,6 +10,7 @@ import {
   tripPlanTripLogMatches,
   tripPlanTripLogPlacesLine,
   type TripPlanPlace,
+  t,
 } from "@logjam/shared";
 import { Button, Checkbox, Dialog } from "../../ui";
 import type { TPlace } from "../../placeUtils";
@@ -52,7 +53,7 @@ export default function PlanTripLogPlacesDialog({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{t`Cancel`}</Button>
           <Button type="submit" form={formId} variant="filled">
             {copy.tripLogNext}
           </Button>

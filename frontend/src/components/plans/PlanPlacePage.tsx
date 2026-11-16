@@ -17,6 +17,7 @@ import {
   tripPlanSetAsideRows,
   userFieldValues,
   type TripPlanPlace,
+  t,
 } from "@logjam/shared";
 import { Hero, SectionHeader, StatGrid, type Stat } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
@@ -49,13 +50,13 @@ export default function PlanPlacePage({
 
   const positionStats: Stat[] = [
     {
-      label: "Coordinates",
+      label: t`Coordinates`,
       value: position,
       span: true,
       onCopy: () => void copyPosition(),
     },
     ...(place.elevation != null
-      ? [{ label: "Elevation", value: formatElevationM(place.elevation) }]
+      ? [{ label: t`Elevation`, value: formatElevationM(place.elevation) }]
       : []),
   ];
 

@@ -19,6 +19,7 @@ import {
   type TripPlanPlace,
   type TripPlanView,
   displayUnits,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -189,7 +190,7 @@ export default function PlanItems({
                 trailing={
                   verbs.length > 0 ? (
                     <Menu
-                      label={`Actions for ${title}`}
+                      label={t`Actions for ${title}`}
                       title={title}
                       placement="right-start"
                       entries={menuEntries(verbs, (id) => run[id]())}
@@ -197,7 +198,7 @@ export default function PlanItems({
                         <IconButton
                           {...props}
                           icon="overflow"
-                          label={`Actions for ${title}`}
+                          label={t`Actions for ${title}`}
                         />
                       )}
                     />
