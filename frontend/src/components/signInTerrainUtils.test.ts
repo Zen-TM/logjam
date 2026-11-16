@@ -14,7 +14,7 @@ import {
   sunPosition,
   traceDownhill,
   valleyLight,
-} from "./signInTerrain";
+} from "./signInTerrainUtils";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ASSETS = join(HERE, "../assets/signIn");

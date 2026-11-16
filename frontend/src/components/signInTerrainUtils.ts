@@ -95,7 +95,7 @@ export function valleyLight(date: Date, lat: number, lon: number) {
 /**
  * D8 as [dy, dx], in the order the drainage file's bytes count them: N NE E
  * SE S SW W NW. The generator declares the same table and the same OUTLET;
- * signInTerrain.test.ts holds the two together.
+ * signInTerrainUtils.test.ts holds the two together.
  */
 export const D8: readonly (readonly [number, number])[] = [
   [-1, 0],
