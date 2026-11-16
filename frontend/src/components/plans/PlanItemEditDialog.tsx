@@ -36,6 +36,7 @@ import { patchPlanItem } from "../../plansApi";
 import { wayNameError } from "../sidebar/panels/waysModel";
 import {
   ITEM_ATTR,
+  itemElevationLabel,
   itemFieldDefs,
   itemPatch,
   itemWords,
@@ -213,7 +214,7 @@ export default function PlanItemEditDialog({
                 />
               </div>
               <NumberField
-                label={copy.itemElevation}
+                label={itemElevationLabel()}
                 value={values.elevation}
                 onChange={(elevation) => set({ elevation })}
                 constraints={{}}

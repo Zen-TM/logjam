@@ -448,7 +448,6 @@ export const TRIP_PLAN_PAGE = {
     itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
     itemLatitude: "Latitude",
     itemLongitude: "Longitude",
-    itemElevation: "Elevation (m)",
     itemAttributes: "Attributes",
     itemDownloadHint: "Click to download",
     placeTypeFallback: "Place",
