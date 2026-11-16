@@ -68,6 +68,12 @@ afterEach(() => {
 // Made-up places: Sydney, and the first simulated New Zealand box.
 const SYDNEY = { lat: -33.87, lng: 151.21, zoom: 12 };
 const MAKARORA = { lat: -44.055, lng: 169.25, zoom: 12 };
+const SYDNEY_AREA: TBbox = {
+  north: -33.8,
+  south: -33.9,
+  east: 151.25,
+  west: 151.15,
+};
 const NZ: TBbox = { north: -44.03, south: -44.08, east: 169.28, west: 169.22 };
 
 function dialog(
@@ -136,5 +142,17 @@ describe("Make a map, over the ground the sheet covers", () => {
       expect(sent()).toHaveLength(1);
       expect(sent()[0]!.config.baseLayer).toBe("osm-topo");
     });
+  });
+
+  // Mutation: at each of the three `seedBaseLayer(activeLayerId, null` calls in
+  // GeoPdfDialog.tsx pass `sheetBox(null, mapCenter)` for `null`, and a New South
+  // Wales layer opened over New Zealand is lost, not back when the area returns.
+  it("keeps the map's layer through a visit to ground that cannot print it", () => {
+    const { rerender } = render(dialog({ mapCenter: MAKARORA }));
+    expect(baseLayers()).toEqual(["OSM Vector", "OSM Topo"]);
+    rerender(dialog({ mapCenter: MAKARORA, pendingExtent: SYDNEY_AREA }));
+    expect(
+      screen.getByRole("radio", { name: "SIX Maps Topo" }).ariaChecked,
+    ).toBe("true");
   });
 });

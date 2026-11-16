@@ -487,6 +487,7 @@ function App() {
   const mapLayerId = mapLayerFor(activeLayerId, {
     active: selectingGeoPdfExtent,
     layerId: geoPdfFramingLayer,
+    view: basemapView,
   });
 
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);

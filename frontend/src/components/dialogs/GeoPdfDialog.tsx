@@ -327,7 +327,7 @@ function GeoPdfDialog({
 
   // Layers
   const [pickedBaseLayer, setSelectedBaseLayer] = useState(() =>
-    seedBaseLayer(activeLayerId, sheetBox(null, mapCenter)),
+    seedBaseLayer(activeLayerId, null),
   );
   // What the sheet is printed from follows the ground it covers (ADR 0049): the
   // pick where it prints there, else that ground's default. The pick is kept.
@@ -462,9 +462,7 @@ function GeoPdfDialog({
       return updated;
     });
     if (c.baseLayer)
-      setSelectedBaseLayer(
-        seedBaseLayer(activeLayerId, sheetBox(null, mapCenter), c.baseLayer),
-      );
+      setSelectedBaseLayer(seedBaseLayer(activeLayerId, null, c.baseLayer));
     if (c.overlays) setSelectedOverlays(new Set(c.overlays));
     if (c.terrainPinned) setTerrainFollowsMap(false);
     if (c.compass !== undefined) setCompassEnabled(c.compass);
@@ -495,9 +493,7 @@ function GeoPdfDialog({
       if (!seededView) {
         setSeededView(true);
         setFormat("geopdf");
-        setSelectedBaseLayer(
-          seedBaseLayer(activeLayerId, sheetBox(null, mapCenter)),
-        );
+        setSelectedBaseLayer(seedBaseLayer(activeLayerId, null));
         setSelectedOverlays(seedOverlays());
         setTerrainFollowsMap(true);
         applyLastSettings();

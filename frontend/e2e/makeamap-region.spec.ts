@@ -50,6 +50,8 @@ test("over simulated New Zealand the base layers are the ones that print there",
   await expect(layers.getByRole("radio", { name: /^SIX Maps/ })).toHaveCount(0);
 });
 
+// Mutation: have `printableBaseLayersFor` in geoPdfBaseLayer.ts drop the SIX
+// maps whatever the ground, and the dialog over Sydney lists none.
 test("over New South Wales it lists the SIX maps as before", async ({
   page,
 }) => {

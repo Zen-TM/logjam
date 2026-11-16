@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { NSW_REGION, SIM_REGIONS } from "@logjam/shared";
+import { NSW_REGION, REGIONS } from "@logjam/shared";
 import { describe, expect, it, vi } from "vitest";
 
 // The simulated regions are read once, when @logjam/shared loads, so the
@@ -26,9 +26,10 @@ const ids = (box: Parameters<typeof printableBaseLayersFor>[0]) =>
 
 describe("the base layers a sheet can be printed from", () => {
   // A floor: the boxes above are inside the two simulated regions and the world
-  // patch, so a switch that stopped declaring them would test nothing.
+  // patch, so a list without them would test nothing. Mutation: delete the
+  // `vi.hoisted` line that sets the switch, and `REGIONS` is New South Wales alone.
   it("reads the simulated regions", () => {
-    expect(SIM_REGIONS.length).toBeGreaterThanOrEqual(2);
+    expect(REGIONS.length).toBeGreaterThanOrEqual(3);
   });
 
   // Mutation: return `PRINTABLE_BASE_LAYERS` from `printableBaseLayersFor`
