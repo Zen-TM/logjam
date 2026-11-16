@@ -65,7 +65,13 @@ plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
 written outside these functions does not grow: a ceiling of bare literals per
 directory that may only fall, found by `shared/src/i18nSource.ts`; the same
 tests hold each message to its hygiene rules (no leading or trailing space, no
-literal `{0}`, a `#` in a plural, only tags `rich` can consume). No test yet
+literal `{0}`, a `#` in a plural, only tags `rich` can consume). On Logjam
+Web's main screens, started in the pseudo-language, text that is outside ⟦ ⟧
+and not in `frontend/e2e/pseudo-unwrapped.json` fails
+`frontend/e2e/pseudo.spec.ts`, and so does an entry of that list that no screen
+shows any more; so does a label wider than its control that is not in
+`frontend/e2e/pseudo-overflows.json` (which depends on the machine's fonts, so
+its entries that fit are no failure). No test yet
 holds that every call site uses it, since existing literals are not converted,
 or that the API's resolver is installed from `AsyncLocalStorage` for every
 path that writes text; a later change adds it. Each client's entry file sets
@@ -82,7 +88,7 @@ getter, so it is written when read, not when its module loads. So is the plan
 form builder's locked-visibility sentence, which the clients read, so that no
 `say` sentence function is called at import
 (`shared/src/contracts/contractLanguage.test.ts`).
-(updated 2026-11-15)
+(updated 2026-11-16)
 
 ## Consequences
 

@@ -144,6 +144,7 @@ export {
   language,
   matchLanguage,
   plural,
+  pseudo,
   rich,
   setLanguageResolver,
   t,

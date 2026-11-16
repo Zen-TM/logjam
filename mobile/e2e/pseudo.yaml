@@ -1,0 +1,95 @@
+# Pseudo-language walk: Logjam GPS's main screens with every catalogue message
+# written ⟦áççéñtéd~~~⟧, one screenshot each, for a person to read: text
+# without the brackets skipped the catalogue, and a label cut short or spilling
+# would not fit a translation. It asserts nothing about the text itself.
+#
+# Needs the dev variant (as maestro/smoke.yaml) under fake auth with
+# EXPO_PUBLIC_SIM_REGIONS=1 in mobile/.env, which is what offers the
+# pseudo-language, and the seeded local API (alice). Not a release
+# qualification flow: see README.md, which has the command. The screenshots
+# land in the directory that command names, outside the tree: they show a
+# phone that may hold real data.
+#
+# Each label is matched in English or in its pseudo form, so the flow reads
+# the same before and after a label goes through the catalogue.
+appId: earth.logjam.gps.dev
+---
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Not now|Places|⟦Pláçéš~+⟧"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Not now"
+    commands:
+      - tapOn: "Not now"
+# Choose the pseudo-language: More → Settings → Display.
+- tapOn: "More.*|⟦Móré~+⟧.*"
+- tapOn: "Settings|⟦Šéttíñgš~+⟧"
+- tapOn: "Display|⟦Díšpláý~+⟧"
+- scrollUntilVisible:
+    element: "Pseudo-language \\(development\\)|⟦Pšéúdó-láñgúágé \\(dévélópméñt\\)~+⟧"
+    direction: DOWN
+- tapOn: "Pseudo-language \\(development\\)|⟦Pšéúdó-láñgúágé \\(dévélópméñt\\)~+⟧"
+# A dev build cannot restart itself: the choice is kept and read at the next
+# start (`chooseLanguage`, src/languageSetting.ts), so start it again.
+- stopApp
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Places|⟦Pláçéš~+⟧"
+    timeout: 120000
+- tapOn: "Map|⟦Máp~+⟧"
+- takeScreenshot: pseudo-01-map
+- tapOn: "Places|⟦Pláçéš~+⟧"
+- extendedWaitUntil:
+    visible: "Claustral Canyon"
+    timeout: 15000
+- takeScreenshot: pseudo-02-places
+- tapOn: "Claustral Canyon"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-03-place
+- back
+- tapOn: "Trips|⟦Trípš~+⟧"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-04-trips
+- tapOn: "Saved|⟦Šávéd~+⟧"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-05-saved
+- tapOn: "More.*|⟦Móré~+⟧.*"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-06-more
+- tapOn: "Inbox.*|⟦Íñbóx~+⟧.*"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-07-inbox
+- back
+- tapOn: "Plans.*|⟦Pláñš~+⟧.*"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-08-plans
+- back
+- tapOn: "Friends|⟦Fríéñdš~+⟧"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-09-friends
+- back
+- tapOn: "Account|⟦Áççóúñt~+⟧"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-10-account
+- back
+- tapOn: "Settings|⟦Šéttíñgš~+⟧"
+- waitForAnimationToEnd
+- takeScreenshot: pseudo-11-settings
+- tapOn: "Display|⟦Díšpláý~+⟧"
+- scrollUntilVisible:
+    element: "English \\(Australia\\)|⟦Éñglíšh \\(Áúštrálíá\\)~+⟧"
+    direction: DOWN
+- takeScreenshot: pseudo-12-display
+# Leave the phone in the source language, read at its next start. Logjam GPS
+# records the language it runs in to the account, so start it once more in
+# English: otherwise the seeded account keeps the pseudo-language, and the next
+# Logjam Web run would write the language back.
+- tapOn: "English \\(Australia\\)|⟦Éñglíšh \\(Áúštrálíá\\)~+⟧"
+- stopApp
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Places"
+    timeout: 120000
+- stopApp
