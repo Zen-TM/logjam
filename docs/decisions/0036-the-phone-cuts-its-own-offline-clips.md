@@ -7,7 +7,9 @@
 ## Context
 
 A saved region ([0005](0005-offline-region-downloads.md)) holds the rasters the
-user picked, the worldwide DEM tiles, and three clips of archives Logjam builds:
+user picked, the worldwide DEM tiles (updated 2026-11-16: until the world
+declares an archive of its own, a clip of which is saved in their place,
+[0005](0005-offline-region-downloads.md)), and three clips of archives Logjam builds:
 the vector basemap, each DEM archive the area touches (`planDemDownload` in
 `shared/src/mapRegionEstimate.ts`, [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md))
 and the statewide contours (`NSW_REGION.terrain.contours` in `shared/src/regions.ts`). Under
@@ -184,7 +186,8 @@ Nothing new calls it.
   height archive itself, and a z15-only clip would shade only close in, so
   `clipArchiveFor` cuts `nsw-5m` from `demClipMinZoom` (z8); the sampler still
   reads z15 alone ([0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)),
-  and the worldwide terrarium clip is unchanged. `planRegionForBasemaps` prices
+  and the worldwide terrarium clip is unchanged (updated 2026-11-16: until the
+  world declares an archive of its own, [0005](0005-offline-region-downloads.md)). `planRegionForBasemaps` prices
   every zoom of it, about three and a half times the z15 bytes of the same box
   (1.2 MB against 0.33 MB for a 24-tile Katoomba Falls box). A clip saved before
   this holds z15 alone: `holdsHillshade` (`mobile/src/map/sourceResolver.ts`)

@@ -22,6 +22,7 @@ import {
   lonOverlap,
   lonWidth,
   REGIONS,
+  WORLD,
   wrapLon,
   type BasemapCatalogEntry,
   type Region,
@@ -635,13 +636,15 @@ function resolveStatewide(
  * zoomed out, so it is no clip for this: an area saved that way says "Needs a
  * connection" until it is saved again. Used by the layers sheet's switch and
  * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
- * Answers "is anything saved" over `regions`; what the map draws is only the
- * shown region's clips (`resolveTerrain`). Guard: `sourceResolver.test.ts`
- * ("holdsHillshade").
+ * Answers "is anything saved" over `regions` and the world entry, whose clip
+ * shades a map over ground no region covers; what the map draws is only the
+ * shown region's clips (`resolveTerrain`). Guards: `sourceResolver.test.ts`
+ * ("holdsHillshade", "holdsHillshade and drawsTerrain: the world's clip, where
+ * the world declares an archive").
  */
 export function holdsHillshade(
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
-  regions: readonly Region[] = REGIONS,
+  regions: readonly Region[] = [...REGIONS, WORLD],
 ): boolean {
   return (
     artifact.kind === "dem-region" &&
@@ -692,7 +695,7 @@ export const holdsCoverage = (artifact: Pick<MapArtifact, "kind">): boolean =>
  */
 export const drawsTerrain = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
-  regions: readonly Region[] = REGIONS,
+  regions: readonly Region[] = [...REGIONS, WORLD],
 ): boolean =>
   holdsContours(artifact, regions) ||
   holdsSlope(artifact, regions) ||

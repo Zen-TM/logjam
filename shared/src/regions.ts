@@ -9,7 +9,8 @@
 // saved, printed or exported; the basemap gallery asks them through
 // `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts). Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
-// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
+// (the public Terrarium tiles, the OSM rasters, Open-Meteo) belong to no
+// region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
 // every region's sources) and `areaExport.test.ts` (the check reads every
 // region with terrain).
@@ -630,9 +631,10 @@ export const REGIONS: readonly Region[] = simRegionsOn()
  * What answers outside every region: no border, so never in `REGIONS` and
  * never returned by `regionAt`. It declares nothing in prod. Guards:
  * `regions.test.ts` ("declares only NSW unless the simulated-regions flag is
- * set", "never returns the world"). Nothing reads it yet. `DEM_SOURCES` is
- * built from `REGIONS` alone, so switching the worldwide tier on means setting
- * `vector` and `terrain` here and also adding its heights to `DEM_SOURCES`.
+ * set", "never returns the world"). Where it declares `terrain.heights`, those
+ * are the last height source in place of the public Terrarium tiles
+ * (`worldwideSource` in demSources.ts; guard: `demSources.test.ts`, the
+ * describe "the worldwide source"); where it declares none, they stay.
  */
 const EMPTY_WORLD: Region = {
   id: "world",

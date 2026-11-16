@@ -52,6 +52,7 @@ describe("snapArchiveFor", () => {
       vector: {
         archivePath: "master/basemap/shallow.pmtiles",
         maxzoom: SNAP_TILE_ZOOM - 1,
+        licence: "odbl",
       },
     };
     const [lon, lat] = shallow.view.center;
