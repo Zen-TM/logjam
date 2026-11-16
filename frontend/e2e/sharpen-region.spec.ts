@@ -140,6 +140,53 @@ test("with the map wholly outside New South Wales, and no switch, the entry says
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 });
 
+// A completion link names a job that exists: it opens the dialog whatever the
+// map shows, and "Not available here" belongs to starting a new sharpen.
+// Mutation: in App.tsx change `sharpenFor(pendingTopoBbox ?? topoJobBox)` to
+// `sharpenFor(pendingTopoBbox)`, and the link over Queenstown opens the off state.
+test("a completion link opens the dialog over ground the map's region cannot sharpen", async ({
+  page,
+}) => {
+  const ring = [
+    [150.2, -33.8],
+    [150.3, -33.8],
+    [150.3, -33.7],
+    [150.2, -33.7],
+    [150.2, -33.8],
+  ];
+  await page.route(/\/topo-jobs\/job-from-link$/, (route) =>
+    route.fulfill({
+      json: {
+        id: "job-from-link",
+        status: "complete",
+        name: "Made-up gully",
+        footprint: { type: "Polygon", coordinates: [ring] },
+        tileCount: 1,
+        estimatedSeconds: null,
+        layerOptions: null,
+        errorMessage: null,
+        createdAt: "2026-11-01T00:00:00.000Z",
+        updatedAt: "2026-11-01T00:00:00.000Z",
+        s3OutputKeys: null,
+        syncRole: "owner",
+      },
+    }),
+  );
+  await stubMaster(page);
+  await page.addInitScript(
+    ([stored]) => localStorage.setItem("logjam.mapView", stored!),
+    [QUEENSTOWN],
+  );
+  await page.goto("/?topoJob=job-from-link");
+  const dialog = page.locator("dialog[open]");
+  await expect(
+    dialog.getByText(
+      "Drop your ELVIS ZIP here, or select it in your file system.",
+    ),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByText(MAP_TERRAIN.copy.notHere)).toHaveCount(0);
+});
+
 // Mutation: rename NSW's portal in shared/src/regions.ts, and prod's one
 // region reads differently.
 test("over New South Wales, with no switch, it reads as it always did", async ({

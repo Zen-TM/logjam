@@ -415,8 +415,8 @@ describe("sharpenOfferFor", () => {
 
 describe("sharpenUnavailable", () => {
   // Mutation: in sharpen.ts change `offer.mode === "off"` in
-  // `sharpenUnavailable` to `offer.mode !== "off"`, or write the state's words
-  // there instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
+  // `sharpenUnavailable` to `offer.mode !== "off"`, or write different words as
+  // the state there instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
   it("says Not available here, with the region's reason, only where it is off", () => {
     expect(sharpenUnavailable(sharpenOffer(NSW_REGION))).toBeNull();
     expect(sharpenUnavailable(sharpenOffer(SIM_NZ))).toEqual({

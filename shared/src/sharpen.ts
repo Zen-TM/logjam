@@ -80,6 +80,9 @@ export function sharpenOffer(region: Region | null): SharpenOffer {
     : { mode: "off", reason: SHARPEN_OFF_REASON[entry.reason] };
 }
 
+/** What an entry point to sharpening says where it is off: `state` beside it, `reason` for a tooltip or a screen reader. */
+export type SharpenUnavailable = { state: string; reason: string };
+
 /**
  * What an entry point to sharpening says where it is off: the Terrain layers'
  * "Not available here" beside it, and the region's reason for a tooltip or a
@@ -88,7 +91,7 @@ export function sharpenOffer(region: Region | null): SharpenOffer {
  */
 export function sharpenUnavailable(
   offer: SharpenOffer,
-): { state: string; reason: string } | null {
+): SharpenUnavailable | null {
   return offer.mode === "off"
     ? { state: MAP_TERRAIN.copy.notHere, reason: offer.reason }
     : null;
