@@ -157,7 +157,7 @@ export type Region = {
    * lower-case letters and digits").
    */
   id: string;
-  /** What user copy calls it: "That area is outside NSW". */
+  /** What user copy calls it: "Import NSW from RopeWiki". */
   name: string;
   /** Where a map opens before the user has moved it. */
   view: { center: readonly [lon: number, lat: number]; zoom: number };

@@ -14,6 +14,10 @@ from pathlib import Path
 
 REGIONS_FILE = Path(__file__).with_name("regions.json")
 
+# The archives an area export reads; a region without all of them is no export
+# region (`export_region`, `EXPORT_ARCHIVES` in shared/src/areaExport.ts).
+EXPORT_ARCHIVES = ("heights", "slope", "contours")
+
 # The database hosts and environment variables api/src/lib/runtime.ts reads,
 # bar NODE_ENV (tests/test_regions.py `TestRuntimeParity` holds them equal).
 LOCAL_DB_HOSTS = {"localhost", "127.0.0.1", "host.docker.internal", "postgres"}
@@ -84,3 +88,29 @@ def region_of_area(coverage, regions=None):
     the cases its test reads)."""
     west, south, east, north = coverage
     return region_at((west + east) / 2, (south + north) / 2, regions)
+
+
+def export_region(bbox, regions=None):
+    """The region an area export reads its archives from: the one holding the
+    centre of the (west, south, east, north) box, else the first touching it,
+    among those that declare every `EXPORT_ARCHIVES`, or None. `areaExportRegion` in
+    shared/src/areaExport.ts is the same choice, so the API's grid and the
+    worker's archives come from one region (tests/test_regions.py
+    `TestExportRegion` reads the cases its test reads)."""
+    from shapely.geometry import Polygon
+    from shapely.geometry import box as box_polygon
+
+    west, south, east, north = bbox
+    exporting = [
+        r
+        for r in (REGIONS if regions is None else regions)
+        if all(r["terrain"].get(layer) for layer in EXPORT_ARCHIVES)
+    ]
+    found = region_at((west + east) / 2, (south + north) / 2, exporting)
+    if found:
+        return found
+    cover = box_polygon(west, south, east, north)
+    for r in exporting:
+        if any(Polygon(ring).intersects(cover) for ring in r["borders"]):
+            return r
+    return None

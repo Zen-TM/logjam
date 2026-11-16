@@ -118,7 +118,7 @@ definitions are in `envs/prod/ecs.tf`:
 | Task family | Image | Runs | Launched by |
 |---|---|---|---|
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
-| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
+| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the terrain of the box's region over it → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
 | `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: a region's OpenStreetMap extract (NSW's, as scheduled) → the public place registry under `master/places/` | an EventBridge schedule, monthly |
 | `logjam-gauges` | topo worker | `topo/build_gauges.py`: WaterNSW latest readings (every 2 hours) and BoM history (daily) → the public river gauge files under `master/gauges/` | an EventBridge schedule, every 2 hours |
 | `logjam-fire-history` | topo worker | `topo/build_fire_history.py`: NPWS's fire history map service → the most-recent-fire-year raster the vegetation layer reads, under `fire/`, and the public Fire history overlay archive under `master/fire/` | an EventBridge schedule, monthly |

@@ -31,7 +31,8 @@ os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
 import export_worker  # noqa: E402
-from area_export import AreaOutsideNsw  # noqa: E402
+import regions  # noqa: E402
+from area_export import AreaOutsideTerrain  # noqa: E402
 from export_worker import GENERIC_FAILURE, failure_sentence  # noqa: E402
 from renderers.context import ExportTooLarge, RenderError  # noqa: E402
 
@@ -72,10 +73,10 @@ class TestFailureSentence(unittest.TestCase):
 
     # Mutation: map an AreaExportError to GENERIC_FAILURE whatever it is, and
     # a box in Victoria reads as a fault worth retrying.
-    def test_outside_nsw_says_what_to_do(self):
+    def test_outside_terrain_says_what_to_do(self):
         self.assertEqual(
-            failure_sentence(AreaOutsideNsw("no heights tiles in the box")),
-            AreaOutsideNsw.SENTENCE,
+            failure_sentence(AreaOutsideTerrain("no heights tiles in the box")),
+            AreaOutsideTerrain.SENTENCE,
         )
 
 
@@ -98,6 +99,9 @@ class TestAreaBoxNeverLogged(unittest.TestCase):
         with (
             mock.patch.object(export_worker, "render_area") as render,
             mock.patch.object(export_worker, "s3_archives"),
+            mock.patch.object(
+                regions, "export_region", return_value=regions.region("nsw")
+            ),
             self.assertLogs("export_worker", level="DEBUG") as logs,
         ):
             export_worker.render_area_export(mock.Mock(), row, Path("/work"))
@@ -150,6 +154,9 @@ class TestAreaExportGrid(unittest.TestCase):
         with (
             mock.patch.object(export_worker, "render_area") as render,
             mock.patch.object(export_worker, "s3_archives"),
+            mock.patch.object(
+                regions, "export_region", return_value=regions.region("nsw")
+            ),
         ):
             export_worker.render_area_export(
                 mock.Mock(), {**self.ROW, "bbox": bbox}, Path("/work")
@@ -165,6 +172,62 @@ class TestAreaExportGrid(unittest.TestCase):
     # Mutation: read `bbox["epsg"]`, and a job an older API queued fails.
     def test_a_job_queued_before_the_api_named_a_grid_passes_none(self):
         self.assertIsNone(self.epsg_passed(self.ROW["bbox"]))
+
+
+class TestAreaExportRegion(unittest.TestCase):
+    """The archives an export reads are its box's region's."""
+
+    ROW = {
+        "format": "geotiff",
+        "layers": ["heights"],
+        "vector_style_snapshot": {},
+        "source_job_ids": [],
+    }
+
+    def render(self, box, every=None):
+        west, south, east, north = box
+        row = {
+            **self.ROW,
+            "bbox": {"west": west, "south": south, "east": east, "north": north},
+        }
+        with (
+            mock.patch.object(export_worker, "render_area") as render,
+            mock.patch.object(export_worker, "s3_archives") as archives,
+            mock.patch.object(
+                regions, "REGIONS", regions.REGIONS if every is None else every
+            ),
+        ):
+            export_worker.render_area_export(mock.Mock(), row, Path("/work"))
+        return archives, render
+
+    # Mutation: pass a fixed region (read `region("nsw")`) in place of the box's,
+    # and a box over New Zealand reads New South Wales's archives.
+    def test_a_box_reads_the_archives_of_the_region_it_is_in(self):
+        env = {"SIM_REGIONS": "1", "DB_HOST": "postgres"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            loaded = regions._load()
+        archives, render = self.render((169.22, -44.08, 169.24, -44.06), loaded)
+        self.assertEqual(archives.call_args.args[2]["id"], "simnz")
+        self.assertEqual(render.call_args.kwargs["top_zoom"], 17)
+
+    # A box over New South Wales exports what it did before regions: the same
+    # archives (area_export.py `region_keys`, pinned in test_area_export.py
+    # `NswExportUnchanged`), z15 and the grid the API named.
+    # Mutation: leave `top_zoom` out of the render_area call, and a region
+    # whose archives go deeper than z15 is read at z15.
+    def test_a_box_over_nsw_is_read_from_nsw_at_z15(self):
+        archives, render = self.render((150.30, -33.72, 150.32, -33.70))
+        self.assertEqual(archives.call_args.args[2]["id"], "nsw")
+        self.assertEqual(render.call_args.kwargs["top_zoom"], 15)
+
+    # Mutation: read the archives of "no region" as NSW's, and a box in
+    # Victoria is exported from archives that hold none of its ground.
+    def test_a_box_no_region_touches_is_refused_with_the_sentence(self):
+        with self.assertRaises(AreaOutsideTerrain) as raised:
+            self.render((144.2, -36.8, 144.3, -36.7))
+        self.assertEqual(
+            failure_sentence(raised.exception), AreaOutsideTerrain.SENTENCE
+        )
 
 
 if __name__ == "__main__":
