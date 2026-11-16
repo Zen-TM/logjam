@@ -36,7 +36,7 @@ describe("date handling", () => {
   it("reads a UTC-midnight date as its own calendar day", () => {
     // In AEST, a local-time read of this instant is 14 March.
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
-    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe("Sun 15 Mar 2026");
+    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe("Sun, 15 Mar 2026");
   });
 
   // Mutation: write `formatDateKey` with `localDay` for `utcDay`, and a
@@ -47,7 +47,7 @@ describe("date handling", () => {
     try {
       expect(formatDateKey("2026-03-15T00:00:00.000Z")).toBe("15 Mar 2026");
       expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe(
-        "Sun 15 Mar 2026",
+        "Sun, 15 Mar 2026",
       );
     } finally {
       process.env.TZ = previous;

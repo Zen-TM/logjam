@@ -74,6 +74,10 @@ function fill(pattern: string, day: Partial<Day>): string {
 export const formatWeekdayDayMonthYear = (d: Day): string =>
   fill(t`<weekday> <day> <month> <year>`, d);
 
+/** "Sun, 15 Mar 2026": a logbook entry's own line, written the way en-AU's own `Intl` does. */
+export const formatWeekdayDayMonthYearComma = (d: Day): string =>
+  fill(t`<weekday>, <day> <month> <year>`, d);
+
 /** "Sat 8 Nov" */
 export const formatWeekdayDayMonth = (
   d: Pick<Day, "weekday" | "day" | "month">,
@@ -109,9 +113,9 @@ export const formatDayLongMonthYear = (
 export const formatLongMonthYear = (d: Pick<Day, "month" | "year">): string =>
   fill(t`<fullmonth> <year>`, d);
 
-/** "Sunday 15 March 2026" */
+/** "Sunday, 15 March 2026" */
 export const formatFullDay = (d: Day): string =>
-  fill(t`<fullweekday> <day> <fullmonth> <year>`, d);
+  fill(t`<fullweekday>, <day> <fullmonth> <year>`, d);
 
 /** "15/03/2026": for where a month's name would not fit. */
 export const formatNumericDay = (

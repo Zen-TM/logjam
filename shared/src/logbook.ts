@@ -17,7 +17,7 @@ import { monthInitial } from "./dateNames.js";
 import {
   formatDayMonthYear,
   formatMonthYear,
-  formatWeekdayDayMonthYear,
+  formatWeekdayDayMonthYearComma,
   utcDay,
 } from "./dateFormat.js";
 import {
@@ -51,9 +51,9 @@ export function defaultTrackName(now: Date = new Date()): string {
   return `Track ${formatDateKey(todayDateKey(now))}`;
 }
 
-/** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
+/** "Sun, 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
 export function formatTripDate(isoDate: string): string {
-  return formatWeekdayDayMonthYear(utcDay(new Date(isoDate)));
+  return formatWeekdayDayMonthYearComma(utcDay(new Date(isoDate)));
 }
 
 /** "15 Mar 2026" — where the weekday would be noise (sheet titles, filter summaries). */
