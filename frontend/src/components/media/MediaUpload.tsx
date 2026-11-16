@@ -4,6 +4,7 @@ import {
   type MediaCategory,
   type MediaItem,
   type MediaLinkedType,
+  t,
 } from "@logjam/shared";
 import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
@@ -24,8 +25,8 @@ const ACCEPT_BY_CATEGORY: Record<UploadCategory, string> = {
 const ACCEPT_ALL = `${ACCEPT_BY_CATEGORY.visual},${ACCEPT_BY_CATEGORY.track}`;
 
 const HINT_BY_CATEGORY: Record<UploadCategory, string> = {
-  visual: "Photos & videos",
-  track: "GPX or KML",
+  visual: t`Photos & videos`,
+  track: t`GPX or KML`,
 };
 
 export default function MediaUpload({
@@ -68,7 +69,7 @@ export default function MediaUpload({
   const accept = category ? ACCEPT_BY_CATEGORY[category] : ACCEPT_ALL;
   const subHint = category
     ? HINT_BY_CATEGORY[category]
-    : "Photos, videos, GPX/KML";
+    : t`Photos, videos, GPX/KML`;
   const locked = Boolean(disabled) || Boolean(disabledReason) || busy;
 
   function categoryAllowed(
@@ -100,7 +101,7 @@ export default function MediaUpload({
       for (const file of selected) {
         const resolved = resolveMediaType(file);
         if (!resolved) {
-          failures.push(`${file.name}: unsupported file type`);
+          failures.push(t`${file.name}: unsupported file type`);
           continue;
         }
         if (!categoryAllowed(resolved.category)) {
@@ -123,13 +124,13 @@ export default function MediaUpload({
         } catch (err) {
           console.error(err);
           failures.push(
-            `${file.name}: ${messageFromError(err, "upload failed")}`,
+            `${file.name}: ${messageFromError(err, t`upload failed`)}`,
           );
         }
       }
     } catch (err) {
       console.error(err);
-      failures.push(messageFromError(err, "Couldn't prepare upload."));
+      failures.push(messageFromError(err, t`Couldn't prepare upload.`));
     }
     setErrors(failures);
     setBusy(false);
@@ -182,10 +183,10 @@ export default function MediaUpload({
         )}
         <span className={classes.hint}>
           {busy
-            ? "Uploading…"
+            ? t`Uploading…`
             : disabledReason
               ? disabledReason
-              : "Drop files or click to upload"}
+              : t`Drop files or click to upload`}
         </span>
         {!disabledReason && <span className={classes.sub}>{subHint}</span>}
         <input

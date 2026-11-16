@@ -165,6 +165,7 @@ import {
   type SharpenOffer,
   gaugeFeedOf,
   type LonLatBox,
+  t,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
@@ -695,7 +696,7 @@ function App() {
   useEffect(() => {
     document.title = activePanel
       ? `${PANEL_TITLES[activePanel]} — Logjam Web`
-      : "Logjam Web";
+      : t`Logjam Web`;
   }, [activePanel]);
 
   // Leaving a detail page via the NavRail drops what it was showing.
@@ -841,7 +842,7 @@ function App() {
         refetchStandaloneFiles();
       } catch (err) {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't delete that file."));
+        toast.error(messageFromError(err, t`Couldn't delete that file.`));
       }
     },
     [refetchStandaloneFiles, toast],
@@ -1050,7 +1051,7 @@ function App() {
     hydrateFromUser().catch(console.error);
     fetchCurrentUser().catch((err) => {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't load your preferences."));
+      toast.error(messageFromError(err, t`Couldn't load your preferences.`));
     });
   }, [authenticated, hydrateFromUser, toast]);
 
@@ -1187,7 +1188,7 @@ function App() {
         refetchCurrentUser();
       } catch (err) {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't dismiss job."));
+        toast.error(messageFromError(err, t`Couldn't dismiss job.`));
       }
     },
     [refetchCurrentUser, toast],
@@ -1230,7 +1231,7 @@ function App() {
         .then((urls) => {
           const entry = urls.find((u) => u.name === layer);
           if (!entry) {
-            toast.error(`Download layer "${layer}" not found for this job.`);
+            toast.error(t`Download layer "${layer}" not found for this job.`);
             return;
           }
           const a = document.createElement("a");
@@ -1242,7 +1243,7 @@ function App() {
         })
         .catch((err) => {
           console.error(err);
-          toast.error(messageFromError(err, "Couldn't start download."));
+          toast.error(messageFromError(err, t`Couldn't start download.`));
         });
     } else {
       apiFetch<TopoJob>(`/topo-jobs/${jobId}`)
@@ -1279,15 +1280,15 @@ function App() {
           setActivePanel("inbox");
           toast.error(
             view.status === "failed"
-              ? (view.errorMessage ?? "That map couldn't be made.")
-              : "That map isn't ready yet. It comes to your Inbox when it is.",
+              ? (view.errorMessage ?? t`That map couldn't be made.`)
+              : t`That map isn't ready yet. It comes to your Inbox when it is.`,
           );
         }
       })
       .catch((err) => {
         console.error(err);
         setActivePanel("inbox");
-        toast.error(messageFromError(err, "Couldn't load that map."));
+        toast.error(messageFromError(err, t`Couldn't load that map.`));
       });
   }, [loadsUserData, toast]);
 
@@ -1601,7 +1602,7 @@ function App() {
       toast.error(
         placeId
           ? wayFailureMessage(err)
-          : messageFromError(err, "Couldn't save the route."),
+          : messageFromError(err, t`Couldn't save the route.`),
       );
     } finally {
       setSavingRoute(false);
@@ -1686,15 +1687,13 @@ function App() {
       action={
         <IconButton
           icon="close"
-          label="Clear filters"
+          label={t`Clear filters`}
           size={14}
           round
           onClick={clearFilters}
         />
       }
-    >
-      Places filter: {filteredPlaces.length} of {allPlaces.length} shown
-    </Notice>
+    >{t`Places filter: ${filteredPlaces.length} of ${allPlaces.length} shown`}</Notice>
   ) : null;
 
   // Opening Make a map anew: no stale form, and no pick result from last time.
@@ -1773,13 +1772,12 @@ function App() {
               event.preventDefault();
               panel.focus();
             }}
-          >
-            Skip to panel
-          </a>
+          >{t`Skip to panel`}</a>
         )}
-        <a href="#main-content" className={classes.skipLink}>
-          Skip to map
-        </a>
+        <a
+          href="#main-content"
+          className={classes.skipLink}
+        >{t`Skip to map`}</a>
         <TopoDialog
           open={showTopo}
           onClose={() => {
@@ -2128,7 +2126,7 @@ function App() {
           />
         </div>
         <main id="main-content" className={classes.main}>
-          <h1 className={classes.visuallyHidden}>Logjam place map</h1>
+          <h1 className={classes.visuallyHidden}>{t`Logjam place map`}</h1>
           <Map
             filters={planOnMap ? emptyFilters : filters}
             // An open plan's things are drawn whatever the layer switches say;
@@ -2280,7 +2278,7 @@ function App() {
               <MapButton
                 ref={layersButtonRef}
                 icon="layers"
-                label="Layers"
+                label={t`Layers`}
                 expanded={layersOpen}
                 onClick={() => setLayersOpen((open) => !open)}
               />
@@ -2391,9 +2389,7 @@ function App() {
               compact
               variant="filled"
               onClick={cancelFilterAreaSelection}
-            >
-              Cancel
-            </Button>
+            >{t`Cancel`}</Button>
           </div>
         )}
 

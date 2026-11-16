@@ -7,6 +7,7 @@ import {
   SIGN_IN_COPY,
   USERNAME_HINT,
   type Region,
+  t,
 } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
 import BrandMark from "./brand/BrandMark";
@@ -111,16 +112,16 @@ function ConsentGate({
       <div className={classes.card}>
         <BrandMark className={classes.brandMark} />
         <h1 className={classes.title}>
-          {newAccount ? "Welcome to Logjam" : "Updated terms"}
+          {newAccount ? t`Welcome to Logjam` : t`Updated terms`}
         </h1>
         <p className={classes.body}>
           {newAccount
-            ? "Choose your public display name and review the terms to finish creating your account."
-            : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
+            ? t`Choose your public display name and review the terms to finish creating your account.`
+            : t`Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
         </p>
         {newAccount && (
           <TextField
-            label="Username"
+            label={t`Username`}
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
@@ -163,17 +164,13 @@ function ConsentGate({
           className={classes.action}
           onClick={handleAgree}
           busy={submitting}
-        >
-          Agree and continue
-        </Button>
+        >{t`Agree and continue`}</Button>
         <Button
           className={classes.action}
           onClick={onSignOut}
           disabled={submitting}
-          disabledReason="Recording your agreement…"
-        >
-          Sign out
-        </Button>
+          disabledReason={t`Recording your agreement…`}
+        >{t`Sign out`}</Button>
       </div>
     </div>
   );

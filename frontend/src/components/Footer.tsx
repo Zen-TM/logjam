@@ -1,4 +1,4 @@
-import { BUG_REPORT_URL, SOURCE_URL } from "@logjam/shared";
+import { BUG_REPORT_URL, SOURCE_URL, t } from "@logjam/shared";
 
 import classes from "./Footer.module.css";
 
@@ -10,9 +10,7 @@ function Footer() {
         href="/tos.html"
         target="_blank"
         rel="noopener noreferrer"
-      >
-        Terms
-      </a>
+      >{t`Terms`}</a>
       <span className={classes.sep} aria-hidden="true">
         ·
       </span>
@@ -21,9 +19,7 @@ function Footer() {
         href="/privacy.html"
         target="_blank"
         rel="noopener noreferrer"
-      >
-        Privacy
-      </a>
+      >{t`Privacy`}</a>
       <span className={classes.sep} aria-hidden="true">
         ·
       </span>
@@ -32,9 +28,7 @@ function Footer() {
         href={SOURCE_URL}
         target="_blank"
         rel="noopener noreferrer"
-      >
-        Source
-      </a>
+      >{t`Source`}</a>
       <span className={classes.sep} aria-hidden="true">
         ·
       </span>
@@ -43,9 +37,7 @@ function Footer() {
         href={BUG_REPORT_URL}
         target="_blank"
         rel="noopener noreferrer"
-      >
-        Report a bug
-      </a>
+      >{t`Report a bug`}</a>
     </footer>
   );
 }

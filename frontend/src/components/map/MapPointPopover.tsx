@@ -13,6 +13,7 @@ import {
   type Region,
   type MapPointCoord,
   type MapPointVerbId,
+  t,
 } from "@logjam/shared";
 import { useElevationPoint } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
@@ -134,7 +135,7 @@ export default function MapPointPopover({
     void navigator.clipboard
       .writeText(mapPointPosition(point))
       .then(() => toast.done(MAP_POINT.copy.coordinatesCopied))
-      .catch(() => toast.error("Couldn't copy the coordinates."));
+      .catch(() => toast.error(t`Couldn't copy the coordinates.`));
   };
   const stats: Stat[] = mapPointFacts({
     point,
@@ -225,7 +226,7 @@ export default function MapPointPopover({
                     icon="back"
                     label={
                       view === "weather"
-                        ? "Back to options"
+                        ? t`Back to options`
                         : MAP_POINT.copy.backToPoint
                     }
                     onClick={() => setView(mapPointStepBack(view) ?? "point")}
