@@ -52,6 +52,12 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
       "the name of ELVIS's own menu entry, which the step tells the user to open",
   },
   {
+    file: "components/dialogs/geoPdfExtentFields.ts",
+    text: "topo maps",
+    reason:
+      "the printed paper maps whose grid the E/N fields use, not a sharpened area",
+  },
+  {
     file: "components/dialogs/TopoDialog.tsx",
     text: "select the specific tiles",
     reason:
