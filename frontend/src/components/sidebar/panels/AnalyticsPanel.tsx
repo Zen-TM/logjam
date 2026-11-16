@@ -229,7 +229,7 @@ function AnalyticsPanel({
           title={title}
           onBack={activity ? closeActivity : onBack}
           backLabel={
-            activity ? copy.backToActivities : t`Back to ${TRIPS_LIST.title}`
+            activity ? copy.backToActivities : `Back to ${TRIPS_LIST.title}`
           }
         />
         {tripLogs.length > 0 && (

@@ -205,7 +205,7 @@ function medalTile(medal: Medal | null) {
       <IconTile
         icon="leaderboard"
         hue={MEDAL_HUE[medal]}
-        label={t`${medal} medal`}
+        label={`${medal} medal`}
       />
     )
   );

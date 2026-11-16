@@ -240,7 +240,7 @@ function rowSubtitle(
   placeTypes?: TPlaceType[],
 ): string {
   const type = customFieldTypeName(def.type);
-  if (def.appliesToAllTypes) return t`${type} · all types`;
+  if (def.appliesToAllTypes) return `${type} · all types`;
   if (!placeTypes) {
     return def.tripTypes.length > 0
       ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}`
@@ -249,7 +249,7 @@ function rowSubtitle(
   const names = placeTypes
     .filter((placeType) => def.placeTypeIds.includes(placeType.id))
     .map((placeType) => placeType.name);
-  if (names.length === 0) return t`${type} · no types`;
+  if (names.length === 0) return `${type} · no types`;
   return `${type} · ${names.join(", ")}`;
 }
 
