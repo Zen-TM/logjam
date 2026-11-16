@@ -51,7 +51,9 @@ import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
-const ALL: readonly Region[] = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD, WORLD];
+// Every region the declaration holds, real or simulated, and both worlds: a
+// region added to `REGIONS_WITH_SIMULATED` is in every guard that reads this.
+const ALL: readonly Region[] = [...REGIONS_WITH_SIMULATED, SIM_WORLD, WORLD];
 
 describe("the declaration", () => {
   // Mutation: write a vertex of any ring at a longitude of 190 or -190, and
@@ -158,7 +160,7 @@ describe("the declaration", () => {
 
   // Mutation: a view centre in the sea, and a new map opens on nothing.
   it("opens its map inside its own border", () => {
-    for (const region of [NSW_REGION, ...SIM_REGIONS]) {
+    for (const region of REGIONS_WITH_SIMULATED) {
       const [lon, lat] = region.view.center;
       expect(
         regionTouchesBox(region, {
@@ -900,8 +902,7 @@ describe("a region's registry prefix", () => {
   // simulated region's `placeSearch` as "master/places/simnz/v0/".
   it("carries the current registry format, for every declared and simulated region", () => {
     const declared = regionsWithRegistry([
-      NSW_REGION,
-      ...SIM_REGIONS,
+      ...REGIONS_WITH_SIMULATED,
       SIM_WORLD,
     ]);
     // A floor: a filter that stopped matching would check nothing.
