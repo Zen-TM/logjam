@@ -73,16 +73,18 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
   text, the import failure codes, the stored names and hints of the built-in
   place types, a source's name that the API stores in a place's sources. Guard:
   `shared/src/apiErrors.test.ts` ("still maps the refusal when the page started
-  in another language") for the first; none for the others, which a later
-  `t` would not turn red. (3) Developer detail, text given to `malformed` or
-  logged, stays bare; no test fails if one is wrapped in `t`. (4) A data
+  in another language") for the first; for the others, only the flag described
+  below. (3) Developer detail, text given to `malformed` or logged, stays bare;
+  likewise only that flag. (4) A data
   source's credit stays as its publisher wrote it, plain and HTML alike, so the
   two agree in every language; no test holds that they agree. Rules 2 to 4 name
   what they leave as written in `DATA_LITERALS` (by file, so the same words
   elsewhere are still counted) or `EXEMPT_FILES` (`shared/src/i18nSource.ts`),
-  each with its reason; `shared/src/i18nCoverage.test.ts` ("lists only literals
-  that exist, in the file that holds them") fails on an entry its file does not
-  hold. The region declaration's vocabulary (tenure classes, fire types,
+  each with its reason. For a value listed there, wrapping it in `t` turns
+  `shared/src/i18nCoverage.test.ts` ("lists only literals that exist, in the
+  file that holds them") red, because the file no longer holds the literal;
+  that flags the change but does not hold the rule, since deleting the entry
+  makes the test green. For anything not listed, nothing does. The region declaration's vocabulary (tenure classes, fire types,
   caveats, the world's name) is written when the module loads, so it follows
   the language a client started in, and the API reads only ids and numbers from
   it; the first guard lists `REGIONS` as safe on that ground, so no test holds
