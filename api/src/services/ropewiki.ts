@@ -553,7 +553,7 @@ export async function fetchAndParseRopeWiki(
     signal: AbortSignal.timeout(15000),
     headers: {
       "User-Agent":
-        "Logjam/1.0 (canyoning logbook; https://logjam.earth; noreply@notifications.logjamnsw.com)",
+        "Logjam/1.0 (canyoning logbook; https://logjam.earth; noreply@notifications.logjam.earth)",
     },
   });
   if (!response.ok) {

@@ -71,7 +71,7 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "5432"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name = "ECS_SECURITY_GROUPS"
       # Dedicated worker SG. Vestigial here (a maintainer script never calls
@@ -170,7 +170,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "EMPTY_DIR"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name  = "SMTP_HOST"
       value = "smtp.resend.com"
@@ -317,7 +317,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "5432"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name  = "FRONTEND_URL"
       value = "https://logjam.earth/"

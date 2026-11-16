@@ -3,9 +3,9 @@
  *
  * Why this exists: Cognito's default email sending mails verification codes from
  * `no-reply@verificationemail.com` on AWS's shared IP pool without DKIM/DMARC
- * alignment with logjamnsw.com, so Gmail spam-bins signup codes. SES is
+ * alignment with logjam.earth, so Gmail spam-bins signup codes. SES is
  * unavailable. Routing Cognito's emails through Resend (verified
- * DKIM/SPF/DMARC on notifications.logjamnsw.com) lands them in the inbox.
+ * DKIM/SPF/DMARC on notifications.logjam.earth) lands them in the inbox.
  *
  * Mechanism: with CustomEmailSender enabled, Cognito encrypts the code with our
  * KMS CMK and invokes this function instead of sending mail directly; we
