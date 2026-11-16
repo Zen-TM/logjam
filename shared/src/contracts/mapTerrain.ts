@@ -3,10 +3,11 @@
 // of the map first (`TERRAIN_LAYER_KEYS` in terrain.ts, which both clients
 // also stack them by).
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const MAP_TERRAIN = {
   id: "map.terrain",
-  title: "Terrain",
+  title: t`Terrain`,
   sections: [
     { key: "contours" },
     { key: "slope" },
@@ -18,67 +19,65 @@ export const MAP_TERRAIN = {
     {
       key: "sharpenedAreas",
       on: "web",
-      reason:
-        "Making a sharpened area, and deleting it from the account, is planning, done at home: Logjam GPS draws the ones the account has and, from Saved, shares one, saves it and deletes its device copy.",
+      reason: t`Making a sharpened area, and deleting it from the account, is planning, done at home: Logjam GPS draws the ones the account has and, from Saved, shares one, saves it and deletes its device copy.`,
     },
   ],
   copy: {
+    // The switches' labels and hints stay plain literals: each client's
+    // `switchCopy.test.ts` measures a switch's words by their literal types,
+    // which `t` widens to `string`.
     contours: "Contours",
     slope: "Slope",
     land: "Land tenure",
     hillshade: "Hillshade",
     vegetation: "Vegetation",
-    sharpenedAreas: "Sharpened areas",
+    sharpenedAreas: t`Sharpened areas`,
     // Behind the Sharpened areas row's help button, titled with its label.
-    sharpenedAreasAbout: "About sharpened areas",
-    sharpenedAreasLegend:
-      "A sharpened area redraws contours, slope and hillshade from LiDAR you supply, at the survey's own detail instead of the statewide layers'. It is yours alone until you share it with a friend.",
+    sharpenedAreasAbout: t`About sharpened areas`,
+    sharpenedAreasLegend: t`A sharpened area redraws contours, slope and hillshade from LiDAR you supply, at the survey's own detail instead of the statewide layers'. It is yours alone until you share it with a friend.`,
     vegetationHint: "Scrub density for bushbashing",
     // Behind the Vegetation row's help button, titled with its label.
-    vegetationAbout: "About vegetation",
-    vegetationLegend:
-      "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
+    vegetationAbout: t`About vegetation`,
+    vegetationLegend: t`Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.`,
     // Land tenure, Fire history and Coverage stack with this group, but their
     // rows are in `MAP_OVERLAYS`: none is part of the shape of the ground.
     // Behind that row's help button, titled with its label.
-    landAbout: "About land tenure",
+    landAbout: t`About land tenure`,
     // Each source's own caveat is the region's (`LandArchive.caveat`).
-    landLegend:
-      "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.",
+    landLegend: t`Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.`,
     fire: "Fire history",
     // Behind that row's help button, titled with its label; the legend's rows
     // are `fireLegendRows`.
-    fireAbout: "About fire history",
-    fireLegend:
-      "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.",
+    fireAbout: t`About fire history`,
+    fireLegend: t`Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.`,
     coverage: "Coverage",
     // Behind that row's help button, titled with its label, over a picker of
     // the region's carriers and a swatch of the hatch.
-    coverageAbout: "About coverage",
-    coverageCarrier: "Your carrier",
+    coverageAbout: t`About coverage`,
+    coverageCarrier: t`Your carrier`,
     // In place of the row's switch until a carrier is picked: the overlay
     // draws one carrier's map, and there is no default.
-    coverageChooseCarrier: "Choose your carrier",
-    coverageLegend:
-      "Hatching marks where your carrier's own model predicts no mobile reception for a phone in your hand outdoors.",
+    coverageChooseCarrier: t`Choose your carrier`,
+    coverageLegend: t`Hatching marks where your carrier's own model predicts no mobile reception for a phone in your hand outdoors.`,
     // What "What is here?" says after the carrier; the first is the
     // legend's swatch too.
-    coverageNoReception: "no mobile reception",
-    coverageReception: "mobile reception",
-    slopeBands: "Slope bands",
+    coverageNoReception: t`no mobile reception`,
+    // The legend row's heading: the same words as a sentence of their own.
+    coverageNoReceptionRow: t`No mobile reception`,
+    coverageReception: t`mobile reception`,
+    slopeBands: t`Slope bands`,
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.
     contoursHint: "A line every 10 m of height",
     slopeHint: "Coloured by steepness",
     hillshadeHint: "Ridges and gullies stand out",
-    slopeAbout: "About slope",
-    slopeLegend:
-      "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.",
+    slopeAbout: t`About slope`,
+    slopeLegend: t`Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.`,
     // At the top of the editor on both clients.
-    slopeBandsIntro: "Colour terrain based on how steep it is.",
+    slopeBandsIntro: t`Colour terrain based on how steep it is.`,
     // The Contours switch over a topographic sheet, which has its own.
-    contoursPrinted: "This map prints its own",
+    contoursPrinted: t`This map prints its own`,
     // The Hillshade switch over imagery.
-    hillshadeImagery: "The photos have their own shadows",
+    hillshadeImagery: t`The photos have their own shadows`,
   },
 } as const satisfies ScreenContract;

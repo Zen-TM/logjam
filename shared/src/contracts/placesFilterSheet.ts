@@ -10,10 +10,11 @@ import {
 import { regionEdgesKm } from "../mapRegionEstimate.js";
 import type { RegionBbox } from "../mapRegionEstimate.js";
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const PLACES_FILTER_SHEET = {
   id: "places.filterSheet",
-  title: "Sort and filter",
+  title: t`Sort and filter`,
   sections: [
     // The options are `PLACE_SORT_OPTIONS`.
     { key: "sort" },
@@ -31,35 +32,41 @@ export const PLACES_FILTER_SHEET = {
     {
       key: "onMap",
       on: "gps",
-      reason:
-        "Logjam Web's list sits beside its map, which always draws what the list shows. On Logjam GPS the map is another tab, so narrowing it is a choice the user makes here and can see.",
+      reason: t`Logjam Web's list sits beside its map, which always draws what the list shows. On Logjam GPS the map is another tab, so narrowing it is a choice the user makes here and can see.`,
     },
   ],
   copy: {
     // A section's title is the copy under its own key.
-    sort: "Sort",
-    status: "Status",
-    attributes: "Attributes",
-    location: "Location",
-    source: "Source",
-    dates: "Dates",
-    onMap: "On the map",
+    sort: t`Sort`,
+    status: t`Status`,
+    attributes: t`Attributes`,
+    location: t`Location`,
+    source: t`Source`,
+    dates: t`Dates`,
+    onMap: t`On the map`,
 
-    allStatuses: "All",
+    allStatuses: t`All`,
+    // Plain literals: a switch's words are measured through their literal types
+    // in each client's `switchCopy.test.ts`, and `t` widens them to `string`.
+    // No switch-copy test names these words, so a wrap passes there; it turns
+    // `i18nCoverage.test.ts` ("writes no new text outside the catalogue, and
+    // every ceiling is the count") red until the contracts ceiling is lowered.
     includeMissing: "Include if not set",
     includeMissingHint: "Also show ones with no value",
-    drawArea: "Draw on map",
+    drawArea: t`Draw on map`,
     /** Logjam Web only: the map is in view beside the sheet. */
-    areaToView: "This view",
-    clear: "Clear",
+    areaToView: t`This view`,
+    clear: t`Clear`,
+    // Plain literal, as `includeMissing` above.
     sharedByMe: "Shared by me",
-    added: "Added",
-    updated: "Updated",
-    dateFrom: "From",
-    dateTo: "To",
+    added: t`Added`,
+    updated: t`Updated`,
+    dateFrom: t`From`,
+    dateTo: t`To`,
+    // Plain literal, as `includeMissing` above.
     showOnMap: "Only filtered places",
-    reset: "Reset",
-    done: "Done",
+    reset: t`Reset`,
+    done: t`Done`,
   },
 } as const satisfies ScreenContract;
 
@@ -124,10 +131,10 @@ export function placesOnMapSummary(
   filteredCount: number,
   totalCount: number,
 ): string {
-  if (!enabled) return "The map shows every place";
+  if (!enabled) return t`The map shows every place`;
   // Nothing is being narrowed: say so rather than print a fraction that reads
   // as "one place is missing".
   return filteredCount >= totalCount
-    ? `All ${totalCount} places`
-    : `${filteredCount} of ${totalCount} places`;
+    ? t`All ${totalCount} places`
+    : t`${filteredCount} of ${totalCount} places`;
 }

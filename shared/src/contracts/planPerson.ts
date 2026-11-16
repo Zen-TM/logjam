@@ -2,6 +2,7 @@
 // Logjam GPS alike: who they are, where they stand, the forms they haven't
 // answered (a leader's view alone) and what the viewer may do to them.
 // Guard: planPerson.test.ts.
+import { t } from "../i18n.js";
 import type {
   DateOnly,
   TripPlanMemberView,
@@ -13,7 +14,6 @@ import {
   type PlanVerb,
 } from "./planVerbs.js";
 import {
-  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   tripPlanFormTally,
   tripPlanGoing,
@@ -118,7 +118,7 @@ export function tripPlanPerson(
           : copy.peopleGoing,
     invitedBy:
       member.status === "invited" && member.invitedBy
-        ? `${TRIP_PLAN_JOIN.copy.invitedBy} ${member.invitedBy.username}`
+        ? t`Invited by ${member.invitedBy.username}`
         : null,
     unanswered,
     actions,

@@ -8,14 +8,15 @@
 import { FRIEND_INVITE_TTL_DAYS } from "../friendInvite.js";
 import type { IconIdea } from "../icons.js";
 import type { ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 /** The shortest username search the API answers (GET /friends/search). */
 export const USER_SEARCH_MIN_CHARS = 3;
 
 export const FRIENDS = {
   id: "friends.list",
-  question: "Who can I share a place with, and who is waiting on me?",
-  title: "Friends",
+  question: t`Who can I share a place with, and who is waiting on me?`,
+  title: t`Friends`,
   sections: [
     { key: "hero" },
     // One rail, a true partition: a pending request is not a friend yet.
@@ -23,46 +24,44 @@ export const FRIENDS = {
     { key: "list" },
   ],
   copy: {
-    add: "Add",
-    addTitle: "Add friend",
-    searchField: "Search by username",
-    searchHint: `Keep typing — at least ${USER_SEARCH_MIN_CHARS} characters.`,
-    searchEmpty: "No one by that name.",
+    add: t`Add`,
+    addTitle: t`Add friend`,
+    searchField: t`Search by username`,
+    searchHint: t`Keep typing — at least ${USER_SEARCH_MIN_CHARS} characters.`,
+    searchEmpty: t`No one by that name.`,
 
-    bucketAll: "All",
-    bucketFriends: "Friends",
-    bucketRequests: "Requests",
+    bucketAll: t`All`,
+    bucketFriends: t`Friends`,
+    bucketRequests: t`Requests`,
 
-    requestSubtitle: "Wants to be friends",
-    pillFriend: "Friend",
-    pillRequested: "Requested",
+    requestSubtitle: t`Wants to be friends`,
+    pillFriend: t`Friend`,
+    pillRequested: t`Requested`,
 
-    firstRunTitle: "No friends yet",
-    firstRunBody:
-      "Friends are who you can share a place, a route or a map with. Find one by their username.",
-    noRequestsTitle: "No pending requests",
-    noRequestsBody:
-      "A request you send or receive waits here until someone answers it.",
-    loadFailed: "Couldn't load friends.",
+    firstRunTitle: t`No friends yet`,
+    firstRunBody: t`Friends are who you can share a place, a route or a map with. Find one by their username.`,
+    noRequestsTitle: t`No pending requests`,
+    noRequestsBody: t`A request you send or receive waits here until someone answers it.`,
+    loadFailed: t`Couldn't load friends.`,
 
-    removeFailed: "Couldn't remove friend.",
-    sendFailed: "Couldn't send friend request.",
-    searchFailed: "Couldn't search users.",
+    removeFailed: t`Couldn't remove friend.`,
+    sendFailed: t`Couldn't send friend request.`,
+    searchFailed: t`Couldn't search users.`,
 
     // The invite link, under the search in the Add sheet.
-    inviteHint: `Or send a link. It makes one person your friend when they open it and sign in, and stops working after ${FRIEND_INVITE_TTL_DAYS} days.`,
-    inviteCopy: "Copy invite link",
-    inviteShare: "Share invite link",
-    inviteCopied: "Invite link copied.",
-    inviteFailed: "Couldn't make an invite link.",
-    inviteCopyFailed: "Couldn't copy the invite link.",
-    inviteRevoke: "Turn off my links",
-    inviteRevoked: "Your invite links no longer work.",
-    inviteRevokeFailed: "Couldn't turn off your invite links.",
+    inviteHint: t`Or send a link. It makes one person your friend when they open it and sign in, and stops working after ${FRIEND_INVITE_TTL_DAYS} days.`,
+    inviteCopy: t`Copy invite link`,
+    inviteShare: t`Share invite link`,
+    inviteCopied: t`Invite link copied.`,
+    inviteFailed: t`Couldn't make an invite link.`,
+    inviteCopyFailed: t`Couldn't copy the invite link.`,
+    inviteRevoke: t`Turn off my links`,
+    inviteRevoked: t`Your invite links no longer work.`,
+    inviteRevokeFailed: t`Couldn't turn off your invite links.`,
     // Opening one.
-    inviteSignIn: "Sign in or create an account to accept your friend invite.",
-    inviteAccept: "Add friend",
-    inviteInvalid: "This invite link no longer works. Ask for a new one.",
+    inviteSignIn: t`Sign in or create an account to accept your friend invite.`,
+    inviteAccept: t`Add friend`,
+    inviteInvalid: t`This invite link no longer works. Ask for a new one.`,
   },
 } as const satisfies ScreenContract;
 
@@ -74,10 +73,9 @@ export type FriendsBucket = "all" | "friends" | "requests";
  * counts.
  */
 export function friendsHeroSubtitle(requests: number, friends: number): string {
-  if (requests > 0)
-    return `${requests} ${requests === 1 ? "request" : "requests"}`;
-  if (friends === 0) return "No friends yet";
-  return `${friends} ${friends === 1 ? "friend" : "friends"}`;
+  if (requests > 0) return plural(requests, "# request", "# requests");
+  if (friends === 0) return t`No friends yet`;
+  return plural(friends, "# friend", "# friends");
 }
 
 /** What an empty list says, by what emptied it. */
@@ -93,7 +91,7 @@ export function friendsEmptyKind(state: {
 }
 
 export function friendAcceptedMessage(username: string): string {
-  return `${username} is now a friend.`;
+  return t`${username} is now a friend.`;
 }
 
 /**
@@ -107,12 +105,12 @@ export function friendRequestMadeFriend(response: unknown): boolean {
 
 /** How many links are out, beside the button that turns them off. */
 export function friendInvitesLiveLabel(count: number): string {
-  return `${count} ${count === 1 ? "link" : "links"} not used yet.`;
+  return plural(count, "# link not used yet.", "# links not used yet.");
 }
 
 /** What goes in the message a link is sent with. */
 export function friendInviteMessage(url: string): string {
-  return `Add me as a friend on Logjam: ${url}`;
+  return t`Add me as a friend on Logjam: ${url}`;
 }
 
 /**
@@ -124,17 +122,17 @@ export function friendInviteConfirm(username: string): {
   confirmBody: string;
 } {
   return {
-    confirmTitle: `Add ${username} as a friend?`,
-    confirmBody: `${username} sent you an invite link. Friends can share places, routes and maps with each other; nothing of yours is shared until you choose to share it.`,
+    confirmTitle: t`Add ${username} as a friend?`,
+    confirmBody: t`${username} sent you an invite link. Friends can share places, routes and maps with each other; nothing of yours is shared until you choose to share it.`,
   };
 }
 
 export function alreadyFriendsMessage(username: string): string {
-  return `You and ${username} are already friends.`;
+  return t`You and ${username} are already friends.`;
 }
 
 export function friendRemovedMessage(username: string): string {
-  return `${username} removed.`;
+  return t`${username} removed.`;
 }
 
 /** Removing a friend ends sharing both ways; that is the whole cost. */
@@ -143,8 +141,8 @@ export function friendRemoveConfirm(username: string): {
   confirmBody: string;
 } {
   return {
-    confirmTitle: `Remove ${username}?`,
-    confirmBody: `Everything you share with each other stops being shared, both ways. You can send ${username} a friend request again later, and sharing does not come back with it.`,
+    confirmTitle: t`Remove ${username}?`,
+    confirmBody: t`Everything you share with each other stops being shared, both ways. You can send ${username} a friend request again later, and sharing does not come back with it.`,
   };
 }
 
@@ -154,14 +152,13 @@ export function friendsRemoveConfirm(count: number): {
   confirmBody: string;
 } {
   return {
-    confirmTitle: `Remove ${count} friends?`,
-    confirmBody:
-      "Everything you share with each of them stops being shared, both ways. You can send them a friend request again later, and sharing does not come back with it.",
+    confirmTitle: t`Remove ${count} friends?`,
+    confirmBody: t`Everything you share with each of them stops being shared, both ways. You can send them a friend request again later, and sharing does not come back with it.`,
   };
 }
 
 export function friendsRemovedMessage(count: number): string {
-  return `${count} friends removed.`;
+  return t`${count} friends removed.`;
 }
 
 type FriendVerbDeclaration = {
@@ -176,17 +173,17 @@ type FriendVerbDeclaration = {
 
 /** A friend's and a request's verbs, in order. */
 export const FRIEND_VERBS = [
-  { id: "shares", icon: "shareFriend", label: "Shared items", for: "friend" },
+  { id: "shares", icon: "shareFriend", label: t`Shared items`, for: "friend" },
   {
     id: "remove",
     icon: "removeFriend",
-    label: "Remove friend",
+    label: t`Remove friend`,
     for: "friend",
     danger: true,
     separated: true,
   },
-  { id: "accept", icon: "accept", label: "Accept", for: "request" },
-  { id: "decline", icon: "ignore", label: "Decline", for: "request" },
+  { id: "accept", icon: "accept", label: t`Accept`, for: "request" },
+  { id: "decline", icon: "ignore", label: t`Decline`, for: "request" },
 ] as const satisfies readonly FriendVerbDeclaration[];
 
 export type FriendVerbId = (typeof FRIEND_VERBS)[number]["id"];
@@ -197,7 +194,7 @@ export function friendVerb(id: FriendVerbId) {
 
 export const FRIEND_SHARES = {
   id: "friends.shares",
-  question: "What does this friend see of mine, and what do they let me see?",
+  question: t`What does this friend see of mine, and what do they let me see?`,
   sections: [
     { key: "hero" },
     // "You share" / "They share": a direction, not a filter.
@@ -206,12 +203,12 @@ export const FRIEND_SHARES = {
     { key: "list" },
   ],
   copy: {
-    youShare: "You share",
-    theyShare: "They share",
-    loading: "Loading sharing…",
-    emptyHint: "Share a place, a route or a map from its own menu.",
-    loadFailed: "Couldn't load what's shared with this friend.",
-    unshareFailed: "Couldn't stop sharing. Try again.",
+    youShare: t`You share`,
+    theyShare: t`They share`,
+    loading: t`Loading sharing…`,
+    emptyHint: t`Share a place, a route or a map from its own menu.`,
+    loadFailed: t`Couldn't load what's shared with this friend.`,
+    unshareFailed: t`Couldn't stop sharing. Try again.`,
   },
 } as const satisfies ScreenContract;
 
@@ -221,8 +218,8 @@ export function friendSharesNote(
   username: string,
 ): string {
   return direction === "theySee"
-    ? `Items you have shared with ${username}.`
-    : `Items ${username} has shared with you.`;
+    ? t`Items you have shared with ${username}.`
+    : t`Items ${username} has shared with you.`;
 }
 
 export function friendSharesEmptyTitle(
@@ -230,20 +227,20 @@ export function friendSharesEmptyTitle(
   username: string,
 ): string {
   return direction === "theySee"
-    ? `You haven't shared anything with ${username}`
-    : `${username} hasn't shared anything with you`;
+    ? t`You haven't shared anything with ${username}`
+    : t`${username} hasn't shared anything with you`;
 }
 
 export function unsharedMessage(title: string, username: string): string {
-  return `${title} is no longer shared with ${username}.`;
+  return t`${title} is no longer shared with ${username}.`;
 }
 
 export function bulkUnshareLabel(count: number, username: string): string {
-  return `Stop sharing ${count} with ${username}`;
+  return t`Stop sharing ${count} with ${username}`;
 }
 
 export function bulkRemoveLabel(count: number): string {
-  return `Remove ${count} from your account`;
+  return t`Remove ${count} from your account`;
 }
 
 type ShareVerbDeclaration = {
@@ -259,42 +256,41 @@ type ShareVerbDeclaration = {
   gap?: string;
 };
 
-const NO_WEB_MENU_GAP =
-  "Logjam Web's share rows carry one inline button and no ⋯ menu.";
+const NO_WEB_MENU_GAP = t`Logjam Web's share rows carry one inline button and no ⋯ menu.`;
 
 /** A friend's share row's verbs, in order. */
 export const FRIEND_SHARE_VERBS = [
   {
     id: "open",
     icon: "place",
-    label: "Open place",
+    label: t`Open place`,
     on: "gps",
     gap: NO_WEB_MENU_GAP,
   },
   {
     id: "unshare",
     icon: "unshare",
-    label: "Stop sharing",
+    label: t`Stop sharing`,
     direction: "theySee",
   },
   {
     id: "copy",
     icon: "copy",
-    label: "Save a copy",
+    label: t`Save a copy`,
     on: "gps",
     gap: NO_WEB_MENU_GAP,
   },
   {
     id: "copyAndRemove",
     icon: "moveCopy",
-    label: "Save a copy and remove",
+    label: t`Save a copy and remove`,
     on: "gps",
     gap: NO_WEB_MENU_GAP,
   },
   {
     id: "remove",
     icon: "hide",
-    label: "Remove from my account",
+    label: t`Remove from my account`,
     direction: "youSee",
   },
 ] as const satisfies readonly ShareVerbDeclaration[];

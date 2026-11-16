@@ -18,15 +18,20 @@ import {
 
 const IMPORT = 'import { t } from "@logjam/shared";\n';
 
-const run = (source: string, options: { words?: boolean } = {}) =>
-  extractMessages(ts, "x.tsx", source, options);
+const run = (
+  source: string,
+  options: { words?: boolean; prose?: boolean } = {},
+) => extractMessages(ts, "x.tsx", source, options);
 
 /** The English a rewrite changed: nothing, when it only moved the copy. */
 const changed = (before: string, after: string) =>
   pieceChanges(textPieces(ts, "x.tsx", before), textPieces(ts, "x.tsx", after));
 
 /** `source` rewritten, which must also leave its pieces of text as they were. */
-function rewritten(source: string, options: { words?: boolean } = {}): string {
+function rewritten(
+  source: string,
+  options: { words?: boolean; prose?: boolean } = {},
+): string {
   const { source: out } = run(source, options);
   expect(changed(source, out)).toEqual({ removed: [], added: [] });
   return out;
@@ -197,7 +202,10 @@ describe("extractMessages: the import", () => {
 });
 
 describe("extractMessages: what it leaves to a person, and says why", () => {
-  const left = (source: string, options: { words?: boolean } = {}) => {
+  const left = (
+    source: string,
+    options: { words?: boolean; prose?: boolean } = {},
+  ) => {
     const out = run(source, options);
     return {
       source: out.source,
@@ -387,10 +395,33 @@ describe("extractMessages: one-word labels", () => {
     expect(run(source, { words: true }).converted).toBe(2);
   });
 
-  // Mutation: delete the `.filter((found) => found.why !== "prose")` in `extractMessages`.
+  // Mutation: change `options.prose || ` to `true || ` in the `filter` in `extractMessages`.
   it("leaves prose outside the net alone, with words or without", () => {
     const source = "const m = 'Try again later';";
     expect(run(source, { words: true }).converted).toBe(0);
+  });
+});
+
+describe("extractMessages: prose literals", () => {
+  // Mutation: delete `options.prose || ` from the `filter` in `extractMessages`.
+  it("writes prose outside a copy position only when asked, and the English stays", () => {
+    const source =
+      "const m = 'Try again later';\nconst n = `Saved ${x} places`;";
+    expect(run(source).converted).toBe(0);
+    const out = rewritten(source, { prose: true });
+    expect(out).toContain("const m = t`Try again later`;");
+    expect(out).toContain("const n = t`Saved ${x} places`;");
+  });
+
+  // Mutation: delete the `+` check from `placement`.
+  it("still leaves a prose + chain, and lists it", () => {
+    const out = run("const a = 'Try again' + suffix + ' or give up';", {
+      prose: true,
+    });
+    expect(out.skipped.map((s) => s.reason)).toEqual([
+      expect.stringContaining("joined with +"),
+    ]);
+    expect(out.source).not.toContain("t`");
   });
 });
 

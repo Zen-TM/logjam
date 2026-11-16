@@ -9,11 +9,12 @@ import { normalizeUserUiPreferences } from "../themeSchemes.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
 import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const PLACES_LIST = {
   id: "places.list",
-  question: "How far through my list am I?",
-  title: "Places",
+  question: t`How far through my list am I?`,
+  title: t`Places`,
   sections: [
     { key: "hero" },
     // One rail: what kind of place. The selection bar takes its place.
@@ -25,39 +26,33 @@ export const PLACES_LIST = {
     {
       key: "listHead",
       on: "web",
-      reason:
-        "It carries the keyboard's range-selection hint, which a touch screen can't use. Logjam GPS names a sort that is not the default in the filter note instead.",
+      reason: t`It carries the keyboard's range-selection hint, which a touch screen can't use. Logjam GPS names a sort that is not the default in the filter note instead.`,
     },
     {
       key: "truncated",
       on: "web",
-      reason:
-        "Only Logjam Web lists straight from the server's capped response. Logjam GPS lists the mirror that sync fills.",
+      reason: t`Only Logjam Web lists straight from the server's capped response. Logjam GPS lists the mirror that sync fills.`,
     },
     { key: "list" },
   ],
   copy: {
-    typeRail: "Place type",
-    anyType: "All",
-    newType: "New type",
+    typeRail: t`Place type`,
+    anyType: t`All`,
+    newType: t`New type`,
 
-    search: "Search places",
-    clearFilters: "Clear filters",
-    sortByNameAgain: "Sort by name again",
-    loading: "Loading your places…",
+    search: t`Search places`,
+    clearFilters: t`Clear filters`,
+    sortByNameAgain: t`Sort by name again`,
+    loading: t`Loading your places…`,
 
-    firstRunTitle: "No places yet",
+    firstRunTitle: t`No places yet`,
     // The first-run body names the ways in, and they differ: Logjam Web
     // imports, Logjam GPS does not, and a guest's places never sync.
-    firstRunBodyWeb:
-      "Add a place on the map, or bring your list in from a file or RopeWiki. Places you add here reach Logjam GPS for offline use.",
-    firstRunBodyGps:
-      "Add places, or import your list on Logjam Web. Once synced, they work offline.",
-    firstRunBodyGuest:
-      "Add places to start. Everything is saved on this phone and works offline.",
-    filteredTitle: "No places match",
-    filteredBody:
-      "Nothing matches your search and filters. Clear them to see the rest.",
+    firstRunBodyWeb: t`Add a place on the map, or bring your list in from a file or RopeWiki. Places you add here reach Logjam GPS for offline use.`,
+    firstRunBodyGps: t`Add places, or import your list on Logjam Web. Once synced, they work offline.`,
+    firstRunBodyGuest: t`Add places to start. Everything is saved on this phone and works offline.`,
+    filteredTitle: t`No places match`,
+    filteredBody: t`Nothing matches your search and filters. Clear them to see the rest.`,
   },
 } as const satisfies ScreenContract;
 
@@ -68,28 +63,26 @@ export const PLACES_LIST = {
  */
 export const PLACES_ADD = {
   id: "places.list.add",
-  title: "Add",
+  title: t`Add`,
   sections: [
     { key: "add" },
     {
       key: "importFile",
       on: "web",
-      reason:
-        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
+      reason: t`Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.`,
     },
     {
       key: "importRopewiki",
       on: "web",
-      reason:
-        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
+      reason: t`Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.`,
     },
   ],
   copy: {
-    add: "Add a place",
-    importFile: "Import from CSV",
-    importRopewiki: "Import from RopeWiki",
-    importingRopewiki: "Importing from RopeWiki…",
-    menu: "Add places",
+    add: t`Add a place`,
+    importFile: t`Import from CSV`,
+    importRopewiki: t`Import from RopeWiki`,
+    importingRopewiki: t`Importing from RopeWiki…`,
+    menu: t`Add places`,
   },
 } as const satisfies ScreenContract;
 
@@ -100,15 +93,15 @@ export const PLACES_ADD = {
  */
 export const ROPEWIKI_OFFER = {
   title: (region: Region) =>
-    `Load the ${region.name} place database (RopeWiki)`,
+    t`Load the ${region.name} place database (RopeWiki)`,
   hint: (region: Region) =>
-    `Recommended — hundreds of ${region.name} canyons, so your trips have something to match against`,
+    t`Recommended — hundreds of ${region.name} canyons, so your trips have something to match against`,
   menu: (region: Region, offers: number) =>
     offers > 1
-      ? `Import ${region.name} from RopeWiki`
+      ? t`Import ${region.name} from RopeWiki`
       : PLACES_ADD.copy.importRopewiki,
   confirmBody: (region: Region) =>
-    `This fetches the public ${region.name} canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.`,
+    t`This fetches the public ${region.name} canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.`,
 };
 
 /** The regions an account is offered a canyon import for, from its preferences. */
@@ -124,8 +117,7 @@ export const PLACES_ONBOARDING = [
   {
     id: "welcomeDialog",
     on: "web",
-    reason:
-      "Loading RopeWiki and importing files is desk work, like the imports in the Add menu. Logjam GPS's first-run empty state sends the user to Logjam Web for it.",
+    reason: t`Loading RopeWiki and importing files is desk work, like the imports in the Add menu. Logjam GPS's first-run empty state sends the user to Logjam Web for it.`,
   },
 ] as const satisfies readonly ClientOnly[];
 
@@ -142,7 +134,7 @@ export const PLACES_ADD_ICON: Record<
 
 /** "1 place", "37 places". */
 export function placesCountLabel(count: number): string {
-  return `${count} ${count === 1 ? "place" : "places"}`;
+  return plural(count, "# place", "# places");
 }
 
 /**
@@ -165,7 +157,7 @@ export function placesFilterNote(
 ): string | null {
   const parts = [
     hiddenFilterCount > 0
-      ? `${hiddenFilterCount} ${hiddenFilterCount === 1 ? "filter" : "filters"} active`
+      ? plural(hiddenFilterCount, "# filter active", "# filters active")
       : null,
     sort !== "name" ? placeSortLabel(sort) : null,
   ].filter((part): part is string => part != null);

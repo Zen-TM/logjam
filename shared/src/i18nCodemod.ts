@@ -121,7 +121,9 @@ const TRAILING_NEWLINE = /[\r\n][ \t]*$/;
  * fragment with a space at an end, a literal `{0}`, a template whose holes hold
  * words, an entity it cannot decode, a literal typed `as const`, and a place
  * where the file already has a `t` of its own. Prose outside the net is not
- * touched: those need a decision each.
+ * touched unless `prose` is set, which also rewrites the prose literals of the
+ * file (a sentence in a data table, a returned string), each held to the same
+ * leave-and-list rules.
  *
  * `importFrom` is where the file reads `t` from (`importFor`). The output is not
  * formatted; run `make format`.
@@ -130,13 +132,13 @@ export function extractMessages(
   tsModule: unknown,
   fileName: string,
   source: string,
-  options: { words?: boolean; importFrom?: string } = {},
+  options: { words?: boolean; prose?: boolean; importFrom?: string } = {},
 ): Extraction {
   const ts = tsModule as typeof TypeScript;
   const importFrom = options.importFrom ?? "@logjam/shared";
   const wanted = new Set(
     bareCopyIn(ts, fileName, source, { words: options.words })
-      .filter((found) => found.why !== "prose")
+      .filter((found) => options.prose || found.why !== "prose")
       .map((found) => found.start),
   );
   const sf = ts.createSourceFile(

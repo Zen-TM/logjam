@@ -1,6 +1,7 @@
 // The kinds of line a user keeps: Logjam Web's Ways page rail and Logjam GPS's
 // Saved tab. Guard: `ways.test.ts`.
 import type { IconIdea } from "../icons.js";
+import { t } from "../i18n.js";
 
 /** In the order Logjam Web's rail offers them. Routes first: the only kind
  *  authored there. */
@@ -16,12 +17,12 @@ export const WAY_KIND_WORDS: Record<
   WayKind,
   { label: string; plural: string; icon: IconIdea }
 > = {
-  route: { label: "Route", plural: "Routes", icon: "route" },
+  route: { label: t`Route`, plural: t`Routes`, icon: "route" },
   // Not named for a format ("GPX & KML"), and not for lines ("Ways"): a row is
   // a whole file the user brought in, and may hold points and polygons as
   // readily as lines.
-  import: { label: "Import", plural: "Imports", icon: "importedFile" },
-  track: { label: "Track", plural: "Tracks", icon: "track" },
+  import: { label: t`Import`, plural: t`Imports`, icon: "importedFile" },
+  track: { label: t`Track`, plural: t`Tracks`, icon: "track" },
 };
 
 /**
@@ -30,8 +31,8 @@ export const WAY_KIND_WORDS: Record<
  * short name where the format is already clear.
  */
 export const WAY_IMPORT = {
-  menu: "Import GPX, KML or GeoJSON",
-  file: "Import a file",
-  saved: (name: string) => `“${name}” is saved under Imports.`,
-  failed: "Couldn't import that file.",
+  menu: t`Import GPX, KML or GeoJSON`,
+  file: t`Import a file`,
+  saved: (name: string) => t`“${name}” is saved under Imports.`,
+  failed: t`Couldn't import that file.`,
 } as const;

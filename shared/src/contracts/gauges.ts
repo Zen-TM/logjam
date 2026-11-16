@@ -16,11 +16,12 @@ import {
 import type { ProfileSeries } from "../profileSeries.js";
 import { PAIRED_STAT_LABELS, pairedStatLayout } from "../statPairs.js";
 import type { ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const GAUGES = {
   id: "gauges",
-  question: "What did the river gauge last read?",
-  title: "River gauge",
+  question: t`What did the river gauge last read?`,
+  title: t`River gauge`,
   sections: [
     { key: "reading" },
     { key: "age" },
@@ -28,22 +29,15 @@ export const GAUGES = {
     { key: "credit" },
   ],
   copy: {
-    overlay: "River gauges",
+    overlay: t`River gauges`,
     level: PAIRED_STAT_LABELS.level,
     flow: PAIRED_STAT_LABELS.flow,
-    age: "Latest reading",
-    graph: "Last 7 days",
-    noLevel: "No level reading",
-    onThisTrip: "on this trip",
-    onLastTrip: "on your last trip here",
-    now: "now",
-    noneNow: "no recent reading now",
-    noneForDate: "has no reading for that date.",
-    noRecent: "This gauge has had no reading in the last 7 days.",
-    failed: "River gauges couldn't be loaded.",
-    staleFile: "Readings last refreshed",
+    graph: t`Last 7 days`,
+    noLevel: t`No level reading`,
+    noRecent: t`This gauge has had no reading in the last 7 days.`,
+    failed: t`River gauges couldn't be loaded.`,
     // Only if the file's own attribution is blank: the credit is never dropped.
-    credit: "© State of New South Wales through WaterNSW",
+    credit: t`© State of New South Wales through WaterNSW`,
   },
 } as const satisfies ScreenContract;
 
@@ -54,34 +48,56 @@ export const GAUGE_RECENT_MS = 7 * DAY_MS;
 export const GAUGE_STALE_FILE_MS = DAY_MS;
 
 // BoM's long names are mostly upper case, some abbreviated: "COLO RIVER AT
-// UPPER COLO", "RICHMOND RV @ OAKLAND ROAD".
-const NAME_WORDS: Record<string, string> = {
-  "@": "at",
-  AT: "at",
-  NEAR: "near",
-  OF: "of",
-  R: "River",
-  RV: "River",
-  RIV: "River",
-  CK: "Creek",
-  RD: "Road",
-  "D/S": "downstream of",
-  "U/S": "upstream of",
-  DOWNSTREAM: "downstream",
-  UPSTREAM: "upstream",
-};
+// UPPER COLO", "RICHMOND RV @ OAKLAND ROAD". A function, so each word is
+// written in the language in force when a name is read.
+const nameWords = (): Record<string, string> => ({
+  "@": t`at`,
+  AT: t`at`,
+  NEAR: t`near`,
+  OF: t`of`,
+  R: t`River`,
+  RV: t`River`,
+  RIV: t`River`,
+  CK: t`Creek`,
+  RD: t`Road`,
+  "D/S": t`downstream of`,
+  "U/S": t`upstream of`,
+  DOWNSTREAM: t`downstream`,
+  UPSTREAM: t`upstream`,
+});
 
 /** A gauge's name for reading: "Colo River at Upper Colo". A word the table
  *  doesn't know is only re-cased, never guessed at. */
 export function gaugeDisplayName(raw: string): string {
-  return raw
+  const key = (word: string | undefined) =>
+    (word ?? "").replace(/\.$/, "").toUpperCase();
+  // The clean-up reads BoM's tokens, never the catalogue's words, so it holds
+  // in every language (gauges.test.ts, "drops the 'at' before a stream phrase
+  // whatever language the words are in"). "OF" is the `nameWords` key a stream
+  // phrase ends in.
+  const words = raw
     .replace(/@/g, " @ ")
-    .replace(/\b(up|down) ?stream( of)?\b/gi, "$1stream of")
+    .replace(/\b(up|down) ?(stream)( of)?\b/gi, "$1$2 OF")
     .replace(/(\S)\(/g, "$1 (")
     .split(/\s+/)
-    .filter(Boolean)
+    .filter(Boolean);
+  const table = nameWords();
+  return words
+    .filter((word, i) => {
+      if (key(word) !== "AT" && key(word) !== "@") return true;
+      // "at" before a stream phrase and a place: "at downstream of X" is
+      // "downstream of X". A phrase is one token (D/S) or two (DOWNSTREAM OF).
+      const next = key(words[i + 1]);
+      const length =
+        next === "D/S" || next === "U/S"
+          ? 2
+          : next === "DOWNSTREAM" || next === "UPSTREAM"
+            ? 3
+            : 0;
+      return length === 0 || words.length <= i + length;
+    })
     .map((word) => {
-      const known = NAME_WORDS[word.replace(/\.$/, "").toUpperCase()];
+      const known = table[key(word)];
       if (known) return known;
       // Mixed case ("McKIMMS", "Beechwod") was typed by a person: leave it.
       if (word !== word.toUpperCase()) return word;
@@ -91,8 +107,7 @@ export function gaugeDisplayName(raw: string): string {
         .toLowerCase()
         .replace(/(^|[-'(])([a-z])/g, (_, a, b) => a + b.toUpperCase());
     })
-    .join(" ")
-    .replace(/ at (up|down)stream of /, " $1stream of ");
+    .join(" ");
 }
 
 export type GaugeLatest = {
@@ -155,7 +170,7 @@ export function gaugeAges(latest: GaugeLatest, now: number): GaugeAges {
     Math.abs(levelAt - flowAt) <= GAUGE_SAME_READING_MS
   )
     return {
-      line: `${GAUGES.copy.age} ${gaugeAgo(newest, now)}`,
+      line: t`Latest reading ${gaugeAgo(newest, now)}`,
       level: null,
       flow: null,
     };
@@ -215,12 +230,12 @@ export function formatGaugeFlow(megalitresPerDay: number): string {
 /** "45 min ago": how long before `now` a moment was. */
 export function gaugeAgo(at: number, now: number): string {
   const minutes = Math.max(0, Math.floor((now - at) / 60_000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t`just now`;
+  if (minutes < 60) return t`${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24) return t`${hours} h ago`;
   const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
+  return plural(days, "# day ago", "# days ago");
 }
 
 /** What to say about an old file: when it was written, or null while it is
@@ -229,7 +244,7 @@ export function gaugeFileNote(generatedAt: string, now: number): string | null {
   const at = Date.parse(generatedAt);
   return Number.isNaN(at) || now - at <= GAUGE_STALE_FILE_MS
     ? null
-    : `${GAUGES.copy.staleFile} ${gaugeAgo(at, now)}`;
+    : t`Readings last refreshed ${gaugeAgo(at, now)}`;
 }
 
 const values = (gauge: Gauge, r: GaugeDayReading | null): string =>
@@ -264,10 +279,16 @@ export function tripGaugeLines(
       const then = gaugeReadingOnDay(gauge, history, day, now);
       if (!then) continue;
       const current = values(gauge, latestGaugeReading(gauge, now));
+      const name = gaugeDisplayName(gauge.name);
+      const earlier = values(gauge, then);
       return [
-        `${gaugeDisplayName(gauge.name)}: ${values(gauge, then)} ${
-          when === "trip" ? GAUGES.copy.onThisTrip : GAUGES.copy.onLastTrip
-        }, ${current ? `${current} ${GAUGES.copy.now}` : GAUGES.copy.noneNow}.`,
+        when === "trip"
+          ? current
+            ? t`${name}: ${earlier} on this trip, ${current} now.`
+            : t`${name}: ${earlier} on this trip, no recent reading now.`
+          : current
+            ? t`${name}: ${earlier} on your last trip here, ${current} now.`
+            : t`${name}: ${earlier} on your last trip here, no recent reading now.`,
       ];
     }
     return [];
@@ -276,6 +297,6 @@ export function tripGaugeLines(
     ? lines
     : inputs.map(
         ({ gauge }) =>
-          `${gaugeDisplayName(gauge.name)} ${GAUGES.copy.noneForDate}`,
+          t`${gaugeDisplayName(gauge.name)} has no reading for that date.`,
       );
 }

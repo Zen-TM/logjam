@@ -9,6 +9,7 @@ import type { IconIdea } from "../icons.js";
 import type { TripPlanRole } from "../tripPlans.js";
 import type { ConfirmCopy } from "./confirm.js";
 import type { ContractPlatform } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 type PlanVerbDeclaration = {
   id: string;
@@ -32,19 +33,17 @@ const ANY: readonly TripPlanRole[] = ["leader", "editor", "member"];
 const WRITERS: readonly TripPlanRole[] = ["leader", "editor"];
 const LEADERS: readonly TripPlanRole[] = ["leader"];
 
-const PRINT_ON_WEB =
-  "A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.";
+const PRINT_ON_WEB = t`A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.`;
 
-const DRAW_ON_GPS =
-  "A route is drawn with a finger on the phone's map; Logjam Web has the map beside the page to add one from.";
+const DRAW_ON_GPS = t`A route is drawn with a finger on the phone's map; Logjam Web has the map beside the page to add one from.`;
 
 /** The plan's ⋯, in menu order. */
 export const PLAN_VERBS = [
-  { id: "edit", icon: "edit", label: "Edit plan", roles: WRITERS },
+  { id: "edit", icon: "edit", label: t`Edit plan`, roles: WRITERS },
   {
     id: "print",
     icon: "print",
-    label: "Print a summary",
+    label: t`Print a summary`,
     roles: ANY,
     whenArchived: true,
     on: "web",
@@ -53,21 +52,21 @@ export const PLAN_VERBS = [
   {
     id: "tripLog",
     icon: "trip",
-    label: "Log a trip from this plan",
+    label: t`Log a trip from this plan`,
     roles: ANY,
     whenArchived: true,
   },
   {
     id: "archive",
     icon: "archive",
-    label: "Archive",
+    label: t`Archive`,
     roles: LEADERS,
     separated: true,
   },
   {
     id: "unarchive",
     icon: "archive",
-    label: "Bring back",
+    label: t`Bring back`,
     roles: LEADERS,
     whenArchived: true,
     separated: true,
@@ -75,7 +74,7 @@ export const PLAN_VERBS = [
   {
     id: "leave",
     icon: "leave",
-    label: "Leave plan",
+    label: t`Leave plan`,
     roles: ANY,
     whenArchived: true,
     separated: true,
@@ -83,7 +82,7 @@ export const PLAN_VERBS = [
   {
     id: "delete",
     icon: "delete",
-    label: "Delete plan",
+    label: t`Delete plan`,
     roles: LEADERS,
     whenArchived: true,
     danger: true,
@@ -97,14 +96,14 @@ export const PLAN_ADD_VERBS = [
   {
     id: "section",
     icon: "notes",
-    label: "Add a write-up section",
+    label: t`Add a write-up section`,
     roles: WRITERS,
   },
-  { id: "copy", icon: "add", label: "Add a place or way", roles: ANY },
+  { id: "copy", icon: "add", label: t`Add a place or way`, roles: ANY },
   {
     id: "route",
     icon: "route",
-    label: "Draw a route",
+    label: t`Draw a route`,
     roles: ANY,
     on: "gps",
     reason: DRAW_ON_GPS,
@@ -112,21 +111,21 @@ export const PLAN_ADD_VERBS = [
   {
     id: "form",
     icon: "form",
-    label: "Add a form",
+    label: t`Add a form`,
     roles: LEADERS,
   },
-  { id: "invite", icon: "addFriend", label: "Invite people", roles: LEADERS },
+  { id: "invite", icon: "addFriend", label: t`Invite people`, roles: LEADERS },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
 /** A section's ⋯. */
 export const PLAN_SECTION_VERBS = [
-  { id: "edit", icon: "edit", label: "Edit", roles: WRITERS },
-  { id: "moveUp", icon: "collapse", label: "Move up", roles: WRITERS },
-  { id: "moveDown", icon: "expand", label: "Move down", roles: WRITERS },
+  { id: "edit", icon: "edit", label: t`Edit`, roles: WRITERS },
+  { id: "moveUp", icon: "collapse", label: t`Move up`, roles: WRITERS },
+  { id: "moveDown", icon: "expand", label: t`Move down`, roles: WRITERS },
   {
     id: "delete",
     icon: "delete",
-    label: "Delete",
+    label: t`Delete`,
     roles: WRITERS,
     danger: true,
     separated: true,
@@ -138,13 +137,13 @@ export const PLAN_FORM_VERBS = [
   {
     id: "edit",
     icon: "edit",
-    label: "Edit form",
+    label: t`Edit form`,
     roles: LEADERS,
   },
   {
     id: "delete",
     icon: "delete",
-    label: "Delete form",
+    label: t`Delete form`,
     roles: LEADERS,
     danger: true,
     separated: true,
@@ -153,7 +152,7 @@ export const PLAN_FORM_VERBS = [
 
 /** A plan the caller asked to join, until they're let in: its row's ⋯. */
 export const PLAN_REQUEST_VERBS = [
-  { id: "withdraw", icon: "leave", label: "Withdraw request", roles: ANY },
+  { id: "withdraw", icon: "leave", label: t`Withdraw request`, roles: ANY },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
 /** Every plan verb list, for the guards that hold them all. */
@@ -193,8 +192,8 @@ export function planAddVerbLabel(
 
 /** What a route drawn from a plan says when it is saved but not in the plan. */
 export const planRouteNotAdded = () => ({
-  title: "Route saved",
-  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
+  title: t`Route saved`,
+  body: t`It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
 });
 
 /** A plan verb's words, where one stands outside its ⋯ (the over notice's
@@ -227,7 +226,7 @@ export function planVerbsFor<D extends readonly PlanVerbDeclaration[]>(
 }
 
 /** Why Start a trip log waits, while the trip is still ahead. */
-export const PLAN_TRIP_LOG_WAITS = "After the trip";
+export const PLAN_TRIP_LOG_WAITS = t`After the trip`;
 
 /**
  * The plan's ⋯ for one caller: Archive or Bring back by its state; Start a
@@ -263,19 +262,15 @@ export function planVerbs(
 
 // ── Confirms: what goes, what stays, counted ────────────────────────
 
-function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** "2 places, 1 way, 340 MB": a zero is left out (shared/DESIGN.md §11). */
 export function planCountsLabel(
   counts: { places?: number; ways?: number; files?: number },
   size?: string,
 ): string {
   return [
-    counts.places ? plural(counts.places, "place") : null,
-    counts.ways ? plural(counts.ways, "way") : null,
-    counts.files ? plural(counts.files, "file") : null,
+    counts.places ? plural(counts.places, "# place", "# places") : null,
+    counts.ways ? plural(counts.ways, "# way", "# ways") : null,
+    counts.files ? plural(counts.files, "# file", "# files") : null,
     size,
   ]
     .filter(Boolean)
@@ -288,19 +283,18 @@ export function planDeleteConfirm(
 ): ConfirmCopy {
   const things = planCountsLabel(counts);
   return {
-    confirmTitle: `Delete ${name}?`,
-    confirmBody: `Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.`,
-    confirmLabel: "Delete",
+    confirmTitle: t`Delete ${name}?`,
+    confirmBody: t`Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.`,
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }
 
 export function planLeaveConfirm(name: string): ConfirmCopy {
   return {
-    confirmTitle: `Leave ${name}?`,
-    confirmBody:
-      "You lose access at once. Your answers to its forms go. What you added stays in the plan, and its files keep counting against your storage.",
-    confirmLabel: "Leave plan",
+    confirmTitle: t`Leave ${name}?`,
+    confirmBody: t`You lose access at once. Your answers to its forms go. What you added stays in the plan, and its files keep counting against your storage.`,
+    confirmLabel: t`Leave plan`,
     tone: "destructive",
     icon: "leave",
   };
@@ -311,15 +305,14 @@ export function planLeaveDeleteAddedLabel(
   counts: { places: number; ways: number },
   size?: string,
 ): string {
-  return `Also delete what I added (${planCountsLabel(counts, size)})`;
+  return t`Also delete what I added (${planCountsLabel(counts, size)})`;
 }
 
 export function planSectionDeleteConfirm(title: string): ConfirmCopy {
   return {
-    confirmTitle: `Delete ${title}?`,
-    confirmBody:
-      "Its text goes, for everyone in the plan. This can't be undone.",
-    confirmLabel: "Delete",
+    confirmTitle: t`Delete ${title}?`,
+    confirmBody: t`Its text goes, for everyone in the plan. This can't be undone.`,
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }
@@ -334,12 +327,16 @@ export function planFormDeleteConfirm(form: {
   const title = form.title;
   const answers = form.answers.length + (form.myAnswer ? 1 : 0);
   return {
-    confirmTitle: `Delete ${title}?`,
+    confirmTitle: t`Delete ${title}?`,
     confirmBody:
       answers > 0
-        ? `Its questions and ${plural(answers, "answer")} go, for everyone in the plan. This can't be undone.`
-        : "Its questions go, for everyone in the plan. This can't be undone.",
-    confirmLabel: "Delete",
+        ? plural(
+            answers,
+            "Its questions and # answer go, for everyone in the plan. This can't be undone.",
+            "Its questions and # answers go, for everyone in the plan. This can't be undone.",
+          )
+        : t`Its questions go, for everyone in the plan. This can't be undone.`,
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }
@@ -348,13 +345,18 @@ export function planFormDeleteConfirm(form: {
 
 /** A leader's verbs on someone going, in menu order. */
 export const PLAN_MEMBER_VERBS = [
-  { id: "makeLeader", icon: "flag", label: "Make a leader", roles: LEADERS },
-  { id: "makeEditor", icon: "edit", label: "Make an editor", roles: LEADERS },
-  { id: "makeMember", icon: "account", label: "Make a member", roles: LEADERS },
+  { id: "makeLeader", icon: "flag", label: t`Make a leader`, roles: LEADERS },
+  { id: "makeEditor", icon: "edit", label: t`Make an editor`, roles: LEADERS },
+  {
+    id: "makeMember",
+    icon: "account",
+    label: t`Make a member`,
+    roles: LEADERS,
+  },
   {
     id: "remove",
     icon: "removeFriend",
-    label: "Remove from plan",
+    label: t`Remove from plan`,
     roles: LEADERS,
     danger: true,
     separated: true,
@@ -391,22 +393,22 @@ export const PLAN_ITEM_VERBS = [
   {
     id: "download",
     icon: "download",
-    label: "Download",
+    label: t`Download`,
     roles: ANY,
     whenArchived: true,
   },
   {
     id: "save",
     icon: "copy",
-    label: "Save a copy",
+    label: t`Save a copy`,
     roles: ANY,
     whenArchived: true,
   },
-  { id: "edit", icon: "edit", label: "Edit", roles: ANY },
+  { id: "edit", icon: "edit", label: t`Edit`, roles: ANY },
   {
     id: "delete",
     icon: "delete",
-    label: "Delete from plan",
+    label: t`Delete from plan`,
     roles: ANY,
     danger: true,
     separated: true,
@@ -435,16 +437,17 @@ export function planItemVerbs(
 
 /** `photos`: a place's, which go with it (counted, shared/DESIGN.md §9). */
 export function planItemDeleteConfirm(title: string, photos = 0): ConfirmCopy {
-  const theirs =
-    photos === 0
-      ? ""
-      : photos === 1
-        ? " Its photo goes too."
-        : ` Its ${photos} photos go too.`;
   return {
-    confirmTitle: `Delete ${title} from the plan?`,
-    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay. This can't be undone.`,
-    confirmLabel: "Delete",
+    confirmTitle: t`Delete ${title} from the plan?`,
+    confirmBody:
+      photos === 0
+        ? t`It goes for everyone in the plan. Copies people saved stay. This can't be undone.`
+        : plural(
+            photos,
+            "It goes for everyone in the plan. Its photo goes too. Copies people saved stay. This can't be undone.",
+            "It goes for everyone in the plan. Its # photos go too. Copies people saved stay. This can't be undone.",
+          ),
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }
@@ -459,18 +462,18 @@ export function planRemoveConfirm(
   planName: string,
   files: { count: number; size: string } | null,
 ): ConfirmCopy & { deleteFilesLabel: string | null } {
-  const counted = files ? `${plural(files.count, "file")}, ${files.size}` : "";
+  const counted = files
+    ? plural(files.count, "# file, {0}", "# files, {0}", files.size)
+    : "";
   return {
-    confirmTitle: `Remove ${username} from ${planName}?`,
-    confirmBody: `They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.${
-      files
-        ? ` Their files (${counted}) will count against your storage instead.`
-        : ""
-    }`,
-    confirmLabel: "Remove",
+    confirmTitle: t`Remove ${username} from ${planName}?`,
+    confirmBody: files
+      ? t`They lose access at once and are told. Their answers to its forms go. What they added stays in the plan. Their files (${counted}) will count against your storage instead.`
+      : t`They lose access at once and are told. Their answers to its forms go. What they added stays in the plan.`,
+    confirmLabel: t`Remove`,
     tone: "destructive",
     icon: "unshare",
-    deleteFilesLabel: files ? `Delete their files instead (${counted})` : null,
+    deleteFilesLabel: files ? t`Delete their files instead (${counted})` : null,
   };
 }
 
@@ -480,27 +483,31 @@ export function planSelfRoleConfirm(
   role: "editor" | "member",
   otherLeaders: readonly string[],
 ): ConfirmCopy {
-  const becoming = `Make yourself ${role === "editor" ? "an editor" : "a member"}`;
+  const editor = role === "editor";
   const names =
     otherLeaders.length > 1
-      ? `${otherLeaders.slice(0, -1).join(", ")} and ${otherLeaders[otherLeaders.length - 1]}`
+      ? t`${otherLeaders.slice(0, -1).join(", ")} and ${otherLeaders[otherLeaders.length - 1]}`
       : otherLeaders[0];
   return {
-    confirmTitle: `${becoming}?`,
-    confirmBody: `You won't be able to make yourself a leader again. ${
-      otherLeaders.length > 1 ? "The leaders" : "The leader"
-    } ${names} can.`,
-    confirmLabel: becoming,
+    confirmTitle: editor
+      ? t`Make yourself an editor?`
+      : t`Make yourself a member?`,
+    confirmBody:
+      otherLeaders.length > 1
+        ? t`You won't be able to make yourself a leader again. The leaders ${names} can.`
+        : t`You won't be able to make yourself a leader again. The leader ${names} can.`,
+    confirmLabel: editor
+      ? t`Make yourself an editor`
+      : t`Make yourself a member`,
     tone: "filled",
   };
 }
 
 export function planTurnDownConfirm(username: string): ConfirmCopy {
   return {
-    confirmTitle: `Decline ${username}?`,
-    confirmBody:
-      "They're told their request was declined. They can ask again with the link.",
-    confirmLabel: "Decline",
+    confirmTitle: t`Decline ${username}?`,
+    confirmBody: t`They're told their request was declined. They can ask again with the link.`,
+    confirmLabel: t`Decline`,
     tone: "filled",
   };
 }

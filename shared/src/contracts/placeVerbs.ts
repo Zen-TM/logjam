@@ -10,6 +10,7 @@ import { LIDAR_JOB_COPY } from "../sharpen.js";
 import type { IconIdea } from "../icons.js";
 import type { ConfirmCopy } from "./confirm.js";
 import type { ContractPlatform } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export type PlaceVerbSurface = "row" | "page" | "pin";
 
@@ -35,28 +36,25 @@ type VerbDeclaration = {
   separated?: boolean;
 };
 
-const NO_MAP_FROM_A_PLACE =
-  "Logjam GPS makes a map from an area framed on its map, not from a place.";
+const NO_MAP_FROM_A_PLACE = t`Logjam GPS makes a map from an area framed on its map, not from a place.`;
 
-const MAPS_MADE_AT_A_DESK =
-  "A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.";
+const MAPS_MADE_AT_A_DESK = t`A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.`;
 
-const OPENING_SHOWS_IT_ON_WEB =
-  "On Logjam Web the map sits beside the page, and opening a place already flies it there.";
+const OPENING_SHOWS_IT_ON_WEB = t`On Logjam Web the map sits beside the page, and opening a place already flies it there.`;
 
 /** In menu order. */
 export const PLACE_VERBS = [
   {
     id: "open",
     icon: "place",
-    label: "Open place",
+    label: t`Open place`,
     for: "both",
     omitOn: "page",
   },
   {
     id: "show",
     icon: "map",
-    label: "Show on map",
+    label: t`Show on map`,
     for: "both",
     omitOn: "pin",
     on: "gps",
@@ -64,8 +62,8 @@ export const PLACE_VERBS = [
   },
   // Owner only: a trip links only its owner's places, and the API refuses the
   // rest.
-  { id: "logTrip", icon: "trip", label: "Log a trip here", for: "owner" },
-  { id: "edit", icon: "edit", label: "Edit place", for: "owner" },
+  { id: "logTrip", icon: "trip", label: t`Log a trip here`, for: "owner" },
+  { id: "edit", icon: "edit", label: t`Edit place`, for: "owner" },
   {
     id: "makeTopo",
     icon: "lidar",
@@ -77,7 +75,7 @@ export const PLACE_VERBS = [
   {
     id: "makeGeoPdf",
     icon: "export",
-    label: "Make a map here",
+    label: t`Make a map here`,
     for: "both",
     on: "web",
     reason: MAPS_MADE_AT_A_DESK,
@@ -87,38 +85,38 @@ export const PLACE_VERBS = [
   {
     id: "exportPlace",
     icon: "export",
-    label: "Export…",
+    label: t`Export…`,
     for: "both",
   },
   {
     id: "share",
     icon: "shareFriend",
-    label: { web: "Share…", gps: "Share" },
+    label: { web: t`Share…`, gps: t`Share` },
     for: "owner",
     separated: true,
   },
-  { id: "copy", icon: "copy", label: "Save a copy", for: "sharee" },
+  { id: "copy", icon: "copy", label: t`Save a copy`, for: "sharee" },
   // Keeping a copy and dropping the share is ONE decision, and it sits with
   // the parting verbs. Copy first, so a failure leaves the user with both
   // rather than neither.
   {
     id: "copyAndRemove",
     icon: "moveCopy",
-    label: "Save a copy and remove",
+    label: t`Save a copy and remove`,
     for: "sharee",
     separated: true,
   },
   {
     id: "remove",
     icon: "hide",
-    label: "Remove from my account",
+    label: t`Remove from my account`,
     for: "sharee",
     separated: true,
   },
   {
     id: "delete",
     icon: "delete",
-    label: "Delete place",
+    label: t`Delete place`,
     for: "owner",
     danger: true,
     separated: true,
@@ -174,7 +172,7 @@ export function placeVerbs<P extends ContractPlatform>(
 
 /** The done-toast after deleting places, from a page and a list alike. */
 export function placeDeleteDone(count: number): string {
-  return count === 1 ? "Place deleted." : `${count} places deleted.`;
+  return plural(count, "Place deleted.", "# places deleted.");
 }
 
 /**
@@ -195,25 +193,33 @@ export function placeDeleteConfirm(
   const one = "name" in target || target.count === 1;
   const trips =
     linkedTripCount == null
-      ? `Trips that link to ${one ? "it" : "them"} stay, unlinked.`
+      ? one
+        ? t`Trips that link to it stay, unlinked.`
+        : t`Trips that link to them stay, unlinked.`
       : linkedTripCount === 0
         ? null
-        : `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip stays" : "trips stay"}, unlinked.`;
+        : plural(
+            linkedTripCount,
+            "# logged trip stays, unlinked.",
+            "# logged trips stay, unlinked.",
+          );
   return {
     confirmTitle:
       "name" in target
-        ? `Delete ${target.name}?`
+        ? t`Delete ${target.name}?`
         : one
-          ? "Delete this place?"
-          : `Delete ${target.count} places?`,
+          ? t`Delete this place?`
+          : t`Delete ${target.count} places?`,
     confirmBody: [
-      `${one ? "Its" : "Their"} notes, photos, tracks and shares go too.`,
+      one
+        ? t`Its notes, photos, tracks and shares go too.`
+        : t`Their notes, photos, tracks and shares go too.`,
       trips,
-      "This can't be undone.",
+      t`This can't be undone.`,
     ]
       .filter(Boolean)
       .join(" "),
-    confirmLabel: "Delete",
+    confirmLabel: t`Delete`,
     tone: "destructive",
   };
 }
