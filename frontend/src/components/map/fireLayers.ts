@@ -1,29 +1,35 @@
 import {
   FIRE_MIN_ZOOM,
-  type FireArchive,
   fireColor,
   fireEdgeOpacity,
   fireFillOpacity,
+  layerIn,
+  type Region,
   zoomFadeIn,
 } from "@logjam/shared";
 import type { ExpressionSpecification, LayerSpecification } from "maplibre-gl";
 
-import { FIRE_EDGE_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
+import { fireEdgeLayer, fireFillLayer } from "./layerOrder";
 
 type Expr = ExpressionSpecification;
 
 /**
- * The Fire history layers of `fire` over the source `source`, tint first and its edge
- * over it, as of `now`: the ramp's months are counted from it.
+ * The Fire history layers of `region` over the source `source`, tint first and
+ * its edge over it, as of `now`: the ramp's months are counted from it. Null
+ * where the region has no fire archive.
  */
 export function fireLayerSpecs(
-  fire: FireArchive,
+  region: Region,
   source: string,
   now: Date,
-): [
-  Extract<LayerSpecification, { type: "fill" }>,
-  Extract<LayerSpecification, { type: "line" }>,
-] {
+):
+  | [
+      Extract<LayerSpecification, { type: "fill" }>,
+      Extract<LayerSpecification, { type: "line" }>,
+    ]
+  | null {
+  const fire = layerIn(region, "fire");
+  if (!fire) return null;
   const common = {
     source,
     "source-layer": fire.sourceLayer,
@@ -32,7 +38,7 @@ export function fireLayerSpecs(
   return [
     {
       ...common,
-      id: FIRE_FILL_LAYER,
+      id: fireFillLayer(region),
       type: "fill",
       paint: {
         "fill-color": fireColor(fire, now) as Expr,
@@ -44,7 +50,7 @@ export function fireLayerSpecs(
     },
     {
       ...common,
-      id: FIRE_EDGE_LAYER,
+      id: fireEdgeLayer(region),
       type: "line",
       paint: {
         "line-color": fireColor(fire, now) as Expr,

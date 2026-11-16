@@ -5,7 +5,8 @@
 // first sit on the page as buttons, every other one is behind the ⋯. A page
 // draws no verb of its own, so Delete and Remove are never a section.
 import { fieldValue } from "../fieldValues.js";
-import { SOURCES_FIELD_KEY, systemFieldDef } from "../placeTypes.js";
+import { isLengthField, SOURCES_FIELD_KEY } from "../placeTypes.js";
+import { lengthInputText, lengthUnitLabel } from "../units.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { AttributeRow } from "../logbook.js";
 import {
@@ -143,19 +144,33 @@ export function formatPlacePosition(latitude: number, longitude: number) {
   return `${latitude.toFixed(POSITION_DECIMALS)}, ${longitude.toFixed(POSITION_DECIMALS)}`;
 }
 
-/** A value as it is READ: the unit its definition declares ("15 m"). Only a
- *  built-in carries one, and only where the label does not already say it. */
+/** A value as it is READ: the unit its definition declares ("15 m", or "49.2
+ *  ft" where the account reads feet). Only a built-in carries one, and only
+ *  where the label does not already say it. Guard: `units.test.ts` ("a length
+ *  field"). */
 export function withFieldUnit(key: string, text: string): string {
-  const unit = systemFieldDef(key)?.unit;
-  return unit ? `${text} ${unit}` : text;
+  // Text that already ends in the unit is left as it is, so applying this
+  // twice is the same as once. Guard: `contracts.test.ts` ("withRowUnit applied
+  // twice is applied once").
+  if (!isLengthField(key) || text.endsWith(` ${lengthUnitLabel()}`))
+    return text;
+  const metres = Number(text);
+  const shown =
+    text.trim() === "" || !Number.isFinite(metres)
+      ? text
+      : lengthInputText(metres);
+  return `${shown} ${lengthUnitLabel()}`;
 }
 
 /** An attribute row with its built-in unit on the value ("15" becomes "15
  *  m"). The value is otherwise left raw: the table formats it by type, and
- *  formatting it here as well would format a date twice. */
+ *  formatting it here as well would format a date twice. `attributeRows` and
+ *  `tripPlanSetAsideRows` apply it; a row that has the unit already keeps it,
+ *  so applying it again changes nothing. Guard: `contracts.test.ts`
+ *  ("withRowUnit applied twice is applied once"). */
 export function withRowUnit(row: AttributeRow): AttributeRow {
   const [key, label, value, type] = row;
-  if (value == null || value === "" || !systemFieldDef(key)?.unit) return row;
+  if (value == null || value === "" || !isLengthField(key)) return row;
   return [key, label, withFieldUnit(key, String(value)), type];
 }
 

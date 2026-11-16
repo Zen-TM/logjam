@@ -100,6 +100,9 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   const shared = await importOriginal<typeof import("@logjam/shared")>();
   return {
     ...shared,
+    // The simulated regions' archives are known as well as NSW's.
+    saveClipArchive: (id: string) =>
+      shared.saveClipArchive(id, [shared.NSW_REGION, ...shared.SIM_REGIONS]),
     planExtract: (source: unknown, options: { bbox: never }) =>
       shared.planExtract(source as never, {
         ...options,
@@ -109,8 +112,14 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_REGION, planExtract } =
-  await import("@logjam/shared");
+const {
+  fetchExtractRequest,
+  LAND_EDGE_MINZOOM,
+  NSW_REGION,
+  planExtract,
+  planRegionForBasemaps,
+} = await import("@logjam/shared");
+const { regionClipSpecs } = await import("./regionTilePlanning");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
@@ -118,6 +127,7 @@ const BBOX = { west: 150.2, south: -33.8, east: 150.6, north: -33.4 };
 const SPEC = {
   id: "c1",
   basemapId: "protomaps",
+  vectorPath: "master/basemap/protomaps-nsw.pmtiles",
   label: "Vector map region",
   groupId: "g1",
   groupLabel: "Area",
@@ -334,13 +344,23 @@ describe("runRegionClip", () => {
   it("leaves out a DEM or contour archive the CDN lacks, and only that", async () => {
     cdn.failFrom = 0;
     cdn.status = 403;
-    const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
+    const dem = { archiveId: "nsw-5m", basemapId: "nsw-5m" };
     expect(await run(dem)).toEqual({ status: "cancelled" });
-    expect(await run({ contours: true })).toEqual({ status: "cancelled" });
-    expect(await run({ slope: true })).toEqual({ status: "cancelled" });
-    expect(await run({ land: true })).toEqual({ status: "cancelled" });
-    expect(await run({ fire: true })).toEqual({ status: "cancelled" });
-    expect(await run({ coverage: true })).toEqual({ status: "cancelled" });
+    expect(await run({ archiveId: NSW_REGION.terrain.contours.id })).toEqual({
+      status: "cancelled",
+    });
+    expect(await run({ archiveId: NSW_REGION.terrain.slope.id })).toEqual({
+      status: "cancelled",
+    });
+    expect(await run({ archiveId: NSW_REGION.terrain.land.id })).toEqual({
+      status: "cancelled",
+    });
+    expect(await run({ archiveId: NSW_REGION.terrain.fire.id })).toEqual({
+      status: "cancelled",
+    });
+    expect(await run({ archiveId: NSW_REGION.terrain.coverage.id })).toEqual({
+      status: "cancelled",
+    });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",
@@ -360,7 +380,9 @@ describe("runRegionClip", () => {
   // Mutation: file the slope clip as a raster, or under the basemap's key,
   // and offline the map draws the terrarium PNGs as noise, or not at all.
   it("files a slope clip as the DEM the map colours", async () => {
-    expect((await run({ slope: true })).status).toBe("ready");
+    expect((await run({ archiveId: NSW_REGION.terrain.slope.id })).status).toBe(
+      "ready",
+    );
     for (const { url } of cdn.calls)
       expect(url).toBe(`${CDN}/master/dem/nsw-5m-slope.pmtiles`);
     expect(insertArtifact).toHaveBeenCalledWith(
@@ -376,7 +398,9 @@ describe("runRegionClip", () => {
   // Mutation: cut Land from the archive's own z8, and a saved area carries
   // about five times the bytes in zooms no map draws.
   it("cuts a land clip from the zoom a map draws it", async () => {
-    expect((await run({ land: true })).status).toBe("ready");
+    expect((await run({ archiveId: NSW_REGION.terrain.land.id })).status).toBe(
+      "ready",
+    );
     for (const { url } of cdn.calls)
       expect(url).toBe(`${CDN}/${NSW_REGION.terrain.land.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
@@ -392,7 +416,9 @@ describe("runRegionClip", () => {
   // the map's fire from z8 to z11 is missing offline, or its clip is read as
   // Land's.
   it("cuts a fire clip from the archive's own first zoom", async () => {
-    expect((await run({ fire: true })).status).toBe("ready");
+    expect((await run({ archiveId: NSW_REGION.terrain.fire.id })).status).toBe(
+      "ready",
+    );
     for (const { url } of cdn.calls)
       expect(url).toBe(`${CDN}/${NSW_REGION.terrain.fire.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
@@ -408,7 +434,9 @@ describe("runRegionClip", () => {
   // Mutation: cut Coverage from another archive or file it as a fire clip, and
   // the hatch is missing offline, or its clip is read as Fire's.
   it("cuts a coverage clip from the whole coverage archive", async () => {
-    expect((await run({ coverage: true })).status).toBe("ready");
+    expect(
+      (await run({ archiveId: NSW_REGION.terrain.coverage.id })).status,
+    ).toBe("ready");
     for (const { url } of cdn.calls)
       expect(url).toBe(`${CDN}/${NSW_REGION.terrain.coverage.archivePath}`);
     expect(insertArtifact).toHaveBeenCalledWith(
@@ -425,7 +453,7 @@ describe("runRegionClip", () => {
   // holds z15 alone, so the hillshade vanishes offline below z15 while the
   // estimate still prices z8-14.
   it("cuts the nsw-5m height clip from z8, not from the sampler's z15", async () => {
-    const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
+    const dem = { archiveId: "nsw-5m", basemapId: "nsw-5m" };
     expect((await run(dem)).status).toBe("ready");
     for (const { url } of cdn.calls)
       expect(url).toBe(`${CDN}/master/dem/nsw-5m.pmtiles`);
@@ -438,6 +466,162 @@ describe("runRegionClip", () => {
         maxzoom: 14,
       }),
     );
+  });
+
+  // A save over NSW cuts these clips from these archives and files them under
+  // these keys: the stored ids and paths of ADR 0036 and the registry rows
+  // already on a phone. The first zoom read back is the archive's own (the
+  // fixture archive stops at z14, so the last is not).
+  // Mutation: file the slope clip as a `dem-region` (`CLIP_KIND`), or cut
+  // every archive from one fixed path in `clipArchiveFor`, and a row goes red.
+  it("cuts each clip of a save over NSW from its archive and files it under its key", async () => {
+    const plan = planRegionForBasemaps(BBOX, [], 15, () => 16);
+    const specs = regionClipSpecs(
+      { bbox: BBOX, groupId: "g", groupLabel: "Area", allowCellular: false },
+      plan.clips,
+      plan.vectors,
+      (basemapId) => ({ id: `clip-${basemapId}`, label: basemapId }),
+    );
+    const filed: unknown[] = [];
+    for (const spec of specs) {
+      cdn.calls = [];
+      insertArtifact.mockClear();
+      expect((await run(spec)).status).toBe("ready");
+      const [saved] = insertArtifact.mock.calls[0];
+      filed.push([
+        spec.basemapId,
+        cdn.calls[0].url.replace(`${CDN}/`, ""),
+        saved.kind,
+        saved.logicalKey,
+        saved.sourceType,
+        saved.minzoom,
+      ]);
+    }
+    expect(filed).toEqual([
+      [
+        "nsw-5m",
+        "master/dem/nsw-5m.pmtiles",
+        "dem-region",
+        "nsw-5m",
+        "raster",
+        8,
+      ],
+      [
+        "nsw-contours",
+        "master/contours/nsw-10m.pmtiles",
+        "contours-region",
+        "nsw-contours",
+        "vector",
+        11,
+      ],
+      [
+        "nsw-5m-slope",
+        "master/dem/nsw-5m-slope.pmtiles",
+        "slope-region",
+        "nsw-5m-slope",
+        "raster-dem",
+        8,
+      ],
+      [
+        "nsw-land",
+        "master/land/nsw-tenure.pmtiles",
+        "land-region",
+        "nsw-land",
+        "vector",
+        LAND_EDGE_MINZOOM,
+      ],
+      [
+        "nsw-fire",
+        "master/fire/nsw-fire-history.pmtiles",
+        "fire-region",
+        "nsw-fire",
+        "vector",
+        NSW_REGION.terrain.fire.minzoom,
+      ],
+      [
+        "nsw-coverage",
+        "master/coverage/nsw-coverage.pmtiles",
+        "coverage-region",
+        "nsw-coverage",
+        "vector",
+        NSW_REGION.terrain.coverage.minzoom,
+      ],
+      [
+        "protomaps",
+        "master/basemap/protomaps-nsw.pmtiles",
+        "basemap-region",
+        "protomaps",
+        "vector",
+        0,
+      ],
+    ]);
+  });
+
+  // A vector clip is filed under the one logical basemap, "protomaps", with the
+  // archive it was cut from, so the map draws it only while it shows that
+  // region. A clip with no archive to cut from is no clip.
+  // Mutation: leave `archivePath` off the filed artifact, and the map never
+  // draws a saved vector clip; cut every vector clip from NSW's archive, and a
+  // clip of simulated New Zealand's holds NSW's tiles.
+  it("files a vector clip under protomaps with the archive it was cut from", async () => {
+    expect((await run()).status).toBe("ready");
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath: "master/basemap/protomaps-nsw.pmtiles",
+      }),
+    );
+    cdn.calls = [];
+    insertArtifact.mockClear();
+    const nz = { vectorPath: "master/basemap/protomaps-simnz.pmtiles" };
+    expect((await run(nz)).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/basemap/protomaps-simnz.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logicalKey: "protomaps",
+        archivePath: "master/basemap/protomaps-simnz.pmtiles",
+      }),
+    );
+    cdn.calls = [];
+    insertArtifact.mockClear();
+    expect((await run({ vectorPath: undefined })).status).toBe("failed");
+    expect(cdn.calls).toEqual([]);
+    expect(insertArtifact).not.toHaveBeenCalled();
+  });
+
+  // A save over a simulated region cuts that region's archive and files the
+  // clip under that archive's id, so the map draws it only while it shows that
+  // region. An id no region declares is no clip.
+  // Mutation: cut every archive from NSW's contours path in `clipArchiveFor`
+  // and the URL is NSW's; cut the vector map for an id no region declares
+  // instead of throwing, and a stale id is saved as a clip of it.
+  it("cuts a simulated region's archive and files it under that archive's id", async () => {
+    expect(
+      (
+        await run({
+          basemapId: "simnz-contours",
+          archiveId: "simnz-contours",
+        })
+      ).status,
+    ).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/contours/simnz-10m.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "contours-region",
+        logicalKey: "simnz-contours",
+        sourceType: "vector",
+      }),
+    );
+    cdn.calls = [];
+    insertArtifact.mockClear();
+    expect(
+      (await run({ basemapId: "simnz-gone", archiveId: "simnz-gone" })).status,
+    ).toBe("failed");
+    expect(cdn.calls).toEqual([]);
+    expect(insertArtifact).not.toHaveBeenCalled();
   });
 
   // A sharpened area's clip: cut from the bucket through the presigned URL,
@@ -493,7 +677,9 @@ describe("runRegionClip", () => {
       code: "region-rejected",
       detail: "outside-nsw",
     });
-    expect(await run({ bbox: outside, contours: true })).toEqual({
+    expect(
+      await run({ bbox: outside, archiveId: NSW_REGION.terrain.contours.id }),
+    ).toEqual({
       status: "cancelled",
     });
     expect(disk.size).toBe(0);

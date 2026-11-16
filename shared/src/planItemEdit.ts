@@ -6,10 +6,13 @@
 // filename as its name.
 import { gradeFieldsAt, isCanyonGradeKey } from "./canyonGrade.js";
 import { fieldValue } from "./fieldValues.js";
+import { t } from "./i18n.js";
 import { SYSTEM_FIELD_DEFS, SYSTEM_PLACE_TYPES } from "./placeTypes.js";
 import { REGIONS, type Region } from "./regions.js";
+import { lengthFromInput, lengthInputText, lengthUnitLabel } from "./units.js";
 import {
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
 import type {
@@ -27,6 +30,13 @@ export type ItemWords = {
 };
 
 export const ITEM_ATTR = "attr:";
+
+/**
+ * The elevation field's label, with the unit it is typed in ("Elevation (ft)").
+ * Guard: `lengthFieldClients.test.ts` for both clients' call, `planItemEdit.test.ts`.
+ */
+export const itemElevationLabel = (): string =>
+  t`Elevation (${lengthUnitLabel()})`;
 
 /** Key order aside: JSONB hands objects back in Postgres's key order. */
 const sorted = (value: unknown): unknown =>
@@ -92,11 +102,12 @@ export function itemWords(item: TripPlanItem): ItemWords {
         altNames: item.altNames.join(", "),
         latitude: String(item.latitude),
         longitude: String(item.longitude),
-        elevation: item.elevation == null ? "" : String(item.elevation),
+        elevation:
+          item.elevation == null ? "" : lengthInputText(item.elevation),
       };
       for (const def of itemFieldDefs(item)) {
         const raw = fieldValue(item.fieldValues, def.key);
-        words[ITEM_ATTR + def.key] = raw == null ? "" : String(raw);
+        words[ITEM_ATTR + def.key] = fieldInputText(def.key, raw);
       }
       return words;
     }
@@ -145,13 +156,25 @@ export function itemPatch(
         from: { latitude: seen.latitude, longitude: seen.longitude },
         to: { latitude, longitude },
       };
+    // Typed in the display units, stored in metres: text the form opened with
+    // keeps the stored metres, so a feet figure rounded for display never
+    // rewrites an elevation the user did not touch.
     const elevation =
-      now.elevation.trim() === "" ? null : Number(now.elevation);
+      now.elevation === was.elevation
+        ? seen.elevation
+        : now.elevation.trim() === ""
+          ? null
+          : lengthFromInput(Number(now.elevation));
     if (elevation !== seen.elevation)
       patch.elevation = { from: seen.elevation, to: elevation };
     for (const def of defs) {
-      const to = coerceFieldValue(now[ITEM_ATTR + def.key], def.type);
       const from = fieldValue(seen.fieldValues, def.key) ?? null;
+      const to = coerceFieldInput(
+        def.key,
+        now[ITEM_ATTR + def.key],
+        def.type,
+        from,
+      );
       if (!sameValue(to, from))
         (patch.fieldValues ??= {})[def.key] = { from, to };
     }

@@ -32,6 +32,9 @@ import {
   type TripPlanItem,
   type TripPlanRole,
   coordinateEntry,
+  displayUnits,
+  itemElevationLabel,
+  lengthFromInput,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -106,7 +109,11 @@ export function PlanItemSheet({
   const [seen, setSeen] = useState<TripPlanItem | null>(null);
   const [opened, setOpened] = useState<ItemWords | null>(null);
   const [moved, setMoved] = useState(false);
-  const key = item ? `${item.kind}:${item.id}` : null;
+  // The units are in the key: the form's length text and its conversion are in
+  // one unit, so a change of units reseeds it (dropping what was typed) rather
+  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
+  // of a length field converts it").
+  const key = item ? `${item.kind}:${item.id}|${displayUnits()}` : null;
   if (key !== shownFor) {
     setShownFor(key);
     setEditing(false);
@@ -185,7 +192,9 @@ export function PlanItemSheet({
           longitude: blank(values.longitude)
             ? undefined
             : Number(values.longitude),
-          elevation: blank(values.elevation) ? null : Number(values.elevation),
+          elevation: blank(values.elevation)
+            ? null
+            : lengthFromInput(Number(values.elevation)),
           fieldValues: Object.fromEntries(
             Object.entries(coerceCustomFields(attrs, defs)).filter(
               ([, value]) => value != null,
@@ -368,7 +377,7 @@ export function PlanItemSheet({
                 </View>
               </View>
               <TextField
-                label={copy.itemElevation}
+                label={itemElevationLabel()}
                 value={values.elevation}
                 hint={theirs("elevation")}
                 keyboardType="numbers-and-punctuation"

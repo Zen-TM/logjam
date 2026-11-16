@@ -6,7 +6,9 @@ import {
   LAND_EDGE_LINES,
   MAP_TERRAIN,
   NSW_REGION,
+  SIM_NZ,
   TILE_SIZE,
+  type LandArchive,
 } from "@logjam/shared";
 import type { Ctx } from "./common";
 import {
@@ -17,17 +19,19 @@ import {
   type LandShape,
 } from "./land";
 
-const LAND_CLASSES = NSW_REGION.terrain.land.classes;
+const NSW_LAND = NSW_REGION.terrain.land;
+const NZ_LAND = SIM_NZ.terrain.land!;
+const LAND_CLASSES = NSW_LAND.classes;
 
 const zig = (v: number) => (v << 1) ^ (v >> 31);
 
 /** One made-up square covering the tile, of one class. */
-function squareTile(tenure: string): Uint8Array {
+function squareTile(tenure: string, land: LandArchive = NSW_LAND): Uint8Array {
   const tile = new PbfWriter();
   tile.writeMessage(
     3,
     (_o, layer) => {
-      layer.writeStringField(1, NSW_REGION.terrain.land.sourceLayer);
+      layer.writeStringField(1, land.sourceLayer);
       layer.writeMessage(
         2,
         (_f, pbf) => {
@@ -40,7 +44,7 @@ function squareTile(tenure: string): Uint8Array {
         },
         null,
       );
-      layer.writeStringField(3, NSW_REGION.terrain.land.classProperty);
+      layer.writeStringField(3, land.classProperty);
       layer.writeMessage(4, (_v, pbf) => pbf.writeStringField(1, tenure), null);
       layer.writeVarintField(5, 4096);
       layer.writeVarintField(15, 2);
@@ -62,7 +66,7 @@ describe("buildLand", () => {
   // Mutation: read the colour from anything but the class, and a print's
   // borders stop matching the map's legend.
   it("colours a tile's borders by its class", () => {
-    const [shape] = buildLand([at(0, "Private")], t);
+    const [shape] = buildLand([at(0, "Private")], t, NSW_LAND);
     expect(shape!.color).toBe(LAND_CLASSES[0].colour);
     expect(shape!.rings).toHaveLength(1);
   });
@@ -70,15 +74,15 @@ describe("buildLand", () => {
   // Mutation: drop the class test, and an unknown class prints with no
   // legend entry to read it by.
   it("leaves out a class it doesn't know, and a tile that won't decode", () => {
-    expect(buildLand([at(0, "Unknown")], t)).toEqual([]);
+    expect(buildLand([at(0, "Unknown")], t, NSW_LAND)).toEqual([]);
     const garbage = { x: 0, y: 0, data: new Uint8Array([255, 255, 255]) };
-    expect(buildLand([garbage], t)).toEqual([]);
+    expect(buildLand([garbage], t, NSW_LAND)).toEqual([]);
   });
 
   // Mutation: round neither edge, and neighbours overlap by a fraction of a
   // pixel, which doubles a border where it crosses the join.
   it("gives neighbouring tiles exactly one shared edge", () => {
-    const [a, b] = buildLand([at(0, "Private"), at(1, "Private")], t);
+    const [a, b] = buildLand([at(0, "Private"), at(1, "Private")], t, NSW_LAND);
     expect(a!.clip.right).toBe(b!.clip.left);
     expect(Number.isInteger(a!.clip.right)).toBe(true);
     expect(a!.clip.right - a!.clip.left).toBeCloseTo(
@@ -88,10 +92,42 @@ describe("buildLand", () => {
   });
 });
 
+describe("a region's own archive", () => {
+  // Mutation: read NSW's class property ("TenureClass") in buildLand in place
+  // of `land.classProperty`, and a sheet in another region draws nothing.
+  it("reads the class property and classes it is given", () => {
+    const nz = {
+      x: t.minTileX,
+      y: t.minTileY,
+      data: squareTile("Public", NZ_LAND),
+    };
+    const [shape] = buildLand([nz], t, NZ_LAND);
+    expect(shape!.color).toBe(NZ_LAND.classes[0].colour);
+    expect(buildLand([nz], t, NSW_LAND)).toEqual([]);
+  });
+
+  // Mutation: list NSW's classes in landClassesDrawn in place of `land.classes`,
+  // and a sheet in another region lists NSW's tenure words beside its colours.
+  it("lists the classes of the archive that drew", () => {
+    const square = { left: 0, top: 0, right: 100, bottom: 100 };
+    const shapes: LandShape[] = [
+      {
+        color: NZ_LAND.classes[0].colour,
+        pixel: 1,
+        clip: square,
+        rings: [Float64Array.from([10, 10, 90, 10, 90, 90])],
+      },
+    ];
+    expect(landClassesDrawn(shapes, 100, 100, NZ_LAND)).toEqual([
+      NZ_LAND.classes[0],
+    ]);
+  });
+});
+
 describe("drawLand", () => {
   // Mutation: skip the strip test, and every strip repaints the whole print.
   it("draws only the tiles that reach the strip", () => {
-    const shapes = buildLand([at(0, "Private")], t);
+    const shapes = buildLand([at(0, "Private")], t, NSW_LAND);
     const ctx = {
       save: vi.fn(),
       restore: vi.fn(),
@@ -127,7 +163,7 @@ describe("drawLand", () => {
       clip: (rule?: string) => calls.push(`clip ${rule ?? "tile"}`),
       stroke: log("stroke"),
     };
-    const shapes = buildLand([at(0, "Private")], t);
+    const shapes = buildLand([at(0, "Private")], t, NSW_LAND);
     drawLand(ctx as unknown as Ctx, shapes, 0, 800);
     expect(calls).toEqual([
       "clip tile",
@@ -154,30 +190,35 @@ describe("landClassesDrawn", () => {
       shape(second.colour, [10, 10, 90, 10, 90, 90]),
       shape(first.colour, [20, 20, 80, 20, 80, 80]),
     ];
-    expect(landClassesDrawn(shapes, 100, 100)).toEqual([first, second]);
+    expect(landClassesDrawn(shapes, 100, 100, NSW_LAND)).toEqual([
+      first,
+      second,
+    ]);
   });
 
   // Mutation: test the ring against the whole tile, and a print lists a class
   // that's only in the part of the tile off the sheet.
   it("leaves out a class whose border is off the sheet", () => {
     const shapes = [shape(first.colour, [60, 60, 90, 60, 90, 90])];
-    expect(landClassesDrawn(shapes, 50, 50)).toEqual([]);
+    expect(landClassesDrawn(shapes, 50, 50, NSW_LAND)).toEqual([]);
   });
 
   // Mutation: test the ring against the sheet alone, and every class in a
   // tile's margin is listed for an edge that is only where the tile was cut.
   it("doesn't take the edge a tile was cut at for a border", () => {
     const cut = [-5, -5, 105, -5, 105, 105, -5, 105];
-    expect(landClassesDrawn([shape(third.colour, cut)], 300, 300)).toEqual([]);
+    expect(
+      landClassesDrawn([shape(third.colour, cut)], 300, 300, NSW_LAND),
+    ).toEqual([]);
   });
 
   // Mutation: test vertices alone, and a long straight border across the
   // sheet explains nothing.
   it("finds a border that crosses the sheet with no vertex on it", () => {
     const across = [-500, 50, 500, 50, 500, 600, -500, 600];
-    expect(landClassesDrawn([shape(first.colour, across)], 100, 100)).toEqual([
-      first,
-    ]);
+    expect(
+      landClassesDrawn([shape(first.colour, across)], 100, 100, NSW_LAND),
+    ).toEqual([first]);
   });
 });
 

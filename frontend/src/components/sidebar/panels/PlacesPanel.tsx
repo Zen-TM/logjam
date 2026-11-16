@@ -169,6 +169,7 @@ function PlacesPanel({
   onExpandSheet,
   canyonRegions,
   gradeSystem,
+  uiPreferences,
 }: {
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
@@ -217,6 +218,8 @@ function PlacesPanel({
   canyonRegions: readonly Region[];
   /** The system the map in view grades in: "Easiest first" sorts by it. */
   gradeSystem: CanyonGradeSystem;
+  /** The account's preferences: which grade attributes a new type's step lists. */
+  uiPreferences: unknown;
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
@@ -940,6 +943,7 @@ function PlacesPanel({
           onTypesChange={onPlaceTypesChange}
           placeDefs={placeCustomFieldDefs}
           onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+          uiPreferences={uiPreferences}
           onClose={() => setAddingType(false)}
         />
       )}

@@ -3,12 +3,10 @@
 // nothing to serve in CI, the basemap source never loads and MapLibre never
 // writes the map's credits. An archive the fixtures lack is a clean 404.
 import type { Page, Route } from "@playwright/test";
-import { BASEMAP_CATALOG, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { statewideArchives } from "./geoPdfTiles";
 
-const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
-  (entry) => entry.id === "protomaps",
-)!.urlTemplate;
+const PROTOMAPS_ARCHIVE = NSW_REGION.vector!.archivePath;
 
 let archives: Record<string, Buffer> | undefined;
 function archiveByPath() {

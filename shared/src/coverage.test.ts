@@ -18,6 +18,7 @@ import {
   coverageOpacity,
   drawsCoverage,
   carriersOf,
+  coverageCarrierHere,
   coverageFilter,
   normalizeCarrier,
 } from "./coverage.js";
@@ -203,6 +204,19 @@ describe("coverageNameOf", () => {
     expect(
       coverageNameOf(NSW_COVERAGE, [at("unknown")], "telstra", TAP),
     ).toBeNull();
+  });
+});
+
+describe("coverageCarrierHere", () => {
+  // Mutation: return the stored carrier whatever the region lists, and the
+  // Coverage row names a network the region in view has no data for.
+  it("keeps a stored carrier only where the region lists it", () => {
+    expect(coverageCarrierHere(NSW_REGION, "optus")).toBe("optus");
+    expect(coverageCarrierHere(SIM_NZ, "optus")).toBeNull();
+    expect(coverageCarrierHere(SIM_NZ, "simtwo")).toBe("simtwo");
+    expect(coverageCarrierHere(SIM_UTAH, "simtwo")).toBeNull();
+    expect(coverageCarrierHere(null, "optus")).toBeNull();
+    expect(coverageCarrierHere(NSW_REGION, null)).toBeNull();
   });
 });
 

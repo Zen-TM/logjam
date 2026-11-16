@@ -33,7 +33,12 @@ type StyleLayer = ReturnType<typeof layers>[number];
 type Group = "paint" | "layout";
 type Evaluate = (feature?: VectorTileFeature) => unknown;
 
-const STYLE = layers("protomaps", namedFlavor("light"), { lang: "en" });
+/** The style a sheet draws, its labels in `lang` where the data has a name in it. */
+const styleIn = (lang: string) =>
+  layers("protomaps", namedFlavor("light"), { lang });
+// English, which the bands are read from: the layers' ids and order do not
+// depend on the language.
+const STYLE = styleIn("en");
 
 /** A road's number means nothing without the shield its sprite draws round it. */
 const NEEDS_SPRITE = new Set(["roads_shields"]);
@@ -125,7 +130,11 @@ function decode(data: ArrayBuffer) {
   return features;
 }
 
-/** Decode the tiles and place the labels, for `drawBasemapBand` and `drawBasemapLabels`. */
+/**
+ * Decode the tiles and place the labels, for `drawBasemapBand` and
+ * `drawBasemapLabels`. Labels are in `lang`, English by default. Guard:
+ * `basemap.test.ts` ("buildBasemap's labels").
+ */
 export function buildBasemap(
   tiles: readonly BasemapTile[],
   transform: TileToMapTransform,
@@ -133,7 +142,9 @@ export function buildBasemap(
   pxScale: number,
   mapPx: { width: number; height: number },
   measure: Ctx,
+  lang = "en",
 ): BasemapDrawing {
+  const style = lang === "en" ? STYLE : styleIn(lang);
   const ordered = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x);
   const decoded = ordered.flatMap((tile) => {
     try {
@@ -170,7 +181,7 @@ export function buildBasemap(
 
   let background = "#ffffff";
   const paints: Paint[] = [];
-  STYLE.forEach((layer, index) => {
+  style.forEach((layer, index) => {
     if (!inZoom(layer, styleZoom)) return;
     const prop = evaluator(layer, styleZoom);
     if (layer.type === "background") {
@@ -231,12 +242,21 @@ export function buildBasemap(
     background,
     widthPx: mapPx.width,
     paints,
-    labels: placeLabels(decoded, ringsOf, styleZoom, pxScale, mapPx, measure),
+    labels: placeLabels(
+      style,
+      decoded,
+      ringsOf,
+      styleZoom,
+      pxScale,
+      mapPx,
+      measure,
+    ),
     tilesDrawn: decoded.length,
   };
 }
 
 function placeLabels(
+  style: readonly StyleLayer[],
   decoded: readonly {
     tile: BasemapTile;
     features: Map<string, VectorTileFeature[]>;
@@ -253,7 +273,7 @@ function placeLabels(
   const repeatPx = LABEL_REPEAT_PX * pxScale;
 
   // Top of the style first, as MapLibre places: a place name beats a road's.
-  for (const layer of [...STYLE].reverse()) {
+  for (const layer of [...style].reverse()) {
     if (layer.type !== "symbol" || NEEDS_SPRITE.has(layer.id)) continue;
     if (!inZoom(layer, styleZoom) || !layer.layout?.["text-field"]) continue;
     const sourceLayer = layer["source-layer"];

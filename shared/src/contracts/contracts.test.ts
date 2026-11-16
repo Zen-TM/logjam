@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { setDisplayUnits } from "../units.js";
 import { gridZonesFor } from "../grids.js";
 import { REGIONS } from "../regions.js";
 import { SIM_REGIONS } from "../simRegions.js";
@@ -540,6 +541,25 @@ describe("a place's page", () => {
     }
   });
 
+  // Mutation: drop the `endsWith` check from `withFieldUnit`, and a row that
+  // has its unit takes it again ("15 m m").
+  it("withRowUnit applied twice is applied once", () => {
+    const row: AttributeRow = ["longest_abseil", "Longest pitch", 15, "float"];
+    try {
+      for (const [units, shown] of [
+        ["metric", "15 m"],
+        ["imperial", "49.2 ft"],
+      ] as const) {
+        setDisplayUnits(units);
+        expect(withRowUnit(row)[2]).toBe(shown);
+        expect(withRowUnit(withRowUnit(row))).toEqual(withRowUnit(row));
+        expect(withFieldUnit("longest_abseil", shown)).toBe(shown);
+      }
+    } finally {
+      setDisplayUnits("metric");
+    }
+  });
+
   // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
   it("gives both clients and a sharee the gauge section", () => {
     for (const client of ["web", "gps"] as const)
@@ -1047,13 +1067,13 @@ describe("the map's overlays list", () => {
 
 describe("the grid row's title", () => {
   const sydney = { lon: 151.2, lat: -33.9 };
-  const wanaka = { lon: 169.1, lat: -44.63 };
+  const makarora = { lon: 169.25, lat: -44.055 };
   const bryce = { lon: -112.17, lat: 37.6 };
 
   // Mutation: return a fixed "MGA grid", or the first region's grid whatever
   // the view, and New Zealand reads "MGA grid".
   it("names the grid in view", () => {
-    expect(gridOverlayTitle(wanaka, SIM_REGIONS)).toBe("NZTM grid");
+    expect(gridOverlayTitle(makarora, SIM_REGIONS)).toBe("NZTM grid");
     expect(gridOverlayTitle(bryce, SIM_REGIONS)).toBe("UTM grid");
   });
 
@@ -1089,7 +1109,7 @@ describe("the grid row's title", () => {
 
   // Mutation: have the title read the grid by another rule than
   // `gridZonesFor` and a view can be titled NZTM while it draws UTM lines.
-  it.each([wanaka, bryce, sydney])(
+  it.each([makarora, bryce, sydney])(
     "is the name of the zone drawn at %j",
     (at) => {
       const box = {

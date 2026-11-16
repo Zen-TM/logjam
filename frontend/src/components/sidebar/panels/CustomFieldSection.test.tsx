@@ -3,10 +3,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   attributesHint,
   SETTINGS_LIST,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_PLACE_TYPE_IDS,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import CustomFieldSection from "./CustomFieldSection";
+import CustomFieldSection, { TypeAttributesDialog } from "./CustomFieldSection";
+import type { TPlaceType } from "../../../placeUtils";
+
+// The simulated regions are declared when shared loads, so the flag is set
+// before any import runs. Utah is the simulated region that grades in ACA.
+vi.hoisted(() => {
+  (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS = true;
+});
 
 // The section only reaches the network through a rename/delete/create, none of
 // which this suite performs — the dialogs are stubbed so nothing mounts MUI.
@@ -46,7 +55,7 @@ const OWN_DEF: ScopedCustomFieldDef = {
   tripTypes: [],
 };
 
-function renderSection(defs: ScopedCustomFieldDef[]) {
+function renderSection(defs: ScopedCustomFieldDef[], uiPreferences?: unknown) {
   return render(
     <CustomFieldSection
       entity="place"
@@ -55,10 +64,19 @@ function renderSection(defs: ScopedCustomFieldDef[]) {
       loading={false}
       defs={defs}
       onDefsChange={() => {}}
+      uiPreferences={uiPreferences}
       onBack={() => {}}
     />,
   );
 }
+
+// jsdom has no modal <dialog>; the kit's Dialog calls both.
+HTMLDialogElement.prototype.showModal = function showModal() {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close() {
+  this.removeAttribute("open");
+};
 
 // vitest runs without globals, so nothing unmounts the previous render for us.
 afterEach(cleanup);
@@ -113,5 +131,79 @@ describe("what the page says about itself", () => {
     expect(
       screen.getByText(SETTINGS_LIST.copy.builtInAttributesWhy),
     ).toBeTruthy();
+  });
+});
+
+// The built-in system definitions as the server sends them for Canyon.
+const CANYON: TPlaceType = {
+  id: SYSTEM_PLACE_TYPE_IDS.canyon,
+  name: "Canyon",
+  iconKey: "mountain",
+  color: "#336699",
+} as TPlaceType;
+const BUILT_IN = SYSTEM_FIELD_DEFS.map((def) => ({
+  ...def,
+  ownerId: null,
+  appliesToAllTypes: false,
+  placeTypeIds: def.placeTypes.map((key) => SYSTEM_PLACE_TYPE_IDS[key]),
+  tripTypes: [],
+})) as unknown as ScopedCustomFieldDef[];
+const ACCOUNT_IN_NSW = { regions: ["nsw"] };
+const ACCOUNT_IN_UTAH = { regions: ["simutah"] };
+const FRENCH = ["V grade", "A grade", "Commitment"];
+const ACA = ["ACA technical", "ACA water", "ACA time", "ACA risk"];
+
+// The grade attributes a built-in list names are those of the account's home
+// region: Utah's ACA four are not shown over NSW. Guards the helper
+// `listedAttributeDefs` at each list; its own rule is in canyonGrade.test.ts.
+describe("the built-in grade attributes of the Place attributes list", () => {
+  // Mutation: derive `own` and `system` from `defs` instead of `listed` in
+  // `CustomFieldSection`.
+  it("are the French three over NSW, and no ACA one", () => {
+    const { container } = renderSection(BUILT_IN, ACCOUNT_IN_NSW);
+    const text = container.textContent ?? "";
+    for (const label of FRENCH) expect(text.includes(label)).toBe(true);
+    for (const label of ACA) expect(text.includes(label)).toBe(false);
+  });
+
+  // Mutation: filter with the French system whatever the account, in
+  // `listedAttributeDefs` (`canyonGrade.ts`).
+  it("are the ACA four for an account whose home region grades in ACA", () => {
+    const { container } = renderSection(BUILT_IN, ACCOUNT_IN_UTAH);
+    const text = container.textContent ?? "";
+    for (const label of ACA) expect(text.includes(label)).toBe(true);
+    for (const label of FRENCH) expect(text.includes(label)).toBe(false);
+  });
+});
+
+describe("the built-in grade attributes of a type's attributes dialog", () => {
+  const dialogText = (uiPreferences: unknown) => {
+    render(
+      <TypeAttributesDialog
+        type={CANYON}
+        placeTypes={[CANYON]}
+        defs={BUILT_IN}
+        onDefsChange={() => {}}
+        uiPreferences={uiPreferences}
+        onClose={() => {}}
+      />,
+    );
+    return document.querySelector("dialog")?.textContent ?? "";
+  };
+
+  // Mutation: drop `listedAttributeDefs` from the `shown` list of
+  // `TypeAttributesDialog`.
+  it("are the French three over NSW, and no ACA one", () => {
+    const text = dialogText(ACCOUNT_IN_NSW);
+    for (const label of FRENCH) expect(text.includes(label)).toBe(true);
+    for (const label of ACA) expect(text.includes(label)).toBe(false);
+  });
+
+  // Mutation: filter with the French system whatever the account, in
+  // `listedAttributeDefs` (`canyonGrade.ts`).
+  it("are the ACA four for an account whose home region grades in ACA", () => {
+    const text = dialogText(ACCOUNT_IN_UTAH);
+    for (const label of ACA) expect(text.includes(label)).toBe(true);
+    for (const label of FRENCH) expect(text.includes(label)).toBe(false);
   });
 });

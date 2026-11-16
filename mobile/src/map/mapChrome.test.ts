@@ -9,10 +9,10 @@ describe("homeView", () => {
     const north: Region = {
       ...NSW_REGION,
       id: "north",
-      view: { center: [-110.8, 38.27], zoom: 11 },
+      view: { center: [-112.945, 37.285], zoom: 11 },
     };
     expect(homeView(["north"], [NSW_REGION, north])).toEqual({
-      center: [-110.8, 38.27],
+      center: [-112.945, 37.285],
       zoom: 11,
     });
   });

@@ -6,11 +6,14 @@ import { model as magneticModel } from "geomagnetism";
 import {
   extractionCreditLine,
   BASEMAP_CATALOG,
+  formatScaleStep,
   gridConvergence,
   overlayAttributionLines,
   REGIONS,
+  scaleBarSteps,
   type GeoPdfConfig,
   type Region,
+  type TopoLayerName,
 } from "@logjam/shared";
 import { sheetGrid } from "../sheetGrid";
 import {
@@ -28,14 +31,6 @@ import {
   TN_COLOR,
   type Ctx,
 } from "./common";
-
-const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
-
-/** Format distance label for scale bar */
-function formatDistance(m: number): string {
-  if (m >= 1000) return `${m / 1000} km`;
-  return `${m} m`;
-}
 
 export function drawRoundedRect(
   ctx: Ctx,
@@ -132,8 +127,9 @@ export function drawScaleBar(
     111320 *
     Math.cos(midLat * DEG_TO_RAD);
   const maxBarM = mapWidthM * 0.25;
-  let barDistM = SCALE_BAR_DISTANCES[0];
-  for (const d of SCALE_BAR_DISTANCES) {
+  const steps = scaleBarSteps("print");
+  let barDistM = steps[0];
+  for (const d of steps) {
     if (d <= maxBarM) barDistM = d;
     else break;
   }
@@ -144,7 +140,7 @@ export function drawScaleBar(
   const segments = 4;
   const segWidth = barWidthPx / segments;
 
-  const labelText = formatDistance(barDistM);
+  const labelText = formatScaleStep(barDistM);
   ctx.font = `${fontPx}px ${MAP_FONT}`;
   const labelW = ctx.measureText(labelText).width;
 
@@ -694,8 +690,14 @@ export function drawGridLines(
 /** What the credits are made of: the page's config and what drew. */
 export type AttributionInput = {
   baseLayer: string;
-  /** Overlay layer names whose data is on the page (`overlayAttributionLines`). */
-  renderedOverlays: readonly string[];
+  /**
+   * Topo layers whose data is on the page (`overlayAttributionLines`). Land is
+   * not one: its credit is the region's own, in `landCredit`. The type holds no
+   * `land`, so the typecheck (which covers the tests) is the guard.
+   */
+  renderedOverlays: readonly TopoLayerName[];
+  /** The credit of the sheet's region's Land archive when Land drew, else null. */
+  landCredit: string | null;
   /** `terrainCreditLines` of what drew. */
   terrainLines: readonly string[];
   /** When the base tiles were taken (the dated NSW Spatial Services credit). */
@@ -742,6 +744,7 @@ export function attributionLines(
     extractionCreditLine(input.baseLayer, input.extractedAt),
     ...input.terrainLines,
     ...overlayAttributionLines([...input.renderedOverlays]),
+    input.landCredit,
   ]
     .filter((line): line is string => line !== null)
     .flatMap(wrap);

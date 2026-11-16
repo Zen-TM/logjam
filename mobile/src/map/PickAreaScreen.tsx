@@ -44,7 +44,7 @@ import {
   type MapRef,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { RegionBbox } from "@logjam/shared";
+import { pointBox, regionInView, type RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
 import { spacing, makeStyles } from "../theme";
@@ -52,7 +52,7 @@ import { Button, Notice } from "../ui";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
-import { readBasemapPreference } from "./basemapPreference";
+import { readEffectiveBasemap } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { BAND_MARKERS } from "./layerOrder";
@@ -117,7 +117,10 @@ export function PickAreaScreen({
   const [home] = useState(() => homeView(readRegions()));
   // Fixed for the life of the screen: the basemap the user was last looking at,
   // with no way to change it here (see the header for why there is no rail).
-  const basemapId: BasemapId = lastCamera?.basemapId ?? readBasemapPreference();
+  // With no last camera the stored pick is read over home, where the screen
+  // opens, since it may be a basemap that ground does not offer.
+  const basemapId: BasemapId =
+    lastCamera?.basemapId ?? readEffectiveBasemap(pointBox(...home.center));
   const mapRef = useRef<MapRef>(null);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -138,9 +141,21 @@ export function PickAreaScreen({
     () => ({ connectivity, artifacts, cdnBaseUrl: config.topoCdnBaseUrl }),
     [connectivity, artifacts],
   );
+  // The vector basemap is read from the archive of the region the map shows:
+  // what the camera opened on until the map first reports its bounds.
+  const [openLon, openLat] = initialArea
+    ? [
+        (initialArea.west + initialArea.east) / 2,
+        (initialArea.south + initialArea.north) / 2,
+      ]
+    : (lastCamera?.center ?? home.center);
+  const region = useMemo(
+    () => regionInView(viewport ?? pointBox(openLon!, openLat!)),
+    [viewport, openLon, openLat],
+  );
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
-    [basemapId, ctx],
+    () => resolveMapSource({ kind: "basemap", basemapId, region }, ctx),
+    [basemapId, region, ctx],
   );
 
   const places = useMirrorPlaces();

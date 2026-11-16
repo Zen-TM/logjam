@@ -115,6 +115,7 @@ function dialog({
   onSelectOnMap?: (...args: unknown[]) => void;
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
+  mapCenter?: { lat: number; lng: number; zoom: number } | null;
   completedTopoJobs?: CompletedTopoJob[];
   topoJobsLoaded?: boolean;
   onClose?: () => void;
@@ -676,6 +677,46 @@ describe("GeoPdfDialog, Type the coordinates", () => {
     );
   });
 
+  // A map panned round the world reports longitudes past 180; the sheet is the
+  // ground they wrap to, or its Terrain tiles are asked for outside the world.
+  // Mutation: use `pendingExtent` as it is where the pick is applied (drop
+  // `wrapBox`), and West reads 510.2.
+  it("reads a sheet picked in another world copy as the ground it shows", () => {
+    const turned = {
+      ...extent,
+      west: extent.west + 360,
+      east: extent.east + 360,
+    };
+    render(dialog({ open: true, pendingExtent: turned, pendingScale: 50000 }));
+    typeEdges();
+    const edge = (name: string) =>
+      Number.parseFloat(
+        (screen.getByRole("textbox", { name }) as HTMLInputElement).value,
+      );
+    expect(edge("West")).toBeCloseTo(extent.west, 5);
+    expect(edge("East")).toBeCloseTo(extent.east, 5);
+    expect(edge("North")).toBeCloseTo(extent.north, 5);
+  });
+
+  // Mutation: pass `center.lng` as it is to `extentFromCentreAndSize` in
+  // `centredOn` (drop `wrapLon`), and the sheet seeded from a map centre a turn
+  // over reads 510.25.
+  it("seeds the sheet from a map centre in another world copy as the ground it shows", () => {
+    render(
+      dialog({
+        open: true,
+        mapCenter: { lat: -33.65, lng: 150.25 + 360, zoom: 12 },
+      }),
+    );
+    typeEdges();
+    const edge = (name: string) =>
+      Number.parseFloat(
+        (screen.getByRole("textbox", { name }) as HTMLInputElement).value,
+      );
+    const middle = (edge("West") + edge("East")) / 2;
+    expect(middle).toBeCloseTo(150.25, 4);
+  });
+
   // The lock and the pivot are gone: typing an edge moves the box. Mutation:
   // bring either control back.
   it("has no pivot or lock, and shows the four edges", () => {
@@ -805,6 +846,90 @@ describe("GeoPdfDialog, the Terrain layers", () => {
     await vi.waitFor(() => {
       expect(rendered()).toHaveLength(1);
       expect(rendered()[0]!.config.overlays).not.toContain("hillshade");
+    });
+  });
+
+  // A box made up in the open ocean, in no region.
+  const ocean: TBbox = { north: -10, south: -10.05, east: -140, west: -140.05 };
+  // Over imagery, which prints no contours of its own: only Hillshade is off.
+  const layerButtons = ["Contours", "Slope", "Land tenure"];
+  const imagery = { activeLayerId: "six-imagery" };
+
+  // Mutation: drop the `layerMissingHere` test from `offReason` and from the
+  // Land tenure chip, and a sheet in no region offers layers that draw
+  // nothing; test `sheet` without `extentValid` and the unset form (no area
+  // yet) says the same about NSW's own ground.
+  it("says no layer is available where no region holds the sheet", () => {
+    const { rerender } = render(dialog({ open: true, ...imagery }));
+    for (const name of layerButtons)
+      expect(
+        (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+        `${name} before an area is set`,
+      ).toBe(false);
+
+    rerender(
+      dialog({
+        open: true,
+        ...imagery,
+        pendingExtent: ocean,
+        pendingScale: 25000,
+      }),
+    );
+    for (const name of layerButtons)
+      expect(
+        (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+        name,
+      ).toBe(true);
+    expect(screen.getAllByText("Not available here.").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Hillshade" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByText(`${MAP_TERRAIN.copy.hillshadeImagery}.`),
+    ).toBeNull();
+
+    rerender(
+      dialog({
+        open: true,
+        ...imagery,
+        pendingExtent: extent,
+        pendingScale: 25000,
+      }),
+    );
+    expect(
+      (screen.getByRole("button", { name: "Slope" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Land tenure" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  // Mutation: drop `!layerMissingHere(sheet, id)` from `printedOverlays`, and a
+  // slope ticked in NSW is still sent for a sheet outside every region.
+  it("sends none of the layers the sheet's region lacks", async () => {
+    render(
+      dialog({
+        open: true,
+        pendingExtent: ocean,
+        pendingScale: 25000,
+        terrainLayers: {
+          ...TERRAIN_LAYER_DEFAULTS,
+          slope: true,
+          contours: true,
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => {
+      expect(rendered()).toHaveLength(1);
+      const sent = rendered()[0]!.config.overlays;
+      expect(sent).not.toContain("slope");
+      expect(sent).not.toContain("contours");
     });
   });
 });

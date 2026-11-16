@@ -5,24 +5,31 @@ import {
   getMapDimensions,
   NSW_REGION,
   RASTER_TEMPLATE_DEFAULTS,
+  SIM_NZ,
+  SIM_REGIONS,
   type GeoPdfConfig,
   type SharpenedOverlay,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {
+  planTerrainBlocks,
   printGeometry,
   rasterBaseTiles,
   statewideReads,
   vectorBasemap,
 } from "./plan";
+import { sheetTerrain } from "./sheetTerrain";
 import type { GeoPdfRenderInput } from "./types";
 
-// A made-up point inside the NSW coverage.
+// A made-up point inside the NSW coverage, and one inside the first simulated
+// New Zealand box.
 const CENTRE = { lat: -30, lon: 150 };
+const NZ_CENTRE = { lat: -44.055, lon: 169.25 };
 
 function input(
   over: Partial<GeoPdfConfig>,
   areas: SharpenedOverlay[] = [],
+  centre = CENTRE,
 ): GeoPdfRenderInput {
   const base = {
     paperSize: "A5" as const,
@@ -41,8 +48,8 @@ function input(
     config: {
       ...base,
       extent: extentFromCentreAndSize(
-        CENTRE.lat,
-        CENTRE.lon,
+        centre.lat,
+        centre.lon,
         base.scale * (map.w / 1000),
         base.scale * (map.h / 1000),
       ),
@@ -146,6 +153,102 @@ describe("statewideReads", () => {
   });
 });
 
+describe("a sheet in another region", () => {
+  const nz = SIM_NZ.terrain;
+  const read = (over: Partial<GeoPdfConfig>) => {
+    const sheet = input(over, [], NZ_CENTRE);
+    return statewideReads(
+      sheet,
+      sheetTerrain(sheet.config.extent, SIM_REGIONS),
+    );
+  };
+
+  // Mutation: recompute `terrain` from the sheet's extent in statewideReads,
+  // ignoring its argument, and a print is planned from the regions the page
+  // knows, not the ones it was given.
+  it("reads the archives of its own region", () => {
+    expect(paths(read({})).sort()).toEqual(
+      [nz.hillshade!.archivePath, nz.slope!.archivePath].sort(),
+    );
+    expect(
+      paths(read({ baseLayer: "six-imagery", overlays: ["contours"] })),
+    ).toEqual([nz.contours!.archivePath]);
+    expect(paths(read({ overlays: ["land"] }))).toEqual([nz.land!.archivePath]);
+  });
+
+  // Mutation: add `?? regions[0]` after `regionInView` in sheetTerrain, and a
+  // print outside every region prefetches NSW's tiles.
+  it("reads nothing where no region holds the sheet", () => {
+    const outside = input(
+      { overlays: ["hillshade", "slope", "land"] },
+      [],
+      NZ_CENTRE,
+    );
+    expect(statewideReads(outside)).toEqual([]);
+  });
+
+  // Mutation: pass a literal 15 to `terrainTileReader` in place of
+  // `archive.maxzoom` in planTerrainBlocks, and a sheet beside a held area
+  // reads its z17 tiles from z15, stretched.
+  it("reads at its archive's top zoom, in and beside a sharpened area", () => {
+    const { config } = input(
+      { scale: 15000, overlays: ["slope"] },
+      [],
+      NZ_CENTRE,
+    );
+    const g = printGeometry(config);
+    const whole = [{ from: 0, to: g.nativeH }];
+    const zooms = (areas: SharpenedOverlay[]) => {
+      const plan = planTerrainBlocks(
+        config,
+        g,
+        areas,
+        "slope",
+        { maxzoom: 17 },
+        whole,
+      );
+      return {
+        demZoom: plan.demZoom,
+        read: new Set(plan.blocks.flatMap((b) => b.reads.map((r) => r.z))),
+      };
+    };
+    const x15 = lon2tileX(NZ_CENTRE.lon, 15);
+    const y15 = lat2tileY(NZ_CENTRE.lat, 15);
+    const held: SharpenedOverlay = {
+      id: "nz1",
+      zmax: 16,
+      tiles15: [x15, y15, x15, y15],
+      coverage: [
+        NZ_CENTRE.lon,
+        NZ_CENTRE.lat,
+        NZ_CENTRE.lon + 0.01,
+        NZ_CENTRE.lat,
+      ],
+      contours: false,
+      credit: "Elevation: made up.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      heightsUrl: "https://bucket.test/h?sig",
+      slopeUrl: "https://bucket.test/s?sig",
+      contoursUrl: null,
+    };
+    expect(zooms([])).toEqual({ demZoom: 17, read: new Set([17]) });
+    expect(zooms([held])).toEqual({ demZoom: 17, read: new Set([16, 17]) });
+  });
+
+  // Mutation: read the zoom from a literal 15 in planTerrainBlocks in place of
+  // `archive.maxzoom`, and a region whose archive stops shallower is asked for
+  // tiles it does not hold.
+  it("reads no deeper than its archive holds", () => {
+    const { config } = input({ overlays: ["slope"] });
+    const whole = [{ from: 0, to: 1000 }];
+    const g = printGeometry(config);
+    const plan = (maxzoom: number) =>
+      planTerrainBlocks(config, g, [], "slope", { maxzoom }, whole).demZoom;
+    expect(plan(12)).toBe(12);
+    expect(plan(15)).toBe(15);
+  });
+});
+
 describe("rasterBaseTiles", () => {
   // Mutation: read at `geometry.zoom`, and a 1:25 000 print's labels land at
   // half the size, off a base with four times the tiles.
@@ -165,15 +268,15 @@ describe("rasterBaseTiles", () => {
 });
 
 describe("vectorBasemap", () => {
-  const print = (baseLayer: string, scale: number) => {
-    const { config } = input({ baseLayer, overlays: [] });
+  const print = (baseLayer: string, scale: number, centre = CENTRE) => {
+    const { config } = input({ baseLayer, overlays: [] }, [], centre);
     const scaled = { ...config, scale };
     return { config: scaled, geometry: printGeometry(scaled) };
   };
 
   it("is nothing for a raster base", () => {
     const { config, geometry } = print("six-base", 25000);
-    expect(vectorBasemap(config, geometry)).toBeNull();
+    expect(vectorBasemap(config, geometry, NSW_REGION.vector)).toBeNull();
   });
 
   // Mutation: read at the print's own zoom, and a 1:25 000 print asks for
@@ -181,12 +284,36 @@ describe("vectorBasemap", () => {
   it("reads at the style's zoom, up to the archive's deepest", () => {
     const coarse = print("protomaps", 25000);
     expect(
-      vectorBasemap(coarse.config, coarse.geometry)!.transform.tiles[0]!.z,
+      vectorBasemap(coarse.config, coarse.geometry, NSW_REGION.vector)!
+        .transform.tiles[0]!.z,
     ).toBe(14);
     const fine = print("protomaps", 2000);
     expect(
-      vectorBasemap(fine.config, fine.geometry)!.transform.tiles[0]!.z,
+      vectorBasemap(fine.config, fine.geometry, NSW_REGION.vector)!.transform
+        .tiles[0]!.z,
     ).toBe(15);
+  });
+
+  // Mutation: read the deepest zoom from anywhere but the archive it is given
+  // (a constant 15), and a print from an archive that stops at z12 asks for
+  // tiles it does not hold.
+  it("reads the archive it is given, to that archive's own deepest zoom", () => {
+    const fine = print("protomaps", 2000);
+    const shallow = {
+      archivePath: "master/basemap/shallow.pmtiles",
+      maxzoom: 12,
+      licence: "odbl" as const,
+    };
+    const drawn = vectorBasemap(fine.config, fine.geometry, shallow)!;
+    expect(drawn.path).toBe(shallow.archivePath);
+    expect(drawn.transform.tiles[0]!.z).toBe(12);
+  });
+
+  // Mutation: fall back to an archive when the sheet's region has none, and a
+  // print outside every region reads tiles of a region it is not in.
+  it("is nothing where the sheet's region has no vector archive", () => {
+    const { config, geometry } = print("protomaps", 25000);
+    expect(vectorBasemap(config, geometry, null)).toBeNull();
   });
 
   it("is warmed by the dialog's prefetch", () => {
@@ -194,5 +321,19 @@ describe("vectorBasemap", () => {
     expect(statewideReads(vector).map((r) => r.path)).toContain(
       "master/basemap/protomaps-nsw.pmtiles",
     );
+  });
+
+  // Mutation: read `NSW_REGION.vector` in place of the sheet's region's, and a
+  // sheet in simulated New Zealand is warmed from NSW's archive.
+  it("warms the archive of the region the sheet is in", () => {
+    const sheet = input(
+      { baseLayer: "protomaps", overlays: [] },
+      [],
+      NZ_CENTRE,
+    );
+    const terrain = sheetTerrain(sheet.config.extent, SIM_REGIONS);
+    expect(paths(statewideReads(sheet, terrain))).toEqual([
+      SIM_NZ.vector!.archivePath,
+    ]);
   });
 });

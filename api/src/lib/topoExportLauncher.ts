@@ -32,8 +32,9 @@ export interface CreateAndLaunchExportInput {
   /** The submitting user's monthly credit allowance, passed in because the
    * route has already loaded the user row. */
   monthlyComputeCredits: number;
-  /** An export of an area: the box, with no source job. */
-  bbox?: AreaBbox;
+  /** An export of an area: the box and the EPSG of the grid the worker warps
+   * it to (`areaExportEpsg`), with no source job. */
+  bbox?: AreaBbox & { epsg: number };
 }
 
 /**

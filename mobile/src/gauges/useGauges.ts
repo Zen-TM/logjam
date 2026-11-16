@@ -7,11 +7,13 @@ import { GAUGE_REFRESH_MS, refreshGauges } from "./gaugeFeed";
 import { readCachedGauges } from "./gaugeStorage";
 
 /**
- * The gauge file: the phone's kept copy at once, a fresh one when something
- * asks for it, when the app returns to the front and when signal returns.
- * Nothing runs while `enabled` is false.
+ * The gauge file of the feed at `feed` (a region's `gauges` prefix): the
+ * phone's kept copy at once, a fresh one when something asks for it, when the
+ * app returns to the front and when signal returns. Nothing runs while `feed`
+ * is null, and a file is only ever returned for the feed it came from
+ * (guard: `gauges.test.ts`, "never reads one feed's file as another's").
  */
-export function useGauges(enabled: boolean): {
+export function useGauges(feed: string | null): {
   file: GaugeLatestFile | null;
   /** The first load has finished, so no file means none could be had. */
   settled: boolean;
@@ -19,18 +21,26 @@ export function useGauges(enabled: boolean): {
    *  last reading ages out is drawn faint without a fetch. */
   now: number;
 } {
-  const [file, setFile] = useState<GaugeLatestFile | null>(null);
+  const [held, setHeld] = useState<{
+    feed: string;
+    file: GaugeLatestFile;
+  } | null>(null);
   const [settled, setSettled] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!enabled) return;
+    if (feed === null) return;
     let live = true;
-    // A fetch can beat the read: keep whichever landed first.
-    const read = readCachedGauges().then(
-      (kept) => live && setFile((f) => f ?? kept),
+    // A fetch can beat the read: keep whichever landed first for this feed.
+    const read = readCachedGauges(feed).then(
+      (kept) =>
+        live &&
+        kept &&
+        setHeld((h) => (h?.feed === feed ? h : { feed, file: kept })),
     );
     const load = () =>
-      refreshGauges().then((fresh) => live && fresh && setFile(fresh));
+      refreshGauges(feed).then(
+        (fresh) => live && fresh && setHeld({ feed, file: fresh }),
+      );
     void Promise.all([read, load()]).then(() => {
       if (!live) return;
       setNow(Date.now());
@@ -59,6 +69,6 @@ export function useGauges(enabled: boolean): {
       app.remove();
       unsubscribe();
     };
-  }, [enabled]);
-  return { file, settled, now };
+  }, [feed]);
+  return { file: held?.feed === feed ? held.file : null, settled, now };
 }

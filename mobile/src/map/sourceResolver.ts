@@ -15,17 +15,26 @@
 // a MapArtifact path or bbox; resolver results carry no bbox provenance
 // beyond the bounds MapLibre needs.
 import {
+  areasInRegion,
   BASEMAP_CATALOG,
-  NSW_REGION,
+  layerIn,
+  lonMid,
+  lonOverlap,
+  lonWidth,
+  REGIONS,
+  wrapLon,
   type BasemapCatalogEntry,
+  type Region,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   type RoutedTerrain,
   type SharpenedArea,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
+  type TerrainLayerKey,
   type TopoLayerFormat,
   type TopoLayerKey,
+  vectorIn,
 } from "@logjam/shared";
 
 import {
@@ -37,16 +46,21 @@ import {
 } from "./terrainRoutes";
 import type { TileJson } from "./tileJsonFile";
 
-export type BasemapId =
-  | "protomaps"
-  | "six-topo"
-  | "six-base"
-  | "six-imagery"
-  | "osm-topo"
-  | "osm-cycle";
+/**
+ * A string, as the catalogue's ids are data: `resolveMapSource` throws on one it
+ * does not hold, and `basemapMeta.test.ts` ("are all ids the resolver draws")
+ * covers every id a picker lists.
+ */
+export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =
-  | { kind: "basemap"; basemapId: BasemapId }
+  /**
+   * `region` is the one the map shows (`regionShown`): the vector basemap is
+   * read from its archive, online, and from the clips saved of it, offline.
+   * Any other basemap ignores it. Required, so that a caller cannot leave the
+   * vector map with no archive by leaving it out.
+   */
+  | { kind: "basemap"; basemapId: BasemapId; region: Region | null }
   | {
       kind: "topo-overlay";
       jobId: string;
@@ -56,18 +70,18 @@ export type LogicalLayerRef =
       remoteUrl: string | null;
       attribution?: string;
     }
-  /** The statewide contour lines (`shared/src/nswContours.ts`). */
-  | { kind: "nsw-contours" }
-  /** The Terrain group's statewide slope and hillshade (`shared/src/terrain.ts`).
-   * `viewport` picks the one clip drawn offline. */
-  | { kind: "nsw-slope"; viewport?: Viewport | null }
-  | { kind: "nsw-hillshade"; viewport?: Viewport | null }
-  /** The Land overlay (`shared/src/land.ts`); `viewport` as for the slope. */
-  | { kind: "nsw-land"; viewport?: Viewport | null }
-  /** The Fire history overlay (`shared/src/fireHistory.ts`), the same way. */
-  | { kind: "nsw-fire"; viewport?: Viewport | null }
-  /** The Coverage overlay (`shared/src/coverage.ts`), the same way. */
-  | { kind: "nsw-coverage"; viewport?: Viewport | null }
+  /**
+   * One Terrain group layer of `region`, the one the map shows
+   * (`regionShown`): the layer is not drawn where `region` has none. `viewport`
+   * picks the one saved clip drawn offline below the zoom routing starts at.
+   * `shared/src/terrain.ts` holds the layers.
+   */
+  | {
+      kind: "terrain";
+      layer: TerrainLayerKey;
+      region: Region | null;
+      viewport?: Viewport | null;
+    }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -95,7 +109,11 @@ export type ResolvedTileSource =
   | {
       status: "unavailable";
       key: string;
-      reason: "offline-not-downloaded" | "online-only-source" | "no-remote-url";
+      reason:
+        | "offline-not-downloaded"
+        | "online-only-source"
+        | "no-remote-url"
+        | "not-available-here";
     };
 
 export interface MapArtifact {
@@ -153,6 +171,13 @@ export interface MapArtifact {
    */
   groupId?: string | null;
   groupLabel?: string | null;
+  /**
+   * The CDN path of the archive a vector basemap clip was cut from: the vector
+   * map draws only the clips cut from the archive of the region it shows
+   * (`holdsBasemap`). Null on every other artifact, and on a vector clip saved
+   * before it was kept.
+   */
+  archivePath?: string | null;
 }
 
 export interface ResolveContext {
@@ -223,9 +248,31 @@ function localArtifactSource(
   };
 }
 
+/**
+ * Whether a saved file is a clip of `basemapId`'s map as it is drawn over
+ * `region`. For the vector map that is a clip cut from the archive of that
+ * region: one of another region's, or saved before clips kept their archive,
+ * is not drawn there. The resolver, the offline notice and the place page's
+ * coverage row all ask this one question. Guard: `sourceResolver.test.ts`
+ * ("holdsBasemap").
+ */
+export function holdsBasemap(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "archivePath">,
+  basemapId: string,
+  region: Region | null,
+): boolean {
+  if (artifact.kind !== "basemap-region" || artifact.logicalKey !== basemapId) {
+    return false;
+  }
+  if (basemapId !== "protomaps") return true;
+  const archive = vectorIn(region);
+  return archive !== null && artifact.archivePath === archive.archivePath;
+}
+
 function resolveBasemap(
   basemapId: BasemapId,
   ctx: ResolveContext,
+  region: Region | null,
 ): ResolvedTileSource[] {
   const logicalId = `basemap:${basemapId}`;
   const online = ctx.connectivity === "online";
@@ -233,19 +280,28 @@ function resolveBasemap(
   // registry lists the newest first. Where saves overlap, the newest wins
   // until a style reload (`BAND_MARKERS`).
   const regions = ctx.artifacts
-    .filter((a) => a.kind === "basemap-region" && a.logicalKey === basemapId)
+    .filter((a) => holdsBasemap(a, basemapId, region))
     .reverse();
 
   if (basemapId === "protomaps") {
-    // Self-hosted vector basemap. Remote archive lives on our CDN (catalog
-    // urlTemplate = CDN-relative archive path); offline it needs a downloaded
-    // region.
+    // Self-hosted vector basemap, read from the archive of the region the map
+    // shows: remote online, and offline the clips saved from that archive. A
+    // clip of another region's archive is never drawn here, nor one saved
+    // before clips named their archive (`holdsBasemap`). Guard:
+    // `sourceResolver.test.ts` ("offline: draws only the clips cut from the
+    // archive of the region shown").
+    const archive = vectorIn(region);
     const protomapsEntry = catalogEntry("protomaps");
     if (!protomapsEntry) {
       throw new Error("protomaps missing from BASEMAP_CATALOG");
     }
+    if (!archive) {
+      return [
+        { status: "unavailable", key: logicalId, reason: "not-available-here" },
+      ];
+    }
     if (online) {
-      const url = `pmtiles://${ctx.cdnBaseUrl}/${protomapsEntry.urlTemplate}`;
+      const url = `pmtiles://${ctx.cdnBaseUrl}/${archive.archivePath}`;
       return [
         {
           status: "ok",
@@ -272,9 +328,9 @@ function resolveBasemap(
   }
 
   const entry = catalogEntry(basemapId);
-  if (!entry) {
+  if (entry?.kind !== "raster") {
     // Fail loudly — an unknown basemap id is a programming error, not a
-    // degradable state.
+    // degradable state. The one vector entry is drawn above.
     throw new Error(`Unknown basemap id: ${basemapId}`);
   }
 
@@ -434,17 +490,20 @@ function savedStatewideClips(
  * its fixed address (sharpenedArchives.ts). Offline, they are the area clips
  * saved on this phone and, for a layer that draws one statewide clip when
  * two or more are saved, those clips too. Otherwise each statewide rectangle
- * reads every saved statewide clip that reaches it. With no area, the
- * statewide source alone as before.
+ * reads every saved statewide clip that reaches it. A sharpened area routes
+ * only inside the `region` it lies in: the source of another region has
+ * nothing to put it over. With no area, the statewide source alone as before.
  * Guard: `sourceResolver.test.ts` ("routes the Terrain group", "routes saved
- * areas offline", "routes two saved clips offline").
+ * areas offline", "routes two saved clips offline", "routes a sharpened area
+ * only inside its region").
  */
 function routeTerrain(
   statewide: ResolvedTileSource[],
   archive: { id: string; minzoom: number; maxzoom: number; credit: string },
   layer: TerrainArchiveLayer,
   ctx: ResolveContext,
-  holds?: (clip: MapArtifact) => boolean,
+  holds: ((clip: MapArtifact) => boolean) | undefined,
+  region: Region,
 ): ResolvedTileSource[] {
   const drawn = statewide.flatMap((s) =>
     s.status === "ok" && s.url ? [s] : [],
@@ -454,11 +513,17 @@ function routeTerrain(
   const clips =
     !online && holds ? savedStatewideClips(ctx, holds, archive.credit) : [];
   const areas: RoutedArea[] = online
-    ? (ctx.sharpenedAreas ?? []).map((area) => ({
-        ...area,
-        tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
-      }))
-    : [...savedAreaClips(ctx, layer), ...(clips.length > 1 ? clips : [])];
+    ? areasInRegion(
+        region,
+        (ctx.sharpenedAreas ?? []).map((area) => ({
+          ...area,
+          tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
+        })),
+      )
+    : [
+        ...areasInRegion(region, savedAreaClips(ctx, layer)),
+        ...(clips.length > 1 ? clips : []),
+      ];
   if (areas.length === 0) return statewide;
   const z = TERRAIN_ROUTED_FROM[layer];
   const sourceType = layer === "contours" ? "vector" : "raster-dem";
@@ -564,42 +629,52 @@ function resolveStatewide(
 }
 
 /**
- * Whether a saved file can shade the Terrain group's hillshade offline: the
- * `nsw-5m` height clip, and only one that holds the shallow zooms. A clip saved
+ * Whether a saved file can shade the Terrain group's hillshade offline: a
+ * region's height clip, and only one that holds the shallow zooms. A clip saved
  * before `demClipMinZoom` is z15 alone, and draws nothing where the map is
  * zoomed out, so it is no clip for this: an area saved that way says "Needs a
  * connection" until it is saved again. Used by the layers sheet's switch and
  * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
- * Guard: `sourceResolver.test.ts` ("holdsHillshade").
+ * Answers "is anything saved" over `regions`; what the map draws is only the
+ * shown region's clips (`resolveTerrain`). Guard: `sourceResolver.test.ts`
+ * ("holdsHillshade").
  */
 export function holdsHillshade(
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+  regions: readonly Region[] = REGIONS,
 ): boolean {
   return (
     artifact.kind === "dem-region" &&
-    artifact.logicalKey === NSW_REGION.terrain.heights.id &&
     artifact.minzoom != null &&
-    artifact.minzoom <= NSW_REGION.terrain.hillshade.minzoom
+    regions.some(
+      ({ terrain: { heights, hillshade } }) =>
+        heights !== undefined &&
+        hillshade !== undefined &&
+        artifact.logicalKey === heights.id &&
+        artifact.minzoom! <= hillshade.minzoom,
+    )
   );
 }
 
 /**
- * Whether a saved file is a clip of the statewide contours or slope, not an
+ * Whether a saved file is a clip of a region's contours or slope, not an
  * area's own (a sharpened area's clip is filed as this kind too, under its
  * id). The layers sheet's switches and the resolver read the same test.
  * Guard: `sourceResolver.test.ts` ("holdsContours and holdsSlope").
  */
 export const holdsContours = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
   artifact.kind === "contours-region" &&
-  artifact.logicalKey === NSW_REGION.terrain.contours.id;
+  regions.some((r) => r.terrain.contours?.id === artifact.logicalKey);
 
 export const holdsSlope = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
   artifact.kind === "slope-region" &&
-  artifact.logicalKey === NSW_REGION.terrain.slope.id;
+  regions.some((r) => r.terrain.slope?.id === artifact.logicalKey);
 
 export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
   artifact.kind === "land-region";
@@ -617,13 +692,14 @@ export const holdsCoverage = (artifact: Pick<MapArtifact, "kind">): boolean =>
  */
 export const drawsTerrain = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+  regions: readonly Region[] = REGIONS,
 ): boolean =>
-  holdsContours(artifact) ||
-  holdsSlope(artifact) ||
+  holdsContours(artifact, regions) ||
+  holdsSlope(artifact, regions) ||
   holdsLand(artifact) ||
   holdsFire(artifact) ||
   holdsCoverage(artifact) ||
-  holdsHillshade(artifact);
+  holdsHillshade(artifact, regions);
 
 /**
  * The one clip drawn offline below the zoom `routeTerrain` takes over: the one
@@ -640,24 +716,25 @@ export const drawsTerrain = (
  */
 function mainRegion(viewport: Viewport | null | undefined) {
   return (regions: MapArtifact[]): MapArtifact[] => {
-    const lng = viewport ? (viewport.west + viewport.east) / 2 : 0;
+    const lng = viewport ? lonMid(viewport.west, viewport.east) : 0;
     const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
     const perLng = Math.cos((lat * Math.PI) / 180);
     const away = ({ bbox }: MapArtifact) => {
       if (!bbox) return Number.POSITIVE_INFINITY;
       if (!viewport) return 0;
       const [west, south, east, north] = bbox;
-      const dx = Math.max(west - lng, 0, lng - east) * perLng;
+      const half = lonWidth(west, east) / 2;
+      const dx =
+        Math.max(Math.abs(wrapLon(lng - (west + half))) - half, 0) * perLng;
       const dy = Math.max(south - lat, 0, lat - north);
       return dx * dx + dy * dy;
     };
     const size = ({ bbox }: MapArtifact) =>
-      bbox ? (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) : 0;
+      bbox ? lonWidth(bbox[0], bbox[2]) * (bbox[3] - bbox[1]) : 0;
     const onScreen = ({ bbox }: MapArtifact) => {
       if (!bbox || !viewport) return 0;
       const [west, south, east, north] = bbox;
-      const wide =
-        Math.min(east, viewport.east) - Math.max(west, viewport.west);
+      const wide = lonOverlap(west, east, viewport.west, viewport.east) ?? 0;
       const tall =
         Math.min(north, viewport.north) - Math.max(south, viewport.south);
       return Math.max(wide, 0) * Math.max(tall, 0);
@@ -706,12 +783,12 @@ export function basemapsCoveringViewport(
   artifacts: readonly MapArtifact[],
   viewport: Viewport,
   candidates: readonly BasemapId[],
+  region: Region | null,
 ): BasemapId[] {
   return candidates.filter((candidate) =>
     artifacts.some(
       (artifact) =>
-        artifact.kind === "basemap-region" &&
-        artifact.logicalKey === candidate &&
+        holdsBasemap(artifact, candidate, region) &&
         bboxOnScreen(artifact.bbox, viewport),
     ),
   );
@@ -733,11 +810,117 @@ export function bboxOnScreen(
   if (bbox == null) return false;
   const [west, south, east, north] = bbox;
   return (
-    west <= viewport.east &&
-    east >= viewport.west &&
+    lonOverlap(west, east, viewport.west, viewport.east) !== null &&
     south <= viewport.north &&
     north >= viewport.south
   );
+}
+
+/**
+ * One Terrain group layer of the region the map shows, as a list of sources:
+ * none where that region has no such archive. Every source's key carries the
+ * archive's id, so the map crossing into another region swaps it. Offline it
+ * draws that region's saved clips alone, so another region's data never
+ * carries this one's credit, source layer or paint.
+ * Guard: `sourceResolver.test.ts` ("draws the region the map shows", "offline:
+ * draws only the clips of the region the map shows").
+ */
+function resolveTerrain(
+  { layer, region, viewport }: Extract<LogicalLayerRef, { kind: "terrain" }>,
+  ctx: ResolveContext,
+): ResolvedTileSource[] {
+  const archive = region && layerIn(region, layer);
+  if (!region || !archive) return [];
+  const main = mainRegion(viewport);
+  const holdsKind =
+    (kind: MapArtifact["kind"]) =>
+    (a: MapArtifact): boolean =>
+      a.kind === kind && a.logicalKey === archive.id;
+  const shown = {
+    contours: (a: MapArtifact) => holdsContours(a, [region]),
+    slope: (a: MapArtifact) => holdsSlope(a, [region]),
+    hillshade: (a: MapArtifact) => holdsHillshade(a, [region]),
+  };
+  switch (layer) {
+    case "contours":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "vector",
+          "contours-region",
+          ctx,
+          undefined,
+          shown.contours,
+        ),
+        archive,
+        "contours",
+        ctx,
+        undefined,
+        region,
+      );
+    case "land":
+      return resolveStatewide(
+        archive,
+        "vector",
+        "land-region",
+        ctx,
+        main,
+        holdsKind("land-region"),
+      );
+    case "fire":
+      return resolveStatewide(
+        archive,
+        "vector",
+        "fire-region",
+        ctx,
+        main,
+        holdsKind("fire-region"),
+      );
+    case "coverage":
+      return resolveStatewide(
+        archive,
+        "vector",
+        "coverage-region",
+        ctx,
+        main,
+        holdsKind("coverage-region"),
+      );
+    case "slope":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "raster-dem",
+          "slope-region",
+          ctx,
+          main,
+          shown.slope,
+        ),
+        archive,
+        "slope",
+        ctx,
+        shown.slope,
+        region,
+      );
+    // The saved height clip is registered as a plain raster (the sampler
+    // reads its bytes); here it is drawn as the DEM it is.
+    case "hillshade":
+      return routeTerrain(
+        resolveStatewide(
+          archive,
+          "raster-dem",
+          "dem-region",
+          ctx,
+          (clips) =>
+            main(clips).map((r) => ({ ...r, sourceType: "raster-dem" })),
+          shown.hillshade,
+        ),
+        archive,
+        "heights",
+        ctx,
+        shown.hillshade,
+        region,
+      );
+  }
 }
 
 export function resolveMapSource(
@@ -746,83 +929,11 @@ export function resolveMapSource(
 ): ResolvedTileSource[] {
   switch (ref.kind) {
     case "basemap":
-      return resolveBasemap(ref.basemapId, ctx);
+      return resolveBasemap(ref.basemapId, ctx, ref.region);
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
-    case "nsw-contours":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.contours,
-          "vector",
-          "contours-region",
-          ctx,
-          undefined,
-          holdsContours,
-        ),
-        NSW_REGION.terrain.contours,
-        "contours",
-        ctx,
-      );
-    case "nsw-land":
-      return resolveStatewide(
-        NSW_REGION.terrain.land,
-        "vector",
-        "land-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-fire":
-      return resolveStatewide(
-        NSW_REGION.terrain.fire,
-        "vector",
-        "fire-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-coverage":
-      return resolveStatewide(
-        NSW_REGION.terrain.coverage,
-        "vector",
-        "coverage-region",
-        ctx,
-        mainRegion(ref.viewport),
-      );
-    case "nsw-slope":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.slope,
-          "raster-dem",
-          "slope-region",
-          ctx,
-          mainRegion(ref.viewport),
-          holdsSlope,
-        ),
-        NSW_REGION.terrain.slope,
-        "slope",
-        ctx,
-        holdsSlope,
-      );
-    // The saved height clip is registered as a plain raster (the sampler
-    // reads its bytes); here it is drawn as the DEM it is.
-    case "nsw-hillshade":
-      return routeTerrain(
-        resolveStatewide(
-          NSW_REGION.terrain.hillshade,
-          "raster-dem",
-          "dem-region",
-          ctx,
-          (regions) =>
-            mainRegion(ref.viewport)(regions).map((r) => ({
-              ...r,
-              sourceType: "raster-dem",
-            })),
-          holdsHillshade,
-        ),
-        NSW_REGION.terrain.hillshade,
-        "heights",
-        ctx,
-        holdsHillshade,
-      );
+    case "terrain":
+      return resolveTerrain(ref, ctx);
     case "geopdf-import":
     case "vector-import":
       return resolveImport(ref, ctx);

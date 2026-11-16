@@ -10,8 +10,12 @@
 //
 // Asked only when the user presses for it: nothing here polls.
 
+import type { LicenceId } from "./licences.js";
+
 export const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 export const OPEN_METEO_CREDIT_URL = "https://open-meteo.com/";
+/** What the forecast is read under (`licences.ts`): the free API is for non-commercial use (ADR 0038). */
+export const WEATHER_LICENCE = "open-meteo-free" as const satisfies LicenceId;
 
 /** The grid a request is snapped to: coarser than every model's own. */
 export const WEATHER_CELL_DEGREES = 0.1;

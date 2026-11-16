@@ -13,6 +13,7 @@ import {
   readDemArchive,
   TERRARIUM,
   demCredits,
+  demSourceCovers,
   demTileUrl,
   isFinerClimbSource,
   sampleDem,
@@ -73,6 +74,38 @@ describe("the declaration", () => {
     expect(demCredits([])).toEqual([]);
   });
 
+  // Mutation: pair every area with `regions[0]` in demCredits in place of the
+  // region `areasInRegion` finds, and an area outside every region is credited
+  // to the first one; drop the `coverage` test and an area with none throws.
+  it("credits an area with the heights of the region it lies in", () => {
+    const area = (coverage: DemSource["coverage"]) => ({
+      ...sharpenedDemSource({
+        id: "a1",
+        zmax: 16,
+        tiles15: [0, 0, 1, 1],
+        coverage: [0, 0, 0, 0],
+        contours: true,
+        credit: "Elevation: a survey.",
+        createdAt: "2026-10-24T00:00:00.000Z",
+      }),
+      coverage,
+    });
+    const nz = SIM_REGIONS.find((r) => r.id === "simnz")!;
+    const inNz = area([169.22, -44.08, 169.28, -44.03]);
+    expect(demCredits([inNz.id], [inNz], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+      nz.terrain.heights!.credit,
+    ]);
+    const nowhere = area([0, 0, 0.01, 0.01]);
+    expect(demCredits([nowhere.id], [nowhere], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+    const unplaced = area(null);
+    expect(demCredits([unplaced.id], [unplaced], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+  });
+
   // Mutation: paste a source's host into a reader instead of importing the
   // declaration, and this names the file. A region declares its own sources,
   // and so do the simulated regions, whose sources join `DEM_SOURCES` when
@@ -103,6 +136,39 @@ describe("the declaration", () => {
       offenders,
       "read a DEM source's URL from DEM_SOURCES (docs/decisions/0028)",
     ).toEqual([]);
+  });
+});
+
+describe("demSourceCovers", () => {
+  const over = (coverage: DemSource["coverage"]): DemSource => ({
+    ...TERRARIUM,
+    id: "made-up",
+    coverage,
+  });
+  const position = (lon: number, lat = -17.5) => ({ lon, lat, distanceM: 0 });
+
+  // Mutation: compare `position.lon >= west && position.lon <= east` in
+  // `demSourceCovers` (no `lonWithin`), and the -179.5 position, which is 180.5
+  // for a source whose box is unwrapped, reads as outside it.
+  it.each([
+    ["unwrapped", [178, -19, 182, -16]],
+    ["wrapped", [178, -19, -178, -16]],
+  ] as const)(
+    "covers a position either side of the date line for a box that is %s",
+    (_form, coverage) => {
+      const source = over(coverage);
+      expect(demSourceCovers(source, position(179.5))).toBe(true);
+      expect(demSourceCovers(source, position(-179.5))).toBe(true);
+      expect(demSourceCovers(source, position(177.9))).toBe(false);
+      expect(demSourceCovers(source, position(-177.9))).toBe(false);
+      expect(demSourceCovers(source, position(179.5, -15))).toBe(false);
+    },
+  );
+
+  // Mutation: return false for a null `coverage` in `demSourceCovers`, and a
+  // worldwide source answers for no position.
+  it("covers every position for a source with no box", () => {
+    expect(demSourceCovers(over(null), position(-179.5))).toBe(true);
   });
 });
 

@@ -13,7 +13,8 @@ import type {
 } from "@logjam/shared";
 import {
   abandonConfirm,
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   contractSectionKeys,
   placeAttributesTitle,
   PLACE_FORM,
@@ -32,6 +33,7 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
+  displayUnits,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -215,12 +217,22 @@ function PlaceDialog({
   // for the same place and must not replace what the user has typed.
   const placeId = place?.id ?? null;
   const [populatedFor, setPopulatedFor] = useState({ open: false, placeId });
+  // The units the form's text was written in, set by `populateForm` alone: the
+  // length text and its conversion are always in one unit. A change of units
+  // while the form is open, or closed for a pick on the map, writes the text
+  // again from the stored values (dropping what was typed) rather than saving
+  // feet as metres. Guards: `PlaceDialog.units.render.test.tsx` and
+  // `lengthFieldClients.test.ts` ("every form of a length field converts it").
+  const units = displayUnits();
+  const [seededUnits, setSeededUnits] = useState(units);
   if (open !== populatedFor.open || placeId !== populatedFor.placeId) {
     setPopulatedFor({ open, placeId });
     if (open) {
       if (picking) setPicking(false);
       else populateForm();
     }
+  } else if (open && seededUnits !== units) {
+    populateForm({ unitsOnly: true });
   }
 
   // An existing place's media is refetched on each open (fresh presigned
@@ -232,7 +244,11 @@ function PlaceDialog({
     if (mediaFor !== null) setMediaLoading(true);
   }
 
-  function populateForm() {
+  // `unitsOnly` writes the fields again in the new units and leaves the rest of
+  // the session as it is: the media shown, the draft place and the uploads made
+  // so far, which Cancel and Save still have to account for.
+  function populateForm({ unitsOnly = false } = {}) {
+    setSeededUnits(displayUnits());
     let initialName: string;
     let initialAltNames: string;
     let initialLatitude: string;
@@ -263,7 +279,7 @@ function PlaceDialog({
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = fieldValue(place.fieldValues, def.key);
-        vals[def.key] = raw != null ? String(raw) : "";
+        vals[def.key] = fieldInputText(def.key, raw);
       }
       initialFieldValues = vals;
     } else {
@@ -306,6 +322,7 @@ function PlaceDialog({
     setNewFieldMin("");
     setNewFieldMax("");
     setAddFieldError(null);
+    if (unitsOnly) return;
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
@@ -512,9 +529,11 @@ function PlaceDialog({
       // "has a value" filter.
       const attributes: Record<string, unknown> = {};
       for (const def of typeFieldDefs) {
-        attributes[def.key] = coerceFieldValue(
+        attributes[def.key] = coerceFieldInput(
+          def.key,
           getFieldValue(def.key),
           def.type,
+          fieldValue(place?.fieldValues, def.key),
         );
       }
 

@@ -120,11 +120,9 @@ describe("a region's own land vocabulary", () => {
 });
 
 describe("Land's credit", () => {
-  // Mutation: drop `land` from TOPO_OVERLAY_SOURCE, and a print shows CC BY
-  // data with no credit.
-  it("goes on a print", () => {
-    expect(overlayAttributionLines(["land"])).toEqual([
-      NSW_REGION.terrain.land.credit,
-    ]);
+  // Mutation: put `land` back in TOPO_OVERLAY_SOURCE with NSW's credit, and a
+  // map or print over another region credits New South Wales's tenure data.
+  it("is the region's own, never a line `overlayAttributionLines` adds", () => {
+    expect(overlayAttributionLines(["land"])).toEqual([]);
   });
 });

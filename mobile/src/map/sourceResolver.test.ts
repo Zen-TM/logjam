@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { NSW_REGION, type SharpenedOverlay } from "@logjam/shared";
+import {
+  lonLatToTile,
+  NSW_REGION,
+  SIM_NZ,
+  SIM_REGIONS,
+  SIM_UTAH,
+  type Region,
+  type SharpenedOverlay,
+} from "@logjam/shared";
 import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
+  holdsBasemap,
   resolveMapSource,
   hashKey,
   holdsContours,
@@ -45,7 +54,7 @@ function artifact(overrides: Partial<MapArtifact>): MapArtifact {
 describe("basemap resolution", () => {
   it("online: catalog raster resolves to remote XYZ tiles with display cap", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx(),
     );
     expect(r.status).toBe("ok");
@@ -58,7 +67,7 @@ describe("basemap resolution", () => {
 
   it("offline: OSM-family is online-only by policy", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -69,7 +78,7 @@ describe("basemap resolution", () => {
 
   it("offline: offline-capable basemap without downloads is unavailable (no silent remote fallback)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({
@@ -82,17 +91,102 @@ describe("basemap resolution", () => {
   // draws on top. The registry lists the newest first.
   it("offline: lists saved regions oldest first, so the newest mounts on top", () => {
     const save = (id: string, path: string) =>
-      artifact({ id, kind: "basemap-region", logicalKey: "protomaps", path });
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath: NSW_REGION.vector!.archivePath,
+        path,
+      });
     const newest = save("new", "/files/maps/new.pmtiles");
     const oldest = save("old", "/files/maps/old.pmtiles");
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "protomaps" },
+      { kind: "basemap", basemapId: "protomaps", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: [newest, oldest] }),
     );
     expect(resolved.map((r) => (r.status === "ok" ? r.url : null))).toEqual([
       "pmtiles://file:///files/maps/old.pmtiles",
       "pmtiles://file:///files/maps/new.pmtiles",
     ]);
+  });
+
+  // Mutation: read the archive from the catalogue entry (a fixed NSW path), and
+  // the vector map in simulated New Zealand draws NSW's tiles; build the
+  // URL differently over NSW, and every NSW map remounts on a new key.
+  it("online: the vector basemap is read from the archive of the region shown", () => {
+    const vector = (region: Region | null) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx(),
+      );
+    const nsw = `pmtiles://${CDN}/master/basemap/protomaps-nsw.pmtiles`;
+    expect(vector(NSW_REGION)).toEqual([
+      {
+        status: "ok",
+        key: `basemap:protomaps:remote:${hashKey(nsw)}`,
+        sourceType: "vector",
+        url: nsw,
+        attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+        origin: "remote",
+      },
+    ]);
+    expect(vector(SIM_NZ)).toMatchObject([
+      {
+        status: "ok",
+        url: `pmtiles://${CDN}/${SIM_NZ.vector!.archivePath}`,
+      },
+    ]);
+  });
+
+  // Mutation: fall back to the first region's archive where the region shown
+  // has none, and the map outside every region draws NSW's.
+  it("the vector basemap is unavailable where the region shown has no archive of it", () => {
+    for (const region of [null, { ...SIM_UTAH, vector: null }]) {
+      for (const connectivity of ["online", "offline"] as const) {
+        expect(
+          resolveMapSource(
+            { kind: "basemap", basemapId: "protomaps", region },
+            ctx({ connectivity }),
+          ),
+        ).toEqual([
+          {
+            status: "unavailable",
+            key: "basemap:protomaps",
+            reason: "not-available-here",
+          },
+        ]);
+      }
+    }
+  });
+
+  // Mutation: drop the `archivePath` test, and the map over New Zealand draws a
+  // clip of NSW's archive (which holds nothing there) beside its own; match a
+  // clip with no archive, and one saved before clips kept theirs is drawn as
+  // whichever region the map is over.
+  it("offline: draws only the clips cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        path: `/files/maps/${id}.pmtiles`,
+        archivePath,
+      });
+    const artifacts = [
+      clip("nsw", NSW_REGION.vector!.archivePath),
+      clip("nz", SIM_NZ.vector!.archivePath),
+      clip("legacy", null),
+    ];
+    const drawn = (region: Region) =>
+      resolveMapSource(
+        { kind: "basemap", basemapId: "protomaps", region },
+        ctx({ connectivity: "offline", artifacts }),
+      ).map((r) => (r.status === "ok" ? r.url : r.reason));
+    expect(drawn(NSW_REGION)).toEqual([
+      "pmtiles://file:///files/maps/nsw.pmtiles",
+    ]);
+    expect(drawn(SIM_NZ)).toEqual(["pmtiles://file:///files/maps/nz.pmtiles"]);
+    expect(drawn(SIM_UTAH)).toEqual(["offline-not-downloaded"]);
   });
 
   it("offline: resolves to ALL downloaded regions with bounds and zoom clamps", () => {
@@ -117,7 +211,7 @@ describe("basemap resolution", () => {
       }),
     ];
     const resolved = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({ connectivity: "offline", artifacts: regions }),
     );
     expect(resolved).toHaveLength(2);
@@ -134,7 +228,7 @@ describe("basemap resolution", () => {
 
   it("forced-offline behaves like offline (user override)", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm-topo" },
+      { kind: "basemap", basemapId: "osm-topo", region: null },
       ctx({ connectivity: "forced-offline" }),
     );
     expect(r.status).toBe("unavailable");
@@ -142,7 +236,7 @@ describe("basemap resolution", () => {
 
   it("online: subset-coverage basemaps prefer remote even when a region is downloaded", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "six-topo" },
+      { kind: "basemap", basemapId: "six-topo", region: null },
       ctx({
         artifacts: [
           artifact({
@@ -160,7 +254,10 @@ describe("basemap resolution", () => {
 
   it("throws loudly on an unknown basemap id", () => {
     expect(() =>
-      resolveMapSource({ kind: "basemap", basemapId: "bogus" as never }, ctx()),
+      resolveMapSource(
+        { kind: "basemap", basemapId: "bogus" as never, region: null },
+        ctx(),
+      ),
     ).toThrow(/Unknown basemap id/);
   });
 });
@@ -294,6 +391,7 @@ describe("basemapsCoveringViewport", () => {
       id: "r2",
       kind: "basemap-region",
       logicalKey: "protomaps",
+      archivePath: NSW_REGION.vector!.archivePath,
       bbox: [150.4, -33.6, 150.6, -33.4],
     }),
   ];
@@ -310,6 +408,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.45, -33.55, 150.55, -33.45),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["protomaps", "six-topo"]);
   });
@@ -323,13 +422,19 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.05, -33.95, 150.15, -33.85),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
 
   it("is empty when the viewport is nowhere near anything saved", () => {
     expect(
-      basemapsCoveringViewport(saved, view(145, -31, 146, -30), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(145, -31, 146, -30),
+        CANDIDATES,
+        NSW_REGION,
+      ),
     ).toEqual([]);
   });
 
@@ -341,6 +446,7 @@ describe("basemapsCoveringViewport", () => {
         saved,
         view(150.9, -33.1, 151.5, -32.5),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual(["six-topo"]);
   });
@@ -358,14 +464,228 @@ describe("basemapsCoveringViewport", () => {
         overlay,
         view(150.4, -33.6, 150.6, -33.4),
         CANDIDATES,
+        NSW_REGION,
       ),
     ).toEqual([]);
+  });
+
+  // Mutation: count a vector clip by its `logicalKey` alone (`holdsBasemap`),
+  // and a clip with no archive, or one cut from another region's, reads as
+  // saved map on screen: offline the map is blank and the "No saved map here"
+  // notice stays silent; also read no region, and no vector clip counts.
+  it("counts a vector clip only where it was cut from the archive of the region shown", () => {
+    const clip = (id: string, archivePath: string | null) =>
+      artifact({
+        id,
+        kind: "basemap-region",
+        logicalKey: "protomaps",
+        archivePath,
+        bbox: [150.4, -33.6, 150.6, -33.4],
+      });
+    const here = view(150.45, -33.55, 150.55, -33.45);
+    const covering = (clips: MapArtifact[], region: Region | null) =>
+      basemapsCoveringViewport(clips, here, ["protomaps"], region);
+    expect(
+      covering([clip("a", NSW_REGION.vector!.archivePath)], NSW_REGION),
+    ).toEqual(["protomaps"]);
+    expect(covering([clip("none", null)], NSW_REGION)).toEqual([]);
+    expect(
+      covering([clip("nz", SIM_NZ.vector!.archivePath)], NSW_REGION),
+    ).toEqual([]);
+    expect(covering([clip("a", NSW_REGION.vector!.archivePath)], null)).toEqual(
+      [],
+    );
+  });
+});
+
+describe("holdsBasemap", () => {
+  const file = (over: Partial<MapArtifact>) => ({
+    kind: "basemap-region" as const,
+    logicalKey: "protomaps",
+    archivePath: null as string | null,
+    ...over,
+  });
+
+  // Mutation: drop the `kind` test, and a topo overlay filed under a basemap's
+  // key counts; drop the `logicalKey` test, and every saved map holds every
+  // basemap.
+  it("holds a raster basemap by its key, whatever the region", () => {
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-topo", null),
+    ).toBe(true);
+    expect(
+      holdsBasemap(file({ logicalKey: "six-topo" }), "six-base", null),
+    ).toBe(false);
+    expect(
+      holdsBasemap(
+        file({ kind: "topo-overlay" as never, logicalKey: "six-topo" }),
+        "six-topo",
+        null,
+      ),
+    ).toBe(false);
+  });
+
+  // Mutation: return true for any "protomaps" file, and the coverage row, the
+  // offline notice and the resolver count a clip no map draws.
+  it("holds the vector map only by a clip of the archive of the region", () => {
+    const nsw = NSW_REGION.vector!.archivePath;
+    expect(
+      holdsBasemap(file({ archivePath: nsw }), "protomaps", NSW_REGION),
+    ).toBe(true);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", SIM_NZ)).toBe(
+      false,
+    );
+    expect(holdsBasemap(file({}), "protomaps", NSW_REGION)).toBe(false);
+    expect(holdsBasemap(file({ archivePath: nsw }), "protomaps", null)).toBe(
+      false,
+    );
+  });
+});
+
+describe("saved regions across the date line", () => {
+  const view = (west: number, east: number): Viewport => ({
+    west,
+    south: -17.6,
+    east,
+    north: -17.4,
+  });
+  // Made-up ground: a region saved from a map panned past the line, its east
+  // edge above 180.
+  const saved = [
+    artifact({
+      id: "across",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [178, -19, 182, -16],
+    }),
+  ];
+
+  // Mutation: compare `west <= viewport.east && east >= viewport.west` in
+  // `bboxOnScreen` (no `lonOverlap`), and the view at -179.9 to -179.5, which is
+  // ground the region holds, reads as off it.
+  it.each([
+    ["east of the line", 179.2, 179.6, ["six-topo"]],
+    ["west of the line", -179.9, -179.5, ["six-topo"]],
+    ["panned a turn over", 539.2, 539.6, ["six-topo"]],
+    ["panned a turn under", -540.9, -540.4, ["six-topo"]],
+    ["across the line", 179.8, 180.2, ["six-topo"]],
+    ["clear of it", 175, 176, []],
+    ["clear of it, west of the line", -176, -175, []],
+  ])(
+    "names the basemaps with saved tiles on a view %s",
+    (_n, w, e, expected) => {
+      expect(
+        basemapsCoveringViewport(saved, view(w, e), ["six-topo"], null),
+      ).toEqual(expected);
+    },
+  );
+
+  // Mutation: in `lonOverlap` (placeGeo.ts) test `width > 0` in place of
+  // `width >= 0`, and a view whose edge only touches the box, east or west of
+  // the line, reads as off it.
+  it("counts a view that only touches the region's edge", () => {
+    expect(
+      basemapsCoveringViewport(saved, view(182, 183), ["six-topo"], null),
+    ).toEqual(["six-topo"]);
+    expect(
+      basemapsCoveringViewport(saved, view(-178, -177), ["six-topo"], null),
+    ).toEqual(["six-topo"]);
+  });
+
+  // Mutation: in `lonOverlap` (placeGeo.ts) measure the other range from `west`
+  // by shifts (`shift = wrapTurn(otherWest - west) - 360`, up by 360 while
+  // `shift <= span`), and a box whose edge is the view's edge to the last bit
+  // (150.3, 151.7) reads as off screen.
+  it("counts a view whose edge is a saved box's edge, for non-integer edges", () => {
+    const box = artifact({
+      id: "edge",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [150.3, -34, 151.7, -33],
+    });
+    const at = (west: number, east: number): Viewport => ({
+      west,
+      south: -33.6,
+      east,
+      north: -33.4,
+    });
+    for (const [west, east] of [
+      [151.7, 152.9],
+      [149.1, 150.3],
+      [0.1 + 150.2, 151.7],
+    ])
+      expect(
+        basemapsCoveringViewport([box], at(west!, east!), ["six-topo"], null),
+      ).toEqual(["six-topo"]);
+  });
+
+  const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
+    artifact({
+      id,
+      kind: "slope-region",
+      logicalKey: "nsw-5m-slope",
+      sourceType: "raster-dem",
+      path: `/maps/${id}.pmtiles`,
+      bbox,
+    });
+  const drawn = (clips: MapArtifact[], viewport: Viewport | null) =>
+    resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+      ctx({ connectivity: "offline", artifacts: clips }),
+    ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : []));
+
+  // Mutation: in `mainRegion`, take `onScreen`'s width from
+  // `Math.min(east, viewport.east) - Math.max(west, viewport.west)` (no
+  // `lonOverlap`), and a view panned a turn over draws the tall clip, which is
+  // nearer its middle but covers less of it, in place of the one covering most.
+  it("draws the clip covering most of a view over the line, in whatever world copy the view is", () => {
+    const clips = [
+      clip("tall", [-179.695, -30, -179.685, -5]),
+      clip("wide", [-179.8, -17.8, -179.7, -17.2]),
+    ];
+    for (const turn of [0, 360, -360])
+      expect(drawn(clips, view(-179.72 + turn, -179.66 + turn))).toEqual([
+        "pmtiles://file:///maps/wide.pmtiles",
+      ]);
+  });
+
+  // Mutation: in `mainRegion`'s `away`, measure the gap as `lng - east` and
+  // `west - lng` again (no `wrapLon`), and a view off both clips draws the one
+  // that is 1.9 degrees away across no line over the one 1.1 away across it.
+  it("draws the clip nearest the view across the line when none is on screen", () => {
+    const clips = [
+      clip("near", [178, -17.8, 179, -17.2]),
+      clip("far", [-178, -17.8, -177, -17.2]),
+    ];
+    expect(drawn(clips, view(-179.95, -179.85))).toEqual([
+      "pmtiles://file:///maps/near.pmtiles",
+    ]);
+    expect(drawn([...clips].reverse(), view(-179.95, -179.85))).toEqual([
+      "pmtiles://file:///maps/near.pmtiles",
+    ]);
+  });
+
+  // Mutation: in `mainRegion`, take a clip's `size` from `bbox[2] - bbox[0]`
+  // again, and a clip saved with its box wrapped (west above east) is the
+  // smallest, so the small clip wins.
+  it("draws the wider clip when nothing is on screen, a box across the line included", () => {
+    const clips = [
+      clip("small", [150, -17.8, 151, -17.2]),
+      clip("wide", [178, -17.8, -178, -17.2]),
+    ];
+    expect(drawn(clips, null)).toEqual(["pmtiles://file:///maps/wide.pmtiles"]);
+    expect(drawn([...clips].reverse(), null)).toEqual([
+      "pmtiles://file:///maps/wide.pmtiles",
+    ]);
   });
 });
 
 describe("statewide contours", () => {
   it("online: the CDN's archive", () => {
-    const [r] = resolveMapSource({ kind: "nsw-contours" }, ctx());
+    const [r] = resolveMapSource(
+      { kind: "terrain", layer: "contours", region: NSW_REGION },
+      ctx(),
+    );
     expect(r).toMatchObject({
       status: "ok",
       sourceType: "vector",
@@ -386,14 +706,14 @@ describe("statewide contours", () => {
       artifact({ id: "b", kind: "basemap-region", logicalKey: "protomaps" }),
     ];
     const resolved = resolveMapSource(
-      { kind: "nsw-contours" },
+      { kind: "terrain", layer: "contours", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: saved }),
     );
     expect(resolved).toHaveLength(1);
     expect(resolved[0]).toMatchObject({ status: "ok", origin: "local" });
     expect(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ connectivity: "offline" }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -404,14 +724,20 @@ describe("statewide slope and hillshade", () => {
   // Mutation: resolve either as `raster`, and MapLibre draws the terrarium
   // PNGs as coloured noise instead of a slope or a shade.
   it("online: the CDN's DEM archives, as DEMs", () => {
-    const [slope] = resolveMapSource({ kind: "nsw-slope" }, ctx());
+    const [slope] = resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
+      ctx(),
+    );
     expect(slope).toMatchObject({
       status: "ok",
       sourceType: "raster-dem",
       url: `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
       attribution: expect.stringMatching(/^Slope: derived from the NSW 5 m/),
     });
-    const [shade] = resolveMapSource({ kind: "nsw-hillshade" }, ctx());
+    const [shade] = resolveMapSource(
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+      ctx(),
+    );
     expect(shade).toMatchObject({
       status: "ok",
       sourceType: "raster-dem",
@@ -447,7 +773,10 @@ describe("statewide slope and hillshade", () => {
       }),
     ];
     const offline = ctx({ connectivity: "offline", artifacts: saved });
-    const slope = resolveMapSource({ kind: "nsw-slope" }, offline);
+    const slope = resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
+      offline,
+    );
     expect(slope).toHaveLength(1);
     expect(slope[0]).toMatchObject({
       status: "ok",
@@ -456,7 +785,10 @@ describe("statewide slope and hillshade", () => {
     });
     // Mutation: drop the logicalKey and the worldwide tiles (an MBTiles) are
     // drawn too; keep the registered `raster` and MapLibre draws noise.
-    const shade = resolveMapSource({ kind: "nsw-hillshade" }, offline);
+    const shade = resolveMapSource(
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+      offline,
+    );
     expect(shade).toHaveLength(1);
     expect(shade[0]).toMatchObject({
       status: "ok",
@@ -497,8 +829,16 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    expect(resolveMapSource({ kind: "nsw-land" }, offline)).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-land" }, ctx({}));
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "land", region: NSW_REGION },
+        offline,
+      ),
+    ).toHaveLength(1);
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "land", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/land/nsw-tenure.pmtiles",
@@ -521,9 +861,15 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    const drawn = resolveMapSource({ kind: "nsw-fire" }, offline);
+    const drawn = resolveMapSource(
+      { kind: "terrain", layer: "fire", region: NSW_REGION },
+      offline,
+    );
     expect(drawn).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-fire" }, ctx({}));
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "fire", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     // Mutation: credit the source with anything but NSW_REGION.terrain.fire's own line, and
     // the map's credits drop a CC BY term of the data, online or off.
@@ -552,8 +898,16 @@ describe("statewide slope and hillshade", () => {
       connectivity: "offline",
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
-    expect(resolveMapSource({ kind: "nsw-coverage" }, offline)).toHaveLength(1);
-    const [online] = resolveMapSource({ kind: "nsw-coverage" }, ctx({}));
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "coverage", region: NSW_REGION },
+        offline,
+      ),
+    ).toHaveLength(1);
+    const [online] = resolveMapSource(
+      { kind: "terrain", layer: "coverage", region: NSW_REGION },
+      ctx({}),
+    );
     expect(online).toMatchObject({ status: "ok", sourceType: "vector" });
     expect(online!.status === "ok" && online!.url).toContain(
       "master/coverage/nsw-coverage.pmtiles",
@@ -590,7 +944,7 @@ describe("statewide slope and hillshade", () => {
     });
     expect(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ connectivity: "offline", artifacts: [old] }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -603,7 +957,7 @@ describe("statewide slope and hillshade", () => {
       maxzoom: 15,
     });
     const shade = resolveMapSource(
-      { kind: "nsw-hillshade" },
+      { kind: "terrain", layer: "hillshade", region: NSW_REGION },
       ctx({ connectivity: "offline", artifacts: [old, fresh] }),
     );
     expect(shade).toHaveLength(1);
@@ -613,7 +967,7 @@ describe("statewide slope and hillshade", () => {
     const only = artifact({ kind: "dem-region", logicalKey: "terrarium" });
     expect(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ connectivity: "offline", artifacts: [only] }),
       ),
     ).toMatchObject([{ status: "unavailable" }]);
@@ -635,9 +989,10 @@ describe("statewide slope and hillshade", () => {
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
     const drawn = (viewport: Viewport | null) =>
-      resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap((r) =>
-        r.status === "ok" && r.url ? [r.url] : [],
-      );
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+        offline,
+      ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : []));
     const screen = (lng: number): Viewport => ({
       west: lng - 0.02,
       south: -33.77,
@@ -679,9 +1034,10 @@ describe("statewide slope and hillshade", () => {
     };
     for (const viewport of [screen, null])
       expect(
-        resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap(
-          (r) => (r.status === "ok" && r.url ? [r.url] : []),
-        ),
+        resolveMapSource(
+          { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+          offline,
+        ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : [])),
       ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
   });
   // Mutation: drop `onScreen` from the sort, and the small clip nearer the
@@ -704,7 +1060,7 @@ describe("statewide slope and hillshade", () => {
     };
     expect(
       resolveMapSource(
-        { kind: "nsw-slope", viewport },
+        { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
         ctx({
           connectivity: "offline",
           artifacts: [
@@ -723,7 +1079,7 @@ describe("routes the Terrain group", () => {
     id: "area-1",
     zmax: 17,
     tiles15: [100, 200, 103, 203],
-    coverage: [0, 0, 0, 0],
+    coverage: [150.3, -33.8, 150.4, -33.7],
     contours,
     credit: "Made-up area credit",
     createdAt: "2026-10-01T00:00:00Z",
@@ -741,7 +1097,7 @@ describe("routes the Terrain group", () => {
   it("stops statewide slope at z15 and reads each rectangle from one archive", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -768,11 +1124,40 @@ describe("routes the Terrain group", () => {
     }
   });
 
+  // Mutation: take the statewide rectangle's maxzoom as 15 in `routeTerrain`
+  // in place of the region's archive's, and a map over a region whose archive
+  // holds z17 stops drawing it at z15 beside an area.
+  it("reads the region's own archive to its top zoom beside an area", () => {
+    const { x, y } = lonLatToTile(169.23, -44.07, 15);
+    const nzArea: SharpenedOverlay = {
+      ...area("a"),
+      zmax: 16,
+      tiles15: [x, y, x, y],
+      coverage: [169.22, -44.08, 169.24, -44.06],
+    };
+    const [statewide, ...routed] = ok(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: SIM_NZ },
+        ctx({ sharpenedAreas: [nzArea] }),
+      ),
+    );
+    expect(statewide.layerMaxZoom).toBe(15);
+    const beside = routed.filter(
+      (r) => r.attribution !== "Made-up area credit",
+    );
+    expect(beside.length).toBeGreaterThan(0);
+    for (const r of beside)
+      expect(r.tileJson).toMatchObject({
+        maxzoom: SIM_NZ.terrain.slope!.maxzoom,
+      });
+    expect(SIM_NZ.terrain.slope!.maxzoom).toBe(17);
+  });
+
   // Red if the hillshade reads the slope archive.
   it("shades the hillshade from the area's heights", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -783,7 +1168,7 @@ describe("routes the Terrain group", () => {
   it("routes contours from z14, to the area's z14 archive", () => {
     const [statewide, ...routed] = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a")] }),
       ),
     );
@@ -797,7 +1182,7 @@ describe("routes the Terrain group", () => {
   it("leaves the statewide contours where an area has none", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         ctx({ sharpenedAreas: [area("a", false)] }),
       ),
     );
@@ -809,11 +1194,11 @@ describe("routes the Terrain group", () => {
   // Red if a source reads the presigned URL instead of the fixed address.
   it("puts no presigned URL in a source, so new URLs remount nothing", () => {
     const before = resolveMapSource(
-      { kind: "nsw-slope" },
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
       ctx({ sharpenedAreas: [area("a")] }),
     );
     const after = resolveMapSource(
-      { kind: "nsw-slope" },
+      { kind: "terrain", layer: "slope", region: NSW_REGION },
       ctx({ sharpenedAreas: [area("b")] }),
     );
     expect(JSON.stringify(before)).not.toContain("X-Amz");
@@ -822,10 +1207,23 @@ describe("routes the Terrain group", () => {
 
   // Red if saved clips are routed offline.
   it("draws statewide alone with no area, and offline", () => {
-    expect(resolveMapSource({ kind: "nsw-slope" }, ctx())).toEqual(
-      resolveMapSource({ kind: "nsw-slope" }, ctx({ sharpenedAreas: [] })),
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx(),
+      ),
+    ).toEqual(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx({ sharpenedAreas: [] }),
+      ),
     );
-    const [only] = ok(resolveMapSource({ kind: "nsw-slope" }, ctx()));
+    const [only] = ok(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        ctx(),
+      ),
+    );
     expect(only.layerMaxZoom).toBeUndefined();
     // Offline, a saved clip: the area's archive can't be reached.
     const saved = {
@@ -841,13 +1239,18 @@ describe("routes the Terrain group", () => {
     };
     const offline = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         ctx({ ...saved, sharpenedAreas: [area("a")] }),
       ),
     );
     expect(offline).toHaveLength(1);
     expect(offline).toEqual(
-      ok(resolveMapSource({ kind: "nsw-slope" }, ctx(saved))),
+      ok(
+        resolveMapSource(
+          { kind: "terrain", layer: "slope", region: NSW_REGION },
+          ctx(saved),
+        ),
+      ),
     );
   });
 });
@@ -859,7 +1262,7 @@ describe("routes saved areas offline", () => {
     id: "area-1",
     zmax: 17 as const,
     tiles15: [100, 200, 103, 203] as const,
-    coverage: [0, 0, 0, 0] as const,
+    coverage: [150.3, -33.8, 150.4, -33.7] as const,
     contours: true,
     credit: "Made-up area credit",
     createdAt: "2026-10-01T00:00:00Z",
@@ -895,7 +1298,7 @@ describe("routes saved areas offline", () => {
   it("reads the area's saved clip inside it and the statewide clip around it", () => {
     const [statewide, ...routed] = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline([
           clip("s", "slope-region", "nsw-5m-slope"),
           clip("a", "slope-region", "lidar-area-1", areaBounds),
@@ -937,7 +1340,10 @@ describe("routes saved areas offline", () => {
       [-178.9, 84.8, -178.7, 84.9],
     );
     const [whole, ...routed] = ok(
-      resolveMapSource({ kind: "nsw-hillshade" }, offline([west, east], [])),
+      resolveMapSource(
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
+        offline([west, east], []),
+      ),
     );
     expect(whole).toMatchObject({ layerMaxZoom: 15 });
     const readers = (x: number, y: number) =>
@@ -965,7 +1371,7 @@ describe("routes saved areas offline", () => {
   it("reads a sharpened area's clip over the statewide clips under it", () => {
     const routed = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         offline([
           clip("s1", "dem-region", "nsw-5m", areaBounds),
           clip("s2", "dem-region", "nsw-5m", areaBounds),
@@ -983,7 +1389,7 @@ describe("routes saved areas offline", () => {
   it("never takes an area's clip for the statewide one", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline([clip("a", "slope-region", "lidar-area-1", areaBounds)], []),
       ),
     );
@@ -999,10 +1405,13 @@ describe("routes saved areas offline", () => {
     // Another area is still listed: only area-1 has gone.
     const listed = [{ ...kept, id: "area-2" }];
     expect(
-      resolveMapSource({ kind: "nsw-slope" }, offline(saved, listed)),
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
+        offline(saved, listed),
+      ),
     ).toEqual(
       resolveMapSource(
-        { kind: "nsw-slope" },
+        { kind: "terrain", layer: "slope", region: NSW_REGION },
         offline(saved.slice(0, 1), listed),
       ),
     );
@@ -1014,7 +1423,7 @@ describe("routes saved areas offline", () => {
   it("reads every saved statewide contour clip around the area, and the area's z14 clip inside it", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         offline([
           clip("c1", "contours-region", "nsw-contours"),
           clip("c2", "contours-region", "nsw-contours"),
@@ -1043,7 +1452,7 @@ describe("routes saved areas offline", () => {
     const far: MapArtifact["bbox"] = [10, 10, 10.1, 10.1];
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-contours" },
+        { kind: "terrain", layer: "contours", region: NSW_REGION },
         offline([
           clip("near", "contours-region", "nsw-contours"),
           // Saved far from the area: only a rectangle reaching it reads it.
@@ -1066,7 +1475,7 @@ describe("routes saved areas offline", () => {
   it("shades the area from its saved heights", () => {
     const sources = ok(
       resolveMapSource(
-        { kind: "nsw-hillshade" },
+        { kind: "terrain", layer: "hillshade", region: NSW_REGION },
         offline([
           artifact({
             id: "h",
@@ -1083,5 +1492,169 @@ describe("routes saved areas offline", () => {
       ),
     );
     expect(JSON.stringify(sources)).toContain("/maps/ah.pmtiles");
+  });
+});
+
+describe("draws the region the map shows", () => {
+  const regions = [NSW_REGION, ...SIM_REGIONS];
+  const urls = (sources: ReturnType<typeof resolveMapSource>) =>
+    sources.flatMap((s) => (s.status === "ok" && s.url ? [s.url] : []));
+  const layers = [
+    "contours",
+    "slope",
+    "hillshade",
+    "land",
+    "fire",
+    "coverage",
+  ] as const;
+
+  // Mutation: read NSW_REGION in the resolver in place of ref.region, and a
+  // map over another region draws New South Wales's archives.
+  it.each(layers)("draws %s from the region's own archive", (layer) => {
+    const url = (region: typeof SIM_NZ) =>
+      urls(resolveMapSource({ kind: "terrain", layer, region }, ctx()));
+    const archive = (r: typeof SIM_NZ) => r.terrain[layer]!.archivePath;
+    // Coverage is NZ's alone: Utah has none to draw.
+    expect(url(SIM_NZ)).toEqual([`pmtiles://${CDN}/${archive(SIM_NZ)}`]);
+    if (layer !== "coverage")
+      expect(url(SIM_UTAH)).toEqual([`pmtiles://${CDN}/${archive(SIM_UTAH)}`]);
+  });
+
+  // Mutation: key a source by the layer alone, and the map crossing into
+  // another region keeps the first one's source mounted.
+  it("keys a region's source by its archive, so crossing regions swaps it", () => {
+    const key = (region: typeof SIM_NZ) =>
+      resolveMapSource({ kind: "terrain", layer: "slope", region }, ctx())[0]!
+        .key;
+    expect(key(SIM_NZ)).toContain("simnz-slope");
+    expect(key(SIM_UTAH)).toContain("simutah-slope");
+    expect(key(SIM_NZ)).not.toBe(key(SIM_UTAH));
+    expect(key(NSW_REGION)).toContain("nsw-5m-slope");
+  });
+
+  // Mutation: fall back to NSW's archive when the region has none, and the
+  // map outside every region draws a layer with no data there.
+  it("draws nothing for a layer the region lacks, or with no region", () => {
+    for (const layer of layers)
+      expect(
+        resolveMapSource({ kind: "terrain", layer, region: null }, ctx()),
+      ).toEqual([]);
+    expect(
+      resolveMapSource(
+        { kind: "terrain", layer: "coverage", region: SIM_UTAH },
+        ctx(),
+      ),
+    ).toEqual([]);
+  });
+
+  // Mutation: match a saved clip by its kind alone (drop `&& a.logicalKey ===
+  // archive.id` in `holdsKind`), and where the map shows one region the clip
+  // of another is drawn, with this region's credit, source layer and paint.
+  it.each([
+    ["contours", "contours-region", "simnz-contours"],
+    ["slope", "slope-region", "simnz-slope"],
+    ["hillshade", "dem-region", "simnz-heights"],
+    ["land", "land-region", "simnz-land"],
+    ["fire", "fire-region", "simnz-fire"],
+    ["coverage", "coverage-region", "simnz-coverage"],
+  ] as const)(
+    "offline: draws only the clips of the region the map shows (%s)",
+    (layer, kind, logicalKey) => {
+      const offline = ctx({
+        connectivity: "offline",
+        artifacts: [
+          artifact({
+            id: logicalKey,
+            kind,
+            logicalKey,
+            path: `/maps/${logicalKey}.pmtiles`,
+            bbox: [169.2, -44.1, 169.3, -44.01],
+            minzoom: 8,
+            maxzoom: 15,
+          }),
+        ],
+      });
+      const [own, ...rest] = resolveMapSource(
+        { kind: "terrain", layer, region: SIM_NZ },
+        offline,
+      );
+      expect(rest).toEqual([]);
+      expect(own).toMatchObject({
+        status: "ok",
+        origin: "local",
+        attribution: SIM_NZ.terrain[layer]!.credit,
+      });
+      expect(
+        resolveMapSource(
+          { kind: "terrain", layer, region: SIM_UTAH },
+          offline,
+        ).flatMap((r) => (r.status === "ok" ? [r] : [])),
+      ).toEqual([]);
+    },
+  );
+
+  // Mutation: test `holdsContours` against NSW's id alone (REGIONS, not the
+  // `regions` argument), and a simulated region's clip enables no switch.
+  it("holdsContours, holdsSlope and holdsHillshade: any listed region's clip", () => {
+    expect(
+      holdsContours(
+        { kind: "contours-region", logicalKey: "simutah-contours" },
+        regions,
+      ),
+    ).toBe(true);
+    expect(
+      holdsSlope({ kind: "slope-region", logicalKey: "simnz-slope" }, regions),
+    ).toBe(true);
+    expect(
+      holdsHillshade(
+        { kind: "dem-region", logicalKey: "simnz-heights", minzoom: 8 },
+        regions,
+      ),
+    ).toBe(true);
+    expect(
+      holdsHillshade(
+        { kind: "dem-region", logicalKey: "simnz-heights", minzoom: 15 },
+        regions,
+      ),
+    ).toBe(false);
+    // With the switch off, only NSW's are listed.
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "simnz-contours" }),
+    ).toBe(false);
+  });
+
+  // Mutation: in the online branch of `routeTerrain`, pass `ctx.sharpenedAreas`
+  // on without `areasInRegion(region, …)`, and an area in New South Wales is
+  // routed over the source of a map showing New Zealand.
+  it("routes a sharpened area only inside its region", () => {
+    const area: SharpenedOverlay = {
+      id: "area-1",
+      zmax: 17,
+      tiles15: [100, 200, 103, 203],
+      coverage: [150.3, -33.8, 150.4, -33.7],
+      contours: false,
+      credit: "Made-up area credit",
+      createdAt: "2026-10-01T00:00:00Z",
+      heightsUrl: "https://bucket.example/h.pmtiles",
+      slopeUrl: "https://bucket.example/s.pmtiles",
+      contoursUrl: null,
+    };
+    const slope = (region: typeof SIM_NZ) =>
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region },
+        ctx({ sharpenedAreas: [area] }),
+      );
+    const routed = (region: typeof SIM_NZ) =>
+      slope(region).some(
+        (r) => r.status === "ok" && r.attribution === area.credit,
+      );
+    expect(routed(NSW_REGION)).toBe(true);
+    expect(routed(SIM_NZ)).toBe(false);
+    expect(slope(SIM_NZ)).toEqual(
+      resolveMapSource(
+        { kind: "terrain", layer: "slope", region: SIM_NZ },
+        ctx(),
+      ),
+    );
   });
 });
