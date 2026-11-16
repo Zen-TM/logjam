@@ -211,14 +211,14 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
 };
 
 const FORMATION =
-  "a vegetation formation as the map data and the topo build name it";
-const CREDIT = "a credit the topo build writes too, as its source asks";
+  "a vegetation formation as the map data and the build script name it";
+const CREDIT = "a credit the build script writes too, as its source asks";
 
 /**
  * Text that reads as words and is not words a user reads: an operator the
  * place filter stores, a land tenure class as the map data spells it,
  * RopeWiki's name for a region, the producer a PDF names, a noun in a
- * developer's error, a vegetation formation, a credit the topo build writes
+ * developer's error, a vegetation formation, a credit the build script writes
  * too. A literal equal to one is never counted or converted.
  * `i18nCoverage.test.ts` ("lists only literals that exist") fails on an entry
  * no source file holds.
