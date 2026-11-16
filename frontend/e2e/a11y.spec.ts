@@ -1470,6 +1470,10 @@ test.describe("desktop", () => {
       panel.getByRole("button", { name: /^Coordinates: .*\. Copy$/ }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(
+      panel.getByRole("button", { name: /^Grid reference: .*\. Copy$/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Options" })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
