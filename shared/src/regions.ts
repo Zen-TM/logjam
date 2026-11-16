@@ -14,6 +14,10 @@
 // every region's sources) and `areaExport.test.ts` (the check reads every
 // region with terrain).
 //
+// Each source a region declares (heights, Terrain archives, the vector cut, the
+// canyon list, the gauge feed, the place registry) carries its licence
+// (`licences.ts`; guard: `licences.test.ts`).
+//
 // Stored ids and paths keep their values: `nsw-5m`, `six-*`,
 // `master/dem/nsw-5m.pmtiles`, `master/places/v1/` and `master/gauges/v1/` are
 // on phones, in tracks' climb labels and in installed builds. A new region's
@@ -22,6 +26,7 @@
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
 import type { GridId } from "./grids.js";
+import type { LicenceId } from "./licences.js";
 import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
@@ -58,6 +63,8 @@ export type TerrainArchive = {
   coverage: readonly [number, number, number, number];
   credit: string;
   creditHtml: string;
+  /** What the source is licensed under (`licences.ts`). */
+  licence: LicenceId;
   tileBytes: TileBytes;
 };
 
@@ -145,19 +152,23 @@ export type Region = {
   /** The one a map opens on before the user picks; one of `basemaps`. */
   defaultBasemap: string;
   /** The region's cut of the vector basemap, or null where it has none. */
-  vector: { archivePath: string; maxzoom: number } | null;
+  vector: { archivePath: string; maxzoom: number; licence: LicenceId } | null;
   /** Height sources, finest first. `DEM_SOURCES` is every region's, then the worldwide one. */
   dem: readonly DemSource[];
   /** The Terrain group's archives; `{}` where a region has none. */
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */
   placeSearch: string | null;
+  /** The registry's licence: not null exactly where `placeSearch` is not (`licences.test.ts`). */
+  placeSearchLicence: LicenceId | null;
   /**
    * The CDN prefix of the gauge feed (ADR 0044), ending in "/" because a feed's
    * paths are this prefix and a file name (`gaugeLatestPath`, `gaugeHistoryUrl`),
    * or null. Guard: `regions.test.ts` ("every gauge feed prefix ends in a slash").
    */
   gauges: string | null;
+  /** The feed's licence: not null exactly where `gauges` is not (`licences.test.ts`). */
+  gaugesLicence: LicenceId | null;
   /** The map grid coordinates are given in. */
   grid: GridId;
   /**
@@ -170,6 +181,7 @@ export type Region = {
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
+    licence: LicenceId;
     /** RopeWiki's own name for the region, as its `Located in regions` holds it. */
     ropewikiRegion: string;
     /** The hand-exported snapshot in the media bucket (api `ropeWikiCache.ts`). */
@@ -194,6 +206,7 @@ const NSW_HEIGHTS = {
   // absent, and the position falls through.
   coverage: [140.9, -37.6, 153.7, -28.0],
   urlTemplate: null,
+  licence: "cc-by-3-au",
   archivePath: "master/dem/nsw-5m.pmtiles",
   // z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
   // 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
@@ -224,6 +237,7 @@ const NSW_HEIGHTS = {
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({
   coverage: NSW_HEIGHTS.coverage,
+  licence: NSW_HEIGHTS.licence,
   credit: NSW_HEIGHTS.credit.replace(/^Elevation/, layer),
   creditHtml: NSW_HEIGHTS.creditHtml.replace(/^Elevation/, layer),
 });
@@ -275,7 +289,11 @@ export const NSW_REGION = {
   defaultBasemap: "six-topo",
   // The catalogue entry "protomaps" (geoPdfBaseLayers.ts) reads this path and
   // zoom from here.
-  vector: { archivePath: "master/basemap/protomaps-nsw.pmtiles", maxzoom: 15 },
+  vector: {
+    archivePath: "master/basemap/protomaps-nsw.pmtiles",
+    maxzoom: 15,
+    licence: "odbl",
+  },
   dem: [NSW_HEIGHTS],
   terrain: {
     heights: NSW_HEIGHTS,
@@ -391,6 +409,7 @@ export const NSW_REGION = {
       caveat:
         "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-4",
       credit:
         "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
       creditHtml:
@@ -432,6 +451,7 @@ export const NSW_REGION = {
       caveat:
         "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-4",
       credit:
         "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
       creditHtml:
@@ -470,7 +490,9 @@ export const NSW_REGION = {
       // The source's limits.
       caveat:
         "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+      // The ABS coastline in it is CC BY 4.0, which asks no more.
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-2.5-au",
       credit:
         "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
       creditHtml:
@@ -478,12 +500,19 @@ export const NSW_REGION = {
     },
   },
   placeSearch: PLACE_REGISTRY_PREFIX,
+  placeSearchLicence: "odbl",
   gauges: GAUGE_PREFIX,
+  // The readings are WaterNSW's; the history is the Bureau's, under CC BY. The
+  // stricter is tagged (ADR 0044).
+  gaugesLicence: "waternsw-copyright",
   grid: "mga2020",
   canyonGrades: "french",
   units: "metric",
   canyons: {
     kind: "ropewiki",
+    // The licence and its version were not verified at RopeWiki's own page
+    // (`licences.ts`, `cc-by-nc-sa`).
+    licence: "cc-by-nc-sa",
     ropewikiRegion: "New South Wales",
     snapshotKey: "reference/ropewiki-nsw.csv",
     extraLinks: { label: "OzUltimate", match: matchOzUltimateUrl },
@@ -532,7 +561,9 @@ const EMPTY_WORLD: Region = {
   dem: [],
   terrain: {},
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "utm",
   canyonGrades: "french",
   units: "metric",

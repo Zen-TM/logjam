@@ -198,7 +198,7 @@ describe("a place's elevation, typed in the display units", () => {
   });
 
   // Mutation: read the typed text as metres, or drop the
-  // `now.elevation === was.elevation` test, which sends 812.0016 for an
+  // `now.elevation === was.elevation` test, which sends 811.9872 for an
   // elevation the user left alone.
   it("saves the feet typed as metres, and an untouched figure as it was", () => {
     try {
