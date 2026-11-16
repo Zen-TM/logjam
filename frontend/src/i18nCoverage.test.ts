@@ -33,7 +33,7 @@ const CEILINGS: Record<string, number> = {
   "components/plans": 41,
   "components/routes": 25,
   "components/sidebar": 0,
-  "components/sidebar/panels": 82,
+  "components/sidebar/panels": 8,
   csvImport: 68,
   geoPdf: 3,
   "geoPdf/draw": 3,

@@ -27,6 +27,7 @@ import {
   type NotificationPreferences,
   type ScopedCustomFieldDef,
   type Units,
+  rich,
   t,
 } from "@logjam/shared";
 
@@ -49,6 +50,7 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../ui";
+import { Rich } from "../../../ui/rich";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
 import LanguageChooser from "./LanguageChooser";
@@ -427,22 +429,31 @@ function SettingsPanel({
         {/* The closing note, where Logjam GPS ends this page with what is kept
             on the phone. */}
         <p className={classes.privacy}>
-          Only you see your places unless you share one with a friend. Nothing
-          here leaves your account. Read the{" "}
-          <a
-            className={classes.privacyLink}
-            href="/tos.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{t`Terms`}</a>{" "}
-          and{" "}
-          <a
-            className={classes.privacyLink}
-            href="/privacy.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{t`Privacy policy`}</a>
-          .
+          <Rich
+            parts={rich`Only you see your places unless you share one with a friend. Nothing here leaves your account. Read the <tos>Terms</tos> and <privacy>Privacy policy</privacy>.`}
+            tags={{
+              tos: (text) => (
+                <a
+                  className={classes.privacyLink}
+                  href="/tos.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {text}
+                </a>
+              ),
+              privacy: (text) => (
+                <a
+                  className={classes.privacyLink}
+                  href="/privacy.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {text}
+                </a>
+              ),
+            }}
+          />
         </p>
       </>
     ),
