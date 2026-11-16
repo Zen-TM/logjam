@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { regionCovering } from "./snapRegion";
 import type { MapArtifact } from "./sourceResolver";
 
+const ARCHIVE = "master/basemap/protomaps-nsw.pmtiles";
 // Synthetic coordinates only — no real place locations in a committed test.
 const region = (over: Partial<MapArtifact>): MapArtifact => ({
   id: "r1",
@@ -14,6 +15,7 @@ const region = (over: Partial<MapArtifact>): MapArtifact => ({
   bbox: [150.0, -34.0, 151.0, -33.0],
   minzoom: 0,
   maxzoom: 15,
+  archivePath: ARCHIVE,
   sizeBytes: 1,
   downloadedAt: "2026-08-07T00:00:00.000Z",
   label: null,
@@ -26,18 +28,20 @@ const OUTSIDE: [number, number] = [149.0, -33.5];
 
 describe("regionCovering", () => {
   it("picks a region holding both ends", () => {
-    expect(regionCovering([region({})], INSIDE_A, INSIDE_B)?.id).toBe("r1");
+    expect(regionCovering([region({})], INSIDE_A, INSIDE_B, ARCHIVE)?.id).toBe(
+      "r1",
+    );
   });
 
   it("declines when only one end is inside", () => {
-    expect(regionCovering([region({})], INSIDE_A, OUTSIDE)).toBeNull();
+    expect(regionCovering([region({})], INSIDE_A, OUTSIDE, ARCHIVE)).toBeNull();
   });
 
   it("declines a region clipped shallower than the snap zoom", () => {
     // It would answer "no ways here" rather than "I don't have that" — worse
     // than falling back to the network.
     expect(
-      regionCovering([region({ maxzoom: 13 })], INSIDE_A, INSIDE_B),
+      regionCovering([region({ maxzoom: 13 })], INSIDE_A, INSIDE_B, ARCHIVE),
     ).toBeNull();
   });
 
@@ -51,12 +55,28 @@ describe("regionCovering", () => {
         ],
         INSIDE_A,
         INSIDE_B,
+        ARCHIVE,
       ),
     ).toBeNull();
   });
 
+  // Mutation: drop the `archivePath` test, and a clip cut from another
+  // region's archive answers for ground it holds no ways of; match a clip
+  // saved with no archive, and a clip of unknown origin does the same.
+  it("declines a clip of another archive, or of none", () => {
+    const other = region({ archivePath: "master/basemap/protomaps-x.pmtiles" });
+    const unknown = region({ archivePath: null });
+    expect(
+      regionCovering([other, unknown], INSIDE_A, INSIDE_B, ARCHIVE),
+    ).toBeNull();
+    expect(
+      regionCovering([other, unknown, region({})], INSIDE_A, INSIDE_B, ARCHIVE)
+        ?.id,
+    ).toBe("r1");
+  });
+
   it("is empty-safe", () => {
-    expect(regionCovering([], INSIDE_A, INSIDE_B)).toBeNull();
+    expect(regionCovering([], INSIDE_A, INSIDE_B, ARCHIVE)).toBeNull();
   });
 
   // Mutation: put the plain `lon >= west && lon <= east` back in `regionCovering`.
@@ -64,9 +84,11 @@ describe("regionCovering", () => {
     // A saved area drawn over a view panned past the line has an east edge
     // above 180; the route's own longitudes are always inside [-180, 180].
     const across = region({ bbox: [178, -18, 182, -16] });
-    expect(regionCovering([across], [179.5, -17], [-179.5, -17])?.id).toBe(
-      "r1",
-    );
-    expect(regionCovering([across], [179.5, -17], [170, -17])).toBeNull();
+    expect(
+      regionCovering([across], [179.5, -17], [-179.5, -17], ARCHIVE)?.id,
+    ).toBe("r1");
+    expect(
+      regionCovering([across], [179.5, -17], [170, -17], ARCHIVE),
+    ).toBeNull();
   });
 });

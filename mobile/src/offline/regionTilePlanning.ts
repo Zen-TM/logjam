@@ -13,6 +13,7 @@ import {
   type RegionTilePlan,
   type SaveClip,
   type SaveClipKind,
+  type VectorArchive,
 } from "@logjam/shared";
 
 import {
@@ -91,7 +92,8 @@ const CLIP_ORDER: Record<SaveClipKind, number> = {
 /**
  * The clips every saved area carries, whoever saves it: one of each archive of
  * the Terrain group of every region the area touches (`clips`, which
- * `planRegionForBasemaps` prices), and the vector map. They cost a few to a
+ * `planRegionForBasemaps` prices), and of each vector archive the area needs
+ * (`vectors`: that of each region it touches, else the world's). They cost a few to a
  * few tens of megabytes, and without them the Vector map is blank out
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
@@ -105,6 +107,7 @@ export function regionClipSpecs(
     "bbox" | "groupId" | "groupLabel" | "allowCellular"
   >,
   clips: readonly Pick<SaveClip, "kind" | "archive">[],
+  vectors: readonly VectorArchive[],
   job: (basemapId: string) => { id: string; label: string },
 ): ({ taskKind: "clip" } & RegionClipSpec)[] {
   const clip = (basemapId: string, extra: Partial<RegionClipSpec> = {}) => ({
@@ -118,7 +121,9 @@ export function regionClipSpecs(
     ...[...clips]
       .sort((a, b) => CLIP_ORDER[a.kind] - CLIP_ORDER[b.kind])
       .map(({ archive }) => clip(archive.id, { archiveId: archive.id })),
-    clip("protomaps"),
+    ...vectors.map(({ archivePath }) =>
+      clip("protomaps", { vectorPath: archivePath }),
+    ),
   ];
 }
 

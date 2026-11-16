@@ -166,6 +166,7 @@ describe("REGION_ARTIFACT_KINDS", () => {
     const specs = regionClipSpecs(
       { bbox, groupId: "g", groupLabel: "Katoomba", allowCellular: false },
       planRegionForBasemaps(bbox, [], 15, () => 16).clips,
+      planRegionForBasemaps(bbox, [], 15, () => 16).vectors,
       (id) => ({ id, label: id }),
     );
     const kinds = specs.map(regionClipKind);
@@ -222,6 +223,26 @@ describe("supersededBy", () => {
       saved("clip", { kind: "dem-region" }),
     ];
     expect(supersededBy(fresh, all).map((a) => a.id)).toEqual(["old"]);
+  });
+
+  // Mutation: drop the `archivePath` test, and updating the vector clip of one
+  // region in a card deletes the clip of the other region it holds.
+  it("names the vector clip of the same archive, not the card's other vector clip", () => {
+    const vector = (id: string, archivePath: string | null) =>
+      saved(id, {
+        logicalKey: "protomaps",
+        format: "pmtiles",
+        sourceType: "vector",
+        archivePath,
+      });
+    const fresh = vector("new", "master/basemap/a.pmtiles");
+    const all = [
+      fresh,
+      vector("old-a", "master/basemap/a.pmtiles"),
+      vector("old-b", "master/basemap/b.pmtiles"),
+      vector("legacy", null),
+    ];
+    expect(supersededBy(fresh, all).map((a) => a.id)).toEqual(["old-a"]);
   });
 
   it("finds a legacy row, which stands alone under its own id", () => {

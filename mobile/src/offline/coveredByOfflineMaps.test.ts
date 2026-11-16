@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { NSW_REGION } from "@logjam/shared";
 
+import type { MapArtifact } from "../map/sourceResolver";
 import {
   coveredByOfflineMaps,
+  heldBasemapIn,
   routeCoveredByOfflineMaps,
 } from "./coveredByOfflineMaps";
 
@@ -235,5 +238,43 @@ describe("a saved region that runs past 180°", () => {
       [179.4, -17.1, -179.4, -16.9],
     ] as const)
       expect(coveredByOfflineMaps([...box], [eastSide, westSide])).toBe(true);
+  });
+});
+
+describe("heldBasemapIn", () => {
+  const BOX: [number, number, number, number] = [150.2, -33.8, 150.3, -33.7];
+  const file = (id: string, key: string, archivePath: string | null) =>
+    ({
+      id,
+      kind: "basemap-region",
+      logicalKey: key,
+      archivePath,
+      bbox: BOX,
+    }) as MapArtifact;
+  const files = [
+    file("a", "protomaps", NSW_REGION.vector!.archivePath),
+    file("other", "protomaps", "master/basemap/protomaps-other.pmtiles"),
+    file("old", "protomaps", null),
+    file("topo", "six-topo", null),
+  ];
+
+  // Mutation: filter by `logicalKey` alone, and a vector clip of another
+  // archive, or one with none, reads the place as covered and hides the Save
+  // action though the map draws nothing there.
+  it("holds the vector map only by a clip of the archive of the region the box is in", () => {
+    expect(heldBasemapIn(files, "protomaps", BOX).map((f) => f.id)).toEqual([
+      "a",
+    ]);
+    expect(heldBasemapIn(files, "six-topo", BOX).map((f) => f.id)).toEqual([
+      "topo",
+    ]);
+  });
+
+  // Mutation: look up the region of a fixed box in place of `bbox`, and a box
+  // outside every region counts vector clips as held.
+  it("holds no vector clip for a box outside every region", () => {
+    expect(heldBasemapIn(files, "protomaps", [160, -40, 160.1, -39.9])).toEqual(
+      [],
+    );
   });
 });

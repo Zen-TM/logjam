@@ -87,7 +87,12 @@ import {
 } from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
-import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
+import {
+  initialVectorArchive,
+  snapUrlFor,
+  vectorStyleLayers,
+  vectorSourceUrl,
+} from "./vectorBasemap";
 import {
   arrowSegmentFeatures,
   DRAFT_LINE,
@@ -112,6 +117,8 @@ import {
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
+  type VectorArchive,
+  vectorIn,
 } from "@logjam/shared";
 
 export type { SnapMode };
@@ -338,50 +345,30 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
  * mobile/src/map/basemap/ are reshaped for maplibre-react-native (paint+layout
  * merged into one camelCase object). Same package, same pinned version — see
  * scripts/basemap/package.json; bump both together or neither.
- *
- * Light flavor only: Logjam Web has no dark theme (index.css carries a single
- * prefers-color-scheme rule that inverts icons, nothing more).
  */
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",
+  archive: VectorArchive,
 ) {
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   // Fail loudly — a missing catalog entry is a programming error, and silently
   // skipping it would leave the picker offering a basemap that draws nothing.
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
 
-  // Always same-origin: prod serves /master/* from the web distribution, and
-  // the dev server proxies the same prefix (see vite.config.ts). That keeps
-  // the archive under CSP 'self' and out of the CORS problem entirely.
   map.addSource(PROTOMAPS_SOURCE_ID, {
     type: "vector",
-    url: `pmtiles://${window.location.origin}/${entry.urlTemplate}`,
+    url: vectorSourceUrl(archive, window.location.origin),
     attribution: entry.attributionHtml,
   });
 
-  for (const layer of protomapsLayers(
-    PROTOMAPS_SOURCE_ID,
-    namedFlavor("light"),
-    { lang: "en" },
-  )) {
+  for (const layer of vectorStyleLayers(PROTOMAPS_SOURCE_ID)) {
     map.addLayer({
       ...layer,
       id: `${PROTOMAPS_LAYER_PREFIX}${layer.id}`,
       layout: { ...layer.layout, visibility },
     } as maplibregl.LayerSpecification);
   }
-}
-
-/**
- * The Protomaps archive, read directly for snapping. Same origin in prod and
- * proxied in dev (vite.config.ts), so this never leaves our own host — and it
- * is independent of which basemap is showing or how far the map is zoomed.
- */
-function snapArchiveUrl(): string {
-  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
-  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
-  return `${window.location.origin}/${entry.urlTemplate}`;
 }
 
 /** Every layer id belonging to the Protomaps band, in style order. */
@@ -928,6 +915,9 @@ function Map({
   // without refs it would close over the first render's points and snap every
   // segment from the same stale vertex.
   // Read inside the map's one-shot load handler, which cannot see later props.
+  // The URL the vector source reads now, so a region change that names the same
+  // archive reloads nothing.
+  const vectorUrlRef = useRef<string | null>(null);
   const activeLayerIdRef = useRef(activeLayerId);
   useEffect(() => {
     activeLayerIdRef.current = activeLayerId;
@@ -982,7 +972,11 @@ function Map({
    */
   const snapBetweenRef = useRef((from: RoutePoint, to: RoutePoint) => {
     if (snapModeRef.current === "off") return;
-    void fetchSnapLines(snapArchiveUrl(), snapModeRef.current, from, to)
+    // The archive is read directly, independent of which basemap is showing or
+    // how far the map is zoomed.
+    const archiveUrl = snapUrlFor(from, to, window.location.origin);
+    if (!archiveUrl) return;
+    void fetchSnapLines(archiveUrl, snapModeRef.current, from, to)
       .then((lines) => {
         const between = snapSegment(lines, from, to);
         // `between` includes the graph nodes nearest both ends; drop them, or
@@ -1213,7 +1207,12 @@ function Map({
         const visibility =
           layer.id === activeLayerIdRef.current ? "visible" : "none";
         if (layer.kind === "vector") {
-          addProtomapsBasemap(map, visibility);
+          const archive = initialVectorArchive(boxOf(map.getBounds()));
+          vectorUrlRef.current = vectorSourceUrl(
+            archive,
+            window.location.origin,
+          );
+          addProtomapsBasemap(map, visibility, archive);
           return;
         }
         map.addSource(layer.id, {
@@ -2763,6 +2762,23 @@ function Map({
       marker.remove();
     };
   }, [searchPin, mapLoaded]);
+
+  // The vector source reads the archive of the region the map shows. A region
+  // with none leaves it as it was: the vector map is not offered there, so its
+  // layers are hidden and nothing is read.
+  useEffect(() => {
+    const archive = vectorIn(region);
+    const map = mapRef.current;
+    if (!mapLoaded || !map || !archive) return;
+    const url = vectorSourceUrl(archive, window.location.origin);
+    if (url === vectorUrlRef.current) return;
+    vectorUrlRef.current = url;
+    (
+      map.getSource(PROTOMAPS_SOURCE_ID) as
+        | maplibregl.VectorTileSource
+        | undefined
+    )?.setUrl(url);
+  }, [region, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

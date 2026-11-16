@@ -33,7 +33,7 @@ export const FIRE_MIN_ZOOM = 10;
  */
 export const COVERAGE_MIN_ZOOM = 12;
 
-/** Statewide contours (the archive starts at z11, `NSW_REGION.terrain.contours`). */
+/** Statewide contours (NSW's archive starts at z11, `terrain.contours` in regions.ts). */
 export const CONTOURS_MIN_ZOOM = 12;
 export const CONTOUR_LABELS_MIN_ZOOM = 13;
 /** Minor contours, between the majors. */

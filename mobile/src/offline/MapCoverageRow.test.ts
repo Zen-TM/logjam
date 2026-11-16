@@ -51,6 +51,9 @@ describe("MapCoverageRow's basemap", () => {
       "utf8",
     );
     expect(source).toContain("readEffectiveBasemap(boundsView(bbox))");
+    // Mutation: filter `artifacts` by `logicalKey` in the row, and a vector
+    // clip of another archive reads the place as covered.
+    expect(source).toContain("heldBasemapIn(artifacts, basemapId, bbox)");
     expect(source).not.toContain("readBasemapPreference");
   });
 });
