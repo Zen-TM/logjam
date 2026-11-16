@@ -113,21 +113,6 @@ function scan(): Scan {
 const named = (english: string) =>
   new RegExp(`^(${escaped(english)}|${escaped(pseudo(english))})`);
 
-/**
- * A weekday, a month, a half of the day and a year (shown only when it is not
- * this year's), each read as one fixed form, so the list does not change with
- * the day or the hour of the run, or how long ago the stack was seeded.
- */
-const CALENDAR: [RegExp, string][] = [
-  [/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:[a-z]*day)?\b/g, "Mon"],
-  [
-    /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b/g,
-    "Jan",
-  ],
-  [/\b[AP]M\b/g, "AM"],
-  [/\bJan 0\b(?!, 0)/g, "Jan 0, 0"],
-];
-
 const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 class Walk {
@@ -183,7 +168,7 @@ class Walk {
 
   /**
    * `text` with each message taken out (and counted), each seeded name
-   * written `{}`, each number `0` and each date word as in `CALENDAR`; null
+   * written `{}`, each number `0` and each half of the day `AM`; null
    * when the text is one string the API sent, or no letter is left, so it was
    * messages, the account's data and numbers only.
    *
@@ -205,14 +190,21 @@ class Walk {
       })(?![\\p{L}\\p{N}])`,
       "gu",
     );
-    let rest = text
-      .replace(/⟦[^⟦⟧]*⟧/g, (message) => {
+    // A message can hold another (a date's month name), so take them out
+    // from the inside until none is left.
+    let rest = text;
+    for (let prev = ""; prev !== rest; ) {
+      prev = rest;
+      rest = rest.replace(/⟦[^⟦⟧]*⟧/g, (message) => {
         this.wrapped.add(message);
         return " ";
-      })
+      });
+    }
+    rest = rest
       .replace(this.names, "{}")
-      .replace(/\d+(?:[.,:]\d+)*/g, "0");
-    for (const [word, fixed] of CALENDAR) rest = rest.replace(word, fixed);
+      .replace(/\d+(?:[.,:]\d+)*/g, "0")
+      // A clock time is written by the browser's locale, not the catalogue.
+      .replace(/\b[AP]M\b/g, "AM");
     rest = rest.replace(/\s+/g, " ").trim();
     return /\p{L}/u.test(rest.replace(/\{\}/g, "")) ? rest : null;
   }
@@ -297,7 +289,8 @@ test.beforeEach(async ({ page }) => {
 // every message is new text outside ⟦ ⟧: red on the list too); or, rewriting the
 // list, set `en-AU` for the key in the `pseudo` project of playwright.config.ts
 // and for `language` in the `/users/me` stub in `beforeEach` (no message met:
-// red on the floor).
+// red on the floor); or take the messages out of `rest` once, not until none
+// is left (a date's month name is a message inside a message: red on the list).
 test("every main screen reads in the pseudo-language, bar the listed text", async ({
   page,
 }, testInfo) => {
