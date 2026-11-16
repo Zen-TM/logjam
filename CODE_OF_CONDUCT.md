@@ -13,5 +13,5 @@ The maintainer may edit or remove anything that breaks these rules, and may
 block anyone who keeps breaking them.
 
 To report something privately, email
-[zentmarcos@gmail.com](mailto:zentmarcos@gmail.com?subject=Logjam%20conduct)
+[support@logjam.earth](mailto:support@logjam.earth?subject=Logjam%20conduct)
 with "Logjam conduct" in the subject.
