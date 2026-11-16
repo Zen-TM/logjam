@@ -1,30 +1,26 @@
-// Nothing outside the region declaration names NSW's region, fire or coverage
-// constants, so a second region cannot be silently answered with NSW's data.
-// A file that still does is listed below. The test keeps the list exact: a
-// file that names one without a line fails, and so does a line for a file that
-// no longer does, so a new entry is an added line a reviewer sees. Each change
-// that makes a file region-neutral deletes its line.
-//
-// Mutation that turns it red: add `NSW_REGION.view` to any new source file, or
-// leave a file in the list after it stopped naming a constant.
+// Nothing outside the region declaration names a region: NSW's region, fire
+// and coverage constants and the simulated regions are read only in
+// `regions.ts` and `simRegions.ts`. A second region is then answered from the
+// region in view, never from NSW's data by default, and a client cannot offer
+// made-up regions in prod. Adding a region: docs/operations/adding-a-region.md.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const repo = join(import.meta.dirname, "..", "..");
 const PACKAGES = ["shared/src", "frontend/src", "mobile/src", "api/src"];
-const NAMES = /\b(NSW_REGION|NSW_FIRE|NSW_COVERAGE)\b/;
 const TEST_FILE = /\.test\.tsx?$|(^|\/)__(tests|fixtures|mocks)__\//;
 
-// The declaration itself may name them.
-const DECLARES = ["shared/src/regions.ts"];
+// The declaration itself, and the simulated regions it takes in.
+const DECLARES = ["shared/src/regions.ts", "shared/src/simRegions.ts"];
 
-const STILL_NAMING = [
-  "shared/src/contourRules.ts",
-  "shared/src/geoPdfBaseLayers.ts",
-  "shared/src/overlayLegends.ts",
-  "shared/src/overlayZoom.ts",
-];
+const NSW_NAMES = /\b(NSW_REGION|NSW_FIRE|NSW_COVERAGE)\b/;
+const SIM_NAMES = /\b(SIM_REGIONS|SIM_NZ|SIM_UTAH|SIM_WORLD)\b/;
+// `SIM_REGIONS` is also the API's environment variable. Its spellings as one
+// (`api/src/loadEnv.ts`, the key in `api/src/lib/env.ts`) do not read the
+// declaration.
+const SIM_ENV_VAR =
+  /process\.env\.SIM_REGIONS|\bSIM_REGIONS=1|\bSIM_REGIONS: z\./g;
 
 function sources(dir: string): string[] {
   return readdirSync(join(repo, dir), { withFileTypes: true }).flatMap((e) => {
@@ -38,34 +34,39 @@ function sources(dir: string): string[] {
 }
 
 const scanned = PACKAGES.flatMap(sources);
-const naming = scanned
-  .filter((path) => NAMES.test(readFileSync(join(repo, path), "utf8")))
-  .sort();
+const naming = (names: RegExp, strip?: RegExp) =>
+  scanned
+    .filter((path) => {
+      const text = readFileSync(join(repo, path), "utf8");
+      return names.test(strip ? text.replace(strip, "") : text);
+    })
+    .sort();
 
-describe("files that name NSW's region constants", () => {
-  // Mutation: scan one package fewer, or let the pattern stop matching. The
-  // floor is on the files scanned, not the files naming a constant, which
-  // falls as each change clears one.
+describe("files that name a region", () => {
+  // Mutation: scan one package fewer, or let either pattern stop matching. The
+  // floor is on the files scanned and on both patterns finding the
+  // declaration, so a scan that checks nothing fails.
   it("finds the declaration among the sources, so a scan that stops matching fails", () => {
-    expect(naming).toEqual(expect.arrayContaining(DECLARES));
+    expect(naming(NSW_NAMES)).toContain("shared/src/regions.ts");
+    expect(naming(SIM_NAMES)).toEqual(expect.arrayContaining(DECLARES));
     expect(scanned.length).toBeGreaterThanOrEqual(1000);
   });
 
-  // Mutation: a new file reads NSW_REGION.view.
-  it("are the declaration and the files still on the list", () => {
-    const unlisted = naming.filter(
-      (path) => !DECLARES.includes(path) && !STILL_NAMING.includes(path),
-    );
+  // Mutation: a new source file reads `NSW_REGION.view`.
+  it("name NSW's region, fire and coverage constants nowhere but the declaration", () => {
     expect(
-      unlisted,
-      "Read the region in view (regionInView, layerIn) instead of NSW's constants: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
+      naming(NSW_NAMES).filter((path) => !DECLARES.includes(path)),
+      "Read the region in view (regionInView, layerIn) instead of NSW's constants, so a second region is answered from its own data. Adding a region: docs/operations/adding-a-region.md. Why: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
     ).toEqual([]);
   });
 
-  // Mutation: leave a file on the list after it stops naming a constant.
-  it("leave the list only when they do", () => {
-    const cleared = STILL_NAMING.filter((path) => !naming.includes(path));
-    expect(cleared, "Delete these lines from STILL_NAMING").toEqual([]);
-    expect(STILL_NAMING).toEqual([...STILL_NAMING].sort());
+  // Mutation: a client or the API imports `SIM_NZ` (or `SIM_REGIONS`,
+  // `SIM_UTAH`, `SIM_WORLD`). The shared index exports all four, so the import
+  // compiles, and the client would offer made-up regions in prod.
+  it("name the simulated regions nowhere but the declaration", () => {
+    expect(
+      naming(SIM_NAMES, SIM_ENV_VAR).filter((path) => !DECLARES.includes(path)),
+      "Only `REGIONS` and `WORLD` (regions.ts) take in the simulated regions, and only where the dev switch is on; a client that reads one offers made-up regions in prod. Use `REGIONS`. Adding a region: docs/operations/adding-a-region.md. Why: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
+    ).toEqual([]);
   });
 });

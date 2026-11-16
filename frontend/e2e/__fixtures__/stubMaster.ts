@@ -8,12 +8,10 @@
 // sim-regions-stub.spec.ts.
 import { readFileSync } from "node:fs";
 import type { Page, Route } from "@playwright/test";
-import { BASEMAP_CATALOG, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { statewideArchives } from "./geoPdfTiles";
 
-const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
-  (entry) => entry.id === "protomaps",
-)!.urlTemplate;
+const PROTOMAPS_ARCHIVE = NSW_REGION.vector!.archivePath;
 
 const SIM_BUILD = new URL(
   "../../../scripts/sim-regions/boxes.json",

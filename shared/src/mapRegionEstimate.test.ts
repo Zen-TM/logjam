@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { TERRARIUM } from "./demSources.js";
+import { TERRARIUM, worldwideSource } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { LAND_EDGE_MINZOOM, landClip } from "./land.js";
 import {
@@ -28,6 +28,7 @@ import {
   type SaveClipKind,
 } from "./mapRegionEstimate.js";
 import {
+  layerIn,
   NSW_REGION,
   REGIONS,
   WORLD,
@@ -35,7 +36,7 @@ import {
   regionBounds,
   type Region,
 } from "./regions.js";
-import { SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
@@ -310,6 +311,102 @@ describe("planRegionForBasemaps", () => {
     );
   });
 
+  // The world's heights, once declared, are saved as a clip in place of the
+  // Terrarium tiles. A box in Perth is outside every region's border and
+  // coverage.
+  const PERTH = { west: 115.8, south: -32.0, east: 115.9, north: -31.9 };
+
+  // Mutation: leave `world.terrain` out of the list `saveClipsFor` clips, and
+  // a save outside every region has no worldwide heights at all.
+  it("clips the world's heights with every save, after the regions' own", () => {
+    const heights = layerIn(SIM_WORLD, "heights")!;
+    for (const box of [TEN_KM, PERTH]) {
+      const job = planRegionForBasemaps(
+        box,
+        [],
+        15,
+        maxZoomFor,
+        [NSW_REGION],
+        SIM_WORLD,
+      );
+      const ids = job.clips
+        .filter((c) => c.kind === "heights")
+        .map((c) => c.archive.id);
+      expect(ids, JSON.stringify(box)).toEqual(
+        box === TEN_KM ? ["nsw-5m", heights.id] : [heights.id],
+      );
+      // Cut from the zoom the world's hillshade is drawn from, to the one the
+      // sampler reads, at the archive's own tile sizes.
+      const world = job.clips.find((c) => c.archive.id === heights.id)!;
+      expect(world.size.meanBytes).toBe(
+        planRegionTiles(box, 8, heights.sampleZoom).totalTiles * 30_000,
+      );
+    }
+  });
+
+  // Mutation: keep adding the Terrarium pyramid when the world declares an
+  // archive, and a save fetches the public tiles it has no use for.
+  it("saves no Terrarium pyramid where the world declares an archive of its own", () => {
+    const job = planRegionForBasemaps(
+      TEN_KM,
+      ["six-topo"],
+      15,
+      maxZoomFor,
+      [NSW_REGION],
+      SIM_WORLD,
+    );
+    expect(job.perSource.map((s) => s.basemapId)).toEqual(["six-topo"]);
+    expect(job.totalTiles).toBe(job.perSource[0]!.plan.totalTiles);
+  });
+
+  // Mutation: set `DEM_SOURCE_ID` to `TERRARIUM.id`, and the job a card reads
+  // as its elevation is not the world's clip, which is filed under the
+  // archive's id.
+  it("names the world's archive as the DEM a save carries, where the world declares one", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const on = await import("./mapRegionEstimate.js");
+      const world = worldwideSource(SIM_WORLD).id;
+      expect(world).not.toBe(TERRARIUM.id);
+      expect(on.DEM_SOURCE_ID).toBe(world);
+      const job = on.planRegionForBasemaps(PERTH, [], 15, maxZoomFor);
+      expect(job.perSource).toEqual([]);
+      expect(job.clips.map((c) => c.archive.id)).toEqual([world]);
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
+  });
+
+  // Mutation: declare a heights archive on the empty world in regions.ts, and
+  // prod saves a clip and loses its tile pyramid.
+  it("saves the public Terrarium tiles, and no world clip, while the world declares nothing", () => {
+    expect(layerIn(WORLD, "heights"), "premise: prod's world is empty").toBe(
+      null,
+    );
+    expect(DEM_SOURCE_ID).toBe(TERRARIUM.id);
+    for (const box of [TEN_KM, PERTH]) {
+      const job = planRegionForBasemaps(box, [], 15, maxZoomFor);
+      expect(job.perSource.map((s) => [s.basemapId, s.zMin, s.zMax])).toEqual([
+        [TERRARIUM.id, 13, 13],
+      ]);
+      expect(job.clips.map((c) => c.archive.id)).toEqual(
+        box === TEN_KM
+          ? [
+              "nsw-5m",
+              "nsw-5m-slope",
+              "nsw-contours",
+              "nsw-land",
+              "nsw-fire",
+              "nsw-coverage",
+            ]
+          : [],
+      );
+    }
+  });
+
   // Mutation: price the height clip at z15 alone and an area's estimate
   // undercounts the z8-14 tiles the hillshade is drawn from offline.
   it("prices the height clip at every zoom the hillshade is drawn at", () => {
@@ -483,6 +580,41 @@ describe("planRegionForBasemaps", () => {
     expect(job.clips.filter((c) => c.kind === "heights")).toHaveLength(1);
   });
 
+  // Mutation: list the first declared vector archive whatever the box, and
+  // a save in simulated New Zealand clips NSW's vector map; stop at the first
+  // region touching, and the second's is never saved.
+  it("plans the vector archive of every region a box touches", () => {
+    const makarora = {
+      west: 169.22,
+      south: -44.08,
+      east: 169.28,
+      north: -44.03,
+    };
+    expect(
+      planRegionForBasemaps(makarora, [], 15, maxZoomFor, [
+        NSW_REGION,
+        ...SIM_REGIONS,
+      ]).vectors,
+    ).toEqual([SIM_NZ.vector]);
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    expect(
+      planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, [NSW_REGION, overlap])
+        .vectors,
+    ).toEqual([NSW_REGION.vector, SIM_UTAH.vector]);
+  });
+
+  // Mutation: read the planet's archive whatever the box touches, and a save in
+  // a region clips the planet's vector map as well.
+  it("plans the world's vector archive only for a box no region touches", () => {
+    const sea = { west: 160, south: -40.1, east: 160.1, north: -40 };
+    const plan = (box: RegionBbox, world?: Region) =>
+      planRegionForBasemaps(box, [], 15, maxZoomFor, [NSW_REGION], world)
+        .vectors;
+    expect(plan(sea, SIM_WORLD)).toEqual([SIM_WORLD.vector]);
+    expect(plan(sea)).toEqual([]);
+    expect(plan(TEN_KM, SIM_WORLD)).toEqual([NSW_REGION.vector]);
+  });
+
   // Mutation: price every region's clips whatever the box, and a box in
   // Utah is also priced for NSW's archives.
   it("saves the clips of the one region in a box that touches only it, with every region on", () => {
@@ -620,6 +752,21 @@ describe("planRegionForBasemaps", () => {
     // The hillshade shares the height archive and is not a clip of its own.
     expect(saveClipArchive("nsw-5m-hillshade", every)).toBeNull();
     expect(saveClipArchive("simnz-heights", [NSW_REGION])).toBeNull();
+  });
+
+  // Mutation: search `regions` alone in `saveClipArchive`, and a saved world
+  // clip is "an unknown map archive" the phone cannot update or label.
+  it("finds the world's heights clip under its id, with the zooms it is cut at", () => {
+    const heights = layerIn(SIM_WORLD, "heights")!;
+    const clip = saveClipArchive(heights.id, [NSW_REGION], SIM_WORLD);
+    expect(clip && [clip.kind, clip.archive.archivePath, clip.zooms]).toEqual([
+      "heights",
+      "master/dem/simworld-heights.pmtiles",
+      { minzoom: 8, maxzoom: 13 },
+    ]);
+    expect(demClipMinZoom(heights, [NSW_REGION, SIM_WORLD])).toBe(8);
+    // Where the world declares nothing the id is nobody's.
+    expect(saveClipArchive(heights.id, [NSW_REGION])).toBeNull();
   });
 });
 

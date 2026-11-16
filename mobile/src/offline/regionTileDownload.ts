@@ -26,7 +26,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import {
   BASEMAP_CATALOG,
-  DEM_SOURCE_ID,
   REGION_MIN_ZOOM,
   TERRARIUM,
   planRegionTiles,
@@ -207,17 +206,21 @@ export async function connectionAllows(
  * Where a downloadable source's tiles come from, what to credit, and what the
  * finished file IS.
  *
- * The DEM is not in `BASEMAP_CATALOG` and must not be: the catalog is the list
- * of maps the layer picker offers, and nothing draws terrarium tiles. It is
- * still fetched by this same engine under the same politeness envelope, so the
- * only thing that differs is these three fields.
+ * The public worldwide DEM is not in `BASEMAP_CATALOG` and must not be: the
+ * catalog is the list of maps the layer picker offers, and nothing draws
+ * terrarium tiles. It is still fetched by this same engine under the same
+ * politeness envelope, so the only thing that differs is these three fields.
+ * Where the world has an archive of its own there is no such job: that is
+ * saved as a clip (`regionClipSpecs`; guard: `regionTilePlanning.test.ts`,
+ * "gives every area the world's heights clip too, where the world declares an
+ * archive").
  */
 function tileSourceFor(sourceId: DownloadableTileSourceId): {
   urlTemplate: string;
   attribution: string;
   kind: MapArtifact["kind"];
 } {
-  if (sourceId === DEM_SOURCE_ID) {
+  if (sourceId === TERRARIUM.id) {
     return {
       urlTemplate: TERRARIUM.urlTemplate,
       attribution: TERRARIUM.credit,
@@ -226,9 +229,9 @@ function tileSourceFor(sourceId: DownloadableTileSourceId): {
   }
   const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === sourceId);
   if (!entry) throw new Error(`Unknown basemap id: ${sourceId}`);
-  if (!entry.offlineCapable) {
+  if (!entry.offlineCapable || entry.kind !== "raster") {
     // A programming error: the picker must never offer a source the catalog
-    // marks online-only.
+    // marks online-only, nor the vector map, which is saved as clips.
     throw new Error(`Basemap ${sourceId} is not offline-capable`);
   }
   return {

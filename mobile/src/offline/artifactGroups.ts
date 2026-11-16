@@ -50,7 +50,8 @@ export function isBundledRegionMember(
 
 /**
  * The files of a saved area that `fresh` replaces: a group holds one file per
- * kind and source, so a newer download of the same map in the same card (an
+ * kind and source (and, for the vector map, per archive: a box over two regions
+ * has a clip of each), so a newer download of the same map in the same card (an
  * update) takes the older one's place. Nothing else is touched.
  * Guard: `artifactGroups.test.ts` ("supersededBy").
  */
@@ -65,7 +66,8 @@ export function supersededBy(
       isRegionArtifact(other) &&
       regionGroupKey(other) === key &&
       other.kind === fresh.kind &&
-      other.logicalKey === fresh.logicalKey,
+      other.logicalKey === fresh.logicalKey &&
+      (other.archivePath ?? null) === (fresh.archivePath ?? null),
   );
 }
 

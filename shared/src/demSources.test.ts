@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CLIMB_SOURCES,
+  climbRank,
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
   SHARPENED_CLIMB_SOURCE,
@@ -17,13 +18,15 @@ import {
   demTileUrl,
   isFinerClimbSource,
   sampleDem,
+  worldwideSource,
   type DemSource,
   type DemTileReader,
 } from "./demSources.js";
+import { demSlopeAt } from "./demSlope.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
 import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
 import { sharpenedDemSource } from "./sharpen.js";
-import { NSW_REGION } from "./regions.js";
+import { layerIn, NSW_REGION, WORLD } from "./regions.js";
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 
 describe("demTileUrl", () => {
@@ -173,6 +176,97 @@ describe("the declaration", () => {
   });
 });
 
+describe("the worldwide source", () => {
+  /** What the module declares with the simulated regions on at load. */
+  async function withSimulatedRegions() {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      return {
+        demSources: await import("./demSources.js"),
+        elevation: await import("./elevation.js"),
+        simRegions: await import("./simRegions.js"),
+      };
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
+  }
+
+  // Mutation: declare `terrain.heights` on the empty world in regions.ts, and
+  // prod's last source is no longer the public tiles it has always asked.
+  it("is the public Terrarium tiles while the world declares no archive, and asks as it always did", async () => {
+    expect(layerIn(WORLD, "heights"), "premise: prod's world is empty").toBe(
+      null,
+    );
+    expect(worldwideSource()).toBe(TERRARIUM);
+    expect(DEM_SOURCES.at(-1)).toBe(TERRARIUM);
+    expect(CLIMB_SOURCES).toEqual(["lidar", "nsw-5m", "terrarium", "gps"]);
+    // A line far from NSW reaches the last source and asks it for these tiles.
+    const asked: string[] = [];
+    await sampleDem(
+      [{ lon: 115.86, lat: -31.95, distanceM: 0 }],
+      async (source, tiles) => {
+        for (const tile of tiles)
+          asked.push(
+            source.id +
+              " " +
+              demTileUrl(
+                source as DemSource & { urlTemplate: string },
+                tile.tileX,
+                tile.tileY,
+              ),
+          );
+        return new Map();
+      },
+    );
+    expect(asked).toEqual([
+      "terrarium https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/6732/4863.png",
+    ]);
+  });
+
+  // Mutation: return the archive as it is declared (a box) and its coverage is
+  // not null: the slope reading then takes the 30 m worldwide heights.
+  it("is the world's archive, read with no coverage box, where the world declares one", async () => {
+    const { simRegions } = await withSimulatedRegions();
+    const heights = layerIn(simRegions.SIM_WORLD, "heights")!;
+    expect(heights.coverage).not.toBeNull();
+    const source = worldwideSource(simRegions.SIM_WORLD);
+    expect(source).toMatchObject({
+      id: heights.id,
+      archivePath: heights.archivePath,
+      sampleZoom: heights.sampleZoom,
+      urlTemplate: null,
+      coverage: null,
+    });
+    // Too coarse for a slope: the reading finds no regional source and gives none.
+    const flat: DemTileReader = async (_source, tiles) =>
+      new Map(
+        tiles.map((t) => [
+          `${t.tileX}/${t.tileY}`,
+          new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE).fill(500),
+        ]),
+      );
+    expect(await demSlopeAt(10, 50, flat, [source])).toBeNull();
+  });
+
+  // Mutation: build `DEM_SOURCES` from `REGIONS` and `TERRARIUM` as before,
+  // and a world hillshade draws from an archive the height sampler never reads.
+  it("replaces the Terrarium tiles in DEM_SOURCES, last, when the world declares an archive", async () => {
+    const { demSources, simRegions } = await withSimulatedRegions();
+    const world = layerIn(simRegions.SIM_WORLD, "heights")!;
+    expect(demSources.DEM_SOURCES.at(-1)).toMatchObject({
+      id: world.id,
+      coverage: null,
+    });
+    expect(demSources.DEM_SOURCES.map((source) => source.id)).not.toContain(
+      "terrarium",
+    );
+    expect(demSources.DEM_SOURCES.at(-2)!.id).toBe("simutah-heights");
+  });
+});
+
 describe("demSourceCovers", () => {
   const over = (coverage: DemSource["coverage"]): DemSource => ({
     ...TERRARIUM,
@@ -229,6 +323,59 @@ describe("climb sources", () => {
 
   it("never replace a climb from a source this build does not know", () => {
     expect(isFinerClimbSource("nsw-5m", "nsw-1m")).toBe(false);
+  });
+
+  // Mutation: rank by `CLIMB_SOURCES.indexOf` alone in `climbRank`, and a
+  // track stored from the Terrarium tiles is "replaced" by the archive that
+  // took their place, for the same 30 m ground.
+  it("rank the Terrarium tiles with the world's archive", async () => {
+    const flag = globalThis as { LOGJAM_SIM_REGIONS?: unknown };
+    vi.resetModules();
+    flag.LOGJAM_SIM_REGIONS = true;
+    try {
+      const sources = await import("./demSources.js");
+      const elevation = await import("./elevation.js");
+      const world = sources.worldwideSource().id;
+      expect(world).not.toBe("terrarium");
+      // Tracks already carry the Terrarium id, so it stays a climb source.
+      expect(sources.CLIMB_SOURCES).toEqual([
+        "lidar",
+        "nsw-5m",
+        "simnz-heights",
+        "simutah-heights",
+        world,
+        "terrarium",
+        "gps",
+      ]);
+      expect(sources.climbRank("terrarium")).toBe(sources.climbRank(world));
+      expect(sources.isFinerClimbSource(world, "terrarium")).toBe(false);
+      expect(sources.isFinerClimbSource("terrarium", world)).toBe(false);
+      expect(sources.isFinerClimbSource(world, "gps")).toBe(true);
+      expect(sources.isFinerClimbSource("simnz-heights", world)).toBe(true);
+      expect(sources.isFinerClimbSource("simnz-heights", "terrarium")).toBe(
+        true,
+      );
+      // A climb read wholly from the archive is stored under its id.
+      const profile = {
+        samples: [0, 1].map((distanceM) => ({ distanceM, elevationM: 100 })),
+        gainM: 0,
+        lossM: 0,
+        minM: 100,
+        maxM: 100,
+        demSourceIds: [world],
+      } as Parameters<typeof elevation.climbFromProfile>[0];
+      expect(elevation.climbFromProfile(profile)?.elevationSource).toBe(world);
+    } finally {
+      delete flag.LOGJAM_SIM_REGIONS;
+      vi.resetModules();
+    }
+  });
+
+  // Mutation: have `climbRank` rank the Terrarium id as another source
+  // (`"nsw-5m"`, say), and a stored Terrarium climb no longer ranks at its own
+  // `CLIMB_SOURCES` index.
+  it("rank the Terrarium tiles where they are the worldwide source, as before", () => {
+    expect(climbRank("terrarium")).toBe(CLIMB_SOURCES.indexOf("terrarium"));
   });
 });
 

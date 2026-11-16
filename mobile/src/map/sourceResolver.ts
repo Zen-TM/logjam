@@ -22,6 +22,7 @@ import {
   lonOverlap,
   lonWidth,
   REGIONS,
+  WORLD,
   wrapLon,
   type BasemapCatalogEntry,
   type Region,
@@ -34,6 +35,7 @@ import {
   type TerrainLayerKey,
   type TopoLayerFormat,
   type TopoLayerKey,
+  vectorIn,
 } from "@logjam/shared";
 
 import {
@@ -53,7 +55,13 @@ import type { TileJson } from "./tileJsonFile";
 export type BasemapId = BasemapCatalogEntry["id"];
 
 export type LogicalLayerRef =
-  | { kind: "basemap"; basemapId: BasemapId }
+  /**
+   * `region` is the one the map shows (`regionShown`): the vector basemap is
+   * read from its archive, online, and from the clips saved of it, offline.
+   * Any other basemap ignores it. Required, so that a caller cannot leave the
+   * vector map with no archive by leaving it out.
+   */
+  | { kind: "basemap"; basemapId: BasemapId; region: Region | null }
   | {
       kind: "topo-overlay";
       jobId: string;
@@ -102,7 +110,11 @@ export type ResolvedTileSource =
   | {
       status: "unavailable";
       key: string;
-      reason: "offline-not-downloaded" | "online-only-source" | "no-remote-url";
+      reason:
+        | "offline-not-downloaded"
+        | "online-only-source"
+        | "no-remote-url"
+        | "not-available-here";
     };
 
 export interface MapArtifact {
@@ -160,6 +172,13 @@ export interface MapArtifact {
    */
   groupId?: string | null;
   groupLabel?: string | null;
+  /**
+   * The CDN path of the archive a vector basemap clip was cut from: the vector
+   * map draws only the clips cut from the archive of the region it shows
+   * (`holdsBasemap`). Null on every other artifact, and on a vector clip saved
+   * before it was kept.
+   */
+  archivePath?: string | null;
 }
 
 export interface ResolveContext {
@@ -230,9 +249,31 @@ function localArtifactSource(
   };
 }
 
+/**
+ * Whether a saved file is a clip of `basemapId`'s map as it is drawn over
+ * `region`. For the vector map that is a clip cut from the archive of that
+ * region: one of another region's, or saved before clips kept their archive,
+ * is not drawn there. The resolver, the offline notice and the place page's
+ * coverage row all ask this one question. Guard: `sourceResolver.test.ts`
+ * ("holdsBasemap").
+ */
+export function holdsBasemap(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "archivePath">,
+  basemapId: string,
+  region: Region | null,
+): boolean {
+  if (artifact.kind !== "basemap-region" || artifact.logicalKey !== basemapId) {
+    return false;
+  }
+  if (basemapId !== "protomaps") return true;
+  const archive = vectorIn(region);
+  return archive !== null && artifact.archivePath === archive.archivePath;
+}
+
 function resolveBasemap(
   basemapId: BasemapId,
   ctx: ResolveContext,
+  region: Region | null,
 ): ResolvedTileSource[] {
   const logicalId = `basemap:${basemapId}`;
   const online = ctx.connectivity === "online";
@@ -240,19 +281,28 @@ function resolveBasemap(
   // registry lists the newest first. Where saves overlap, the newest wins
   // until a style reload (`BAND_MARKERS`).
   const regions = ctx.artifacts
-    .filter((a) => a.kind === "basemap-region" && a.logicalKey === basemapId)
+    .filter((a) => holdsBasemap(a, basemapId, region))
     .reverse();
 
   if (basemapId === "protomaps") {
-    // Self-hosted vector basemap. Remote archive lives on our CDN (catalog
-    // urlTemplate = CDN-relative archive path); offline it needs a downloaded
-    // region.
+    // Self-hosted vector basemap, read from the archive of the region the map
+    // shows: remote online, and offline the clips saved from that archive. A
+    // clip of another region's archive is never drawn here, nor one saved
+    // before clips named their archive (`holdsBasemap`). Guard:
+    // `sourceResolver.test.ts` ("offline: draws only the clips cut from the
+    // archive of the region shown").
+    const archive = vectorIn(region);
     const protomapsEntry = catalogEntry("protomaps");
     if (!protomapsEntry) {
       throw new Error("protomaps missing from BASEMAP_CATALOG");
     }
+    if (!archive) {
+      return [
+        { status: "unavailable", key: logicalId, reason: "not-available-here" },
+      ];
+    }
     if (online) {
-      const url = `pmtiles://${ctx.cdnBaseUrl}/${protomapsEntry.urlTemplate}`;
+      const url = `pmtiles://${ctx.cdnBaseUrl}/${archive.archivePath}`;
       return [
         {
           status: "ok",
@@ -279,9 +329,9 @@ function resolveBasemap(
   }
 
   const entry = catalogEntry(basemapId);
-  if (!entry) {
+  if (entry?.kind !== "raster") {
     // Fail loudly — an unknown basemap id is a programming error, not a
-    // degradable state.
+    // degradable state. The one vector entry is drawn above.
     throw new Error(`Unknown basemap id: ${basemapId}`);
   }
 
@@ -586,13 +636,15 @@ function resolveStatewide(
  * zoomed out, so it is no clip for this: an area saved that way says "Needs a
  * connection" until it is saved again. Used by the layers sheet's switch and
  * the resolver's candidates alike, so a z15-only clip never beats a z8-15 one.
- * Answers "is anything saved" over `regions`; what the map draws is only the
- * shown region's clips (`resolveTerrain`). Guard: `sourceResolver.test.ts`
- * ("holdsHillshade").
+ * Answers "is anything saved" over `regions` and the world entry, whose clip
+ * shades a map over ground no region covers; what the map draws is only the
+ * shown region's clips (`resolveTerrain`). Guards: `sourceResolver.test.ts`
+ * ("holdsHillshade", "holdsHillshade and drawsTerrain: the world's clip, where
+ * the world declares an archive").
  */
 export function holdsHillshade(
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
-  regions: readonly Region[] = REGIONS,
+  regions: readonly Region[] = [...REGIONS, WORLD],
 ): boolean {
   return (
     artifact.kind === "dem-region" &&
@@ -643,7 +695,7 @@ export const holdsCoverage = (artifact: Pick<MapArtifact, "kind">): boolean =>
  */
 export const drawsTerrain = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
-  regions: readonly Region[] = REGIONS,
+  regions: readonly Region[] = [...REGIONS, WORLD],
 ): boolean =>
   holdsContours(artifact, regions) ||
   holdsSlope(artifact, regions) ||
@@ -734,12 +786,12 @@ export function basemapsCoveringViewport(
   artifacts: readonly MapArtifact[],
   viewport: Viewport,
   candidates: readonly BasemapId[],
+  region: Region | null,
 ): BasemapId[] {
   return candidates.filter((candidate) =>
     artifacts.some(
       (artifact) =>
-        artifact.kind === "basemap-region" &&
-        artifact.logicalKey === candidate &&
+        holdsBasemap(artifact, candidate, region) &&
         bboxOnScreen(artifact.bbox, viewport),
     ),
   );
@@ -880,7 +932,7 @@ export function resolveMapSource(
 ): ResolvedTileSource[] {
   switch (ref.kind) {
     case "basemap":
-      return resolveBasemap(ref.basemapId, ctx);
+      return resolveBasemap(ref.basemapId, ctx, ref.region);
     case "topo-overlay":
       return resolveTopoOverlay(ref, ctx);
     case "terrain":

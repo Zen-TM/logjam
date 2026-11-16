@@ -21,11 +21,14 @@ export function simRegionsFor(
   return true;
 }
 
-if (
-  simRegionsFor(
-    import.meta.env.VITE_SIM_REGIONS,
-    import.meta.env.VITE_AUTH_MODE,
-  )
-) {
-  (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS = true;
+const authMode = import.meta.env.VITE_AUTH_MODE;
+const sim = globalThis as { LOGJAM_SIM_REGIONS?: boolean };
+if (simRegionsFor(import.meta.env.VITE_SIM_REGIONS, authMode)) {
+  sim.LOGJAM_SIM_REGIONS = true;
+} else if (authMode !== "fake") {
+  // `@logjam/shared` honours the global in any build, so one set by the page
+  // before this bundle loaded would turn the regions on without the build flag.
+  // Guard: simRegions.test.ts ("clears a switch the page set before the bundle
+  // loaded").
+  delete sim.LOGJAM_SIM_REGIONS;
 }

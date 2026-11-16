@@ -41,6 +41,8 @@ import {
   regionTouchesBox,
   simRegionsOn,
   soleRegion,
+  vectorArchiveAt,
+  vectorsTouching,
   WORLD,
   type LonLatBox,
   type Region,
@@ -49,7 +51,9 @@ import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
-const ALL: readonly Region[] = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD, WORLD];
+// Every region the declaration holds, real or simulated, and both worlds: a
+// region added to `REGIONS_WITH_SIMULATED` is in every guard that reads this.
+const ALL: readonly Region[] = [...REGIONS_WITH_SIMULATED, SIM_WORLD, WORLD];
 
 describe("the declaration", () => {
   // Mutation: write a vertex of any ring at a longitude of 190 or -190, and
@@ -79,6 +83,17 @@ describe("the declaration", () => {
     for (const id of claimed) expect(ids(BASEMAP_CATALOG)).toContain(id);
   });
 
+  // Mutation: list "protomaps" in a region's `basemaps` again, and the vector
+  // map is offered by ownership as well as by `vector`: two declarations that
+  // can disagree.
+  it("leaves the vector basemap out of every region's basemaps", () => {
+    const vector = BASEMAP_CATALOG.filter((entry) => entry.kind === "vector");
+    expect(vector.length).toBeGreaterThan(0);
+    for (const region of ALL)
+      for (const entry of vector)
+        expect(region.basemaps).not.toContain(entry.id);
+  });
+
   // Mutation: set a default basemap the region doesn't list, or default to an
   // `offered: false` entry, and Logjam GPS opens on a map its picker can't
   // show. A region with none opens on a worldwide entry, which no region lists.
@@ -100,6 +115,17 @@ describe("the declaration", () => {
   it("keeps each id to lower-case letters and digits", () => {
     expect(ALL.length).toBeGreaterThanOrEqual(5);
     for (const region of ALL) expect(region.id).toMatch(/^[a-z0-9]+$/);
+  });
+
+  // Mutation: add a second entry to `REGIONS` whose heights reuse NSW's id
+  // (`nsw-5m`), or give a simulated slope another region's id, and a save
+  // queues two clips under one key and prices the archive twice.
+  it("gives every terrain archive an id no other has, across every region", () => {
+    const archiveIds = [...new Set([...REGIONS, ...ALL])].flatMap((region) =>
+      Object.values(region.terrain).map((archive) => archive.id),
+    );
+    expect(archiveIds.length).toBeGreaterThanOrEqual(15);
+    expect(new Set(archiveIds).size).toBe(archiveIds.length);
   });
 
   // Mutation: add a DEM source with a coverage box to DEM_SOURCES by hand, or
@@ -134,7 +160,7 @@ describe("the declaration", () => {
 
   // Mutation: a view centre in the sea, and a new map opens on nothing.
   it("opens its map inside its own border", () => {
-    for (const region of [NSW_REGION, ...SIM_REGIONS]) {
+    for (const region of REGIONS_WITH_SIMULATED) {
       const [lon, lat] = region.view.center;
       expect(
         regionTouchesBox(region, {
@@ -168,7 +194,6 @@ describe("the declaration", () => {
     expect(NSW_REGION.placeSearch).toBe("master/places/v1/");
     expect(NSW_REGION.gauges).toBe("master/gauges/v1/");
     expect(NSW_REGION.basemaps).toEqual([
-      "protomaps",
       "six-topo",
       "six-base",
       "six-imagery",
@@ -410,7 +435,11 @@ describe("offeredBasemaps", () => {
   // Mutation: list every catalogue entry, and a map over New Zealand is
   // offered SIX Maps of NSW.
   it("lists the worldwide basemaps and the own ones of what the view touches", () => {
-    expect(ids(offeredBasemaps(inNz, two))).toEqual(["osm-topo", "osm-cycle"]);
+    expect(ids(offeredBasemaps(inNz, two))).toEqual([
+      "protomaps",
+      "osm-topo",
+      "osm-cycle",
+    ]);
     expect(ids(offeredBasemaps(inNsw, two))).toEqual([
       "protomaps",
       "osm-topo",
@@ -445,7 +474,7 @@ describe("offeredBasemaps", () => {
           two,
         ),
       ),
-    ).toEqual(["osm-topo", "osm-cycle"]);
+    ).toEqual(["protomaps", "osm-topo", "osm-cycle"]);
   });
 
   // Mutation: drop the `offered` test, and both pickers grow a second
@@ -495,6 +524,76 @@ describe("LISTED_BASEMAPS", () => {
   });
 });
 
+describe("the vector basemap", () => {
+  const bare: Region = { ...SIM_UTAH, vector: null };
+  const three = [NSW_REGION, SIM_NZ, bare];
+  const at = ([lon, lat]: readonly [number, number]): LonLatBox => ({
+    west: lon - 0.05,
+    south: lat - 0.05,
+    east: lon + 0.05,
+    north: lat + 0.05,
+  });
+  const inNsw = at([150.3, -33.7]);
+  const inNz = at([169.25, -44.055]);
+  const inBare = at(bare.view.center);
+  const atSea = at([160, -40]);
+  const offers = (view: LonLatBox, world?: Region) =>
+    ids(offeredBasemaps(view, three, world)).includes("protomaps");
+
+  // Mutation: offer the vector entry whatever the view, and a map over a
+  // region with no vector extract lists a map that draws nothing; offer it
+  // only where `NSW_REGION` is, and New Zealand's own cut is never listed.
+  it("is offered where the region in view declares an archive of it", () => {
+    expect(offers(inNsw)).toBe(true);
+    expect(offers(inNz)).toBe(true);
+    expect(offers(inBare)).toBe(false);
+    expect(offers(atSea)).toBe(false);
+  });
+
+  // Mutation: read `world.vector` whatever touches, and a view over a region
+  // with none is offered the planet's.
+  it("falls to the world's archive only where no region is in view", () => {
+    expect(offers(atSea, SIM_WORLD)).toBe(true);
+    expect(offers(inBare, SIM_WORLD)).toBe(false);
+  });
+
+  // Mutation: look in `REGIONS` alone, and a saved clip of the world's archive
+  // reads as one no one declares; look nowhere but the first region, and a
+  // clip of a later region's archive does too.
+  it("vectorArchiveAt: finds a declared archive by its path, else none", () => {
+    expect(vectorArchiveAt(NSW_REGION.vector!.archivePath, three)).toBe(
+      NSW_REGION.vector,
+    );
+    expect(vectorArchiveAt(SIM_NZ.vector!.archivePath, three)).toBe(
+      SIM_NZ.vector,
+    );
+    expect(
+      vectorArchiveAt(SIM_WORLD.vector!.archivePath, three, SIM_WORLD),
+    ).toBe(SIM_WORLD.vector);
+    expect(vectorArchiveAt(SIM_WORLD.vector!.archivePath, three)).toBeNull();
+    expect(vectorArchiveAt("master/basemap/none.pmtiles", three)).toBeNull();
+  });
+
+  // Mutation: take only the first touching region's, and a save over two
+  // regions has no vector map for the second; take the world's as well, and a
+  // save over a region adds the planet's archive.
+  it("vectorsTouching: every touching region's archive, else the world's", () => {
+    const wide: LonLatBox = { west: 140, south: -50, east: 175, north: -30 };
+    expect(vectorsTouching(wide, three, SIM_WORLD)).toEqual([
+      NSW_REGION.vector,
+      SIM_NZ.vector,
+    ]);
+    expect(vectorsTouching(inNsw, three, SIM_WORLD)).toEqual([
+      NSW_REGION.vector,
+    ]);
+    expect(vectorsTouching(inBare, three, SIM_WORLD)).toEqual([]);
+    expect(vectorsTouching(atSea, three, SIM_WORLD)).toEqual([
+      SIM_WORLD.vector,
+    ]);
+    expect(vectorsTouching(atSea, three)).toEqual([]);
+  });
+});
+
 describe("vectorBasemapIn", () => {
   // Mutation: return the vector id without the `includes` test, and a client
   // falls to a vector map over ground its archive does not cover; return the
@@ -541,25 +640,18 @@ describe("toggleRegion and regionOffRefusal", () => {
 });
 
 describe("the simulated regions", () => {
-  // Mutation: reuse an id or an archive path across two, and a clip or a map
-  // layer of one answers for another.
-  it("share no id or archive path with each other or with NSW", () => {
-    const declared = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD];
-    const archives = declared.flatMap((r) => [
-      ...Object.values(r.terrain).map((a) => a.id),
-      ...Object.values(r.terrain).map((a) => a.archivePath),
-    ]);
-    // A hillshade shares its archive with the heights, so count the ids.
-    const idsOnly = declared.flatMap((r) =>
-      Object.values(r.terrain).map((a) => a.id),
-    );
-    expect(new Set(idsOnly).size).toBe(idsOnly.length);
-    expect(archives.length).toBeGreaterThan(15);
+  // Mutation: name a simulated archive's path without its region's id, and a
+  // clip of one region's data could be taken for another's.
+  it("keep each archive under its own region's path", () => {
+    let checked = 0;
     for (const sim of [...SIM_REGIONS, SIM_WORLD])
-      for (const archive of Object.values(sim.terrain))
+      for (const archive of Object.values(sim.terrain)) {
+        checked++;
         expect(archive.archivePath).toContain(
           sim === SIM_WORLD ? "simworld" : sim.id,
         );
+      }
+    expect(checked).toBeGreaterThanOrEqual(15);
   });
 
   // Mutation: duplicate a `source` or `name` in a simulated region's land
@@ -772,7 +864,8 @@ describe("placeRegistryIn", () => {
 
   // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
   // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
-  // once round the world matches no region.
+  // once round the world matches no region. Either change alone stays green:
+  // `regionsTouching` answers.
   it("reads a map panned round the world", () => {
     const [lon, lat] = nz.view.center;
     expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
@@ -810,8 +903,7 @@ describe("a region's registry prefix", () => {
   // simulated region's `placeSearch` as "master/places/simnz/v0/".
   it("carries the current registry format, for every declared and simulated region", () => {
     const declared = regionsWithRegistry([
-      NSW_REGION,
-      ...SIM_REGIONS,
+      ...REGIONS_WITH_SIMULATED,
       SIM_WORLD,
     ]);
     // A floor: a filter that stopped matching would check nothing.

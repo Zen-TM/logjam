@@ -1,9 +1,10 @@
 import { mapTools, type MapToolIdOn } from "@logjam/shared";
 import type { MenuEntry } from "../../ui";
-import type { MapTool, MapToolUnavailable } from "./MapChrome";
+import type { SharpenUnavailable } from "@logjam/shared";
+import type { MapTool } from "./MapChrome";
 
 type Action =
-  | { onSelect: () => void; unavailable?: MapToolUnavailable }
+  | { onSelect: () => void; unavailable?: SharpenUnavailable }
   | { menu: readonly MenuEntry[] };
 
 /**

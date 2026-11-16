@@ -41,6 +41,18 @@ describe("sheetTerrain", () => {
     expect(nz.credit).not.toBe(nsw.credit);
   });
 
+  // Mutation: take `NSW_REGION.vector` in place of `vectorIn(region)`, and a
+  // sheet in another region prints the vector map from NSW's archive; read the
+  // world's whatever the region, and an ocean sheet with no world has one.
+  it("draws the vector basemap from the archive of the sheet's region", () => {
+    expect(sheetTerrain(KATOOMBA, ALL).vector).toBe(NSW_REGION.vector);
+    expect(sheetTerrain(NZ, ALL).vector).toBe(SIM_NZ.vector);
+    expect(sheetTerrain(UTAH, ALL).vector).toBe(SIM_UTAH.vector);
+    expect(sheetTerrain(OCEAN, ALL).vector).toBeNull();
+    expect(sheetTerrain(OCEAN, ALL, SIM_WORLD).vector).toBe(SIM_WORLD.vector);
+    expect(sheetTerrain(NZ, ALL, SIM_WORLD).vector).toBe(SIM_NZ.vector);
+  });
+
   // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
   // `last` to 0) and the centre unwrapped in `regionInView`, and a sheet picked
   // in another world copy (longitude shifted by a whole turn) finds no region,
@@ -90,6 +102,7 @@ describe("sheetTerrain", () => {
       slope: null,
       contours: null,
       land: null,
+      vector: null,
       credit: null,
     });
   });
