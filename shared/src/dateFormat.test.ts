@@ -41,7 +41,7 @@ describe("the day forms", () => {
     }
   });
 
-  // Mutation: add an exported function whose name starts with "format" that the fixture lacks, or change one form's `fill(t` to `fill( t`, so the scan of patterns misses it.
+  // Mutation: add an exported function whose name starts with "format" that the fixture lacks.
   it("are all in the fixture, so a client test can pin every one", () => {
     expect(FORMS.length).toBeGreaterThanOrEqual(12);
     for (const [key, forms] of Object.entries(FIXTURE)) {
@@ -51,7 +51,7 @@ describe("the day forms", () => {
     }
   });
 
-  // Mutation: give two forms the same pattern, as the holes {0} {1} {2} would be for "Sat 8 Nov" and "15 Mar 2026".
+  // Mutation: give two forms the same pattern, as the holes {0} {1} {2} would be for "Sat 8 Nov" and "15 Mar 2026", or change one form's `fill(t` to `fill( t`, so the scan of patterns misses it.
   it("give every form a message of its own", () => {
     const source = readFileSync(join(HERE, "dateFormat.ts"), "utf8");
     const patterns = [...source.matchAll(/fill\(t`([^`]+)`/g)].map((m) => m[1]);
