@@ -244,6 +244,10 @@ export default function MapChrome({
                         className={`${item.className} ${classes.trayUnavailable}`}
                       >
                         {face}
+                        {/* Without it the name reads "Sharpen an areaNot
+                            available here", and axe's label-content-name-
+                            mismatch cannot match it to what is drawn. It
+                            renders no gap: the tray item is a flex row. */}{" "}
                         <span className={classes.trayState}>
                           {tool.unavailable!.state}
                         </span>

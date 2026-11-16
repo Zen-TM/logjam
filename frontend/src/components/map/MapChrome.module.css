@@ -88,7 +88,6 @@
   line-height: inherit;
   text-align: left;
   box-shadow: var(--shadow-map-card);
-  cursor: pointer;
   z-index: calc(10 - var(--i, 0));
   animation: trayFold 110ms ease-out both;
   animation-delay: calc(var(--i, 0) * 30ms);
@@ -130,7 +129,12 @@
   }
 }
 
-.trayItem:hover {
+/* Only a tool that can run answers a pointer (shared/DESIGN.md §4). */
+.trayItem:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+.trayItem:not([aria-disabled="true"]):hover {
   background: var(--color-card-pressed);
 }
 

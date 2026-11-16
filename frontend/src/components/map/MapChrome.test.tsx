@@ -154,8 +154,10 @@ describe("a tool the map's region cannot run", () => {
     togglePopover() {},
   });
 
-  // Mutation: leave `unavailable` out of the tool's branch in MapChrome, and
-  // the press runs the tool and closes the tray.
+  // Mutation: in MapChrome.tsx change `) : tool.unavailable ? (` to
+  // `) : false ? (`, and the press runs the tool and closes the tray; delete
+  // the `{" "}` before `<span className={classes.trayState}>`, and the name
+  // reads "Sharpen an areaNot available here".
   it("says why beside its label and does nothing when pressed", () => {
     const onSelect = vi.fn();
     chrome(false, null, [
@@ -168,7 +170,9 @@ describe("a tool the map's region cannot run", () => {
       },
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
-    const tool = screen.getByRole("button", { name: /^Sharpen an area/ });
+    const tool = screen.getByRole("button", {
+      name: "Sharpen an area Not available here",
+    });
     expect(tool.getAttribute("aria-disabled")).toBe("true");
     expect(tool.textContent).toContain("Not available here");
     fireEvent.click(tool);

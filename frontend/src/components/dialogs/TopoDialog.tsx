@@ -455,9 +455,11 @@ export default function TopoDialog({
         dismissible={!uploading}
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
-        onClose={mode === "form" ? performClose : backToForm}
+        onClose={mode === "form" || off ? performClose : backToForm}
         discard={
-          isDirty && mode === "form" ? abandonConfirm("request", true) : null
+          isDirty && mode === "form" && !off
+            ? abandonConfirm("request", true)
+            : null
         }
         // Where sharpening is off the dialog has nothing to send or go back
         // to: the header's Close is its way out.

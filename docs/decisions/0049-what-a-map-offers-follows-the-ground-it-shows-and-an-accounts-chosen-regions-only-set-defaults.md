@@ -126,8 +126,8 @@ read, none of them a location.)
   whose job was refused. A map not yet placed starts from the stored or
   default camera's region, so a New South Wales user never sees the off state
   flash. Guard: `shared/src/sharpen.test.ts` ("sharpenOffer",
-  "sharpenOfferFor"), `frontend/src/components/App.render.test.tsx` and
-  `frontend/e2e/sharpen-region.spec.ts`. Everything else above stands.
+  "sharpenOfferFor"), `frontend/src/components/map/viewRegion.test.ts`
+  ("startingView") and `frontend/e2e/sharpen-region.spec.ts`. Everything else above stands.
 - **Update 2026-11-16: an area export's rasters come from one region.** An
   area export (GeoTIFF, GeoPackage, MBTiles) reads its heights, slope and
   contours from the one region `areaExportRegion` (`shared/src/areaExport.ts`)

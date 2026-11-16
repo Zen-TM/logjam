@@ -20,6 +20,7 @@ const view = (lat: number, lng: number) =>
 const ZION = view(37.285, -112.945);
 const MAKARORA = view(-44.055, 169.25);
 const SYDNEY = view(-33.87, 151.21);
+const QUEENSTOWN = view(-45.03, 168.66);
 
 async function openAt(page: Page, mapView: string, sim: boolean) {
   await stubMaster(page);
@@ -85,14 +86,20 @@ test("over a region whose portal has no errand, the dialog names it and gives it
 
 // Mutation: leave `unavailable` out of the `sharpen` tool in App.tsx, or
 // `sharpenOff` out of the Sharpened areas view in LayersPopover.tsx, and the
-// entry point over Makarora opens a dialog with nothing to offer.
+// entry point over Makarora opens a dialog with nothing to offer; change
+// `.trayItem:not([aria-disabled="true"])` in MapChrome.module.css to
+// `.trayItem`, and the tool answers a pointer.
 test("over a region with no sharpening, the entry points say so and open nothing", async ({
   page,
 }) => {
   await openAt(page, MAKARORA, true);
   const tool = await openTray(page);
   await expect(tool).toHaveAttribute("aria-disabled", "true");
-  await expect(tool).toContainText(MAP_TERRAIN.copy.notHere);
+  await expect(tool).toHaveAccessibleName(
+    `Sharpen an area ${MAP_TERRAIN.copy.notHere}`,
+  );
+  // Nothing that cannot run answers a pointer (shared/DESIGN.md §4).
+  await expect(tool).toHaveCSS("cursor", "default");
   // Playwright will not click what aria-disabled marks: the press is the point.
   await tool.click({ force: true });
   await expect(page.getByRole("tooltip")).toHaveText(
@@ -115,6 +122,24 @@ test("over a region with no sharpening, the entry points say so and open nothing
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 });
 
+// Mutation: in shared/src/sharpen.ts change `(region ?? WORLD).sharpen` to
+// `(region ?? REGIONS[0]!).sharpen`, and the map wholly outside New South
+// Wales opens the ELVIS dialog, whose job the worker would refuse.
+test("with the map wholly outside New South Wales, and no switch, the entry says so", async ({
+  page,
+}) => {
+  await openAt(page, QUEENSTOWN, false);
+  const tool = await openTray(page);
+  await expect(tool).toHaveAccessibleName(
+    `Sharpen an area ${MAP_TERRAIN.copy.notHere}`,
+  );
+  await tool.click({ force: true });
+  await expect(page.getByRole("tooltip")).toHaveText(
+    SHARPEN_OFF_REASON["no-lidar"],
+  );
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+});
+
 // Mutation: rename NSW's portal in shared/src/regions.ts, and prod's one
 // region reads differently.
 test("over New South Wales, with no switch, it reads as it always did", async ({
@@ -123,7 +148,8 @@ test("over New South Wales, with no switch, it reads as it always did", async ({
   await openAt(page, SYDNEY, false);
   const tool = await openTray(page);
   await expect(tool).not.toHaveAttribute("aria-disabled", "true");
-  await expect(tool).not.toContainText(MAP_TERRAIN.copy.notHere);
+  await expect(tool).toHaveAccessibleName("Sharpen an area");
+  await expect(tool).toHaveCSS("cursor", "pointer");
   await tool.click();
   const dialog = page.locator("dialog[open]");
   await expect(

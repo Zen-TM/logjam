@@ -17,6 +17,7 @@ import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
 import { t } from "./i18n.js";
 import {
   REGIONS,
+  WORLD,
   regionOfArea,
   type LonLatBox,
   type Region,
@@ -63,19 +64,13 @@ export type SharpenOffer =
   | { mode: "off"; reason: string };
 
 /**
- * What sharpening offers where `region` is. With no region (a map not yet
- * placed, or over ground no region declares) it offers what the first
- * upload region does, as the dialog always did when New South Wales was the
- * only region; the worker still refuses a survey of ground in none
- * (topo/sharpen.py `upload_region`). Guard: `sharpen.test.ts` ("sharpenOffer").
+ * What sharpening offers where `region` is. Over ground no region declares
+ * (`null`) it is the world's entry, which has no LiDAR to sharpen from: the
+ * worker refuses a survey of that ground up front (topo/sharpen.py
+ * `upload_region`). Guard: `sharpen.test.ts` ("sharpenOffer").
  */
-export function sharpenOffer(
-  region: Region | null,
-  regions: readonly Region[] = REGIONS,
-): SharpenOffer {
-  const entry: RegionSharpen = (
-    region ?? regions.find((r) => r.sharpen.mode === "upload")
-  )?.sharpen ?? { mode: "off", reason: "no-lidar" };
+export function sharpenOffer(region: Region | null): SharpenOffer {
+  const entry: RegionSharpen = (region ?? WORLD).sharpen;
   return entry.mode === "upload"
     ? {
         mode: "upload",
@@ -100,19 +95,21 @@ export function sharpenUnavailable(
 }
 
 /**
- * The offer for an action about `box`, else about what the map shows: the
- * region holding the box's centre decides, which is how the worker picks one
- * (`regionOfArea`), and a box in no region falls back to `view`. Guard:
- * `sharpen.test.ts` ("sharpenOfferFor").
+ * The offer for an action about `box`, else about what the map shows. A box
+ * is judged by the region holding its centre, which is how the worker picks
+ * the one that fills the area (`regionOfArea`): a box in no region is off,
+ * and never falls back to `view`. Only a `null` box reads the map's region.
+ * Guard: `sharpen.test.ts` ("sharpenOfferFor").
  */
 export function sharpenOfferFor(
   box: LonLatBox | null,
   view: Region | null,
   regions: readonly Region[] = REGIONS,
 ): SharpenOffer {
-  const there =
-    box && regionOfArea([box.west, box.south, box.east, box.north], regions);
-  return sharpenOffer(there || view, regions);
+  if (!box) return sharpenOffer(view);
+  return sharpenOffer(
+    regionOfArea([box.west, box.south, box.east, box.north], regions),
+  );
 }
 
 /** A completed sharpened job, as a client and the API's sampler need it. */

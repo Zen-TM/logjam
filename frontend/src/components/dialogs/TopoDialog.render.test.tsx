@@ -281,6 +281,36 @@ describe("TopoDialog where the region's portal has no errand of its own", () => 
   });
 });
 
+describe("TopoDialog when the area is drawn in a region with no sharpening", () => {
+  const off = sharpenOffer(SIM_NZ);
+
+  // Mutation: in TopoDialog.tsx change `onClose={mode === "form" || off ? performClose : backToForm}`
+  // to `onClose={mode === "form" ? performClose : backToForm}`, and Close in
+  // the off state goes back to a form that is not there.
+  it("closes from the instructions sub-view it was left in", () => {
+    const onClose = vi.fn();
+    const { rerender } = render(dialog({ open: true, onClose }));
+    fireEvent.click(button("Haven't got one? Order LiDAR from ELVIS"));
+    rerender(dialog({ open: true, onClose, offer: off }));
+    expect(heading("Not available here")).toBeTruthy();
+    fireEvent.click(button("Close"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: in TopoDialog.tsx change `isDirty && mode === "form" && !off`
+  // to `isDirty && mode === "form"`, and closing asks to discard a ZIP that
+  // no form shows.
+  it("does not ask to discard a ZIP the off state does not show", () => {
+    const onClose = vi.fn();
+    const { container, rerender } = render(dialog({ open: true, onClose }));
+    pick(container, lazZip());
+    rerender(dialog({ open: true, onClose, offer: off }));
+    fireEvent.click(button("Close"));
+    expect(screen.queryByText("Discard this request?")).toBeNull();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("TopoDialog where the region has no sharpening", () => {
   const OFF: [string, SharpenOffer, string][] = [
     ["already-fine", sharpenOffer(SIM_NZ), SHARPEN_OFF_REASON["already-fine"]],

@@ -332,8 +332,8 @@ describe("sharpenOffer", () => {
     }
   });
 
-  // Mutation: read the offer from NSW_REGION whatever the region, and Utah
-  // is sent to ELVIS.
+  // Mutation: in sharpen.ts change `(region ?? WORLD).sharpen` to
+  // `REGIONS[0]!.sharpen`, and Utah is sent to ELVIS.
   it("offers the region's own portal and vegetation model", () => {
     expect(sharpenOffer(NSW_REGION)).toEqual({
       mode: "upload",
@@ -351,8 +351,8 @@ describe("sharpenOffer", () => {
     });
   });
 
-  // Mutation: look up `SHARPEN_OFF_REASON["no-lidar"]` whatever the region's
-  // reason, or make the two sentences the same.
+  // Mutation: in sharpen.ts change `SHARPEN_OFF_REASON[entry.reason]` to
+  // `SHARPEN_OFF_REASON["no-lidar"]`, or make the two sentences the same.
   it("says why a region that is off is off", () => {
     expect(sharpenOffer(SIM_NZ)).toEqual({
       mode: "off",
@@ -367,15 +367,11 @@ describe("sharpenOffer", () => {
     );
   });
 
-  // Mutation: answer `no-lidar` for a map over no region, and prod, which
-  // has one region, hides Sharpen an area wherever the map has not found
-  // New South Wales yet.
-  it("offers the first upload region's where no region is in view", () => {
-    expect(sharpenOffer(null, [NSW_REGION])).toEqual(sharpenOffer(NSW_REGION));
-    expect(sharpenOffer(null, [SIM_NZ, SIM_UTAH])).toEqual(
-      sharpenOffer(SIM_UTAH),
-    );
-    expect(sharpenOffer(null, [SIM_NZ])).toEqual({
+  // Mutation: in sharpen.ts change `const entry: RegionSharpen = (region ?? WORLD).sharpen;`
+  // to `(region ?? REGIONS[0]!).sharpen`, and a map over no region offers
+  // ELVIS's errand.
+  it("is off with no LiDAR over ground no region declares", () => {
+    expect(sharpenOffer(null)).toEqual({
       mode: "off",
       reason: SHARPEN_OFF_REASON["no-lidar"],
     });
@@ -383,24 +379,44 @@ describe("sharpenOffer", () => {
 });
 
 describe("sharpenOfferFor", () => {
+  const all = [NSW_REGION, ...SIM_REGIONS];
   const inUtah = { west: -112.97, south: 37.26, east: -112.93, north: 37.3 };
+  const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
 
-  // Mutation: read `view` before `box`, and a Utah place's Sharpen offers
-  // ELVIS because the map is over New South Wales.
-  it("lets the box's region decide, and the view stand in for none", () => {
-    const all = [NSW_REGION, ...SIM_REGIONS];
+  // Mutation: in sharpen.ts replace `if (!box) return sharpenOffer(view);` and
+  // the `return sharpenOffer(` call after it with `return sharpenOffer(view);`,
+  // and a Utah place's Sharpen offers ELVIS because the map is over New South Wales.
+  it("lets the box's region decide, whatever the map shows", () => {
     expect(sharpenOfferFor(inUtah, NSW_REGION, all)).toEqual(
       sharpenOffer(SIM_UTAH),
     );
+  });
+
+  // Mutation: in sharpen.ts end the box branch with `?? view` after the
+  // `regionOfArea(...)` call, and a box in no region is offered the map's
+  // region's errand.
+  it("is off for a box in no region, with no fall back to the map's region", () => {
+    expect(sharpenOfferFor(atSea, NSW_REGION, all)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+  });
+
+  // Mutation: in sharpen.ts change `if (!box) return sharpenOffer(view);` to
+  // `if (!box) return sharpenOffer(null);`, and the map's own entry points
+  // ignore the region in view.
+  it("reads the map's region for an action about no box", () => {
     expect(sharpenOfferFor(null, SIM_NZ, all)).toEqual(sharpenOffer(SIM_NZ));
-    const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
-    expect(sharpenOfferFor(atSea, SIM_NZ, all)).toEqual(sharpenOffer(SIM_NZ));
+    expect(sharpenOfferFor(null, NSW_REGION, all)).toEqual(
+      sharpenOffer(NSW_REGION),
+    );
   });
 });
 
 describe("sharpenUnavailable", () => {
-  // Mutation: return a state for an upload offer, or write the state's words
-  // here instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
+  // Mutation: in sharpen.ts change `offer.mode === "off"` in
+  // `sharpenUnavailable` to `offer.mode !== "off"`, or write the state's words
+  // there instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
   it("says Not available here, with the region's reason, only where it is off", () => {
     expect(sharpenUnavailable(sharpenOffer(NSW_REGION))).toBeNull();
     expect(sharpenUnavailable(sharpenOffer(SIM_NZ))).toEqual({
