@@ -224,7 +224,7 @@ describe("the en-US catalogue", () => {
   // Mutation: empty `AUSTRALIAN_WORDS`, or write `\\bX${word}` in `holdsAustralianWord`.
   it("finds the messages with an Australian word — a list that stopped matching would pass forever", () => {
     const found = [...keys].filter(holdsAustralianWord);
-    // 42 today: 39 with an entry and the 3 in `LEFT_AS_WRITTEN`.
+    // 44 today: 41 with an entry and the 3 in `LEFT_AS_WRITTEN`.
     expect(found.length).toBeGreaterThanOrEqual(40);
     for (const word of ["colour", "abseil", "cancell", "tick", "mobile"])
       expect(
