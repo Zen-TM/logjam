@@ -1,5 +1,5 @@
 import { Fragment, type MouseEvent, type Ref } from "react";
-import { labelWithBadge } from "@logjam/shared";
+import { labelWithBadge, t } from "@logjam/shared";
 import type { PanelId } from "./panels";
 import {
   partitionNavItems,
@@ -104,7 +104,7 @@ function NavRail({
 
   if (!isNarrow) {
     return (
-      <nav className={classes.rail} aria-label="Pages">
+      <nav className={classes.rail} aria-label={t`Pages`}>
         <div className={classes.brand}>
           <BrandMark className={classes.brandMark} />
         </div>
@@ -115,10 +115,10 @@ function NavRail({
 
   const moreCount = aggregateBadgeCount(moreItems, badgeCounts);
   return (
-    <nav className={classes.tabs} aria-label="Pages">
+    <nav className={classes.tabs} aria-label={t`Pages`}>
       {items}
       <Menu
-        label="More pages"
+        label={t`More pages`}
         placement="top-end"
         entries={moreItems.map((item) => ({
           id: item.id,
@@ -135,7 +135,7 @@ function NavRail({
         trigger={(props) => (
           <NavButton
             {...props}
-            label="More"
+            label={t`More`}
             icon="moreTab"
             active={isPanelInMore(moreItems, activePanel)}
             count={moreCount}

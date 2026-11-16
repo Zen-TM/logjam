@@ -13,6 +13,7 @@ import {
   LIDAR_JOB_COPY,
   formatDayMonthYear,
   localDay,
+  t,
 } from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
@@ -34,7 +35,7 @@ export const MAP_IDENTITY: Record<
   topo: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: "LiDAR map",
+    label: t`LiDAR map`,
   },
   // A finished LiDAR job: the Terrain layers made sharper over its area.
   sharpened: {
@@ -98,7 +99,7 @@ export function fileSubtitle(parts: {
     .join(" · ");
 }
 
-const FAILED = "Couldn't be made";
+const FAILED = t`Couldn't be made`;
 
 /** "Making · about 5 min", or the verb alone while no estimate exists (rows
  *  made before the estimator, or a zero). */
@@ -118,11 +119,11 @@ export function toposBeingMade(
     title: topoLabel(job),
     detail:
       job.status === "uploading"
-        ? "Uploading"
+        ? t`Uploading`
         : job.status === "pending"
-          ? "Queued"
+          ? t`Queued`
           : job.status === "processing"
-            ? withEstimate("Processing", job.estimatedSeconds)
+            ? withEstimate(t`Processing`, job.estimatedSeconds)
             : (job.errorMessage ?? FAILED),
     failed: job.status === "failed",
     createdAt: job.createdAt,

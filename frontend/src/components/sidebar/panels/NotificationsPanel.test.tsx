@@ -11,6 +11,7 @@ import {
   areaExportFailed,
   areaExportTooLargeSentence,
   INBOX,
+  pseudo,
 } from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
 import type { TNotification } from "../../../placeUtils";
@@ -345,7 +346,9 @@ describe("NotificationsPanel: a failed export", () => {
           },
         },
       ]);
-      expect(screen.getByRole("button", { name: "Report a bug" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: pseudo("Report a bug") }),
+      ).toBeTruthy();
     } finally {
       delete languageOf.LOGJAM_LANGUAGE;
     }

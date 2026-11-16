@@ -58,6 +58,7 @@ import {
   selfStanding,
   type LeaderboardResponse,
   type Region,
+  t,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -348,7 +349,7 @@ function FriendsPanel({
           </SelectionBar>
         ) : (
           <ChipRail
-            label="Which people"
+            label={t`Which people`}
             options={buckets}
             value={bucket}
             onChange={setBucket}
@@ -412,7 +413,7 @@ function FriendsPanel({
                           compact
                           variant="outline"
                           disabled={busyId === request.id}
-                          disabledReason="Replying…"
+                          disabledReason={t`Replying…`}
                           onClick={() => {
                             const decline = friendRequestAnswers(
                               request.requester.username,
@@ -448,7 +449,7 @@ function FriendsPanel({
                     leading={
                       <TileCheckbox
                         tile={<Avatar username={friend.username} />}
-                        label={`Select ${friend.username}`}
+                        label={t`Select ${friend.username}`}
                         checked={selectedIds.includes(friend.friendshipId)}
                         selecting={selecting}
                         onToggle={(extendRange) =>
@@ -458,13 +459,13 @@ function FriendsPanel({
                     }
                     selected={selectedIds.includes(friend.friendshipId)}
                     title={friend.username}
-                    description="Opens what you share with each other"
+                    description={t`Opens what you share with each other`}
                     disabled={busyId === friend.friendshipId}
                     onOpen={() => setOpenFriend(friend)}
                     trailing={
                       selecting ? undefined : (
                         <Menu
-                          label={`Actions for ${friend.username}`}
+                          label={t`Actions for ${friend.username}`}
                           title={friend.username}
                           placement="bottom-end"
                           entries={[
@@ -486,7 +487,7 @@ function FriendsPanel({
                             <IconButton
                               {...props}
                               icon="overflow"
-                              label={`Actions for ${friend.username}`}
+                              label={t`Actions for ${friend.username}`}
                             />
                           )}
                         />
@@ -524,7 +525,7 @@ function FriendsPanel({
         copy={
           removing && {
             ...friendRemoveConfirm(removing.username),
-            confirmLabel: "Remove",
+            confirmLabel: t`Remove`,
             tone: "destructive",
             icon: "unshare",
           }
@@ -537,7 +538,7 @@ function FriendsPanel({
         open={removingSelected}
         copy={{
           ...friendsRemoveConfirm(selectedFriends.length),
-          confirmLabel: "Remove",
+          confirmLabel: t`Remove`,
           tone: "destructive",
           icon: "unshare",
         }}
@@ -628,7 +629,7 @@ export function AddFriendDialog({
       title={copy.addTitle}
       onClose={onClose}
       dismissible={sendingId === null}
-      footer={<Button onClick={onClose}>Close</Button>}
+      footer={<Button onClick={onClose}>{t`Close`}</Button>}
     >
       <div className={classes.addBody}>
         <SearchField
@@ -663,7 +664,7 @@ export function AddFriendDialog({
                       variant="outline"
                       busy={sendingId === user.id}
                       disabled={sendingId !== null}
-                      disabledReason="Sending…"
+                      disabledReason={t`Sending…`}
                       onClick={() => void handleSend(user)}
                     >
                       {copy.add}
@@ -772,7 +773,7 @@ export function InviteLink({ open }: { open: boolean }) {
           <Button
             compact
             disabled={busy}
-            disabledReason="Working…"
+            disabledReason={t`Working…`}
             onClick={() => void handleRevoke()}
           >
             {copy.inviteRevoke}

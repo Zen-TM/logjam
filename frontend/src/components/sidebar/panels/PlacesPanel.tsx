@@ -46,6 +46,7 @@ import {
   formatNumericDay,
   localDay,
   type SharpenOffer,
+  t,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -414,7 +415,7 @@ function PlacesPanel({
       },
       {
         id: "export",
-        label: "Make a map",
+        label: t`Make a map`,
         icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
@@ -537,7 +538,7 @@ function PlacesPanel({
       );
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't import from RopeWiki."));
+      toast.error(messageFromError(err, t`Couldn't import from RopeWiki.`));
     } finally {
       setRefreshing(false);
     }
@@ -634,26 +635,26 @@ function PlacesPanel({
           {/* One word each, and the trash stays a glyph: "Make a map" and a
               fourth word ran the count off the bar at 380px. */}
           <Menu
-            label="Make a map"
+            label={t`Make a map`}
             entries={makeMapEntries(selected)}
-            trigger={(props) => <SelectionVerb {...props}>Map</SelectionVerb>}
+            trigger={(props) => (
+              <SelectionVerb {...props}>{t`Map`}</SelectionVerb>
+            )}
           />
           <SelectionVerb
             onClick={() => onSharePlaces(selected.map((place) => place.id))}
-          >
-            Share
-          </SelectionVerb>
+          >{t`Share`}</SelectionVerb>
           <Menu
-            label="Export as"
+            label={t`Export as`}
             placement="bottom-end"
             entries={exportEntries(selected)}
             trigger={(props) => (
-              <SelectionVerb {...props}>Export</SelectionVerb>
+              <SelectionVerb {...props}>{t`Export`}</SelectionVerb>
             )}
           />
           <IconButton
             icon="delete"
-            label="Delete"
+            label={t`Delete`}
             tone="danger"
             onClick={() => setPendingDelete(selected.map((place) => place.id))}
           />
@@ -779,7 +780,7 @@ function PlacesPanel({
               subtitle={subtitle || undefined}
               selected={isSelected}
               disabled={selecting && !owned}
-              disabledReason="Shared with you, so you can't select it"
+              disabledReason={t`Shared with you, so you can't select it`}
               onOpen={() => openPlace(place)}
               onPointerEnter={() => onHoverPlace(place.id)}
               onPointerLeave={() => onHoverPlace(null)}
@@ -787,7 +788,7 @@ function PlacesPanel({
                 owned ? (
                   <TileCheckbox
                     tile={tile}
-                    label={`Select ${place.name}`}
+                    label={t`Select ${place.name}`}
                     checked={isSelected}
                     selecting={selecting}
                     onToggle={(extendRange) =>
@@ -814,7 +815,7 @@ function PlacesPanel({
                   {quality && (
                     <span
                       className={classes.meta}
-                      aria-label={`Rated ${quality.replace("★ ", "")}`}
+                      aria-label={t`Rated ${quality.replace("★ ", "")}`}
                     >
                       <Icon idea="favourite" size={12} aria-hidden />
                       {quality.replace("★ ", "")}
@@ -832,7 +833,7 @@ function PlacesPanel({
                   )}
                   {!selecting && (
                     <Menu
-                      label={`Actions for ${place.name}`}
+                      label={t`Actions for ${place.name}`}
                       title={place.name}
                       placement="right-start"
                       entries={rowEntries(row)}
@@ -840,7 +841,7 @@ function PlacesPanel({
                         <IconButton
                           {...props}
                           icon="overflow"
-                          label={`Actions for ${place.name}`}
+                          label={t`Actions for ${place.name}`}
                         />
                       )}
                     />
@@ -917,7 +918,7 @@ function PlacesPanel({
       <div className={classes.listHead}>
         <span>
           {selecting
-            ? "Shift-click to select a range · Ctrl+A selects all"
+            ? t`Shift-click to select a range · Ctrl+A selects all`
             : `Sorted by ${placeSortLabel(sort).toLowerCase()}`}
         </span>
         <span>{visible.length}</span>
@@ -926,10 +927,9 @@ function PlacesPanel({
     // The server caps the owned list; say when this is a truncated view so
     // the oldest places aren't silently missing.
     truncated: placesTotal != null && placesTotal > places.length && (
-      <p className={classes.note}>
-        Showing your {places.length} most recent places of {placesTotal}. Older
-        ones aren't loaded.
-      </p>
+      <p
+        className={classes.note}
+      >{t`Showing your ${places.length} most recent places of ${placesTotal}. Older ones aren't loaded.`}</p>
     ),
     list,
   };
@@ -977,11 +977,11 @@ function PlacesPanel({
       <ConfirmDialog
         open={confirmRefresh}
         copy={{
-          confirmTitle: "Import from RopeWiki?",
+          confirmTitle: t`Import from RopeWiki?`,
           confirmBody: importRegion
             ? ROPEWIKI_OFFER.confirmBody(importRegion)
             : "",
-          confirmLabel: "Fetch from RopeWiki",
+          confirmLabel: t`Fetch from RopeWiki`,
           tone: "filled",
         }}
         busy={refreshing}

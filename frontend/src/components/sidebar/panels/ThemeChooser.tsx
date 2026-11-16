@@ -1,6 +1,7 @@
 import { useThemePreferences } from "../../../themePreferences";
 import { Icon, ErrorBanner, LoadingState } from "../../../ui";
 import classes from "./ThemeChooser.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * The schemes, as a radio group of swatch cards — the same shape as Logjam
@@ -24,9 +25,9 @@ function ThemeChooser() {
     <>
       {error && <ErrorBanner message={error} />}
       {isHydrating ? (
-        <LoadingState label="Loading your saved theme…" />
+        <LoadingState label={t`Loading your saved theme…`} />
       ) : (
-        <div className={classes.group} role="radiogroup" aria-label="Theme">
+        <div className={classes.group} role="radiogroup" aria-label={t`Theme`}>
           {schemes.map((scheme) => {
             const selected = scheme.id === schemeId;
             return (

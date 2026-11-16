@@ -25,6 +25,7 @@ import {
   type Medal,
   type Region,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 import classes from "./LeaderboardPage.module.css";
 import { useStoredState } from "../../../useStoredState";
@@ -90,7 +91,7 @@ function LeaderboardPage({
         <Hero
           title={LEADERBOARD.title}
           onBack={onBack}
-          backLabel="Back to friends"
+          backLabel={t`Back to friends`}
           actions={
             <IconButton
               icon="help"
@@ -183,7 +184,7 @@ function LeaderboardPage({
         title={copy.rulesTitle}
         size="small"
         onClose={() => setRulesOpen(false)}
-        footer={<Button onClick={() => setRulesOpen(false)}>Close</Button>}
+        footer={<Button onClick={() => setRulesOpen(false)}>{t`Close`}</Button>}
       >
         <ul className={classes.rules}>
           {leaderboardRules(region)

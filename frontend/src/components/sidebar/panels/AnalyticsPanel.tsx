@@ -35,6 +35,7 @@ import {
   type SectionKeysOn,
   type StatsSpark,
   formatLongMonthYear,
+  t,
 } from "@logjam/shared";
 
 const copy = STATS.copy;
@@ -110,7 +111,7 @@ function AnalyticsPanel({
   // in should not reset every visit.
   const [rangeLabel, setRangeLabel] = useStoredState(
     "logjam.logbookStatsRange",
-    "All time",
+    t`All time`,
   );
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -234,7 +235,7 @@ function AnalyticsPanel({
         {tripLogs.length > 0 && (
           <div className={classes.rails}>
             <ChipRail
-              label="Period"
+              label={t`Period`}
               options={ranges.map((entry) => ({
                 value: entry.label,
                 label: entry.label,
@@ -303,8 +304,8 @@ function SparkBlock({
       <ActivitySpark
         label={
           spark.axis === "year"
-            ? "Trips per year"
-            : `Trips per month in ${spark.year}`
+            ? t`Trips per year`
+            : t`Trips per month in ${spark.year}`
         }
         buckets={namedBuckets(spark)}
         caption={busiest}
@@ -399,7 +400,7 @@ function PlacesVisited({
             footer={
               <div className={classes.bar}>
                 <ProgressBar
-                  label={`${entry.name}: ${entry.logged} of ${entry.total} visited`}
+                  label={t`${entry.name}: ${entry.logged} of ${entry.total} visited`}
                   value={
                     entry.total === 0 ? 0 : (entry.logged / entry.total) * 100
                   }
@@ -484,7 +485,7 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
         display.buckets && (
           <div className={classes.bar}>
             <ActivitySpark
-              label={`${stat.label}: trips at each value`}
+              label={t`${stat.label}: trips at each value`}
               buckets={display.buckets.map((bucket) => ({
                 label: `${bucket.value}`,
                 name: `${bucket.value}`,

@@ -27,6 +27,7 @@ import {
   type NotificationPreferences,
   type ScopedCustomFieldDef,
   type Units,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -168,7 +169,7 @@ function SettingsPanel({
         [key]: previous[key],
       }));
       toast.error(
-        messageFromError(err, "Couldn't save that notification setting."),
+        messageFromError(err, t`Couldn't save that notification setting.`),
       );
     } finally {
       setNotifSavingKey((current) => (current === key ? null : current));
@@ -263,7 +264,7 @@ function SettingsPanel({
     return (
       <CustomFieldSection
         entity={isTrip ? "trip-log" : "place"}
-        title={isTrip ? "Trip attributes" : "Place attributes"}
+        title={isTrip ? t`Trip attributes` : t`Place attributes`}
         rowNoun={isTrip ? "trip" : "place"}
         loading={!currentUser}
         defs={isTrip ? customFieldDefs : placeCustomFieldDefs}
@@ -347,7 +348,7 @@ function SettingsPanel({
                   // One at a time: a failed save rolls back to the choice before
                   // it, which would undo a toggle made mid-save.
                   disabled={regionsSaving || refused !== null}
-                  disabledReason={refused ?? "Saving…"}
+                  disabledReason={refused ?? t`Saving…`}
                   onChange={() => handleToggleRegion(region.id)}
                 />
               );
@@ -377,7 +378,7 @@ function SettingsPanel({
                     title={label}
                     checked={notifPrefs[key]}
                     disabled={notifSavingKey === key}
-                    disabledReason="Saving…"
+                    disabledReason={t`Saving…`}
                     onChange={() => handleToggleNotif(key)}
                   />
                 ))}
@@ -402,7 +403,7 @@ function SettingsPanel({
                   description={COPY_MEDIA_SETTING.hint}
                   checked={copyMedia}
                   disabled={copyMediaSaving}
-                  disabledReason="Saving…"
+                  disabledReason={t`Saving…`}
                   onChange={handleToggleCopyMedia}
                 />
               )}
@@ -416,7 +417,7 @@ function SettingsPanel({
                   description={LEADERBOARD_SETTING.hint}
                   checked={leaderboardOptIn}
                   disabled={leaderboardSaving}
-                  disabledReason="Saving…"
+                  disabledReason={t`Saving…`}
                   onChange={handleToggleLeaderboard}
                 />
               )}
@@ -433,18 +434,14 @@ function SettingsPanel({
             href="/tos.html"
             target="_blank"
             rel="noopener noreferrer"
-          >
-            Terms
-          </a>{" "}
+          >{t`Terms`}</a>{" "}
           and{" "}
           <a
             className={classes.privacyLink}
             href="/privacy.html"
             target="_blank"
             rel="noopener noreferrer"
-          >
-            Privacy policy
-          </a>
+          >{t`Privacy policy`}</a>
           .
         </p>
       </>

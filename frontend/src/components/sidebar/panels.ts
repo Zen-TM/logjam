@@ -1,4 +1,4 @@
-import { MAP_MEASURE, navLabel, TRIP_PLANS_LIST } from "@logjam/shared";
+import { MAP_MEASURE, navLabel, TRIP_PLANS_LIST, t } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
@@ -45,19 +45,19 @@ export const DRAFT_PEEK_REVEAL_PX = 152;
 
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
-  places: "Places",
+  places: t`Places`,
   logs: navLabel("logs"),
-  ways: "Ways",
+  ways: t`Ways`,
   plans: TRIP_PLANS_LIST.title,
-  friends: "Friends",
-  inbox: "Inbox",
-  account: "Account",
-  settings: "Settings",
-  "place-detail": "Place",
-  "trip-detail": "Trip",
-  "way-detail": "Way",
-  "plan-detail": "Plan",
-  "way-draw": "Draw a route",
+  friends: t`Friends`,
+  inbox: t`Inbox`,
+  account: t`Account`,
+  settings: t`Settings`,
+  "place-detail": t`Place`,
+  "trip-detail": t`Trip`,
+  "way-detail": t`Way`,
+  "plan-detail": t`Plan`,
+  "way-draw": t`Draw a route`,
   measure: MAP_MEASURE.title,
 };
 
