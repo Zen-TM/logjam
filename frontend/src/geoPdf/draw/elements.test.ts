@@ -241,7 +241,8 @@ describe("a sheet's grid follows the ground it covers", () => {
     `${Math.floor(km / 100)} ${String(km % 100).padStart(2, "0")} 000`;
 
   it("prints NZTM's eastings and northings over New Zealand", () => {
-    // Makarora, E 1 295 356 to 1 303 873 and N 5 109 440 to 5 120 914 in NZTM.
+    // Makarora in NZTM: the south-west corner is E 1 295 869, N 5 109 441 and
+    // the north-east E 1 303 373, N 5 120 913, the two corners the lines run between.
     const box = { north: -44.005, south: -44.105, east: 169.3, west: 169.2 };
     expect(printed(box)).toEqual([
       ...through(1296, 1303).map(label),

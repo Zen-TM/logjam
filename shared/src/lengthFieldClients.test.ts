@@ -24,12 +24,17 @@ describe("every form of a length field converts it", () => {
   // Mutation: change any of these calls back to the unit-blind one
   // (`String(raw)`, `coerceFieldValue(...)`, or `coerceCustomFields` without
   // the stored values), drop `fieldKey={def.key}` from either filter, drop the
-  // units from any one input's seed key (`displayUnits()` in the trip
-  // sheet's `openKey`, `seedKey`, `seededUnits`, the plan item sheet's `key` or the plan item
-  // dialog's `key`), drop the `seededUnits` check from a pick's return that
-  // keeps the form, let a flip run all of `populateForm` (drop `unitsOnly`),
-  // drop the filters' `shownUnits` reseed, or give a filter's
-  // `coerceFieldInput` the `value` it is fed back instead of its `seedMetres`.
+  // units from any one input's seed key (`displayUnits()` in the trip sheet's
+  // `openKey`, `seedKey`, `seededUnits`, the plan item sheet's `key` or the
+  // plan item dialog's `key`), drop the `seededUnits` check from a pick's
+  // return that keeps the form, let a flip run all of `populateForm` (drop
+  // `unitsOnly`), call `media.reset()` on a flip of units in either phone
+  // sheet (`seed`'s `unitsOnly`, the trip sheet's `seededFor === null`) or
+  // take the trip sheet's media baseline anew (`pristine?.media`), give a plan
+  // place's elevation field a fixed label instead of `itemElevationLabel()`,
+  // check the phone sheet's elevation without `lengthFromInput`, drop the
+  // filters' `shownUnits` reseed, or give a filter's `coerceFieldInput` the
+  // `value` it is fed back instead of its `seedMetres`.
   it.each([
     [
       "frontend/src/components/dialogs/PlaceDialog.tsx",
@@ -61,7 +66,8 @@ describe("every form of a length field converts it", () => {
         "coerceCustomFields( fieldValues, typeFieldDefs, place?.fieldValues, );",
         "units: displayUnits(),",
         "seededFor.units !== seedKey.units",
-        "if (visible && (!resuming || seededUnits !== seedKey.units)) seed();",
+        "if (visible && (!resuming || seededUnits !== seedKey.units)) seed({ unitsOnly: resuming || onlyUnits });",
+        "if (!unitsOnly) media.reset();",
         "setSeededUnits(displayUnits());",
       ],
     ],
@@ -71,17 +77,25 @@ describe("every form of a length field converts it", () => {
         "setFieldValues(fieldValueStrings(trip?.customFields));",
         "coerceCustomFields(fieldValues, visibleFieldDefs, trip?.customFields),",
         'const openKey = visible ? `${trip?.id ?? "new"}|${displayUnits()}` : null;',
+        "if (seededFor === null) { media.reset();",
+        "media: pristine?.media ?? mediaPrint,",
       ],
     ],
     [
       "mobile/src/plans/PlanItemSheet.tsx",
       [
         "const key = item ? `${item.kind}:${item.id}|${displayUnits()}` : null;",
+        "label={itemElevationLabel()}",
+        "lengthFromInput(Number(values.elevation))",
       ],
     ],
     [
       "frontend/src/components/plans/PlanItems.tsx",
       ["key={displayUnits()} planId={plan.id}"],
+    ],
+    [
+      "frontend/src/components/plans/PlanItemEditDialog.tsx",
+      ["label={itemElevationLabel()}"],
     ],
     [
       "frontend/src/ui/AttributeFilter.tsx",
