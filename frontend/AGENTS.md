@@ -38,6 +38,9 @@
 ## Testing
 
 - `npm test` (vitest, jsdom) and `npm run lint`.
+- **Lint's `react-hooks/preserve-manual-memoization`** (React Compiler rules)
+  fails a `useMemo` or `useCallback` that reads a value computed inline
+  from props or state: memoise that value as well, keyed on primitives.
 - E2E: `npm run e2e` (Playwright, system Chrome). It starts Vite with fake auth
   but not the API; bring that up first.
 - `e2e/a11y.spec.ts` is the per-surface a11y gate. A case never writes to the

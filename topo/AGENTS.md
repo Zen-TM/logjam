@@ -17,7 +17,8 @@ covers flags, output format and troubleshooting.
 
 ## Testing
 
-- `python -m unittest discover -s tests` from `topo/`. A pure-logic test
+- `make topo-test` from the repo root: the suite on the Python `mise.toml`
+  pins (guard `tests/test_python_version.py`). A pure-logic test
   imports `tests/_native_stub.py` first, so it runs without GDAL; a test of a
   real native library skips when stubbed and runs in the `topo-e2e` job's
   image instead. GDAL/PDAL subprocess orchestration

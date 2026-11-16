@@ -2,7 +2,7 @@
 
 The host-side unit tests stub the native stack (`_native_stub.py`), so the seam
 between the guarded status logic and a **real** runtime is not exercised by
-`python -m unittest discover -s tests` on the dev host. Two integration
+`make topo-test` on the dev host. Two integration
 layers close that gap. §1 is opt-in and skips in normal host discovery; §2, the
 full worker run, is CI's `topo-e2e` job, which can also be run by hand.
 

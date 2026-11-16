@@ -10,7 +10,7 @@ This walks the import graph from the ECS task commands and fails if
 anything reachable is missing from the image.
 
 Pure AST + text parsing: no imports of the modules themselves, so it runs on
-the dev host with no GDAL/PDAL/psycopg2 (`python -m unittest discover -s tests`).
+the dev host with no GDAL/PDAL/psycopg2 (`make topo-test`).
 """
 
 import ast
