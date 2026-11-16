@@ -255,9 +255,9 @@ describe("a longitude in another world copy", () => {
     ]);
   });
 
-  // 150.3 - wrapLon(150.3) is about 6e-14, not 0.
-  // Mutation: shift by that difference unrounded and the declared edges and
-  // meridian come back nudged, and these exact comparisons fail.
+  // Mutation: use `Math.ceil` for `Math.round` in `lonTurn` (placeGeo.ts), and
+  // 150.3 is placed a world copy over, so the declared edges and meridian
+  // come back shifted by 360.
   it("hands back an ordinary longitude's zone with its declared edges", () => {
     const zone = gridZoneAt(150.3, -33.7);
     expect([zone.west, zone.east, zone.centralMeridian]).toEqual([
@@ -449,5 +449,16 @@ describe("typed grid references", () => {
     expect(utm.lat).toBeGreaterThan(50);
     const none = parseGridReference(text, { lat: 40, lon: -100 }, MADE_UP)!;
     expect(none.label).toBe("MGA 56 245000 6264000");
+  });
+
+  // The text's own "MGA" beats the grid of the region the map is over.
+  // Mutation: read the grid from the map first in `parseGridReference` (change
+  // `prefix === "MGA" || (!prefix && nearGrid === "mga2020")` to
+  // `nearGrid ? nearGrid === "mga2020" : prefix === "MGA"`).
+  it("lets an MGA prefix win over a UTM region's grid", () => {
+    const mga = parseGridReference("MGA 56 245000 6264000", overUtah, MADE_UP)!;
+    expect(mga.label).toBe("MGA 56 245000 6264000");
+    expect(mga.lat).toBeCloseTo(-33.7, 0);
+    expect(mga.lon).toBeCloseTo(150.3, 0);
   });
 });

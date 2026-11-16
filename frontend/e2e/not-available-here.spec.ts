@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { GAUGE_LATEST_PATH, MAP_TERRAIN } from "@logjam/shared";
+import { GAUGE_PREFIX, MAP_TERRAIN, gaugeLatestPath } from "@logjam/shared";
 import { stubMaster } from "./__fixtures__/stubMaster";
 
 // With the map over ground no region declares, every layer that draws a
@@ -67,7 +67,7 @@ test("a layer with no data here says so, and the choices return over NSW", async
   // The map reads the gauge feed only where a region has one.
   const gaugeReads: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes(GAUGE_LATEST_PATH))
+    if (request.url().includes(gaugeLatestPath(GAUGE_PREFIX)))
       gaugeReads.push(request.url());
   });
   await page.goto("/");

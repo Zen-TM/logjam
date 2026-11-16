@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { setDisplayUnits } from "@logjam/shared";
 import {
   TRIP_DRAFT_MAX_AGE_MS,
   TRIP_DRAFT_MAX_CHARS,
@@ -33,6 +34,7 @@ function form(overrides: Partial<TripDraftForm> = {}): TripDraftForm {
 beforeEach(() => {
   localStorage.clear();
 });
+afterEach(() => setDisplayUnits("metric"));
 
 describe("tripFormFingerprint", () => {
   it("is stable across key insertion order", () => {
@@ -295,5 +297,62 @@ describe("storage wrappers", () => {
     writeTripDraft(ALICE, form(), NOW);
     clearTripDraft();
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("a draft typed in other units", () => {
+  const longForm = () =>
+    form({ fieldValues: { water: "high", longest_abseil: "100" } });
+  const stored = (units: "metric" | "imperial") => {
+    setDisplayUnits(units);
+    const written = serializeTripDraft(ALICE, longForm(), NOW);
+    if (written.status !== "ok") throw new Error("expected ok");
+    return written.raw;
+  };
+
+  // Mutation: drop the `typedIn === units` filter in `parseTripDraft`, and 100
+  // feet is restored into a field that reads metres.
+  it("loses its length text and keeps the rest", () => {
+    const raw = stored("imperial");
+    expect(parseTripDraft(raw, NOW, "imperial")!.form.fieldValues).toEqual({
+      water: "high",
+      longest_abseil: "100",
+    });
+    expect(parseTripDraft(raw, NOW, "metric")!.form.fieldValues).toEqual({
+      water: "high",
+    });
+    expect(
+      parseTripDraft(stored("metric"), NOW, "imperial")!.form.fieldValues,
+    ).toEqual({
+      water: "high",
+    });
+  });
+
+  // Mutation: read a record with no `units` as the current units, and a draft
+  // saved before the field existed keeps its text in feet.
+  it("reads a record from before the units were written as metric", () => {
+    const raw = JSON.parse(stored("metric")) as Record<string, unknown>;
+    delete raw.units;
+    const old = JSON.stringify(raw);
+    expect(parseTripDraft(old, NOW, "metric")!.form.fieldValues).toEqual({
+      water: "high",
+      longest_abseil: "100",
+    });
+    expect(parseTripDraft(old, NOW, "imperial")!.form.fieldValues).toEqual({
+      water: "high",
+    });
+  });
+
+  // Mutation: write the draft without its units (`serializeTripDraft`).
+  it("is written with the units it was typed in, and read in the units now", () => {
+    setDisplayUnits("imperial");
+    expect(writeTripDraft(ALICE, longForm(), NOW).status).toBe("saved");
+    expect(readTripDraft(ALICE, NOW)!.form.fieldValues.longest_abseil).toBe(
+      "100",
+    );
+    setDisplayUnits("metric");
+    expect(
+      readTripDraft(ALICE, NOW)!.form.fieldValues.longest_abseil,
+    ).toBeUndefined();
   });
 });

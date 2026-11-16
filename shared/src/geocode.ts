@@ -11,9 +11,10 @@
 // It goes only when the user asks (shared/DESIGN.md §13): Nominatim's usage
 // policy forbids search-as-you-type on its API.
 
+import type { LicenceId } from "./licences.js";
 import {
   regionBounds,
-  regionInWrappedView,
+  regionInView,
   REGIONS,
   WORLD,
   type LonLatBox,
@@ -27,6 +28,8 @@ export interface GeocodeResult {
 }
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+/** What the geocoder answers under (`licences.ts`). */
+export const GEOCODER_LICENCE = "osmf-nominatim" as const satisfies LicenceId;
 
 /**
  * The box to bias a search by: the bounds of the region the map shows, or
@@ -39,7 +42,7 @@ export function geocodeBias(
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): LonLatBox | null {
-  const region = view ? regionInWrappedView(view, regions, world) : null;
+  const region = view ? regionInView(view, regions, world) : null;
   return region && region.borders.length > 0 ? regionBounds(region) : null;
 }
 

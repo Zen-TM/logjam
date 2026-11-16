@@ -6,6 +6,7 @@
 // GeoPDF follows the same two-digit label convention. Guards: mapGrid.test.ts,
 // and layerOrder.test.ts ("grid layers": each client calls `mapGrid`).
 import { fromGrid, gridZonesFor, toGrid, type GridZone } from "./grids.js";
+import { lonNear } from "./placeGeo.js";
 import { REGIONS, type Region } from "./regions.js";
 
 export interface GridBbox {
@@ -126,8 +127,7 @@ function zoneGrid(out: MapGrid, bbox: GridBbox, zone: GridZone, step: number) {
     const { lat, lon } = fromGrid(e, n, zone);
     // fromGrid answers in [-180, 180]; a view in another world copy (MapLibre
     // past the date line) wants the copy it is in, or the clip drops the line.
-    const copy = Math.round(((bbox.west + bbox.east) / 2 - lon) / 360);
-    return [lon + 360 * copy, lat];
+    return [lonNear(lon, (bbox.west + bbox.east) / 2), lat];
   };
   const run = (from: number, to: number) =>
     Array.from(

@@ -1,11 +1,11 @@
+import type { LicenceId } from "./licences.js";
 import type { TopoLayerName } from "./topoSettings.js";
 import {
   NSW_REGION,
   REGIONS,
-  regionInWrappedView,
+  regionInView,
   regionsOf,
   regionsTouching,
-  wrapView,
   type LonLatBox,
   type Region,
   type TileBytes,
@@ -40,6 +40,8 @@ type BasemapCatalogBase = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
   name: string;
+  /** The label on a chip in a row of maps, where `name` would run to a second line. */
+  chipName?: string;
   /**
    * "raster" = XYZ tile provider (urlTemplate is a {z}/{x}/{y} template).
    * "vector" = self-hosted PMTiles archive (urlTemplate is the CDN-relative
@@ -61,6 +63,11 @@ type BasemapCatalogBase = {
    * bush; keep that behaviour).
    */
   displayMaxZoom: number;
+  /**
+   * What the provider licenses its tiles under, or the stricter of that and
+   * its tile policy (`licences.ts`).
+   */
+  licence: LicenceId;
   /** Plain-text attribution (GeoPDF print, mobile). */
   attribution: string;
   /** HTML attribution (web AttributionControl). */
@@ -131,6 +138,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     kind: "vector",
     urlTemplate: NSW_REGION.vector.archivePath,
     maxNativeZoom: NSW_REGION.vector.maxzoom,
+    licence: NSW_REGION.vector.licence,
     displayMaxZoom: 15,
     attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
     attributionHtml:
@@ -146,6 +154,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 19,
     displayMaxZoom: 19,
+    licence: "osmf-tiles",
     attribution: "Base map © OpenStreetMap contributors",
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -167,6 +176,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
     displayMaxZoom: 17,
+    licence: "cc-by-sa-3",
     attribution:
       "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM",
     attributionHtml:
@@ -187,6 +197,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
     maxNativeZoom: 20,
     displayMaxZoom: 20,
+    licence: "osmf-tiles",
     attribution: "Base map © CyclOSM, © OpenStreetMap contributors",
     attributionHtml:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -199,11 +210,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-topo",
     printsContours: true,
     name: "SIX Maps Topo",
+    chipName: "Topo",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 16,
     displayMaxZoom: 16,
+    licence: "six-web-services",
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
@@ -237,11 +250,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-base",
     printsContours: true,
     name: "SIX Maps Base Map",
+    chipName: "Base Map",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 18,
     displayMaxZoom: 18,
+    licence: "six-web-services",
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
@@ -262,11 +277,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "six-imagery",
     photo: true,
     name: "SIX Maps Imagery",
+    chipName: "Imagery",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 20,
     displayMaxZoom: 18,
+    licence: "six-web-services",
     attribution:
       "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
     attributionHtml: SIX_ATTRIBUTION_HTML,
@@ -318,9 +335,7 @@ export function offeredBasemaps(
 ): BasemapCatalogEntry[] {
   return listed(
     regions,
-    new Set(
-      regionsTouching(wrapView(view), regions).flatMap((r) => r.basemaps),
-    ),
+    new Set(regionsTouching(view, regions).flatMap((r) => r.basemaps)),
   );
 }
 
@@ -339,7 +354,7 @@ export function basemapHere(
   const offered = offeredBasemaps(view, regions).map((entry) => entry.id);
   return offered.includes(picked)
     ? picked
-    : (regionInWrappedView(view, regions)?.defaultBasemap ?? offered[0]!);
+    : (regionInView(view, regions)?.defaultBasemap ?? offered[0]!);
 }
 
 /**

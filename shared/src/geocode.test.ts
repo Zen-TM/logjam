@@ -138,7 +138,8 @@ describe("geocode", () => {
 
 describe("geocodeBias", () => {
   // MapLibre's bounds run past ±180 after a pan around the world. Mutation:
-  // drop the `wrapView` call in `geocodeBias`.
+  // read the box only as given in `regionTouchesBox` (set `first` and `last` to
+  // 0) and the centre unwrapped in `regionInView`.
   it.each([-360, 360, 720])(
     "finds the region, or none, in the copy of the world %i degrees over",
     (turn) => {

@@ -19,7 +19,8 @@ For each area it writes three files to OUT_DIR:
     sign_in_terrain.py SHEETS_DIR src/assets/signIn "October 2026" [key ...]
 
 No key makes every area. A month other than the one in
-NSW_REGION.terrain.heights.credit (shared/src/regions.ts) fails signInTerrain.test.ts until the two agree.
+the credit of the `nsw-5m` heights source (shared/src/regions.ts, read through
+signInCredit) fails signInTerrain.test.ts until the two agree.
 """
 
 import glob

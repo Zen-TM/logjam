@@ -196,6 +196,19 @@ describe("the place page's Sharpen an area here", () => {
   });
 });
 
+describe("the place panel's river gauge", () => {
+  // Mutation: draw the gauge section whatever `gaugeFeedAt` says, and a place
+  // in no region with a gauge feed offers gauges from another region's.
+  it("is offered to the owner where the place's region has a feed, and nowhere else", () => {
+    const { unmount } = renderPanel();
+    expect(screen.queryByText(PLACE_PAGE.copy.chooseGauge)).not.toBeNull();
+    unmount();
+    const elsewhere = { ...place, latitude: -45.1, longitude: 169.2 };
+    renderPanel({ place: elsewhere, places: [elsewhere] });
+    expect(screen.queryByText(PLACE_PAGE.copy.chooseGauge)).toBeNull();
+  });
+});
+
 const route = (over: Partial<TRoute>): TRoute => ({
   id: "r1",
   ownerId: "alice",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   customFilterKind,
@@ -8,6 +8,7 @@ import {
   type CustomFieldFilter,
 } from "./customFieldFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import { setDisplayUnits } from "./units.js";
 
 function def(
   overrides: Partial<TripLogCustomFieldDef> = {},
@@ -182,5 +183,37 @@ describe("reconcileCustomFieldFilters", () => {
     expect(
       reconcileCustomFieldFilters(filters, [def({ type: "string" })]),
     ).toEqual({});
+  });
+});
+
+describe("a length filter", () => {
+  const exactly = (value: number): Record<string, CustomFieldFilter> => ({
+    longest_abseil: { kind: "number", op: "Exactly", value },
+  });
+  afterEach(() => setDisplayUnits("metric"));
+
+  // Mutation: compare `num === filter.value` for a length too, and "Exactly
+  // 49.2 ft" (14.99616 m) misses the place stored at 15 m.
+  it("is exactly what the pages show: 15 m matches 49.2 ft", () => {
+    const place = { longest_abseil: 15 };
+    expect(pass(place, exactly(15))).toBe(true);
+    expect(pass(place, exactly(14))).toBe(false);
+    setDisplayUnits("imperial");
+    // 49.2 typed in feet, as `lengthFromInput` stores it.
+    expect(pass(place, exactly(14.99616))).toBe(true);
+    expect(pass(place, exactly(15.24))).toBe(false);
+    expect(pass({ longest_abseil: "abc" }, exactly(15))).toBe(false);
+  });
+
+  // Mutation: `isLengthField(key)` becomes true for every key, and 14.99616
+  // matches 15 for a count.
+  it("leaves another number's Exactly strict", () => {
+    setDisplayUnits("imperial");
+    expect(
+      pass(
+        { num_abseils: 15 },
+        { num_abseils: { kind: "number", op: "Exactly", value: 14.99616 } },
+      ),
+    ).toBe(false);
   });
 });

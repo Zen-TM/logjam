@@ -11,6 +11,7 @@
 // accuracy. GPTS is treated as WGS84 everywhere; no datum-shift machinery.
 import proj4 from "proj4";
 
+import { wrapLon } from "../placeGeo.js";
 import { formatHeight } from "../units.js";
 import { GeoPdfParseError, type GeoPdfCrs } from "./parseGeoref.js";
 
@@ -87,10 +88,6 @@ function epsgEntry(epsg: number): EpsgEntry | undefined {
   return { def: utm(zone, family.south), isGeographic: false, zone };
 }
 
-/** A longitude difference in degrees, wrapped into [-180, 180). */
-export const wrapDegrees = (d: number): number =>
-  ((((d + 180) % 360) + 360) % 360) - 180;
-
 /** Refuse a zoned code whose zone is far from the sheet. Only for a sheet
  * with no usable WKT, where nothing else places it and its affine fits
  * perfectly in the wrong plane: an EPSG-only sheet, a WKT that does not
@@ -103,7 +100,7 @@ function assertZoneNearSheet(
   zone: number,
   probe: [number, number],
 ): void {
-  const offset = Math.abs(wrapDegrees(probe[0] - (6 * zone - 183)));
+  const offset = Math.abs(wrapLon(probe[0] - (6 * zone - 183)));
   if (offset > MAX_ZONE_OFFSET_DEG) {
     throw new GeoPdfParseError(
       "UNSUPPORTED_CRS",

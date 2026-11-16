@@ -13,6 +13,7 @@ import {
 } from "./demSources.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { escapeXml } from "./escapeXml.js";
+import type { LicenceId } from "./licences.js";
 import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
 import { t } from "./i18n.js";
 import {
@@ -196,6 +197,13 @@ export function compareSharpenedAreas(
 }
 
 /**
+ * What a sharpened area's heights are licensed under: the LiDAR is ELVIS's,
+ * and NSW's sharpen credit (`sharpen.credit` in `regions.ts`) names this licence.
+ * Guard: `licences.test.ts` ("names the sharpened heights' licence in the region's sharpen credit").
+ */
+export const SHARPENED_LICENCE = "cc-by-3-au" as const satisfies LicenceId;
+
+/**
  * An area as a DEM source. It ranks above every statewide source
  * (ADR 0028), and its archive is private: each runtime opens it itself,
  * after it has checked the caller may read the area (the API's check:
@@ -209,6 +217,7 @@ export function sharpenedDemSource(area: SharpenedArea): DemSource {
     urlTemplate: null,
     archivePath: null,
     areaId: area.id,
+    licence: SHARPENED_LICENCE,
     credit: area.credit,
     creditHtml: escapeXml(area.credit),
   };

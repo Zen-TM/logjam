@@ -11,7 +11,8 @@
 import proj4 from "proj4";
 
 import { GeoPdfParseError, type GeoPdfViewport } from "./parseGeoref.js";
-import { resolveCrs, wrapDegrees } from "./crs.js";
+import { wrapLon } from "../placeGeo.js";
+import { resolveCrs } from "./crs.js";
 
 export interface XY {
   x: number;
@@ -218,7 +219,7 @@ function sheetCentre(vp: GeoPdfViewport): [number, number] {
   const lon0 = pts[0].lon;
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
   return [
-    lon0 + mean(pts.map((p) => wrapDegrees(p.lon - lon0))),
+    lon0 + mean(pts.map((p) => wrapLon(p.lon - lon0))),
     mean(pts.map((p) => p.lat)),
   ];
 }

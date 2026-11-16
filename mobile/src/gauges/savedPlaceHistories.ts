@@ -1,4 +1,5 @@
 import { AppState } from "react-native";
+import { gaugeIdsByFeed } from "@logjam/shared";
 
 import { listMirrorPlaces } from "../sync/mirrorStore";
 import { refreshGaugeHistories } from "./gaugeFeed";
@@ -10,7 +11,11 @@ export function registerSavedGaugeHistoryRefresh(): () => void {
   const refresh = () =>
     listMirrorPlaces()
       .then((places) =>
-        refreshGaugeHistories(places.flatMap((p) => p.gaugeId ?? [])),
+        Promise.all(
+          gaugeIdsByFeed(places).map(({ feed, gaugeIds }) =>
+            refreshGaugeHistories(feed, gaugeIds),
+          ),
+        ),
       )
       .catch(() => {});
   void refresh();

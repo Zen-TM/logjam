@@ -11,6 +11,7 @@ import {
   searchPinAfter,
   type SearchPoint,
   gaugeDisplayName,
+  gaugeFeedIn,
   geocode,
   GEOCODE_MIN_QUERY_LENGTH,
   PLACE_REGISTRY_ATTRIBUTION,
@@ -88,7 +89,9 @@ export default function MapSearchBox({
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const { file: gaugeFile } = useGauges(focused);
+  const { file: gaugeFile } = useGauges(
+    focused ? gaugeFeedIn(getView?.() ?? null) : null,
+  );
   // The highlighted option by id, not position, so it stays on the same row
   // when an answer adds or removes rows around it.
   const [activeId, setActiveId] = useState<string | null>(null);

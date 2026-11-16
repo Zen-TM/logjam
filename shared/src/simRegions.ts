@@ -11,6 +11,7 @@
 // `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
 import { t } from "./i18n.js";
+import type { LicenceId } from "./licences.js";
 import type {
   CoverageArchive,
   Region,
@@ -44,26 +45,34 @@ function placeholderTileBytes(minzoom: number, maxzoom: number): TileBytes {
   );
 }
 
-/** The heights, slope, hillshade and contours of a simulated region. */
+/**
+ * The heights, slope, hillshade and contours of a simulated region, under
+ * `licence`: the real publisher's, because the archives are cut from published
+ * elevation models (`licences.test.ts`, "tags each simulated archive by where
+ * its ground comes from"). The credit text is a placeholder until they are built.
+ */
 function simTerrain(
   id: string,
   name: string,
   coverage: Box,
   topZoom: number,
+  licence: LicenceId,
 ): RegionTerrain {
   const credit = (layer: string) => ({
     coverage,
+    licence,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
   const heights = {
     id: `${id}-heights`,
+    name: t`${name} (simulated)`,
     sampleZoom: topZoom,
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
     tileBytes: placeholderTileBytes(8, topZoom),
     ...credit("Elevation"),
-  } as const satisfies DemSource & { tileBytes: TileBytes };
+  } as const satisfies DemSource & { name: string; tileBytes: TileBytes };
   return {
     heights,
     slope: {
@@ -106,6 +115,7 @@ function simOverlays(
 ): Pick<RegionTerrain, "land" | "fire" | "coverage"> {
   const credit = (layer: string) => ({
     coverage,
+    licence: "cc0" as const,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
@@ -171,7 +181,9 @@ const NZ_COVERAGE: Box = [
   NZ_NORTH_BOX[3],
 ];
 const NZ_TERRAIN: RegionTerrain = {
-  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17),
+  // LINZ's 1 m model (CC BY 4.0); outside its survey the heights are the
+  // Copernicus model's, also open.
+  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17, "cc-by-4"),
   ...simOverlays("simnz", "New Zealand", NZ_COVERAGE, [
     { id: "simone", name: t`Simulated One` },
     { id: "simtwo", name: t`Simulated Two` },
@@ -181,20 +193,26 @@ const NZ_TERRAIN: RegionTerrain = {
 export const SIM_NZ: Region = {
   id: "simnz",
   name: "Simulated New Zealand",
+  fullName: "Simulated New Zealand",
   view: { center: [169.25, -44.055], zoom: 11 },
   timeZone: "Pacific/Auckland",
   borders: [ringAround(NZ_SOUTH_BOX), ringAround(NZ_NORTH_BOX)],
   // The worldwide entries are the only basemaps a simulated region has.
   basemaps: [],
   defaultBasemap: "osm-topo",
+  // Each simulated vector archive is a cut of the OpenStreetMap-derived
+  // vector basemap, so ODbL, as NSW's is.
   vector: {
     archivePath: "master/basemap/protomaps-simnz.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [NZ_TERRAIN.heights!],
   terrain: NZ_TERRAIN,
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "nztm2000",
   canyonGrades: "french",
   units: "metric",
@@ -208,13 +226,15 @@ export const SIM_NZ: Region = {
 const UTAH_BOX: Box = [-113.0, 37.24, -112.89, 37.33];
 // No coverage: a second simulated region that lacks a layer NZ has.
 const UTAH_TERRAIN: RegionTerrain = {
-  ...simTerrain("simutah", "Utah", UTAH_BOX, 15),
+  // USGS's 3D Elevation Program.
+  ...simTerrain("simutah", "Utah", UTAH_BOX, 15, "us-public-domain"),
   ...simOverlays("simutah", "Utah", UTAH_BOX),
 };
 
 export const SIM_UTAH: Region = {
   id: "simutah",
   name: "Simulated Utah",
+  fullName: "Simulated Utah",
   view: { center: [-112.945, 37.285], zoom: 11 },
   timeZone: "America/Denver",
   borders: [ringAround(UTAH_BOX)],
@@ -223,11 +243,14 @@ export const SIM_UTAH: Region = {
   vector: {
     archivePath: "master/basemap/protomaps-simutah.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [UTAH_TERRAIN.heights!],
   terrain: UTAH_TERRAIN,
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "utm",
   canyonGrades: "aca",
   units: "imperial",
@@ -254,11 +277,13 @@ const WORLD_TERRAIN = simTerrain(
   "the world",
   [-180, -85.06, 180, 85.06],
   13,
+  "copernicus-dem",
 );
 
 export const SIM_WORLD: Region = {
   id: "world",
   name: "The world",
+  fullName: "The world",
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",
   borders: [],
@@ -267,6 +292,7 @@ export const SIM_WORLD: Region = {
   vector: {
     archivePath: "master/basemap/protomaps-simworld.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [WORLD_TERRAIN.heights!],
   // The everywhere tier draws heights and hillshade only.
@@ -275,7 +301,9 @@ export const SIM_WORLD: Region = {
     hillshade: WORLD_TERRAIN.hillshade,
   },
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "utm",
   canyonGrades: "french",
   units: "metric",

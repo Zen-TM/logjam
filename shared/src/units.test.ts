@@ -17,18 +17,29 @@ import {
   formatHeight,
   formatHeightRange,
   formatRain,
+  formatScaleStep,
   formatSpeed,
   formatTemperature,
   formatTemperatureRange,
   formatWind,
   lengthFromInput,
+  lengthInputText,
   lengthToInput,
   lengthUnitLabel,
   choosesUnits,
   offersUnitsChoice,
+  scaleBarSteps,
   setDisplayUnits,
   unitsOf,
 } from "./units.js";
+import { withFieldUnit, withRowUnit } from "./contracts/placePage.js";
+import { formatThreshold } from "./placeFilterOptions.js";
+import {
+  coerceFieldInput,
+  customFieldDisplayLabel,
+  fieldInputText,
+  withLengthUnit,
+} from "./tripLogFields.js";
 import { NSW_REGION, simRegionsOn } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
@@ -188,6 +199,190 @@ describe("imperial", () => {
     for (const metres of [0, 1, 12.5, 30, 250.25]) {
       expect(lengthFromInput(lengthToInput(metres))).toBeCloseTo(metres, 10);
     }
+  });
+});
+
+describe("scale bars", () => {
+  // The step lists and labels the two bars wrote before this module, verbatim.
+  const screenWas = [
+    1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
+    50_000, 100_000, 200_000, 500_000,
+  ];
+  const printWas = [100, 250, 500, 1000, 2000, 5000, 10000];
+  const screenLabelWas = (m: number) =>
+    m >= 1_000
+      ? `${Number.isInteger(m / 1_000) ? m / 1_000 : (m / 1_000).toFixed(1)} km`
+      : `${m} m`;
+  const printLabelWas = (m: number) =>
+    m >= 1000 ? `${m / 1000} km` : `${m} m`;
+
+  // Mutation: add a step to the metric `screen` or `print` list in units.ts,
+  // or change `formatScaleStep`'s metric branch to `formatDistance`.
+  it("are what Logjam drew in metric, label by label", () => {
+    expect(scaleBarSteps("screen")).toEqual(screenWas);
+    expect(scaleBarSteps("print")).toEqual(printWas);
+    for (const m of screenWas)
+      expect(formatScaleStep(m)).toBe(screenLabelWas(m));
+    for (const m of printWas) expect(formatScaleStep(m)).toBe(printLabelWas(m));
+    // A clamped bar's label is of an arbitrary whole number of metres.
+    expect(formatScaleStep(1500)).toBe("1.5 km");
+    expect(formatScaleStep(7)).toBe("7 m");
+  });
+
+  // Mutation: `SCALE_STEPS.screen.imperial` becomes the metric list, or
+  // `formatScaleStep` writes feet where it should write miles from half a mile.
+  it("are round in feet then miles in imperial", () => {
+    setDisplayUnits("imperial");
+    for (const kind of ["screen", "print"] as const) {
+      const steps = scaleBarSteps(kind);
+      expect(steps.length).toBeGreaterThan(6);
+      expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    }
+    const labels = (kind: "screen" | "print") =>
+      scaleBarSteps(kind).map(formatScaleStep);
+    expect(labels("screen")).toEqual([
+      "1 ft",
+      "2 ft",
+      "5 ft",
+      "10 ft",
+      "20 ft",
+      "50 ft",
+      "100 ft",
+      "200 ft",
+      "500 ft",
+      "1000 ft",
+      "2000 ft",
+      "0.5 mi",
+      "1 mi",
+      "2 mi",
+      "5 mi",
+      "10 mi",
+      "20 mi",
+      "50 mi",
+      "100 mi",
+      "200 mi",
+      "500 mi",
+    ]);
+    expect(labels("print")).toEqual([
+      "200 ft",
+      "500 ft",
+      "1000 ft",
+      "2000 ft",
+      "0.5 mi",
+      "1 mi",
+      "2 mi",
+      "5 mi",
+      "10 mi",
+    ]);
+    // A clamped bar: 2500 m is 1.55 mi.
+    expect(formatScaleStep(2500)).toBe("1.6 mi");
+  });
+});
+
+describe("a length field", () => {
+  const longest = "longest_abseil";
+
+  // Mutation: `withFieldUnit` writes `${text} m` whatever the units, or
+  // `isLengthField` is true for `num_abseils` too ("6 m").
+  it("is read in the display units, and in metric as it always was", () => {
+    expect(withFieldUnit(longest, "15")).toBe("15 m");
+    expect(withFieldUnit(longest, "12.345")).toBe("12.345 m");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withRowUnit([longest, "Longest pitch", 15, "float"])[2]).toBe(
+      "15 m",
+    );
+    setDisplayUnits("imperial");
+    expect(withFieldUnit(longest, "15")).toBe("49.2 ft");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withRowUnit([longest, "Longest pitch", 30.48, "float"])[2]).toBe(
+      "100 ft",
+    );
+    // Text that is not a number keeps its words, with the unit it is read in.
+    expect(withFieldUnit(longest, "about 15")).toBe("about 15 ft");
+  });
+
+  // Mutation: `fieldInputText` returns `String(stored)` for a length, or
+  // `coerceFieldInput` skips `lengthFromInput`.
+  it("is typed in the display units and stored in metres", () => {
+    expect(fieldInputText(longest, 15)).toBe("15");
+    expect(coerceFieldInput(longest, "15", "float")).toBe(15);
+    setDisplayUnits("imperial");
+    expect(fieldInputText(longest, 30.48)).toBe("100");
+    expect(fieldInputText(longest, null)).toBe("");
+    expect(coerceFieldInput(longest, "100", "float")).toBeCloseTo(30.48, 10);
+    expect(coerceFieldInput(longest, "", "float")).toBeNull();
+    // Another field is untouched by the unit.
+    expect(fieldInputText("num_abseils", 6)).toBe("6");
+    expect(coerceFieldInput("num_abseils", "6", "integer")).toBe(6);
+  });
+
+  // Mutation: `withLengthUnit` appends the unit in metric too, or for every
+  // key, or `customFieldDisplayLabel` stops calling it.
+  it("says the unit it is typed in once the setting is not metric", () => {
+    const def = (key: string, over = {}) =>
+      ({ key, label: "Longest pitch", type: "float", ...over }) as Parameters<
+        typeof customFieldDisplayLabel
+      >[0];
+    const longestDef = def(longest, { min: 0, max: null });
+    expect(customFieldDisplayLabel(longestDef)).toBe("Longest pitch (0+)");
+    expect(withLengthUnit(longest, "Longest pitch")).toBe("Longest pitch");
+    setDisplayUnits("imperial");
+    expect(customFieldDisplayLabel(longestDef)).toBe("Longest pitch (0+ ft)");
+    expect(customFieldDisplayLabel(def(longest))).toBe("Longest pitch (ft)");
+    expect(withLengthUnit(longest, "Longest pitch")).toBe("Longest pitch (ft)");
+    expect(customFieldDisplayLabel(def("num_abseils", { min: 0 }))).toBe(
+      "Longest pitch (0+)",
+    );
+  });
+
+  // Mutation: drop the rounding in `lengthFromInput` (`value * METRES_PER_FOOT`
+  // alone): 35 ft stores 10.668000000000001 m.
+  it("stores feet as clean metres a metric reader reads exactly", () => {
+    setDisplayUnits("imperial");
+    const ten = coerceFieldInput(longest, "35", "float");
+    const ninety = coerceFieldInput(longest, "98.4", "float");
+    expect([ten, ninety]).toEqual([10.668, 29.99232]);
+    // Nothing switched: the feet typed read back as typed.
+    expect(fieldInputText(longest, ninety)).toBe("98.4");
+    setDisplayUnits("metric");
+    expect(fieldInputText(longest, ten)).toBe("10.668");
+    expect(fieldInputText(longest, ninety)).toBe("29.99232");
+    expect(withFieldUnit(longest, String(ten))).toBe("10.668 m");
+    expect(formatThreshold(["More than", ten as number], true)).toBe(
+      "Over 10.668",
+    );
+  });
+
+  // Mutation: drop the `stored` comparison from `coerceFieldInput`, and a
+  // save with nothing edited turns 15 m into 14.9961 m.
+  it("keeps its stored metres while the text is as it was shown", () => {
+    setDisplayUnits("imperial");
+    const shown = fieldInputText(longest, 15);
+    expect(shown).toBe("49.2");
+    expect(coerceFieldInput(longest, shown, "float", 15)).toBe(15);
+    // Edited: the new text wins.
+    expect(coerceFieldInput(longest, "50", "float", 15)).toBeCloseTo(15.24, 10);
+  });
+
+  // Mutation: `formatThreshold` writes `filter[1]` for a length in imperial.
+  it("writes a filter's threshold in the display units, with no unit, as before", () => {
+    expect(formatThreshold(["More than", 30], true)).toBe("Over 30");
+    expect(formatThreshold(["More than", 30])).toBe("Over 30");
+    setDisplayUnits("imperial");
+    expect(formatThreshold(["More than", 30.48], true)).toBe("Over 100");
+    expect(formatThreshold(["Less than", 6])).toBe("Under 6");
+  });
+});
+
+describe("lengthInputText", () => {
+  // Mutation: `lengthInputText` rounds in metric too (12.345 reads "12.3").
+  it("keeps the stored digits in metric and rounds feet to one decimal", () => {
+    expect(lengthInputText(12.345)).toBe("12.345");
+    expect(lengthInputText(40)).toBe("40");
+    setDisplayUnits("imperial");
+    expect(lengthInputText(30.48)).toBe("100");
+    expect(lengthInputText(35)).toBe("114.8");
+    expect(lengthInputText(0)).toBe("0");
   });
 });
 

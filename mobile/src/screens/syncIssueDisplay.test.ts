@@ -405,27 +405,32 @@ describe("opChanges", () => {
     expect(changes.every((change) => !change.rejected)).toBe(true);
   });
 
-  // Mutation: write `${value} m` for `longestAbseil` in syncIssueDisplay.ts
-  // again, or drop `trimNumber` there (metric 12.345 reads "12.345 m").
+  // A real parked place edit carries a length inside `fieldValues`, under its
+  // field key; a top-level `longestAbseil` is no column.
+  const longest = (metres: number) =>
+    opChanges(parked({ fields: { fieldValues: { longest_abseil: metres } } }));
+
+  // Mutation: test the field's key as `longestAbseil` in `fieldValueText`
+  // (no real op has one), or drop `trimNumber` there (metric 12.345 reads
+  // "12.345 m").
   it("writes a length in the display units, rounded as the place summary rounds it", () => {
-    expect(
-      opChanges(parked({ fields: { longestAbseil: 12.345 } }))[0].value,
-    ).toBe("12.3 m");
+    expect(longest(12.345)[0]).toMatchObject({
+      label: "Longest abseil",
+      value: "12.3 m",
+    });
     setDisplayUnits("imperial");
     try {
-      expect(
-        opChanges(parked({ fields: { longestAbseil: 35 } }))[0].value,
-      ).toBe("114.8 ft");
+      expect(longest(35)[0].value).toBe("114.8 ft");
     } finally {
       setDisplayUnits("metric");
     }
   });
 
+  // Mutation: drop `lengthUnitLabel()` from the line `fieldValueText` writes
+  // for a length, and a parked edit reads a bare "35".
   it("carries the unit where the bare number would be a riddle", () => {
     expect(opChanges(parked({ fields: { hours: 1 } }))[0].value).toBe("1 hour");
-    expect(opChanges(parked({ fields: { longestAbseil: 35 } }))[0].value).toBe(
-      "35 m",
-    );
+    expect(longest(35)[0].value).toBe("35 m");
     expect(opChanges(parked({ fields: { quality: 4 } }))[0].value).toBe("4/5");
     // A count is a count.
     expect(opChanges(parked({ fields: { numAbseils: 5 } }))[0].value).toBe("5");

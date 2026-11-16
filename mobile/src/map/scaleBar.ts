@@ -7,7 +7,11 @@
 // which both clients' maps use; this file holds the 256-based tile variant
 // and the conversions only Logjam GPS needs.
 
-import { MAP_WORLD_PX_Z0 } from "@logjam/shared";
+import {
+  formatScaleStep,
+  MAP_WORLD_PX_Z0,
+  scaleBarSteps,
+} from "@logjam/shared";
 
 // Web-Mercator ground resolution at zoom 0, latitude 0, for the SLIPPY-TILE
 // convention (256-based) — deliberately a separate constant from the 512-based
@@ -50,19 +54,12 @@ export function degreesPerDp(zoom: number): number {
   return 360 / (MAP_WORLD_PX_Z0 * 2 ** zoom);
 }
 
-// Round distances a reader can divide in their head. Ends at 500 km — beyond
-// that the whole state fits on screen and the bar stops being useful.
-const NICE_STEPS_M = [
-  1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
-  50_000, 100_000, 200_000, 500_000,
-] as const;
-
 export type ScaleBarStep = {
   /** Ground distance the bar represents. */
   meters: number;
   /** On-screen width to draw, always <= the space offered. */
   widthPx: number;
-  /** Reader-facing label, e.g. "500 m" / "2 km". */
+  /** Reader-facing label in the display units, e.g. "500 m" or "2 mi". */
   label: string;
 };
 
@@ -86,25 +83,17 @@ export function chooseScaleStep(
   }
 
   const maxMeters = metersPerPixelValue * maxWidthPx;
-  const fitting = NICE_STEPS_M.filter((step) => step <= maxMeters);
+  const fitting = scaleBarSteps("screen").filter((step) => step <= maxMeters);
   if (fitting.length === 0) {
-    // Never label the bar "0 m": below half a metre the rounding would wipe
-    // the number out entirely and the bar would claim no scale at all.
-    const meters = Math.max(1, Math.round(maxMeters));
-    return { meters, widthPx: maxWidthPx, label: formatScaleLabel(meters) };
+    // Never label the bar "0": below the smallest step ("1 m", "1 ft") the
+    // rounding would wipe the number out and the bar would claim no scale.
+    const meters = Math.max(scaleBarSteps("screen")[0]!, maxMeters);
+    return { meters, widthPx: maxWidthPx, label: formatScaleStep(meters) };
   }
   const meters = fitting[fitting.length - 1]!;
   return {
     meters,
     widthPx: meters / metersPerPixelValue,
-    label: formatScaleLabel(meters),
+    label: formatScaleStep(meters),
   };
-}
-
-function formatScaleLabel(meters: number): string {
-  if (meters >= 1_000) {
-    const km = meters / 1_000;
-    return `${Number.isInteger(km) ? km : km.toFixed(1)} km`;
-  }
-  return `${meters} m`;
 }

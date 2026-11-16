@@ -19,6 +19,9 @@ import {
   type FieldStat,
   type LogbookStats,
 } from "./logbookStats.js";
+import { withRowUnit } from "./contracts/placePage.js";
+import { isLengthField } from "./placeTypes.js";
+import { displayUnits, lengthInputText, lengthUnitLabel } from "./units.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
 
 export type LogbookTrip = {
@@ -487,13 +490,24 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
           ? `highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}`
           : undefined,
       };
-    case "quantity":
+    case "quantity": {
+      // A length (a canyon's longest pitch) is stored in metres and read in
+      // the display units; any other quantity is the number itself. Guard:
+      // `logbook.test.ts` ("gives a length its unit in the display units, and
+      // another quantity none").
+      // In feet the figure is the place page's own (`lengthInputText`), so the
+      // two never disagree; in metric it is a stat's one decimal.
+      const shown = (n: number) =>
+        isLengthField(stat.key)
+          ? `${displayUnits() === "imperial" ? lengthInputText(n) : formatStatNumber(n)} ${lengthUnitLabel()}`
+          : formatStatNumber(n);
       return {
-        metric: { value: formatStatNumber(stat.average), suffix: "avg" },
+        metric: { value: shown(stat.average), suffix: "avg" },
         subtitle: stat.best
-          ? `highest ${formatStatNumber(stat.best.value)}, ${stat.best.label}`
+          ? `highest ${shown(stat.best.value)}, ${stat.best.label}`
           : undefined,
       };
+    }
     case "boolean":
       return {
         metric: { value: `${stat.yes}`, suffix: "yes" },
@@ -556,7 +570,10 @@ export function attributeRows(
     .map(
       ([key, value]): AttributeRow => [key, humanizeFieldKey(key), value, null],
     );
-  return [...defined, ...orphaned];
+  // A length reads in the display units, on every table built here. Guard:
+  // `lengthFieldClients.test.ts` ("every table of attribute rows reads a
+  // length in the display units").
+  return [...defined, ...orphaned].map(withRowUnit);
 }
 
 /** Keys are slugs of the original label (`makeCustomFieldKey`), so un-slugging

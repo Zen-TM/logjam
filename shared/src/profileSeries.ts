@@ -23,7 +23,8 @@ import {
   type SpeedProfile,
   type TrackDetail,
 } from "./trackStats.js";
-import { NSW_REGION } from "./regions.js";
+import { REGIONS } from "./regions.js";
+import { t } from "./i18n.js";
 import { formatHeight } from "./units.js";
 
 export type ProfilePoint = { x: number; value: number | null };
@@ -143,16 +144,28 @@ export const TRACK_PROFILE_COPY = {
 } as const;
 
 /**
- * What a reader is told a height came from, by `CLIMB_SOURCES` id. One per
- * id: "names every source a climb can be stored from" in
- * profileSeries.test.ts.
+ * What a reader is told a height came from, by `CLIMB_SOURCES` id, for the
+ * sources no region owns. One per id with `regionHeightsName`: "names every
+ * source a climb can be stored from" in profileSeries.test.ts.
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
   [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
-  [NSW_REGION.terrain.heights.id]: "NSW 5 m terrain data",
   [TERRARIUM.id]: "30 m terrain data",
   [GPS_CLIMB_SOURCE]: "GPS heights",
 };
+
+/** A region's own heights, named by the archive's `name`: "NSW 5 m terrain data". */
+function regionHeightsName(id: string): string | undefined {
+  for (const region of REGIONS) {
+    const heights = region.terrain.heights;
+    if (heights?.id === id) return t`${heights.name} terrain data`;
+  }
+  return undefined;
+}
+
+function nameOfHeightSource(id: string): string {
+  return regionHeightsName(id) ?? HEIGHT_SOURCE_NAMES[id] ?? UNNAMED_SOURCE;
+}
 /** A source this build does not know was written by a newer one. */
 const UNNAMED_SOURCE = "terrain data";
 
@@ -160,7 +173,7 @@ const UNNAMED_SOURCE = "terrain data";
 function heightSourceName(sourceIds: readonly string[] | undefined): string {
   const sources = new Set(sourceIds?.map(climbSourceOf));
   return sources.size === 1
-    ? (HEIGHT_SOURCE_NAMES[[...sources][0]!] ?? UNNAMED_SOURCE)
+    ? nameOfHeightSource([...sources][0]!)
     : UNNAMED_SOURCE;
 }
 
@@ -171,7 +184,7 @@ function heightSourceName(sourceIds: readonly string[] | undefined): string {
  * different sources; each says its own, in the same words.
  */
 export function storedClimbCaption(source: string | null | undefined): string {
-  return `Ascent and descent from ${HEIGHT_SOURCE_NAMES[source ?? GPS_CLIMB_SOURCE] ?? UNNAMED_SOURCE}`;
+  return `Ascent and descent from ${nameOfHeightSource(source ?? GPS_CLIMB_SOURCE)}`;
 }
 
 /**

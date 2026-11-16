@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
-import type { GeoPdfConfig } from "@logjam/shared";
+import { afterEach, describe, expect, it } from "vitest";
+import { setDisplayUnits, type GeoPdfConfig } from "@logjam/shared";
 import { SIM_REGIONS } from "@logjam/shared/dist/simRegions.js";
 import type { Ctx } from "./common";
-import { drawCompass, drawGridLabel, drawGridLines } from "./elements";
+import {
+  drawCompass,
+  drawGridLabel,
+  drawGridLines,
+  drawScaleBar,
+} from "./elements";
 
 type Op = {
   op: "line" | "stroke" | "fill";
@@ -34,6 +39,11 @@ function recorder() {
       Object.assign(this, saved.pop());
     },
     measureText: (text: string) => ({ width: text.length * 5 }),
+    quadraticCurveTo() {},
+    closePath() {},
+    fill() {},
+    fillRect() {},
+    strokeRect() {},
     beginPath() {
       path = [];
     },
@@ -231,7 +241,8 @@ describe("a sheet's grid follows the ground it covers", () => {
     `${Math.floor(km / 100)} ${String(km % 100).padStart(2, "0")} 000`;
 
   it("prints NZTM's eastings and northings over New Zealand", () => {
-    // Makarora, E 1 295 356 to 1 303 873 and N 5 109 440 to 5 120 914 in NZTM.
+    // Makarora in NZTM: the south-west corner is E 1 295 869, N 5 109 441 and
+    // the north-east E 1 303 373, N 5 120 913, the two corners the lines run between.
     const box = { north: -44.005, south: -44.105, east: 169.3, west: 169.2 };
     expect(printed(box)).toEqual([
       ...through(1296, 1303).map(label),
@@ -329,5 +340,32 @@ describe("the compass's grid north", () => {
     ],
   ])("prints the figure for a sheet %s", (_name, extent, text) => {
     expect(gn(extent)).toBe(text);
+  });
+});
+
+afterEach(() => setDisplayUnits("metric"));
+
+// The printed bar spans a round distance in the display units: the largest of
+// its steps that fits a quarter of the sheet's width. This sheet is about
+// 9.2 km wide, so a quarter is 2.3 km: the bar is 2 km, or 1 mi in imperial
+// (the next step, 2 mi, is longer).
+describe("the printed scale bar", () => {
+  const bar = () => {
+    const { ctx, ops } = recorder();
+    drawScaleBar(ctx, config("latlon"), 1000, 900, 20, 10, 8, 150);
+    return ops.filter((o) => o.op === "fill").map((o) => o.text);
+  };
+
+  // Mutation: drop 2000 from the `print` metric steps in units.ts, and this
+  // reads "1 km".
+  it("is 2 km on a sheet about 9 km wide, in metric", () => {
+    expect(bar()).toEqual(["0", "2 km"]);
+  });
+
+  // Mutation: put the metric list back in `drawScaleBar`
+  // (`const steps = [100, 250, 500, 1000, 2000, 5000, 10000]`).
+  it("is 1 mi on the same sheet in imperial", () => {
+    setDisplayUnits("imperial");
+    expect(bar()).toEqual(["0", "1 mi"]);
   });
 });
