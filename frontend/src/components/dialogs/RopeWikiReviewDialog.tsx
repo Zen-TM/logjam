@@ -10,6 +10,7 @@ import MatchReview from "./MatchReview";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import { Button, Dialog, ErrorBanner } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
+import { t } from "@logjam/shared";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
 
@@ -143,7 +144,7 @@ function RopeWikiReviewDialog({
     } catch (err) {
       console.error(err);
       setError(
-        messageFromError(err, "Couldn't apply RopeWiki review decisions."),
+        messageFromError(err, t`Couldn't apply RopeWiki review decisions.`),
       );
     } finally {
       setSubmitting(false);
@@ -153,7 +154,7 @@ function RopeWikiReviewDialog({
   return (
     <Dialog
       open={open}
-      title="Review possible duplicates"
+      title={t`Review possible duplicates`}
       size="large"
       dismissible={!submitting}
       onClose={onClose}
@@ -162,15 +163,15 @@ function RopeWikiReviewDialog({
           <Button
             onClick={onClose}
             disabled={submitting}
-            disabledReason="Applying…"
-          >
-            Cancel
-          </Button>
+            disabledReason={t`Applying…`}
+          >{t`Cancel`}</Button>
           {/* Absent with nothing to review: no decision exists to apply. */}
           {review.length > 0 && (
-            <Button variant="filled" busy={submitting} onClick={handleApply}>
-              Apply
-            </Button>
+            <Button
+              variant="filled"
+              busy={submitting}
+              onClick={handleApply}
+            >{t`Apply`}</Button>
           )}
         </>
       }
@@ -186,11 +187,9 @@ function RopeWikiReviewDialog({
             they were left alone.
           </p>
         )}
-        <p className={classes.intro}>
-          These RopeWiki places may already be in your collection. For each one,
-          say whether to link it to a place you have, create it as new, or skip
-          it.
-        </p>
+        <p
+          className={classes.intro}
+        >{t`These RopeWiki places may already be in your collection. For each one, say whether to link it to a place you have, create it as new, or skip it.`}</p>
         {error && <ErrorBanner message={error} />}
         <MatchReview items={items} onChange={handleChange} />
       </div>

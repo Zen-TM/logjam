@@ -48,6 +48,7 @@ import {
   coordinateEntry,
   coordinateNumber,
   displayUnits,
+  t,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -620,12 +621,12 @@ function TripLogDialog({
       draftWarnedRef.current = true;
       if (result.status === "too-large") {
         toast.error(
-          "These notes are too long to save a local draft. Save the trip so it isn't lost.",
+          t`These notes are too long to save a local draft. Save the trip so it isn't lost.`,
         );
       } else {
         console.error(result.error);
         toast.error(
-          "Couldn't save a local draft of this trip. Save it so it isn't lost.",
+          t`Couldn't save a local draft of this trip. Save it so it isn't lost.`,
         );
       }
     }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
@@ -684,7 +685,7 @@ function TripLogDialog({
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load trip files."));
+        setError(messageFromError(err, t`Couldn't load trip files.`));
       })
       .finally(() => setMediaLoading(false));
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -837,7 +838,7 @@ function TripLogDialog({
         setError(
           messageFromError(
             err,
-            "Couldn't add the route to this trip. You can add it below.",
+            t`Couldn't add the route to this trip. You can add it below.`,
           ),
         );
       } finally {
@@ -858,7 +859,7 @@ function TripLogDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(err, "Couldn't discard uploaded files. Try again."),
+          messageFromError(err, t`Couldn't discard uploaded files. Try again.`),
         );
         return;
       }
@@ -1030,7 +1031,7 @@ function TripLogDialog({
     }
     if (selectedTypes.length >= MAX_TRIP_TYPES_PER_TRIP) {
       setTypesError(
-        `A trip can have at most ${MAX_TRIP_TYPES_PER_TRIP} types.`,
+        t`A trip can have at most ${MAX_TRIP_TYPES_PER_TRIP} types.`,
       );
       return;
     }
@@ -1191,7 +1192,7 @@ function TripLogDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save the attribute. Try again."),
+        messageFromError(err, t`Couldn't save the attribute. Try again.`),
       );
     } finally {
       setAddingField(false);
@@ -1231,7 +1232,7 @@ function TripLogDialog({
             subtitle={
               selectedCount === 1 ? "1 place" : `${selectedCount} places`
             }
-            description="Places on this trip. Press to choose."
+            description={t`Places on this trip. Press to choose.`}
             leading={<IconTile icon="place" hue="var(--color-accent)" />}
             trailing={
               <Icon
@@ -1343,7 +1344,7 @@ function TripLogDialog({
           selected={selectedTypes}
           onToggle={toggleType}
           onAdd={addType}
-          addLabel="Add a type"
+          addLabel={t`Add a type`}
           lockedValues={lockedTypes}
           primaryValue={
             selectedTypes.length > 1
@@ -1382,7 +1383,7 @@ function TripLogDialog({
               <FieldBeside>
                 <IconButton
                   icon="delete"
-                  label={`Delete the attribute ${def.label}`}
+                  label={t`Delete the attribute ${def.label}`}
                   tone="danger"
                   onClick={() => setFieldToDelete(def)}
                 />
@@ -1421,9 +1422,7 @@ function TripLogDialog({
               icon="add"
               className={classes.addAttribute}
               onClick={() => setShowAddField(true)}
-            >
-              Add an attribute
-            </Button>
+            >{t`Add an attribute`}</Button>
           )}
         </section>
       </>
@@ -1450,7 +1449,7 @@ function TripLogDialog({
                 trailing={
                   <IconButton
                     icon="close"
-                    label={`Remove ${def.label} from this trip`}
+                    label={t`Remove ${def.label} from this trip`}
                     onClick={() => removeLeftoverField(def.key)}
                   />
                 }
@@ -1467,16 +1466,14 @@ function TripLogDialog({
         <section className={classes.section}>
           <SectionHeader title={TRIP_FORM.copy.photos} />
           {mediaLoading ? (
-            <p className={classes.muted} role="status">
-              Loading files…
-            </p>
+            <p className={classes.muted} role="status">{t`Loading files…`}</p>
           ) : (
             <MediaGallery
               media={media}
               variant="visual"
               canDelete
               onDeleted={handleMediaDeleted}
-              emptyText="No photos or videos yet."
+              emptyText={t`No photos or videos yet.`}
             />
           )}
           <MediaUpload
@@ -1496,9 +1493,10 @@ function TripLogDialog({
         <section className={classes.section}>
           <SectionHeader title={TRIP_FORM.copy.routes} />
           {attachingTrack && (
-            <p className={classes.muted} role="status">
-              Adding the route…
-            </p>
+            <p
+              className={classes.muted}
+              role="status"
+            >{t`Adding the route…`}</p>
           )}
           {!mediaLoading && (
             <MediaGallery
@@ -1517,7 +1515,7 @@ function TripLogDialog({
               setMode("way");
             }}
             disabled={saving}
-            disabledReason="Saving…"
+            disabledReason={t`Saving…`}
           >
             {ADD_WAY.copy.title}
           </Button>
@@ -1532,7 +1530,7 @@ function TripLogDialog({
         open={open}
         title={
           mode === "places"
-            ? "Places on this trip"
+            ? t`Places on this trip`
             : mode === "way"
               ? ADD_WAY.copy.title
               : tripLog
@@ -1556,27 +1554,25 @@ function TripLogDialog({
         }
         footer={(requestClose) =>
           mode === "places" ? (
-            <Button variant="filled" icon="done" onClick={backToForm}>
-              Done
-            </Button>
+            <Button
+              variant="filled"
+              icon="done"
+              onClick={backToForm}
+            >{t`Done`}</Button>
           ) : mode === "way" ? (
             <Button
               icon="back"
               onClick={() => setMode("form")}
               disabled={wayBusy}
-              disabledReason="Adding…"
-            >
-              Back to the trip
-            </Button>
+              disabledReason={t`Adding…`}
+            >{t`Back to the trip`}</Button>
           ) : (
             <>
               <Button
                 onClick={requestClose}
                 disabled={saving || uploading > 0}
-                disabledReason={saving ? "Saving…" : "Uploading…"}
-              >
-                Cancel
-              </Button>
+                disabledReason={saving ? t`Saving…` : t`Uploading…`}
+              >{t`Cancel`}</Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
                   path, so a click can't fire alongside the form's submit. */}
               <Button
@@ -1598,7 +1594,7 @@ function TripLogDialog({
         {mode === "places" && (
           <div className={classes.picker}>
             <SearchField
-              label="Search your places"
+              label={t`Search your places`}
               value={placeSearch}
               // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
               autoFocus
@@ -1618,14 +1614,14 @@ function TripLogDialog({
             <FieldError message={placesError} />
             {selectedCount > 0 && (
               <section className={classes.section}>
-                <SectionHeader title="On this trip" count={selectedCount} />
+                <SectionHeader title={t`On this trip`} count={selectedCount} />
                 {pinnedPlaces.map((place, index) => (
                   <Row
                     key={place.id}
                     className={classes.row}
                     title={place.name}
-                    subtitle={`${index + 1} of ${selectedCount}`}
-                    description="On this trip. Press to take it off."
+                    subtitle={t`${index + 1} of ${selectedCount}`}
+                    description={t`On this trip. Press to take it off.`}
                     leading={<IconTile icon="done" hue="var(--color-accent)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
@@ -1633,9 +1629,9 @@ function TripLogDialog({
                 {creating && (
                   <Row
                     className={classes.row}
-                    title={creating.name || "New place"}
-                    subtitle={`${selectedCount} of ${selectedCount} · made when the trip is saved`}
-                    description="A new place. Press to take it off."
+                    title={creating.name || t`New place`}
+                    subtitle={t`${selectedCount} of ${selectedCount} · made when the trip is saved`}
+                    description={t`A new place. Press to take it off.`}
                     leading={
                       <IconTile icon="addPlace" hue="var(--color-accent)" />
                     }
@@ -1646,14 +1642,14 @@ function TripLogDialog({
             )}
             <section className={classes.section}>
               <SectionHeader
-                title={needle ? "Matches" : "Your places"}
+                title={needle ? t`Matches` : t`Your places`}
                 count={matches.length}
               />
               {needle && !creating && (
                 <Row
                   className={classes.row}
-                  title={`Create “${placeSearch.trim()}”`}
-                  subtitle="A new canyon, made when the trip is saved"
+                  title={t`Create “${placeSearch.trim()}”`}
+                  subtitle={t`A new canyon, made when the trip is saved`}
                   leading={
                     <IconTile icon="addPlace" hue="var(--color-neutral)" />
                   }
@@ -1672,7 +1668,7 @@ function TripLogDialog({
                     key={place.id}
                     className={classes.row}
                     title={place.name}
-                    description="Press to add it to this trip."
+                    description={t`Press to add it to this trip.`}
                     leading={<IconTile icon="add" hue="var(--color-neutral)" />}
                     onOpen={() => togglePlace(place.id)}
                   />
@@ -1705,12 +1701,15 @@ function TripLogDialog({
                 {formatDraftSavedAt(restorableDraft.savedAt)}.
               </p>
               <div className={classes.draftActions}>
-                <Button compact onClick={handleDiscardDraft}>
-                  Discard
-                </Button>
-                <Button compact variant="outline" onClick={handleRestoreDraft}>
-                  Restore
-                </Button>
+                <Button
+                  compact
+                  onClick={handleDiscardDraft}
+                >{t`Discard`}</Button>
+                <Button
+                  compact
+                  variant="outline"
+                  onClick={handleRestoreDraft}
+                >{t`Restore`}</Button>
               </div>
             </div>
           )}

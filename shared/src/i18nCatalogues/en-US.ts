@@ -36,7 +36,10 @@ export const enUS: Catalogue = {
     "Can you set up and do a rappel on your own?",
   "Colour terrain based on how steep it is.":
     "Color terrain based on how steep it is.",
+  Colour: "Color",
   "Coloured by steepness": "Colored by steepness",
+  "Band {0} colour, taken from the scale":
+    "Band {0} color, taken from the scale",
   "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.":
     "Each area is colored by how long since it last burned: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no color.",
   "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.":
@@ -53,6 +56,7 @@ export const enUS: Catalogue = {
   "Last burnt": "Last burned",
   "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.":
     "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no color.",
+  "Everyone you know is ticked.": "Everyone you know is checked.",
   "Mobile coverage": "Cell coverage",
   "Modelled rain, past {0} days": "Modeled rain, past {0} days",
   "Need a lift": "Need a ride",
@@ -61,6 +65,10 @@ export const enUS: Catalogue = {
   Ochre: "Ocher",
   "Pale smooth bark and grey-green leaves, for reading in full sun.":
     "Pale smooth bark and gray-green leaves, for reading in full sun.",
+  "Reset colours": "Reset colors",
+  "Scale end colour (the steepest band)": "Scale end color (the steepest band)",
+  "Scale start colour (the shallowest band)":
+    "Scale start color (the shallowest band)",
   "Scrub density for bushbashing": "Scrub density for bushwhacking",
   "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.":
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
