@@ -27,7 +27,7 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  ".": 663,
+  ".": 659,
   contracts: 20,
   geoPdfImport: 1,
 };
