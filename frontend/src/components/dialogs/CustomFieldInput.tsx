@@ -3,6 +3,7 @@ import {
   customFieldDisplayLabel,
   railChoices,
   systemFieldDef,
+  t,
 } from "@logjam/shared";
 import {
   numericFieldError,
@@ -21,8 +22,8 @@ const UNSET = "";
  *  nobody gave. (CustomFieldInput.render.test.tsx) */
 const BOOLEAN_OPTIONS = [
   { value: UNSET, label: "—" },
-  { value: "true", label: "Yes" },
-  { value: "false", label: "No" },
+  { value: "true", label: t`Yes` },
+  { value: "false", label: t`No` },
 ];
 
 /**

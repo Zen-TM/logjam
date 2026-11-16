@@ -136,12 +136,12 @@ import classes from "./GeoPdfDialog.module.css";
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
 const PAPER_OPTIONS: ChipOption<PaperSize>[] = PAPER_SIZES.map((size) => ({
   value: size,
-  label: size === "custom" ? "Custom" : size,
+  label: size === "custom" ? t`Custom` : size,
 }));
 
 const ORIENTATION_OPTIONS: ChipOption<Orientation>[] = [
-  { value: "portrait", label: "Portrait" },
-  { value: "landscape", label: "Landscape" },
+  { value: "portrait", label: t`Portrait` },
+  { value: "landscape", label: t`Landscape` },
 ];
 
 const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
@@ -149,14 +149,14 @@ const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
     value: `${scale}` as ScaleChoice,
     label: `1:${scale.toLocaleString()}`,
   })),
-  { value: "other", label: "Other" },
+  { value: "other", label: t`Other` },
 ];
 
 /** What is made: a GeoPDF, or one of the area formats for GIS. */
 type FormatChoice = "geopdf" | AreaExportFormat;
 
 const FORMAT_OPTIONS: ChipOption<FormatChoice>[] = [
-  { value: "geopdf", label: "GeoPDF" },
+  { value: "geopdf", label: t`GeoPDF` },
   ...AREA_EXPORT_FORMATS.map((format) => ({
     value: format,
     label: EXPORT_FORMAT_LABELS[format],
@@ -193,8 +193,8 @@ function gisFormatNote(
 }
 
 const COORD_OPTIONS: ChipOption<CoordMode>[] = [
-  { value: "latlon", label: "Lat/Lon" },
-  { value: "enNorthing", label: "E/N" },
+  { value: "latlon", label: t`Lat/Lon` },
+  { value: "enNorthing", label: t`E/N` },
 ];
 
 // The overlay keys are Terrain layers to the map's stacking but overlays to the
@@ -208,7 +208,7 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
 
-const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
+const SCALE_TOOLTIP = t`1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
   paperSize: "A4",
@@ -227,9 +227,9 @@ const RENDER_FAILED =
   "Couldn't make the GeoPDF. Check your connection, or try another base map.";
 
 const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
-  preparing: "Getting the map ready.",
-  drawing: "Drawing the map.",
-  finishing: "Putting the PDF together.",
+  preparing: t`Getting the map ready.`,
+  drawing: t`Drawing the map.`,
+  finishing: t`Putting the PDF together.`,
 };
 
 /** How long the area, scale and layers stand still before tiles are prefetched. */
@@ -655,7 +655,7 @@ function GeoPdfDialog({
       ? `${MAP_TERRAIN.copy.notHere}.`
       : key === "contours" &&
           contoursPrintedHere(selectedBaseLayer, lidarOverlap)
-        ? "This map prints its own contours."
+        ? t`This map prints its own contours.`
         : key === "hillshade" && hillshadeShadowedHere(selectedBaseLayer)
           ? `${MAP_TERRAIN.copy.hillshadeImagery}.`
           : null;
@@ -690,7 +690,7 @@ function GeoPdfDialog({
   const gisAreaLimit = !gisArea
     ? null
     : gisArea.north <= gisArea.south || gisArea.east <= gisArea.west
-      ? "That box has no size. Draw it again on the map."
+      ? t`That box has no size. Draw it again on the map.`
       : areaExportTooLarge(gisArea)
         ? areaExportTooLargeSentence()
         : !areaInTerrainRegion(gisArea)
@@ -743,7 +743,7 @@ function GeoPdfDialog({
         setGisCoordsOpen(true);
         setGisPicked(false);
       }
-      setError("A field below needs fixing first.");
+      setError(t`A field below needs fixing first.`);
       return;
     }
     setGenerating(true);
@@ -754,13 +754,13 @@ function GeoPdfDialog({
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
       toast.done(
-        "Making your map. It comes to your Inbox, and downloads itself if this tab is still open.",
+        t`Making your map. It comes to your Inbox, and downloads itself if this tab is still open.`,
       );
       onExportQueued?.();
       onClose();
     } catch (e) {
       console.error(e);
-      setError(messageFromError(e, "Couldn't queue the map. Try again."));
+      setError(messageFromError(e, t`Couldn't queue the map. Try again.`));
     } finally {
       setGenerating(false);
     }
@@ -856,7 +856,7 @@ function GeoPdfDialog({
         setCoordsOpen(true);
         setAreaPicked(false);
       }
-      setError("A field below needs fixing first.");
+      setError(t`A field below needs fixing first.`);
       return;
     }
     // A prefetch must not share the link with the render it was meant to help.
@@ -923,7 +923,7 @@ function GeoPdfDialog({
             terrainPinned: !terrainFollowsMap,
           }),
         );
-        toast.done("Your GeoPDF is downloading.");
+        toast.done(t`Your GeoPDF is downloading.`);
         onClose();
       } else if (result.reason === "too-large") {
         setError(geoPdfTooLargeSentence());
@@ -1001,7 +1001,7 @@ function GeoPdfDialog({
     <>
       <Dialog
         open={open}
-        title="Make a map"
+        title={t`Make a map`}
         size="large"
         dismissible={!generating}
         onClose={onClose}
@@ -1013,29 +1013,27 @@ function GeoPdfDialog({
             <Button
               onClick={requestClose}
               disabled={generating}
-              disabledReason="Making it…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Making it…`}
+            >{t`Cancel`}</Button>
             <Button
               variant="filled"
               busy={generating || (!gisFormat && !topoJobsLoaded)}
               onClick={gisFormat ? handleExportArea : handleGenerate}
-            >
-              Make it
-            </Button>
+            >{t`Make it`}</Button>
           </>
         )}
       >
         <div className={classes.form}>
-          <p className={classes.wideHint}>This is easier on a bigger screen.</p>
+          <p
+            className={classes.wideHint}
+          >{t`This is easier on a bigger screen.`}</p>
 
           {error && <ErrorBanner message={error} />}
 
           <section className={classes.group}>
-            <SectionHeader title="Format" />
+            <SectionHeader title={t`Format`} />
             <ChipRail
-              label="Format"
+              label={t`Format`}
               className={classes.railCell}
               options={FORMAT_OPTIONS}
               value={format}
@@ -1053,7 +1051,7 @@ function GeoPdfDialog({
               area={gisArea}
               areaError={
                 gisAreaLimit ??
-                (gisTried && !gisArea ? "Pick an area on the map." : null)
+                (gisTried && !gisArea ? t`Pick an area on the map.` : null)
               }
               edges={gisEdges}
               raw={gisRaw}
@@ -1112,10 +1110,10 @@ function GeoPdfDialog({
               {/* Paper, orientation and scale set the area's size; the map sets
               where it is. */}
               <section className={classes.group}>
-                <SectionHeader title="Area" />
-                <SettingsRow label="Paper">
+                <SectionHeader title={t`Area`} />
+                <SettingsRow label={t`Paper`}>
                   <ChipRail
-                    label="Paper size"
+                    label={t`Paper size`}
                     className={classes.railCell}
                     options={PAPER_OPTIONS}
                     value={extentState.paperSize}
@@ -1126,12 +1124,12 @@ function GeoPdfDialog({
                   />
                 </SettingsRow>
                 <SettingsRow
-                  label="Orientation"
+                  label={t`Orientation`}
                   disabled={extentState.paperSize === "custom"}
-                  disabledReason="A custom ratio sets its own shape."
+                  disabledReason={t`A custom ratio sets its own shape.`}
                 >
                   <ChipRail
-                    label="Orientation"
+                    label={t`Orientation`}
                     className={classes.railCell}
                     options={ORIENTATION_OPTIONS}
                     value={extentState.orientation}
@@ -1145,12 +1143,12 @@ function GeoPdfDialog({
                 </SettingsRow>
                 {extentState.paperSize === "custom" && (
                   <SettingsRow
-                    label="Ratio"
-                    tooltip="Width against height, in whatever units. A4 is 210 by 297."
+                    label={t`Ratio`}
+                    tooltip={t`Width against height, in whatever units. A4 is 210 by 297.`}
                   >
                     <div className={classes.ratioRow}>
                       <TextField
-                        label="Ratio width"
+                        label={t`Ratio width`}
                         hideLabel
                         className={classes.ratioField}
                         type="text"
@@ -1170,7 +1168,7 @@ function GeoPdfDialog({
                       />
                       <span aria-hidden>:</span>
                       <TextField
-                        label="Ratio height"
+                        label={t`Ratio height`}
                         hideLabel
                         className={classes.ratioField}
                         type="text"
@@ -1191,9 +1189,9 @@ function GeoPdfDialog({
                     </div>
                   </SettingsRow>
                 )}
-                <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
+                <SettingsRow label={t`Scale`} tooltip={SCALE_TOOLTIP}>
                   <ChipRail
-                    label="Scale"
+                    label={t`Scale`}
                     wrap
                     className={classes.railCell}
                     options={SCALE_OPTIONS}
@@ -1217,7 +1215,7 @@ function GeoPdfDialog({
                       1 :
                     </span>
                     <TextField
-                      label="Scale"
+                      label={t`Scale`}
                       hideLabel
                       className={classes.scaleField}
                       type="text"
@@ -1271,11 +1269,11 @@ function GeoPdfDialog({
                 {coordsOpen && (
                   <div className={classes.group}>
                     <SettingsRow
-                      label="Coordinates"
+                      label={t`Coordinates`}
                       tooltip={coordTooltip(extentState)}
                     >
                       <ChipRail
-                        label="Coordinates"
+                        label={t`Coordinates`}
                         className={classes.railCell}
                         options={COORD_OPTIONS}
                         value={extentState.coordMode}
@@ -1301,8 +1299,8 @@ function GeoPdfDialog({
                           which="n"
                           label={
                             extentState.coordMode === "latlon"
-                              ? "North"
-                              : "N (northing)"
+                              ? t`North`
+                              : t`N (northing)`
                           }
                           value={rawN}
                           error={extentInputErrors.n}
@@ -1323,8 +1321,8 @@ function GeoPdfDialog({
                           which="w"
                           label={
                             extentState.coordMode === "latlon"
-                              ? "West"
-                              : "W (easting)"
+                              ? t`West`
+                              : t`W (easting)`
                           }
                           value={rawW}
                           error={extentInputErrors.w}
@@ -1345,8 +1343,8 @@ function GeoPdfDialog({
                           which="e"
                           label={
                             extentState.coordMode === "latlon"
-                              ? "East"
-                              : "E (easting)"
+                              ? t`East`
+                              : t`E (easting)`
                           }
                           value={rawE}
                           error={extentInputErrors.e}
@@ -1367,8 +1365,8 @@ function GeoPdfDialog({
                           which="s"
                           label={
                             extentState.coordMode === "latlon"
-                              ? "South"
-                              : "S (northing)"
+                              ? t`South`
+                              : t`S (northing)`
                           }
                           value={rawS}
                           error={extentInputErrors.s}
@@ -1393,11 +1391,13 @@ function GeoPdfDialog({
               </section>
 
               <section className={classes.group}>
-                <SectionHeader title="Layers" />
+                <SectionHeader title={t`Layers`} />
                 <div className={classes.baseLayer}>
-                  <span className={classes.baseLayerLabel}>Base layer</span>
+                  <span
+                    className={classes.baseLayerLabel}
+                  >{t`Base layer`}</span>
                   <BasemapGallery
-                    label="Base layer"
+                    label={t`Base layer`}
                     layers={printableBaseLayersFor(groundBox)}
                     activeLayerId={selectedBaseLayer}
                     onChange={(id) => {
@@ -1429,7 +1429,7 @@ function GeoPdfDialog({
                   }
                 />
                 <ChipPicker
-                  label="Overlays"
+                  label={t`Overlays`}
                   options={[
                     ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : []).map(
                       (layer) => ({
@@ -1437,8 +1437,8 @@ function GeoPdfDialog({
                         label: layer.label,
                       }),
                     ),
-                    { value: MY_PLACES, label: "My places" },
-                    { value: SHARED_PLACES, label: "Shared places" },
+                    { value: MY_PLACES, label: t`My places` },
+                    { value: SHARED_PLACES, label: t`Shared places` },
                     {
                       value: "land",
                       label: MAP_TERRAIN.copy.land,
@@ -1471,11 +1471,11 @@ function GeoPdfDialog({
               </section>
 
               <section className={classes.group}>
-                <SectionHeader title="Map elements" />
+                <SectionHeader title={t`Map elements`} />
                 <div className={classes.checkList}>
                   <div className={classes.elementRow}>
                     <Checkbox
-                      label="Title"
+                      label={t`Title`}
                       checked={titleEnabled}
                       onChange={(next) => {
                         setTitleEnabled(next);
@@ -1484,10 +1484,10 @@ function GeoPdfDialog({
                     />
                     {titleEnabled && (
                       <TextField
-                        label="Map title"
+                        label={t`Map title`}
                         hideLabel
                         className={classes.elementField}
-                        placeholder="Map title"
+                        placeholder={t`Map title`}
                         value={titleShown}
                         onChange={(event) => {
                           setTitleText(event.target.value);
@@ -1499,7 +1499,7 @@ function GeoPdfDialog({
                   </div>
 
                   <Checkbox
-                    label="North arrow (TN / GN / MN)"
+                    label={t`North arrow (TN / GN / MN)`}
                     checked={compassEnabled}
                     onChange={(next) => {
                       setCompassEnabled(next);
@@ -1509,7 +1509,7 @@ function GeoPdfDialog({
 
                   <div className={classes.elementRow}>
                     <Checkbox
-                      label="Scale text"
+                      label={t`Scale text`}
                       checked={scaleTextEnabled}
                       onChange={(next) => {
                         setScaleTextEnabled(next);
@@ -1524,7 +1524,7 @@ function GeoPdfDialog({
                   </div>
 
                   <Checkbox
-                    label="Scale bar"
+                    label={t`Scale bar`}
                     checked={scaleBarEnabled}
                     onChange={(next) => {
                       setScaleBarEnabled(next);
@@ -1534,7 +1534,7 @@ function GeoPdfDialog({
 
                   <div className={classes.elementRow}>
                     <Checkbox
-                      label="Grid lines"
+                      label={t`Grid lines`}
                       checked={gridLinesEnabled}
                       onChange={(next) => {
                         setGridLinesEnabled(next);
@@ -1543,7 +1543,7 @@ function GeoPdfDialog({
                     />
                     {gridLinesEnabled && (
                       <ChipRail
-                        label="Grid lines"
+                        label={t`Grid lines`}
                         className={classes.railCell}
                         options={COORD_OPTIONS}
                         value={gridLinesMode}
@@ -1556,8 +1556,8 @@ function GeoPdfDialog({
                   </div>
                 </div>
                 <TextField
-                  label="File name"
-                  hint="Optional. Empty, it is the title when there is one. .pdf is added."
+                  label={t`File name`}
+                  hint={t`Optional. Empty, it is the title when there is one. .pdf is added.`}
                   placeholder={fileDefault}
                   value={fileText}
                   onChange={(event) => {
@@ -1574,16 +1574,18 @@ function GeoPdfDialog({
 
       <Dialog
         open={progress !== null}
-        title="Making your GeoPDF"
+        title={t`Making your GeoPDF`}
         onClose={() => renderAbort.current?.abort()}
         footer={
-          <Button onClick={() => renderAbort.current?.abort()}>Cancel</Button>
+          <Button
+            onClick={() => renderAbort.current?.abort()}
+          >{t`Cancel`}</Button>
         }
       >
         {progress && (
           <div className={classes.progress}>
             <ProgressBar
-              label="Making your GeoPDF"
+              label={t`Making your GeoPDF`}
               value={progress.fraction * 100}
             />
             <p className={classes.note}>
@@ -1619,7 +1621,7 @@ function AreaRow({
   onClear: () => void;
 }) {
   return (
-    <SettingsRow label="Area">
+    <SettingsRow label={t`Area`}>
       <div className={classes.areaCell}>
         <span className={classes.areaSize}>{size}</span>
         <Button
@@ -1627,13 +1629,11 @@ function AreaRow({
           compact
           variant={picked ? "filled" : "outline"}
           onClick={onPick}
-        >
-          Pick on the map
-        </Button>
+        >{t`Pick on the map`}</Button>
         {picked && (
           <IconButton
             icon="close"
-            label="Clear the picked area"
+            label={t`Clear the picked area`}
             size={14}
             onClick={onClear}
           />
@@ -1643,9 +1643,7 @@ function AreaRow({
           variant={coordsOpen ? "filled" : "outline"}
           aria-expanded={coordsOpen}
           onClick={onToggleCoords}
-        >
-          Type the coordinates
-        </Button>
+        >{t`Type the coordinates`}</Button>
       </div>
     </SettingsRow>
   );
@@ -1708,7 +1706,7 @@ function ExtentField({
 }
 
 const LAYER_LABELS: Record<AreaExportLayer, string> = {
-  heights: "Heights",
+  heights: t`Heights`,
   slope: MAP_TERRAIN.copy.slope,
   hillshade: MAP_TERRAIN.copy.hillshade,
   contours: MAP_TERRAIN.copy.contours,
@@ -1720,10 +1718,10 @@ const EDGE_FIELDS: {
   latlon: string;
   en: string;
 }[] = [
-  { which: "n", cell: "extentNorth", latlon: "North", en: "N (northing)" },
-  { which: "w", cell: "extentWest", latlon: "West", en: "W (easting)" },
-  { which: "e", cell: "extentEast", latlon: "East", en: "E (easting)" },
-  { which: "s", cell: "extentSouth", latlon: "South", en: "S (northing)" },
+  { which: "n", cell: "extentNorth", latlon: t`North`, en: "N (northing)" },
+  { which: "w", cell: "extentWest", latlon: t`West`, en: "W (easting)" },
+  { which: "e", cell: "extentEast", latlon: t`East`, en: "E (easting)" },
+  { which: "s", cell: "extentSouth", latlon: t`South`, en: "S (northing)" },
 ];
 
 const NO_EDGES_TYPED: ExtentFieldValues = { n: "", s: "", e: "", w: "" };
@@ -1793,12 +1791,12 @@ function AreaExportFields({
   return (
     <>
       <section className={classes.group}>
-        <SectionHeader title="Area" />
+        <SectionHeader title={t`Area`} />
         <AreaRow
           size={
             size
               ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
-              : "None yet"
+              : t`None yet`
           }
           picked={picked}
           onPick={onPick}
@@ -1809,9 +1807,9 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label="Coordinates" tooltip={coordTooltip(edges)}>
+            <SettingsRow label={t`Coordinates`} tooltip={coordTooltip(edges)}>
               <ChipRail
-                label="Coordinates"
+                label={t`Coordinates`}
                 className={classes.railCell}
                 options={COORD_OPTIONS}
                 value={coordMode}
@@ -1848,9 +1846,9 @@ function AreaExportFields({
       </section>
 
       <section className={classes.group}>
-        <SectionHeader title="Layers" />
+        <SectionHeader title={t`Layers`} />
         <ChipPicker
-          label="Include"
+          label={t`Include`}
           options={AREA_EXPORT_LAYERS_BY_FORMAT[format].map((layer) => ({
             value: layer,
             label: LAYER_LABELS[layer],
@@ -1859,7 +1857,7 @@ function AreaExportFields({
             layers.has(layer),
           )}
           onToggle={(layer) => onToggleLayer(layer as AreaExportLayer)}
-          error={noLayers ? "Pick at least one layer." : null}
+          error={noLayers ? t`Pick at least one layer.` : null}
         />
         {sharpenedInside > 0 && (
           <p className={classes.note}>
@@ -1869,19 +1867,15 @@ function AreaExportFields({
           </p>
         )}
         {/* No number until computeEstimate has an area-export kind. */}
-        <p className={classes.note}>
-          Its time and credits aren't known until it has run; it's charged for
-          the time it takes.
-        </p>
-        <p className={classes.note}>
-          It comes to your Inbox, and downloads itself if this tab is still
-          open. Map files are kept for 7 days.
-        </p>
-        <p className={classes.note}>
-          What comes out is drawn from the government's survey, and it may be
-          wrong or out of date. Don't rely on it in place of your own
-          navigation, judgement or rescue planning.
-        </p>
+        <p
+          className={classes.note}
+        >{t`Its time and credits aren't known until it has run; it's charged for the time it takes.`}</p>
+        <p
+          className={classes.note}
+        >{t`It comes to your Inbox, and downloads itself if this tab is still open. Map files are kept for 7 days.`}</p>
+        <p
+          className={classes.note}
+        >{t`What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgement or rescue planning.`}</p>
       </section>
     </>
   );

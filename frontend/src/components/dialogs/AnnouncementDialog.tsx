@@ -3,6 +3,7 @@ import {
   ANNOUNCEMENT,
   parseMessageMarkdown,
   type MessageBlock,
+  t,
 } from "@logjam/shared";
 import { Button, Dialog } from "../../ui";
 import { messageInlines } from "../MessageInlines";
@@ -69,7 +70,7 @@ function AnnouncementDialog({
       title={message?.title}
       onClose={onClose}
       size="large"
-      footer={<Button onClick={onClose}>Close</Button>}
+      footer={<Button onClick={onClose}>{t`Close`}</Button>}
     >
       <p className={classes.from}>{ANNOUNCEMENT.from}</p>
       <div className={classes.message}>{blocks.map(block)}</div>

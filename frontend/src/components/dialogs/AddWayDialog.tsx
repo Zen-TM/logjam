@@ -33,6 +33,7 @@ import {
   WayRefusedError,
   WayRemovalError,
   type WaySource,
+  t,
 } from "@logjam/shared";
 import {
   linkMediaToPlace,
@@ -197,7 +198,7 @@ export default function AddWayDialog({
 
   const fileList = (list: StandaloneFile[], source: "track" | "import") =>
     !loaded ? (
-      <p className={classes.hint}>Loading…</p>
+      <p className={classes.hint}>{t`Loading…`}</p>
     ) : loadError ? (
       <ErrorBanner message={loadError} />
     ) : list.length === 0 ? (
@@ -256,18 +257,18 @@ export default function AddWayDialog({
         dismissible={!busy}
         footer={
           mode === "sources" ? (
-            <Button onClick={close} disabled={busy} disabledReason="Working…">
-              Cancel
-            </Button>
+            <Button
+              onClick={close}
+              disabled={busy}
+              disabledReason={t`Working…`}
+            >{t`Cancel`}</Button>
           ) : (
             <Button
               icon="back"
               onClick={back}
               disabled={busy}
-              disabledReason="Working…"
-            >
-              Back
-            </Button>
+              disabledReason={t`Working…`}
+            >{t`Back`}</Button>
           )
         }
       >
