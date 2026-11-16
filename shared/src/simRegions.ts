@@ -53,6 +53,7 @@ function simTerrain(
 ): RegionTerrain {
   const credit = (layer: string) => ({
     coverage,
+    licence: "cc0" as const,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
@@ -106,6 +107,7 @@ function simOverlays(
 ): Pick<RegionTerrain, "land" | "fire" | "coverage"> {
   const credit = (layer: string) => ({
     coverage,
+    licence: "cc0" as const,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
@@ -190,11 +192,14 @@ export const SIM_NZ: Region = {
   vector: {
     archivePath: "master/basemap/protomaps-simnz.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [NZ_TERRAIN.heights!],
   terrain: NZ_TERRAIN,
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "nztm2000",
   canyonGrades: "french",
   units: "metric",
@@ -221,11 +226,14 @@ export const SIM_UTAH: Region = {
   vector: {
     archivePath: "master/basemap/protomaps-simutah.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [UTAH_TERRAIN.heights!],
   terrain: UTAH_TERRAIN,
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "utm",
   canyonGrades: "aca",
   units: "imperial",
@@ -252,6 +260,7 @@ export const SIM_WORLD: Region = {
   vector: {
     archivePath: "master/basemap/protomaps-simworld.pmtiles",
     maxzoom: 15,
+    licence: "odbl",
   },
   dem: [WORLD_TERRAIN.heights!],
   // The everywhere tier draws heights and hillshade only.
@@ -260,7 +269,9 @@ export const SIM_WORLD: Region = {
     hillshade: WORLD_TERRAIN.hillshade,
   },
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
+  gaugesLicence: null,
   grid: "utm",
   canyonGrades: "french",
   units: "metric",

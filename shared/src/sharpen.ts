@@ -125,6 +125,8 @@ export function sharpenedDemSource(area: SharpenedArea): DemSource {
     urlTemplate: null,
     archivePath: null,
     areaId: area.id,
+    // ELVIS LiDAR, which the worker's credit names as CC BY 3.0 AU (`licences.test.ts`).
+    licence: "cc-by-3-au",
     credit: area.credit,
     creditHtml: escapeXml(area.credit),
   };

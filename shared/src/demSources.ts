@@ -22,6 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
+import type { LicenceId } from "./licences.js";
 import { lonWithin } from "./placeGeo.js";
 import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
 
@@ -58,6 +59,8 @@ export type DemSource = {
    * the area (`sharpenedDemSource`; the API's check: `api/src/__tests__/sharpenedAreas.test.ts`).
    */
   areaId?: string;
+  /** What the source is licensed under (`licences.ts`). */
+  licence: LicenceId;
   /** Required by the source's terms wherever a height from it is shown. */
   credit: string;
   /** The same credit for MapLibre, which renders HTML in `attribution`. */
@@ -76,6 +79,7 @@ export const TERRARIUM = {
   archivePath: null,
   urlTemplate:
     "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+  licence: "terrain-tiles",
   credit: "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.",
   creditHtml:
     'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',

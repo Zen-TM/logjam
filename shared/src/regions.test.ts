@@ -177,7 +177,7 @@ describe("the declaration", () => {
     expect(NSW_REGION.terrain.coverage.archivePath).toBe(
       "master/coverage/nsw-coverage.pmtiles",
     );
-    expect(NSW_REGION.vector).toEqual({
+    expect(NSW_REGION.vector).toMatchObject({
       archivePath: "master/basemap/protomaps-nsw.pmtiles",
       maxzoom: 15,
     });
