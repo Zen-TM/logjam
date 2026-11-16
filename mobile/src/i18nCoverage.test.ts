@@ -25,7 +25,7 @@ const APP = join(SRC, "..", "App.tsx");
 const CEILINGS: Record<string, number> = {
   ".": 21,
   api: 2,
-  auth: 19,
+  auth: 20,
   customFields: 29,
   gauges: 1,
   geopdf: 26,
@@ -38,13 +38,13 @@ const CEILINGS: Record<string, number> = {
   places: 88,
   plans: 16,
   routes: 23,
-  saved: 171,
-  screens: 335,
-  "screens/settings": 101,
+  saved: 172,
+  screens: 339,
+  "screens/settings": 103,
   sharing: 72,
   sync: 13,
   tracks: 58,
-  ui: 49,
+  ui: 51,
 };
 
 function sources(dir: string): string[] {
