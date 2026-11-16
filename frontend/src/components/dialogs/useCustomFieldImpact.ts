@@ -4,6 +4,7 @@ import {
   type CustomFieldEntityKind,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { t } from "@logjam/shared";
 
 /**
  * Impact count for a custom field: how many of the user's rows (trip logs or
@@ -48,7 +49,7 @@ export function useCustomFieldImpact(
           setError(
             messageFromError(
               err,
-              `Couldn't check how many ${noun} use this field.`,
+              t`Couldn't check how many ${noun} use this field.`,
             ),
           );
       });

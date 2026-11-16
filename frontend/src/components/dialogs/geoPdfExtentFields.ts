@@ -125,12 +125,12 @@ function rangeError(
   if (LAT_FIELDS.includes(field)) {
     if (deg < -90 || deg > 90) {
       return grid === null
-        ? "Must be between -90 and 90"
+        ? t`Must be between -90 and 90`
         : t`Not a valid ${grid} northing`;
     }
   } else if (!(Math.abs(deg - centreLon) <= 180)) {
     return grid === null
-      ? "Must be between -180 and 180"
+      ? t`Must be between -180 and 180`
       : t`Not a valid ${grid} easting`;
   }
   return null;
@@ -158,7 +158,7 @@ export function extentFieldErrors(
   for (const field of ["n", "s", "e", "w"] as ExtentFieldKey[]) {
     const deg = parseExtentField(field, values[field], state);
     if (deg === null) {
-      errors[field] = "Enter a number";
+      errors[field] = t`Enter a number`;
       continue;
     }
     errors[field] = rangeError(field, deg, grid, centreLon);
@@ -168,10 +168,10 @@ export function extentFieldErrors(
   // Sign-correct orientation checks (work in both hemispheres; grid northings/
   // eastings compare the same way after conversion to degrees).
   if (degrees.n !== null && degrees.s !== null && degrees.n <= degrees.s) {
-    errors.n = "Must be north of the South value";
+    errors.n = t`Must be north of the South value`;
   }
   if (degrees.e !== null && degrees.w !== null && degrees.e <= degrees.w) {
-    errors.e = "Must be east of the West value";
+    errors.e = t`Must be east of the West value`;
   }
 
   return errors;
@@ -189,7 +189,7 @@ export function hasExtentFieldError(errors: ExtentFieldErrors): boolean {
 /** Inline error for the scale denominator field ("1 : N"). */
 export function scaleFieldError(raw: string): string | null {
   const v = rawToNumber(raw);
-  if (v === null) return "Enter a number";
-  if (v < 1) return "Must be at least 1";
+  if (v === null) return t`Enter a number`;
+  if (v < 1) return t`Must be at least 1`;
   return null;
 }
